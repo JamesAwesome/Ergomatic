@@ -1289,6 +1289,35 @@ const THREE_STEP_RUN: MonitorRun = {
   terminated: false,
 };
 
+// GYRE_RUN — door spec (2026-09-02) §5.1, Task 4's own fixture: a real
+// library workout (RF3), not a hand-built minimum. Gyre (this file's own
+// F1b fixture above): three SEQUENTIAL distance work steps, w1 750m@2k+5
+// (rest 2'), w2 500m@2k+3 (rest 2'), w3 250m@2k+1 (no rest) — three
+// intervals, so a partial landing on the middle one proves selectivity
+// against BOTH neighbours at once, not just "not index 0."
+const GYRE = library("Gyre");
+const GYRE_DRAFT = buildDraft({
+  id: "id-gyre-partial",
+  title: GYRE.title,
+  type: GYRE.type as WorkoutType,
+  steps: GYRE.steps,
+});
+const GYRE_BUILT = buildRun(GYRE_DRAFT, BASELINES, NOW);
+const GYRE_PROGRAM = compileOrThrow(GYRE_BUILT.phases);
+const GYRE_LOG_SEED = buildLogSeed(GYRE_BUILT.phases, BASELINES);
+const GYRE_RUN: MonitorRun = {
+  v: 2,
+  workoutId: GYRE_DRAFT.workoutId,
+  title: GYRE_DRAFT.title,
+  program: GYRE_PROGRAM,
+  logSeed: GYRE_LOG_SEED,
+  actuals: [],
+  deviceName: "PM5 432331249",
+  startedAt: NOW.toISOString(),
+  completedAt: new Date(NOW.getTime() + 3 * 60 * 1000).toISOString(),
+  terminated: false,
+};
+
 describe("buildMonitorLogSteps (7C spec §3)", () => {
   it("maps walk 4's interval 0: label from the seed, target from the program, actualSplit/actualSpm/avgHr/actualSeconds/actualMeters verbatim from the actual, source pm5 (Phase LT spec 1, §2: WALK4_DRAFT authors no spm, so the target half stays absent — the distinct-values split is its own dedicated test below)", () => {
     const steps = buildMonitorLogSteps(WALK4_RUN);
@@ -2194,6 +2223,85 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       expect(steps[0]!.spm).toBe(20);
       expect(steps[0]).not.toHaveProperty("actualSpm");
       expect(steps[0]).not.toHaveProperty("actualSource");
+    });
+  });
+
+  // door spec (2026-09-02) §5.1, Task 4: the in-flight interval's own
+  // reading, copied onto the step it belongs to. `run.partial` is written
+  // ONLY at close (`monitorRun.ts`'s `withPartial`) and read here, off the
+  // LOADED `MonitorRun` — never `actualMeters`/`actualSeconds`, never a
+  // third `actualSource` member (global constraints: an older server drops
+  // unknown keys silently, so new key names make its degradation identical
+  // to not shipping §5 at all).
+  describe("door spec (2026-09-02) §5.1: the partial pair", () => {
+    it("puts the pair on the step whose PROGRAM index matches run.partial.intervalIndex, and on no other — writing neither actualMeters nor actualSeconds for it (the anti-leg)", () => {
+      const run: MonitorRun = {
+        ...GYRE_RUN,
+        partial: { intervalIndex: 1, meters: 320, seconds: 88 },
+      };
+      const steps = buildMonitorLogSteps(run);
+      expect(steps).toHaveLength(3);
+      expect(steps[0]).not.toHaveProperty("partialMeters");
+      expect(steps[0]).not.toHaveProperty("partialSeconds");
+      expect(steps[1]!.partialMeters).toBe(320);
+      expect(steps[1]!.partialSeconds).toBe(88);
+      expect(steps[1]).not.toHaveProperty("actualMeters");
+      expect(steps[1]).not.toHaveProperty("actualSeconds");
+      expect(steps[1]).not.toHaveProperty("actualSource");
+      expect(steps[2]).not.toHaveProperty("partialMeters");
+      expect(steps[2]).not.toHaveProperty("partialSeconds");
+    });
+
+    it("I-B6 restated on the read side: a partial whose index collides with an interval that already carries an actual writes no partial", () => {
+      const run: MonitorRun = {
+        ...GYRE_RUN,
+        actuals: [
+          {
+            index: 1,
+            elapsedSeconds: 95,
+            distanceMeters: 500,
+            avgSplit: 190,
+            avgSpm: 24,
+            avgHeartRateBpm: 140,
+            restDistanceMeters: 0,
+          },
+        ],
+        // The writer (`withPartial`) already refuses this shape — I-B6 —
+        // but this leg proves the READER holds the same invariant even if
+        // a stored record somehow carried both (belt and braces: M4.3
+        // deletes the `actual === undefined` guard and this leg goes red).
+        partial: { intervalIndex: 1, meters: 400, seconds: 100 },
+      };
+      const steps = buildMonitorLogSteps(run);
+      expect(steps[1]!.actualSource).toBe("pm5");
+      expect(steps[1]).not.toHaveProperty("partialMeters");
+      expect(steps[1]).not.toHaveProperty("partialSeconds");
+    });
+
+    it("the legacy warm-up leg: a legacy kind:'warmup' seed step at program index 0 makes out.length diverge from i, and the partial (index 1) still lands on the FIRST EMITTED step — the leg M4.1 (keying on out.length instead of i) turns red", () => {
+      const legacyStep = {
+        ...GYRE_LOG_SEED.steps[0]!,
+        kind: "warmup",
+      } as unknown as (typeof GYRE_LOG_SEED.steps)[number];
+      const legacySeed = {
+        ...GYRE_LOG_SEED,
+        steps: [legacyStep, ...GYRE_LOG_SEED.steps.slice(1)],
+      };
+      const run: MonitorRun = {
+        ...GYRE_RUN,
+        logSeed: legacySeed,
+        partial: { intervalIndex: 1, meters: 210, seconds: 70 },
+      };
+      const steps = buildMonitorLogSteps(run);
+      // The legacy warm-up position (program index 0) produced no step —
+      // two survive, and the partial belongs to the first of them (index
+      // 1), even though `out.length === 0` at the moment it's checked.
+      expect(steps).toHaveLength(2);
+      expect(steps[0]!.label).toBe(legacySeed.steps[1]!.label);
+      expect(steps[0]!.partialMeters).toBe(210);
+      expect(steps[0]!.partialSeconds).toBe(70);
+      expect(steps[1]).not.toHaveProperty("partialMeters");
+      expect(steps[1]).not.toHaveProperty("partialSeconds");
     });
   });
 });

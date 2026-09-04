@@ -40,6 +40,7 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
+import { releasingSchedule } from "../test/statusSubscriptions";
 import { loadMonitorRun, MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
 import {
   resetForTests as resetHandoffStore,
@@ -53,6 +54,7 @@ import {
 } from "./handoffStore";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
+import { measuredIntervalCount } from "../session/summaryModel";
 import {
   createFakeTransport,
   type FakeBoundaryEvent,
@@ -378,7 +380,14 @@ function harness(
       driverOptions: {
         settleTicks: 0,
         prepareSettleTicks: 0,
-        schedule: () => (): void => undefined,
+        // `releasingSchedule` rather than a bare stub (connect-latency
+        // design spec 2026-09-03): the driver's status subscriptions now
+        // wait for the first acked CSAFE sequence or for a fallback on
+        // this very seam, and a stub that swallows every timer leaves a
+        // connect that never arms — or one whose fake never acks — hearing
+        // nothing at all. The wrapper fires that first timer and swallows
+        // the rest, exactly as before.
+        schedule: releasingSchedule(() => (): void => undefined),
       },
       // TIMER HYGIENE, the identical reasoning one field up (storage-spine
       // design spec §2's late side, Task 3): `teardown` now arms its own
@@ -407,6 +416,20 @@ type Session = ReturnType<typeof harness>["result"];
 async function connect(result: Session): Promise<void> {
   await act(async () => {
     await result.current.connect();
+  });
+}
+
+/** `beginFreeRow()` PLUS the drain its arm now needs (spec 2026-09-03 Part
+ *  2, "the free row waits, like a workout does"). The call itself reaches
+ *  only `"programming"`; `"ready"` arrives on the driver's `armed` event,
+ *  which it emits when the p.80 send settles — one microtask hop against a
+ *  fake that answers inline, a wire round trip against a real PM5. Every
+ *  test below that wants a free row ALREADY ARMED goes through here; the
+ *  ones that want the window in between drive it by hand. */
+async function armFreeRow(result: Session): Promise<void> {
+  await act(async () => {
+    result.current.beginFreeRow();
+    await flush();
   });
 }
 
@@ -1901,7 +1924,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
           driverOptions: {
             settleTicks: 0,
             prepareSettleTicks: 0,
-            schedule: () => (): void => undefined,
+            schedule: releasingSchedule(() => (): void => undefined),
           },
           // No `schedule` override here — this hook-level default
           // fallback (real `setTimeout`) is the exact seam under test.
@@ -2205,7 +2228,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: () => driverMs,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -2350,7 +2373,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: () => driverMs,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -2457,7 +2480,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -2559,7 +2582,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -2974,7 +2997,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
           driverOptions: {
             settleTicks: 0,
             prepareSettleTicks: 0,
-            schedule: driverTimer.schedule,
+            schedule: releasingSchedule(driverTimer.schedule),
           },
         },
       );
@@ -3082,7 +3105,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -3893,7 +3916,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -3998,7 +4021,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
           driverOptions: {
             settleTicks: 0,
             prepareSettleTicks: 0,
-            schedule: driverTimer.schedule,
+            schedule: releasingSchedule(driverTimer.schedule),
           },
         },
       );
@@ -4079,7 +4102,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: () => driverMs,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4220,7 +4243,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4293,7 +4316,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4370,7 +4393,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: () => driverMs,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4488,7 +4511,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4646,7 +4669,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4758,7 +4781,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -4847,7 +4870,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -5381,7 +5404,7 @@ describe('Whole-branch review B1: End under a watchdog-fired banner (phase still
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -5457,7 +5480,7 @@ describe('Whole-branch review B1: End under a watchdog-fired banner (phase still
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -5667,6 +5690,7 @@ describe("RC-37: the programDropped consumer guard, outside programming/ready", 
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: clock.now,
+          schedule: releasingSchedule(),
         },
       }),
     );
@@ -5996,12 +6020,11 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
    *  transport (the RC-37 block's own ack sequence: a refused prepare —
    *  never-observed on hardware, `sendPrepare` swallows anything but a
    *  disconnect — then the real send's own `"ok"` ack, then a fresh armed
-   *  readback for `verifyArmed`), then rows: one live frame carrying
-   *  banked distance (the hook's own READY -> LIVE gate) and one completed
-   *  interval actual over a real 0x0037/0x0038 pair — leg (a)'s own "≥1
-   *  completed interval actual". Returns once `phase === "live"` with the
-   *  actual recorded. */
-  async function driveLiveWithActual(
+   *  readback for `verifyArmed`), then rows one live frame carrying banked
+   *  distance (the hook's own READY -> LIVE gate). Returns once
+   *  `phase === "live"`, with NO interval actual banked —
+   *  `driveLiveWithActual` below adds that. */
+  async function driveLive(
     result: Session,
     transport: ReturnType<typeof rawTransport>,
   ): Promise<void> {
@@ -6046,7 +6069,19 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
       transport.notify(GENERAL_STATUS_UUID, liveFrame(30, 100));
     });
     expect(result.current.phase).toBe("live");
+  }
 
+  /** `driveLive` plus interval 0's own completed actual over a real
+   *  0x0037/0x0038 pair — leg (a)'s own "at least one completed interval
+   *  actual". Split out of `driveLive` above for door PR B Task 3's own
+   *  `program-dropped` leg, which needs a live run with NO actual banked:
+   *  I-B6 retires the in-flight reading the moment that interval's actual
+   *  lands, so a drop taken after this call has nothing left to bank. */
+  async function driveLiveWithActual(
+    result: Session,
+    transport: ReturnType<typeof rawTransport>,
+  ): Promise<void> {
+    await driveLive(result, transport);
     act(() => {
       transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(0, 30, 100));
       transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(0, 22));
@@ -6090,6 +6125,7 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: clock.now,
+          schedule: releasingSchedule(),
         },
       }),
     ).result;
@@ -6133,6 +6169,46 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
     // wire itself, the same before/after idiom this file's other
     // `wireWrites` assertions already use.
     expect(receiveWrites()).toBe(writesBeforeDrop);
+  });
+
+  // Door PR B Task 3 (door-partial design spec §5.3): the THIRD of the five
+  // partial producers, living here rather than in Task 3's own describe block
+  // because a `programDropped` needs `driver.ts`'s armedWatch driven to a
+  // genuine structural mismatch, and the fake transport cannot be scripted to
+  // report a wrong armed structure (this block's own header says why). No
+  // actual is banked in this leg on purpose: I-B6 retires the in-flight
+  // reading the moment its interval's own actual lands, so `driveLive` — not
+  // `driveLiveWithActual` — is what leaves a reading for the drop to bank.
+  it("(a2) door PR B: a live drop banks the in-flight reading as a partial, as endedBy program-dropped", async () => {
+    const transport = rawTransport();
+    const clock = manualClock();
+    const result = buildSession(transport, clock);
+    await driveLive(result, transport);
+
+    triggerLiveDrop(transport, clock, 30, 100);
+
+    expect(result.current.phase).toBe("ended");
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("program-dropped");
+    // `liveFrame(30, 100)`'s own reading: interval 0, 100 m, 30 s. The three
+    // wrong-structure WaitToBegin ticks that follow are not rowing frames and
+    // mint nothing over it.
+    expect(stored?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    // I-B2: still not an `IntervalActual`. "N intervals kept" does not move
+    // for a partial.
+    expect(stored?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(stored!.actuals)).toBe(0);
+    const ringEntries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const written = ringEntries.filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=0 m=100 s=30");
   });
 
   it("(b) a denied durable write on the live drop's close enters held-error — the ended patch, not a healthy release", async () => {
@@ -6376,7 +6452,7 @@ describe("useMonitorSession: failures", () => {
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -6421,7 +6497,7 @@ describe("useMonitorSession: failures", () => {
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -6991,7 +7067,7 @@ describe("Review round 3, item 1: sessionId is collision-resistant across a full
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -7183,7 +7259,7 @@ describe("Review round 5, item 1: a cancelled pre-GATT attempt cannot clone the 
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
         burstLingerSchedule: () => (): void => undefined,
       }),
@@ -7268,7 +7344,11 @@ describe("useMonitorSession: the seams and their defaults", () => {
       useMonitorSession({
         createTransport: () => fake,
         createLog: () => log,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
     const before = Date.now();
@@ -8645,7 +8725,11 @@ describe("useMonitorSession: exportLog", () => {
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -8674,7 +8758,11 @@ describe("useMonitorSession: exportLog", () => {
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
     await connect(result);
@@ -8707,7 +8795,11 @@ describe("useMonitorSession: exportLog", () => {
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
     await connect(result);
@@ -9251,7 +9343,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
       useMonitorSession({
         createTransport: () => transport,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9302,7 +9398,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
         requestStoragePersistence: false,
       }),
     );
@@ -9335,7 +9435,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9366,7 +9470,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9400,7 +9508,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9435,7 +9547,11 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
         createTransport: () => fake,
         createLog: () => log,
         now: () => t0,
-        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
       }),
     );
 
@@ -9771,7 +9887,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -9865,7 +9981,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -9925,7 +10041,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -10002,7 +10118,7 @@ describe("Phase LL Task 2: the banner's hysteresis, through the real hook compos
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -10209,7 +10325,7 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -10262,7 +10378,10 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       program: TWO_INTERVALS,
     });
     const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({ createTransport: () => fake }),
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        driverOptions: { schedule: releasingSchedule() },
+      }),
     );
 
     await act(async () => {
@@ -10315,7 +10434,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -10407,7 +10530,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -10476,7 +10603,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -10565,7 +10696,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -10687,7 +10822,10 @@ describe("Whole-branch review minor 1: the native lifecycle unsub race, driven w
       program: TWO_INTERVALS,
     });
     const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({ createTransport: () => fake }),
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        driverOptions: { schedule: releasingSchedule() },
+      }),
     );
 
     // ATTEMPT 1: connects (registers its own pending native listener),
@@ -11107,7 +11245,11 @@ describe("Phase LL Task 4: the continuity consumption seam, through the real hoo
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await connect(result);
     await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
@@ -11330,7 +11472,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -11457,7 +11599,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -11549,7 +11691,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -11622,6 +11764,246 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
   }, 15000);
 
   // -------------------------------------------------------------------
+  // Door PR B Task 3 (door-partial design spec §5.3): THE FIFTH PRODUCER.
+  // The continuity reset commits through `applyProducerCommit` directly and
+  // never touches `closeRecord`, so a read installed only there would miss
+  // this close entirely — the one close a link-loss report is most likely to
+  // be about. Lives in this block because the reset needs the real driver +
+  // real captured bytes composition its siblings above already build.
+  // -------------------------------------------------------------------
+  it("door PR B: the continuity reset banks the LAST HONEST reading as a partial — the fifth producer, at its own commit", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(() => (): void => undefined),
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    // The LAST HONEST frame: real hardware bytes, mid-session, rowing —
+    // elapsed 5970/100 s and distance 2441/10 m, straight off
+    // `REAL_TAIL_HEX`'s own leading six bytes. This is what the reset has to
+    // preserve.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    expect(lifecycleCb).toBeDefined();
+    resumeAfterGap(lifecycleCb!);
+    expect(result.current.frameSilence).toBe(true);
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("ended");
+
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("link-lost");
+    // I-B4: a link-lost close banks what was LAST RECEIVED. The frame that
+    // TRIPS the reset is by definition the dishonest one (10.0 m / 1.0 s
+    // here — a machine that went backwards), and `handleFrame`'s live branch
+    // mints AFTER the reset commit precisely so it can never be the reading
+    // banked.
+    expect(stored?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 244.1,
+      seconds: 59.7,
+    });
+    // I-B2, at the fifth producer too.
+    expect(stored?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(stored!.actuals)).toBe(0);
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const written = exported.filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=0 m=244.1 s=59.7");
+  }, 15000);
+
+  // The same producer's REFUSAL arm — reachable, and the one a "it kept
+  // nothing" report after a link loss actually lands on: the rower finished
+  // the work bout (a rest frame retired the reading, I-B3 half one) and the
+  // reset arrives during that rest. Nothing to bank, and the ring has to say
+  // WHICH silence this was.
+  it("door PR B: a continuity reset with the reading already retired records partial-refused, not silence", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(() => (): void => undefined),
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    // `REAL_TAIL_HEX`'s own decoded fields, re-encoded with the ONE change
+    // this leg is about: the machine has moved to INTERVALREST. Every
+    // continuity axis is held exactly where the tail left it (twd 1354,
+    // elapsed 59.7, distance 244.1) so nothing but the work-bout end
+    // changes — a frame that also moved a number backwards would be a
+    // different test.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        buildGeneralStatusBytes({
+          elapsedSeconds: 59.7,
+          distanceMeters: 244.1,
+          workoutType: 8,
+          intervalType: 0,
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          rowingState: 0,
+          strokeState: 0,
+          totalWorkDistanceMeters: 1354,
+          workoutDurationRaw: 6000,
+          workoutDurationType: 0,
+          dragFactor: 104,
+        }),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    expect(lifecycleCb).toBeDefined();
+    resumeAfterGap(lifecycleCb!);
+    expect(result.current.frameSilence).toBe(true);
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("ended");
+
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("link-lost");
+    expect(stored?.partial).toBeUndefined();
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(exported.filter((e) => e.kind === "partial-written")).toHaveLength(
+      0,
+    );
+    const refused = exported.filter((e) => e.kind === "partial-refused");
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.detail).toBe("reason=no-reading idx=none");
+  }, 15000);
+
+  // -------------------------------------------------------------------
   // Whole-branch review minor 2: the continuity reset was closing the
   // record through `completeContinuityReset` directly — a pure transform
   // that never touches `withSeries`/`stopSeriesFlush`/the recorder at
@@ -11674,7 +12056,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
         seriesFlushSchedule: flushTimer.schedule,
       }),
@@ -11808,7 +12190,11 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result, unmount } = renderHook(() => freshUseMonitorSession());
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -11919,7 +12305,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -12370,7 +12756,7 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: () => (): void => undefined,
+          schedule: releasingSchedule(() => (): void => undefined),
         },
       }),
     );
@@ -12743,7 +13129,11 @@ describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result, unmount } = renderHook(() => freshUseMonitorSession());
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -13008,6 +13398,7 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
           settleTicks: 0,
           prepareSettleTicks: 0,
           now: clock.now,
+          schedule: releasingSchedule(),
         },
       }),
     );
@@ -13154,7 +13545,7 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 2), rescoped round 3 item 3: 
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -13213,7 +13604,7 @@ describe("Final whole-branch review, item 1: one burst-eligible session consumes
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          schedule: driverTimer.schedule,
+          schedule: releasingSchedule(driverTimer.schedule),
         },
       },
     );
@@ -13315,30 +13706,199 @@ describe("beginFreeRow (the free row's own arm)", () => {
     return { program: LIBRARY.program, events: FREE_ROW_EVENTS };
   }
 
-  it("reaches ready without programming, under a Just Row identity", async () => {
+  it("reaches ready without calling program(), under a Just Row identity", async () => {
     const { result, fake } = harness(freeRowScript());
     await connect(result);
+
+    await armFreeRow(result);
+
+    // `ready` is the phase the record-open branch waits in. Reaching it
+    // without `program()` is the whole arm. (This comment used to end "and
+    // we have sent it nothing", which spec 2026-09-02's p.80 send made
+    // false; the four tests below this block are where the send's own
+    // timing is pinned.)
+    expect(result.current.phase).toBe("ready");
+    // `null`, not 0: the fake reports what the MACHINE is holding as a
+    // PROGRAMMED WORKOUT, and it is holding none — a p.80 Just Row loads no
+    // intervals. Reaching `ready` with that still empty is the assertion; a
+    // programmed arm would have loaded intervals here.
+    expect(fake.loadedIntervals()).toBeNull();
+  });
+
+  /**
+   * SPEC 2026-09-03 PART 2 — THE FREE ROW WAITS FOR THE MONITOR.
+   *
+   * These four are the gate the spec names, and they live at the HOOK
+   * because that is the only layer that can reach the invariant: the
+   * component reads `axes.program`, which is a pure function of the phase
+   * this file owns, and the driver has no phase at all.
+   *
+   * What they pin, in order: the door does NOT say ready while the p.80
+   * send is on the wire; an ack arms it; and — Gate 0's approved
+   * fall-through — a send the monitor never answers and a send the monitor
+   * REFUSES both arm it anyway, because a free row needs nothing from the
+   * monitor to be rowable and a failure card would block a row that would
+   * have worked. Which way it went is in the ring, never on the screen.
+   *
+   * The mutation that must bite all of them is restoring the synchronous
+   * flip (`update({ phase: "ready" })` on the line after
+   * `driver.beginFreeRow()`); this task's report records what it said.
+   */
+  it("does NOT reach ready while the p.80 send is still on the wire", async () => {
+    const { result, fake } = harness(freeRowScript());
+    await connect(result);
+    // Holds each write's own promise open for 50 real ms while the fake
+    // still answers inline, so the send is provably mid-flight here rather
+    // than merely un-drained (the same idiom the terminate tests below use).
+    fake.delayWrites(50);
 
     act(() => {
       result.current.beginFreeRow();
     });
 
-    // `ready` is the phase the record-open branch waits in. Reaching it
-    // without `program()` is the whole arm: the machine is already in its
-    // own Just Row and we have sent it nothing.
+    // The whole point, stated as the thing a rower would see: "Ready when
+    // you pull" is a promise about the erg, and the erg has not answered.
+    expect(result.current.phase).not.toBe("ready");
+    expect(result.current.phase).toBe("programming");
+    // ...and not a drain away from it either — the ack is what releases it,
+    // and no ack has landed.
+    await act(async () => {
+      await flush();
+    });
+    expect(result.current.phase).toBe("programming");
+  });
+
+  it("reaches ready when the ack lands", async () => {
+    const { result, fake } = harness(freeRowScript());
+    await connect(result);
+    fake.delayWrites(50);
+
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.phase).toBe("programming");
+
+    // The 50 ms window closes, `sendSequence` resolves on the ack the fake
+    // answered inline, and the settle emits the arm.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+      await flush();
+    });
+
     expect(result.current.phase).toBe("ready");
-    // `null`, not 0: the fake reports what the MACHINE is holding, and it is
-    // holding nothing at all. Reaching `ready` with the machine still empty
-    // is the assertion — a programmed arm would have loaded intervals here.
-    expect(fake.loadedIntervals()).toBeNull();
+    const kinds = (
+      JSON.parse(result.current.exportLog()) as { kind: string }[]
+    ).map((e) => e.kind);
+    expect(kinds).toContain("free-row-program-sent");
+    expect(kinds).not.toContain("free-row-program-unanswered");
+    expect(kinds).not.toContain("free-row-program-failed");
+  });
+
+  /** A transport that answers NOTHING: the shape a PM5 that has gone quiet
+   *  presents, and the only way to hold the p.80 send open to its own
+   *  deadline. Hand-rolled rather than scripted, because `transports/fake
+   *  .ts` is an HONEST protocol simulator and always acks — the same reason
+   *  the RC-37 block below keeps its own `rawTransport` (this file's
+   *  per-test-file convention: no cross-file test imports). */
+  function silentTransport(): Transport {
+    return {
+      scan: () => Promise.resolve([{ id: "stub", name: DEVICE_NAME }]),
+      connect: () => Promise.resolve(),
+      write: () => Promise.resolve(),
+      subscribe: () => () => undefined,
+      disconnect: () => Promise.resolve(),
+      onDisconnect: () => () => undefined,
+    };
+  }
+
+  it("reaches ready ANYWAY when the monitor never answers — at the deadline, with the ring saying so", async () => {
+    const transport = silentTransport();
+    const driverTimer = manualSchedule();
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          // `releasingSchedule` fires the driver's FIRST timer (the status-
+          // subscription fallback) at construction; every later one — the
+          // free-row deadline included — lands here to be fired by hand.
+          schedule: releasingSchedule(driverTimer.schedule),
+        },
+      }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.phase).toBe("programming");
+
+    // 5000 as an INDEPENDENT literal, never `FREE_ROW_PROGRAM_DEADLINE_MS`
+    // (RF21: a test that imports the constant it gates retunes itself with
+    // it, and this one exists to say the deadline is five seconds).
+    const deadline = driverTimer.pendingWithMs(5000);
+    expect(deadline).not.toBeNull();
+    await act(async () => {
+      deadline!.fire();
+      await flush();
+    });
+
+    // FALL-THROUGH, approved with Gate 0: no failure card, no stuck door.
+    expect(result.current.phase).toBe("ready");
+    const kinds = (
+      JSON.parse(result.current.exportLog()) as { kind: string }[]
+    ).map((e) => e.kind);
+    expect(kinds).toContain("free-row-program-unanswered");
+    expect(kinds).not.toContain("free-row-program-sent");
+  });
+
+  it("reaches ready ANYWAY when the monitor REFUSES the frame — with the failure and its hex trace in the ring", async () => {
+    const { result, fake } = harness({
+      ...freeRowScript(),
+      failNextProgramFrame: "reject",
+    });
+    await connect(result);
+    // The in-flight step is what makes THIS test bite the change rather
+    // than merely agree with it: without it, the old synchronous flip
+    // satisfied every assertion below (measured — this was the one of the
+    // four that stayed green against the pre-change source). The door must
+    // wait through a send that is going to be REFUSED, exactly as it waits
+    // through one that is going to be acked.
+    fake.delayWrites(50);
+
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    expect(result.current.phase).toBe("programming");
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+      await flush();
+    });
+
+    expect(result.current.phase).toBe("ready");
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const failed = ring.find((e) => e.kind === "free-row-program-failed");
+    expect(failed).toBeDefined();
+    // The TRACE, not just the entry: the walk reads this to see what the
+    // monitor actually said, so an empty detail would be a receipt for
+    // nothing. `driver.test.ts`'s own NAK test pins the same two halves.
+    expect(failed?.detail).toContain(`write ${JUST_ROW_FRAME_HEX}`);
+    expect(failed?.detail).toContain("ack ");
+    expect(ring.map((e) => e.kind)).not.toContain("free-row-program-sent");
   });
 
   it("opens a record carrying the free-row identity and mode on first motion", async () => {
     const { result, fake } = harness(freeRowScript());
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
 
     tick(fake, 1000);
     tick(fake, 1000);
@@ -13358,9 +13918,7 @@ describe("beginFreeRow (the free row's own arm)", () => {
   it("files the machine's own summary totals on a free row", async () => {
     const { result, fake } = harness(freeRowScript());
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
     tick(fake, 1000);
     tick(fake, 1000);
 
@@ -13387,24 +13945,41 @@ describe("beginFreeRow (the free row's own arm)", () => {
     expect(run?.verificationBytes).toBeDefined();
   });
 
+  /** The two frame literals, TYPED from `docs/monitor/pm5-interface-notes.md`
+   *  (§12 example 2 and §13 — the same pair `driver.test.ts`'s own free-row
+   *  block uses), never derived from the builders. */
+  const JUST_ROW_FRAME_HEX = "f1 76 07 01 01 01 13 02 01 01 61 f2";
+  const TERMINATE_FRAME_HEX = "f1 76 04 13 02 01 02 60 f2";
+
   /**
-   * CANCEL MUST NOT TERMINATE A ROW WE NEVER PROGRAMMED (the antagonist
-   * pass's own smaller finding, landed here because the free-row arm is
-   * what makes it reachable). `cancel()`'s armed predicate is "phase is
-   * programming or ready", and its own comment says why it terminates
-   * there: "it terminates what we armed". A free row sits at `ready`
-   * having armed NOTHING — and the terminate would reach the machine's
-   * own row. Worst case is a rower who began pulling before the motion
-   * gate fired (up to ~5 frames at the walk's measured 1 Hz): their row
-   * dies on the erg because they tapped Cancel in an app that was only
-   * ever watching.
+   * CANCEL UNDOES THE ARM — a free row's included (walk
+   * `docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4).
+   *
+   * This test used to assert the OPPOSITE ("cancel() at ready sends NO
+   * terminate on a free row — we armed nothing"), and it was right when it
+   * was written: `beginFreeRow()` sent no bytes then. Since spec
+   * 2026-09-02 it sends the PM5 Concept2's p.80 frame, which puts the
+   * monitor into a Just Row session — so a free row at `ready` IS armed,
+   * by us, and a Cancel that leaves it there strands the rower in front of
+   * a machine the app started a session on and then walked away from.
+   * James watched exactly that happen at the erg.
+   *
+   * The ORDER is asserted, not merely the presence: the terminate must
+   * follow the p.80 write AND its ack, because the driver shares one
+   * `pendingAck` slot between them (which is why `driver.ts`'s
+   * `terminate()` waits on `freeRowSendSettled` rather than racing it).
+   *
+   * WHAT THIS TEST CAN AND CANNOT SEE (measured, not assumed): restoring
+   * the `mode !== "justrow"` exclusion in `cancel()` ALONE leaves it green,
+   * because `cancel()`'s own `teardown(armed, driver)` call then sends the
+   * terminate instead. The biting mutation is both exclusions together —
+   * the state the walk caught — and the unmount test below is what pins
+   * `teardown`'s half on its own.
    */
-  it("cancel() at ready sends NO terminate on a free row — we armed nothing", async () => {
+  it("cancel() at ready TERMINATES a free row: the terminate frame follows the p.80 write and its ack", async () => {
     const { result, transport } = harness(freeRowScript());
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
     expect(result.current.phase).toBe("ready");
     const writesAtReady = transport.wireWrites;
 
@@ -13413,8 +13988,174 @@ describe("beginFreeRow (the free row's own arm)", () => {
       await flush();
     });
 
-    expect(transport.wireWrites).toBe(writesAtReady);
+    // Exactly one more frame on the wire, and the ring says which.
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const justRowWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === JUST_ROW_FRAME_HEX,
+    );
+    const ack = ring.findIndex((e, i) => e.kind === "ack" && i > justRowWrite);
+    const terminateWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === TERMINATE_FRAME_HEX,
+    );
+    expect(justRowWrite).toBeGreaterThanOrEqual(0);
+    expect(ack).toBeGreaterThan(justRowWrite);
+    expect(terminateWrite).toBeGreaterThan(ack);
+    expect(ring.map((e) => e.kind)).toContain("terminate-sent");
     expect(transport.disconnects).toBe(1);
+  });
+
+  /**
+   * THE OTHER EXIT FROM `ready`, owing the same undo. `cancel()` is the
+   * button; an unmount is the tab bar. `teardown`'s own armed guard carried
+   * the identical free-row exclusion, written to match `cancel()`'s and
+   * citing it by name — so the walk's finding falsified both at once, and
+   * fixing only the one James happened to press would have left the same
+   * stranded monitor one gesture away.
+   */
+  it("an unmount at ready terminates a free row too — the tab-bar exit is not a free pass", async () => {
+    const { result, transport, unmount } = harness(freeRowScript());
+    await connect(result);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    await act(async () => {
+      await flush();
+    });
+    expect(result.current.phase).toBe("ready");
+    const writesAtReady = transport.wireWrites;
+
+    await act(async () => {
+      unmount();
+      await flush();
+    });
+
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    expect(transport.disconnects).toBe(1);
+  });
+
+  /**
+   * END INSIDE THE SEND WINDOW. `endSession` swallows the terminate's
+   * rejection, so while `terminate()` REFUSED during the free-row send an
+   * END in the first seconds ended the app's row and told the erg nothing.
+   * NOT what the walk saw, and this comment used to imply it was: finding
+   * 4's Cancel ran 1589 ms after the send's own ack (ring 3), so nothing
+   * refused there — the exclusion did it. This is the refusal's own,
+   * separately reachable sibling, invisible in the field because the
+   * swallow is silent by design, and fixed in the same PR as hardening.
+   * `driver.terminate()` now waits the send out (bounded by its own
+   * deadline), so the terminate reaches the wire AFTER the p.80 ack
+   * instead of never.
+   *
+   * `delayWrites(50)` is what makes the window real: it holds each write's
+   * returned promise open for 50 real ms while the fake still answers
+   * inline, so `sendSequence` is provably mid-flight when END arrives.
+   */
+  it("endSession() while the free-row send is still in flight still terminates — after the p.80 ack, not instead of it", async () => {
+    const { result, fake, transport } = harness(freeRowScript());
+    await connect(result);
+    fake.delayWrites(50);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    // `"programming"`, and that IS the window this test is about (spec
+    // 2026-09-03 Part 2 — the line used to read `toBe("ready")`, which was
+    // true when the flip was synchronous and is now the very thing the
+    // sending card exists to stop claiming). END arrives with the p.80 send
+    // still on the wire.
+    expect(result.current.phase).toBe("programming");
+    const writesAtReady = transport.wireWrites;
+
+    await act(async () => {
+      await result.current.endSession();
+      await flush();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const ringKinds = ring.map((e) => e.kind);
+    const sent = ringKinds.indexOf("free-row-program-sent");
+    const terminateWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === TERMINATE_FRAME_HEX,
+    );
+    expect(sent).toBeGreaterThanOrEqual(0);
+    expect(terminateWrite).toBeGreaterThan(sent);
+    expect(ringKinds).toContain("terminate-sent");
+  });
+
+  /**
+   * THE TEARDOWN MUST NOT HANG UP FIRST (delta pass on PR #278) — the same
+   * defect as the walk's finding 4, reached down the other path.
+   *
+   * END at `ready` inside the send window closes the record, flips to
+   * `ended`, opens the 2000 ms burst hold, releases, navigates away and
+   * unmounts `JustRow` — and teardown at `ended` is NOT the armed branch,
+   * so it hangs up with a bare `driver.disconnect()` while `endSession`'s
+   * own `await driver.terminate()` is still suspended on the free-row
+   * send. Measured on the walk's ring 1, those two land about 170 ms
+   * apart (ring 1: the Ready screen's first `frame` at +1159 ms after the
+   * p.80 write, END's hold `handoff-hold` +66903 -> `handoff-released`
+   * +68905, then `disconnect-requested` +70930 — an earliest END puts the
+   * hang-up at write+5186 ms against a terminate released at write+5000).
+   * A hang-up that wins aborts the terminate write (Apple:
+   * `cancelPeripheralConnection(_:)` is nonblocking and "any pending
+   * commands ... may not complete"), the terminate rejects, and
+   * `endSession`'s catch swallows it — the erg is left in the Just Row
+   * session, silently, which is what this PR exists to stop.
+   *
+   * The production gap between END and the unmount is the burst hold's
+   * 2000 ms; here it is the same turn. The INTERLEAVING is identical and
+   * is the whole subject — the unmount arrives while the terminate is
+   * suspended, before it has written a byte. `delayWrites(50)` is what
+   * holds it there: the fake defers each write's returned promise while
+   * still answering inline, so the send is provably mid-flight.
+   *
+   * `writesAtHangUp` is read INSIDE the transport's own `disconnect()`,
+   * the only place that can say what had actually reached the wire at the
+   * moment the radio went away.
+   */
+  it("an unmount while END's terminate is still waiting out the send does not hang up first — the terminate frame is on the wire before the radio goes", async () => {
+    const { result, fake, transport, unmount } = harness(freeRowScript());
+    await connect(result);
+    const hangUp = transport.disconnect.bind(transport);
+    let writesAtHangUp = -1;
+    transport.disconnect = async (): Promise<void> => {
+      writesAtHangUp = transport.wireWrites;
+      return hangUp();
+    };
+    fake.delayWrites(50);
+    act(() => {
+      result.current.beginFreeRow();
+    });
+    // `"programming"`, for the reason the sibling test above states: the
+    // send is still on the wire, which is the whole interleaving here.
+    expect(result.current.phase).toBe("programming");
+    const writesAtReady = transport.wireWrites;
+
+    await act(async () => {
+      // Returns with `terminate()` already entered and suspended on the
+      // send — `endSession` runs synchronously as far as its own
+      // `await driver.terminate()`.
+      const ending = result.current.endSession();
+      unmount();
+      await ending;
+      await flush();
+    });
+
+    // Exactly one terminate, from `endSession` — teardown at `ended` is
+    // not the armed branch and adds none.
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    expect(transport.disconnects).toBe(1);
+    // ...and it was out before the hang-up. Without the driver's wait this
+    // reads `writesAtReady`: the radio went away with the frame still owed.
+    expect(writesAtHangUp).toBe(writesAtReady + 1);
   });
 
   /**
@@ -13552,9 +14293,7 @@ describe("a free row banks no intervals", () => {
       ],
     });
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
     tick(fake, 1000);
     tick(fake, 1000);
     tick(fake, 1000);
@@ -13581,9 +14320,7 @@ describe("beginFreeRow after Ended (the no-reopen rule)", () => {
   it("is a no-op at phase ended — a new row requires a new user action", async () => {
     const { result, fake } = harness(freeRowScriptForDebug());
     await connect(result);
-    act(() => {
-      result.current.beginFreeRow();
-    });
+    await armFreeRow(result);
     tick(fake, 1000);
     tick(fake, 1000);
     expect(result.current.phase).toBe("live");
@@ -13636,3 +14373,664 @@ function freeRowScriptForDebug(): FakeScript {
     ],
   };
 }
+
+// Door spec (2026-09-02) §5.2 I-B6 / §5.3, plan Task 2. The MINT-side
+// refusal, and the only part of Task 2's ref that is observable at Task 2's
+// own layer: `noteFrameForPartial` writes this entry itself, whereas every
+// other leg of the ref's lifetime is observable only through the read Task 3
+// installs in `closeRecord` and at the continuity commit (see this task's
+// report — the mint/zero-mint/I-B3/D3-null/clear-site legs and mutations
+// M2.1/M2.2/M2.4/M2.5-M2.7 belong to Task 3, where a partial can actually
+// be written).
+//
+// THE SHAPE IS SYNTHETIC AND SAYS SO (brief step 1, Finding 7): no committed
+// capture contains the window, but `MonitorFrame.intervalIndex` lags the
+// machine's own interval reset by up to 810 ms
+// (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`, antagonist ledger), so
+// a rowing frame CAN carry the index of an interval whose actual is already
+// banked. These are real bytes through the fake's real encoding — the script
+// authors OUR program index and `toMachineIndex` puts the machine's own
+// number on the wire, so `toProgramIndex` is exercised end to end.
+describe("Door PR B Task 2 (§5.3, I-B6): the mint refusal, diagnosed once per interval index", () => {
+  /** Interval 0's boundary lands, and then TWO more rowing frames still
+   *  carry index 0 — the lag window, twice over. */
+  function laggingScript(): FakeScript {
+    return {
+      program: TWO_INTERVALS,
+      events: [
+        status(100, {
+          elapsedSeconds: 30,
+          distanceMeters: 100,
+          programIntervalIndex: 0,
+        }),
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSpm: 24,
+            avgHeartRateBpm: 142,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 200,
+        },
+        status(300, {
+          elapsedSeconds: 61,
+          distanceMeters: 204,
+          programIntervalIndex: 0,
+        }),
+        status(400, {
+          elapsedSeconds: 62,
+          distanceMeters: 208,
+          programIntervalIndex: 0,
+        }),
+      ],
+    };
+  }
+
+  it("two consecutive rowing frames carrying a banked index write EXACTLY ONE partial-mint-refused entry", async () => {
+    const { result, fake } = harness(laggingScript());
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+    expect(result.current.actuals).toHaveLength(1);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    // `filter(...).length`, never `find` — `find` stays green under a
+    // duplicate and the duplicate IS the failure mode this dedupe exists
+    // for (the refusal arm is per-FRAME, and the ring is ~1 Hz of budget).
+    const refusals = entries.filter((e) => e.kind === "partial-mint-refused");
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]?.detail).toBe("reason=actual-banked idx=0");
+    // I-B6's own consequence: the banked actual is untouched by the frames
+    // that were refused.
+    expect(loadMonitorRun()?.actuals).toStrictEqual([
+      expect.objectContaining({ index: 0, distanceMeters: 200 }),
+    ]);
+  });
+
+  // Review fix round 1, finding 3: the dedupe's OTHER half. "At most one
+  // entry per index per RUN" has two claims in it, and the leg above only
+  // proves the first (one per index). The second — that a SECOND run gets
+  // its own entry — is what the `partialMintRefusedRef.current.clear()` at
+  // every arming site exists for, and it is genuinely at risk: `sessionRef`
+  // and its ring are replaced only at GATT (see `connect()`'s own
+  // "NOTHING SESSION-IDENTITY-SHAPED HAPPENS HERE" block), while `program()`
+  // re-arms inside one connection. A Set that outlived its run would
+  // silence the next run's first refusal for the whole session.
+  it("a SECOND run in the SAME session gets its own entry — the dedupe is per-RUN, not per-session", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        // Run 1: rowing, its boundary, then the lag frame.
+        status(100, {
+          elapsedSeconds: 30,
+          distanceMeters: 100,
+          programIntervalIndex: 0,
+        }),
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSpm: 24,
+            avgHeartRateBpm: 142,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 200,
+        },
+        status(300, {
+          elapsedSeconds: 61,
+          distanceMeters: 204,
+          programIntervalIndex: 0,
+        }),
+        // Run 2, after a re-arm on the SAME connection: the same three
+        // beats over again.
+        status(400, {
+          elapsedSeconds: 12,
+          distanceMeters: 40,
+          programIntervalIndex: 0,
+        }),
+        {
+          atMs: 500,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 210,
+            avgSpm: 25,
+            avgHeartRateBpm: 145,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 210,
+        },
+        status(600, {
+          elapsedSeconds: 61,
+          distanceMeters: 214,
+          programIntervalIndex: 0,
+        }),
+      ],
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+    expect(result.current.actuals).toHaveLength(1);
+    tick(fake, 100);
+
+    // ONE refusal so far — run 1's.
+    const afterRunOne = (
+      JSON.parse(result.current.exportLog()) as { kind: string }[]
+    ).filter((e) => e.kind === "partial-mint-refused");
+    expect(afterRunOne).toHaveLength(1);
+
+    // The re-arm, on the SAME transport and therefore the SAME ring.
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+    expect(result.current.actuals).toHaveLength(1);
+    tick(fake, 100);
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const refusals = entries.filter((e) => e.kind === "partial-mint-refused");
+    expect(refusals).toHaveLength(2);
+    expect(refusals.map((e) => e.detail)).toStrictEqual([
+      "reason=actual-banked idx=0",
+      "reason=actual-banked idx=0",
+    ]);
+  });
+
+  it("an ordinary live run, no actual banked yet: nothing is refused", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, {
+          elapsedSeconds: 30,
+          distanceMeters: 100,
+          programIntervalIndex: 0,
+        }),
+        status(200, {
+          elapsedSeconds: 31,
+          distanceMeters: 104,
+          programIntervalIndex: 0,
+        }),
+      ],
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+    }[];
+    expect(
+      entries.filter((e) => e.kind === "partial-mint-refused"),
+    ).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Door PR B Task 3 (door-partial design spec 2026-09-02, §5.1/§5.2/§5.3): THE
+// READ, at both close sites. Task 2 minted `lastRowingFrameRef` and cleared it
+// on I-B3's two events, but nothing read it — so seven of that task's own legs
+// asserted on `MonitorRun.partial`, a field no code path could write yet, and
+// four of its mutations came back green for that reason alone (its report §2).
+// They are folded in here, where the reads make them observable.
+//
+// Every leg drives the REAL hook to a REAL close and reads `loadMonitorRun()`
+// (or, where the store deliberately refuses the close write, the ring — which
+// is written either way, and is the SECOND observable harden lens 2 finding 3
+// exists for).
+// ---------------------------------------------------------------------------
+
+describe("Door PR B Task 3 (§5.3): the in-flight reading, banked at close", () => {
+  /** The one rowing frame every positive leg's reading comes from:
+   *  interval 0, 100 m, 30 s. Numbers chosen so a leg asserting the pair
+   *  cannot pass on a coincidence with the boundary actual's own (200 m /
+   *  60 s) or with a zero. */
+  function rowingAtZero(atMs = 100): FakeTimelineEvent {
+    return status(atMs, {
+      elapsedSeconds: 30,
+      distanceMeters: 100,
+      programIntervalIndex: 0,
+    });
+  }
+
+  /** Interval 0's own `IntervalActual`, the I-B3 half-two clear's trigger. */
+  function boundaryAtZero(atMs: number): FakeBoundaryEvent {
+    return {
+      atMs,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 60,
+        distanceMeters: 200,
+        avgSpm: 24,
+        avgHeartRateBpm: 142,
+        restDistanceMeters: 0,
+      },
+      cumulativeElapsedSeconds: 60,
+      cumulativeDistanceMeters: 200,
+    };
+  }
+
+  function ring(result: Session): { kind: string; detail: string }[] {
+    return JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+  }
+
+  /** Connects and arms `TWO_INTERVALS` over the fake, ready to be ticked. */
+  async function armed(
+    events: FakeTimelineEvent[],
+  ): Promise<ReturnType<typeof harness>> {
+    const h = harness({ program: TWO_INTERVALS, events });
+    await connect(h.result);
+    await programAndArm(h.result, h.fake, TWO_INTERVALS, TWO_IDENTITY);
+    return h;
+  }
+
+  // -----------------------------------------------------------------------
+  // The five producers, one leg each (plus the natural finish, which is the
+  // negative). The continuity reset — the fifth — needs the real driver +
+  // real-bytes composition and lives with its siblings in the Phase LL Task 4
+  // F3/I6 block above; the live `programDropped` arm needs a hand-rolled
+  // structural mismatch and lives in the Wave F PR 1 Task 2 block above. Both
+  // are named here so a reader looking for "five producers" finds all five.
+  // -----------------------------------------------------------------------
+
+  it("producer 1 — End with the link up banks the in-flight reading, as endedBy rower", async () => {
+    const { result, fake } = await armed([rowingAtZero()]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("rower");
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    // I-B2: a partial is NEVER an `IntervalActual`. "N intervals kept" does
+    // not move for it — a partial single-interval piece is still kept = 0.
+    expect(run?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(run!.actuals)).toBe(0);
+    // §5.1: the ring says what the record shows, at the site that knows.
+    const written = ring(result).filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=0 m=100 s=30");
+  });
+
+  it("producer 2 — End after the link is gone banks it too, as endedBy link-lost", async () => {
+    const { result, fake } = await armed([rowingAtZero()]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    // `linkGone`'s first disjunct (`phase === "disconnected"`). The
+    // `frameSilence` disjunct is the same one line of `endSession` and is
+    // already pinned by the whole-branch B1 block above; what this leg is
+    // about is that the reading survives to a link-lost close at all —
+    // I-B4's "a link-lost close banks what was LAST RECEIVED".
+    act(() => {
+      fake.injectDisconnect();
+    });
+    expect(result.current.phase).toBe("disconnected");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("link-lost");
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    expect(run?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(run!.actuals)).toBe(0);
+  });
+
+  it("producer 3 — a machine TERMINATE (the PM5's own Menu) banks it, as endedBy rower", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      status(200, {
+        workoutState: WORKOUTSTATE_TERMINATE,
+        elapsedSeconds: 40,
+        distanceMeters: 130,
+        spm: 0,
+        currentSplit: 0,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("rower");
+    // The TERMINATE frame itself carries `intervalIndex: null` (no interval
+    // is "current" while terminated — `pm5/parse.ts`'s own business rule),
+    // so it mints nothing and the reading banked is the last ROWING one.
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    expect(run?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(run!.actuals)).toBe(0);
+  });
+
+  it("producer 4 — program() failing over an open run banks it, as endedBy program-failed", async () => {
+    const { result, fake, transport } = await armed([rowingAtZero()]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    // The P3b block's own setup, for its own reason: a real PM answers
+    // `program()`'s leading Terminate by reporting `terminated`, which would
+    // close the run through the ORDINARY path before the rejection surfaces.
+    // Lose that one notification and the run is genuinely still open when the
+    // reject lands — the state P3b (and this producer) is about.
+    transport.deaf = true;
+    fake.injectNak(0);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    expect(result.current.phase).toBe("failed");
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("program-failed");
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+    expect(run?.actuals).toStrictEqual([]);
+    expect(measuredIntervalCount(run!.actuals)).toBe(0);
+  });
+
+  it("the natural finish banks NOTHING — I-B1 is an allowlist, and finished is not on it", async () => {
+    const { result, fake } = await armed([rowingAtZero(), finishedAt(200)]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("finished");
+    expect(run?.partial).toBeUndefined();
+    // THE POINT of the ring half: the reading was STILL HELD at this close
+    // (idx=0) — nothing retired it — so the only thing that refused the
+    // partial is the close reason itself. A `reason=no-reading` here would
+    // mean this leg proved something else.
+    const refused = ring(result).filter((e) => e.kind === "partial-refused");
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.detail).toBe("reason=finished idx=0");
+  });
+
+  // -----------------------------------------------------------------------
+  // I-B3 / I-B6 / D3 — the mint and its clears, all of which assert on
+  // `partial` and so could not go red until the reads above existed
+  // (Task 2 report §2, and mutations M2.1/M2.2/M2.4 which were green there).
+  // -----------------------------------------------------------------------
+
+  it("I-B3 (a): a resting frame carrying the held index retires the reading — the close banks nothing", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      // The work bout for interval 0 is over. On a rested program this
+      // fires ~60 s BEFORE interval 0's own actual (MEASURED at 59 940 ms,
+      // `walk-2026-08-28/rest-boundary-recording.jsonl.gz`), and an End
+      // during that rest would otherwise store a COMPLETED interval as a
+      // partial and count it unmeasured.
+      status(200, {
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 45,
+        distanceMeters: 150,
+        programIntervalIndex: 0,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("rower");
+    expect(run?.partial).toBeUndefined();
+    // The C2-shaped ordering's own ring entry (§5.1): "it kept nothing" is
+    // exactly the report a rower files, and this is the line that answers it.
+    const refused = ring(result).filter((e) => e.kind === "partial-refused");
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.detail).toBe("reason=no-reading idx=none");
+  });
+
+  it("I-B3 (b): a resting frame for a DIFFERENT interval leaves the reading alone", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      // Interval 1's rest, arriving while interval 0's reading is the one
+      // held. The clear is keyed on the index, never on "any rest frame" —
+      // a rest for someone else's interval says nothing about this bout.
+      status(200, {
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 45,
+        distanceMeters: 150,
+        programIntervalIndex: 1,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(loadMonitorRun()?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+  });
+
+  it("I-B6: the interval's own actual retires the reading — a banked index never becomes a partial", async () => {
+    const { result, fake } = await armed([rowingAtZero(), boundaryAtZero(200)]);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.actuals).toHaveLength(1);
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    // Without this, a close in the 810 ms lag window writes
+    // `partialMeters: 0` beside `actualMeters: 200` — the same interval,
+    // twice, once as a completed reading and once as a piece of one.
+    expect(run?.partial).toBeUndefined();
+    expect(run?.actuals).toHaveLength(1);
+    expect(measuredIntervalCount(run!.actuals)).toBe(1);
+    // `reason=no-reading`, NOT `reason=actual-banked` — and the ring is the
+    // ONLY observable that tells those two apart, because both leave the
+    // record without a partial. `no-reading` means the actual RETIRED the
+    // reading when it landed (I-B3 half two); `actual-banked` would mean the
+    // reading survived and was refused at close by `withPartial`'s own
+    // belt-and-braces I-B6 check. Deleting the clear leaves this record
+    // identical and flips this line, which is what makes the clear itself
+    // gated rather than merely redundant.
+    const refused = ring(result).filter((e) => e.kind === "partial-refused");
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.detail).toBe("reason=no-reading idx=none");
+  });
+
+  it("D3: a rowing frame whose index the program cannot explain mints nothing — the close banks the last INDEXED reading", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      // `toProgramIndex(5, "rowing", 2)` is `null`: a candidate more than
+      // one step outside the program's range is not explained by the
+      // forward-attribution rule at all. Absence over invention, the rule
+      // `logDraft` already applies to null-index actuals.
+      status(200, {
+        elapsedSeconds: 99,
+        distanceMeters: 999,
+        programIntervalIndex: 5,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    // 999/99 would be the D3 frame's own numbers. The record must carry the
+    // last frame that knew which interval it belonged to.
+    expect(loadMonitorRun()?.partial).toStrictEqual({
+      intervalIndex: 0,
+      meters: 100,
+      seconds: 30,
+    });
+  });
+
+  it("a zero-distance reading banks as 0 metres, never floored away — the pair is what the machine last said", async () => {
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      boundaryAtZero(200),
+      // Interval 1's first rowing frame: the machine's interval-scoped
+      // distance is back at 0 while the elapsed clock runs on. A rower who
+      // presses End here rowed 0 m of interval 1, and that is what the row
+      // has to say — a floor would silently promote "nothing yet" to
+      // "nothing at all".
+      status(300, {
+        elapsedSeconds: 61,
+        distanceMeters: 0,
+        programIntervalIndex: 1,
+      }),
+    ]);
+    tick(fake, 100);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.partial).toStrictEqual({
+      intervalIndex: 1,
+      meters: 0,
+      seconds: 61,
+    });
+    // I-B2 again, this time with a real actual in the record beside it.
+    expect(run?.actuals).toHaveLength(1);
+    expect(measuredIntervalCount(run!.actuals)).toBe(1);
+    // ...and the ring says `m=0`, not `m=none`: the diagnostic's fallback is
+    // `??`, which fires only on null/undefined. A `||` there would read a
+    // banked zero as "nothing was kept" — the same floor this leg exists to
+    // refuse, one layer over.
+    const written = ring(result).filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=1 m=0 s=61");
+  });
+
+  it("program()'s own clear: a re-armed run's close carries no stale reading from the run before it", async () => {
+    // Run 1 rows interval 0 and holds 100 m / 30 s.
+    const { result, fake } = await armed([
+      rowingAtZero(),
+      // Run 2's first frame, after the re-arm: it opens the record (the
+      // READY -> LIVE gate needs banked distance, and 40 is banked) but
+      // carries a D3 null index, so it mints NOTHING. That is the one
+      // reachable ordering in which a stale reading could survive into a
+      // second run's close — every other first-frame shape mints over it.
+      status(200, {
+        elapsedSeconds: 12,
+        distanceMeters: 40,
+        programIntervalIndex: 5,
+      }),
+    ]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    const run = loadMonitorRun();
+    expect(run?.endedBy).toBe("rower");
+    // 100/30 is run 1's reading. Run 2 never took one.
+    expect(run?.partial).toBeUndefined();
+  });
+
+  it("a boundary the STORE refused leaves the reading alive — the close still banks it (RF25)", async () => {
+    const { result, fake } = await armed([rowingAtZero(), boundaryAtZero(200)]);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    // Race the store directly underneath the hook's own
+    // `lastAcceptedRevisionRef` — the file's own established idiom for
+    // making `applyProducerCommit` refuse. From here the hook's every
+    // producer commit is stale, the boundary's included.
+    const current = currentUnretiredHandoffForTest();
+    expect(current).not.toBeNull();
+    expect(
+      commitHandoffForTest(current!.sessionKey, current!.revision, {
+        ...current!.run,
+        title: "RACED — not the hook's own write",
+      }).accepted,
+    ).toBe(true);
+
+    tick(fake, 100);
+    // The GATE took the actual; the STORE did not. `runRef` is unchanged,
+    // so the record does not own it.
+    expect(result.current.actuals).toHaveLength(0);
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    // The close write is refused by the same stale revision, so the DURABLE
+    // record cannot show the partial here — the ring is the observable, and
+    // it is the one that discriminates: retiring the reading on a refused
+    // commit would lose it twice over (the record owns no actual AND the
+    // close finds no reading), which is exactly RF25's shape.
+    expect(loadMonitorRun()?.title).toBe("RACED — not the hook's own write");
+    expect(loadMonitorRun()?.completedAt).toBeNull();
+    const entries = ring(result);
+    const written = entries.filter((e) => e.kind === "partial-written");
+    expect(written).toHaveLength(1);
+    expect(written[0]?.detail).toBe("idx=0 m=100 s=30");
+    expect(entries.filter((e) => e.kind === "partial-refused")).toHaveLength(0);
+  });
+});

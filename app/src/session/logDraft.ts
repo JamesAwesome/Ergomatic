@@ -214,6 +214,20 @@ export interface LogStep {
    *  all — its measured value lives in `spm` instead (see that field's
    *  own doc comment, and `spmIsMeasured` below). */
   actualSpm?: number;
+  /** Door spec (2026-09-02) §5.1: OUR reading of the interval that was
+   *  still in flight when a connected session closed short — the last
+   *  rowing frame's own 0x0031 distance, never an `IntervalActual`.
+   *  Written ONLY by `buildMonitorLogSteps` below, only on a step with NO
+   *  `actualSource`, and only from `MonitorRun.partial`. NEW KEY NAMES on
+   *  purpose (§5.1): a partial carried in `actualMeters` would reach an
+   *  older server as the number without its marker and enter every sum
+   *  forever. Never summed, never paced (§5.2 I-B5). */
+  partialMeters?: number;
+  /** The same reading's ELAPSED time, not rowing time — the PM5 has no
+   *  paused state and its clock runs whether or not the rower pulls
+   *  (`domain/monitor/types.ts`). Paired with `partialMeters` above:
+   *  `buildMonitorLogSteps` writes both or neither. */
+  partialSeconds?: number;
 }
 
 /** THE ROW-LOCAL DISCRIMINANT for a pre-split monitor row (Phase LT spec 1,
@@ -927,6 +941,35 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
       // with this rate. Unambiguous against the row-local discriminant,
       // which requires `actualSource === "pm5"` first.
       if (interval.displaySpm !== null) step.spm = interval.displaySpm;
+    }
+    // Door spec (2026-09-02) §5.1: the in-flight interval's own reading,
+    // copied onto the step it belongs to and NEVER into
+    // `actualMeters`/`actualSeconds`. Keyed on the PROGRAM index `i` (the
+    // index `MonitorRun.partial` carries), not on `out.length` — a legacy
+    // warm-up seed step returns above without pushing, so the two diverge.
+    // `actual === undefined` restates I-B6 on the read side: the writer
+    // (`withPartial`) already refuses an interval that carries an actual,
+    // and a step can never show both.
+    //
+    // A `run.partial` whose index matches NO emitted step is dropped
+    // SILENTLY, and that is deliberate (harden lens 2, finding 3, which
+    // otherwise puts a ring entry on every refusal). This function runs
+    // OUTSIDE the hook — there is no `sessionRef` here, and giving a
+    // pure builder that `summaryModel.ts` and `LogSession.tsx` call on
+    // every render a diagnostics dependency would be the wrong trade.
+    // It is also unreachable under Task 2's `program()` placement: the
+    // index is minted from `frame.intervalIndex`, which `toProgramIndex`
+    // derives from the SAME `run.program` this loop iterates, and the
+    // ref clears at every re-arm — so a partial can only carry an index
+    // this program has.
+    const partial = run.partial;
+    if (
+      partial !== undefined &&
+      partial.intervalIndex === i &&
+      actual === undefined
+    ) {
+      step.partialMeters = partial.meters;
+      step.partialSeconds = partial.seconds;
     }
     out.push(step);
   });

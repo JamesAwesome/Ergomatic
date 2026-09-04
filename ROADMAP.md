@@ -47,7 +47,7 @@ plan in `docs/superpowers/plans/`) when it starts.
 | Name              | **Ergomatic** in UI and docs (design files say "Erg Log")                                                                                                                                                                                                                                                 |
 | Architecture      | Server-backed SPA: React 19 + Vite 8 client, Express 5 API, TypeScript, ESM, pnpm                                                                                                                                                                                                                         |
 | Data              | PostgreSQL 18 + Drizzle ORM; per-user data throughout                                                                                                                                                                                                                                                     |
-| Offline           | Active session (timer state, in-progress log) persists in localStorage; reload or dropped connection never loses a workout; log save syncs to the API                                                                                                                                                     |
+| Offline           | Active session state persists locally when the durable write succeeds; a rejected connected hand-off write keeps the measured row in memory while the process lives. Reload after a rejected write and later WebKit/localStorage eviction are instrumented, accepted residuals; no surface may pretend either was durable. Log save syncs to the API. |
 | Auth              | Google OAuth (authorization code flow) only at launch; self-hosted cookie sessions in Postgres; no auth SaaS. **Sign-up is deny-by-default against `ALLOWED_EMAILS` — Wave A changes this, and it is the single largest gap between this app and a stranger using it**                                    |
 | Deployment        | Full CD: push to main → self-hosted runner → SSH deploy script → health-gated auto-rollback (nataliesawacritter pattern)                                                                                                                                                                                  |
 | Hosting           | Docker Compose (hardened: read_only, cap_drop ALL, non-root) fronted by a Cloudflare tunnel behind a compose profile                                                                                                                                                                                      |
@@ -120,7 +120,7 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 | Wave  | What it is                  | Size | Tester sees                                 |
 | ----- | --------------------------- | ---- | ------------------------------------------- |
-| **F** | Lifecycle: stop losing rows | L    | Yes, and it is the most valuable thing here |
+| **F** | Lifecycle closeout          | —    | Shipped; final evidence/review only         |
 | **A** | The front door              | L    | Yes, immediately                            |
 | **D** | The toolbox                 | M    | Nothing                                     |
 | **B** | Backups and telemetry       | M    | Nothing                                     |
@@ -189,15 +189,50 @@ slate.
   `docs/monitor/pm5-interface-notes.md:204` (`SET_WORKOUTTYPE(0x01)` +
   `SET_SCREENSTATE(PREPARETOROWWORKOUT)`), and `SET_SCREENSTATE` is
   already built and emitted. **No research pass — the earlier line here
-  saying one was owed was wrong (RF18).** Cost if built: `beginFreeRow()`
-  stops being "sends no bytes" and gains a reject path and an ack gate;
-  carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
-  `OBJ_WORKOUTTYPE_T` entry). One driver change plus one walk leg. **M**
+  saying one was owed was wrong (RF18).** One driver change plus one walk
+  leg; carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
+  `OBJ_WORKOUTTYPE_T` entry). **M**
   **RE-CONFIRMED by James, 2026-09-02 ("i do want item 2"), after using the
   ready fix: build it. Its own PR (wire semantics + a walk leg), after the
   Timer-mode design pass. Ground already in the repo: the 08-31 walk's
   OPEN 5, the p.80 JustRow frame at `docs/monitor/pm5-interface-notes.md:204`,
-  RC-38 rides with it.**
+  RC-38 rides with it.** **IMPLEMENTED (PR #278, 2026-09-02; spec
+  `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`
+  rev 5, Gate 0 rev 1c): `beginFreeRow()` opens the run, then sends the
+  p.80 frame ALONE — no prepare, since a terminate with a run open is the
+  row's own END — as a DETACHED send bounded by
+  `FREE_ROW_PROGRAM_DEADLINE_MS` (5 s, raised from 3 s by the walk's
+  measured write→ack of 1968/2060/1788 ms); its outcome goes to the ring
+  (`free-row-program-sent`/`-unanswered`/`-failed`) and nothing on the
+  phone branches on it. The earlier cost line here ("gains a reject path
+  and an ack gate") was half wrong: there is a reject PATH but no ack
+  GATE, because the readback that would verify the program (0x0031
+  `workoutType = 1`) is also the PM5's idle-after-terminate default, so
+  the erg's own screen is the acknowledgment. The Ready line is James's:
+  `The clock starts on your first stroke.` (the shipped `Nothing is
+  programmed…` line became false and is gone). Gates: `commands.test.ts`
+  pins the frame literal; `driver.test.ts` the ring order, the no-prepare
+  literal, NAK, the terminate-waits ordering and deadline paths;
+  `justRowReplay.test.ts` the
+  unanswered send over the 08-31 capture; `e2e/justrow.spec.ts` reads
+  `free-row-program-sent` off the diagnostics door's copied ring.
+  **WALK RUN 2026-09-03** (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`,
+  three sessions with the control): the frame DOES drive the erg —
+  `workoutType` 0 at the virgin menu, ack at 1.97 s, type 1 89 ms later,
+  and the PM5's own Just Row screen photographed. It also found the
+  defect James saw: **Cancel on the Ready screen left the erg in the Just
+  Row session.** ONE cause was observed — `cancel()` excluded
+  `mode === "justrow"` from its terminate on the now-false ground that "a
+  free row armed nothing". Two more paths to the same stranded monitor were
+  found by reading, NOT on the erg, and are fixed as hardening: the
+  driver's `terminate()` refusal while the send holds the ack slot (never
+  entered on the walk — ring 3's Cancel ran 1589 ms after the ack), and a
+  teardown hang-up overtaking the terminate that refusal fix introduced
+  (~186 ms of margin, from ring 1's own END timings). FIXED in this PR:
+  both exclusions go, `terminate()` WAITS OUT the free-row send instead of
+  refusing it (bounded by the deadline above), and `disconnect()` holds the
+  hang-up while a terminate still owes its write. RC-38's disposition is
+  under Phase PROTO.**
 - **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
   infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
   James ruled TIME ONLY; Gate 0 PASSED on rev 2e
@@ -349,10 +384,11 @@ two headline numbers are safe. **Two capture findings re-open design,
 though, and they must be settled before PR 1 tags its enum** (both are
 written up in the spec's own CLOSED section):
 
-- **The PM5 does not advertise while a Just Row is open**, so the app cannot
-  connect mid-row and cannot reconnect after a mid-row link drop. The spec's
-  "already mid-Just-Row at connect" path is struck; the Today recovery row can
-  only mean "log what we have", never "resume".
+- **The PM5 does not advertise while a Just Row is open**, so a generic scan
+  cannot discover it mid-row. The spec's "already mid-Just-Row at connect"
+  path remains struck. Deferred Correct Resume research considers a retained
+  same-device route after a proven drop, not a scan. That capability is not
+  shipped or scheduled; today the rower can End and log what the app has.
 - **Nothing was observed closing a free row the rower walked away from** — the workout stayed
   active for 896.8 s after the rower stopped, with frames still arriving and
   no auto-terminate — a BOUNDED observation, since the operator ended the
@@ -387,28 +423,51 @@ ship a tester nothing, so they release alongside C rather than alone — two
 consecutive empty release notes is how the invisible-but-necessary wave gets
 skipped.
 
+**SLATE COMPLETE 2026-09-03.** All twelve items above are ticked; item 2
+(#278) was the last, and its walk found the connect latency that #283 then
+fixed.
+
+- [x] **Connect programs the erg sooner, and the free row waits for it
+      (#283, 2026-09-03).** Not a slate item: item 2's walk exposed it.
+      Every connect this app has ever made waited ~1.7-2.1 s between our
+      first CSAFE write and the PM5's ack, because `createPm5Driver`
+      enqueued ten native calls before the program write on the plugin's
+      single FIFO queue. The driver now defers its status subscriptions
+      until the first non-prepare sequence is acked. **Walked 2026-09-03**
+      (`docs/monitor/sessions/walk-2026-09-03-connect-sooner/`): free row
+      202 ms, programmed workout's erg screen 1799 ms against a prior
+      2700-2969 ms. Part 2 in the same PR: the free row waits for the
+      monitor like a workout does, with the Gate 0 "Starting your row"
+      card. **Spec** `docs/superpowers/specs/2026-09-03-connect-programs-sooner-design.md`.
+
 ---
 
 ## Wave F — Lifecycle: the app stops losing rows
 
-**Status:** OPEN and shipping — three of its items are struck (#228 in
-v0.27.0, #239 in v0.30.0, and the ring-recovery item struck unrecoverable on
-2026-08-31); the lifecycle spec is WRITTEN
-(`docs/superpowers/specs/2026-08-31-lifecycle-design.md`, four PRs), and
-correct resume and the `door` column remain beside it. **TRIAD** (stored
-shapes: the `door` column, and the lifecycle spec's fifth `CloseReason`).
+**Status:** IMPLEMENTATION COMPLETE; final closeout review pending.
+Correct Resume is in the Icebox, not this wave's implementation or exit.
+The pocketed-phone umbrella's three child items are resolved below; no
+additional implementation is hidden in its former unchecked box. The
+phase-close evidence still needs reconciliation against the narrowed exit
+before the phase is archived; this status does not claim that review passed.
 **L.** Absorbs the rest of Phase LM, whose PR 1 shipped as #198 / v0.24.0.
 
-**Goal:** a phone in a pocket, a phone that locks, and a link that drops all
-stop costing the rower the row they actually did.
+**Goal:** preserve received work across pocketing, locking and link loss,
+with an honest End/save fallback after a true drop. Continuing collection in
+the same row after that drop is deferred.
 
-**Why it is first:** the pocketed-phone row loss is reproduced on hardware, in
-production, this week. It is the only defect in this file that destroys a
-rower's work silently.
+**Why it was first:** the pocketed-phone row loss was reproduced on production
+hardware in August. The shipped fixes below address that evidence; they do not
+establish demand for same-row Bluetooth reattachment.
 
-- [ ] **The pocketed-phone row: a whole piece rowed and nothing kept.
-      RE-DIAGNOSED at the phase-open anchor pass, 2026-08-28.** The outcome is
-      real (James's row, walk leg 4, v0.25.0 build 759, production), but this
+- [x] **The pocketed-phone row: a whole piece rowed and nothing kept.**
+      **WORK ITEMS RESOLVED:** live program-drop handling shipped in #248;
+      the resume edge closed as unreproduced/instrumented in #280 after
+      #267's instrument; #258 replaced the unrecoverable ring with history.
+      This resolves the three child items, not the unproven original causal
+      chain. **Historical diagnosis from the phase-open anchor, 2026-08-28:**
+      the outcome is real (James's row, walk leg 4, v0.25.0 build 759,
+      production), but this
       item's original mechanism — "stays `phase=ready`, opens no record, End
       silently discards" — was FALSE by its own cited ring: the record OPENED
       at machine elapsed 43.04 s (`rowing-active-fallback`'s single emit site
@@ -434,7 +493,7 @@ rower's work silently.
       waiting on it.** The cited hook line numbers moved with PR #239; the
       handler is `useMonitorSession.ts`'s `programDropped` case, found by
       name rather than by line.
-- [ ] **Handle `programDropped` while a run is live** (from the
+- [x] **Handle `programDropped` while a run is live** (from the
       pocketed-phone re-diagnosis above). Small and deterministic, warranted
       whatever the full ring says — the detector already fires; only the
       live arm swallows it, and that arm has NO test
@@ -459,12 +518,24 @@ rower's work silently.
       live arm publishing `closeReason`; the real-driver seam test; the
       two Gate-0 surfaces; this composition drive-through). **PR #248**,
       PM final gate GO-WITH-CONDITIONS 2026-08-31.
-- [ ] **The pocketed-phone window's two co-producers. RE-SCOPED on evidence
-      2026-08-31 — one is not a defect.** `pause-declared` at 66 spm while
-      rowing is real and stays here, owned by
-      `2026-08-31-lifecycle-design.md` §4, and it deliberately WAITS on that
-      spec's §3 instrument rather than being fixed on the stale-frame story
-      (66 spm is consistent with a stale reading, not evidence of one).
+- [x] **~~The pocketed-phone window's two co-producers~~ — §4 CLOSED
+      2026-09-03: UNREPRODUCED and INSTRUMENTED (James's ruling at the
+      resume-edge walk).** `pause-declared` at 66 spm while rowing was
+      owned by `2026-08-31-lifecycle-design.md` §4 and waited on that
+      spec's §3 instrument, which shipped in #267. The walk that used it
+      (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`) performed the
+      exact gesture — locked mid-row for 35.5 s, kept rowing, unlocked —
+      and **declared no pause at all in the 22.4 s that followed**. The
+      post-resume inter-arrival gaps were `[84,180,90]` ms; the one
+      genuine `pause-declared`, seven seconds into a deliberate mid-work
+      stop, carried `[90,90,180]` ms. **Timing does not discriminate on
+      this device, and there was nothing to discriminate.** Designing a
+      predicate on a defect an instrumented capture of its own gesture
+      cannot reproduce would be inventing a mechanism, so the instrument
+      stays and the item closes — the same posture as F-1 (6-MIN). The
+      next occurrence arrives with `gapsMs` and `sinceResumeMs` already on
+      it; a design starts from those numbers or not at all. One device,
+      one run: this is not a claim that the defect cannot happen.
       **TWD 52→0→64 m non-monotonic is CORRECT BEHAVIOUR and leaves this
       item:** `continuity.ts`'s `check` convicts a reset only when TWD,
       elapsed AND distance all read backward together — TWD alone is the
@@ -511,38 +582,7 @@ rower's work silently.
       place for the next one. The same PR also ships §3 (the resume-edge frame
       instrument) and §6 (the RC-29 latch counter, see that register row).
 
-- [ ] **Correct resume** (was LM PR 2). James's ruling, 2026-08-20:
-      **"CORRECT RESUME, not a background mode."** **Unblocked 2026-08-26** —
-      it was gated on a probe James cancelled, so the probe will never report.
-      The newest walks read `framesWhileHidden=1` (2026-08-27) and `1`/`0`
-      (2026-08-28) — the older `=2` was walk-2026-08-26b's number; the
-      conclusion (suspended, not throttled) is unchanged. **This is a
-      build-from-zero item:** `framesWhileHiddenRef`'s sole read is string
-      interpolation into a diagnostic line (`useMonitorSession.ts:3072-3079`),
-      and `decideResumeLatch`'s latch does nothing that recovers — there is
-      no existing resume mechanism to extend. **M**
-      **DELIBERATELY EXCLUDED from `2026-08-31-lifecycle-design.md`** (its
-      §0.6, skip spoken not silent): build-from-zero, its own M, and the
-      pocketed-phone chain does not need it — the late open cost the series
-      trace's head, never the interval actuals. Stays a separate Wave F
-      item.
-- [ ] **RC-29 — LEFT WAVE F on 2026-08-31, same day it was folded in.** It
-      was folded in carrying a measured false-positive rate — "9 banners in
-      288 s over a link that never dropped (`walk-2026-08-26/`)" — that
-      `2026-08-27-link-authority-design.md` revision 4 had ALREADY retired:
-      `decideResumeLatch` shipped in v0.24.0 and killed exactly that, and
-      the build-759 ring from the next day
-      (`walk-2026-08-27/lock-phone-ring.json`) shows ONE latch for one
-      39.4 s lock with `silent=true` — the watchdog behaving correctly.
-      v0.24.0's own release note tells testers so. **Nobody has measured the
-      rate since, so there is no defect number to design against**
-      (recurring failure 16's second corollary: a sourced premise true when
-      written and false when used). Ruled out of the spec by James,
-      2026-08-31. It returns to the open-item register as UNMEASURED on the
-      current build; `2026-08-31-lifecycle-design.md` §6 ships a latch
-      counter so ordinary use produces the number, and no threshold moves
-      until it does.
-- [ ] **The `door` item — RE-SCOPED 2026-09-02, spec
+- [x] **The `door` item — RE-SCOPED 2026-09-02, spec
       `docs/superpowers/specs/2026-09-02-door-partial-design.md`.** The
       column itself SHIPPED as `session_logs.source` (`pm5 | timer |
       manual`) in #268 / migration 0020 on 2026-09-02, so "which door" is
@@ -588,7 +628,9 @@ rower's work silently.
         guard now keeping the `pm5` door for a nameless erg instead of
         storing the session as by-hand. All three riders below are ticked.
         Gate 0-A was APPROVED by James on 2026-09-02 before any task ran.
-        **PR B (the stored NUMBER) is still open.**
+        **PR B (the stored NUMBER) is IMPLEMENTED on branch
+        `wave-f-door-b`, 2026-09-03** — the item below carries what it
+        shipped as **PR #279**.
       - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
         in-flight interval's metres in NEW step keys (`partialMeters`/
         `partialSeconds`), never `actualMeters` — an older server drops
@@ -605,16 +647,35 @@ rower's work silently.
       **S/M each; A lands before B; B's plan gets a FULL antagonist pass
       (novel stored shape + session-scoped ref).**
 
-- [ ] **The in-flight interval's metres are discarded on a mid-row link loss.**
+      **TICKED 2026-09-03 — nothing remains under this item.** The column
+      shipped in #268; PR A shipped the stored WORD in #276 (`e6f456ce`);
+      PR B ships the stored NUMBER and is the last thing this item scoped.
+      The spec's §4 riders are also resolved under PR A. Correct Resume is
+      separate, iceboxed work; it does not leave an obligation under this
+      delivered item. PR B's number is recorded above and below as #279.
+
+- [x] **The in-flight interval's metres are discarded on a mid-row link loss.**
+      **DONE — door PR B (branch `wave-f-door-b`), 2026-09-03.** A close that
+      catches the rower mid-interval banks that interval's last reading in two
+      NEW step keys and the row shows it beside the dash; no hero, tier, total
+      or "N intervals kept" moves (I-B2/I-B5). The five replay legs drive real
+      wire bytes from three committed captures. Gate 0-B approved 2026-09-02.
+      **PR #279.**
       On a single-interval workout — the tester's own 2000 m "Beam Sea" — any
       mid-row loss gives `kept = 0`, which was the MAJORITY outcome of walk
-      leg B, not an oddity. **The spec states explicitly whether correct resume
-      recovers those metres.** **S**
+      leg B, not an oddity. **The held reading survives today's End/save path;
+      same-row reconnect is deferred, not shipped by this item.** If that work
+      reopens, it must preserve this reading without recovering anything the
+      app never received; generic `connect()`/`teardown()` clears cannot be
+      reused blindly. A later confirmed actual supersedes the partial;
+      otherwise the latest held pair remains the honest lower bound. **S**
       **SPECCED as `2026-08-31-lifecycle-design.md` §5, and SEQUENCED BEHIND
       THE `door` COLUMN above.** The live-drop arm (§1) inherits this
       directly: banking "what was rowed" banks nothing when no boundary was
-      reached. A stored partial is OUR number, not the machine's — there is
-      no interval pair mid-interval — so it can never be tier A, and
+      reached. A stored partial is the machine's own frame reading with OUR
+      attribution to the in-flight interval, never an interval pair the
+      machine reported — there is none mid-interval — so it can never be
+      tier A, and
       `measuredIntervalCount` correctly will not count it toward
       "N intervals kept." That is the PARTIAL vocabulary's job, which is why
       this lands with or after that migration and its summary copy is part
@@ -624,13 +685,48 @@ rower's work silently.
       invariants, a lifetime table for the in-flight reading, its own Gate
       0-B, and one replay owed before its plan (when `IntervalActual` N
       arrives — work→rest boundary or end of rest).
-- [ ] **`rowingActive` is falsified but not dangerous.** Owed: (a) one test
-      pinning `surfaceModel.ts:915`'s `midSessionMirror` byte-half — measured,
-      deleting it leaves 5,357 tests / 191 files green, so nothing gates it
-      today; (b) a reconciled comment; (c) a diagnostic carrying the raw byte,
-      since `parse.ts:608`'s strict `rowingState === 1` makes any non-1 read
-      `false` and the next occurrence still will not say which. No behaviour
-      change proposed. **S**
+- [x] **`rowingActive` is falsified but not dangerous — DONE in this PR
+      (2026-09-03, `2026-09-03-rowing-active-design.md`).** Owed: (a) one
+      test pinning `midSessionMirror`'s byte half (`surfaceModel.test.ts` —
+      cited by symbol, not the stale `surfaceModel.ts:915`) — the
+      measurement below was itself stale; RE-MEASURED on `c2182ef5`:
+      deleting `frame.rowingActive === false &&` gives `Test Files 1 failed
+      | 230 passed (231)`, caught only by
+      `ConnectedSurface.screens.test.tsx`'s RC-24 snapshot as an HTML diff,
+      which is why the explicit model-layer pin was still owed; (b) a
+      reconciled comment — ALREADY DONE, at `types.ts`'s `restSeconds`
+      block, narrowed at its own site by #280's walk; (c) a diagnostic
+      carrying the raw byte, since `parse.ts:608`'s strict
+      `rowingState === 1` makes any non-1 read `false` and the next
+      occurrence would otherwise still not say which — DONE, `driver.ts`
+      now logs a `raw-rowing-state` ring entry on the driver's first frame
+      and on every change after (spec §2, invariants I-2/I-3). No
+      behaviour change. **S**
+      **(d) SETTLED 2026-09-03 at the resume-edge walk
+      (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`): the clock
+      RUNS through a mid-work stop.** With the rower sitting still, elapsed
+      went 80.52 s → 92.11 s (+11.6 s) while distance went 247.1 → 249.6 m
+      (coast, then nothing). So `MonitorFrame.state`'s own "no paused state
+      on the wire" note holds for the mid-WORK
+      case and `types.ts:134`'s "FREEZES whenever `rowingActive` goes
+      false" is correct only for its own measured REST — corrected at its
+      site by this walk. Door PR B's `partialSeconds` is therefore interval
+      elapsed INCLUDING idle time, exactly as `2026-09-02-door-partial-design.md`
+      §5.1 concluded; no shipped behaviour changes. **(c) is now DONE too —
+      this PR's `driver.ts` ring carries the raw byte on the first frame and
+      on every change, so the next occurrence will say which value it
+      was.** The original text, for the
+      record: `domain/monitor/types.ts:134` claims `MonitorFrame.elapsedSeconds`
+      "FREEZES whenever `rowingActive` goes false", measured through a REST;
+      `types.ts:189-191` says the wire has no paused state at all; and
+      `PAUSED_FRAME_HOLD`'s comment records that the byte's behaviour through
+      a mid-piece stop has NEVER been observed. Door PR B's stored pair is
+      elapsed time, so the mid-WORK case is the one that matters. The
+      observation: on a DISTANCE interval, stop pulling mid-interval for
+      ≥10 s, keep the program running, then End. The recording then carries
+      both the clock and the byte through the same stop and the loser of
+      those two comments is corrected at its own site. Spec
+      `2026-09-02-door-partial-design.md` §5.1 carries the full reading.
 - [x] **The machine's own totals have NEVER reached a saved row. TRIAD — a
       change to what a stored number MEANS, and it lands alone.** Found by
       James on production TestFlight 2026-08-28; the ring is
@@ -715,11 +811,12 @@ rower's work silently.
       James-approved 2026-08-30). **Per the STRIKE CONTRACT set at #239's PM
       gate, this same commit removed the Task 1-6 progress narration that stood
       here** (the file's own head rule: a struck item does not keep its progress
-      log) **and lifted its forward-looking residuals into the open-item
-      register first** — the memory-only reload gap, the three surviving legacy
-      reads, and the store's standing tier-precedence probe. The full record
-      lives in PR #239 and moves to `docs/history/` when Wave F closes.
-- [ ] **Audit AUD-011/AUD-015 — storage denial is recoverable before work.**
+      log) **and lifted its forward-looking residuals before closure.** Two
+      remain open — the three surviving legacy reads and the standing
+      tier-precedence probe. The memory-only reload gap moved to Accepted on
+      James's 2026-09-03 ruling. The full record lives in PR #239 and moves to
+      `docs/history/` when Wave F closes.
+- [x] **Audit AUD-011/AUD-015 — storage denial is recoverable before work — DONE in PR #282.**
       Guard getter denial on every persisted loader, and never leave Countdown
       for Timer unless the active run is durable. One local-storage recovery
       PR may own both, with separate regression tests; the visible Retry state
@@ -741,9 +838,16 @@ rower's work silently.
       never reached it because `loadRun` (`Today.tsx:280`) throws first. Three
       spec conditions from the anchor: (1) a Today fixture that actually
       reaches the `loadTodayPick` call (needs a plan and a pool); (2) one
-      COMPOSED denial-then-Start test — after AUD-011's fix, denial makes
-      `loadRun()` return null, so Start proceeds and then hits
-      `saveRun === false`, a path neither finding's own tests cover; (3) the
+      COMPOSED denial-then-Start test — **CORRECTED at the spec's antagonist
+      DELTA pass (2026-09-03): this composition never happens.** A denied
+      getter fails EVERY storage access on that origin, not the run key
+      alone, so `saveDraft` (Countdown's own mount effect, called before
+      `saveRun`) throws first and Countdown never mounts at all — there is
+      no "Start proceeds, then `saveRun === false`" path for AUD-011's fix
+      to create. The blocked-start state this spec actually builds is
+      produced by QUOTA at the run key specifically (the draft write
+      succeeds, only the run write is over budget), not by getter denial —
+      see the spec's §3 legs (a)/(b)/(c). (3) the
       Retry surface needs a non-retry exit — a Retry under a still-denied
       getter is a loop. Open research line for the spec: whether the getter
       can throw in a Capacitor WKWebView on its own origin (the WHATWG
@@ -765,9 +869,30 @@ rower's work silently.
       still dies at `loadRun` first. **So this chunk's unguarded set is now
       exactly three loaders — `loadRun`, `loadDraft`, `loadTodayPick` —
       matching the §8 reshaping above; `loadMonitorRun` is off the list.**
-      Everything else here is unchanged and still owed: the three anchor
-      spec conditions, the Retry surface's Gate 0, AUD-015's Countdown
-      durability, and the Capacitor-WKWebView reachability research line.
+      **SPECCED 2026-09-03 as
+      `docs/superpowers/specs/2026-09-03-storage-denial-design.md`, and the
+      research line is CLOSED.** The getter CANNOT throw on the phone:
+      WebKit's `localStorage` getter has exactly one throw, gated on
+      `canAccessResource(LocalStorage) == No`, whose three routes are an
+      opaque origin, a `file://`-equivalent origin, and
+      `StorageBlockingPolicy::BlockAll` — and our `capacitor://localhost`
+      (no `server` block; a `WKURLSchemeHandler` serves it) is none of
+      them, with the blocking policy embedder-set and unset by Capacitor
+      and by us. Full citations:
+      `docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md`.
+      **James's ruling on that evidence (2026-09-03): the three guards ship
+      as WEB-ARM hardening — the dev loop, the e2e harness, the browser
+      fallback, where a user CAN block site data — and the Retry SURFACE
+      for a denied getter does NOT ship**, so anchor condition (3) is
+      retired with it. AUD-015's Countdown durability keeps its visible
+      state and is where the one Gate 0 goes, because a failed WRITE is
+      reachable everywhere. Anchor conditions (1) and (2) survive. Two
+      corrections the spec carries: the audit's second loader lives in
+      `session/draft.ts`, not `logDraft.ts`; and the catch must be BARE,
+      since the getter's non-throwing failure surfaces as a `TypeError`.
+      **Tripwire:** the whole argument rests on `server.iosScheme` being
+      unset — setting it to `"file"` makes the origin local and the throw
+      immediately reachable.
 
 **Riding this wave because it touches `app/server/` and `app/domain/`:**
 
@@ -807,17 +932,24 @@ saves three round trips.
       (`docs/history/phase-rc.md:2054-2056`). Wording softened at door
       PR A's PM gate.
 
-**Exit:** a phone locked before the first pull, a phone backgrounded mid-piece,
-and a link dropped mid-piece each produce a stored row that matches what the
-machine did, and the row says which door it came in by **(the door clause is
-DELIVERED by `session_logs.source` — pm5 | timer | manual, NOT NULL,
-backfilled — landing in the unconnected-JR PR, 2026-09-02; what remains of
-it for this wave is the no-reading row's own WORD, which posts and
-backfills `manual` today: `storedSummary.ts`'s header carries the history).** **Fourth clause, added
-at the phase-open gate (2026-08-28) so the durability chunks are inside the
-exit they build toward:** a connected row carries the erg's own summary
-numbers whenever the erg spoke them, and a storage failure never silently
-downgrades a measured session to a hand-logged one.
+**Exit (narrowed by James, 2026-09-03):** a phone locked before the first pull
+and a phone backgrounded mid-piece preserve the logical row under the shipped
+lifecycle rules. A true link drop mid-piece preserves received actuals and the
+eligible held partial for End/save, identifies the `pm5` door, and reports the
+incomplete result without inventing measurements. No same-row reconnect or
+`MISSED`/trace-break writer is required. After a true drop the app does not
+collect subsequent work into that row; this is the accepted cost of deferral,
+not a claim of whole-workout recovery. The door clause is delivered by
+`session_logs.source` (`pm5 | timer | manual`, NOT NULL, backfilled), including
+the no-reading word shipped by door PR A. The phase-close gate still verifies
+these outcomes; deferral is not a passing walk or permission to close the wave.
+
+The storage clause is deliberately narrower: while this process remains alive,
+a rejected durable hand-off write never silently downgrades a measured session;
+the memory tier and held surface preserve it. Reload after that rejected write,
+and eviction after a previously successful WebKit/localStorage write, are
+instrumented accepted residuals rather than Wave F blockers. Reopen only after
+a real observed occurrence.
 
 ---
 
@@ -1406,17 +1538,32 @@ X" is a real disposition — most of these are single files.
       for free rows, or accept and say so in the button's copy. **S**
 
 ## Codebase-audit owners
-- **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02): on
-  the connected lost-link banner (`ConnectedSurface.tsx`'s `LostBanner`, the
-  `kept === 0` arm), that line reads as loss at the exact moment the
-  RECONNECT is nullifying it — scary and, given recovery, false. Proposed:
-  `kept === 0` renders the title alone (no body); `kept >= 1` keeps
-  "N intervals kept." Copy-only, one file, cosmetic failure mode —
-  FAST-PATH eligible, but a rendered **Gate 0** first (it changes what a
-  rower reads). **Rides PR 4 (§5 partial metres) — James, 2026-09-02**: the
-  same PR that makes a part-rowed interval count toward "kept" owns what the
-  zero-kept banner says, one Gate 0 for the whole kept vocabulary. Evidence:
-  `ConnectedSurface.tsx:848`.
+- [x] **LOST THE MONITOR must not say "Nothing kept." — DONE in door PR B**
+  (2026-09-03). Shipped on all THREE surfaces that carried the phrase, not
+  one: the banner's `kept === 0` arm renders its title alone (no body
+  element at all, never an emptied one), the connected surface's ended frame
+  says "The erg dropped the workout." and stops, and `LogSession.tsx`'s
+  dropped strip says "You had not finished an interval yet." with the bold
+  clause dropped rather than emptied. Every `kept >= 1` arm is byte-for-byte
+  unchanged. **The sentence below is WRONG and is corrected here rather than
+  deleted, because it was the reason this rode PR B:** a part-rowed interval
+  does NOT count toward "kept" and never will — I-B2, a partial is never an
+  `IntervalActual` and `measuredIntervalCount` does not see it. What PR B
+  actually does is make the zero-kept case one where something IS on screen
+  (the interval's own metres), which is why the phrase had to go. The
+  original text, for the record:
+  > **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02):
+  > on the connected lost-link banner (`ConnectedSurface.tsx`'s
+  > `LostBanner`, the `kept === 0` arm), that line reads as loss at the
+  > exact moment the RECONNECT is nullifying it — scary and, given
+  > recovery, false. Proposed: `kept === 0` renders the title alone (no
+  > body); `kept >= 1` keeps "N intervals kept." Copy-only, one file,
+  > cosmetic failure mode — FAST-PATH eligible, but a rendered **Gate 0**
+  > first (it changes what a rower reads). **Rides PR 4 (§5 partial
+  > metres) — James, 2026-09-02**: the same PR that makes a part-rowed
+  > interval count toward "kept" owns what the zero-kept banner says, one
+  > Gate 0 for the whole kept vocabulary. Evidence:
+  > `ConnectedSurface.tsx:848`.
 
 - **v0.32.0's notes owe the DIAGNOSTICS door its affordance sentence** (PM
   gate on #258, 2026-09-01): where it is (You → DIAGNOSTICS → Monitor logs),
@@ -1511,24 +1658,18 @@ X" is a real disposition — most of these are single files.
   the next time James copies a connection log for any reason.** Evidence:
   `handoffStore.ts`'s receipt ring (stashed to sessionStorage at teardown),
   decoded via the connection log sheet.
-- **The hand-off store's three residuals, lifted here by #239's STRIKE
+- **The hand-off store's two open residuals, lifted here by #239's STRIKE
   CONTRACT (2026-08-31)** when the AUD-016 item was struck. They are real and
-  unscheduled; none is a defect the store introduced.
-  1. **A memory-only record vanishes on reload, indistinguishably from a
-     durable one.** When the durable write is denied, Today shows the row and
-     both connect guards see it — but a reload takes it with no trace, and
-     nothing tells the rower the difference between a record that was kept and
-     one that never was. The store's receipts see it; the rower does not.
-     **Rides the next PR touching the connected surface**, and it wants copy,
-     so a rendered Gate 0 comes with it.
-  2. **Three legacy reads survive**: `monitorRunState()` and `anyLiveSession()`
+  unscheduled; neither is a defect the store introduced. The former
+  memory-only-reload item moved to Accepted on James's 2026-09-03 ruling.
+  1. **Three legacy reads survive**: `monitorRunState()` and `anyLiveSession()`
      (`monitorRun.ts`) and `Today.tsx`'s stale-draft-discard guard still call
      `loadMonitorRun()` rather than the store. Deliberately left with a citing
      comment each — `anyLiveSession()` has zero production callers, and
      deleting them would orphan the cross-file anti-pattern documentation that
      names them (`todayGuard.pin.test.ts`'s binding pin). **Whoever next
      touches these functions owns the decision**, per the close-out's own flag.
-  3. **The store's standing probe is row 11's tier-precedence COMPOUND
+  2. **The store's standing probe is row 11's tier-precedence COMPOUND
      mutation**, not the single-line reorder — that one is a genuine non-bite.
      Remove the `if (hydrated) return` re-entrancy guard together with forcing
      the population guard true: 6 files / 40 tests fail, including
@@ -1696,6 +1837,20 @@ close, not before.**
   confirms our reading or finds a real defect; both outcomes are cheap.
   **Per recurring failure 16's second corollary, the row for each value is
   quoted verbatim beside the claim it supports.** **S**
+  **DISPOSITION (Just Row connect spec 2026-09-02, PR #278): NOT
+  transcribed, and said so where the value is used.** Concept2's PDFs sit
+  behind Cloudflare and could not be fetched, so `0x01` ships as
+  `WORKOUTTYPE_JUSTROW` in `domain/monitor/pm5/commands.ts` with a doc
+  comment naming it a LABEL rather than an `OBJ_WORKOUTTYPE_T` row. What
+  the value rests on instead is machine corroboration, counted not
+  transcribed: the 08-31 capture's 0x0031 census
+  (`docs/monitor/sessions/walk-2026-08-31-justrow/decode-0031.py`) reads
+  type `0` at a virgin menu, `1` from the first pull, and `1` again after
+  a Menu end with nothing sent by anyone — so `1` is what the PM5 picks
+  for its own Just Row, and ALSO its idle default, which is why the spec
+  keys no gate on it. The verbatim row is still owed: James can drop the
+  CSAFE PDF into `docs/monitor/` and the transcription is a comment
+  change. Still **S**, no longer scheduled against a PR.
 - **The axis-quantity question — REHOMED 2026-08-31** into the "say which number
   this is" design pass below. It was never only about `traceModel.ts`'s `t` and
   `d`; it is one of three places the same screen mixes two quantities.
@@ -1787,8 +1942,8 @@ to lose the row has no move except to walk away.
 | **The landscape gutter**                   | The phone timer's landscape gutter absorbs no left inset                                                                                                                                                                                                                                                                                                                                                                                                       | `phase-cr2.md`               |
 | **iOS 26 `100dvh`**                        | Under `viewport-fit=cover`. Wave D's native fake flag is what makes this answerable at a desk                                                                                                                                                                                                                                                                                                                                                                  | `phase-cr2.md`               |
 | **`PULL TO RESUME`**                       | James, 2026-08-17: _"we never got rid of the pull to resume screen."_ CR2 2a task 5 only re-worded it; **the screen was supposed to go, not get politer.** §2b's suspected mechanism was FALSIFIED (zero PAUSED firings across six captures) and the flash's real mechanism is unexplained. Pairs with the stale-while-armed observation                                                                                                                       | `phase-cr2.md`               |
-| **Reconnect's three preconditions**        | Plus the prerequisite from #183's gate: any reconnect design must reset or quarantine `lastContinuityRef`'s count axis across a re-subscribe, or the first post-resubscribe 0x0033 convicts a healthy row on a stale register                                                                                                                                                                                                                                  | `phase-ll.md`                |
-| **Three declined CR questions**            | Projected finish split; **reconnect backfill** (the grid assumes yes — if not, those rows need the `— · MISSED` treatment); distance intervals with a rate cap. Each waits on a hardware fact                                                                                                                                                                                                                                                                  | `phase-cr.md`                |
+| **Reconnect's three preconditions**        | Constraints on the deferred Correct Resume entry, not separate scheduled work. #183's gate requires a reconnect design to reset or quarantine `lastContinuityRef`'s count axis across a re-subscribe; preserving the old baseline without that policy is unresolved. | Correct Resume research, "Status: deferred, not an implementation contract" |
+| **Two declined CR questions**              | Projected finish split; distance intervals with a rate cap. Each waits on a hardware fact. Reconnect belongs to the deferred Correct Resume entry, not this row; its research does not authorize backfill or a MISSED writer. | `phase-cr.md`                |
 | **LL-F4**                                  | The `disconnected` handler records no liveness snapshot where `fail()` does, so a retry's ring has one fewer data point                                                                                                                                                                                                                                                                                                                                        | `phase-ll.md`                |
 | **Connection-log text is unselectable**    | `user-select: none` inherits into the sheet (`index.css:85`, `:5799`); COPY LOG is the only route out                                                                                                                                                                                                                                                                                                                                                          | `phase-cs.md`                |
 | **The bar's two axes**                     | The connected bar's fill and its notches are two axes on DISTANCE work; EST LEFT holds still 6.6 s and 20.8 s at handovers. **The obvious repair was replayed and does not work.** Accepted and documented. **TRIAD** when it is taken                                                                                                                                                                                                                         | `phase-cr2.md`               |
@@ -1798,6 +1953,15 @@ to lose the row has no move except to walk away.
 Known-wrong and deliberately left. They are here so nobody rediscovers them as
 new.
 
+- **Connected hand-off durability stops at the live process when a write was
+  rejected.** The memory tier keeps the measured row and the receipts record
+  the failed durability attempt, but reload destroys that memory-only row.
+  Separately, WebKit or the operating system may later evict a successful
+  localStorage write. Correct Resume cannot cross either process/storage loss:
+  it retains in-memory connection state, not a second durable store. James
+  accepted both on 2026-09-03 because neither has occurred in this app and the
+  shipped receipt/ring instrumentation will identify the first occurrence.
+  Reopen from that evidence, not a hypothetical mitigation.
 - **TIER B2 residual** — `buildMonitorLogSteps` never produces a step for a
   null-index actual, so the row under-counts. **Ongoing population:** link-lost,
   program-failed and interrupted closes can never carry the work pair.
@@ -2164,6 +2328,51 @@ Each needs erg time or a deliberate recording session.
   stack — capture it rather than re-running past it.** This matters more
   than the known e2e flakes: the unit project has no Docker, browser, or
   network and should be deterministic. **S**
+  **THREE files now, and a measured rate (door PR B Task 7, 2026-09-03):**
+  a third test joined the set — `server/auth/middleware.test.ts > noStore >
+  stamps Cache-Control: no-store` — alongside a `data.test.ts` cursor-
+  pagination leg and `server/routes/concept2.test.ts`'s cookie-caller leg
+  (`expected 401 to be 200` inside its own mint helper). Rate: **1 failure
+  in 10 runs at that branch's head, and 1 in 12 with `data.test.ts` reverted
+  to base** — the same rate with and without the branch's only `unit`-project
+  file, which is what rules out a regression and keeps this row's "cause
+  UNKNOWN, capture the next one" instruction standing. `concept2.test.ts`
+  ran 8/8 green in isolation, so it does not reproduce alone.
+  **A CLIENT-project flake joined the set on 2026-09-03** (the `rowingActive`
+  branch, across four full runs): `ConnectedSurface.screens.test.tsx > screen
+  fixtures for pnpm screenshots > pane C, the grid mid-rest (RC-24)` failed
+  once as a SNAPSHOT mismatch and passed on an identical re-run minutes later,
+  on an unchanged tree. This row's title says "unit-project" and its whole
+  inference section reasons about supertest against in-memory fakes — neither
+  covers a jsdom snapshot in the `client` project, so the row's SCOPE is
+  widened here rather than the observation being filed under a mechanism it
+  does not share. What is OBSERVED: one failure, one identical green re-run,
+  no code change between them. What is INFERENCE and explicitly unchosen: the
+  same parallel-worker load theory, or snapshot serialisation racing a
+  concurrent write. **Same standing instruction: capture the next one's full
+  diff rather than re-running past it.**
+- **`retest.spec.ts` is not idempotent across runs on a KEPT stack — the
+  e2e suite passes on a fresh database and fails on a reused one.** Found
+  2026-09-03 on the `rowingActive` branch, and DIAGNOSED rather than
+  re-run past. `retest.spec.ts:121` ("declining the offer keeps the
+  baselines untouched") failed twice in a row — reproducible, not a flake —
+  expecting the heading `Set your 2k baseline?` and landing on Today
+  instead. It is not that branch's doing: the only e2e-reachable file it
+  touches is `transports/fake.ts`, verified to have **0 non-comment changed
+  lines** against base. **The mechanism:** `pnpm e2e` leaves the stack up
+  (`E2E_KEEP` defaults to `1`) and `e2e.sh` tears down with
+  `docker compose down` and NO `-v`, so the per-worktree `pgdata` volume
+  survives every run. A test asserting "you have not set a baseline yet" is
+  exactly the shape that breaks once an earlier run in the same stack set
+  one. **Proof:** `docker compose -p <stack> down -v`, then `pnpm e2e` →
+  `455 passed (2.4m)`, against `454 passed / 1 failed` twice on the reused
+  volume. **Why it matters beyond one test:** CI is unaffected (fresh
+  containers every job), so this only ever bites a human or agent iterating
+  locally — and it bites as a mystery failure in a spec they did not touch,
+  which is the most expensive shape a false red can take. The fix is either
+  a test that seeds its own precondition instead of assuming a virgin
+  database, or an `e2e.sh` that resets the schema between runs; the first is
+  narrower and is the one to try. **S**
 - **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
   can no longer rot independently.** The class was two independent literals —
   `news.spec.ts`'s (CI-gated, bumped by every notes PR) and
@@ -2246,11 +2455,27 @@ Each needs erg time or a deliberate recording session.
 
 ---
 
+# Icebox
+
+Not scheduled in any wave. Reconsider only when the recorded trigger fires;
+an iceboxed item is not a phase-close requirement.
+
+- **Correct Resume — deferred by James, 2026-09-03.** **Trigger:** a
+  diagnostic-backed, naturally occurring authoritative mid-row link drop
+  demonstrates that today's End/save fallback materially fails the rower.
+  Lock/resume gaps and deliberate radio-off probes do not establish demand.
+  Rationale and accepted incomplete-capture cost: `.claude/agents/pm-ledger.md`,
+  "Correct Resume: need before mechanism". The former spec
+  `docs/superpowers/specs/2026-09-03-correct-resume-design.md` and Gate 0 are
+  retained research, not implementation authority; re-scope and approve afresh
+  at the trigger. Not gated on Wave A finishing if the incident arrives sooner.
+
+---
+
 # After the strangers
 
 Deferred, not killed. One line and one trigger each. No exits and no sizes — a
 trigger is the whole entry.
-
 - **Phase PS — personal stats.** The app's stated purpose, and it matters most
   at day 30 and least at day 1: a stranger has no history to trend. **Trigger:**
   a tester has enough history for a trend to be honest. Carries a live hazard

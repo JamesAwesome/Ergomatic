@@ -96,8 +96,12 @@ import {
   formatTimeOfDay,
   MIN_MEASURABLE_ELAPSED_SECONDS,
   NO_MONITOR_READING_SOURCE,
+  partialCaption,
+  partialRowLabel,
+  partialSpokenLabel,
   rowJudgment,
   targetsOnlyCaption,
+  type PrescribedRow,
   type SummaryHeroes,
   type SummaryMeta,
   type SummaryRow,
@@ -130,6 +134,14 @@ export interface StoredLogStep {
   // hands it, so EVERY stored pm5 row would misread as "predates the
   // split" forever, regardless of when it was actually saved.
   actualSpm?: number;
+  /** Door spec (2026-09-02) §5.1 — the READ shape of the in-flight pair.
+   *  The third of the three `LogStep` declarations task (0) widens (write:
+   *  `session/logDraft.ts`; server: `server/stores/logs.ts`; read: here),
+   *  and the one the partial step row renders from. Never summed: every
+   *  reader in this file that adds step actuals reads
+   *  `actualMeters`/`actualSeconds` and nothing else (§5.2 I-B5). */
+  partialMeters?: number;
+  partialSeconds?: number;
 }
 
 /** `GET /api/logs/:id`'s full row (spec §3) — the from-the-log view's own
@@ -944,12 +956,22 @@ export function partialCloseReason(
 // nothing but the row's own `targetSplit`/`actualSplit`/`actualSource`
 // (the stored session average still feeds ONLY the AVG SPLIT hero, via
 // `buildHeroes` below, untouched).
-function buildRows(steps: StoredLogStep[]): SummaryRow[] {
+// `endedBy` is threaded in for ONE reason (door spec 2026-09-02 §6, Gate
+// 0-B decision (g)): a `link-lost` partial row speaks `last reading`
+// rather than `stopped at`, because the pair is what GOT THROUGH and the
+// silence before the close can be arbitrarily long. It reaches no other
+// decision in this function — the pair's own VISIBLE string
+// (`partialRowLabel`) is identical on every close reason, and nothing here
+// derives a number from it.
+function buildRows(
+  steps: StoredLogStep[],
+  endedBy: StoredLog["endedBy"],
+): SummaryRow[] {
   return steps.map((step, i) => {
     const index = i + 1;
     const elapsed = measuredElapsedSeconds(step);
     if (elapsed === undefined) {
-      return {
+      const row: PrescribedRow = {
         measured: false,
         index,
         label: step.label,
@@ -964,6 +986,11 @@ function buildRows(steps: StoredLogStep[]): SummaryRow[] {
             ? fmtSplit(step.targetSplit)
             : undefined,
       };
+      const partial = partialRowLabel(step);
+      if (partial !== undefined) row.partialLabel = partial;
+      const spoken = partialSpokenLabel(step, endedBy);
+      if (spoken !== undefined) row.partialSpoken = spoken;
+      return row;
     }
     const timeLabel = fmtDuration(elapsed / 60);
     const paceLabel =
@@ -1177,8 +1204,8 @@ export function historyChipWord(row: {
 export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const meta = buildMeta(row);
   const heroes = buildHeroes(row);
-  const rows = buildRows(row.steps);
-  const caption = targetsOnlyCaption(rows);
+  const rows = buildRows(row.steps, row.endedBy);
+  const caption = partialCaption(rows, row.endedBy) ?? targetsOnlyCaption(rows);
   const readBack = buildReadBack(row);
   const closeLine = buildCloseLine(row);
   const planFooter = buildPlanFooter(row);

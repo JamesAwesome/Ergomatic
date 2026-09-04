@@ -20,6 +20,7 @@ import { deriveAxes } from "../monitor/connectedAxes";
 import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption";
 import { read as readHandoff } from "../monitor/handoffStore";
 import { useMonitorSession } from "../monitor/useMonitorSession";
+import ChecklistLine from "../workout/ChecklistLine";
 import ConnectedSurface from "../workout/ConnectedSurface";
 import FreeRowChip from "../workout/FreeRowChip";
 import { freeRowTotals } from "./totals";
@@ -287,37 +288,95 @@ export default function JustRow() {
     );
   }
 
-  // The connecting and ready frames.
+  // The connecting, SENDING and ready frames, in the order the rower meets
+  // them (Gate 0, James, 2026-09-03: `docs/design/handoffs/
+  // 2026-09-03-free-row-sending/`).
   //
   // `"armed"` is the axis's word for the phase this screen reaches, and it
   // is the internal name rather than a claim about the machine: a free row
-  // arms nothing, which is exactly why `beginFreeRow` sends no bytes.
+  // arms no interval structure. What it now DOES claim is real, which is
+  // the point of the middle card — this comment used to end "that send is
+  // detached and nothing here reads its outcome — the Ready line below is
+  // true whether or not it landed", and that was the defect wearing a
+  // rationale. "Ready when you pull" is a promise about the erg, and the
+  // erg takes about two seconds to accept the p.80 program; the door made
+  // it in eight milliseconds. `beginFreeRow()` now leaves the session at
+  // `"programming"` until the send settles (spec 2026-09-03 Part 2), which
+  // `deriveProgram` reads as `"sending"` — so the wait has a screen.
+  const sending = axes.program === "sending";
   const ready = axes.program === "armed";
+  // RC-18 (door spec §3): the `??` arm is DEAD, and the argument now has to
+  // cover BOTH cards that render this caption, so it is stated here rather
+  // than beside one of them. `sending` is `axes.program === "sending"` and
+  // `ready` is `"armed"`, which `deriveProgram` produces only from phases
+  // "programming" and "ready"/"live"; the sole route into any of them from
+  // this screen is the arm effect above, which refuses to fire until
+  // `session.deviceName !== null`, and the `failed`/`picking` patches that
+  // null the name always move `phase` off those in the same `update()`. So
+  // the name is never null while either flag is true and this fallback has
+  // no supported producer. Kept for consistency with the other seven sites;
+  // deliberately UNTESTED (RC-18's own reachability rule).
+  const deviceCaption = `${session.deviceName ?? NAMELESS_MONITOR_CAPTION} · CONNECTED`;
+  if (sending) {
+    // GATE 0'S CARD, VALUES LIFTED RATHER THAN CHOSEN: the status label and
+    // serif line are the ready card's own, the checklist is the workout
+    // interstitial's own component with one word changed
+    // (`workout/ChecklistLine.tsx` — shared for exactly this, recurring
+    // failure 8), and Cancel is the same `.button-l2` every card here uses.
+    //
+    // NO BODY LINE and NO KEEP-ON STRIP, both deliberate: the checklist is
+    // already saying what is happening, and "KEEP YOUR PHONE SCREEN ON"
+    // belongs to the row, which has not started.
+    //
+    // NO "Show me the numbers": there are no numbers yet. Its absence is
+    // also what keeps the ready card's lead action meaning something.
+    return (
+      <main className="screen connected-interstitial">
+        <div className="connected-interstitial-body">
+          <p className="connected-status-label">{deviceCaption}</p>
+          <h1 className="connected-serif-line">Starting your row</h1>
+          <div className="connected-checklist">
+            <ChecklistLine label="FOUND" state="done" />
+            <ChecklistLine label="CONNECTED" state="done" />
+            <ChecklistLine label="STARTING THE ROW" state="current" />
+          </div>
+        </div>
+        <div className="action-stack connected-interstitial-actions">
+          {/* CANCEL STILL TERMINATES ON THE ERG from here, and that is the
+              walk's own finding rather than an inference (finding 4,
+              `docs/monitor/sessions/walk-2026-09-03-jr-connect/`): the p.80
+              frame has already gone, so the machine is in a Just Row
+              session whether or not its ack has come back, and a Cancel
+              that walks away leaves the rower in front of it.
+              `useMonitorSession`'s `cancel()` treats `"programming"` as
+              armed for exactly this reason. */}
+          <button
+            type="button"
+            className="button-l2"
+            onClick={() => {
+              void session.cancel();
+              armedThisStart.current = false;
+              setStarted(false);
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </main>
+    );
+  }
   return (
     <main className="screen connected-interstitial">
       <div className="connected-interstitial-body">
         <p className="connected-status-label">
-          {/* RC-18 (door spec §3): DEAD. `ready` is `axes.program ===
-              "armed"`, which `deriveProgram` only produces from phase
-              "ready"/"live" — and this screen's only `beginFreeRow()`
-              caller (the effect above) refuses to arm until
-              `session.deviceName !== null`; the `failed`/`picking`
-              patches that null the name also always move `phase` off
-              "ready"/"live" in the same `update()`. So `session.deviceName`
-              is never null while `ready` is true, and this `??` arm has no
-              supported producer. Changed for consistency with the other
-              seven sites only; deliberately UNTESTED (RC-18's own
-              reachability rule). */}
-          {ready
-            ? `${session.deviceName ?? NAMELESS_MONITOR_CAPTION} · CONNECTED`
-            : "JUST ROW"}
+          {ready ? deviceCaption : "JUST ROW"}
         </p>
         <h1 className="connected-serif-line">
           {ready ? "Ready when you pull" : "Connecting to monitor"}
         </h1>
         <p className="connected-body-line">
           {ready
-            ? "Nothing is programmed. The monitor keeps its own time, and the clock starts on your first stroke."
+            ? "The clock starts on your first stroke."
             : "Wake the monitor if its screen is dark."}
         </p>
         {ready && (

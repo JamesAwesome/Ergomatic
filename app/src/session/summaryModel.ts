@@ -100,6 +100,7 @@ import type { IntervalActual } from "../../domain/monitor/types.js";
 import { judgeVsTarget } from "../judgeBand.js";
 import {
   measuredSessionSeconds,
+  type CloseReason,
   type MonitorRun,
 } from "../monitor/monitorRun.js";
 import {
@@ -269,14 +270,54 @@ export interface MeasuredRow {
 }
 
 /** A prescribed (unmeasured) row (§2E: index/distance-duration/target-pace/
- *  offset/`—`). See this module's header for why the offset fragment is
- *  not split out of `label`. */
+ *  offset, then — door spec (2026-09-02) §5.1, Gate 0-B decision (a) — an
+ *  optional in-flight PAIR cell, and always the `—`). SIX cells, not five:
+ *  the pair is an EXTRA cell in front of the dash, never a replacement for
+ *  it, so every unmeasured row still ends on the same mark. See this
+ *  module's header for why the offset fragment is not split out of
+ *  `label`. */
 export interface PrescribedRow {
   measured: false;
   index?: number;
   label: string;
   durationLabel?: string;
   targetPaceLabel?: string;
+  /** Door spec (2026-09-02) §5.1: the in-flight interval's own reading,
+   *  already formatted — `partialRowLabel` below is the ONE producer, and
+   *  both row builders (this file's `monitorWorkRows` for the live/log door
+   *  and `log/storedSummary.ts`'s `buildRows` for the stored screen) call it
+   *  rather than formatting twice. Present ONLY on a step whose
+   *  `partialMeters`/`partialSeconds` are both set — a partial step is by
+   *  construction UNMEASURED (it carries no `actualSource`), which is why
+   *  this lives here and not on `MeasuredRow`.
+   *
+   *  ASSIGNED CONDITIONALLY by both builders, never as an explicit
+   *  `undefined`: rows in this repo are compared with `toStrictEqual`
+   *  (`docs/TESTING.md` §3's `vitest/prefer-strict-equal`), which
+   *  distinguishes an absent key from a present-and-undefined one. */
+  partialLabel?: string;
+  /** Door spec (2026-09-02) §6, Gate 0-B decision (g), APPROVED: the same
+   *  pair as a screen reader says it, lead-in verb included — `stopped at
+   *  250 m after 1:03`, or `last reading 250 m after 1:03` on a
+   *  `link-lost` close. `partialSpokenLabel` below is the ONE producer and
+   *  both builders call it, exactly as they do for `partialLabel`.
+   *
+   *  A SECOND FIELD, not a derivation of `partialLabel`, for two reasons
+   *  the renderer cannot recover on its own. (1) The middle dot carries no
+   *  meaning aloud, so the spoken form spells the pair out with `after`.
+   *  (2) The VISIBLE order flips by interval kind (decision (b): a time
+   *  interval leads with the clock) while the SPOKEN order never does —
+   *  "stopped at 2:10 after 480 m" says the metres are a duration. The two
+   *  orders are deliberately independent; `summaryModel.test.ts` has the
+   *  leg that stops one being re-derived from the other.
+   *
+   *  The renderer APPENDS this to `, not measured` rather than replacing
+   *  it: the accessible name must not claim more than the visible row
+   *  does, and the visible row still ends on the dash (decision (a)).
+   *
+   *  ASSIGNED CONDITIONALLY, same `toStrictEqual` reasoning as
+   *  `partialLabel` above. */
+  partialSpoken?: string;
 }
 
 export type SummaryRow = MeasuredRow | PrescribedRow;
@@ -285,9 +326,28 @@ export interface SummaryModel {
   meta: SummaryMeta;
   heroes: SummaryHeroes;
   rows: SummaryRow[];
-  /** §2E: `TARGETS ONLY · NOTHING MEASURED`, present only when literally no
-   *  row carries a measurement (R-E, verbatim: "appears only when NO row
-   *  carries a measurement"). */
+  /** The one centred line under the interval table. TWO producers now,
+   *  resolved by PRECEDENCE — never stacked, and never more than one
+   *  element (door spec 2026-09-02 §6, Gate 0-B decision (c), APPROVED):
+   *
+   *  1. `partialCaption` — `INTERVAL N · LAST READING BEFORE THE LINK
+   *     WENT`, on a `link-lost` close whose rows carry an in-flight pair.
+   *  2. `targetsOnlyCaption` — §2E's `TARGETS ONLY · NOTHING MEASURED`
+   *     (R-E, verbatim: "appears only when NO row carries a measurement").
+   *
+   *  Both callers write `partialCaption(...) ?? targetsOnlyCaption(rows)`,
+   *  so (1) REPLACES (2) wherever both would fire — a single-interval
+   *  link-lost piece measures nothing, so they collide in the very same
+   *  slot, and `TARGETS ONLY · NOTHING MEASURED` is arguably false once a
+   *  reading is on the row.
+   *
+   *  SUPERSEDED, and stated so rather than left to be inferred: this
+   *  comment used to read "present only when literally no row carries a
+   *  measurement". That is FALSE as of §5 — a five-interval link-lost
+   *  model with two MEASURED rows and a partial on the third carries a
+   *  caption (`summaryModel.test.ts`'s Tropical Wave leg). The R-E
+   *  sentence still governs producer (2) alone, quoted above where it
+   *  applies. */
   caption?: string;
   /** PR #248's round-1 review recommended suppression ("My recommendation
    *  is to suppress the completion eyebrow"), implemented here, then
@@ -640,6 +700,77 @@ export function readingOfIntervalActual(
   actual: IntervalActual,
 ): MeasuredReading {
   return { fromMonitor: true, elapsedSeconds: actual.elapsedSeconds };
+}
+
+/** Door spec (2026-09-02) §5.1 — the in-flight pair, formatted, and the
+ *  ONE place that decides its order and separator.
+ *
+ *  **APPROVED at Gate 0-B (James, 2026-09-02), decisions (a) and (b).**
+ *  The order puts the counted-DOWN dimension first: a distance interval
+ *  reads `250 m · 1:03`, a time interval `2:10 · 480 m`. Nothing else in
+ *  the codebase re-derives either the order or the separator.
+ *
+ *  BOTH NUMBERS ARE THE MACHINE'S OWN (`MonitorFrame.distanceMeters` /
+ *  `elapsedSeconds`, `domain/monitor/types.ts:31-33`: "exactly as the
+ *  machine reports them"). What this app supplies is the ATTRIBUTION to the
+ *  in-flight interval, which the machine cannot make (spec §7). Do not read
+ *  a comparison against the PM5's own in-flight reading as a check: it is
+ *  the same bytes.
+ *
+ *  NO SPLIT, PACE OR RATE IS DERIVED FROM THIS PAIR (§5.1), and a quotient
+ *  of the two would be a number nobody rowed. The seconds are ELAPSED
+ *  rather than rowing time, and the mid-WORK case this label actually
+ *  displays is NOW SETTLED (rowingActive design spec, 2026-09-03, §4;
+ *  `MonitorFrame.restSeconds`'s own doc comment, domain/monitor/types.ts,
+ *  narrowed the same day): `elapsedSeconds` RUNS through a mid-WORK stop —
+ *  measured at `docs/monitor/sessions/walk-2026-09-03-resume-edge/`,
+ *  elapsed 80.52s -> 92.11s while distance sat at 247.1 -> 249.6 m — and
+ *  only FREEZES through a REST. Same conclusion `useMonitorSession.ts`'s
+ *  `PAUSED_FRAME_HOLD` comment already reached from the 2026-08-08
+ *  recording (§17 item 20: the clock ran while the metres sat pinned). */
+export function partialRowLabel(
+  step: Pick<LogStep, "partialMeters" | "partialSeconds" | "seconds">,
+): string | undefined {
+  const meters = step.partialMeters;
+  const seconds = step.partialSeconds;
+  if (meters === undefined || seconds === undefined) return undefined;
+  const metersLabel = `${Math.round(meters)} m`;
+  const clockLabel = fmtDuration(seconds / 60);
+  return step.seconds === undefined
+    ? `${metersLabel} · ${clockLabel}`
+    : `${clockLabel} · ${metersLabel}`;
+}
+
+/** Door spec (2026-09-02) §6, Gate 0-B decision (g), APPROVED — the pair
+ *  as a screen reader says it, and the ONE place that decides its wording.
+ *
+ *  TWO FORMS, and the discriminant is the LINK, not the rower. On a
+ *  `link-lost` close the pair is what GOT THROUGH, not where the rower got
+ *  to: `endSession`'s `linkGone` includes frame silence, so the reading can
+ *  be arbitrarily old and `stopped at` would assert something the record
+ *  cannot support. That row says `last reading` instead, reading the same
+ *  way the caption under the table does (`partialCaption` above). Every
+ *  other close — and an absent one — says `stopped at`.
+ *
+ *  ALLOWLIST ON THE LINK, NEVER A NEGATION OF `rower`: the input admits
+ *  `interrupted` and `finished` as well as the four wire closes, so a
+ *  `!== "rower"` gate would speak `last reading` for four reasons that
+ *  never lost anything.
+ *
+ *  METRES FIRST ON BOTH INTERVAL KINDS, unlike `partialRowLabel` above,
+ *  whose visible order flips with the target's own quantity (decision (b)).
+ *  Aloud, "480 m after 2:10" is the English one; "2:10 after 480 m" says
+ *  the metres are a duration. The dot goes too — it carries no meaning
+ *  spoken, which is decision (g)'s own reason for spelling the pair out. */
+export function partialSpokenLabel(
+  step: Pick<LogStep, "partialMeters" | "partialSeconds">,
+  endedBy: (CloseReason | "interrupted") | null | undefined,
+): string | undefined {
+  const meters = step.partialMeters;
+  const seconds = step.partialSeconds;
+  if (meters === undefined || seconds === undefined) return undefined;
+  const verb = endedBy === "link-lost" ? "last reading" : "stopped at";
+  return `${verb} ${Math.round(meters)} m after ${fmtDuration(seconds / 60)}`;
 }
 
 /** How many of these readings the rule would keep. The connected
@@ -1011,7 +1142,7 @@ function monitorWorkRows(run: MonitorRun): SummaryRow[] {
   return steps.map((step, i) => {
     const index = i + 1;
     if (!isMonitorRowMeasurable(step)) {
-      return {
+      const row: PrescribedRow = {
         measured: false,
         index,
         label: step.label,
@@ -1026,6 +1157,11 @@ function monitorWorkRows(run: MonitorRun): SummaryRow[] {
             ? fmtSplit(step.targetSplit)
             : undefined,
       };
+      const partial = partialRowLabel(step);
+      if (partial !== undefined) row.partialLabel = partial;
+      const spoken = partialSpokenLabel(step, run.endedBy);
+      if (spoken !== undefined) row.partialSpoken = spoken;
+      return row;
     }
     // isMonitorRowMeasurable already proved actualSeconds is defined and
     // >= the floor — the `!` documents that, matching this file's own `!`
@@ -1074,7 +1210,7 @@ function buildMonitorModel(run: MonitorRun): SummaryModel {
     meta,
     heroes,
     rows,
-    caption: targetsOnlyCaption(rows),
+    caption: partialCaption(rows, run.endedBy) ?? targetsOnlyCaption(rows),
     ...(suppressCompletionEyebrow ? { suppressCompletionEyebrow: true } : {}),
   };
 }
@@ -1214,11 +1350,11 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
  *
  *  WHAT IT DOES NOT SAY: why. Three producers of the silence are
  *  undistinguished, so this names only what we can see from here — that we
- *  hold no reading. The connected surface's own lost banner says
- *  "Nothing kept." for the same session minutes earlier; the two are
- *  deliberately the same register (short, no cause, no blame) without
- *  sharing a string, because they answer different questions on different
- *  screens.
+ *  hold no reading. The connected surface's own lost banner named the same
+ *  zero for the same session minutes earlier — its title alone, no body,
+ *  since Wave F door PR B (Gate 0-B decision (e)) retired the phrase
+ *  "Nothing kept." entirely; the two never shared a string even before
+ *  that, because they answer different questions on different screens.
  *
  *  RETIRED DIVERGENCE (Task 4 option 2 named it; Door PR A, 2026-09-02,
  *  §2.1 closes it): the STORED row for this same session used to read
@@ -1284,6 +1420,32 @@ function buildManualModel(
 // ---------------------------------------------------------------------
 // Shared
 // ---------------------------------------------------------------------
+
+/** Door spec (2026-09-02) §6, Gate 0-B decision (c), APPROVED: on a
+ *  `link-lost` close the pair is what GOT THROUGH, not where the rower got
+ *  to, and the ROW itself cannot say so — an inline word collapses the
+ *  pace-ref cell to zero (measured at the gate). The sentence goes under
+ *  the table instead, in `.summary-targets-only-caption`'s own type (mono
+ *  10px, `--ink-3`, centred; 6.69:1 on `--page`, computed at the gate).
+ *
+ *  PRECEDENCE, NEVER STACKING (the gate's C2b frame): a single-interval
+ *  link-lost piece measures nothing, so `targetsOnlyCaption` fires in the
+ *  very same slot. When this caption fires it REPLACES that one — two
+ *  centred captions read as clutter, and `TARGETS ONLY · NOTHING MEASURED`
+ *  is arguably false once a reading is on the row. Both callers therefore
+ *  write `partialCaption(...) ?? targetsOnlyCaption(rows)` and neither
+ *  renders a second element. */
+export function partialCaption(
+  rows: SummaryRow[],
+  endedBy: (CloseReason | "interrupted") | null | undefined,
+): string | undefined {
+  if (endedBy !== "link-lost") return undefined;
+  const row = rows.find(
+    (r) => r.measured === false && r.partialLabel !== undefined,
+  );
+  if (row?.index === undefined) return undefined;
+  return `INTERVAL ${row.index} · LAST READING BEFORE THE LINK WENT`;
+}
 
 /** R-E, verbatim: "TARGETS ONLY · NOTHING MEASURED appears only when NO
  *  row carries a measurement" — every row. Final-review FIX-2:

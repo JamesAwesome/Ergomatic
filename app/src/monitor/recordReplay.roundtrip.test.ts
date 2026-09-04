@@ -27,6 +27,7 @@ import {
 } from "../../domain/monitor/pm5/parse.js";
 import { createEventLog } from "./eventLog";
 import { createPm5Driver } from "./driver";
+import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { createFakeTransport, type FakeTimelineEvent } from "./transports/fake";
 import {
   buildRecordingFile,
@@ -218,7 +219,7 @@ describe("record -> replay round trip (A3): a recorded session replays into a se
     // needs) — a no-op `schedule` means no dangling real-or-fake timer
     // survives the test rather than a 3-second one this file would
     // otherwise never clean up.
-    const recDriver = createPm5Driver(tap.transport, recLog, {
+    const recDriver = createSubscribedDriver(tap.transport, recLog, {
       deviceName: DEVICE,
       schedule: () => () => {},
     });
@@ -262,14 +263,18 @@ describe("record -> replay round trip (A3): a recorded session replays into a se
     const replay = createReplayTransport(parsed);
     const [rdev] = await replay.transport.scan();
     await replay.transport.connect(rdev.id);
-    const repDriver = createPm5Driver(replay.transport, createEventLog(), {
-      deviceName: DEVICE,
-      // B2: the driver's clock IS the replay clock — bound here even though
-      // this particular timeline never crosses the finish grace, so that a
-      // future edit to this test inherits the correct wiring by default.
-      now: () => replay.clock.now(),
-      schedule: (cb, ms) => replay.clock.schedule(cb, ms),
-    });
+    const repDriver = createSubscribedDriver(
+      replay.transport,
+      createEventLog(),
+      {
+        deviceName: DEVICE,
+        // B2: the driver's clock IS the replay clock — bound here even though
+        // this particular timeline never crosses the finish grace, so that a
+        // future edit to this test inherits the correct wiring by default.
+        now: () => replay.clock.now(),
+        schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+      },
+    );
     const replayed: MonitorEvent[] = [];
     repDriver.events((e) => replayed.push(e));
 
@@ -341,7 +346,7 @@ describe("record -> replay round trip (A3): a recorded session replays into a se
     });
     const tap = createRecordingTransport(fake, now);
     const recLog = createEventLog();
-    const recDriver = createPm5Driver(tap.transport, recLog, {
+    const recDriver = createSubscribedDriver(tap.transport, recLog, {
       deviceName: DEVICE,
       now,
       schedule: () => () => {},
@@ -388,11 +393,15 @@ describe("record -> replay round trip (A3): a recorded session replays into a se
     const replay = createReplayTransport(parsed);
     const [rdev] = await replay.transport.scan();
     await replay.transport.connect(rdev.id);
-    const repDriver = createPm5Driver(replay.transport, createEventLog(), {
-      deviceName: DEVICE,
-      now: () => replay.clock.now(),
-      schedule: (cb, ms) => replay.clock.schedule(cb, ms),
-    });
+    const repDriver = createSubscribedDriver(
+      replay.transport,
+      createEventLog(),
+      {
+        deviceName: DEVICE,
+        now: () => replay.clock.now(),
+        schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+      },
+    );
     const replayed: MonitorEvent[] = [];
     repDriver.events((e) => replayed.push(e));
 

@@ -69,6 +69,30 @@ export function hasRunProgress(run: SessionRun): boolean {
   );
 }
 
+/** I-4 (storage-denial spec §2, 2026-09-03): the one place Countdown
+ *  decides a run is durable enough to hand off to Timer. `saveRun`'s own
+ *  boolean means only that `setItem` did not throw — there is no
+ *  read-back inside it (`run.ts`). This confirms with the CONSUMER's own
+ *  loader, once, so Timer/LogSession's shared `useState(() => loadRun())`
+ *  mount-read can never disagree with what Countdown just decided. Returns
+ *  the built run only when BOTH `saveRun(run) === true` AND
+ *  `loadRun() !== null` hold; `null` otherwise, which the build effect and
+ *  Retry both read as "blocked". A pure function of its three arguments —
+ *  never reads `Date.now()` itself — so a caller controls exactly which
+ *  instant gets stamped (the build effect's own `now`, or a fresh one at
+ *  Retry). Exported for direct testing, same pattern as
+ *  `remainingSeconds`/`hasRunProgress` above. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function attemptBuild(
+  draft: SessionDraft,
+  baselines: Baselines | null,
+  now: Date,
+): SessionRun | null {
+  const run = buildRun(draft, baselines, now);
+  if (!saveRun(run) || loadRun() === null) return null;
+  return run;
+}
+
 // The three pieces of state the build effect produces together (the run
 // record, the count's own clock, and the render-time clock reading) live in
 // ONE state slice updated by ONE setState call — react-hooks' own
@@ -144,6 +168,13 @@ export default function Countdown() {
     [baselinesState],
   );
   const [built, setBuilt] = useState<Built | null>(null);
+  // AUD-015 / storage-denial spec §2: `attemptBuild` returned `null` — the
+  // run write failed I-4's check. A SEPARATE boolean rather than folding a
+  // third arm into `Built | null | "blocked"`: `built` stays exactly what
+  // it always was ("the last thing that built successfully"), which is
+  // what Retry's own comment below needs to stay true after a Retry that
+  // fails a second time.
+  const [saveBlocked, setSaveBlocked] = useState(false);
   // A ref, not a `built !== null` check, guards the build effect: both fire
   // from the SAME dependency change (baselines/preferences settling), and a
   // ref flips synchronously before the state update commits, where a
@@ -202,23 +233,31 @@ export default function Countdown() {
 
     const now = new Date();
     const startedAtMs = now.getTime();
-    // buildRun + saveRun ARE this effect's real work (synchronizing the
-    // frozen run to localStorage) — everything below just reports that
-    // already-completed side effect back into React state. react-hooks'
-    // set-state-in-effect rule flags a setState call made directly,
-    // synchronously, in an effect body (cascading-render risk); routing it
-    // through a resolved-microtask callback instead is the same "setState
-    // in a callback function when external state changes" shape the rule's
-    // own message recommends, with no perceptible delay (a microtask, not a
-    // timer). `nowMs` is pinned to the SAME instant the count started, not
-    // whatever a lazy initializer might have captured at this component's
-    // mount (which can predate this effect by however long the baselines/
-    // preferences fetch took) — otherwise the very first "ready" render
-    // could read fewer seconds remaining than `countdownSeconds`, or even a
-    // negative elapsed if an earlier `nowMs` predates `startedAtMs`.
-    const run = buildRun(draft, baselines, now);
-    saveRun(run);
+    // `attemptBuild` (buildRun + saveRun + I-4's read-back) IS this
+    // effect's real work (synchronizing the frozen run to localStorage) —
+    // everything below just reports that already-completed side effect
+    // back into React state. react-hooks' set-state-in-effect rule flags a
+    // setState call made directly, synchronously, in an effect body
+    // (cascading-render risk); routing it through a resolved-microtask
+    // callback instead is the same "setState in a callback function when
+    // external state changes" shape the rule's own message recommends,
+    // with no perceptible delay (a microtask, not a timer). `nowMs` is
+    // pinned to the SAME instant the count started, not whatever a lazy
+    // initializer might have captured at this component's mount (which can
+    // predate this effect by however long the baselines/preferences fetch
+    // took) — otherwise the very first "ready" render could read fewer
+    // seconds remaining than `countdownSeconds`, or even a negative
+    // elapsed if an earlier `nowMs` predates `startedAtMs`.
+    const run = attemptBuild(draft, baselines, now);
     void Promise.resolve().then(() => {
+      if (run === null) {
+        // I-4: the write failed, or failed to read back. The render below
+        // takes over from here — Retry re-runs this same
+        // buildRun+saveRun+read-back sequence at `handleRetry`, never this
+        // effect again (`builtRef.current` is already true).
+        setSaveBlocked(true);
+        return;
+      }
       setBuilt({
         run,
         clock: { total: countdownSeconds, startedAtMs },
@@ -319,6 +358,37 @@ export default function Countdown() {
     return <Navigate to="/today" replace />;
   }
 
+  // Gate 0 (storage-denial spec §2, APPROVED by James 2026-09-03): the
+  // run write failed I-4's check (`attemptBuild` returned `null`). Both
+  // hooks are READY by this point (every loading/error branch above
+  // already returned), which is what lets `handleRetry` below read
+  // `preferencesState.preferences` without its own loading/error branch —
+  // see its own re-check for why that narrowing still needs restating
+  // inside the closure.
+  if (saveBlocked) {
+    return (
+      <main className="screen countdown-screen">
+        <p className="mono-status">Couldn't keep your session on this phone.</p>
+        <div className="countdown-actions">
+          <button
+            type="button"
+            className="button-outline"
+            onClick={handleRetry}
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            className="countdown-cancel"
+            onClick={handleCancel}
+          >
+            CANCEL
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   if (built === null) {
     // Both hooks above are "ready"-settled by this point (every loading/
     // error/unset-baselines branch above already returned otherwise), so
@@ -377,6 +447,42 @@ export default function Countdown() {
     navigate(
       draft.workoutId !== null ? `/library/${draft.workoutId}` : "/today",
     );
+  }
+
+  // Gate 0 decision (c): a successful Retry REBUILDS the run at the moment
+  // the write lands (`attemptBuild(draft, baselines, new Date())`), never
+  // re-writes the run the failed mount attempt held — `buildRun` stamps
+  // `startedAtMs`/`phaseStartedAt` from the instant it is handed (the
+  // build effect's own comment above), so re-writing the original object
+  // would silently charge every second spent on this blocked screen to
+  // phase 1. Same TS-narrowing note as `handleCancel` above: the guard
+  // clauses higher up in this render don't propagate into a closure
+  // defined this much later in the same function body, so this re-checks
+  // `draft`/`preferencesState` itself rather than trusting the outer
+  // narrowing. UNGATED BY DESIGN, same as `handleCancel`'s identical
+  // `draft === null` guard above (RF21 — a test that cannot fail is
+  // decoration): Retry only RENDERS inside the `saveBlocked` branch, which
+  // is reachable only once every loading/error/unset-baselines branch
+  // above has already returned, so both conditions are unreachable through
+  // any supported path by the time a rower can press this button.
+  function handleRetry() {
+    if (draft === null) return;
+    if (preferencesState.state !== "ready") return;
+    const baselines = resolvedBaselines;
+    const countdownSeconds = preferencesState.preferences.countdownSeconds;
+    const now = new Date();
+    const startedAtMs = now.getTime();
+    const run = attemptBuild(draft, baselines, now);
+    if (run === null) {
+      setSaveBlocked(true);
+      return;
+    }
+    setSaveBlocked(false);
+    setBuilt({
+      run,
+      clock: { total: countdownSeconds, startedAtMs },
+      nowMs: startedAtMs,
+    });
   }
 
   return (

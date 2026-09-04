@@ -10,11 +10,23 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // failure 24's rule at this layer too).
 //
 // The fake's `program` field is REQUIRED by its script shape and never
-// consulted here: a free row programs nothing, and the fake's
-// byte-for-byte programming assertion has nothing to check when no
-// programming bytes ever arrive.
+// consulted here: a free row sends no WORKOUT program, so the fake's
+// byte-for-byte programming assertion has nothing to check. What the free
+// row does send (spec 2026-09-02) is Concept2's p.80 Just Row frame, which
+// the fake accepts in any phase (`transports/fake.ts`'s
+// `onJustRowFrameComplete`) — and that send is DETACHED: nothing on the
+// flow branches on it, so the only place this layer can see it is the
+// diagnostics door's copy of the ring, asserted at the end of the flow.
 
 const WORKOUTSTATE_INTERVALWORKTIME = 4; // parse.ts's own ordinal
+
+/** Concept2's p.80 Just Row frame and the terminate frame, as the driver's
+ *  ring records a `write` — lowercase hex, space-separated
+ *  (`driver.ts`'s `toHex`). Typed from `docs/monitor/pm5-interface-notes.md`
+ *  (§12 example 2 and §13), the same literals `driver.test.ts`'s free-row
+ *  suite pins; never derived from the builders. */
+const JUST_ROW_FRAME_HEX = "f1 76 07 01 01 01 13 02 01 01 61 f2";
+const TERMINATE_FRAME_HEX = "f1 76 04 13 02 01 02 60 f2";
 
 const FIXTURE_PROGRAM = {
   intervals: [
@@ -76,6 +88,12 @@ test.describe("Just Row: the whole flow", () => {
   test("Today → Connect → live free row → Menu end → log door → history", async ({
     page,
   }) => {
+    // The clipboard read at the end of the flow needs both permissions
+    // granted up front — Chrome does not auto-grant them off a bare user
+    // gesture under headless Playwright (`diagnostics.spec.ts`'s finding).
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
     await signInViaBackdoor(page, {
       email: `justrow-flow-${RUN_ID}@e2e.test`,
       name: "Just Row Walker",
@@ -89,11 +107,17 @@ test.describe("Just Row: the whole flow", () => {
     await page.getByRole("button", { name: "Connect" }).click();
 
     // The ready frame: the interstitial's own copy with the one changed
-    // word — CONNECTED, not PROGRAMMED — because nothing was sent.
+    // word — CONNECTED, not PROGRAMMED — because no WORKOUT was sent (the
+    // p.80 Just Row frame went out detached, and the phone claims nothing
+    // about whether the erg took it). The body line is James's (Gate 0 rev
+    // 1c, spec 2026-09-02 ruling 3), true either way.
     await expect(
       page.getByRole("heading", { name: "Ready when you pull" }),
     ).toBeVisible();
     await expect(page.getByText(/CONNECTED/)).toBeVisible();
+    await expect(
+      page.getByText("The clock starts on your first stroke."),
+    ).toBeVisible();
 
     // "Show me the numbers" hands over to the surface BEFORE the first
     // pull — the ready screen's own lead action, and the one branch only
@@ -163,6 +187,61 @@ test.describe("Just Row: the whole flow", () => {
     await expect(page.getByText("Just Row").first()).toBeVisible();
     await expect(page.locator(".type-badge")).toHaveCount(0);
     await expect(page.locator(".free-row-chip")).toHaveText("JR");
+
+    // THE SEND, seen the only way an e2e can see it (spec 2026-09-02, exit
+    // criterion 4): `beginFreeRow()`'s p.80 frame is a DETACHED send whose
+    // only effects are ring entries, and nothing on the flow above
+    // branches on it — so this proves the send REACHED THE RING and the
+    // fake acked it, not that any erg entered anything (the walk leg's
+    // control is that gate). The ring reaches this layer through the
+    // diagnostics door, whose COPY hands back the session's exported ring
+    // byte-identical (`MonitorLogs.tsx`'s own header) — the door lists
+    // sessions and their event COUNTS, never individual lines, so the
+    // copied JSON is the one thing to read. The write's teardown runs off
+    // the surface's UNMOUNT effect at End, not the click
+    // (`diagnostics.spec.ts`'s header); the poll waits out that gap before
+    // the door's one-read-on-mount would miss it.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            localStorage.getItem("ergomatic:session-log-history"),
+          ),
+        { timeout: 10_000 },
+      )
+      .not.toBeNull();
+    await page.goto("/you/diagnostics/monitor-logs");
+    await expect(page.locator("h1.screen-title")).toHaveText("Monitor logs");
+    // A fresh Playwright context has an empty ring before this session's
+    // own teardown, so the one card IS this session.
+    const cards = page.locator(".diag-log-card");
+    await expect(cards).toHaveCount(1);
+    const copyButton = cards.first().locator(".diag-copy");
+    await copyButton.click();
+    await expect(copyButton).toHaveText("COPIED");
+    const ring = JSON.parse(
+      await page.evaluate(() => navigator.clipboard.readText()),
+    ) as { kind: string; detail: string }[];
+    const kinds = ring.map((e) => e.kind);
+    // Both frame literals are TYPED from `docs/monitor/pm5-interface-notes.md`
+    // (§12 example 2, §13), never built.
+    const justRowWriteAt = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === JUST_ROW_FRAME_HEX,
+    );
+    expect(justRowWriteAt).toBeGreaterThan(kinds.indexOf("free-row-open"));
+    expect(kinds.indexOf("free-row-open")).toBeGreaterThanOrEqual(0);
+    expect(
+      ring.filter((e) => e.kind === "write" && e.detail === JUST_ROW_FRAME_HEX),
+    ).toHaveLength(1);
+    // NO PREPARE: the first terminate on the wire is the rower's own END,
+    // after the p.80 frame — never a clearing terminate in front of it.
+    const firstTerminateAt = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === TERMINATE_FRAME_HEX,
+    );
+    expect(firstTerminateAt).toBeGreaterThan(justRowWriteAt);
+    expect(kinds).toContain("free-row-program-sent");
+    expect(kinds).not.toContain("free-row-program-failed");
+    expect(kinds).not.toContain("free-row-program-unanswered");
   });
 });
 
@@ -171,15 +250,15 @@ test.describe("Just Row: the whole flow", () => {
 // and the record reads `TIMER` everywhere it names its door. Entered at
 // the door and walked to the detail through the real POST validator and a
 // real GET (RF24: the one test that STARTS upstream of every producer —
-// the SessionRun the door mints, the actual ▶ freezes, the body Save
+// the SessionRun the door mints, the actual END freezes, the body Save
 // posts — and asserts downstream of every reader).
 //
 // The wait after Start Timer is REAL time, not a fake clock: the Timer's
 // count-up is wall-clock based (criterion 5's invariant), so the recorded
 // TIME must be at least the seconds this test genuinely stood on the
-// screen — `0:00` there would mean ▶ recorded nothing.
+// screen — `0:00` there would mean END recorded nothing.
 test.describe("Just Row: without the monitor", () => {
-  test("Today → Start Timer → count-up → ▶ → Finish session → time-only log door → history chip → TIMER detail", async ({
+  test("Today → Start Timer → count-up → END → Finish session → time-only log door → history chip → TIMER detail", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -213,9 +292,9 @@ test.describe("Just Row: without the monitor", () => {
       timeout: 10_000,
     });
 
-    // ▶ stages the finish (handoff `ClockFinish.dc.html`, verbatim from the
-    // shipped Timer) rather than advancing: a free row has no next phase.
-    await page.getByRole("button", { name: "Next phase" }).click();
+    // END stages the existing finish flow: a free row has no next phase, so
+    // this is the phone-timed row's direct route to the same confirmation.
+    await page.getByRole("button", { name: "END →" }).click();
     await expect(page.getByText("Finish this session?")).toBeVisible();
     await page.getByRole("button", { name: "Finish session" }).click();
 
@@ -223,14 +302,17 @@ test.describe("Just Row: without the monitor", () => {
     // meta line naming the TIMER door, TIME alone — no DISTANCE cell, no
     // AVG SPLIT cell, no dash standing in for either. The TIME figure is at
     // least the three seconds stood on the clock above: `0:00` here would
-    // mean ▶ froze nothing (criterion 1's shape at this layer).
+    // mean END froze nothing (criterion 1's shape at this layer). Capture
+    // the exact door value so history must read back this same persisted
+    // value, not merely pass an independent range check.
     await expect(page).toHaveURL(/\/justrow\/log$/);
     await expect(page.getByRole("heading", { name: "Just Row" })).toBeVisible();
     await expect(page.locator(".justrow-meta")).toContainText("TIMER");
     await expect(page.getByText("TIME", { exact: true })).toBeVisible();
-    await expect(page.locator(".justrow-log-numvalue")).toHaveText(
-      /^0:(0[3-9]|[1-5]\d)$/,
-    );
+    const savedTime = (
+      await page.locator(".justrow-log-numvalue").textContent()
+    )?.trim();
+    expect(savedTime).toMatch(/^0:(0[3-9]|[1-5]\d)$/);
     await expect(page.getByText("DISTANCE")).toHaveCount(0);
     await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
     await expect(page.getByText("—")).toHaveCount(0);
@@ -259,7 +341,7 @@ test.describe("Just Row: without the monitor", () => {
     await expect(row.locator(".free-row-chip")).toHaveText("JR");
     await expect(row.locator(".type-badge")).toHaveCount(0);
     await expect(row.locator(".today-log-hero")).toHaveText(
-      /^TIME 0:(0[3-9]|[1-5]\d)$/,
+      `TIME ${savedTime}`,
     );
 
     // The detail (handoff `Detail.dc.html`, criterion 3): the meta line
@@ -373,8 +455,8 @@ test.describe("Just Row: standing in for a plan session", () => {
       "SESSION 1 OF 84",
     );
 
-    // The phone-timed door, three real seconds on the clock, then ▶ →
-    // Finish — the same walk `Just Row: without the monitor` takes.
+    // The phone-timed door, three real seconds on the clock, then the
+    // supported Next phase → Finish alternate path.
     await page.getByRole("link", { name: "JUST ROW" }).click();
     await page.getByRole("button", { name: "Start Timer" }).click();
     await expect(page).toHaveURL(/\/session\/run$/);

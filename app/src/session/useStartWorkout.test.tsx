@@ -375,6 +375,10 @@ describe("useStartWorkout", () => {
     expect(loadMonitorRun()).toBeNull();
   });
 
+  // Storage-denial spec (2026-09-03) §3 leg 2: this blanket `setItem`
+  // denial is ALREADY the "whole-storage denial stops one screen earlier"
+  // leg the spec's own §3 asks for — `startError` set, Countdown never
+  // reached — nothing new is owed here.
   it("surfaces an inline error and does not navigate when saveDraft fails (quota)", async () => {
     const { vi } = await import("vitest");
     const spy = vi

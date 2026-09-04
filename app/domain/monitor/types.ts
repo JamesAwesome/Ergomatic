@@ -131,9 +131,16 @@ export interface MonitorFrame {
   //   `AdditionalStatus1.restSeconds`) but never carried onto this type
   //   until the EST LEFT fix (Phase LL): it is the field that makes a
   //   countdown through a rest possible without the wall clock. Unlike
-  //   `MonitorFrame.elapsedSeconds` (the per-interval clock, which FREEZES
-  //   whenever `rowingActive` goes false — a rower sitting still through a
-  //   rest stops it dead), Rest Time counts down in real time regardless
+  //   `MonitorFrame.elapsedSeconds` (the per-interval clock, which freezes
+  //   through a REST — a rower sitting still through a rest stops it dead;
+  //   NARROWED 2026-09-03, this comment used to say it freezes "whenever
+  //   `rowingActive` goes false", which over-reaches: through a mid-WORK
+  //   stop the clock KEEPS RUNNING, measured at
+  //   `docs/monitor/sessions/walk-2026-09-03-resume-edge/` — elapsed
+  //   80.52s -> 92.11s while distance sat at 247.1 -> 249.6 m — which is
+  //   what `:189-191`'s "no paused state on the wire" describes and what
+  //   door PR B's stored `partialSeconds` therefore is), Rest Time counts
+  //   down in real time regardless
   //   of the flywheel (EST LEFT design spec §1/§5, measured against
   //   `docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl`:
   //   the interval clock froze at 133.08 for 26s while this field ran
@@ -401,7 +408,17 @@ export interface IntervalActual {
  */
 export type MonitorEvent =
   | { kind: "frame"; frame: MonitorFrame }
-  | { kind: "armed" } // programming done, PM waits for stroke one
+  // Programming done, the PM waits for stroke one. `freeRow` names WHICH
+  // arm answered, because the two have different acceptance semantics and a
+  // consumer has to be able to tell them apart (spec 2026-09-03 Part 2):
+  // `program()`'s emit follows a STRUCTURAL READBACK and is inseparable
+  // from the `program()` call that is still awaiting it, while
+  // `beginFreeRow()`'s follows its p.80 send's SETTLE and outlives the call
+  // that started it — so a free row's arm can arrive after the rower has
+  // already ended or cancelled, and only that one needs refusing. Absent
+  // (never `false`) on the programmed arm, so a consumer that ignores the
+  // field behaves exactly as it did before the field existed.
+  | { kind: "armed"; freeRow?: true }
   // `finalBoundary` is present (and `true`) on exactly one event per run at
   // most: the FINISH GRACE boundary described in the run contract above —
   // the final interval's own data, delivered by the machine one

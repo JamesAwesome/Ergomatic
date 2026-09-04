@@ -2226,6 +2226,45 @@ describe("Today (stale draft discard on mount)", () => {
       spy.mockRestore();
     }
   });
+
+  // Storage-denial spec (2026-09-03) §1/§3 leg 1 — the anchor's own
+  // condition (1): a Today fixture that actually reaches `loadTodayPick`.
+  // The audit's original mounted-Today probe never got there because
+  // `loadRun()` (Today.tsx's mount) threw first; this PR's Task 1 closes
+  // that loader, so THIS is the first test that can exercise
+  // `loadTodayPick`'s own guard through a real Today mount. `mockReady()`'s
+  // default PLAN_AT (planKey "sprint", doneN 11) is simply the fixture's own
+  // default — the `loadTodayPick` call fires unconditionally on mount in
+  // both plan and freestyle modes (Today.tsx's own `pickOverride` lazy
+  // initializer), so no particular plan/freestyle state is what makes it
+  // reachable. SCOPED TO THIS KEY ON PURPOSE, same reasoning as the
+  // MONITOR_RUN_KEY test above: a blanket denial still dies at `loadRun()`
+  // first and would prove nothing about this loader.
+  it("survives a DENIED storage getter on the today-pick key: Today mounts, and the daily pick reads as absent (storage-denial spec §1/§3)", async () => {
+    mockReady();
+    const real = Storage.prototype.getItem;
+    const spy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(function (this: Storage, key: string): string | null {
+        if (key === TODAY_PICK_KEY) {
+          throw new DOMException("storage is denied", "SecurityError");
+        }
+        return real.call(this, key);
+      });
+    try {
+      await renderToday();
+      // Mounts cleanly — the throw is absorbed, not surfaced — and falls
+      // back to the pool's own least-recently-done pick (the same default
+      // the SHUFFLE describe block's first assertion pins for this exact
+      // `mockReady()` fixture), proving the denial read as ABSENT rather
+      // than merely "did not crash".
+      expect(
+        await screen.findByRole("heading", { name: "Stationary Front" }),
+      ).toBeInTheDocument();
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("Today (loading/error states)", () => {

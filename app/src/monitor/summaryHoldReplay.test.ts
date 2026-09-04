@@ -163,6 +163,7 @@ import {
 } from "../../domain/monitor/pm5/uuids.js";
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import { releasingSchedule } from "../test/statusSubscriptions";
 
 /** Same path-surgery idiom as `burstReplay.test.ts` (jsdom resolves
  *  `new URL(...)` against `http://localhost:3000/`, so string surgery on
@@ -574,7 +575,7 @@ async function runReplay(
       schedule: (cb, ms) => replay.clock.schedule(cb, ms),
       driverOptions: {
         now: () => replay.clock.now(),
-        schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+        schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
       },
     }),
   );

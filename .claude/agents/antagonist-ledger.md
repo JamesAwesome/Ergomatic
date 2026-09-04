@@ -5875,6 +5875,125 @@ same way.
   shortened-literal grep returns exactly the 6 hits claimed; no `.summary-meta`
   e2e locator can see a second element; and PR A introduces no session-scoped
   state, so RF27 owes nothing.
+
+## Spec-stage pass, 2026-09-02 (Just Row: connect programs the erg)
+
+- **"0x0031's `workoutType` readback discriminates the main menu (0) from a
+  Just-Row-armed monitor (1), so `type === 1 && armed` verifies our program."**
+  FALSIFIED, and the falsifying line was already committed in this repo's own
+  domain code. `domain/monitor/pm5/statusFrames.ts:131-135` defines
+  `EMPTY_ARM_STRUCTURE = {workoutType: 1, workoutDurationRaw: 0,
+  workoutDurationType: 128}` — session 4a's captured anatomy of a PM5 that
+  armed **NOTHING** — and `driver.ts:4963` records that `sendPrepare()`'s own
+  Terminate drives the machine into exactly that "UNPROGRAMMED default",
+  stably, for the duration of the send. The proposed proof-of-success is
+  byte-identical to this codebase's canonical signature for a FAILED arm, and
+  `fake.ts:2258` already emits it on the refusal path. Re-decoding the cited
+  capture confirmed it on the wire: after the Menu end in
+  `walk-2026-08-31-justrow/just-row-…1788214688045.jsonl.gz`, **105
+  consecutive 0x0031 frames read type=1, state=0, elapsed=0, distance=0** —
+  the spec cited the file's first 94 frames and stopped. A second instance was
+  sitting in prose the spec had read: `pm5-interface-notes.md:5089` notes
+  `walk-2026-08-23/ring-phone-3-menu-terminate.json` seq 6 showing
+  `workoutType=1` **before programming**.
+  **Technique: for any predicate keyed on one wire byte, grep the repo for a
+  named constant carrying that same value and read what it is named AFTER.**
+  This codebase names its known-bad wire shapes (`EMPTY_ARM_STRUCTURE`,
+  `PRE_ARM_BASELINE_STRUCTURE`), so a new gate that duplicates a bad shape's
+  value collides with its own failure sentinel — and the collision is one grep
+  away, in a file the spec never had to open. Corollary: **decode the WHOLE
+  capture, not the window the claim describes.** The spec's reading was true
+  for t=15..109 s and false for t=614..719 s of the same file; a `Counter` over
+  every frame plus a transition print took three minutes and inverted the
+  ruling. (Disposition: rev 2 deleted the verification, copy B and the
+  transient state; the send stays and the walk leg gains a control.)
+- **A companion check worth making standing: ask what the design's OWN first
+  step does to the state the design then measures.** Here `sendPrepare()`'s
+  terminate is documented, in the same file, as producing the exact readback
+  the verify treats as success. A verification whose preceding step can
+  manufacture its own pass condition is not a verification — no mutation, no
+  capture and no walk photograph can tell the two apart, because the machine
+  genuinely is in that state.
+- **Attacked and NOT broken:** the p.80 frame itself — run through the real
+  `packPayload`/`chunkFrames`, it emits `F1 76 07 01 01 01 13 02 01 01 61 F2`
+  exactly, one frame, one chunk, wrapper count `07`, checksum `0x61`
+  reproduced independently by hand XOR; the prepare-settle stall hypothesis
+  (`driver.ts:5532` returns immediately unless the prior state is
+  rowing/resting, and the menu reads `armed`); the arm-effect re-trigger
+  hypothesis (`deriveProgram` is a pure function of phase and the hook flips
+  to `ready` synchronously — but the invariant is the SYNCHRONOUS FLIP, which
+  the hook's own comment calls load-bearing, so an async rewrite reopens it);
+  the RC-37 watchdog and divergence-escalation opt-outs (`driver.ts:2575`,
+  `:4982`), which survive a real program only because `activeRun.freeRow` is
+  set before the send; and the WAITTOBEGIN/COUNTDOWNPAUSE `armed` conflation,
+  which is harmless here — COUNTDOWNPAUSE appears in 0 of 1660 captured
+  frames and a JustRow has no countdown.
+  **Technique kept: `tsx` against the worktree's own domain modules from a
+  scratchpad file settles "what bytes does this produce" in one command,
+  with no repo write and no test file.**
+- **Copy over-claims are wire questions too.** "Just Row is on the monitor"
+  was to be justified by 0x0031 offsets 6/8 — which report the WORKOUT model,
+  never the SCREEN — while §19.6 quotes CSAFE-DEF p.65 verbatim saying a
+  `SetScreenState` ack means QUEUED and names
+  `CSAFE_PM_GET_SCREENSTATESTATUS` as the poll that would actually answer it.
+  **Technique: when copy asserts something about the machine's DISPLAY, ask
+  which field reports the display — and check whether the primary source
+  names a command for it that the design silently skipped.** (James had
+  already cut the claim from the copy before the pass landed.)
+
+## harden run, 2026-09-02 (Just Row: connect programs the erg — rev 2 → 4)
+
+- **A synchronous opener that fires a detached wire send inverts the ordering
+  the safe path depended on.** The spec argued its two `freeRow` opt-outs held
+  "throughout" the send; `grep -n freeRow driver.ts` returns exactly two guard
+  sites, and the run-CLOSING terminal branch has none — while the send's first
+  byte was `buildTerminate()`, now sent with a run OPEN. `program()` is safe
+  only by ordering (prepare before `activeRun` exists). **Technique: for any
+  newly detached send, list the state the send's own bytes drive the machine
+  INTO, then grep every reader of that state for the new opt-out — a guard
+  census is cheaper and more complete than reading the branches the spec
+  names.** (Fix: no prepare.)
+- **The fake could not go red on it, and its own doc says why:** it queues the
+  terminate reaction only for a RUNNING machine. **Technique: before believing
+  a prescribed gate, read the FAKE's trigger condition for the machine reaction
+  the defect needs.** (Fix: the fake reacts regardless of running state.)
+- **"Two senders, one ack slot" is answered by naming the distinguishing
+  VALUE** — the ack carries the command byte, the matcher never reads it, and
+  the timeout that would clean up a collision (`ackTimeout`) is not configured
+  in production. **Technique: find the identity field on the wire and check
+  whether the matcher reads it; then check whether the cleanup timeout is
+  CONFIGURED, not merely available.** (Fix: `programInFlight` across the
+  send; `terminate()` refuses meanwhile.)
+- **A fire-and-forget with a `finally` inherits the promise's liveness.** The
+  replay transport resolves writes and never acks; production sets no ack
+  timeout; so the flag cleared in `finally` would stay set for the driver's
+  life and END would be refused forever. **Technique: for any detached send,
+  ask which transport NEVER answers, then trace whether `finally` can run at
+  all.** (Fix: a named deadline races the send.)
+- **"X happens before Y returns" must be walked to the first `await`.**
+  `sendSequence` issues its write synchronously inside the caller, so the
+  prescribed "no write before return" assertion could never pass. **Technique:
+  before writing an ordering assertion, walk the async callee to its first
+  `await`; everything above it runs inside the caller.** (Fix: assert ring
+  order instead.)
+- **Enumerate the error CLASSES a catch receives by listing every `await` in
+  the callee**, not its `throw new` sites — the transport's plain rejection
+  carried no `hexTrace`, so the prescribed record would have said `undefined`.
+- **A gate on a detached effect must read the ring, not the flow:** nothing
+  on the connected flow branches on the send, so every UI assertion is blind
+  to it; the diagnostics door is the only e2e-visible witness.
+- **A "no state, only ring entries" design still has a lifetime:** the ring is
+  snapshotted BEFORE unsubscribe/disconnect, so a failure recorded after
+  teardown is unreachable. Stated in the spec; the walk does not rely on it.
+- **Attacked and NOT broken:** a stray 0x0039 from a terminated old workout
+  cannot be filed against the free row (`noteSummary` needs `lastIndex >= 0`;
+  `{intervals: []}` gives `-1`); the walk's type-0 control is readable on the
+  phone (the ring's `structure` entry carries the raw type); no
+  `UIBackgroundModes` in `Info.plist`, so a backgrounded send suspends rather
+  than half-writes; the arm effect cannot re-trigger (no log subscribers, and
+  re-entry hits `free-row-ignored`); the p.80 literal through `packPayload` is
+  one chunk, `f1 76 07 01 01 01 13 02 01 01 61 f2`.
+
 ### 2026-09-02 — Wave E PR1.75b native plan (DELTA pass 1)
 
 - **A vendor lifecycle hook named in a design without checking that it fires in the case
@@ -6462,6 +6581,440 @@ plan's own tools and never with the REPO's.
   before trusting a mutation row, ask what value the mutant produces for EACH
   fixture the suite feeds it; a mutation that maps every fixture to the
   original output is not a mutation of the behaviour under test.**
+
+## 2026-09-02 — Wave F `door` PR B (§5, in-flight metres): harden lens 1, FULL pass, TRIAD stored number
+
+- **CLAIM: "the in-flight ref is cleared when that interval's boundary actual
+  lands."** FALSIFIED by replay. On a program with rests the `IntervalActual`
+  arrives at the END of the interval's rest — measured 59 941 ms after the
+  work→rest frame (`walk-2026-08-28/rest-boundary-recording.jsonl.gz`, boundary
+  at t=136430 vs the resting transition at t=76489), with zero resting frames
+  after it. The mechanism is in the wire, not the timing: 0x0037 carries
+  `intervalRestTimeSeconds` (`pm5/parse.ts`, `readU16LE(bytes, 12)`; bytes
+  12-13 of that rx are `3c 00` = 60), so the characteristic CANNOT be emitted
+  before the rest completes. Consequence: a ~60 s window per interval in which
+  a completed interval is stored as a "partial" and counted as unmeasured.
+  TECHNIQUE: **when a design keys a lifetime on "the event that closes X",
+  replay a committed capture and print the interleaving of that event against
+  the frames — and then read the PAYLOAD of the characteristic that carries it.
+  A field the event must report (here, the rest it just finished) is a hard
+  lower bound on when the event can exist, and it converts a timing observation
+  into a mechanism.**
+- **A GUARD WRITTEN AGAINST STATE CAN MISS THE SAME BUG ARRIVING ON THE OTHER
+  STATE.** I-B3 excluded `resting` readings to stop a double count; the double
+  count is reachable from a ROWING frame instead, because `MonitorFrame.intervalIndex`
+  lags the machine's own interval reset (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`:
+  boundary index 0 at t=80417, then `state=rowing idx=0 d=0` at t=80957, 810 ms
+  and two frames before `idx=1` at t=81227). TECHNIQUE: **for any guard phrased
+  as "only while state === S", replay the boundary and check whether the
+  DISCRIMINATOR the guard reads is itself lagged there. `intervalIndex.ts`
+  documents a 10.6-92.9 ms lag; the real corpus shows 810 ms.** The durable fix
+  is to key the invariant on the RECORD ("never for an interval already carrying
+  an `IntervalActual`"), never on event timing.
+- **A CLOSE-ARM CENSUS IS `grep closeRecord(` PLUS THE CLOSES THAT DO NOT USE
+  IT.** The spec named three arms; there are five producers of an allowlisted
+  `endedBy`, and the fifth (`completeContinuityReset` → `link-lost`, committed
+  via `applyProducerCommit`) never touches `closeRecord` at all, so a fix
+  installed "inside `closeRecord`" would still miss it. TECHNIQUE: **grep the
+  close FUNCTION, then grep the stored FIELD's other writers
+  (`grep -rn 'endedBy' src/monitor/monitorRun.ts`) — a pure transform exported
+  beside the main closer is the shape that hides a producer.** Corollary found
+  the same way: the arm the spec omitted (machine TERMINATE, `endByMachine(true)`
+  → `"rower"`) is the one every committed capture actually exercises, because a
+  replay cannot press a button — it delivers `ws=11`. **A replay-based gate for
+  a user-initiated close is testing the machine's arm unless the harness cuts
+  the capture and calls the API itself.**
+- **A "widen the type" task counts ONE type when the repo carries three.**
+  `LogStep` is declared in `src/session/logDraft.ts` (write), `server/stores/logs.ts`
+  (server) and as `StoredLogStep` in `src/log/storedSummary.ts` (read — and
+  the one the new row renders from). TECHNIQUE: **before accepting "widens
+  `<Type>`", grep for `interface <Type>` AND for the read-side alias; a payload
+  that crosses the wire in this repo has a write shape, a server shape and a
+  read shape, and the render task depends on the third.**
+- **Attacked and HELD:** the two index spaces really are one after normalization
+  (`toProgramIndex` on 0x0033, `toActualIndex` on 0x0037/38 both return OUR
+  0-based-per-work-interval index — they disagree on the WIRE, never after);
+  a rowing frame's `distanceMeters`/`elapsedSeconds` are per-interval on every
+  capture (first rowing frame of N+1 reads d=0.8 / d=0); `isMonitorRun` has no
+  unknown-key check, so `MonitorRun` takes the new field with no `v` bump;
+  `PATCH /api/logs/:id` accepts only held/pain/thumbs/notes, so no edit path can
+  strip new step keys; no reader iterates `LogStep` keys generically; the
+  four `rowingStreakRef` clear sites are exactly the four named; `closeRecord`'s
+  `completedAt` guard makes a double partial unrepresentable; and a Just Row
+  can never mint the ref (`toProgramIndex` returns null for `programLength <= 0`).
+- **Filed alongside:** at a terminate the PM5 DOES send the in-flight interval's
+  own 0x0037/0x0038 (`end-on-interval-1-recording.jsonl.gz`, t=15442, el=8.5
+  d=15) — we decline it only because `toActualIndex` returns `null` for
+  `terminated` (CSAFE-DEF footnote 12). "Our number, never the machine's" is
+  correct for a stronger reason than the spec states, and the next implementer
+  will find that event.
+- **2026-09-02, PR B's PLAN (delta pass): A PER-ARM RESET AT THE TOP OF AN ARMING
+  FUNCTION DISARMS THE CLOSE THAT FUNCTION PERFORMS IN ITS OWN CATCH.** The plan
+  placed the new ref's clear "beside `rowingStreakRef.current = null;`" at every
+  one of that ref's four sites. Three are harmless; `program()` is not — its
+  clear runs above the `try`, and its catch closes the previous run with
+  `"program-failed"`, one of the five producers the same plan requires to bank a
+  partial. The prescribed Task 3 leg for that producer could never pass.
+  TECHNIQUE: **when copying a lifetime from a sibling ref, do not check the
+  SITES — check whether any of those sites CLOSES the thing the new ref is about.
+  `grep` the arming function for the closer (`closeRecord`, `complete*`) and
+  order the clear against its own closes, never against the sibling's
+  placement.** A sibling ref is only a valid template while its own consumers
+  read at the same moments yours do.
+- **A "constructed ordering" leg can prove the invariant and not the arm.** Task
+  7's End-arm leg cut the capture at t<=100000 — 3.5 s after the first `resting`
+  frame — so I-B3 had already cleared the ref and the leg's own assertion was
+  `partial === undefined`. It gated I-B3 under an End close and was written up as
+  gating the End arm. TECHNIQUE: **for every cut-the-capture leg, print the cut
+  timestamp against the interleaving of the events that CLEAR the state under
+  test; a cut is a claim about where in the timeline you landed, and it needs the
+  same measurement as the timeline itself.** The fix is a second cut (t<=76200,
+  between the last rowing frame and the first resting frame) whose assertion is
+  positive.
+- **"Joined by one asserted fixture" is a claim about IMPORTS, not about equal
+  literals.** The two halves of the headline gate carried the same object typed
+  twice in two files; a change to what the hook banks reddens one and leaves the
+  other asserting a stale literal that still round-trips. The repo had already
+  ruled on this shape one PR earlier — `server/routes/partial.integration.test.ts`
+  imports its predicate from `src/` and says a copy "would be a third mirror" —
+  which also disproves the plan's premise that a server test cannot reach the
+  client tree. TECHNIQUE: **before accepting "these two tests share a fixture",
+  ask which FILE the symbol is declared in; if the answer is two, grep the repo
+  for a test that already crosses that boundary before believing it cannot be
+  crossed.**
+- **2026-09-02, PR B's PLAN (harden lens 2, the prescribed code read as code):
+  settle "does the pnpm-swallows-flags footgun apply to THIS flag?" with a
+  deliberately invalid flag, not by reasoning from the documented case.**
+  `pnpm test --project unit --reporter=totally-bogus-reporter` errors inside
+  vitest if pnpm forwarded it and passes silently if it did not — one bounded
+  command, no full suite. Used to clear Task 6's `-u` invocation. The sibling
+  technique on the same pass: **for any ref whose clear sites are listed "by
+  symbol", read each site's PHASE GUARD before writing its leg** — three of
+  PR B's four "gated" sites turned out unreachable in the only phase the ref
+  can be non-null, which no amount of symbol-matching would have shown. And
+  the class-1 catch: a write gate written as a NEGATION over a type the same
+  plan WIDENED (`CloseReason | "interrupted"`) admitted the member the spec
+  says writes none — "allowlists, never negations" applies to the guard on the
+  producer, not only to the render.
+
+## 2026-09-03 — Phase JR item 2, post-walk delta (PR #278, commits b74c65a0 / 4987a1b6 / 7d0c50ce)
+
+- **A "mutation → red" line in a spec is a claim about a COMMAND, and it gets
+  run.** Spec rev 5's §Evidence 2b said "Mutation for each: restore the
+  `mode !== "justrow"` exclusion → red" for three legs. Restoring `cancel()`'s
+  exclusion alone leaves the whole client suite green (172/172 files,
+  4782/4782 tests) because `cancel()`'s own `teardown(armed, driver)` call
+  then sends the terminate; and `endSession` has no such exclusion at all, so
+  the named mutation cannot reach that leg either (its biting mutation is the
+  terminate refusal, which reddens 6 tests at the corrected head). TECHNIQUE:
+  **apply every mutation a spec's evidence table names, as written, before
+  believing the table — and when a commit says "a probe found X", grep for the
+  DOCUMENT that asserts not-X.** Here the implementer found it and wrote it
+  into the code and the test but not the spec: fixed where the claim is USED,
+  left standing where it is ARGUED — the review-record rule's own failure,
+  inverted.
+- **A walk that found one cause does not license "two causes, both fixed".**
+  The ring settled it in three lines: `free-row-program-sent` at +1795 ms,
+  `disconnect-requested` at +3384 ms — Cancel ran 1589 ms AFTER the send
+  settled, so the refusal path was never entered and only the mode exclusion
+  was operative. TECHNIQUE: **print the ring's interleaving of each claimed
+  cause's PRECONDITION against the moment the symptom happened.** A cause that
+  was not live then is hardening debt, not a diagnosis — the walk README said
+  so correctly ("would"); the commit message promoted the hypothetical.
+- **A CONSTANT THAT ACQUIRES A SECOND CONSUMER MUST BE RETUNED AGAINST BOTH.**
+  `FREE_ROW_PROGRAM_DEADLINE_MS` bounded a flag; the same commit made it also
+  bound how long a `terminate()` is DEFERRED, then raised it 3000 → 5000
+  against ack latency alone. The deferral then raced the hook's own teardown:
+  END at `ready` closes, holds the burst ~2002 ms, releases, navigates,
+  unmounts, and disconnects ≈4027 ms after END, against a Ready frame at
+  write+1159 ms and a deadline at write+5000 ms — a margin of ~186 ms. If the
+  disconnect wins, the terminate writes to a hung-up transport and the erg is
+  left armed: the defect being fixed, one path over. Nobody stated the margin.
+  TECHNIQUE: **when a timeout gains a new reader, list every OTHER timer it now
+  races and put the arithmetic in the comment.** The tell is a doc comment
+  whose own qualifier excludes the case the constant governs — here, "raising
+  it costs nothing on a machine that answers", written on the constant that
+  exists for machines that do not. FIXED in `ed8b0766` by making the driver
+  owe its terminate write (`terminateWritesOwed`) and holding `disconnect()`
+  until the debt clears — a race closed structurally, not by retuning a number.
+- **"No caller awaits it" is a grep, and it decides whether a guard is
+  testable.** `cancel()`'s terminate is distinguished from `teardown()`'s only
+  by being AWAITED; every call site is `void session.cancel()` (three in
+  `JustRow.tsx`, two in `ConnectedInterstitial.tsx`, one in
+  `JustRowObserver.tsx`). So the property the code's own comment claimed as its
+  contract had no consumer and no possible oracle — RF21's third smell, found
+  by grepping call sites rather than by reading the guard.
+- **A LIFETIME TABLE'S "survives" CELL NAMES A GUARD; CHECK THAT GUARD CANNOT
+  LAPSE MID-LIFETIME.** Rev 5's table justified "cannot be overwritten while
+  live" with the driver's `runIsOpen()` refusal — but `activeRun.closed = true`
+  is set by the machine's own terminal frame, reachable during the ~2 s send
+  (the rower presses Menu). The invariant holds, one layer up, via the hook's
+  phase gate. TECHNIQUE: **for every guard cited in a lifetime table, grep for
+  every writer of the state that guard reads, and ask whether any of them can
+  fire inside the lifetime being described.**
+- **Attacked and HELD:** the wait is genuinely bounded (ack, NAK, deadline via
+  `setTimeout`, and the disconnect hatch resolving `pendingAck` as
+  `"disconnected"` — all four reach the stored chain; both handlers attached,
+  neither throws, so the chain resolves and `terminate()` can never reject from
+  the await; `buildJustRowProgram` is one frame, so no mid-sequence null-
+  `pendingAck` window); no ordering sends the terminate before the p.80 frame
+  (`beginFreeRow()` is synchronous through the first write and mints the
+  promise in the same statement) or twice (`cancel` nulls `driverRef` before
+  its await; `alreadyTerminated` stops the repeat); no stale await is possible
+  (clear is `= null`, a suspended waiter holds its own reference); the deadline
+  IS pinned by independent literals (4999 held / 5000 released, never importing
+  the constant, failing in both directions); the cancel test really does run
+  inside the send window (proved by the refusal mutation reddening it, not by
+  reading it); and every number in the walk README reproduces from the ring
+  JSONs — write→ack 1968/2060/1788 ms, type 0 at write+1158 → ack +1968 → type
+  1 at +2057 (89 ms after the ack), Ready-to-ack 809/809/718 ms. Finding 2
+  (readback unsound) follows from rings 2 and 3 opening at `workoutType=1`
+  before their acks. Finding 1's causal inference rests on the IN-BAND control
+  (type 0 held for 1.16 s of live connection, flipping 89 ms after our own ack,
+  no other write in the ring), not on the photos — which are correctly labelled
+  CORRELATED, not SAME-FRAME, and carry no timestamps.
+- **Filed alongside:** ring 3's ack status byte is `0x01`, not the `0x81` the
+  README's parenthetical named. Both are accepts (the driver logged
+  `free-row-program-sent`, which requires `frameStatus === "ok"`); the
+  difference is the CSAFE frame-toggle bit — the same alternation this repo
+  once invented a wrong mechanism to explain (interface-notes §19.2, D1
+  withdrawn). Corrected in `b78d9a0f`.
+
+### 2026-09-03 — Connect-latency spec (full pass; new ground, no vetted ground)
+
+- **CLAIM: "the ~2 s connect delay is the PM5 or CSAFE processing, not our
+  queue." FALSIFIED, by a controlled comparison already sitting in the
+  corpus.** The byte-identical CSAFE Terminate frame
+  `f1 76 04 13 02 01 02 60 f2` acks in **1698-2058 ms at connect (n=10)** and
+  **136-224 ms mid-session on an empty queue (n=2)** — same command, same
+  characteristic, same device. **Technique: before theorising about a
+  latency, grep the corpus for the SAME BYTES issued in a different queue
+  state.** A repo whose rings log raw hex contains its own controlled
+  experiment; the spec argued from vendor source and an ordering anecdote and
+  never looked. Corroborated by two independent per-op measurements agreeing
+  at ~90-180 ms: chunk-to-chunk write spacing on an empty queue
+  (91/177/180/182 ms) and `notify-first` spacing during the drain (176 and
+  361 ms = exactly 1 and 2 queue slots, matching the subscribe order).
+
+- **CLAIM: "the web arm shows a WORSE gap with no Capacitor queue, so the
+  queue may not be the cause." Resolved, not left open.** On native the
+  plugin's `connect` does not resolve until service AND characteristic
+  discovery completes — it resolves from `setOnConnected`, whose own log line
+  reads "Connected to peripheral. Waiting for service discovery." So
+  discovery is paid inside `transport.connect()`, before the ring's t0; on
+  web it is not. **Technique: when two platform arms disagree about a
+  latency, find where each pays for GATT DISCOVERY before concluding anything
+  about what comes after.** A disanalogy that reads as a falsifier is often a
+  difference in where the clock starts.
+
+- **CLAIM: "reordering the queue programs the erg sooner — a free row, and
+  every programmed workout too." FALSIFIED for the programmed half, by
+  reading the endpoint the rower actually sees.** `program()` is two
+  sequences (a prepare, then a five-chunk programming frame), and the erg's
+  screen changes at the SECOND ack: 2700-2969 ms, not the 1800 ms first ack
+  the census measures. Under the spec's own release trigger ("once the first
+  CSAFE write has been issued") the eight deferred subscribes land BETWEEN
+  the prepare's ack and the chunk writes, and the programmed path ends up
+  ~400 ms SLOWER; releasing after the first SEQUENCE instead makes it ~1.1 s
+  faster. **Technique: for any latency fix, ask which ACK the user's evidence
+  is attached to, then count the queue positions of everything between the
+  first write and that ack.** A saving measured at the first ack of a
+  multi-sequence protocol is a saving the user never sees. **Second-order:
+  the spec's own ordering gate stays GREEN across that regression** — "write
+  before subscribes" remains true while the thing gets slower. A gate that
+  asserts the change rather than the outcome is RF21 with a passing mutation.
+
+- **CLAIM: "no frame the driver would have delivered before is dropped."
+  HOLDS for the rower, FALSE for the instrument.** The liveness watchdog is
+  safe by prior design — it arms at the FIRST 0x0031, "never at `subscribe()`
+  time and never at connect time" — but `JustRowObserver` connects and NEVER
+  arms ("because it never programs the erg"), so it always takes the fallback
+  and every future capture loses its head. **Technique: for any "nothing
+  consumes X before Y" claim, grep for the caller that never reaches Y at
+  all.** The exception to an invariant about arming is the screen that does
+  not arm — and here it was the instrument the project verifies itself with
+  (RF19's shape, one layer up).
+
+- **Deferred-subscribe scheduler, three lifetime holes an RF27 table would
+  have caught.** (1) The transport's `subscribe()` calls its connected-guard
+  SYNCHRONOUSLY and throws when the device id is null — unreachable today
+  because the subscribes run microseconds after connect resolves, reachable
+  after deferral via a walked producer (a cancel during connect), with
+  `createPm5Driver` exposing no dispose to hang the cancel on. (2) A double
+  release genuinely double-subscribes: the transport's fan-out `Set` gets a
+  NEW closure per registration, so it cannot dedupe — every status handler
+  then runs twice, halving tick-counted waits and duplicating frame
+  emissions. (3) "subscribed on every connect, exactly once, whether or not
+  an arm ever comes" literally requires subscribing after teardown.
+  **Technique: for any state that moves a synchronous call into an
+  asynchronous window, re-read the callee's FIRST LINE — the precondition it
+  used to get for free is the one the deferral removes.**
+
+- **Vendor knob not considered.** `BleClient` ships `disableQueue()` and the
+  spec invented a scheduler without recording it. It is probably wrong (the
+  driver's chunked CSAFE writes all target one characteristic and the native
+  callback map is keyed by operation and characteristic, so concurrent
+  same-characteristic writes collide) — but that reasoning IS the
+  research-trigger answer. **Technique: before designing around a library's
+  behaviour, grep its public surface for a switch that turns that behaviour
+  off, and record why you didn't use it.**
+
+- **Held under attack (vetted ground for this work):** the plugin serializes
+  BOTH `write` and `startNotifications`, and the native side resolves a
+  subscribe only after the CCCD round trip, so every slot is a real radio
+  round trip; Core Bluetooth's own per-peripheral serialization reinforces
+  rather than defeats the reorder (both layers are order-preserving, so the
+  fix works even if the ~180 ms is the connection interval rather than the JS
+  queue — the causal claim is not load-bearing); the driver is created at
+  exactly ONE site so the state is per-connect; neither arm path waits on a
+  frame (the free-row door gates on `deviceName`, the interstitial on
+  `phase === "pairing"`, set BEFORE connect) so there is no deadlock;
+  `DriverOptions.schedule` exists so the fallback is testable; production
+  configures no `ackTimeout`, so the tick-denominated bounds are not newly
+  exposed; and the ten-call count and subscribe order in the spec are exactly
+  what the driver enqueues.
+
+### 2026-09-03 — Storage-denial spec (AUD-011 / AUD-015), DELTA pass
+
+- **CLAIM: "a denied getter makes `loadRun()` return null, so Start PROCEEDS and
+  then meets `saveRun === false`" — one denial, one composed path.** FALSE. The
+  denial the spec cites fails EVERY access, so the first writer on that path
+  (`useStartWorkout.confirmReplace`'s `saveDraft`) returns false and shows its
+  existing inline error; the screen the composed test targets never mounts.
+  **Technique: a composed test's ordering is settled by walking the path FORWARD
+  from the user's press and listing every persist call and its branch, not
+  backward from the two findings you want to join. Ask which single fault
+  reaches BOTH legs; if the answer is "a different one for each", they do not
+  compose — and name the fault that actually reaches the second leg (here:
+  quota, where `setItem` throws and `getItem` does not).**
+- **CLAIM: a "proceed anyway" button lets the rower row with a memory-only
+  run.** FALSE as scoped. `Timer` and `LogSession` both re-read the record with
+  `useState(() => loadRun())` at mount and bounce to Today when it is null, so
+  the offer reproduces the very symptom it fixes, one navigation later.
+  **Technique: for any "proceed without persisting" offer, grep the destination
+  route AND every screen downstream of it for `useState(() => load*())` — a
+  memory-only value is only real if every reader on the remaining journey can
+  see it. If making them see it means a module-level memory tier, that is a new
+  session lifetime (RF27) and the antagonist skip that called the change
+  "no session state" is wrong.**
+- **CLAIM: "Countdown does not leave for Timer unless the active run is
+  DURABLE."** NARROWED. The boolean means "`setItem` did not throw" — no
+  read-back. **Technique: a persist function's boolean earns the word "durable"
+  only by reading the value back THROUGH THE CONSUMER'S OWN LOADER; when the
+  consumer is one screen away and reads at mount, calling that loader once at
+  the producer is the cheapest deterministic check available (RF24 in
+  production form, not test form).**
+- **Found, not in the spec: state stamped BEFORE a new blocking state keeps
+  ticking behind it.** `buildRun` stamps `phaseStartedAt` at Countdown's build
+  effect and nothing restamps, so every second spent in a new error state is
+  charged to phase 1 — bounded today by the 10 s countdown, unbounded once a
+  Retry screen exists. **Technique: for every new state that HOLDS a rower on a
+  screen, list the timestamps already stamped upstream of it and say which are
+  re-stamped when the hold ends. A "Retry" that re-writes the object built
+  before the hold silently ships the dwell as elapsed time.**
+- **Attacked and HELD:** the "these three loaders are the whole remaining set"
+  census — every other `localStorage`/`sessionStorage` getter under `app/src`
+  is inside a `try`, including the one that looks like a counterexample
+  (`LogSession.readMonitorLogStash`, bare, but reached only through
+  `readMonitorLogStashSafely`). **Technique for census claims: grep the API, not
+  the wrapper names, then check each hit's ENCLOSING block and each bare hit's
+  CALL SITES — a bare getter behind a `…Safely` wrapper is guarded, and a
+  wrapper-name grep would have produced a false finding here.**
+
+## 2026-09-03 — `rowingActive`: pin the surviving use, put the raw byte in the ring (lens 1, single pass)
+
+- **CLAIM: "`midSessionMirror` is the byte's only remaining behavioural use."**
+  FALSE. `useMonitorSession.ts`'s ready gate reads `frame.rowingActive` in
+  `declared` — the leg that OPENS the session record, whose failure mode is a lost
+  session, not a wrong hero. It is separately pinned (its own test feeds five
+  `rowingState: 0` frames and asserts `phase === "ready"` on four of them), which
+  is why the spec's WORK was right and only its sentence was wrong.
+  **Technique: a spec that says "the only remaining X" gets the grep, not the
+  citation — `grep -rn <field> app/src | grep -v '\.test\.'` — and each hit is
+  then checked for whether it is GATED, not for whether it exists. "Only consumer"
+  and "only UNGATED consumer" are different claims and specs conflate them.**
+- **CLAIM: "the diagnostic is worth building for the timing, not for the value —
+  the byte takes only 0 and 1 across 7,777 frames."** The measurement reproduced
+  exactly; the inference is survivorship. Every recording in the corpus is from a
+  session where the byte behaved, and the interface notes say in as many words
+  that the ONE misbehaving session *"kept no `.jsonl.gz` recording"* and *"cannot
+  distinguish 'the machine said Inactive' from 'the machine said something we do
+  not decode'"*. **Technique: for any "our corpus has never contained X", ask
+  whether the corpus COULD contain X — find the session that motivated the worry
+  and check it is actually in the denominator. A bound computed over the
+  well-behaved cases bounds nothing.**
+- **Found, not in the spec: a change-only detector is silent on a stuck value.**
+  I-2 ("record when the byte changes") emits ZERO entries for the walk-2026-08-26
+  session — one value, all session, no changes — and an operator then cannot tell
+  "never moved" from "instrument absent". **Technique: for every on-CHANGE
+  instrument, run it mentally against the pathological session it was built for.
+  If the answer is "no entries", the invariant owes a first-frame entry so that
+  absence proves something. State it as an entry-count invariant (0 = not running,
+  1 = never moved, N+1 = N changes), never as a transition rule.**
+- **Technique for ring/log budgets: a percentage of FRAMES is the wrong unit.**
+  The spec's "1.2% of frames" said nothing about a 500-entry ring that fills in
+  TIME. Re-measuring the same corpus in wall-clock windows gave the usable
+  numbers — worst whole-file 2.7 changes/min, worst 60 s window 6 — against
+  `driver.ts`'s own recorded precedent (~2 frames/s evicted the whole ring in
+  ~4 minutes) and a real committed ring (68 entries for a whole 100 s session).
+  Conclusion unchanged, argument now falsifiable.
+- **Attacked and HELD: `PAUSED_FRAME_HOLD`'s comment, after a walk that looked
+  like it invalidated it.** The 2026-09-03 walk measured the CLOCK through a
+  mid-work stop; the comment claims the BYTE through a mid-piece stop is
+  unobserved. Different quantities. **Technique: when a walk "settles" a question
+  near a comment, name the quantity the walk measured and the quantity the comment
+  claims before touching it — RF11's mirror rule applied to prose.** (Corpus
+  search did turn up one partial: a stop at an interval's END shows the byte going
+  1→0 within 0.53 s of the last distance increase, `step-3-…second-rest` seq
+  755-758. A stop WITH resumption remains unobserved.)
+- **Technique that found the partial reconciliation: grep the WITHDRAWN WORDS, not
+  the corrected file.** A comment was correctly narrowed at its own site and the
+  withdrawn sentence survived in three other live files — including one
+  (`summaryModel.ts`) that quotes it by LINE NUMBER as evidence for a residual the
+  same walk had settled. `grep -rn "freezes whenever\|FREEZES whenever" app docs
+  ROADMAP.md` takes ten seconds and is the difference between "(b) is done" and
+  "(b) is done in one of four places".
+
+## 2026-09-03 — Reattaching a connection without re-owning the old state (lens 1, single pass)
+
+- **“The logical record owns the actuals, so a fresh driver need not receive
+  them” was false.** The disposable driver's private run state also decided
+  duplicate refusal, cumulative subtraction, final-summary reconciliation,
+  boundary attribution, and finish grace. **Technique: before replacing a
+  stateful object, enumerate every reader of its discarded fields and classify
+  each field as connection state, logical-run state, or diagnostic-only state;
+  naming the surviving database record is not a lifetime proof.**
+- **“A connection generation identifies reconnect work” was incomplete.** A
+  connect can outlive its UI deadline and resolve after Cancel, while native
+  serializes the cleanup behind that connect; a later loss can also replace the
+  reconnect authority while retaining the same logical session and device. The
+  design needed distinct token, reconnect-attempt, and base-attempt IDs, bounded
+  phases, and exact triple-matched late teardown before retry. **Technique: every
+  cancellable async operation gets an identity independent of the object it may
+  eventually create, plus a terminal rule for success after invalidation.**
+- **“Three fresh notifications form a current cohort” was a heuristic disguised
+  by the word cohort.** The feeds are independently delivered; the first triple
+  can mix PM5 instants. Compatibility may release, but a destructive mismatch
+  now requires repeated 0x0031-led evidence over the existing time window, and
+  both false-release and false-close directions stay named. **Technique: write
+  the assembly rule for every multi-feed verdict, then give destructive and
+  non-destructive outcomes different evidence thresholds.**
+- **“The reattach path wrote nothing” had no hardware oracle on native.** Driver
+  logs miss sample-rate and direct error-detail paths. The proof moved to a
+  generation-scoped counter at the lowest shared transport write seam, with one
+  mutation per forbidden write and a still-connected Terminate positive control.
+  **Technique: a negative side-effect invariant belongs below every producer of
+  that side effect; logging from one producer is not an oracle.**
+- **“Server first, client second” did not imply safe rollback.** A loaded web
+  client or distributed native build can keep writing after a nominal client
+  rollback. The additive server reader therefore remains deployed until every
+  capable writer is withdrawn. **Technique: rollout prose must name forward
+  compatibility, already-loaded clients, native distribution, and rollback
+  order separately.**
+- **VETTED GROUND:** base-handle retention with fresh wrappers, typed adapter
+  provenance, confirmed local-disconnect authority, explicit series breaks,
+  retained same-device routes, and the MISSED producer/server/reader seam
+  survived the attack.
 
 ### 2026-09-03 — Wave E PR2 client plan (harden Lens 1)
 

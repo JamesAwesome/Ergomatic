@@ -4,9 +4,7 @@
 in PR A; a stored number's meaning in PR B) · **Status:** APPROVED by James 2026-09-02 (spec "looks good"; Gate 0-A approved
 with one copy change — the `LINK LOST` line shortens to `LINK LOST · the app
 lost the monitor`, a change to the shipped literal that PR A carries; chip in
-the numbers-line slot; chip border left as the shipped Just Row chip's); anchor pass RUN 2026-09-02 and a spec pass RUN the same day on the
-written text (five blockers, all applied below; both ledger entries landed
-with this spec) · **Gate 0:** two, one per PR, rendered before any implementation task
+the numbers-line slot; chip border left as the shipped Just Row chip's); the antagonist entries for this item are in `.claude/agents/antagonist-ledger.md` · **Gate 0:** two, one per PR, rendered before any implementation task
 · **RE-SCOPED 2026-09-02, after approval:** §4's fourth item (the `source`
 derive-when-absent sunset) SHIPPED SEPARATELY as #273 / v0.35.0 on the same
 day and is no longer part of PR A. Nothing else moved.
@@ -35,8 +33,8 @@ NUMBER means.** A reviewer never holds both at once.
   PARTIAL read and its copy; RC-18's neutral fallback; the positive
   `timeLabel` gate; the three riders. Gate 0-A.
 - **PR B — the stored number.** Lifecycle spec §5: the in-flight interval's
-  metres survive a mid-row close as OUR number, never the machine's, in new
-  step keys, and the "N intervals kept" vocabulary including the lost banner.
+  metres survive a mid-row close in new step keys — the MACHINE's own
+  reading, attributed by US to the interval it was in flight for, and the "N intervals kept" vocabulary including the lost banner.
   Gate 0-B. Lands after A.
 
 The decisions below were taken with James on 2026-09-02 and then attacked in
@@ -407,9 +405,17 @@ PR A is that migration.
 ### 5.1 What it stores and where
 
 On a connected close that is not `finished`, the interval in flight — the one
-with no boundary actual — stores its live frame reading as **our** number in
-two NEW step keys, `partialMeters` and `partialSeconds`, on the step that was
-in flight. Never in `actualMeters`/`actualSeconds`, never as a new
+with no boundary actual — stores its live frame reading in two NEW step keys,
+`partialMeters` and `partialSeconds`, on the step that was in flight.
+**Whose number it is, said precisely (PM final gate, 2026-09-03):** the pair
+is `MonitorFrame.distanceMeters`/`elapsedSeconds`, which
+`domain/monitor/types.ts:31-33` documents as _"0x0031's OWN Elapsed Time /
+Distance, exactly as the machine reports them"_ — the QUANTITY is the
+machine's. What is OURS is the ATTRIBUTION: §7 records that
+`toActualIndex` returns `null` at terminate, so the machine reports the
+reading and cannot say which interval it belongs to, and we do. Anything
+else this spec ever said about the pair being "our number, never the
+machine's" is superseded by this paragraph. Never in `actualMeters`/`actualSeconds`, never as a new
 `actualSource` member. The reason is the server's own validator comment
 (`routes/data.ts:594-596`): _"any extra keys the client sent are silently
 dropped, not persisted."_ A partial carried in `actualMeters` plus a marker
@@ -421,12 +427,63 @@ untyped `jsonb` (`schema.ts:195`); no migration. **But the NEW server drops
 them too until its explicit field list grows** (`routes/data.ts:593-605`, ten
 `if (x !== undefined) step.x = x` lines): PR B's task (0) widens `LogStep`,
 the route's field list and its bounds, and the headline gate starts at
-`POST /api/logs` and reads the row back through `GET` (RF24).
+`POST /api/logs` and reads the row back through `GET` (RF24). **Two stored
+shapes change, not one:** the partial is read at close inside `closeRecord`
+(which builds the close through `completeMonitorRun`), while
+`buildMonitorLogSteps` runs later off the loaded `MonitorRun` — so the partial
+lives first on `MonitorRun` (a versioned localStorage record and the hand-off
+store's durable bytes) and only then on the posted step. `isMonitorRun` has
+no unknown-key check (its own comment: the positive conjunction tolerates new
+fields), so no `v` bump; the spec names both shapes because a TRIAD PR that
+changes two must. **On a link-lost close the pair is what we LAST RECEIVED,
+not "so far":** `endSession`'s `linkGone` includes frame silence, so the
+banked reading can be arbitrarily old. Gate 0-B approves that reading with
+that word, or the copy changes.
 
-**The pair is elapsed, not rowing time.** `domain/monitor/types.ts:189-191`:
-_"There is NO paused state on the wire — mid-workout the clock runs whether
-or not the rower pulls."_ A rower who stops pulling and then presses End
-banks a `partialSeconds` that includes idle time. **No split, pace or rate is
+**The pair is elapsed, not rowing time — SETTLED 2026-09-03 by the
+resume-edge walk** (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`:
+with the rower still, elapsed ran 80.52 s → 92.11 s while distance sat at
+247.1 → 249.6 m). The residual the PM gate marked UNSETTLED is discharged
+in favour of this section's conclusion, on this device and this run: the
+clock runs through a mid-WORK stop, and `types.ts:134`'s freeze claim is
+true only of its own measured REST. The two citations below are kept
+because the discriminator between them is what the walk went to find.
+
+- `domain/monitor/types.ts:189-191`, the WIRE-DOC claim, tagged C4/H1:
+  _"There is NO paused state on the wire — mid-workout the clock runs
+  whether or not the rower pulls."_
+- `domain/monitor/types.ts:134`, MEASURED and about the very same field,
+  says the opposite in the same breath: `MonitorFrame.elapsedSeconds` is
+  _"the per-interval clock, which FREEZES whenever `rowingActive` goes false
+  — a rower sitting still through a rest stops it dead"_, measured against
+  `walk-2026-08-16/session-2-wu-4unequal.jsonl`.
+- The discriminator, and why this spec still says "elapsed": that measured
+  freeze was watched **through a REST**, not through a mid-WORK stop, and a
+  mid-work stop HAS been measured the other way. `useMonitorSession.ts`'s
+  `PAUSED_FRAME_HOLD` doc comment records it as §17 item 20, ANSWERED by the
+  2026-08-08 hardware recording: _"on a real PROGRAMMED timed interval the
+  PM5's clock runs whether or not the rower pulls — the recording shows LEFT
+  IN INTERVAL counting 4:38 → 3:47 while meters sat pinned at 30, split at
+  4:16.1, rate at 68"_. That is the case a partial is banked in, and it says
+  the clock runs.
+- **What is therefore still open, precisely two things**, and neither
+  changes what ships: (i) the same observation on a DISTANCE interval —
+  `PAUSED_FRAME_HOLD`'s own caveat says the three-metric freeze "has only
+  been WATCHED on a timed one"; (ii) the `rowingActive` byte's value through
+  that stop, which the same comment records as **never observed** ("frames
+  whose Rowing State behavior during a mid-piece stop has NEVER been
+  observed"), so `types.ts:134`'s "whenever `rowingActive` goes false" has
+  never been evaluated mid-work at all.
+- **No committed capture settles (i) or (ii)**, checked by listing
+  `docs/monitor/sessions/` by date and grepping every `rowingActive` mention
+  in `docs/` (RF16's corpus check). **OWED AT THE NEXT WALK:** on a DISTANCE
+  interval, stop pulling mid-interval for ≥10 s, keep the program running,
+  then End — the recording then carries both the clock's behaviour and the
+  byte through the same stop, and the loser of `types.ts:134` vs
+  `types.ts:189-191` is corrected at its own site.
+
+A rower who stops pulling and then presses End banks a `partialSeconds` that
+includes idle time on the measured evidence above. **No split, pace or rate is
 ever derived from the partial pair**; the step row shows the two numbers as
 what they are (metres so far, interval clock so far). A `rowing` frame with
 `intervalIndex: null` (the D3 divergence, `types.ts:152-159`) writes no
@@ -435,7 +492,14 @@ null-index actuals.
 
 ### 5.2 Invariants (stated as invariants, not mechanisms — RF27)
 
-- **I-B1** A partial is written only on a close with `endedBy ≠ finished`.
+- **I-B1** A partial is written only on a close whose `endedBy` is one of the
+  FOUR WIRE-CLOSE reasons: `rower`, `link-lost`, `program-dropped`,
+  `program-failed`. **An allowlist, never `≠ finished`** (SHIPPED as
+  `PARTIAL_WRITE_REASONS` in `monitorRun.ts`; this bullet used to read
+  "`endedBy ≠ finished`" and that wording is withdrawn): `withPartial`'s own
+  parameter type also admits `interrupted`, which §5.3 says writes none, so
+  the negation is wrong by exactly one member — measured, in the plan's
+  Measurements appendix, as the one row of eighteen that flips.
   Tier B2 (`isReconstructableClose` = `finished | null | undefined`,
   `storedSummary.ts:513-515`) therefore never sees one, and the GATED
   population stays "provably historical" (`:406`) and "genuinely closed,
@@ -444,32 +508,83 @@ null-index actuals.
 - **I-B2** A partial is never an `IntervalActual`. `measuredIntervalCount`
   (`summaryModel.ts:648-653`) reads `run.actuals`, so "N intervals kept" does
   not move; a partial single-interval piece is still `kept = 0`.
-- **I-B3** A partial is captured only while `state === "rowing"`.
-  `MonitorFrame.distanceMeters` is per-interval and spans work plus trailing
-  rest (`domain/monitor/types.ts:33-39`, settled on hardware walk 4), so a
-  reading taken while resting is interval N's work plus rest for an interval
-  whose actual may already be banked — a double count. Resting → no partial.
+- **I-B3** A partial belongs to an interval whose WORK BOUT is still
+  running. The work bout ends at the first `resting` frame carrying that
+  interval's index, or at that interval's own ACCEPTED actual — the clear
+  lives INSIDE the accepted-commit branch, never before `applyProducerCommit`
+  has had its chance to refuse the commit (Task 2 review, RF25: a refused
+  commit that had already retired the reading would lose a partial the run
+  still owns) — whichever comes first — the two are up to a full programmed rest apart (measured:
+  59 941 ms on `walk-2026-08-28/rest-boundary-recording.jsonl.gz`, boundary at
+  t=136430 against the resting transition at t=76489, with zero resting
+  frames after the boundary; the mechanism is the wire: 0x0037 carries
+  `intervalRestTimeSeconds` (`pm5/parse.ts`, bytes 12-13), so the machine
+  cannot emit the interval's actual before its rest has finished). A close
+  after the work bout ends writes no partial, whether or not the actual ever
+  landed. **The first draft cleared the ref on the boundary actual alone;
+  that fires ~60 s late on a rested program, and an End during the rest
+  would have stored a COMPLETED interval as a partial and counted it
+  unmeasured — the inverse of the complaint this spec exists for.**
 - **I-B4** A stale re-emitted frame UNDER-counts, never over: the partial is
   the last rowing frame's reading, and a re-emission repeats an earlier,
-  smaller number. §4's freeze discriminator (open, see the antagonist ledger
-  2026-09-02) does not gate this; the bound is stated instead of assumed.
+  smaller number (zero non-monotonic rowing samples across three committed
+  captures). §4's freeze discriminator (open) does not gate this; the bound
+  is stated instead of assumed. Re-emission is not the only under-counter:
+  a link-lost close banks what was last received (§5.1), which is why the
+  row's copy says what the pair IS rather than "so far".
 - **I-B5** Every reader that sums step actuals ignores partial keys by
   construction: `stepActualSums`, `tierBAvgSplitSeconds`, `hasStepActuals`,
   `buildStoredRest`, `heroDistanceMeters` read `actualMeters`/`actualSeconds`
   and never the partial keys; the partial renders only on its own step row
   and never enters a hero, a tier, or the Concept2 mapping (which reads
-  `work_meters`/`work_seconds` and is fenced to `finished` rows anyway).
+  `work_meters`/`work_seconds` and is fenced to `finished` rows anyway). No
+  reader iterates step keys generically (no spread, `Object.entries` or
+  `Object.keys` over a `LogStep` anywhere in `src`, `server`, `domain`), and
+  `PATCH /api/logs/:id` accepts only `held`/`pain`/`thumbs`/`notes`, so no
+  edit path can strip the keys. **The step type has THREE declarations and
+  task (0) widens all three:** `LogStep` in `src/session/logDraft.ts` (the
+  write shape), `LogStep` in `server/stores/logs.ts` (the server shape), and
+  `StoredLogStep` in `src/log/storedSummary.ts` (the read shape the row
+  renders from).
+- **I-B6** A partial is never written for an interval that already carries an
+  `IntervalActual` on the run — checked against `run.actuals` at write time,
+  never inferred from boundary timing. `MonitorFrame.intervalIndex` lags the
+  machine's own interval reset by up to two frames (measured 810 ms on
+  `walk-2026-08-16/session-1-keystone-2x250r0.jsonl`: boundary index 0 at
+  t=80417, then `state=rowing idx=0 d=0` at t=80957, `idx=1` only at
+  t=81227), so a rowing frame can carry the index of an interval whose actual
+  is already banked and re-mint the ref onto it; without this invariant a
+  close in that window writes `partialMeters: 0` beside `actualMeters: 250`.
 
 ### 5.3 Lifetime table (session-scoped state, RF27)
 
+**AS SHIPPED** (this table was rewritten at Task 8's docs sweep against the
+code; the version written before implementation said "four per-run reset
+sites" and "six sites", counted no `program()` split, and named three of them
+as gated. One is gated. The rest are declared defensive, each with the guard
+that makes it unreachable, and none of them carries a mutation because none
+of them can go red — RF21.)
+
 | state | mint | clear | survives teardown / relaunch / re-arm |
 |---|---|---|---|
-| in-flight interval reading (`lastRowingFrameRef`: `{ intervalIndex, meters, seconds }`) | every `state === "rowing"` frame of the live run with a non-null `intervalIndex` | each boundary actual for that interval (the in-flight interval advanced); the FOUR per-run reset sites `rowingStreakRef` clears at (`useMonitorSession.ts:3536` RC-37 exit, `:4810` `beginFreeRow`, `:4886` `program`, `:5169` cancel — `rowingStreakRef` itself clears at exactly those four and NOT at connect/teardown), PLUS, for this ref only, `connect()` (`:4307`) and `teardown()` (`:3824`) — six sites for the new ref, enumerated by line in the plan (the `beginFreeRow` copy was missed once before, its own comment says so) | no / no / no |
+| in-flight interval reading (`lastRowingFrameRef`: `{ intervalIndex, meters, seconds }`) | every `state === "rowing"` frame of the live run whose `intervalIndex` is non-null and whose interval carries no accepted actual yet (I-B6, checked against the record) | **event-shaped (I-B3), both gated:** the first `resting` frame carrying that interval's index; and that interval's own ACCEPTED actual, cleared INSIDE the accepted-commit branch (never before `applyProducerCommit` can refuse). **per-run, ONE gated site:** `program()`, at BOTH exits — success and its own `program-failed` catch — placed AFTER the close it performs, not beside `rowingStreakRef`'s clear at the top, because `program()` is the only arming site that also closes the run it replaces and that close is one of the five producers. **per-run, FIVE DEFENSIVE sites,** ungated and stated as such: the RC-37 `programDropped`/ready exit (its live arm returns first; its guard admits only `programming`/`ready`, phases that cannot hold a reading), `beginFreeRow()` and `cancel()` (every route into them passes `fail()` or the `disconnected` handler, and `cancel()` nulls `runRef`, so every later `closeRecord` returns at its no-record guard), and `connect()`/`teardown()` (TRIPWIRES: reachable only because no surface offers Connect with a run still open and nothing unmounts this hook and then closes the run it was holding — R10 reconnect would arm them) | no / no / no |
+| mint-refusal dedupe (`partialMintRefusedRef`: `Set<number>`) | the first mint refusal for an interval index, so the ring's `partial-mint-refused reason=… idx=…` is recorded ONCE per index rather than per frame | with the reading above, at every one of the same sites — the Set is per RUN, and its own leg (M2.9) is what proves the dedupe is per-index rather than per-frame | no / no / no |
 
-The close arms that write a partial: the user End arm, the live-drop arm
-(`program-dropped`), and the link-lost arm — each reads the ref once at close
-and never afterwards. `interrupted` (Today's unlogged row) has no live frame
-and writes none.
+A partial is written on every close whose `endedBy` is in clause 4's
+allowlist — five producers, not three. Four commit through `closeRecord` in
+`useMonitorSession.ts` (the End arm, which writes `rower` or `link-lost` by
+`linkGone`; `endByMachine`'s `terminated` arm, the PM5's own Menu, writing
+`rower`; the live `programDropped` arm; and `program()`'s catch writing
+`program-failed`), so the read belongs INSIDE `closeRecord`, gated on
+I-B1's four-member allowlist and on I-B3/I-B6 — one site, never per arm.
+The fifth, the continuity reset (`completeContinuityReset` → `link-lost`,
+committed through `applyProducerCommit`), never touches `closeRecord` and
+needs the same read at its own commit. `interrupted` (Today's unlogged row,
+`completeWithoutWireEvidence`) runs outside the hook and writes none; a
+partial cannot be written twice (`closeRecord` returns on
+`completedAt !== null`). **The arm the first draft omitted — the machine's
+TERMINATE — is the one every committed capture exercises, because a replay
+cannot press a button; it delivers workout state 11.**
 
 ### 5.4 The kept vocabulary and the lost banner
 
@@ -499,9 +614,39 @@ saved row together, one vocabulary.
   title; the numbers-line slot is recommended and leaves Today's last-three
   rows chipless). Every colour
   pairing's contrast ratio stated.
-- **Gate 0-B (before PR B's tasks):** the step row carrying a partial (how a
-  250 of 500 reads beside a measured 500), the saved-row heroes unchanged by
-  it (I-B5 made visible), and the lost banner both arms. Cannot be approved
+- **Gate 0-B (before PR B's tasks):** the step row carrying a partial for
+  BOTH interval kinds — a distance interval (250 m / 1:03 against 500 m) and
+  a time interval (2:10 / 480 m against 3:00; the target slot holds a
+  duration and the partial pair holds metres and clock) — beside a measured
+  row; the same row on a link-lost close, where the pair is what was last
+  received (§5.1); the saved-row heroes unchanged by it (I-B5 made visible);
+  and the lost banner both arms. **APPROVED by James 2026-09-02
+  (`2026-09-02-door-gate-b.html`, all recommendations taken):** (a) the pair
+  `250 m · 1:03` then the dash on a distance row; (b) `2:10 · 480 m` against a
+  `3:00` time row; (c) the link-lost reading marked by a caption under the
+  table in the targets-only caption's type, replacing that caption on a
+  single-interval link-lost row (an inline word collapses the pace-ref cell
+  to zero, measured); (d) an over-target partial (`503 m` against `500 m`)
+  still reads as partial — no pace, no rate; (e) the lost banner's zero-kept
+  arm renders the title alone, AND the two sibling surfaces that say "Nothing
+  kept." — the connected surface's ended-frame line and `LogSession.tsx`'s
+  dropped-program strip — drop it the same way in this PR, since the strip
+  would otherwise sit above a step row showing the metres (RF23's shape);
+  (f) no split, pace or rate is derived from the pair; (g) the row's
+  `aria-label` APPENDS the spoken pair to `, not measured` (the accessible
+  name may not claim more than the visible row, which still ends on the dash),
+  in the artboard's own TWO forms — the draft written into this section
+  before the gate said "stopped at 250 m · 1:03" and is superseded by what
+  James approved and what shipped: `, not measured, stopped at 250 m after
+  1:03` on a `rower`/`program-*`/`interrupted` close, and `, not measured,
+  last reading 250 m after 1:03` on a `link-lost` one, where the pair is what
+  GOT THROUGH. The middle dot goes (it carries no meaning aloud) and the
+  METRES lead on BOTH interval kinds, unlike the visible order, because "2:10
+  after 480 m" says the metres are a duration. The DISTANCE
+  hero already counts the abandoned interval's rowed metres while the rows
+  cannot show them, so a rower can subtract and find a gap; James accepted
+  the gap silently — the pair never enters a hero (I-B5) and no sentence is
+  owed. Cannot be approved
   before §5's shape is decided, which is why it is not folded into 0-A (RC-24:
   a shape approved on a description).
 
@@ -520,9 +665,25 @@ saved row together, one vocabulary.
   driver's terminal branch can close a free row `finished` is SUSPECTED and
   unsettled (§1.1 clause 2).
 - **The PM5 has the concept**: WORKOUTSTATE distinguishes WORKOUTEND from
-  TERMINATE (`domain/monitor/types.ts:186-192`); we store the derivative
-  (`endedBy`), and our End button also writes `terminated`, so venue is lost
-  by design.
+  TERMINATE (`domain/monitor/types.ts`, WORKOUTSTATE doc); we store the
+  derivative (`endedBy`), and our End button also writes `terminated`, so
+  venue is lost by design.
+- **At a terminate the PM5 DOES send the in-flight interval's own
+  0x0037/0x0038** (`walk-2026-08-28/end-on-interval-1-recording.jsonl.gz`,
+  t=15442: el=8.5 d=15) and we decline it, because `toActualIndex` returns
+  `null` for `state === "terminated"` — CSAFE-DEF footnote 12 says the
+  interval number "will change depending on where you are in the interval",
+  so the machine reports the QUANTITY but cannot ATTRIBUTE it. That is
+  exactly what "ours" means here and all it means: the ATTRIBUTION is ours,
+  the two numbers are the machine's own. **This section used to say "our
+  number, never the machine's", which reads as a claim about PROVENANCE and
+  is wrong as one** (PM final gate, 2026-09-03): the pair is
+  `MonitorFrame.distanceMeters`/`elapsedSeconds`, and `types.ts:31-33` says
+  those are _"0x0031's OWN Elapsed Time / Distance, exactly as the machine
+  reports them"_. The sentence mattered because it invites the next agent to
+  compare the pair against the PM5's own in-flight reading and call the
+  agreement a check — same bytes, RF11's mirror. The first implementer to
+  see that declined 0x0037/0x0038 event must still not reach for it.
 - `ls docs/superpowers/research/` covers nothing here (RF18 check run).
 
 ---
@@ -558,27 +719,91 @@ gates are NOT PR A's to claim** — they shipped with #273 and live at
 
 ### 8.2 PR B — the stored number (TRIAD: number meaning; antagonist FULL pass on its plan — a new stored shape; PM final gate)
 
-Tasks: (1) the ref and its lifetime; (2) the three close arms writing the
-partial keys; (3) the step row rendering; (4) I-B5's reader census as a test
-(every summing reader over a row with partial keys equals the same row
-without them); (5) the lost banner; (6) e2e + screenshots.
+Tasks: (0) widen the THREE step types + the route's explicit field list and
+bounds (non-negative, finite; no upper bound against the target — a partial
+can legitimately exceed a distance target by the last stroke); (1) the ref
+and its lifetime on `MonitorRun` (both stored shapes, §5.1); (2) ONE read
+inside `closeRecord` gated on I-B1/I-B3/I-B6, plus the same read at the
+continuity reset's commit — five producers, two sites; (3) the step row
+rendering for both interval kinds; (4) I-B5's reader census as a test (every
+summing reader over a row with partial keys equals the same row without
+them); (5) the lost banner; (6) e2e + screenshots.
 
-Gates: a replay over a committed multi-interval capture closed by End
-mid-interval (the real driver, the real hook, storage read back — RF24's
-"start upstream of the producer") asserting the partial keys on the in-flight
-step and NO change to `actuals`, heroes, or `measuredIntervalCount`; a
-resting-state close asserting no partial (mutate I-B3); the field-list task
-(0) gated by the POST→GET read-back (mutate: remove the two `if` lines → the
-keys vanish → red). The old-server direction of the additive matrix is NOT
-tested — a hand-written copy of the old allowlist would be a mirror (RF11) —
-it is argued in §5.1 from the validator's own comment and stated as such.
+Gates. **The headline gate is two tests joined by one asserted body fixture**
+— nothing can host both halves: the replay half needs jsdom (`client`,
+`src/**`) and the POST→GET half is a supertest route test (`unit`,
+`server/**`, `data.test.ts`'s idiom). The fixture is ONE exported declaration
+(`src/session/partialGateFixture.ts`) that both halves import.
+
+**AS SHIPPED — five replay legs, and what each one gates** (this section was
+written before implementation; it named two captures and a synthetic frame.
+The shipped set is below, and every value in it was MEASURED by
+`partialReplay.test.ts` against the committed captures, not inferred):
+
+- **Leg A** — `walk-2026-08-28/end-on-interval-1-recording.jsonl.gz`, closed
+  by the WIRE terminate 8.3 s into interval 1. Zero attributable actuals, so
+  the partial (`{ intervalIndex: 0, meters: 15, seconds: 8.28 }`) is the only
+  number the row has. **Biting mutation: Task 3's read reverted** (`const
+  banked = withFinalSeries`) → `expected undefined to strictly equal
+  { intervalIndex: +0, meters: 15, …(1) }`.
+- **Leg B** — `rest-boundary-recording.jsonl.gz`, same wire close, in interval
+  2: the banked boundary actual is untouched and the pair
+  (`{ intervalIndex: 1, meters: 37.6, seconds: 10.9 }`) rides the NEXT step.
+  Same biting mutation.
+- **Leg C1** — the END-BUTTON arm, as a constructed ordering (RF26): the same
+  capture cut at `e.t <= 76200` (between the last rowing frame at t=76039 and
+  the first resting frame at t=76489), then `endSession()`. Banks
+  `{ intervalIndex: 0, meters: 196.6, seconds: 59.74 }` — the spec's own
+  inference, MEASURED and identical. The only POSITIVE End-arm gate.
+- **Leg C2** — I-B3 under an End close: the same capture cut DURING the rest.
+  Nothing is banked. **Biting mutation: M7.1**, the `resting` clear deleted →
+  the completed interval is stored as a partial reading 196.6 m / 59.74 s.
+- **Leg D** — `walk-2026-08-25/rests-finished-recording.jsonl.gz`, the corpus's
+  own NATURAL finish. The close fires on the WORKOUTEND frame 180 ms before
+  the final boundary arrives, and a WORKOUTEND frame is neither `rowing` nor
+  `resting`, so a live reading (`{ intervalIndex: 2, meters: 215.7, seconds:
+  59.52 }`) is still held at the instant `closeRecord` runs. **Every gate
+  except I-B1's allowlist would let it through** — which is what makes I-B1
+  load-bearing rather than defensive, and why this leg was added. It also
+  asserts `measuredIntervalCount(actuals) === 3` (I-B2 on a row that really
+  did finish).
+- **One expected divergence per replay**, declared: each capture's own barrier
+  timeout on its last transmit (`tx#75`, `tx#839`), an artifact of replaying a
+  transmit nothing answers.
+
+(b) That same fixture posted and read back through `GET`
+(`data.test.ts`; mutate M0.1 — remove the new `if` lines → the keys vanish →
+`expected { label: '1:00 @ 2:32', …(2) } to strictly equal { …(4) }`).
+**M7.3 (change one number in the fixture module) reddens the REPLAY half and
+leaves the ROUTE half green, by design and measured** (`Tests 1798 passed`):
+the route leg posts the fixture and asserts the fixture, so it is an identity
+over whatever the declaration says. What it gates is the round trip; what
+M0.1 gates is the field list. No single mutation reddens both, and saying so
+is the honest form of the claim.
+
+I-B6: a synthetic frame carrying a banked interval's index after its actual →
+no partial (mutate the `run.actuals` check → red). The old-server direction of
+the additive matrix is NOT tested — a hand-written copy of the old allowlist
+would be a mirror (RF11) — it is argued in §5.1 from the validator's own
+comment and stated as such.
+
+**M2.3 (the MINT-side I-B6 guard) is GREEN BY DESIGN and stays**: the record
+is byte-identical with it deleted, because `withPartial` re-checks I-B6 at the
+close. Its value is the ring entry it writes (`partial-mint-refused`), which
+is what a diagnostics reader needs to see the lag window happen at all. Stated
+here rather than left as an unexplained green (RF21).
 
 ### 8.3 Owed before PR B's plan, no hardware
 
-One replay settles when `IntervalActual` N arrives — at the work→rest
-boundary or at the end of N's rest (`pm5-interface-notes.md:713-715` shows a
-work→work case only). It decides I-B3's exclusion precisely and how reachable
-§1.1's "all matched, `endedBy = rower`" case is.
+**SETTLED 2026-09-02 at the harden pass (PRIMARY, by replay through the real
+driver over committed captures):** `IntervalActual` N arrives at the END of
+N's programmed rest (59 941 ms after the work→rest frame on
+`walk-2026-08-28/rest-boundary-recording.jsonl.gz`; 180 ms after the last
+rowing frame on the r0 keystone `walk-2026-08-16/session-1-keystone-2x250r0.jsonl`
+— the lateness is a property of programmed rest). I-B3 is written from it.
+§1.1's "all matched, `endedBy = rower`" case is therefore reachable only by an
+End pressed in the instant between the last interval's actual and WORKOUTEND
+— on an r0 program, ~180 ms.
 
 ### 8.4 Skips, spoken
 

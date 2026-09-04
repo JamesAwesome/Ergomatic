@@ -61,6 +61,7 @@ import {
   restPairComplete,
 } from "./driver";
 import { createFakeTransport, type FakeTimelineEvent } from "./transports/fake";
+import { createSubscribedDriver } from "../test/statusSubscriptions";
 
 // TIMER HYGIENE, file-wide (fix round 1, review Minor-4). The driver grew
 // its first real timer with the summary-fallback gate — one `setTimeout` at
@@ -566,7 +567,7 @@ function harness(
 ) {
   const fake = createFakeTransport(script);
   const log = createEventLog();
-  const driver = createPm5Driver(fake, log, driverOptions);
+  const driver = createSubscribedDriver(fake, log, driverOptions);
   const events: MonitorEvent[] = [];
   driver.events((e) => events.push(e));
   return { fake, log, driver, events };
@@ -776,7 +777,7 @@ describe("createPm5Driver: a rowing-state frame arriving before program() was ev
     // gate so `maybeEmitFrame` actually reaches `computeRemainingForFrame`.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -927,7 +928,7 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
     // ever happened yet) needs no observation history to get this right.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -2029,7 +2030,7 @@ describe("createPm5Driver: terminate + Appendix-E — the RUN closes, the driver
     // settleTicks: 0 — this test's own focus is the ack-await hatch, not
     // the settle wait; see the sibling "terminate() acks..." test's
     // comment for why the fake can't supply the real default on its own.
-    const driver = createPm5Driver(fake, log, { settleTicks: 0 });
+    const driver = createSubscribedDriver(fake, log, { settleTicks: 0 });
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -2193,7 +2194,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the 
     // never observes "armed".
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     // AS1/AS2 once, purely to satisfy the "seen" gate so status ticks
@@ -2353,7 +2354,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the 
     // and they belong to no program of ours.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -2386,7 +2387,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the 
     // the NEW run's identity (D4's corruption, one level up).
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -2426,7 +2427,9 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the 
     // `settleTicks: 0`.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 0 });
+    const driver = createSubscribedDriver(transport, log, {
+      prepareSettleTicks: 0,
+    });
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
@@ -2467,7 +2470,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the 
   it("replacing an ALREADY-CLOSED run writes no 'run-replaced' entry — that run closed loudly, with its own terminal event", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
@@ -2531,7 +2534,7 @@ describe("createPm5Driver: NAK during programming", () => {
     // the machine reports 'armed'" above).
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.program(MINIMAL_PROGRAM);
     // Prepare step: accept it so the real programming frame is what fails.
@@ -2630,7 +2633,7 @@ describe("createPm5Driver: ProgramBusyError — program() is single-flight (ROAD
   it("a concurrent program() rejects ProgramBusyError immediately, with the write count UNCHANGED (today: both proceed and the first strands — Probe C's stranding)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const first = driver.program(MINIMAL_PROGRAM);
     await acceptPrepare(transport, 0); // genuine wire traffic belonging to the FIRST call
@@ -2655,7 +2658,7 @@ describe("createPm5Driver: ProgramBusyError — program() is single-flight (ROAD
   it("the first program()'s outcome is unaffected by the rejected second — it still resolves on its own merits", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -2677,7 +2680,7 @@ describe("createPm5Driver: ProgramBusyError — program() is single-flight (ROAD
   it("the in-flight flag clears after a failure — a third program() call after a typed rejection succeeds normally (mutation target: clearing only on resolve)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     // Call 1: settles with a genuine NAK on the real programming send.
     const first = driver.program(MINIMAL_PROGRAM);
@@ -2729,7 +2732,7 @@ describe("createPm5Driver: ProgramBusyError — program() is single-flight (ROAD
   it("the busy error's own message never attributes the refusal to the PM5 (NOT a ProgramRejectionReason — that union stays machine-statements-only)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const first = driver.program(MINIMAL_PROGRAM);
     await acceptPrepare(transport, 0);
@@ -2759,7 +2762,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — the wire's four non-'ok' re
     async (frameStatus, expectedReason) => {
       const transport = stubTransport();
       const log = createEventLog();
-      const driver = createPm5Driver(transport, log);
+      const driver = createSubscribedDriver(transport, log);
 
       const pending = driver.program(MINIMAL_PROGRAM);
       transport.notify(
@@ -2830,7 +2833,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine r
     // there (there is no extra write to find, no "error-type" log entry).
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const programFrame0ChunkCount =
       buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
@@ -2900,7 +2903,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine r
   it("logs 'no reply (disconnected)' if the link drops before GetErrorType's own reply arrives, and still rejects nak", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const programFrame0ChunkCount =
       buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
 
@@ -2945,7 +2948,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine r
   it("logs 'no reply (ack-timeout)' if the ack-timeout policy elapses waiting for GetErrorType's own reply, and still rejects nak", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       ackTimeout: { ticks: 2 },
     });
     const programFrame0ChunkCount =
@@ -3013,7 +3016,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine r
     // this reason — it must fire with no `ackTimeout` anywhere in sight.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log); // no ackTimeout at all
+    const driver = createSubscribedDriver(transport, log); // no ackTimeout at all
     const programFrame0ChunkCount =
       buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
 
@@ -3085,7 +3088,9 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine r
   it("a custom errorTypeTicks bound is honored", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { errorTypeTicks: 1 });
+    const driver = createSubscribedDriver(transport, log, {
+      errorTypeTicks: 1,
+    });
     const programFrame0ChunkCount =
       buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
 
@@ -3153,7 +3158,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine r
     // its own later ticks rather than throwing or double-resolving.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       ackTimeout: { ticks: 1 },
       errorTypeTicks: 3,
     });
@@ -3220,7 +3225,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — toggle and slave state neve
   it("an ack with frameToggle=true and a non-'ready' slave state still succeeds, and the ack log records that slave state", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.program(MINIMAL_PROGRAM);
     transport.notify(
@@ -3274,7 +3279,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — toggle and slave state neve
 
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.program(fiveIntervalProgram);
     transport.notify(
@@ -3338,7 +3343,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — terminate()'s post-ack sett
     // there, since today's promise would already be resolved by then.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.terminate();
     transport.notify(
@@ -3365,7 +3370,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — terminate()'s post-ack sett
   it("a custom settleTicks bound is honored", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { settleTicks: 1 });
+    const driver = createSubscribedDriver(transport, log, { settleTicks: 1 });
 
     const pending = driver.terminate();
     transport.notify(
@@ -3381,7 +3386,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — terminate()'s post-ack sett
   it("settleTicks: 0 resolves immediately after the ack, with no wait at all", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { settleTicks: 0 });
+    const driver = createSubscribedDriver(transport, log, { settleTicks: 0 });
 
     const pending = driver.terminate();
     transport.notify(
@@ -3394,7 +3399,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — terminate()'s post-ack sett
   it("a disconnect during the settle wait resolves terminate() rather than hanging it forever", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.terminate();
     transport.notify(
@@ -3476,7 +3481,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
       // as a programming failure — instead of being swallowed here.
       const transport = stubTransport();
       const log = createEventLog();
-      const driver = createPm5Driver(transport, log);
+      const driver = createSubscribedDriver(transport, log);
 
       const pending = driver.program(MINIMAL_PROGRAM);
       transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildPrepareAck());
@@ -3506,7 +3511,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
   it("a disconnect DURING the prepare step still propagates as a fatal rejection — the one outcome sendPrepare never swallows", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.program(MINIMAL_PROGRAM);
     transport.fireDisconnect("radio out of range");
@@ -3525,7 +3530,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
     // resolved by that point.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.program(MINIMAL_PROGRAM);
     transport.notify(
@@ -3563,7 +3568,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
     // fails there (it would resolve instead).
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 3 });
+    const driver = createSubscribedDriver(transport, log, { verifyTicks: 3 });
 
     const pending = driver.program(MINIMAL_PROGRAM);
     transport.notify(
@@ -3630,7 +3635,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
     // programmed nothing, with the monitor never reaching "armed".
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 2 });
+    const driver = createSubscribedDriver(transport, log, { verifyTicks: 2 });
 
     const pending = driver.program(MINIMAL_PROGRAM);
     transport.notify(
@@ -3679,7 +3684,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
   it("a real disconnect DURING verification rejects with reason 'disconnected', not a hang (verification has no other way to learn the link is gone)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.program(MINIMAL_PROGRAM);
     transport.notify(
@@ -3731,7 +3736,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
     // first assertion (`settled` still `false`) fails there.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     // "Armed" arrives BEFORE program() is even called.
     transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
@@ -3790,7 +3795,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
 
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 3 });
+    const driver = createSubscribedDriver(transport, log, { verifyTicks: 3 });
 
     const pending = driver.program(fiveIntervalProgram);
     transport.notify(
@@ -3864,7 +3869,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
     // reviewer's M3b finding).
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       ackTimeout: { ticks: 2 },
     });
 
@@ -3935,7 +3940,7 @@ describe("createPm5Driver: disconnected (link down before any ack arrives)", () 
     // at all, then the test fires the disconnect callback directly.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -3976,7 +3981,7 @@ describe("createPm5Driver: HIGH-2 — ack-timeout policy, distinct from disconne
     // timeout" (spec §4's own phrasing, mirroring "mid-sequence NAK").
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       ackTimeout: { ticks: 2 },
     });
     const events: MonitorEvent[] = [];
@@ -4050,7 +4055,7 @@ describe("createPm5Driver: HIGH-2 — ack-timeout policy, distinct from disconne
       events: timeline,
     });
     const log = createEventLog();
-    const driver = createPm5Driver(fake, log); // no options — the default
+    const driver = createSubscribedDriver(fake, log); // no options — the default
 
     fake.injectTimeout();
     const pending = driver.program(MINIMAL_PROGRAM);
@@ -4299,7 +4304,7 @@ describe("createPm5Driver: R-B — Interval Rest Distance (0x0037 offset 14-15) 
     // field is really wired through boundary-to-boundary).
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
@@ -4482,7 +4487,7 @@ describe("createPm5Driver: RC-1 — Interval Rest Time and Split/Interval Type (
     // 1a/1d).
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
@@ -4684,7 +4689,7 @@ describe("createPm5Driver: RC-1 — Interval Rest Time and Split/Interval Type (
 
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
@@ -4732,7 +4737,7 @@ describe("createPm5Driver: RC-1 — the synthesized-final fallback omits restSec
       },
       pending: () => scheduled[scheduled.length - 1] ?? null,
     };
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       now: clock.now,
       schedule: timer.schedule,
     });
@@ -5013,7 +5018,7 @@ describe("createPm5Driver: storage-spine PR3 Task 1 — the machine's raw interv
   it("no 'frame' event exists before the run's first 0x0033 — nothing for the field to be absent FROM until the very first frame, which already carries it", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -5082,7 +5087,7 @@ describe("createPm5Driver: storage-spine PR3 Task 1 — the machine's raw interv
 
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
@@ -5128,7 +5133,7 @@ describe("createPm5Driver: Task 5 — toActualIndex's own null (state outside ro
     // stable meaning at a mid-terminate moment.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -5199,7 +5204,7 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
     };
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -5388,7 +5393,7 @@ describe("createPm5Driver: 'seen' gating — a notification before its siblings 
     // This test only needs the raw notify + the log's own record of
     // whether a "frame" entry was written — no need to also subscribe via
     // `driver.events()`.
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     transport.notify(
       GENERAL_STATUS_UUID,
@@ -5413,7 +5418,7 @@ describe("createPm5Driver: 'seen' gating — a notification before its siblings 
   it("a Split/Interval notification alone (before AdditionalSplitIntervalData ever arrived) produces no intervalComplete", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -5429,7 +5434,7 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
   it("an ack notification with nothing awaiting it is BUFFERED (logged, not thrown or discarded)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     expect(() =>
       transport.notify(
@@ -5466,7 +5471,7 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
 
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.program(fiveIntervalProgram);
 
@@ -5527,7 +5532,7 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
     // settleTicks: 0 — this test's own focus is the stale-ack buffer, not
     // the settle wait; a stub transport supplies no ticks after the ack
     // otherwise, so `terminatePending` would never settle.
-    const driver = createPm5Driver(transport, log, { settleTicks: 0 });
+    const driver = createSubscribedDriver(transport, log, { settleTicks: 0 });
 
     const programPending = driver.program(MINIMAL_PROGRAM);
     transport.notify(
@@ -5596,7 +5601,7 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
     };
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     const pending = driver.program(fiveIntervalProgram);
     transport.notify(
@@ -5633,7 +5638,7 @@ describe("createPm5Driver: sample-rate write failure", () => {
   it("a failed sample-rate write is logged, not thrown, and doesn't block construction", async () => {
     const transport = stubTransport({ sampleRateFails: true });
     const log = createEventLog();
-    expect(() => createPm5Driver(transport, log)).not.toThrow();
+    expect(() => createSubscribedDriver(transport, log)).not.toThrow();
     await flushMicrotasks();
     expect(
       log
@@ -5917,7 +5922,7 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
     // ever sends complete, correctly-ordered pairs.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -5953,7 +5958,7 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
   it("the same characteristic reporting twice in a row orphans the first — the partner it was waiting for was the lost one", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -5979,7 +5984,7 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
     // behaviour, not a documented guarantee.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -5998,7 +6003,7 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
   it("a REPEATED half of the boundary still pending is not an orphan — the same notification twice changes nothing", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -6443,6 +6448,146 @@ describe("createPm5Driver: the log records frame STATE CHANGES, not every frame"
   });
 });
 
+describe("createPm5Driver: the raw byte in the ring (raw-rowing-state, spec §2)", () => {
+  it("a session's FIRST frame records one entry reading previous=none and the byte's own value — so exactly one entry means the byte never moved", () => {
+    // Same stubTransport idiom as "a rowing-state frame arriving before
+    // program() was ever called" above: AS1/AS2 notified once (arbitrary
+    // valid bytes) purely to satisfy the "seen" gate so `maybeEmitFrame`
+    // reaches the raw-rowing-state logic at all, then ONE 0x0031 frame —
+    // I-2's defined case (spec §2's lifetime table: "no previous value
+    // exists; I-2 records unconditionally, so this is the defined case,
+    // not an edge").
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 1,
+        strokeState: 1,
+        totalWorkDistanceMeters: 100,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(1);
+    const entries = log.entries().filter((e) => e.kind === "raw-rowing-state");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("previous=none");
+    expect(entries[0]!.detail).toContain("value=1");
+  });
+
+  it("a stuck byte records exactly ONCE across five frames — I-3, and the walk-2026-08-26 shape this item exists for", () => {
+    // The byte reads Inactive (0) on every one of five frames while the
+    // machine's own state word says "rowing" throughout — walk-2026-08-26's
+    // own shape (spec §2: "the byte read `false` on every frame of an
+    // entire real row, one value, no changes"). I-3: after the first
+    // frame, an entry is recorded on CHANGE only, so five unchanging
+    // frames must still leave exactly ONE ring entry.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    for (let i = 0; i < 5; i += 1) {
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        buildGeneralStatusBytes({
+          elapsedSeconds: 30 + i,
+          distanceMeters: 100 + i * 4,
+          workoutType: 8,
+          intervalType: 0,
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          rowingState: 0,
+          strokeState: 1,
+          totalWorkDistanceMeters: 100 + i * 4,
+          workoutDurationRaw: 0,
+          workoutDurationType: 0,
+          dragFactor: 130,
+        }),
+      );
+    }
+
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(5);
+    const entries = log.entries().filter((e) => e.kind === "raw-rowing-state");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("previous=none");
+    expect(entries[0]!.detail).toContain("value=0");
+  });
+
+  it("a change records a SECOND entry naming both sides, plus state/elapsed/distance", () => {
+    // 1 -> 0 across two frames: the second entry must name the byte's
+    // PREVIOUS value (1) and its NEW one (0), not just the new one — an
+    // operator reading the ring needs both sides of the change.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 1,
+        strokeState: 1,
+        totalWorkDistanceMeters: 100,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 31,
+        distanceMeters: 104,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 0,
+        strokeState: 1,
+        totalWorkDistanceMeters: 104,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(2);
+    const entries = log.entries().filter((e) => e.kind === "raw-rowing-state");
+    expect(entries).toHaveLength(2);
+    expect(entries[0]!.detail).toContain("previous=none");
+    expect(entries[0]!.detail).toContain("value=1");
+    expect(entries[1]!.detail).toContain("previous=1");
+    expect(entries[1]!.detail).toContain("value=0");
+    expect(entries[1]!.detail).toContain("state=rowing");
+    expect(entries[1]!.detail).toContain("elapsed=31");
+    expect(entries[1]!.detail).toContain("distance=104");
+  });
+});
+
 describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x0031's fields legible (interface-notes.md §17 item 12)", () => {
   /** Mirrors `driver.ts`'s own module-private `toHex` byte-for-byte — kept
    *  local rather than exported, the same choice `L3`'s own `hex` helper
@@ -6482,7 +6627,7 @@ describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x
   it("a fresh 0x0031 notification yields a 'structure' entry carrying the decoded fields and the raw hex (today: no such kind exists)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     const bytes = structureStatus({
       workoutType: 8,
@@ -6501,7 +6646,7 @@ describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x
   it("a 10-tick burst with unchanged structure yields exactly ONE entry (the flood pin — 0x0031 notifies ~2/second, exactly why the raw-hex 'notify' branch above already excludes it)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     for (let i = 0; i < 10; i += 1) {
       transport.notify(
@@ -6525,7 +6670,7 @@ describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x
   it("a change in any one of the three fields yields a fresh entry", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     const base = {
       workoutType: 8,
@@ -6553,7 +6698,7 @@ describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x
   it("interleaves correctly with the existing state-change 'frame' entries — a 'structure' entry logs BEFORE the 'frame' entry on a tick where both change (ordering pin)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     // Satisfy `maybeEmitFrame`'s `seen.general && seen.as1 && seen.as2` gate
     // once, up front — arbitrary-but-valid-length AS1/AS2 bytes, same as
@@ -6751,7 +6896,7 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
     async () => {
       const transport = stubTransport();
       const log = createEventLog();
-      const driver = createPm5Driver(transport, log);
+      const driver = createSubscribedDriver(transport, log);
 
       primeState(transport, WORKOUTSTATE_INTERVALWORKTIME); // rowing, at prepare-send
       const { pending } = await driveThroughPrepareAck(
@@ -6819,7 +6964,9 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
     // whatever the default happens to be.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 7 });
+    const driver = createSubscribedDriver(transport, log, {
+      prepareSettleTicks: 7,
+    });
 
     primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
     const { pending } = await driveThroughPrepareAck(
@@ -6847,7 +6994,7 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
     async () => {
       const transport = stubTransport();
       const log = createEventLog();
-      const driver = createPm5Driver(transport, log);
+      const driver = createSubscribedDriver(transport, log);
 
       primeState(transport, WORKOUTSTATE_INTERVALWORKTIME); // rowing, at prepare-send
       const { pending } = await driveThroughPrepareAck(
@@ -6891,7 +7038,7 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
   it("resting at prepare-send also arms the wait (the gate's other half)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     primeState(transport, WORKOUTSTATE_INTERVALREST); // resting
     const { pending } = await driveThroughPrepareAck(
@@ -6921,7 +7068,7 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
   it("the settle's own success path logs 'prepare-settled' with the ticks actually waited and the +1 tick's state (review finding I4 — the only mechanism able to measure this on hardware)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     primeState(transport, WORKOUTSTATE_INTERVALWORKTIME); // rowing
     const { pending } = await driveThroughPrepareAck(
@@ -6964,7 +7111,9 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
   it("expiry PROCEEDS (never rejects) and logs 'prepare-settle-expired' when the bound is hit with no 'armed' ever observed", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 3 });
+    const driver = createSubscribedDriver(transport, log, {
+      prepareSettleTicks: 3,
+    });
 
     primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
     const { pending } = await driveThroughPrepareAck(
@@ -6998,7 +7147,9 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
   it("expiry with 'armed' arriving ON the final budgeted tick does not contradict itself (whole-branch review M1, proven: the entry used to read 'no \"armed\" state observed (last state: armed)')", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 3 });
+    const driver = createSubscribedDriver(transport, log, {
+      prepareSettleTicks: 3,
+    });
 
     primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
     const { pending } = await driveThroughPrepareAck(
@@ -7042,7 +7193,9 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
   it("prepareSettleTicks: 0 disables the wait entirely, even from a rowing state (session 4b's own detection row)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 0 });
+    const driver = createSubscribedDriver(transport, log, {
+      prepareSettleTicks: 0,
+    });
 
     primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
     const { pending } = await driveThroughPrepareAck(
@@ -7065,7 +7218,7 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
   it("latency pin: a main-menu-state program() (state 'armed' at prepare-send) consumes ZERO prepare-settle ticks — exactly today's sequence (prepare ack, send ack, ONE fresh armed tick)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log); // default prepareSettleTicks (10)
+    const driver = createSubscribedDriver(transport, log); // default prepareSettleTicks (10)
 
     primeState(transport, WORKOUTSTATE_WAITTOBEGIN); // armed — a settled, main-menu state
 
@@ -7112,7 +7265,7 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
   it("a disconnect during the prepare-settle wait rejects with reason 'disconnected' — the identical failure the real send would produce, without ever sending the real programming frames", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
 
     primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
     const { pending } = await driveThroughPrepareAck(
@@ -7315,7 +7468,7 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
       },
     };
     const log = createEventLog();
-    const driver = createPm5Driver(spy, log);
+    const driver = createSubscribedDriver(spy, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -7618,7 +7771,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 20,
       now: clock.now,
     });
@@ -7679,7 +7832,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     // (see the task report's mutation table).
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const driver = createSubscribedDriver(transport, log, { verifyTicks: 20 });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -7725,7 +7878,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     // which is what this test is about.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log); // NO verifyTicks
+    const driver = createSubscribedDriver(transport, log); // NO verifyTicks
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -7755,7 +7908,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     // window is never what holds this back — the STREAK is the whole
     // subject, and it has to survive being the only thing under test.
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 20,
       now: clock.now,
     });
@@ -7798,7 +7951,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     // streak, so five wrong ticks spanning 12 s still do not reject while
     // the payload keeps changing.
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 20,
       now: clock.now,
     });
@@ -7832,7 +7985,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 20,
       now: clock.now,
     });
@@ -7872,7 +8025,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
   it("exactly ONE 'structure-mismatch' log entry across a long mismatch run — logged at first sighting, never per tick (0x0031 notifies ~2/s; the 500-entry ring does not survive per-tick entries)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const driver = createSubscribedDriver(transport, log, { verifyTicks: 20 });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -7911,7 +8064,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 20,
       now: clock.now,
     });
@@ -7940,7 +8093,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 20,
       now: clock.now,
     });
@@ -7969,7 +8122,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 20,
       now: clock.now,
     });
@@ -8007,7 +8160,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
   it("the healthy rest-0 readback resolves — the same 8/6000/Time triple a rest-30 program produces (no rest-keyed difference on the wire)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const driver = createSubscribedDriver(transport, log, { verifyTicks: 20 });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -8040,7 +8193,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
 
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const driver = createSubscribedDriver(transport, log, { verifyTicks: 20 });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -8176,7 +8329,7 @@ describe("createPm5Driver: walk 5 — the structure gate forgives the PM5 its ow
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 20,
       now: clock.now,
     });
@@ -8211,7 +8364,7 @@ describe("createPm5Driver: walk 5 — the structure gate forgives the PM5 its ow
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 100,
       now: clock.now,
     });
@@ -8255,7 +8408,7 @@ describe("createPm5Driver: walk 5 — the structure gate forgives the PM5 its ow
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 100,
       now: clock.now,
     });
@@ -8292,7 +8445,7 @@ describe("createPm5Driver: walk 5 — the structure gate forgives the PM5 its ow
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, { now: clock.now }); // NO verifyTicks
+    const driver = createSubscribedDriver(transport, log, { now: clock.now }); // NO verifyTicks
     const { pending, outcome } = await toVerify(
       driver,
       transport,
@@ -8325,7 +8478,7 @@ describe("createPm5Driver: walk 5 — the structure gate forgives the PM5 its ow
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, { now: clock.now }); // NO verifyTicks
+    const driver = createSubscribedDriver(transport, log, { now: clock.now }); // NO verifyTicks
     const { pending, outcome } = await toVerify(
       driver,
       transport,
@@ -8362,7 +8515,7 @@ describe("createPm5Driver: walk 5 — the structure gate forgives the PM5 its ow
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       verifyTicks: 100,
       now: clock.now,
     });
@@ -8455,7 +8608,7 @@ describe("createPm5Driver: RC-37 — the armed-state structure watch, past verif
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, { now: clock.now });
+    const driver = createSubscribedDriver(transport, log, { now: clock.now });
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
@@ -8826,7 +8979,7 @@ describe("createPm5Driver: walk 5 — the last split always lands (the end-of-wo
     // here, so "how long after the finish" is a thing these tests SAY rather
     // than a thing they hope for. Time never passes on its own.
     const clock = manualClock();
-    const driver = createPm5Driver(transport, log, { now: clock.now });
+    const driver = createSubscribedDriver(transport, log, { now: clock.now });
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     // AS1/AS2 once, so status ticks actually produce frames.
@@ -9210,7 +9363,7 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters with NO p
 
   function replayWalk4(): MonitorFrame[] {
     const transport = stubTransport();
-    const driver = createPm5Driver(transport, createEventLog());
+    const driver = createSubscribedDriver(transport, createEventLog());
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     primeSiblings(transport);
@@ -9288,7 +9441,7 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters with NO p
 
   it("a BACKWARDS-NOISE tick does not fold — the capture's own worst case is -0.57 s", () => {
     const transport = stubTransport();
-    const driver = createPm5Driver(transport, createEventLog());
+    const driver = createSubscribedDriver(transport, createEventLog());
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     primeSiblings(transport);
@@ -9314,7 +9467,7 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters with NO p
 
   it("a new program() resets the accumulator — the next run starts from zero", async () => {
     const transport = stubTransport();
-    const driver = createPm5Driver(transport, createEventLog());
+    const driver = createSubscribedDriver(transport, createEventLog());
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     primeSiblings(transport);
@@ -9441,13 +9594,16 @@ describe("createPm5Driver: the fake's own terminate re-base does not double the 
   });
 });
 
-describe("createPm5Driver: construction-time subscriptions (fast-follow Task 1, design spec §5)", () => {
+describe("createPm5Driver: the subscription list (fast-follow Task 1, design spec §5 — deferred since the connect-latency spec, but unchanged in membership)", () => {
   it("subscribes 0x0039, 0x003A AND NOW 0x003F alongside every existing characteristic — the full pinned list", () => {
     const transport = stubTransport();
-    createPm5Driver(transport, createEventLog());
+    createSubscribedDriver(transport, createEventLog());
 
-    // Every characteristic this driver has ever subscribed at
-    // construction — TRANSMIT (ack stream), the four status
+    // Every characteristic this driver has ever subscribed — TRANSMIT
+    // (the ack stream, still at the head) and the deferred group this
+    // helper releases at construction on its behalf (`createSubscribedDriver`
+    // — the deferral's own timing is pinned by "the deferred status
+    // subscriptions" below): the four status
     // characteristics, the two split-boundary halves, the two summary
     // halves, and now 0x003F (storage-spine design spec §2, delta-pass
     // B3). SAMPLE_RATE_UUID is written, never subscribed, so it does not
@@ -9470,11 +9626,346 @@ describe("createPm5Driver: construction-time subscriptions (fast-follow Task 1, 
   });
 });
 
+// THE DEFERRED STATUS SUBSCRIPTIONS (connect-latency design spec
+// 2026-09-03, Part 1). The driver used to enqueue ten native calls at
+// construction — the sample-rate write, the CSAFE response subscribe, then
+// eight status characteristics — so the program write every connect issues
+// a tick later drained ELEVENTH on the plugin's FIFO queue, and the erg sat
+// on its old screen for ~2s. The eight (nine `subscribe()` calls: 0x0031 is
+// subscribed twice, and the transport folds the second into the existing
+// set for free) now wait for the first completed CSAFE sequence, or for a
+// fallback timer, whichever comes first.
+describe("createPm5Driver: the deferred status subscriptions (connect-latency design spec 2026-09-03, Part 1)", () => {
+  /**
+   * Records the ORDER in which the driver called its transport — the whole
+   * subject of this change is enqueue order, and nothing we already own
+   * records it: `stubTransport` keeps writes only, and `fake.ts`'s
+   * `subscriptionCount()` is a count with no order and no membership.
+   * A thin wrapper over whatever transport the test needs (the honest fake
+   * for the arm paths, a stub for the teardown paths) rather than a wider
+   * API on the shared fake, which every other test would then carry.
+   */
+  function recording<T extends Transport>(inner: T): T & { calls: string[] } {
+    const calls: string[] = [];
+    return {
+      ...inner,
+      write(characteristicId: string, bytes: Uint8Array): Promise<void> {
+        calls.push(`write ${characteristicId}`);
+        return inner.write(characteristicId, bytes);
+      },
+      subscribe(
+        characteristicId: string,
+        cb: (bytes: Uint8Array) => void,
+      ): () => void {
+        calls.push(`subscribe ${characteristicId}`);
+        return inner.subscribe(characteristicId, cb);
+      },
+      calls,
+    } as T & { calls: string[] };
+  }
+
+  /** The driver's own `schedule` seam (`DriverOptions.schedule`), captured
+   *  rather than run: the fallback is the FIRST thing this driver ever
+   *  schedules, so `pending[0]` is it. `fire()` ignores cancellation on
+   *  purpose — a cancelled-then-fired timer is exactly the hostile input
+   *  the once-guard has to survive. */
+  function manualTimers(): {
+    schedule: (cb: () => void, ms: number) => () => void;
+    pending: { ms: number; fire: () => void; cancelled: boolean }[];
+  } {
+    const pending: { ms: number; fire: () => void; cancelled: boolean }[] = [];
+    return {
+      schedule: (cb: () => void, ms: number): (() => void) => {
+        const slot = { ms, fire: cb, cancelled: false };
+        pending.push(slot);
+        return () => {
+          slot.cancelled = true;
+        };
+      },
+      pending,
+    };
+  }
+
+  /** Every `subscribe()` the driver makes for a STATUS characteristic —
+   *  the deferred group, in the order it was enqueued. TRANSMIT is
+   *  excluded: it stays at the head, because it is what hears the ack. */
+  function statusSubscribes(calls: string[]): string[] {
+    return calls.filter(
+      (c) =>
+        c.startsWith("subscribe ") &&
+        c !== `subscribe ${TRANSMIT_CHARACTERISTIC_UUID}`,
+    );
+  }
+
+  /** The nine `subscribe()` calls of the deferred group, in enqueue order —
+   *  0x0031 twice (the status loop and the settle/ack-timeout tick pulse),
+   *  which the transport folds into one plugin subscription. */
+  const DEFERRED_STATUS_SUBSCRIBES = [
+    `subscribe ${ADDITIONAL_STATUS_1_UUID}`,
+    `subscribe ${ADDITIONAL_STATUS_2_UUID}`,
+    `subscribe ${ADDITIONAL_SPLIT_INTERVAL_DATA_UUID}`,
+    `subscribe ${GENERAL_STATUS_UUID}`,
+    `subscribe ${SPLIT_INTERVAL_DATA_UUID}`,
+    `subscribe ${END_OF_WORKOUT_SUMMARY_UUID}`,
+    `subscribe ${END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID}`,
+    `subscribe ${LOGGED_WORKOUT_UUID}`,
+    `subscribe ${GENERAL_STATUS_UUID}`,
+  ];
+
+  it("enqueues the program write behind exactly ONE other native call, the CSAFE response subscribe (Task 2: the sample-rate write is no longer the second)", async () => {
+    const fake = createFakeTransport({ program: seaFretProgram() });
+    const transport = recording(fake);
+    const driver = createPm5Driver(transport, createEventLog());
+
+    // Construction itself: the ack stream, and nothing else. The
+    // sample-rate write moved into the deferred group with the eight
+    // (Task 2) — its head position existed to set frame cadence, which
+    // cannot matter before any status subscription exists.
+    expect(transport.calls).toStrictEqual([
+      `subscribe ${TRANSMIT_CHARACTERISTIC_UUID}`,
+    ]);
+
+    await programAndArm(driver, fake, seaFretProgram());
+
+    const firstProgramWrite = transport.calls.indexOf(
+      `write ${RECEIVE_CHARACTERISTIC_UUID}`,
+    );
+    expect(firstProgramWrite).toBeGreaterThanOrEqual(0);
+    expect(transport.calls.slice(0, firstProgramWrite)).toStrictEqual([
+      `subscribe ${TRANSMIT_CHARACTERISTIC_UUID}`,
+    ]);
+  });
+
+  it("over a real two-sequence program(), no status subscribe sits between the prepare's ack and the chunk writes — the release point is the SEQUENCE, not the frame write", async () => {
+    const fake = createFakeTransport({ program: seaFretProgram() });
+    const transport = recording(fake);
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    await programAndArm(driver, fake, seaFretProgram());
+
+    const receiveWrites = transport.calls
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => c === `write ${RECEIVE_CHARACTERISTIC_UUID}`)
+      .map(({ i }) => i);
+    // The prepare is one frame; the programming sequence is five chunks.
+    expect(receiveWrites.length).toBeGreaterThan(1);
+    const prepareWrite = receiveWrites[0]!;
+    const lastChunkWrite = receiveWrites[receiveWrites.length - 1]!;
+
+    // Releasing on the WRITE rather than the sequence's ack puts the eight
+    // here — between the prepare's ack and the chunks, which cannot be
+    // enqueued until that ack lands — and the programmed path (whose erg
+    // screen changes on the SECOND ack) ends up ~400ms slower than before
+    // the fix.
+    expect(
+      statusSubscribes(transport.calls.slice(prepareWrite + 1, lastChunkWrite)),
+    ).toStrictEqual([]);
+    expect(
+      statusSubscribes(transport.calls.slice(lastChunkWrite)),
+    ).toStrictEqual(DEFERRED_STATUS_SUBSCRIBES);
+
+    // ...and the release is the ACK, not the last write. The transport
+    // sees no call between those two, so call order alone cannot tell
+    // them apart; the ring can, because the driver records every ack it
+    // parses. The programming sequence's own ack is the last one here —
+    // nothing writes CSAFE again on this path.
+    const ring = log.entries().map((e) => e.kind);
+    expect(ring.lastIndexOf("ack")).toBeGreaterThanOrEqual(0);
+    expect(ring.indexOf("status-subscribe")).toBeGreaterThan(
+      ring.lastIndexOf("ack"),
+    );
+  });
+
+  it("the release waits for the ACK, not the last chunk write — a stub that acks only when told holds the group back in between", async () => {
+    // The honest fake answers from inside `write()`, so no ordering it
+    // produces can separate a frame's last chunk from that frame's own
+    // ack; this leg is the one that can, and it is the mutation the
+    // release point exists to refuse (`sendSequence`'s own comment).
+    const transport = recording(stubTransport());
+    const driver = createPm5Driver(transport, createEventLog(), {
+      settleTicks: 0,
+      prepareSettleTicks: 0,
+    });
+    const written = (): number =>
+      transport.calls.filter(
+        (c) => c === `write ${RECEIVE_CHARACTERISTIC_UUID}`,
+      ).length;
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    await waitUntil(() => written() > 0);
+    // The prepare's own answer — a refusal, which `sendPrepare` swallows
+    // (`programViaStub`'s own doc comment explains why every by-hand
+    // exchange in this file uses one).
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+    const programmingChunks = buildProgrammingSequence(MINIMAL_PROGRAM).reduce(
+      (n, frame) => n + frame.length,
+      0,
+    );
+    await waitUntil(() => written() === prepareChunkCount + programmingChunks);
+
+    // Every chunk of the programming frame is on the wire and its ack has
+    // NOT been delivered. Nothing may go out yet.
+    expect(statusSubscribes(transport.calls)).toStrictEqual([]);
+
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await waitUntil(() => statusSubscribes(transport.calls).length > 0);
+    expect(statusSubscribes(transport.calls)).toStrictEqual(
+      DEFERRED_STATUS_SUBSCRIBES,
+    );
+
+    // Finish the call rather than leaving it pending: `verifyArmed` wants
+    // one fresh armed readback for the program we just sent.
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(MINIMAL_PROGRAM));
+    await pending;
+  });
+
+  it("a driver that never arms subscribes the full group on the fallback, at 3000ms, and not before", () => {
+    const timers = manualTimers();
+    const transport = recording(
+      createFakeTransport({ program: MINIMAL_PROGRAM }),
+    );
+    createPm5Driver(transport, createEventLog(), { schedule: timers.schedule });
+
+    expect(statusSubscribes(transport.calls)).toStrictEqual([]);
+    expect(timers.pending).toHaveLength(1);
+    // An INDEPENDENT literal, never the production constant (RF21's first
+    // corollary): a retune of the fallback must retune this pin by hand.
+    expect(timers.pending[0]!.ms).toBe(3000);
+
+    timers.pending[0]!.fire();
+
+    // The whole deferred group, in order, sample-rate write included.
+    expect(transport.calls).toStrictEqual([
+      `subscribe ${TRANSMIT_CHARACTERISTIC_UUID}`,
+      `write ${SAMPLE_RATE_UUID}`,
+      ...DEFERRED_STATUS_SUBSCRIBES,
+    ]);
+  });
+
+  it("an arm AND a fallback both firing still subscribes each characteristic exactly once (the transport cannot dedupe: every registration is a fresh closure)", async () => {
+    const timers = manualTimers();
+    const fake = createFakeTransport({ program: seaFretProgram() });
+    const transport = recording(fake);
+    const driver = createPm5Driver(transport, createEventLog(), {
+      schedule: timers.schedule,
+    });
+
+    await programAndArm(driver, fake, seaFretProgram());
+    expect(statusSubscribes(transport.calls)).toStrictEqual(
+      DEFERRED_STATUS_SUBSCRIBES,
+    );
+
+    // The release cancels its own fallback; firing it anyway is the belt
+    // being cut to test the braces. A second release would register a
+    // SECOND closure per characteristic — the transport folds it into the
+    // same fan-out set without a second `startNotifications` — and every
+    // status handler would then run twice: tick-counted waits halved,
+    // frame emissions duplicated.
+    expect(timers.pending[0]!.cancelled).toBe(true);
+    timers.pending[0]!.fire();
+
+    expect(statusSubscribes(transport.calls)).toStrictEqual(
+      DEFERRED_STATUS_SUBSCRIBES,
+    );
+  });
+
+  it("a teardown inside the gap issues no subscribe at all, and does not throw — the transport's connected-guard is synchronous", async () => {
+    // The honest double: `capacitorBle.subscribe()` calls
+    // `requireConnected()` SYNCHRONOUSLY and throws once the device id is
+    // null, and a caller-initiated `disconnect()` is what nulls it. Before
+    // the deferral this was unreachable — the subscribes ran microseconds
+    // after connect resolved — and a cancel during connect (walked on
+    // 3 September) reaches it now.
+    function severable(): ReturnType<typeof stubTransport> {
+      const base = stubTransport();
+      let connected = true;
+      return {
+        ...base,
+        subscribe(uuid: string, cb: (bytes: Uint8Array) => void): () => void {
+          if (!connected) {
+            throw new Error(
+              "capacitorBle: write/subscribe called before connect()",
+            );
+          }
+          return base.subscribe(uuid, cb);
+        },
+        async disconnect(): Promise<void> {
+          connected = false;
+          await base.disconnect();
+        },
+        fireDisconnect(reason: string): void {
+          connected = false;
+          base.fireDisconnect(reason);
+        },
+      };
+    }
+
+    // (a) the caller hangs up — `useMonitorSession`'s cancel path.
+    const timers = manualTimers();
+    const hungUp = recording(severable());
+    const driver = createPm5Driver(hungUp, createEventLog(), {
+      schedule: timers.schedule,
+    });
+    await driver.disconnect();
+    expect(() => timers.pending[0]!.fire()).not.toThrow();
+    expect(hungUp.calls).toStrictEqual([
+      `subscribe ${TRANSMIT_CHARACTERISTIC_UUID}`,
+    ]);
+
+    // (b) the radio drops on its own — `Transport.onDisconnect`, which a
+    // caller-initiated `disconnect()` never fires, so both producers need
+    // covering.
+    const dropTimers = manualTimers();
+    const dropped = recording(severable());
+    createPm5Driver(dropped, createEventLog(), {
+      schedule: dropTimers.schedule,
+    });
+    dropped.fireDisconnect("radio out of range");
+    expect(() => dropTimers.pending[0]!.fire()).not.toThrow();
+    expect(dropped.calls).toStrictEqual([
+      `subscribe ${TRANSMIT_CHARACTERISTIC_UUID}`,
+    ]);
+  });
+
+  it("the ring names which path released the subscriptions: 'arm' on the normal path, 'fallback' when no arm ever comes", async () => {
+    const armLog = createEventLog();
+    const fake = createFakeTransport({ program: seaFretProgram() });
+    const armed = recording(fake);
+    const driver = createPm5Driver(armed, armLog);
+    await programAndArm(driver, fake, seaFretProgram());
+    expect(
+      armLog
+        .entries()
+        .filter((e) => e.kind === "status-subscribe")
+        .map((e) => e.detail),
+    ).toStrictEqual(["arm"]);
+
+    const fallbackLog = createEventLog();
+    const timers = manualTimers();
+    const idle = recording(createFakeTransport({ program: MINIMAL_PROGRAM }));
+    createPm5Driver(idle, fallbackLog, { schedule: timers.schedule });
+    timers.pending[0]!.fire();
+    expect(
+      fallbackLog
+        .entries()
+        .filter((e) => e.kind === "status-subscribe")
+        .map((e) => e.detail),
+    ).toStrictEqual(["fallback"]);
+  });
+});
+
 describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, design spec §5, mirrors split-half)", () => {
   it("0x0039 receipt logs summary-half with 'run closed' before any program() ever ran", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
 
@@ -9487,7 +9978,7 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
   it("0x003A receipt logs summary-half too, independently of 0x0039 — no pairing gate (review I5)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     // 0x003A arrives ALONE — no 0x0039 notification at all. If the driver
     // paired the two the way it pairs 0x0037/0x0038, this would emit
@@ -9507,7 +9998,7 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
   it("0x003F receipt logs verification-received with 'run closed' before any program() ever ran, and stores nothing (no run to attribute it to)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     transport.notify(LOGGED_WORKOUT_UUID, Uint8Array.from([0xaa, 0xbb]));
 
@@ -9522,7 +10013,7 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
   it("0x003F receipt logs 'run open' while a program is armed", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
 
     transport.notify(LOGGED_WORKOUT_UUID, Uint8Array.from([0xaa, 0xbb]));
@@ -9537,7 +10028,7 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
   it("logs 'run open' while a program is armed, and both a re-fire and 0x003A never touch the count or content of the OTHER characteristic's own entries", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
 
     transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
@@ -9572,7 +10063,7 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
   it("Phase LL Task 1 (link-truth §1): 0x0039's ring entry now carries its own hex, not just the narrative line", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     const bytes = new Uint8Array(20);
     bytes.set([0xaa, 0xbb, 0xcc, 0xdd], 0);
@@ -9586,7 +10077,7 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
   it("Phase LL Task 1: 0x003A's ring entry now carries hex too — its own callback used to take NO bytes parameter at all, so this hex could never reach the ring by any path", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     const bytes = new Uint8Array(19);
     bytes.set([0x11, 0x22, 0x33], 0);
@@ -9601,7 +10092,7 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
   it("a 0x0039 notification produces exactly one summary-log-stamp ring entry carrying the decoded wire= stamp and wall= (RC-2, storage-spine design spec §2, PR 1 Task 3)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log, { now: () => 0 });
+    createSubscribedDriver(transport, log, { now: () => 0 });
 
     // Walk-2026-08-23 keystone's own seq 516 raw bytes (interface-notes.md
     // §24), date/time at offsets 0-3: `78 35 1c 09` decodes to
@@ -9623,7 +10114,7 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
   it("a second 0x0039 (the recovery-HR re-fire) produces a SECOND summary-log-stamp entry — one per NOTIFICATION, not one per run (spec exit criterion 3)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
     transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
@@ -9635,7 +10126,7 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
   it("a garbled (too-short) 0x0039 produces NO summary-log-stamp entry — the stamp is derived off the same successful parse gate as the totals", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
 
     transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(19));
 
@@ -9769,7 +10260,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     const log = createEventLog();
     const clock = manualClock();
     const timer = manualSchedule();
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       now: clock.now,
       schedule: timer.schedule,
     });
@@ -11306,7 +11797,7 @@ describe("createPm5Driver: R0 instrumentation (CR2 spec 1) — the accumulator l
   } {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, {});
+    const driver = createSubscribedDriver(transport, log, {});
     transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
     return { transport, log, driver };
@@ -11465,7 +11956,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
   it("agrees with the machine's own last work-state 0x0032 averageSplit within the 1.0s band, at the terminated transition — and would fail 10x-wrong under the 0x0039 scale (the scale trap)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
 
     // The seen-gate (`maybeEmitFrame`'s own "having seen all three at least
@@ -11520,7 +12011,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
     // exists to refuse, even when a mutation shows it can.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11555,7 +12046,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
   it("suppresses, naming the reason, when a recorded actual measured under MIN_MEASURABLE_ELAPSED_SECONDS — mirrors summaryModel.ts's monitorAvgSplit exclusion", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11587,7 +12078,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
   it("suppresses, naming the reason, when a boundary this run saw could not be attributed to a program interval (the live analogue of monitorAvgSplit's index===null exclusion)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11640,7 +12131,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
     };
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, TWO_INTERVAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11690,7 +12181,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
   it("suppresses, naming the reason, when no work-state 0x0032 sample was ever observed this run", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
@@ -11716,7 +12207,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
   it("suppresses, naming the reason, when the run's own recorded actuals measure zero distance total (Σd = 0) — a real elapsed-time reading with nothing rowed, not excluded by any check above", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11746,7 +12237,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
   it("ignores a 0.00 work-state 0x0032 reading (the interval-reset artifact) rather than letting it overwrite the last REAL reading", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11784,7 +12275,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
   it("samples ONLY workoutState 4/5 — a REST-state 0x0032 reading never becomes lastWorkStateAverageSplit, even though 0x0032's own averageSplit freezes through a rest on the real wire", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11887,7 +12378,7 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
   it("agrees with the machine's own 0x003A Total Rest Distance — exit-7 walk's own captured frame, PM5 memory screen 147 + 95 = 242 m", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, TWO_INTERVAL_R60_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11928,7 +12419,7 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
   it("DIFFERS, naming both numbers, when our own sum genuinely disagrees with the machine's Total Rest Distance beyond the 1 m band — a lost-interval shape, not noise", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11959,7 +12450,7 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
   it("handles the r0 zero without a false alarm — the keystone piece's own captured frame decodes 0 m, and a genuinely rest-free run's own sum agrees rather than reading it as nothing to compare", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -11989,7 +12480,7 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
   it("suppresses, naming the reason, when 0x003A arrives too short for the narrow parser (under 17 bytes)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
     transport.notify(
       END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
       new Uint8Array(16),
@@ -12005,7 +12496,7 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
   it("reports Interval Rest Time but suppresses the distance half, naming the reason, when no run's actuals exist to compare against (0x003A before any program() ever ran)", () => {
     const transport = stubTransport();
     const log = createEventLog();
-    createPm5Driver(transport, log);
+    createSubscribedDriver(transport, log);
     transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, EXIT7_0X003A);
 
     const entries = restDistanceVerdicts(log);
@@ -12019,7 +12510,7 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
   it("reports Interval Rest Time without ever gating on it — a reading neither committed capture has shown still agrees on distance, unaffected", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
     transport.notify(
@@ -12092,7 +12583,7 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
       },
       pending: () => scheduled[scheduled.length - 1] ?? null,
     };
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       now: clock.now,
       schedule: timer.schedule,
     });
@@ -12149,7 +12640,7 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
   it("FIX ROUND 2 (whole-branch review, the Important finding, reproduced and disproved): does NOT DIFFER on a dropped-final-split, otherwise HEALTHY multi-interval run — 0x003A racing ahead of the still-in-flight final split, the exact exit-7 shape (161 of 300 seeded workouts compile with a trailing rest on their own final interval, domain/monitor/program.ts:281-286)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     await programViaStub(driver, transport, TWO_INTERVAL_R60_PROGRAM);
     transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
 
@@ -12208,7 +12699,7 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
       },
       pending: () => scheduled[scheduled.length - 1] ?? null,
     };
-    const driver = createPm5Driver(transport, log, {
+    const driver = createSubscribedDriver(transport, log, {
       now: clock.now,
       schedule: timer.schedule,
     });
@@ -12314,8 +12805,9 @@ describe("restPairComplete (pure) — RC-9d fix round 1: the all-or-nothing gate
  * PHASE JR PR 2, TASK 1 — the free row's own driver run.
  *
  * `activeRun` is assigned in exactly one place, inside `program()`
- * (`driver.ts:5992`). A free row never programs, so without `beginFreeRow`
- * the driver holds no run and `runIsOpen()` is false for the whole row —
+ * (`driver.ts:5992`). A free row never runs `program()`, so without
+ * `beginFreeRow` the driver holds no run and `runIsOpen()` is false for the
+ * whole row —
  * which silently costs three things the rower's row depends on: the machine
  * close never emits (`:2579` returns first), the machine's own 0x0039 is
  * discarded ("nothing filed", `:2974`), and auto-split boundaries take the
@@ -12349,7 +12841,7 @@ describe("beginFreeRow", () => {
   function freeRowDriver() {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createSubscribedDriver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
@@ -12357,18 +12849,285 @@ describe("beginFreeRow", () => {
     return { transport, log, driver, events };
   }
 
-  it("writes NOTHING to the wire", () => {
-    const { transport, driver } = freeRowDriver();
-    // The count BEFORE, not zero: the driver writes its own sample-rate
-    // command at construction. What this pins is that opening a free row
-    // adds no write of its own — asserted on the transport's write log
-    // rather than a spy over `program()`, because a spy proves a method was
-    // not called while the log proves the wire was silent.
-    const before = transport.writes.length;
+  /**
+   * CONNECT PROGRAMS THE ERG (spec 2026-09-02, exit criterion 2). The
+   * free row now sends Concept2's p.80 JustRow frame — alone, no prepare —
+   * as a DETACHED send whose only effects are ring entries, so every
+   * assertion below reads `log.entries()`. Both literals are TYPED from
+   * `docs/monitor/pm5-interface-notes.md` (§12 example 2 and §13), never
+   * derived from the builders, and the fake keeps no write log of its own.
+   */
+  const JUST_ROW_FRAME_HEX = "f1 76 07 01 01 01 13 02 01 01 61 f2";
+  const TERMINATE_FRAME_HEX = "f1 76 04 13 02 01 02 60 f2";
+
+  function freeRowFake(
+    script: Partial<Parameters<typeof createFakeTransport>[0]> = {},
+  ) {
+    // `settleTicks: 0` for the same reason `harness`'s own comment gives —
+    // the fake sends one status tick per terminate ack, never a heartbeat.
+    return harness({ program: MINIMAL_PROGRAM, ...script }, { settleTicks: 0 });
+  }
+
+  function kinds(log: ReturnType<typeof createEventLog>): string[] {
+    return log.entries().map((e) => e.kind);
+  }
+
+  it("opens the run BEFORE the first byte goes out: `free-row-open` precedes the first `write` in the ring", () => {
+    const { log, driver } = freeRowFake();
 
     driver.beginFreeRow();
 
-    expect(transport.writes.length).toBe(before);
+    // `sendSequence` issues its first write synchronously, inside this
+    // call — so the ring is the only witness to the ORDER, and the order
+    // is the whole point: `activeRun.freeRow` is what holds the RC-37
+    // watch and the divergence escalation off during the send.
+    const ring = kinds(log);
+    const open = ring.indexOf("free-row-open");
+    const firstWrite = ring.indexOf("write");
+    expect(open).toBeGreaterThanOrEqual(0);
+    expect(firstWrite).toBeGreaterThan(open);
+  });
+
+  it("writes exactly Concept2's p.80 JustRow frame, NO terminate, and the fake's ack lands as `free-row-program-sent`", async () => {
+    const { log, driver } = freeRowFake();
+
+    driver.beginFreeRow();
+    await waitUntil(() => kinds(log).includes("free-row-program-sent"));
+
+    const writes = log
+      .entries()
+      .filter((e) => e.kind === "write")
+      .map((e) => e.detail);
+    expect(writes).toStrictEqual([JUST_ROW_FRAME_HEX]);
+    expect(writes).not.toContain(TERMINATE_FRAME_HEX);
+    expect(
+      kinds(log).filter((k) => k === "free-row-program-sent"),
+    ).toHaveLength(1);
+    expect(kinds(log)).not.toContain("free-row-program-failed");
+  });
+
+  it("a NAK'd program leaves the row OPEN and records `free-row-program-failed` carrying the hex trace", async () => {
+    const { log, driver } = freeRowFake({ failNextProgramFrame: "reject" });
+
+    driver.beginFreeRow();
+    await waitUntil(() => kinds(log).includes("free-row-program-failed"));
+
+    const failed = log
+      .entries()
+      .find((e) => e.kind === "free-row-program-failed")!;
+    expect(failed.detail).toContain(`write ${JUST_ROW_FRAME_HEX}`);
+    expect(failed.detail).toContain("ack ");
+    expect(kinds(log)).not.toContain("free-row-program-sent");
+    // Still open — nothing on the phone branches on the send's outcome
+    // (ruling 2). `runIsOpen()` has one public witness: a second call is
+    // refused as a re-entry, which it can only be while the first run lives.
+    driver.beginFreeRow();
+    expect(kinds(log).at(-1)).toBe("free-row-ignored");
+  });
+
+  /**
+   * TERMINATE DURING THE SEND WAITS — it does not refuse (spec rev 5).
+   * It refused until the 2026-09-03 walk, but NOT as that walk's observed
+   * cause: finding 4's Cancel ran 1589 ms after the send's own ack (ring
+   * 3), so the refusal was never entered and the hook's
+   * `mode !== "justrow"` exclusion is what left the erg armed. The refusal
+   * is a separately reachable sibling — an END or a Cancel inside the ~2 s
+   * ack window, silent because both callers swallow it — fixed in the same
+   * PR as hardening. The wait is bounded by the send's own deadline (the
+   * test below holds that end), so "wait" can never mean "hang".
+   *
+   * The ORDER is the assertion, read off the ring: the p.80 write, its
+   * ack, the send's own completion entry, and only THEN the terminate
+   * write. `free-row-program-sent` is the entry that bites — the ack lands
+   * synchronously inside `write()` (the fake's own honest asymmetry:
+   * `delayWrites` defers the returned promise, never the notification), so
+   * a terminate that skipped the wait would still land after the ACK while
+   * landing before the send finished.
+   */
+  it("terminate() during the send WAITS for it: the ring shows the p.80 write, its ack and the send's completion BEFORE the terminate write", async () => {
+    const { fake, log, driver } = freeRowFake();
+    // Holds each write's own promise open for 50 ms so `sendSequence` is
+    // provably still running when END arrives. Without the wait,
+    // `terminate()` proceeds immediately and its `awaitAck` overwrites the
+    // single `pendingAck` slot unchecked.
+    fake.delayWrites(50);
+
+    driver.beginFreeRow();
+    const ending = driver.terminate();
+    // Two windows, one per delayed write: the p.80's, then the
+    // terminate's — the terminate's cannot even start until the first has
+    // settled, which is the property under test.
+    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(50);
+    await ending;
+
+    const ring = log.entries();
+    const justRowWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === JUST_ROW_FRAME_HEX,
+    );
+    const ack = ring.findIndex((e, i) => e.kind === "ack" && i > justRowWrite);
+    const sent = ring.findIndex((e) => e.kind === "free-row-program-sent");
+    const terminateWrite = ring.findIndex(
+      (e) => e.kind === "write" && e.detail === TERMINATE_FRAME_HEX,
+    );
+    expect(justRowWrite).toBeGreaterThanOrEqual(0);
+    expect(ack).toBeGreaterThan(justRowWrite);
+    expect(sent).toBeGreaterThan(ack);
+    expect(terminateWrite).toBeGreaterThan(sent);
+    expect(kinds(log)).toContain("terminate-sent");
+  });
+
+  it("abandons an unanswered send at the deadline — and a terminate issued mid-window waits exactly that long, then goes out", async () => {
+    // The stub never acks — the replay transport's shape, and a PM5 that
+    // never answers. Production configures no `ackTimeout`, so without the
+    // deadline `programInFlight` would hold for the driver's life and the
+    // wait below would never end (harden lens 2). This test is the OTHER
+    // half of the one above: that one proves terminate waits, this one
+    // proves the wait is bounded.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log, { settleTicks: 0 });
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    const written = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+
+    driver.beginFreeRow();
+    const afterJustRow = written();
+    // Issued INSIDE the window, while the send still holds the slot.
+    let ended = false;
+    const ending = driver.terminate().then(() => {
+      ended = true;
+    });
+
+    // INDEPENDENT literals, never the driver's constant (RF21: a test that
+    // imports the number it gates retunes itself with it). Held at 4999,
+    // released at 5000.
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(kinds(log)).not.toContain("free-row-program-unanswered");
+    // Still waiting: nothing of the terminate has reached the wire, and its
+    // promise has not settled.
+    expect(written()).toBe(afterJustRow);
+    expect(ended).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await waitUntil(() => kinds(log).includes("free-row-program-unanswered"));
+    expect(kinds(log)).toContain("free-row-program-unanswered");
+    expect(kinds(log)).not.toContain("free-row-program-sent");
+    expect(kinds(log)).not.toContain("free-row-program-failed");
+    // Released BY the deadline: the terminate write is now on the wire.
+    // Its own promise still waits on the ack this stub only sends when
+    // told, which is the next two lines.
+    await waitUntil(() => written() > afterJustRow);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await ending;
+    expect(ended).toBe(true);
+    expect(kinds(log)).toContain("terminate-sent");
+  });
+
+  /**
+   * THE HANG-UP CANNOT OVERTAKE THE TERMINATE (delta pass on PR #278).
+   * Waiting the send out gave `terminate()` something it never had before:
+   * a suspension BEFORE it writes anything. The app's own teardown hangs
+   * up on a timer that knows nothing about it — measured on the walk's
+   * ring 1, an END at `ready` reaches `disconnect()` about 186 ms after
+   * the deadline would release the terminate (first `frame` +1159 ms after
+   * the p.80 write; `handoff-hold` +66903 -> `handoff-released` +68905 ->
+   * `disconnect-requested` +70930, so END->hang-up is 4027 ms), which is
+   * not a margin, it is a coin toss. A hang-up that wins aborts the write (Apple:
+   * `cancelPeripheralConnection(_:)` is nonblocking and "any pending
+   * commands ... may not complete"), the terminate rejects, and both hook
+   * callers swallow it — leaving the erg in the Just Row session, which is
+   * the defect this PR exists to fix, one path over.
+   *
+   * The stub never acks, so the ONLY thing that can release the terminate
+   * here is the deadline: the wait `disconnect()` takes is pinned at its
+   * full ceiling, which is also the proof that the ceiling is what bounds
+   * it. `writesAtHangUp` is read INSIDE the transport's own `disconnect()`
+   * — the one place that can say what had reached the wire at the moment
+   * the radio went away.
+   *
+   * WHAT IT CANNOT DISTINGUISH (measured, not assumed): both this test and
+   * its hook sibling count a write when the transport's `write()` is
+   * CALLED, so moving `sendSequence`'s `onFrameWritten` from after the
+   * awaited chunk loop to before it leaves both green. The release is
+   * placed after the await anyway — the stronger position, and the one a
+   * real radio needs — but no assertion here holds it there.
+   */
+  it("disconnect() does not overtake a terminate that still owes its write — the hang-up waits out the deadline first", async () => {
+    const base = stubTransport();
+    const written = (): number =>
+      base.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID).length;
+    let writesAtHangUp = -1;
+    const transport = {
+      ...base,
+      async disconnect(): Promise<void> {
+        writesAtHangUp = written();
+        return base.disconnect();
+      },
+    };
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log, { settleTicks: 0 });
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    driver.beginFreeRow();
+    const afterJustRow = written();
+    // Suspended on the send: nothing of it is on the wire yet.
+    const ending = driver.terminate().catch(() => undefined);
+    const hangingUp = driver.disconnect();
+
+    // INDEPENDENT literals, never the driver's constant (RF21). Held at
+    // 4999, released at 5000 — the same pin the test above uses, applied
+    // here to the HANG-UP rather than to the terminate.
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(writesAtHangUp).toBe(-1);
+    expect(kinds(log)).toContain("disconnect-deferred");
+
+    await vi.advanceTimersByTimeAsync(1);
+    await hangingUp;
+
+    // The terminate frame was on the wire BEFORE the radio went away.
+    expect(writesAtHangUp).toBe(afterJustRow + 1);
+    const ring = kinds(log);
+    const requested = ring.indexOf("disconnect-requested");
+    const deferred = ring.indexOf("disconnect-deferred");
+    const terminateWrite = log
+      .entries()
+      .findIndex((e) => e.kind === "write" && e.detail === TERMINATE_FRAME_HEX);
+    expect(deferred).toBeGreaterThan(requested);
+    expect(terminateWrite).toBeGreaterThan(deferred);
+
+    // Housekeeping: the stub's `disconnect()` fires no drop callback, so
+    // release the terminate's still-pending ack by hand rather than
+    // leaving a promise dangling past the test.
+    transport.fireDisconnect("hung up");
+    await ending;
+  });
+
+  it("the free row stays open through the send on a fake that reacts to ANY terminate — because nothing in the send is one", async () => {
+    // The fake's default reaction to a terminate at an idle machine is a
+    // plain accept (§18 s3 item 15), which is exactly why a prepare
+    // re-added here could never go red on it (harden lens 1). Opting the
+    // reaction in makes the fake deliver `terminated` for a terminate in
+    // any state — and a `terminated` frame with this run open CLOSES it.
+    const { log, driver, events } = freeRowFake({
+      terminateReactsWhileIdle: true,
+    });
+
+    driver.beginFreeRow();
+    await waitUntil(() => kinds(log).includes("free-row-program-sent"));
+
+    expect(kinds(log)).toContain("free-row-program-sent");
+    expect(events.some((e) => e.kind === "terminated")).toBe(false);
+    expect(kinds(log)).not.toContain("terminal");
+    driver.beginFreeRow();
+    expect(kinds(log).at(-1)).toBe("free-row-ignored");
   });
 
   it("emits `terminated` when the rower backs out on the erg", () => {
@@ -12423,7 +13182,7 @@ describe("beginFreeRow", () => {
     let clock = 0;
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { now: () => clock });
+    const driver = createSubscribedDriver(transport, log, { now: () => clock });
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));

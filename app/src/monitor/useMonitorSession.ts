@@ -66,7 +66,9 @@ import {
   completeContinuityReset,
   completeMonitorRun,
   createMonitorRun,
+  partialRefusal,
   recordActual,
+  withPartial,
   type CloseReason,
   type MonitorRun,
 } from "./monitorRun";
@@ -99,7 +101,10 @@ import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
  *  or frame field — never by a timer and never by an optimistic guess —
  *  with ONE deliberate exception, `"programming"`, which flips
  *  SYNCHRONOUSLY at the top of `program()` before anything is awaited (the
- *  double-fire pin; see `program` below).
+ *  double-fire pin; see `program` below) and, since spec 2026-09-03 Part 2,
+ *  at the end of `beginFreeRow()` for the same reason in the other
+ *  direction: it is the state that says a send is on the wire and no answer
+ *  has come back yet, and the free row now has one of those too.
  *
  *  There is no `"choosing"`: the platform's chooser owns the interaction
  *  while `picking` — on iOS it is the plugin's in-process list sheet over
@@ -235,12 +240,17 @@ const ANONYMOUS_RUN: RunIdentity = {
  *  **RECONCILED, Phase JR PR 2.** This used to read: "None can — `live` is
  *  downstream of `ready`, which is downstream of the `armed` event, which
  *  only `program()` produces." The last clause is no longer true.
- *  `beginFreeRow()` is a SECOND producer of `ready`, reaching it with no
- *  wire traffic at all, so `ready` now has two doors rather than one.
+ *  `beginFreeRow()` is a SECOND producer of `ready`, so `ready` now has two
+ *  doors rather than one. (This clause used to add "reaching it with
+ *  nothing awaited (its p.80 send is detached)"; spec 2026-09-03 Part 2
+ *  retired that half — the free row reaches `ready` on the driver's `armed`
+ *  event, exactly as a workout does.)
  *
- *  The conclusion survives the correction: this value is still never read,
- *  because both doors seed `identityRef` before flipping the phase. It
- *  exists so the ref has no null state to branch on. */
+ *  The conclusion survives both corrections: this value is still never read,
+ *  because both doors seed `identityRef` before flipping the phase — the
+ *  free row's now to `"programming"` rather than straight to `"ready"`,
+ *  which is strictly earlier. It exists so the ref has no null state to
+ *  branch on. */
 const NO_IDENTITY: FreeRowIdentity = {
   program: { intervals: [] },
   ...ANONYMOUS_RUN,
@@ -965,11 +975,16 @@ export interface MonitorSession {
    *  header). */
   connect(): Promise<void>;
   program(p: WorkoutProgram, identity: RunIdentity): Promise<void>;
-  /** Phase JR PR 2: arms for the machine's OWN free row — reaches `ready`
-   *  with no wire traffic and files the record under a Just Row identity
-   *  (`workoutId: null`, `mode: "justrow"`). `program()`'s counterpart, and
-   *  synchronous because nothing is sent. A no-op while a programmed
-   *  session is `programming`/`ready`/`live`. */
+  /** Phase JR PR 2: arms for the machine's OWN free row, filing the record
+   *  under a Just Row identity (`workoutId: null`, `mode: "justrow"`).
+   *  `program()`'s counterpart, and since spec 2026-09-03 Part 2 its
+   *  counterpart in TIMING too: this returns at `"programming"` and `ready`
+   *  arrives on the driver's `armed` event, when the PM5's p.80 Just Row
+   *  send settles. (It used to reach `ready` synchronously and call the
+   *  send DETACHED — "nothing here awaits or branches on it" — which is
+   *  what let the door promise a row the erg had not started.) All three
+   *  settle outcomes arm, by Gate 0's fall-through ruling. A no-op while a
+   *  programmed session is `programming`/`ready`/`live`. */
   beginFreeRow(): void;
   /** The rower's End. Idempotent, and idempotent specifically against a
    *  terminal event racing it (spec §2). */
@@ -1802,6 +1817,129 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
+  /** Door spec (2026-09-02) §5.3's LIFETIME TABLE, in one ref.
+   *
+   *  MINT: every `state === "rowing"` frame of the LIVE run whose
+   *  `intervalIndex` is non-null and whose interval does not already carry
+   *  an `IntervalActual` (I-B6) — `noteFrameForPartial` below is the only
+   *  writer.
+   *  CLEAR: the first `resting` frame carrying that interval's index, or
+   *  that interval's own accepted `IntervalActual`, whichever comes first
+   *  (I-B3 — the two are up to a full programmed rest apart: 59 940 ms on
+   *  `walk-2026-08-28/rest-boundary-recording.jsonl.gz`); the FOUR per-run
+   *  reset sites `rowingStreakRef` clears at (the RC-37 programDropped/ready
+   *  exit in `handleEvent`, `beginFreeRow()`, `cancel()`, and `program()` —
+   *  the last of those NOT beside `rowingStreakRef`'s own clear, because
+   *  `program()`'s catch is itself one of the five producers; see that
+   *  function); and, DEFENSIVELY, `connect()` and `teardown()`. SIX
+   *  sites, found by symbol. **`program()` is the ONE whose clear is
+   *  reachable with a reading held**: nothing but the `"programming"`
+   *  double-fire guard gates re-entry from `live`, and its own catch
+   *  CLOSES the run it is replacing (`program-failed`) with the reading
+   *  still set — which is why its clear sits after that close, and why its
+   *  leg lives with the read that can observe it (the close-site legs,
+   *  added alongside `withPartial`'s call in `closeRecord`). BOTH halves of
+   *  `program()`'s clear are gated, MEASURED (Task 3's report): the catch
+   *  half by the `program-failed` producer leg, which goes red when the
+   *  clear is moved back to the top of this function; the SUCCESS half by a
+   *  re-arm driven through this hook's own `program()` — the phase guard
+   *  admits it, so the "latent today, since no UI path re-programs" caveat
+   *  `rowingStreakRef`'s own clear carries is about the UI, not the hook.
+   *  The other FIVE are DEFENSIVE and ungated by design, each stated so at
+   *  its own site rather than given a test that could not go red (RF21):
+   *  - the RC-37 exit: its live arm returns first, and its own guard admits
+   *    only `programming`/`ready`, neither of which can hold a reading
+   *    (harden lens 2, finding 4);
+   *  - `beginFreeRow()` and `cancel()`: DEFENSIVE, correcting the plan's
+   *    own claim that these two are gated via a `failed`-phase ordering
+   *    (this task's report, RF10). `fail()` and the `disconnected` handler
+   *    are the ONLY routes from `live` to a phase either function admits,
+   *    and both null `driverRef` on the way — so `beginFreeRow()` returns
+   *    at its own `driver === null` guard before reaching this clear, and
+   *    `cancel()` nulls `runRef` (and has already run `teardown()`) before
+   *    returning, so every later `closeRecord` stops at its no-record
+   *    guard;
+   *  - `connect()` and `teardown()`: DEFENSIVE, and the reason is the CALL
+   *    GRAPH, not the state (review fix round 1 — round 0 claimed
+   *    `runRef.current` is null once either has run, and it is not: only
+   *    the RC-37 exit and `cancel()` null it). A link lost mid-row leaves
+   *    an open run AND a held reading, and `endSession` has no phase
+   *    guard. Reachable only because no surface offers Connect with a run
+   *    open (`justrow/JustRow.tsx`; the interstitial's Try Again is pre-row
+   *    only) and nothing unmounts-then-closes. **ROADMAP's R10 reconnect
+   *    would arm both, and then these clears are what lose the metres.**
+   *  SURVIVES teardown / relaunch / re-arm: no / no / no. */
+  const lastRowingFrameRef = useRef<{
+    intervalIndex: number;
+    meters: number;
+    seconds: number;
+  } | null>(null);
+
+  /** Harden lens 2, finding 3: the interval indices whose MINT this run
+   *  has already refused, so the diagnostic below is written ONCE per
+   *  interval rather than once per frame. The refusal is per-frame and
+   *  the ring is ~1 Hz of budget; an unguarded record would push every
+   *  other entry out of the export the moment I-B6 bites.
+   *
+   *  INVARIANT: at most one `partial-mint-refused` entry per interval
+   *  index per RUN. Same lifetime as `lastRowingFrameRef` above at the
+   *  six per-run/per-attempt sites (it is `.clear()`ed on the same line
+   *  each of them nulls the ref), and deliberately NOT cleared by the
+   *  two event-shaped clears inside `noteFrameForPartial` — those fire
+   *  per interval, and clearing there would re-arm the very log line
+   *  this exists to bound. Survives teardown / relaunch / re-arm: no /
+   *  no / no. */
+  const partialMintRefusedRef = useRef<Set<number>>(new Set());
+
+  /** §5.3's mint and its two event-shaped clears, in one place so the
+   *  lifetime is readable as a unit rather than reconstructed from call
+   *  sites. Reads refs only — `[]` deps are honest, `sessionRef`
+   *  included (the ring is reached through a ref, exactly as every other
+   *  `sessionRef.current?.log.record` site in this file reaches it). */
+  const noteFrameForPartial = useCallback((frame: MonitorFrame): void => {
+    const index = frame.intervalIndex;
+    if (index === null) return;
+    if (frame.state === "resting") {
+      // I-B3, half one: the work bout is over. This fires ~60 s BEFORE the
+      // interval's own `IntervalActual` on a rested program, and an End
+      // during that rest would otherwise store a COMPLETED interval as a
+      // partial and count it unmeasured.
+      if (lastRowingFrameRef.current?.intervalIndex === index) {
+        lastRowingFrameRef.current = null;
+      }
+      return;
+    }
+    if (frame.state !== "rowing") return;
+    // I-B6 at MINT time, against the RECORD. `intervalIndex` lags the
+    // machine's interval reset by up to 810 ms, so a rowing frame can
+    // carry the index of an interval whose actual is already banked;
+    // re-minting onto it is what would produce `partialMeters: 0` beside
+    // `actualMeters: 250`. `withPartial` checks the same thing again at
+    // close — belt and braces, and the close-time check is the durable one
+    // because it reads the record the partial is about to be written to.
+    if (runRef.current?.actuals.some((a) => a.index === index) === true) {
+      // Harden lens 2, finding 3: say so, ONCE per interval index. This
+      // arm is the 810 ms lag window and it is per-FRAME — the Set is
+      // what keeps ~1 Hz of refusals from evicting the rest of the ring
+      // (`partialMintRefusedRef`'s own doc comment carries the
+      // invariant). A different entry kind from the close sites'
+      // `partial-refused`: this one says a reading was never taken, that
+      // one says a reading was never banked.
+      if (!partialMintRefusedRef.current.has(index)) {
+        partialMintRefusedRef.current.add(index);
+        sessionRef.current?.log.record(
+          "partial-mint-refused",
+          `reason=actual-banked idx=${index}`,
+        );
+      }
+      return;
+    }
+    lastRowingFrameRef.current = {
+      intervalIndex: index,
+      meters: frame.distanceMeters,
+      seconds: frame.elapsedSeconds,
+    };
+  }, []);
   /** Task 1 (lost-monitor design spec): counts frames `handleFrame` sees
    *  while the app-lifecycle listener believes the app is backgrounded —
    *  `null` when not currently tracking a hidden window (never
@@ -2392,8 +2530,49 @@ export function useMonitorSession(
       }
       if (run.completedAt !== null) return;
       const withFinalSeries = withSeries(run);
-      const next = completeMonitorRun(
+      // Door spec (2026-09-02) §5.3: THE ONE READ, covering FOUR of the five
+      // producers of an allowlisted `endedBy` — the End arm (`rower` or
+      // `link-lost` by `linkGone`), `endByMachine`'s `terminated` arm (the
+      // PM5's own Menu, and the arm every committed capture exercises because
+      // a replay cannot press a button), the live `programDropped` arm, and
+      // `program()`'s catch. Gated inside `withPartial` on I-B1/I-B3/I-B6,
+      // never per arm. The fifth producer (the continuity reset) never
+      // reaches this function and carries the same read at its own commit.
+      //
+      // BELOW the `completedAt !== null` guard above, deliberately: that
+      // guard is what makes "a partial cannot be written twice" (§5.2)
+      // unrepresentable rather than merely unlikely.
+      const banked = withPartial(
         withFinalSeries,
+        endedBy,
+        lastRowingFrameRef.current,
+      );
+      // Harden lens 2, finding 3: EVERY refusal above is otherwise silent,
+      // and "it kept nothing" is precisely the report a rower files. One
+      // entry either way, at the one site that knows — the same
+      // `sessionRef.current?.log.record` idiom `close-no-record` above uses.
+      // `partialRefusal` names the reason from the SAME gates `withPartial`
+      // applied (`monitorRun.ts`, pinned to agree exhaustively by that
+      // file's own M1.4 leg), so the ring can never disagree with the record
+      // it is explaining.
+      const refusal = partialRefusal(
+        withFinalSeries,
+        endedBy,
+        lastRowingFrameRef.current,
+      );
+      if (refusal === null) {
+        sessionRef.current?.log.record(
+          "partial-written",
+          `idx=${banked.partial?.intervalIndex ?? "none"} m=${banked.partial?.meters ?? "none"} s=${banked.partial?.seconds ?? "none"}`,
+        );
+      } else {
+        sessionRef.current?.log.record(
+          "partial-refused",
+          `reason=${refusal} idx=${lastRowingFrameRef.current?.intervalIndex ?? "none"}`,
+        );
+      }
+      const next = completeMonitorRun(
+        banked,
         { terminated, endedBy },
         nowDate(),
       );
@@ -2945,6 +3124,12 @@ export function useMonitorSession(
                   distanceMeters: frame.distanceMeters,
                   intervalCount: frame.rawIntervalCount,
                 };
+          // §5.3: the run's FIRST frame is a rowing frame of the live run
+          // and mints like any other. Without this call an End inside the
+          // very first frame after the record opens would bank nothing —
+          // honest, but needlessly so, and this is the one frame the live
+          // branch below never sees (it returns here).
+          noteFrameForPartial(frame);
           update({
             frame,
             phase: "live",
@@ -3024,15 +3209,46 @@ export function useMonitorSession(
           // exists, so comparing against ITS result here would make every
           // live frame with recorder data look like a fresh reset.
           const withFinalSeries = withSeries(closed);
-          // Hand-off store design spec §1, plan Task 3: `withFinalSeries`
-          // is always a NEW object relative to the run this hook held
-          // before the reset (`closed !== runRef.current` already proved
-          // that; `withSeries` either returns `closed` itself or a further
-          // spread of it), so this always reaches the store — never a
-          // no-op commit. `completeContinuityReset` is one of the writer
-          // gates this task makes PURE; this call site is its own
-          // committer, same discipline as `closeRecord`'s.
-          applyProducerCommit(withFinalSeries);
+          // Door spec §5.3, THE FIFTH PRODUCER. `completeContinuityReset` is
+          // a pure transform committed here, never through `closeRecord`, so
+          // a read installed only there would miss this close entirely.
+          // `closed.endedBy` is `"link-lost"` (`monitorRun.ts`'s
+          // `completeContinuityReset`); the `??` is a total-function
+          // fallback, not a case this reaches.
+          const banked = withPartial(
+            withFinalSeries,
+            closed.endedBy ?? "link-lost",
+            lastRowingFrameRef.current,
+          );
+          // Harden lens 2, finding 3 — the SAME two ring entries as
+          // `closeRecord`'s, because this close is just as silent and is the
+          // one a link-loss report will be about.
+          const refusal = partialRefusal(
+            withFinalSeries,
+            closed.endedBy ?? "link-lost",
+            lastRowingFrameRef.current,
+          );
+          if (refusal === null) {
+            sessionRef.current?.log.record(
+              "partial-written",
+              `idx=${banked.partial?.intervalIndex ?? "none"} m=${banked.partial?.meters ?? "none"} s=${banked.partial?.seconds ?? "none"}`,
+            );
+          } else {
+            sessionRef.current?.log.record(
+              "partial-refused",
+              `reason=${refusal} idx=${lastRowingFrameRef.current?.intervalIndex ?? "none"}`,
+            );
+          }
+          // Hand-off store design spec §1, plan Task 3: the committed value
+          // is always a NEW object relative to the run this hook held before
+          // the reset (`closed !== runRef.current` already proved that;
+          // `withSeries` either returns `closed` itself or a further spread
+          // of it, and `withPartial` either returns ITS input or a further
+          // spread again), so this always reaches the store — never a no-op
+          // commit. `completeContinuityReset` is one of the writer gates
+          // this task makes PURE; this call site is its own committer, same
+          // discipline as `closeRecord`'s.
+          applyProducerCommit(banked);
           // Same two steps `closeRecord` always takes after its own
           // completion write: the 30s flush timer would otherwise keep
           // firing into a record that can never accept another write, and
@@ -3191,6 +3407,20 @@ export function useMonitorSession(
               `gapsMs=[${gapsMs.join(",")}] sinceResumeMs=${sinceResumeMs}`,
           );
         }
+        // §5.3: LAST in this branch, on purpose. The continuity-reset
+        // commit above reads `lastRowingFrameRef` to bank what was LAST
+        // RECEIVED (§5.1) — and the frame that TRIPS a continuity reset is
+        // by definition the dishonest one, so it must not have been folded
+        // into the ref before that read.
+        //
+        // It IS folded in a moment later, though (review fix round 1,
+        // minor a): this line still runs after that close, so the
+        // dishonest frame does mint. Harmless, and deliberately not
+        // special-cased — the reset has already moved the phase to
+        // `"ended"`, so no further frame reaches this branch, and the
+        // closed record's own `completedAt !== null` guard refuses every
+        // later write. The reading simply dies with the hook.
+        noteFrameForPartial(frame);
         update({ frame, frozen: nowPaused });
         return;
       }
@@ -3208,6 +3438,7 @@ export function useMonitorSession(
       stopSeriesFlush,
       applyProducerCommit,
       noHoldCloseVerdict,
+      noteFrameForPartial,
     ],
   );
 
@@ -3321,9 +3552,61 @@ export function useMonitorSession(
         return;
       }
       if (event.kind === "armed") {
-        // The driver emits this only after `verifyArmed` has confirmed the
-        // machine is holding OUR program (structure and all) — so "ready"
-        // means ready, not "the ack came back".
+        // A FREE ROW'S ARM CAN OUTLIVE THE ROWER'S INTEREST IN IT, and this
+        // guard is a REAL FINDING from spec 2026-09-03 Part 2's own test
+        // round rather than defensive tidiness. Both arms flip to
+        // `"programming"` and wait; the difference is who holds the wait.
+        // `program()` is still suspended on its own `await` when its emit
+        // fires, so nothing can have moved on. `beginFreeRow()` RETURNS
+        // with the send still running, so END, Cancel, a link drop or an
+        // unmount can all land first — and without this line the settle
+        // then flips a session that is already `ended` back to `ready`.
+        // The free-row suite caught exactly that, on the
+        // END-inside-the-send-window test: "expected 'ready' to be
+        // 'ended'".
+        //
+        // KEYED ON THE EVENT, NEVER ON THE PHASE ALONE, and that is
+        // measured too: the first draft refused every `armed` outside
+        // `"programming"` and broke two re-arm tests, because a `program()`
+        // dispatched right after a finish is still pumping the machine's
+        // own terminal frames when its arm lands — `"ended"` is a LEGAL
+        // arrival phase for the programmed arm and an illegal one for the
+        // free row's. The event says which it is.
+        //
+        // It is the spec's third detection clause said one more time
+        // ("Once Ended (any closer), the observer NEVER re-opens ... A new
+        // row requires a new user action") — `beginFreeRow()` and
+        // `JustRow.tsx`'s once-latch already state it at the two doors
+        // BEFORE the wire; this states it at the answer coming back.
+        //
+        // The ring, not silence: a refused settle is exactly what a walk
+        // wants to see, because it says the rower left before the erg
+        // answered.
+        if (
+          event.freeRow === true &&
+          stateRef.current.phase !== "programming"
+        ) {
+          sessionRef.current?.log.record(
+            "armed-ignored",
+            `free-row send settled at phase ${stateRef.current.phase} — the row was already over, so nothing is armed`,
+          );
+          return;
+        }
+        // TWO ARMS, TWO ACCEPTANCE POINTS, and this comment used to describe
+        // only the first: "The driver emits this only after `verifyArmed`
+        // has confirmed the machine is holding OUR program (structure and
+        // all) — so 'ready' means ready, not 'the ack came back'."
+        //
+        // That is still exactly right for `program()`. It is NOT right for
+        // `beginFreeRow()`, which since spec 2026-09-03 Part 2 emits this
+        // same event when its p.80 send SETTLES — the ack, and on
+        // fall-through a rejection or the deadline too. The difference is
+        // not an inconsistency to fix: a readback for a free row would be
+        // decoration, because `workoutType = 1` is the PM5's own idle
+        // default (`driver.ts`'s `beginFreeRow` carries the hardware
+        // citation). So the workout is confirmed by READBACK and the free
+        // row by ACK, and both mean the same thing to everything below:
+        // the monitor has had its say and the rower may pull.
         //
         // Hand-off store design spec §5's "armed acceptance" row, plan
         // Task 5 review fix round: THE ACCEPTANCE POINT. `ConnectAction.tsx`
@@ -3460,6 +3743,29 @@ export function useMonitorSession(
         // (`applyProducerCommit`'s own doc comment: "a refusal can
         // therefore never diverge producer from store").
         if (accepted && applyProducerCommit(next)) {
+          // §5.3, I-B3 half two: the interval's own actual has landed, so
+          // its work bout is over by the other of the two events. On a
+          // program with rests the `resting` clear above already fired ~60 s
+          // ago and this is a no-op; on an `r0` program (no rest frames at
+          // all) this is the ONLY clear, and it fires 180 ms after the last
+          // rowing frame (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`).
+          //
+          // INSIDE the committed branch, not beside `accepted` (review fix
+          // round 1, RF25). `accepted` means the RECORD GATE took it;
+          // `applyProducerCommit` returning `false` (stale / retired /
+          // second-key) means the STORE did not, and leaves `runRef`
+          // unchanged. Retiring the reading on that outcome would lose it
+          // twice over: the record does not own the actual, and the close
+          // would find no reading either — a durability failure the caller
+          // CAN see, proceeded past as if it were a success. This is the
+          // same authority the MINT side already reads
+          // (`runRef.current.actuals`), so both halves of I-B3/I-B6 now key
+          // on store truth rather than on gate truth.
+          if (
+            lastRowingFrameRef.current?.intervalIndex === event.actual.index
+          ) {
+            lastRowingFrameRef.current = null;
+          }
           update({ actuals: next.actuals });
         }
         // Whatever the record decided, the boundary the SPLIT condition was
@@ -3551,6 +3857,15 @@ export function useMonitorSession(
         freezeRef.current = NO_FREEZE;
         rowingStreakRef.current = null;
         lastContinuityRef.current = null;
+        // §5.3: DEFENSIVE and UNGATED BY DESIGN (harden lens 2, finding 4).
+        // The live arm a few lines above returns first, and this arm's own
+        // guard is `phase !== "programming" && phase !== "ready"` — neither
+        // phase can hold a reading, because every route from `live`/`ended`
+        // back to `ready` passes `program()`'s or `beginFreeRow()`'s own
+        // clear. Kept as belt-and-braces; no test leg can make it bite, so
+        // it carries no mutation (RF21 — see this task's report).
+        lastRowingFrameRef.current = null;
+        partialMintRefusedRef.current.clear();
         runRef.current = null;
         // Review round 3, item 2: this session's IDENTITY is DELIBERATELY
         // NOT cleared here, correcting round 2's own claim that this exit
@@ -3925,13 +4240,16 @@ export function useMonitorSession(
         // never pulled" case is unchanged by this task).
         if (driver === null) return;
         const phase = stateRef.current.phase;
-        // Phase JR PR 2: same free-row exclusion as `cancel()`'s own armed
-        // predicate, same reasoning — an unmount at `ready` on a free row
-        // must not terminate the machine's own row.
+        // No free-row exclusion here either, for the reason `cancel()`'s
+        // own armed predicate now gives in full: since spec 2026-09-02 a
+        // free row IS armed — `beginFreeRow()` puts the monitor into a Just
+        // Row session — so leaving through the tab bar at `ready` owes the
+        // erg the same undo that Cancel does. The two exits were written to
+        // match each other and still do; only the fact underneath them
+        // changed (walk `walk-2026-09-03-jr-connect`, finding 4).
         if (
           !alreadyTerminated &&
-          (phase === "programming" || phase === "ready") &&
-          identityRef.current.mode !== "justrow"
+          (phase === "programming" || phase === "ready")
         ) {
           bestEffort(
             driver.terminate().finally(() => bestEffort(driver.disconnect())),
@@ -3992,6 +4310,20 @@ export function useMonitorSession(
       }
       frameArrivalsRef.current = [];
       lastResumeAtMsRef.current = null;
+      // §5.3: DEFENSIVE — **reachable only because nothing unmounts this
+      // hook and then closes the run it was holding.** Round 1 of this
+      // task's review corrected the reason first written here: `teardown`
+      // does NOT null `runRef`, and neither does `fail()` or the
+      // `disconnected` handler (only the RC-37 exit and `cancel()` do), so
+      // "the record is gone by now" was false. `teardown` IS the file's
+      // single choke point for every exit path, and every close that
+      // reaches a surface runs before it — but a caller that tore down
+      // with a run open and then closed it would find the reading already
+      // discarded here. Nothing does that today. Here for the same reason
+      // `frameArrivalsRef` above is: nothing of this session's survives a
+      // teardown. No mutation, because nothing can reach it (RF21).
+      lastRowingFrameRef.current = null;
+      partialMintRefusedRef.current.clear();
 
       // STEP 2: STASH. THE LOG SURVIVES THE SESSION (2026-08-08, hardware
       // walk 2): the ended hand-off frame navigates away on its first
@@ -4353,6 +4685,24 @@ export function useMonitorSession(
     // same way: a fresh attempt starts on a stream that has said nothing
     // yet, never latched by whatever the last connection's watchdog saw.
     livenessRef.current = null;
+    // §5.3: DEFENSIVE, and deliberately unlike `rowingStreakRef`, which does
+    // NOT clear here at all. **Reachable only because no surface offers
+    // Connect with a run still open.** Round 1 of this task's review
+    // corrected the reason first written here: `runRef.current` is NOT null
+    // by the time a fresh attempt begins — the only two sites that null it
+    // are the RC-37 exit and `cancel()`, and neither `fail()` nor the
+    // `disconnected` handler is one of them. A link lost mid-row therefore
+    // leaves an OPEN run and a HELD reading, and `endSession` has no phase
+    // guard that would stop a later close from reading it. What holds this
+    // off today is the call graph, not the state: the mid-row lost surface
+    // offers End, never Connect (`justrow/JustRow.tsx`'s own "Try again is
+    // honest here only because no row was under way"), and the
+    // interstitial's Try Again is pre-row only. **ROADMAP's R10 reconnect
+    // would arm exactly this, and then THIS CLEAR is what loses the
+    // metres** — a reconnect that resumes an open run must not run it.
+    // Carries no mutation because nothing can reach it (RF21).
+    lastRowingFrameRef.current = null;
+    partialMintRefusedRef.current.clear();
     hysteresisCancelRef.current?.();
     hysteresisCancelRef.current = null;
     degradedUnsubRef.current = null;
@@ -4779,16 +5129,33 @@ export function useMonitorSession(
   /**
    * PHASE JR PR 2 — the free row's arm, and `program()`'s counterpart.
    *
-   * Reaches `ready` with no wire traffic, because the row is already the
-   * machine's own: the rower is in the PM5's Just Row and there is nothing
-   * to send, arm or verify. Everything downstream is inherited unchanged —
-   * `handleFrame`'s own `"ready"` branch opens the record on the first
-   * rowing frame with distance, which IS the spec's "user intent plus
-   * motion" rule (the tap on Just Row was the intent).
+   * **THE FREE ROW WAITS FOR THE MONITOR, like a workout does** (spec
+   * 2026-09-03 Part 2, Gate 0 PASSED). This used to read "Reaches `ready`
+   * with nothing awaited ... this hook neither awaits nor reads its
+   * outcome, by ruling (the erg's own screen is the acknowledgment)" and
+   * flipped to `ready` on the line after `driver.beginFreeRow()`. The door
+   * therefore said "Ready when you pull" milliseconds after Connect while
+   * the erg was still on its menu — the one thing a workout never does.
+   * This now flips to `"programming"`, and `ready` arrives on the driver's
+   * `armed` event, which the driver emits when its p.80 send SETTLES.
    *
-   * SYNCHRONOUS, unlike `program()`: there is no promise to await when
-   * nothing is sent. That also makes the phase flip and the identity seed
-   * one indivisible step, so no frame can arrive between them.
+   * FALL-THROUGH, not a failure card (approved with Gate 0): all three
+   * settle outcomes — acked, rejected, unanswered at the deadline — reach
+   * `ready`, because a free row needs nothing from the monitor to be
+   * rowable and a failure card would block a row that would have worked.
+   * The ring still records which way it went
+   * (`free-row-program-sent`/`-unanswered`/`-failed`).
+   *
+   * STILL SYNCHRONOUS WHERE IT WAS LOAD-BEARING. The paragraph this
+   * replaces said the `ready` flip and the identity seed were "one
+   * indivisible step, so no frame can arrive between them", and that
+   * property is kept: the identity seed and the `"programming"` flip are
+   * still consecutive synchronous statements, and no frame opens a record
+   * before `ready` anyway (`handleFrame`'s own `"ready"` branch). The
+   * re-trigger it also closed is likewise kept — `deriveProgram
+   * ("programming")` is `"sending"`, not `"none"`, so `JustRow.tsx`'s arm
+   * effect stops matching on this same tick, before its once-latch is even
+   * consulted.
    *
    * **The guard is not defensive tidiness.** Without it, calling this
    * during a programmed session silently rewrites `identityRef` to the Just
@@ -4824,6 +5191,19 @@ export function useMonitorSession(
     }
     // A fresh arm is a fresh streak, the same reason `program()` clears it.
     rowingStreakRef.current = null;
+    // §5.3: a fresh arm is a fresh reading — a partial from the run this
+    // free row is replacing must never be banked onto it. THIS IS THE COPY
+    // THIS FILE ALREADY RECORDS BEING MISSED ONCE: the §3 per-arm reset a
+    // few lines below carries its own "MERGE OF PR #259" note about exactly
+    // that (a second producer of `ready` inheriting the first's state).
+    //
+    // DEFENSIVE, not gated, correcting the plan's claim (this task's
+    // report, RF10): this line sits AFTER the `driver === null` guard
+    // above, and every route from `live` to a phase this function admits
+    // (`fail()`, and the `disconnected` event handler) nulls `driverRef`
+    // on its way — so no supported ordering reaches here holding a reading.
+    lastRowingFrameRef.current = null;
+    partialMintRefusedRef.current.clear();
     // MERGE OF PR #259 INTO THIS BRANCH — the per-ARM reset this branch added
     // to `program()` has to cover BOTH arms, and #259 built the second one.
     //
@@ -4880,7 +5260,12 @@ export function useMonitorSession(
       mode: "justrow",
     };
     driver.beginFreeRow();
-    update({ phase: "ready", error: null });
+    // `"programming"`, never `"ready"` — the driver's `armed` event owns
+    // that flip now (this function's own doc comment). Ordering after the
+    // driver call is safe rather than load-bearing: the driver's emit hangs
+    // off a `.finally()` on a promise chain, so it cannot land before this
+    // statement runs however the send goes.
+    update({ phase: "programming", error: null });
   }, [fail, update]);
 
   const program = useCallback(
@@ -4938,6 +5323,15 @@ export function useMonitorSession(
       update({ phase: "programming", error: null });
       try {
         await driver.program(p);
+        // §5.3: deliberately NOT beside `rowingStreakRef`'s own clear at the
+        // top of this function — see the identical comment in this
+        // function's own catch below for why the reading has to survive
+        // until `program()` is finished with the OLD run. This is the
+        // success half of that same "finished with it now" moment: the wire
+        // conversation landed, so whatever the previous run was holding can
+        // never be banked onto the run this arm is about to open.
+        lastRowingFrameRef.current = null;
+        partialMintRefusedRef.current.clear();
         // Success moves nothing here: the `armed` event does it (spec §2's
         // "every phase transition maps to a real event"), and the driver
         // emits it before this promise resolves.
@@ -4983,6 +5377,18 @@ export function useMonitorSession(
           // spec's own §2 reachability reasoning").
           closeRecord(true, "program-failed");
           update({ runOpen: false });
+          // §5.3: deliberately NOT beside `rowingStreakRef`'s own clear at the
+          // top of this function. `program()` is the only arming site that
+          // also CLOSES the run it is replacing (its catch writes
+          // `program-failed`, one of §5.3's five producers), so the reading
+          // has to survive until that close has read it. Nothing can mint in
+          // between: `noteFrameForPartial` runs only in `handleFrame`'s
+          // ready-seed and `live` branches, and the synchronous
+          // `update({ phase: "programming" })` above moves `stateRef` off
+          // both before the first await (this function's own double-fire pin
+          // says so).
+          lastRowingFrameRef.current = null;
+          partialMintRefusedRef.current.clear();
           // ...and leave the erg terminated rather than holding an orphan.
           // EXCEPT on `disconnected`, where the link is gone and there is
           // nothing to send a terminate over (spec: "no terminate is
@@ -5155,16 +5561,48 @@ export function useMonitorSession(
     // open until `live`). The handoff's "nothing lost" is amended in
     // DEVIATIONS accordingly: nothing OF OURS is lost, and the erg is left
     // terminated rather than armed with an orphan.
-    // Phase JR PR 2: a free row is EXCLUDED from the terminate — the line
-    // above says why it exists ("it terminates what we armed") and a free
-    // row armed nothing, so the terminate would reach the machine's OWN
-    // row. Worst case is a rower who began pulling before the motion gate
-    // fired (~5 frames at the walk's measured 1 Hz): their row dies on the
-    // erg because they tapped Cancel in an app that was only watching.
+    // A FREE ROW IS ARMED TOO, since spec 2026-09-02: `beginFreeRow()`
+    // sends the PM5 Concept2's p.80 frame, which puts the monitor into a
+    // Just Row session on the rower's behalf. So the line above applies to
+    // it unchanged — "it terminates what we armed" — and Cancel undoes the
+    // arm exactly as it does for a workout.
+    //
+    // This used to EXCLUDE `mode === "justrow"`, on the reasoning that "a
+    // free row armed nothing". That was true before the p.80 send and
+    // false after it, and the walk found the cost the same day
+    // (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`, finding 4):
+    // James tapped Cancel on the Ready screen and the PM5 sat there in the
+    // Just Row session the app had just put it in, with nothing on the
+    // wire to undo it. The old worst case still stands and is still
+    // accepted — a rower who began pulling before the motion gate fired
+    // (up to ~5 frames at the walk's measured 1 Hz) loses that row on the
+    // erg — but it is now the SAME trade the programmed path already
+    // makes, rather than a reason to leave the machine armed.
+    //
+    // THE TWO EXITS ARE ONE INVARIANT WITH ONE OBSERVABLE, and a probe
+    // proved it: restoring the exclusion HERE alone leaves every test
+    // green, because this function's own `teardown(armed, driver)` call a
+    // few lines down reaches the same phase with the same driver and sends
+    // the terminate itself (`alreadyTerminated` would be `false`). So do
+    // not read a green suite as licence to put this back — the biting
+    // mutation is both exclusions together, which is the state the walk
+    // caught. This site keeps its own terminate because it is `cancel()`'s
+    // own work, with `alreadyTerminated: true` stopping the repeat, rather
+    // than something left to a cleanup.
+    //
+    // THE `await` HAS NO CALLER (delta pass, PR #278). An earlier version
+    // of this comment called it a CONTRACT — "cancel() has DONE it,
+    // awaited" — and no caller can observe that: all six sites are
+    // `void session.cancel()` (`JustRow.tsx` x3, `ConnectedInterstitial
+    // .tsx` x2, `JustRowObserver.tsx`). What the await genuinely buys is
+    // INTERNAL ordering — the terminate lands before this function's own
+    // `teardown(armed, driver)` hangs up — and since PR #278 the driver
+    // holds that ordering for every caller anyway (`disconnect()` waits
+    // for a terminate that still owes its write). So the await is now belt
+    // to that braces: kept because it costs nothing and reads as the
+    // sequence it is, claimed as nothing more.
     const armed =
-      driver !== null &&
-      (phase === "programming" || phase === "ready") &&
-      identityRef.current.mode !== "justrow";
+      driver !== null && (phase === "programming" || phase === "ready");
     if (armed) {
       try {
         await driver.terminate();
@@ -5183,6 +5621,25 @@ export function useMonitorSession(
     identityRef.current = NO_IDENTITY;
     freezeRef.current = NO_FREEZE;
     rowingStreakRef.current = null;
+    // §5.3: same per-run lifecycle as `rowingStreakRef` above — a reading
+    // from the run this cancel is abandoning must never seed the next one.
+    //
+    // DEFENSIVE, not gated, correcting the plan's claim (this task's
+    // report, RF10): every route from `live` to a phase this function
+    // admits runs through `fail()` or the `disconnected` handler, and
+    // `cancel()` nulls `runRef` a few lines below, so every later
+    // `closeRecord` returns at its own no-record guard.
+    //
+    // DEAD TWICE OVER, in fact (review fix round 1, minor b):
+    // `teardown(armed, driver)` a few lines above has ALREADY cleared both
+    // pieces of state. Kept anyway, and deliberately: `cancel()` states
+    // its own per-run resets beside each other (`identityRef`, `freezeRef`,
+    // `rowingStreakRef`, `lastContinuityRef`, `runRef`) rather than relying
+    // on `teardown`'s list staying a superset of them, and a reader
+    // checking this function's lifetime should not have to read another
+    // function to find a line missing.
+    lastRowingFrameRef.current = null;
+    partialMintRefusedRef.current.clear();
     // Phase LL Task 4: same per-run lifecycle as `freezeRef`/
     // `rowingStreakRef` above — a stale reading from THIS run must never
     // seed the next one's continuity baseline.

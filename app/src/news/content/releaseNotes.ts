@@ -5,6 +5,84 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.36.1: git log v0.36.0..origin/main --oneline at 9baa4fa7.
+    // #288 is the item below; #287 defers Correct Resume in docs only,
+    // with nothing tester-visible. This notes/capture PR adds no behavior.
+    version: "v0.36.1",
+    date: "2026-09-03",
+    items: [
+      "Ending a phone-timed Just Row now lets you finish and save, instead of only abandoning the session.",
+    ],
+  },
+  {
+    // v0.36.0 (2026-09-03): range v0.35.0..main RE-ACCOUNTED at AUD-011/015's
+    // own PR-open head per RF15 (`git log v0.35.0..origin/main --oneline`,
+    // NO `--merges` — main is squash-merged and that form returns empty).
+    // EIGHT merges in range now (was five when this entry was first
+    // written at door PR B's head; #278 and #280 both landed after, and
+    // #280 was still missing after the pass that caught #278 — the
+    // whole-branch review of THIS PR found it):
+    //   #276 door PR A — item 3 (the chip, the count, and the stored
+    //     no-reading word). It made v0.24.0's item-4 promise concrete
+    //     ("from the next release on"); this is that release, so the
+    //     sentence lands here rather than only in that correction.
+    //   #274 timer mode + three free-row copy notes — item 4.
+    //   #271 (the door spec re-scope) and #275 (the harden skill and the
+    //     plan-authoring rules): documents and process, nothing a rower
+    //     can see.
+    //   #277 (Wave E PR1.75b, the native half of the Concept2 activation
+    //     shape): dark by its own fold — no surface reaches it until
+    //     PR2, and its own memory line says no tag until then.
+    //   #280 (the 2026-09-03 resume-edge walk): a walk record, a ROADMAP
+    //     closure, a spec line and one narrowed comment in `domain/`.
+    //     Nothing a rower can see, so no item is owed — named here because
+    //     this file's convention is that every merge in range is
+    //     accounted, with its reason, not silently dropped.
+    //   #278 (JR item 2, walk-gated 2026-09-03) — item 5: Connect now
+    //     actually programs the erg for a Just Row session instead of
+    //     doing nothing, and the Ready line changed with it.
+    // Items 1 and 2 are door PR B. Item 6 is this PR (AUD-011/AUD-015).
+    //
+    // ITEM 1 STATES ITS OWN RETROACTIVITY, and item 3 states the opposite
+    // one, because the two changes are of different kinds and shipped one
+    // tag apart (PM final gate, 2026-09-03): item 3's marker is DERIVED AT
+    // READ from columns already stored, so existing rows gain it on update,
+    // while item 1's pair is WRITTEN AT CLOSE, so no existing row can ever
+    // have it. A note that carries only one of those sentences promises the
+    // reader the wrong one.
+    //
+    // ITEM 2 CARRIES THE CORRECTION IN FULL, the worked example v0.24.0's
+    // own item 5 set: a correction appended to an old version's entry has
+    // an audience of zero, so the withdrawal is written where people will
+    // read it and v0.24.0's shipped string is left alone. Shipped notes
+    // are history.
+    //
+    // RE-ACCOUNTED AT THE TAG (RF15), `git log v0.35.0..main --oneline`,
+    // TWELVE merges in range. The eight above, plus the three that landed
+    // after AUD-011/015's head:
+    //   #281 (the harden skill's Codex adapter): one file under
+    //     `.agents/`, reachable by no rower.
+    //   #284 (the rowing-state byte in the ring): its own PR body says
+    //     "Nothing you can see changes. No screen, number or saved row
+    //     reads differently." A diagnostic for the next time that byte
+    //     lies to us, plus a test and a comment sweep.
+    //   #283 (connect programs the erg sooner, and the free row waits for
+    //     it) — item 7 below, walk-measured 2026-09-03.
+    // The date below is the day the tag was cut.
+    version: "v0.36.0",
+    date: "2026-09-03",
+    items: [
+      "Stop a connected piece partway through an interval and that interval's row now shows what you actually did, 250 m · 1:03, instead of a dash. The two numbers are the erg's own reading for that interval, the last one it sent before you stopped; what is ours is deciding which interval it belongs to. They are never added into your totals, your average split, or the count of intervals kept: those still only count intervals you finished. The reading is captured as a session ends, so it is there for sessions you row from this release on. Sessions already in your log never captured it and keep their dash, unlike the STOPPED EARLY marker further down, which is read off what was already saved. (Corrected 2026-09-03: v0.31.0 said an interval you were still in the middle of is not saved. That was true then; from this release it is saved, as its own two numbers on the row, and still never counted into a total.)",
+      "'Nothing kept.' has left the three screens that said it: the lost-monitor banner, the line the end-of-session screen shows when the erg drops a workout, and the log door's strip. With a part-rowed interval now showing its own metres, the phrase was about to be denying something on the screen underneath it. (Corrected 2026-09-03: v0.24.0 said the banner 'says how much survived: 2 intervals kept., or Nothing kept. when there is nothing'. The first half stands. The second is withdrawn: with nothing kept the banner now shows LOST THE MONITOR alone and promises nothing about what survived.)",
+      "Your history says which sessions did not finish. A session you stopped early wears a STOPPED EARLY chip in the list, and opening it reads 'STOPPED EARLY · 2 of 5 intervals measured'; a session the link died in reads LINK LOST, and one the erg dropped reads PROGRAM DROPPED. This is read off what was already saved, so sessions already in your log get it the moment you update: nothing was rewritten, they simply say what they always were. And the promise v0.24.0 made is kept: a connected session the app never heard a pull in is now stored as exactly that and reads NO MONITOR READING in your history. Rows saved before this release still read LOGGED BY HAND, and always will. One more: an erg that never told us its name is now saved as the connected session it was and reads MONITOR, instead of being filed as logged by hand.",
+      "The timer screen has one END, in the same place whichever way up you hold the phone, and the empty band that used to sit under it is gone. Three smaller things with it: the Just Row door's band reads 'Start a free row session.', a saved row with a time but no distance now prints TIME m:ss under its name in History, and with no plan active the save button just says Save.",
+      "Connect on the Just Row door now actually puts your monitor into a Just Row session instead of leaving it on its own menu: it leaves the menu the moment you connect, and the line under READY reads 'The clock starts on your first stroke.' instead of saying nothing was programmed.",
+      "Your erg now takes its program almost as soon as you tap Connect. It used to sit on its old screen for about two seconds first, on every connect this app has ever made, because the app was making ten other Bluetooth calls before it got to the one that matters. Measured at the erg on 3 September: a free row lands in a fifth of a second, and a programmed workout reaches the erg about a second sooner than it did.",
+      "The Just Row door no longer says it is ready before your erg is. It used to show 'Ready when you pull' the instant you tapped Connect, while the monitor was still on its menu. Now it shows a short 'Starting your row' step until the erg has taken the program, the way a programmed workout already waited. If the monitor never answers, the door goes to ready anyway, so you can always start the row on the erg itself.",
+      "If your phone can't keep the session record when you press Start, you now see 'Couldn't keep your session on this phone.' with a Retry button, instead of the countdown finishing and dropping you back where you started with no explanation.",
+    ],
+  },
+  {
     // v0.35.0 (2026-09-02): range v0.34.0..main = #272 (substitution) plus
     // this PR (the `source` sunset + these notes), accounted per RF15
     // (`git log v0.34.0..origin/main --oneline`). Item 1 is #272 and

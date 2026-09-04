@@ -1905,14 +1905,14 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       <div className="log-dropped-strip">
         <p className="log-dropped-title">THE ERG DROPPED THE WORKOUT.</p>
         <p className="log-dropped-body">
-          <b>
-            {droppedKept === 0
-              ? "Nothing kept."
-              : `${droppedKept} ${droppedKept === 1 ? "interval" : "intervals"} kept.`}
-          </b>{" "}
-          {droppedKept === 0
-            ? "You had not finished an interval yet."
-            : "The row below is what the erg measured before it stopped."}
+          {droppedKept === 0 ? (
+            "You had not finished an interval yet."
+          ) : (
+            <>
+              <b>{`${droppedKept} ${droppedKept === 1 ? "interval" : "intervals"} kept.`}</b>{" "}
+              The row below is what the erg measured before it stopped.
+            </>
+          )}
         </p>
       </div>
     );

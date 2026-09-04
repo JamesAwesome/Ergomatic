@@ -552,7 +552,7 @@ export default function ConnectedSurface({
                     "Your numbers are kept."
                 : session.closeReason === "program-dropped"
                   ? kept === 0
-                    ? "The erg dropped the workout. Nothing kept."
+                    ? "The erg dropped the workout."
                     : `The erg dropped the workout. ${kept} ${kept === 1 ? "interval" : "intervals"} kept.`
                   : kept === 0
                     ? "No numbers to keep."
@@ -844,16 +844,27 @@ export default function ConnectedSurface({
  *  has already learned to recognise, it is what the shipped v0.17.0
  *  release note tells them to expect, and the fact it states — we have
  *  lost the monitor — is equally true either way. Only the promise
- *  underneath it changes. */
+ *  underneath it changes.
+ *
+ *  THE ZERO ARM NO LONGER SAYS `Nothing kept.` (Gate 0-B decision (e)).
+ *  Two reasons, not one. It read as loss at the exact moment a reconnect
+ *  was already nullifying it — fresh frames resuming clear `stale` and
+ *  the whole banner unmounts, so the claim was never live long enough to
+ *  be worth stating as fact. And, after §5, at the exact moment something
+ *  IS being kept: a stopped piece's in-flight interval now renders its own
+ *  step row with the metres and time it banked, directly beneath a banner
+ *  that would otherwise still be denying it. The title alone states what
+ *  is certain — the monitor was lost — and makes no promise the zero case
+ *  cannot keep. */
 function LostBanner({ kept }: { kept: number }) {
   return (
     <div className="connected-lost" role="status">
       <span className="connected-lost-title">LOST THE MONITOR</span>
-      <span className="connected-lost-body">
-        {kept === 0
-          ? "Nothing kept."
-          : `${kept} ${kept === 1 ? "interval" : "intervals"} kept.`}
-      </span>
+      {kept > 0 && (
+        <span className="connected-lost-body">
+          {`${kept} ${kept === 1 ? "interval" : "intervals"} kept.`}
+        </span>
+      )}
     </div>
   );
 }

@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { readFileSync } from "node:fs";
 import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import type { PlanData } from "../api/usePlan";
 import type { SeriesData } from "../monitor/seriesRecorder";
+import { commentStrippedSource, cssRules } from "../test/cssView";
 import PostWorkoutSummary, {
   offsetFragment,
   singleTargetHint,
@@ -1135,5 +1137,348 @@ describe("singleTargetHint", () => {
     expect(
       singleTargetHint([{ targetSplit: 129 }, { targetSplit: 140 }]),
     ).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------
+// Door spec (2026-09-02) §5.1/§5.4/§6 — the in-flight pair, rendered.
+// Gate 0-B (James, 2026-09-02) APPROVED decisions (a), (c), (d), (f) and
+// (g); the copy and structure below are that approval, not a proposal.
+// ---------------------------------------------------------------------
+
+/** The artboard's own scenario: Tropical Wave's five 500 m reps, End
+ *  pressed 250 m into interval 3. Rows 1-2 measured, 3 partial, 4-5 never
+ *  reached — so this model carries all three row shapes at once, which is
+ *  what makes the "dash on one, pair on another" assertions below mean
+ *  anything. */
+function partialModel(overrides: Partial<SummaryModel> = {}): SummaryModel {
+  return {
+    meta: {
+      dateLabel: "AUG 10",
+      timeLabel: "18:57",
+      sourceLabel: "PM5 432331249",
+    },
+    heroes: { avgSplit: "1:52.0", time: "3:44", distanceMeters: 1000 },
+    rows: [
+      {
+        measured: true,
+        index: 1,
+        label: "500 m @ 2k +2",
+        timeLabel: "1:52",
+        paceLabel: "1:52.0",
+      },
+      {
+        measured: true,
+        index: 2,
+        label: "500 m @ 2k +2",
+        timeLabel: "1:52",
+        paceLabel: "1:52.0",
+      },
+      {
+        measured: false,
+        index: 3,
+        label: "500 m @ 2k +2",
+        durationLabel: "500 m",
+        targetPaceLabel: "1:52.0",
+        partialLabel: "250 m · 1:03",
+        partialSpoken: "stopped at 250 m after 1:03",
+      },
+      {
+        measured: false,
+        index: 4,
+        label: "500 m @ 2k +2",
+        durationLabel: "500 m",
+        targetPaceLabel: "1:52.0",
+      },
+      {
+        measured: false,
+        index: 5,
+        label: "500 m @ 2k +2",
+        durationLabel: "500 m",
+        targetPaceLabel: "1:52.0",
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function rowByIndex(index: number): HTMLElement {
+  return screen.getByRole("listitem", {
+    name: new RegExp(`^Interval ${index}:`),
+  });
+}
+
+describe("PostWorkoutSummary — the in-flight pair on a partial step row (§5.1)", () => {
+  it("renders the pair as an EXTRA CELL IN FRONT OF the dash — the dash stays, so a part-rowed row never reads as a rowed one (Gate 0-B decision (a))", () => {
+    renderSummary({ model: partialModel() });
+    const partial = rowByIndex(3);
+    // A DIRECT CHILD of `.summary-row`, which is the flex CONTAINER — so
+    // `index.css`'s `flex: 0 0 auto` lands on the flex ITEM and the shrink
+    // algorithm actually reads it. RF21's recorded failure was a
+    // declaration placed on a DESCENDANT, where it is inert; a plain
+    // `querySelector` here would match a wrapped span just as happily and
+    // was MEASURED to stay green under exactly that mutation (M5.4b in the
+    // task report), which is why this is `:scope >`.
+    expect(
+      partial.querySelector(":scope > .summary-row-partial")?.textContent,
+    ).toBe("250 m · 1:03");
+
+    // THE DASH STAYS. The approved artboard renders the alternative — the
+    // pair REPLACING the dash — beside the recommendation and captions it
+    // "Not recommended: the dash is doing real work", because it is the
+    // one mark rows 3, 4 and 5 share and the only thing that stops a
+    // part-rowed row ending in a number like the measured rows above it.
+    // This assertion is what holds the rejected shape out.
+    expect(
+      partial.querySelector(":scope > .summary-row-dash")?.textContent,
+    ).toBe("—");
+
+    // ORDER: pair, THEN dash. The row must end on the dash.
+    const cells = Array.from(partial.children).map((c) => c.className);
+    expect(cells).toStrictEqual([
+      "summary-row-index",
+      "summary-row-duration",
+      "summary-row-target",
+      "summary-row-offset",
+      "summary-row-partial",
+      "summary-row-dash",
+    ]);
+
+    // The unreached row keeps exactly what it has today — the dash, and
+    // no partial element at all.
+    const unreached = rowByIndex(4);
+    expect(unreached.querySelector(".summary-row-dash")?.textContent).toBe("—");
+    expect(unreached.querySelector(".summary-row-partial")).toBeNull();
+  });
+
+  it("NO pace, split or rate cell appears on a partial row — Gate 0-B decision (f), so a future `helpful` derivation goes red here", () => {
+    // The pair's clock is ELAPSED, not rowing time (the PM5 has no paused
+    // state), so a quotient of the two would be a split nobody rowed.
+    // Asserted as ABSENCE of the two cells that would carry one.
+    renderSummary({ model: partialModel() });
+    const partial = rowByIndex(3);
+    expect(partial.querySelector(".summary-row-pace")).toBeNull();
+    expect(partial.querySelector(".summary-row-dev")).toBeNull();
+    expect(partial.querySelector(".summary-row-bar-track")).toBeNull();
+    // A measured sibling in the SAME list DOES carry a pace cell, so this
+    // is a real absence rather than a selector that matches nothing
+    // anywhere (RF21 — a gate that cannot go red).
+    expect(rowByIndex(1).querySelector(".summary-row-pace")).not.toBeNull();
+  });
+
+  it("the accessible name KEEPS `not measured` and appends the pair, spelled out (Gate 0-B decision (g), both forms)", () => {
+    // `not measured` is kept, matching the dash the sighted row keeps
+    // under decision (a) — the accessible name must not claim more than
+    // the visible row does. And the middle dot carries no meaning aloud,
+    // so the spoken form spells the two numbers out with `after` instead.
+    renderSummary({ model: partialModel() });
+    expect(
+      screen.getByRole("listitem", {
+        name: "Interval 3: 500 m @ 2k +2, not measured, stopped at 250 m after 1:03",
+      }),
+    ).toBeInTheDocument();
+    // The unreached row's own name is untouched.
+    expect(
+      screen.getByRole("listitem", {
+        name: "Interval 4: 500 m @ 2k +2, not measured",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("a LINK-LOST partial row speaks `last reading`, not `stopped at` — the pair is what GOT THROUGH, not where the rower got to", () => {
+    // The second form of decision (g), and it reads the same way the
+    // caption under the table does (`LAST READING BEFORE THE LINK WENT`):
+    // on a link-lost close the silence before the close can be
+    // arbitrarily long, so `stopped at` would assert something the record
+    // cannot support.
+    renderSummary({
+      model: partialModel({
+        rows: [
+          {
+            measured: false,
+            index: 3,
+            label: "500 m @ 2k +2",
+            durationLabel: "500 m",
+            targetPaceLabel: "1:52.0",
+            partialLabel: "250 m · 1:03",
+            partialSpoken: "last reading 250 m after 1:03",
+          },
+        ],
+        caption: "INTERVAL 3 · LAST READING BEFORE THE LINK WENT",
+      }),
+    });
+    expect(
+      screen.getByRole("listitem", {
+        name: "Interval 3: 500 m @ 2k +2, not measured, last reading 250 m after 1:03",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("a ZERO pair renders as a real reading — `0 m · 0:00`, spoken and shown, with no floor swallowing it", () => {
+    renderSummary({
+      model: partialModel({
+        rows: [
+          {
+            measured: false,
+            index: 1,
+            label: "500 m @ 2k +2",
+            durationLabel: "500 m",
+            targetPaceLabel: "1:52.0",
+            partialLabel: "0 m · 0:00",
+            partialSpoken: "stopped at 0 m after 0:00",
+          },
+        ],
+      }),
+    });
+    expect(
+      screen.getByRole("listitem", {
+        name: "Interval 1: 500 m @ 2k +2, not measured, stopped at 0 m after 0:00",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("0 m · 0:00")).toBeInTheDocument();
+  });
+});
+
+describe("PostWorkoutSummary — the link-lost caption block (§6, Gate 0-B decision (c))", () => {
+  it("a single-interval link-lost model renders EXACTLY ONE caption element, carrying the partial sentence", () => {
+    // The model tests gate the VALUE (`summaryModel.test.ts` /
+    // `storedSummary.test.ts`); this leg gates that the block still
+    // renders ONE element for it — precedence, not two stacked captions.
+    const { container } = renderSummary({
+      model: partialModel({
+        rows: [
+          {
+            measured: false,
+            index: 1,
+            label: "500 m @ 2k +2",
+            durationLabel: "500 m",
+            targetPaceLabel: "1:52.0",
+            partialLabel: "250 m · 1:03",
+          },
+        ],
+        caption: "INTERVAL 1 · LAST READING BEFORE THE LINK WENT",
+      }),
+    });
+    const captions = container.querySelectorAll(
+      ".summary-targets-only-caption",
+    );
+    expect(captions).toHaveLength(1);
+    expect(captions[0]!.textContent).toBe(
+      "INTERVAL 1 · LAST READING BEFORE THE LINK WENT",
+    );
+    expect(
+      screen.queryByText("TARGETS ONLY · NOTHING MEASURED"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------
+// The structural CSS pin (docs/TESTING.md §8). jsdom never loads
+// `index.css` as real stylesheet rules, so the rule is read off disk and
+// parsed — through `cssView`'s comment-stripped view, so a rule's PROSE
+// can never satisfy an assertion about its declarations.
+// ---------------------------------------------------------------------
+
+/** Its OWN path regex, scoped to `src/session/`: a regex scoped to some
+ *  other directory would silently fail to substitute here, the read would
+ *  point at THIS file, and every rule lookup would come back empty — a
+ *  gate green by vacuity (RF21). The non-empty leg below is the tripwire
+ *  for exactly that. */
+const SUMMARY_CSS_PATH = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(/session\/[^/]+\.test\.tsx$/, "index.css");
+const SUMMARY_CSS = commentStrippedSource(
+  readFileSync(SUMMARY_CSS_PATH, "utf-8"),
+);
+
+function summaryRuleFor(selector: string) {
+  const rules = cssRules(SUMMARY_CSS).filter((r) =>
+    r.selectors.includes(selector),
+  );
+  expect(rules, `expected exactly one ${selector} rule`).toHaveLength(1);
+  return rules[0]!;
+}
+
+/** The rule's own computed `flex-shrink`, read from either the shorthand
+ *  (`flex: <grow> <shrink> <basis>`) or the longhand. Parsed rather than
+ *  string-matched because the assertion has to be about the VALUE the
+ *  shrink algorithm reads, not about which spelling the author chose. */
+function flexShrinkOf(body: string): string | undefined {
+  const longhand = /(?:^|;)\s*flex-shrink\s*:\s*([^;]+)/.exec(body);
+  if (longhand) return longhand[1]!.trim();
+  const shorthand = /(?:^|;)\s*flex\s*:\s*([^;]+)/.exec(body);
+  if (!shorthand) return undefined;
+  const parts = shorthand[1]!.trim().split(/\s+/);
+  // `flex: <grow> <shrink> <basis>` — a two-or-three-value shorthand names
+  // shrink second; a single-number `flex: 1` leaves shrink at its initial 1.
+  return parts.length >= 2 ? parts[1]! : "1";
+}
+
+describe("index.css: .summary-row-partial is a NON-SHRINKING, NON-WRAPPING flex ITEM", () => {
+  it("reads a non-empty index.css (the path regex actually substituted)", () => {
+    expect(SUMMARY_CSS_PATH.endsWith("/src/index.css")).toBe(true);
+    expect(SUMMARY_CSS.length).toBeGreaterThan(1000);
+    expect(cssRules(SUMMARY_CSS).length).toBeGreaterThan(100);
+  });
+
+  it("declares .summary-row-partial with flex-shrink 0 and white-space nowrap, ON THE FLEX ITEM ITSELF", () => {
+    // RF21's own recorded failure was a `min-width` placed on a CHILD of
+    // the flex item, where the shrink algorithm never reads it. This
+    // asserts on the rule for the element `IntervalRow` renders as a
+    // direct child of `.summary-row` (which is `display: flex`), so the
+    // declaration is on the item the algorithm actually consults.
+    const rule = summaryRuleFor(".summary-row-partial");
+    expect(rule.at).toStrictEqual([]);
+    expect(rule.selectors).toStrictEqual([".summary-row-partial"]);
+    expect(flexShrinkOf(rule.body)).toBe("0");
+    expect(rule.body).toMatch(/white-space:\s*nowrap/);
+    // Contrast computed, never eyeballed (RF6): `--ink-2` (#3f3c35) on
+    // `--page` (#f4f1e8) is 9.74:1 and on `--surface` (#fffdf7) is
+    // 10.81:1 — both clear the 4.5:1 AA floor.
+    expect(rule.body).toMatch(/color:\s*var\(--ink-2\)/);
+    expect(rule.body).toMatch(/font-family:\s*var\(--font-mono\)/);
+  });
+
+  it("is typed as one of the table's own numbers: every TYPE declaration is `.summary-row-time`'s, tabular figures included", () => {
+    // Gate 0-B's approved rule, verbatim: "Every declaration is
+    // `.summary-row-time`'s own (mono, 13px, --ink-2, tabular-nums): the
+    // pair is typed as one of the table's numbers, not as a new register.
+    // Only the box differs." Held equal here rather than trusted, so the
+    // two cannot drift into two registers. `.summary-row-time` shares its
+    // rule with `.summary-row-duration`, which is why the selector list is
+    // read rather than assumed.
+    const partial = summaryRuleFor(".summary-row-partial");
+    const rules = cssRules(SUMMARY_CSS).filter((r) =>
+      r.selectors.includes(".summary-row-time"),
+    );
+    expect(rules).toHaveLength(1);
+    const time = rules[0]!;
+    const typeDecls = (body: string) =>
+      body
+        .split(";")
+        .map((d) => d.trim().replace(/\s+/g, " "))
+        .filter((d) =>
+          /^(font-family|font-size|color|font-variant-numeric)\s*:/.test(d),
+        )
+        .sort();
+    expect(typeDecls(partial.body)).toStrictEqual(typeDecls(time.body));
+    // Named as well as compared, so deleting a declaration from BOTH rules
+    // cannot keep this leg green.
+    expect(typeDecls(partial.body)).toStrictEqual([
+      "color: var(--ink-2)",
+      "font-family: var(--font-mono)",
+      "font-size: 13px",
+      "font-variant-numeric: tabular-nums",
+    ]);
+  });
+
+  it("the neighbour that yields the space still does: .summary-row-offset stays flex: 1 with min-width: 0", () => {
+    // Named here because `.summary-row-partial`'s non-shrink is only
+    // survivable if something ELSE in the row absorbs the squeeze; if this
+    // ever stops being the flexible cell, the partial's `flex: 0 0 auto`
+    // becomes an overflow rather than a nowrap.
+    const rule = summaryRuleFor(".summary-row-offset");
+    expect(rule.body).toMatch(/flex:\s*1\s*;/);
+    expect(rule.body).toMatch(/min-width:\s*0/);
   });
 });
