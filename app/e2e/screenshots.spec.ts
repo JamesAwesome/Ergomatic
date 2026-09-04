@@ -452,6 +452,39 @@ test("today", async ({ page }) => {
   });
 });
 
+// Freestyle chips (2026-09-04): the no-plan Today, which now carries the
+// same four-chip type row as the plan-driven capture above — none lit,
+// the word row reading ANY TYPE — beside a second frame with AT tapped.
+// Landscape at the same 844×390 frame the other landscape captures use,
+// since the chip row is the widest element on the screen.
+test("today-freestyle", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-freestyle@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await seedLogs(page, 3);
+  await page.goto("/today");
+  await page.locator(".today-card").waitFor();
+  await expect(page.locator(".today-plan-line-freestyle")).toBeVisible();
+  await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-freestyle.png"),
+  });
+
+  await page.getByRole("button", { name: "AT", exact: true }).click();
+  await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
+  await expect(page.locator(".today-card .type-badge")).toHaveText("AT");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-freestyle-narrowed.png"),
+  });
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-freestyle-landscape.png"),
+  });
+});
+
 // Phase 8A Task 2: the checkpoint-day pair. A REAL advanced plan (six
 // plan-advancing seeded logs — `stores/logs.ts` bumps done_n per save — so
 // doneN lands exactly on the sprint plan's first checkpoint, index 6 =
