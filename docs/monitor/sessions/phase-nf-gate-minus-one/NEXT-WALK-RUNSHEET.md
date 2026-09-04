@@ -48,7 +48,7 @@ NFC-name-to-picker-free-BLE path?
 | Item | Frozen value |
 | --- | --- |
 | Artifact source commit | `7e10d2897a3d9c00685374695410a59213beb679` |
-| Controller code commit | `ff56d9ed611c2d72962e27fe8b2dc4d95e8e1488` |
+| Controller code commit | `59e576bb52ac4addd0eef8ebb7e0783854182cd7` |
 | Artifact | `/tmp/ergomatic-phase-nf-ready.WQJqQu/Build/Products/Debug-iphoneos/App.app` |
 | Bundle id | `haus.waffle.ergomatic` |
 | App version/build | `0.23.0` / `789` |
@@ -58,7 +58,7 @@ NFC-name-to-picker-free-BLE path?
 | Classifier | `app/scripts/nfc-gate-console-receipt.ts` |
 | Classifier SHA-256 | `3f5f80ce914d54c410d86948416729edc79848c99663656af3c87439783f1739` |
 | Controller | `app/scripts/nfc-normal-trace-controller.ts` |
-| Controller SHA-256 | `b67b42f9ef0aa6d819f04e436a733197cd0765d642286dd70165ce332e9bcea1` |
+| Controller SHA-256 | `218c73f5be8cdca54f9d297212591f7c57a5e54d02a2261bd29f5ea39635c0a4` |
 | Code-sign CDHash | `96d980eec0b53de9446b72589d8e41324224f58a` |
 | NFC entitlement | exactly `com.apple.developer.nfc.readersession.formats = [TAG]` |
 | Usage text | `Scan a PM5 to connect and program your workout.` |
@@ -104,7 +104,7 @@ expected_root=/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktr
 
 test "$(git rev-parse --show-toplevel)" = "$expected_root"
 test -z "$(git status --porcelain)"
-git diff --exit-code ff56d9ed611c2d72962e27fe8b2dc4d95e8e1488 -- app
+git diff --exit-code 59e576bb52ac4addd0eef8ebb7e0783854182cd7 -- app
 git diff --exit-code 7e10d2897a3d9c00685374695410a59213beb679 -- \
   app \
   ':(exclude)app/scripts/nfc-gate-console-receipt.ts' \
@@ -127,7 +127,7 @@ test "$(codesign -d --verbose=4 "$artifact" 2>&1 | \
 test "$(shasum -a 256 app/scripts/nfc-gate-console-receipt.ts | awk '{print $1}')" = \
   3f5f80ce914d54c410d86948416729edc79848c99663656af3c87439783f1739
 test "$(shasum -a 256 app/scripts/nfc-normal-trace-controller.ts | awk '{print $1}')" = \
-  b67b42f9ef0aa6d819f04e436a733197cd0765d642286dd70165ce332e9bcea1
+  218c73f5be8cdca54f9d297212591f7c57a5e54d02a2261bd29f5ea39635c0a4
 capture_dir=$(mktemp -d /tmp/ergomatic-nf-normal-trace.XXXXXX)
 print -r -- "CAPTURE_DIR=$capture_dir"
 ```
