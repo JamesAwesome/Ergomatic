@@ -1,5 +1,9 @@
 # NFC proof paused — 2026-09-04
 
+Desk follow-up: [FEASIBILITY.md](FEASIBILITY.md) verifies the platform/action
+assumptions and records the PM-selected narrow diagnostic-design scope. It
+does not authorize another walk or implementation.
+
 James stopped the walk after reporting that a roughly ten-minute promise had
 become nearly three hours. Hardware work is paused. No additional operator
 action, scan, installation or rebuild is requested today. This is a checkpoint,

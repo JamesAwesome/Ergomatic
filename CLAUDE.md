@@ -249,6 +249,17 @@ requirements).
       and automatic log collection. Any unavoidable console setup is one
       pretested batch declared up front, not repeated commands or manual
       receipt copying during the walk.
+    **Validate that each action is possible, not just that its control
+    exists (James, 2026-09-04).** For every gesture, button and transition,
+    record the exact platform/build, starting UI state, modal-sheet state,
+    and evidence that the operator can actually perform it. Source/API
+    documentation establishes a candidate, not on-device reachability.
+    Reuse compatible recorded demonstrations; no hidden rehearsal walk
+    may bypass this gate. Unknown action feasibility is NOT READY and
+    cannot be an assumed prerequisite. A bounded feasibility experiment
+    can itself be proposed to PM, explicitly labelled as the uncertainty
+    being tested, never as a known-working step. Unknown test outcomes
+    are legitimate; silently impossible instructions are not.
     Finish builds, code review, desk debugging and capture preparation
     before inviting James. Give complete short action blocks between
     pieces; never ask for typing mid-piece. Start and record the agreed

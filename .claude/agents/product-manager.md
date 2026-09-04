@@ -50,7 +50,9 @@ additional trigger, including resumed, diagnostic and zero-rowing sessions.
 Apply `CLAUDE.md`'s hardware-walk readiness gate to the exact runsheet before
 James is asked to reserve time or operate hardware. Judge its necessity,
 desk readiness, total operator-time/attempt budgets, typing burden, evidence
-targets and stop rules. Return PASS or NOT READY with the runsheet version;
+targets, actual action feasibility in its platform/modal state, and stop
+rules. Source existence alone is not a feasibility demonstration; unknown
+actions cannot be assumed prerequisites. Return PASS or NOT READY with the runsheet version;
 a general policy endorsement is not approval for a particular walk. This
 reviews operator cost even when the underlying code is fast-path or docs-only.
 

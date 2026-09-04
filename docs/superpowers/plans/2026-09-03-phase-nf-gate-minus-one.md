@@ -1,5 +1,12 @@
 # Phase NF Gate -1 Hardware Proof Implementation Plan
 
+> **HARDWARE EXECUTION PAUSED — 2026-09-04.** The remaining walk steps below
+> are not a ready runsheet and may not resume under the earlier approval.
+> Read `docs/monitor/sessions/phase-nf-gate-minus-one/SESSION-PAUSED.md` and
+> `FEASIBILITY.md` in that directory first. Some action-feasibility premises
+> failed or remain unproved. Future hardware requires the exact prepared
+> runsheet's PM PASS under `CLAUDE.md`, then James's separate agreement.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Prove or reject the hardened Phase NF NFC architecture on a signed iPhone and real PM5 before any product-facing Scan NFC behavior is implemented.
