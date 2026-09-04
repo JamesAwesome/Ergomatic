@@ -609,12 +609,16 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
       .set("Authorization", bearer)
       .send({ tz: "Europe/London" });
 
+    // ASSERTED FIRST, deliberately: this is the assertion that carries the
+    // invariant, and an earlier `expect` on the status would abort the test
+    // before it ever ran. Probe M40e (derive `"H"` unconditionally) turns
+    // this send into a success, and this line is what goes red for it.
+    expect(posted).toStrictEqual([]);
     expect(refused.status).toBe(422);
     expect(refused.body).toStrictEqual({
       error: "no_weight_class",
       reason: "no_weight",
     });
-    expect(posted).toStrictEqual([]);
     // And the row is untouched, so the client still renders the OFFER
     // rather than a half-sent state.
     expect(
