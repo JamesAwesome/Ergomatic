@@ -369,9 +369,12 @@ test.describe("Concept2 link and send, in a real browser", () => {
     await expect(card.getByRole("radio")).toHaveCount(0);
     await expect(card.getByRole("textbox")).toHaveCount(0);
     await expect(card.locator("input, select, textarea")).toHaveCount(0);
-    await expect(
-      card.getByText("Your weight class comes from Concept2."),
-    ).toBeVisible();
+    // AND IT SAYS NOTHING ABOUT THE CLASS EITHER (James, 2026-09-04: "Stop
+    // talking about the weight class"). The helper line that replaced the
+    // control is gone too, so the whole phrase is absent from the card in
+    // its own rendered engine — asserted after `toBeEnabled()` above, so
+    // "absent" cannot mean "not painted yet".
+    await expect(card.getByText(/weight class/i)).toHaveCount(0);
 
     await connect.click();
     // The web arm navigates THIS document (`adapters/webNavigate.ts`'s
@@ -464,12 +467,14 @@ test.describe("Concept2 link and send, in a real browser", () => {
     await expect(page.locator(".c2-send-status")).toHaveText("SENT");
     await expect(page.getByText("Accepted by Concept2.")).toBeVisible();
     await expect(page.getByText("RESULT 339")).toBeVisible();
-    // RULING R2: the class and its PRODUCER, named at the moment the row
-    // lands. Nothing stores either, so this line exists on this render and
-    // no later one — which is exactly why it needs a driven gate.
-    await expect(
-      page.getByText("WEIGHT CLASS H · FROM YOUR CONCEPT2 WEIGHT"),
-    ).toBeVisible();
+    // THE 200 STILL CARRIES THE CLASS AND ITS PRODUCER — see `fake.send`
+    // above, which is the route's real answer — AND THE SCREEN STILL SHOWS
+    // NEITHER (James, 2026-09-04). This is the driven gate on that: the
+    // withdrawn sub-line drew here and nowhere else, so a client that
+    // started reading those two fields again would light it up in a real
+    // browser. Asserted after `RESULT 339` is visible, so the send has
+    // demonstrably landed before the absence is claimed.
+    await expect(page.locator(".c2-send-foot")).toHaveText(["RESULT 339"]);
     expect(fake.sends).toBe(1);
 
     // THE LINK-OUT IS DRIVEN, NOT INSPECTED, and the distinction is worth
@@ -550,10 +555,9 @@ test.describe("Concept2 link and send, in a real browser", () => {
     await expect(page.locator(".c2-send-status")).toHaveText("SENT");
     await expect(page.getByText("RESULT 512")).toBeVisible();
     expect(fake.sends).toBe(2);
-    // An older server answering a bare `{resultId}` renders SENT with NO
-    // provenance line — the same thing a later mount renders, since nothing
-    // about the class is stored.
-    await expect(page.getByText(/^WEIGHT CLASS /)).toHaveCount(0);
+    // The retry's 200 is the bare `{resultId}` an older server answers, and
+    // it renders the same single sub-line as the class-bearing 200 above.
+    await expect(page.locator(".c2-send-foot")).toHaveText(["RESULT 512"]);
   });
 
   test("send -> 422 no_weight_class -> the account link-out", async ({

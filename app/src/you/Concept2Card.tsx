@@ -454,21 +454,26 @@ export default function Concept2Card({ email }: { email: string }) {
                 Sends finished monitor rows to your Concept2 logbook, one row at
                 a time, from the log.
               </p>
+              {/* Ruling (i), and the 2026-09-04 ruling on top of it: nothing
+                  is asked here and nothing is said about the weight class
+                  either. What used to sit under this rule was a WEIGHT CLASS
+                  section with a two-option radiogroup, then one helper line
+                  saying where the class comes from. James, 2026-09-04:
+                  "Stop talking about the weight class." A rower who is never
+                  asked has no question to answer, so an unprompted answer is
+                  the app volunteering a Concept2 concept nobody raised. The
+                  one place the phrase survives is 2i on the Send block, where
+                  Concept2 has REFUSED a send for that reason and a refusal
+                  that will not say why is worse than the words.
+
+                  THE HAIRLINE STAYS, and it is the frames that say so rather
+                  than habit: 1a still draws a rule between the explanation
+                  and the action, exactly as 1c, 1f, 1f-b and 1j do, and
+                  `e2e/design.spec.ts` measures it on the
+                  `c2-card-unlinked.html` fixture in both orientations
+                  (visible in portrait, hidden by the split rule in
+                  landscape). */}
               <hr className="c2-card-hair" />
-              {/* Ruling (i): nothing is asked here. The hairline still marks
-                  the break between the explanation and the action; what used
-                  to sit between them was a WEIGHT CLASS section and a
-                  two-option radiogroup. The copy below says where the class
-                  comes from rather than leaving the rower to wonder where the
-                  question went — and it names CONCEPT2, not the profile,
-                  because the profile is only the FALLBACK producer
-                  (observation 29): the class comes from the rower's own most
-                  recent Concept2 row first. Naming the profile here would be
-                  wrong for every rower who has ever declared a class, and it
-                  would promise a page this card cannot open. */}
-              <p className="c2-card-helper">
-                Your weight class comes from Concept2.
-              </p>
             </>
           )}
         </div>

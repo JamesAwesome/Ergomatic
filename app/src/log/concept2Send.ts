@@ -107,23 +107,18 @@ export function c2ProfileUrl(logbookBaseUrl: string): string {
   return `${logbookBaseUrl}/profile`;
 }
 
-/** Which producer supplied the class on a send that just succeeded
- *  (`weightClassSource` on the route's 200). Rendered on the SENT state so a
- *  DERIVED class — a guess about a fact Concept2 lets its owner declare — is
- *  visible at the moment it is written, while Concept2's own per-result edit
- *  can still repair it. Never stored: on a later mount the row carries only
- *  its result id, and this line is absent. */
-export type WeightClassSource = "declaration" | "profile";
-
+/** NO CLASS AND NO PRODUCER ON THE SENT STATE (James, 2026-09-04: "Stop
+ *  talking about the weight class"). The route's 200 still carries
+ *  `weightClass` and `weightClassSource` and its log line still records
+ *  which producer answered — that is how an operator settles a disputed
+ *  row later — but the client neither reads them nor draws them, so the
+ *  union carries no field it cannot render. An earlier revision parsed both
+ *  for a provenance sub-line on 2c; the sub-line is withdrawn and parsing
+ *  into a member nothing consumes would be a shape with no reader. */
 export type SendState =
   | { kind: "idle" }
   | { kind: "sending" }
-  | {
-      kind: "sent";
-      resultId: number;
-      weightClass: "H" | "L" | null;
-      weightClassSource: WeightClassSource | null;
-    }
+  | { kind: "sent"; resultId: number }
   | { kind: "duplicate"; resultId: number }
   | { kind: "reauth" }
   /** The block's own preconditions stopped holding mid-session: unlinked
@@ -283,20 +278,12 @@ export function readSendResponse(status: number, body: unknown): SendState {
     if (typeof resultId !== "number") {
       return { kind: "failed", reason: MALFORMED_ANSWER };
     }
-    // The class and its producer are read DEFENSIVELY, not required: an
-    // older server (mid rolling deploy) answers a bare `{resultId}`, and a
-    // SENT row with no provenance line is correct there — it is the same
-    // thing a later mount renders, since nothing about the class is stored.
-    const weightClass = field(body, "weightClass");
-    const source = field(body, "weightClassSource");
-    return {
-      kind: "sent",
-      resultId,
-      weightClass:
-        weightClass === "H" || weightClass === "L" ? weightClass : null,
-      weightClassSource:
-        source === "declaration" || source === "profile" ? source : null,
-    };
+    // The id is the ONLY thing this state takes from the 200. The route
+    // also answers `weightClass` and `weightClassSource`; both are ignored
+    // here on purpose (2026-09-04), because nothing on this surface says
+    // anything about the class any more and a parsed value with no reader
+    // is dead weight that reads as a live field.
+    return { kind: "sent", resultId };
   }
   if (error === "duplicate") {
     const resultId = field(body, "c2ResultId");
@@ -355,17 +342,4 @@ export function readSendResponse(status: number, body: unknown): SendState {
     kind: "failed",
     reason: `COULDN'T SEND THIS ROW · ${String(status)}`,
   };
-}
-
-/** The SENT state's provenance sub-line (ruling R2). Null when the send
- *  carried no class — an older server, or a SENT state re-derived from the
- *  stored row on a later mount. */
-export function weightClassLine(send: SendState): string | null {
-  if (send.kind !== "sent") return null;
-  if (send.weightClass === null || send.weightClassSource === null) return null;
-  return `WEIGHT CLASS ${send.weightClass} · ${
-    send.weightClassSource === "declaration"
-      ? "FROM YOUR LAST CONCEPT2 ROW"
-      : "FROM YOUR CONCEPT2 WEIGHT"
-  }`;
 }

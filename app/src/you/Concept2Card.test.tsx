@@ -816,7 +816,7 @@ describe("Concept2Card layout structure (the tell/act pair the grid targets)", (
     expect(act?.contains(connect)).toBe(true);
     expect(tell?.contains(connect)).toBe(false);
     expect(tell?.textContent).toContain(
-      "Your weight class comes from Concept2.",
+      "Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.",
     );
     expect(act?.textContent).toContain("OPENS CONCEPT2 IN YOUR BROWSER");
     // The head stays OUTSIDE the pair: every amendment frame draws it full
@@ -871,7 +871,7 @@ describe("Concept2Card layout structure (the tell/act pair the grid targets)", (
 // that set against this component's JSX. Never read back off the symbol that
 // renders it.
 describe("Concept2Card copy, pinned literal by literal (F4)", () => {
-  it("1a unlinked: the label, the status, both body lines, the button and its footnote", async () => {
+  it("1a unlinked: the label, the status, its ONE body line, the button and its footnote", async () => {
     mount({ available: true, linked: false });
     await renderCard();
     expect(
@@ -884,10 +884,15 @@ describe("Concept2Card copy, pinned literal by literal (F4)", () => {
         "Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.",
       ),
     ).toBeTruthy();
-    expect(
-      screen.getByText("Your weight class comes from Concept2."),
-    ).toBeTruthy();
     expect(screen.getByText("OPENS CONCEPT2 IN YOUR BROWSER")).toBeTruthy();
+    // James, 2026-09-04: "Stop talking about the weight class." 1a carried a
+    // helper line saying where the class comes from; the card now says
+    // nothing about it at all. ENUMERATED over the class the line was drawn
+    // in, not queried by its old wording — a differently worded replacement
+    // reddens this too, and a `queryByText` of the withdrawn sentence would
+    // not. The unlinked card renders NO `.c2-card-helper` (that class still
+    // draws 1c's "Finished monitor rows can be sent from the log.").
+    expect(document.querySelectorAll(".c2-card-helper")).toHaveLength(0);
   });
 
   it("1b opening: the status chip reads WAITING", async () => {

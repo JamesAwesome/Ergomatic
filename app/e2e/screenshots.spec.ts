@@ -5349,11 +5349,12 @@ test("justrow-history-chip", async ({ page }) => {
 // stack that route 403s `unavailable` before it does anything. A capture
 // step that says "seed state X" must be able to name a WRITER of X reachable
 // in the environment the capture runs in; here there is none. So the SENT
-// and NO-WEIGHT captures DRIVE the tap against a routed answer instead —
-// which is also the only way either can show what this revision added:
-// nothing about the weight class is stored, so a seeded row would render
-// SENT with no provenance line, and the no-weight state has no stored
-// representation whatsoever.
+// and NO-WEIGHT captures DRIVE the tap against a routed answer instead.
+// (An earlier revision of this note gave a second reason — that a driven
+// send was the only way to show the SENT state's provenance sub-line. That
+// line is withdrawn, James 2026-09-04, so the reason above is now the whole
+// of it: the no-weight state has no stored representation at all, and
+// nothing in this stack can write a `c2_result_id`.)
 //
 // A DUPLICATE (2d) capture is deliberately NOT taken. Same shape as the two
 // above and one step worse: the route records the colliding id before
@@ -5482,10 +5483,13 @@ test("you-concept2-unlinked", async ({ page }) => {
   // both — so the page cannot settle the order and the shipped order lives
   // only in a `You.tsx` comment. This image is what that decision looks like.
   //
-  // It is ALSO the visual record of what ruling (i) changed: the board's 1a
-  // drew a WEIGHT CLASS section and a two-option control between the
-  // explanation and the button. Both are gone, and what stands in their
-  // place is one line saying where the class comes from.
+  // It is ALSO the visual record of what the two weight-class rulings
+  // changed: the board's 1a drew a WEIGHT CLASS section and a two-option
+  // control between the explanation and the button, and the first amendment
+  // replaced them with a helper line saying where the class comes from.
+  // James, 2026-09-04: "Stop talking about the weight class." Nothing stands
+  // in their place — the explanation, the rule and the button, and that is
+  // what this image now shows.
   const fake: C2ShotFake = {
     link: { status: 200, body: C2_SHOT_UNLINKED },
     send: { status: 200, body: {} },
@@ -5495,10 +5499,12 @@ test("you-concept2-unlinked", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
   ).toBeEnabled();
-  await expect(
-    page.getByText("Your weight class comes from Concept2."),
-  ).toBeVisible();
   await expect(page.locator(".c2-card").getByRole("radiogroup")).toHaveCount(0);
+  // Shot only once the card demonstrably says nothing about the class —
+  // otherwise the capture is the record of a screen nobody checked.
+  await expect(page.locator(".c2-card").getByText(/weight class/i)).toHaveCount(
+    0,
+  );
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you-concept2-unlinked.png"),
     fullPage: true,
@@ -5613,10 +5619,11 @@ test("log-concept2-idle", async ({ page }) => {
 });
 
 test("log-concept2-sent", async ({ page }) => {
-  // DRIVEN, NEVER SEEDED, and the reason is stated in this block's header:
-  // nothing stores the weight class, so a seeded SENT row renders with no
-  // provenance line — a capture taken that way would silently show the
-  // design without the thing ruling R2 added.
+  // DRIVEN, NEVER SEEDED, for the reason this block's header gives: no
+  // writer of `c2_result_id` is reachable in this stack, so the state has
+  // to be produced by a real tap against a routed answer. The routed 200
+  // still carries the class and its producer — that is the route's real
+  // shape — and the frame below must show neither.
   const fake: C2ShotFake = {
     link: { status: 200, body: C2_SHOT_LINKED },
     send: {
@@ -5634,9 +5641,7 @@ test("log-concept2-sent", async ({ page }) => {
   await page.getByRole("button", { name: "Send to Concept2" }).click();
   await expect(page.locator(".c2-send-status")).toHaveText("SENT");
   await expect(page.getByText("RESULT 339")).toBeVisible();
-  await expect(
-    page.getByText("WEIGHT CLASS H · FROM YOUR CONCEPT2 WEIGHT"),
-  ).toBeVisible();
+  await expect(page.locator(".c2-send-foot")).toHaveText(["RESULT 339"]);
   await page.locator(".c2-send").scrollIntoViewIfNeeded();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-concept2-sent.png"),

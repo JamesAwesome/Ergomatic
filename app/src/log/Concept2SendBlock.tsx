@@ -8,7 +8,6 @@ import {
   isSendable,
   readSendResponse,
   sentResultId,
-  weightClassLine,
   type SendState,
 } from "./concept2Send";
 import type { StoredLog } from "./storedSummary";
@@ -206,25 +205,6 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
           only difference between these two frames is that the button is
           absent here"), so there is no branch here to write. */}
       {resultId !== null && <p className="c2-send-foot">RESULT {resultId}</p>}
-
-      {/* Ruling R2. Concept2's own help makes the weight class the rower's
-          DECLARATION, and the send path reads that declaration first — but
-          when there is none to read we DERIVE one from their profile, and a
-          derived class is a guess about a fact its owner is entitled to set.
-          A guess nobody is shown can never be corrected, and Concept2 permits
-          per-result editing, so the class and its producer are named at the
-          moment the row lands.
-
-          Session-scoped by construction, not by oversight: nothing about the
-          class is stored (I4), so this line renders on the response of the
-          send that just happened and is absent on every later mount, where
-          2c renders exactly as it did before. `weightClassLine` returns null
-          for every other state, including a SENT re-derived from the row —
-          which is why the GATE is that function's own answer and not
-          `resultId`, whose SENT-from-the-record case has no class to name. */}
-      {weightClassLine(send) !== null && (
-        <p className="c2-send-foot">{weightClassLine(send)}</p>
-      )}
 
       {state === "reauth" && (
         <p className="c2-send-line">

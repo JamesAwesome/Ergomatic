@@ -6,7 +6,6 @@ import {
   isSendable,
   readSendResponse,
   sentResultId,
-  weightClassLine,
 } from "./concept2Send";
 
 const LINK: Concept2Link = {
@@ -122,30 +121,29 @@ describe("the two Concept2 URLs", () => {
 });
 
 describe("readSendResponse (409 carries THREE meanings, 422 carries TWO; never key on status)", () => {
-  it("reads a 200 as sent, carrying the class and WHICH producer supplied it", () => {
+  it("takes the RESULT ID and nothing else out of a 200, class fields included", () => {
+    // James, 2026-09-04: "Stop talking about the weight class." The route
+    // still answers `weightClass` and `weightClassSource` — the server's log
+    // line is how an operator settles which producer answered — and the
+    // client drops both on the floor. `toStrictEqual` against a two-key
+    // object is the assertion that says so: a client that started carrying
+    // either field again would fail here, where `toMatchObject` would not.
     expect(
       readSendResponse(200, {
         resultId: 339,
         weightClass: "L",
         weightClassSource: "declaration",
       }),
-    ).toStrictEqual({
-      kind: "sent",
-      resultId: 339,
-      weightClass: "L",
-      weightClassSource: "declaration",
-    });
+    ).toStrictEqual({ kind: "sent", resultId: 339 });
   });
 
-  it("reads an OLDER server's bare 200 as sent with no provenance, rather than as a failure", () => {
-    // Mid rolling deploy the route answers `{resultId}` alone. A SENT row
-    // with no provenance line is exactly what a later mount renders anyway,
-    // since nothing about the class is stored.
+  it("reads an OLDER server's bare 200 the same way, rather than as a failure", () => {
+    // Mid rolling deploy the route answers `{resultId}` alone. That renders
+    // identically to the line above, which is now true of every SENT row on
+    // every mount: the id is the whole state.
     expect(readSendResponse(200, { resultId: 339 })).toStrictEqual({
       kind: "sent",
       resultId: 339,
-      weightClass: null,
-      weightClassSource: null,
     });
   });
 
@@ -372,41 +370,5 @@ describe("readSendResponse (409 carries THREE meanings, 422 carries TWO; never k
       "THIS ROW IS GONE",
       "COULDN'T SEND THIS ROW · 418",
     ]);
-  });
-});
-
-describe("weightClassLine (ruling R2: a class we GUESSED is shown at the moment it is written)", () => {
-  it("names the class and the producer, in two different words for two different producers", () => {
-    expect(
-      weightClassLine({
-        kind: "sent",
-        resultId: 1,
-        weightClass: "H",
-        weightClassSource: "declaration",
-      }),
-    ).toBe("WEIGHT CLASS H · FROM YOUR LAST CONCEPT2 ROW");
-    expect(
-      weightClassLine({
-        kind: "sent",
-        resultId: 1,
-        weightClass: "L",
-        weightClassSource: "profile",
-      }),
-    ).toBe("WEIGHT CLASS L · FROM YOUR CONCEPT2 WEIGHT");
-  });
-
-  it("renders nothing for a SENT state with no class, which is every later mount", () => {
-    // Nothing about the class is stored (I4), so a row re-read from the
-    // record carries a result id and no provenance. The line is absent
-    // rather than invented.
-    expect(
-      weightClassLine({
-        kind: "sent",
-        resultId: 1,
-        weightClass: null,
-        weightClassSource: null,
-      }),
-    ).toBeNull();
-    expect(weightClassLine({ kind: "duplicate", resultId: 1 })).toBeNull();
   });
 });

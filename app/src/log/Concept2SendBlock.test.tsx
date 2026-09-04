@@ -491,10 +491,17 @@ describe("Concept2SendBlock refusals (amendment 2d/2e/2f/2h/2i)", () => {
     ).toHaveLength(2);
   });
 
-  it("names the class it sent AND where it came from, on the send that sent it", async () => {
-    // Ruling R2. A DERIVED class is a guess about a fact Concept2 lets its
-    // owner declare, and Concept2 permits per-result editing — so the guess
-    // is visible at the moment it is written, or it can never be corrected.
+  it("says NOTHING about the weight class on a send whose 200 carried one", async () => {
+    // James, 2026-09-04: "Stop talking about the weight class." This is the
+    // send that used to draw the provenance sub-line, driven with the exact
+    // 200 that used to produce it — so the fixture still carries both class
+    // fields and the screen must still show neither.
+    //
+    // ENUMERATED, not queried by pattern. `queryByText(/WEIGHT CLASS/)`
+    // stays null even when a class paragraph IS rendered with a null child,
+    // so it cannot tell an absent line from an empty one. Listing the mono
+    // sub-lines states the whole of what this frame draws, and reddens on
+    // any second foot however it is spelled.
     mockApi({
       send: {
         status: 200,
@@ -505,26 +512,23 @@ describe("Concept2SendBlock refusals (amendment 2d/2e/2f/2h/2i)", () => {
         },
       },
     });
-    await renderBlock(eligibleRow());
+    const { container } = await renderBlock(eligibleRow());
     await userEvent.click(
       await screen.findByRole("button", { name: "Send to Concept2" }),
     );
+    expect(await screen.findByText("Accepted by Concept2.")).toBeTruthy();
     expect(
-      await screen.findByText("WEIGHT CLASS H · FROM YOUR CONCEPT2 WEIGHT"),
-    ).toBeTruthy();
+      [...container.querySelectorAll(".c2-send-foot")].map(
+        (el) => el.textContent,
+      ),
+    ).toStrictEqual(["RESULT 339"]);
   });
 
-  it("renders a SENT row read back from the RECORD with no class line, because nothing about the class is stored", async () => {
-    // I4, made visible: a row that already carries `c2ResultId` renders SENT
-    // on mount with no send in this session, so there is no class to name.
-    // The line is ABSENT rather than invented.
-    //
-    // ENUMERATED, not queried by pattern. `queryByText(/WEIGHT CLASS/)`
-    // stays null even when the class paragraph IS rendered with a null
-    // child, so it cannot tell an absent line from an empty one — M34f
-    // (gating the class line on `resultId` instead of on
-    // `weightClassLine(send)`) beats it. Listing the mono sub-lines states
-    // the whole of what this frame draws.
+  it("renders a SENT row read back from the RECORD with the same one sub-line", async () => {
+    // I4, still visible: a row that already carries `c2ResultId` renders
+    // SENT on mount with no send in this session. Since 2026-09-04 that
+    // frame is identical to the one above — which is the point, and why
+    // both are pinned rather than one standing for the pair.
     mockApi({});
     const { container } = await renderBlock(
       eligibleRow({ c2ResultId: 339, c2UserId: 2211 }),
