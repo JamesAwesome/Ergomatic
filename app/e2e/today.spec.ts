@@ -841,7 +841,7 @@ test.describe("Today enhancements: freestyle spot-check", () => {
   // Today does, and opening it shows every group the sheet has (the sheet
   // has no notion of a plan at all). Round 2 (2026-08-04) adds LAST DONE/
   // SOURCE to that same unconditional set — five groups now, not three.
-  test("a no-plan user sees FILTER ⌄ and all five of its sheet's groups, but no type chips", async ({
+  test("a no-plan user sees FILTER ⌄ and all five of its sheet's groups, plus an unlit type chip row that narrows on tap", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -876,10 +876,35 @@ test.describe("Today enhancements: freestyle spot-check", () => {
       painGroup.getByRole("button", { name: "1", exact: true }),
     ).toBeVisible();
 
-    // No plan active — nothing to swap away from, so the type-swap chip
-    // row doesn't render at all (unaffected by this round: it never lived
-    // inside the sheet).
-    await expect(page.locator(".type-chip-grid")).toHaveCount(0);
+    // Freestyle chips (2026-09-04): the same four-chip row a plan-driven
+    // Today shows, but with NO chip lit (nothing to swap away from) and
+    // the word row reading ANY TYPE. Tapping one narrows the suggestion
+    // to that type; tapping the lit chip again clears it.
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const chips = page.locator(".type-chip-grid .chip");
+    await expect(chips).toHaveText(["O2", "AT", "TR", "AN"]);
+    for (let i = 0; i < 4; i++) {
+      await expect(chips.nth(i)).toHaveAttribute("aria-pressed", "false");
+    }
+    await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
+
+    await page.getByRole("button", { name: "AT", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "AT", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
+    await expect(page.locator(".today-card .type-badge")).toHaveText("AT");
+    // The plan line stays FREESTYLE — no swap arrow, nothing was swapped.
+    await expect(page.locator(".today-plan-line-freestyle")).toHaveText(
+      /^FREESTYLE/,
+    );
+
+    await page.getByRole("button", { name: "AT", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "AT", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
   });
 });
 
