@@ -8,3 +8,7 @@ The exhausted [v8 runsheet](NORMAL-TRACE-V8-RUNSHEET.md) and
 [operator card](OPERATOR-CARD.md) are retained history. Do not execute them again.
 The broader Gate -1 matrix remains incomplete; no next walk is prepared or
 approved by this result. Every phone install requires explicit permission.
+
+[REMAINING-PROOF.md](REMAINING-PROOF.md) reconciles existing evidence and names
+the next desk preparation: interrupted A → successful B recovery, with related
+cases prepared together before inviting James back.
