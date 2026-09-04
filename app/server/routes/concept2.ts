@@ -612,9 +612,13 @@ export function createConcept2Router({
         // `linkResponseKeys()` parses this literal with a regex that
         // requires a `key:`, and holds the result equal to both
         // `Concept2LinkProbe.tsx`'s `LinkStatus` and `useConcept2Link.ts`'s
-        // `Concept2Link`. Shorthand makes this key INVISIBLE to that gate:
-        // the gate stays green while the thing it exists to track goes
-        // unpinned. The redundancy is the point.
+        // `Concept2Link`. The redundancy keeps the key visible to that
+        // REGEX, and that is all it claims. It is NOT true that shorthand
+        // would go unnoticed — the whole-branch review mutated this line
+        // to `logbookBaseUrl,` and two of that script's contract tests
+        // went red, because the key drops out of `linkResponseKeys()`
+        // while both client types still carry it. The gate bites; the
+        // explicit form just spares it the argument.
         logbookBaseUrl: logbookBaseUrl,
         needsReauth: link.needsReauthAt !== null,
       });
@@ -700,10 +704,14 @@ export function createConcept2Router({
       // point (deviation 5's own "resend-to-B overwrites A's record").
       //
       // This exit deliberately does NOT gain `weightClass`/
-      // `weightClassSource`: no class was resolved on this request, and
-      // inventing one would be a claim about a send that happened in the
-      // past. The client reads both new fields defensively for exactly
-      // this reason.
+      // `weightClassSource`, and the reason is this request, not the
+      // client: NO CLASS WAS RESOLVED here — the short-circuit returns
+      // before `resolveWeightClass` is ever called — so any value put on
+      // this response would be a fresh claim about a send that happened in
+      // the past. (Nothing downstream would notice either way: since the
+      // 2026-09-04 copy drop the client parses neither field on any
+      // response. This comment used to cite that as the reason, which had
+      // it backwards.)
       if (row.c2ResultId !== null && row.c2UserId === link.c2UserId) {
         res.status(200).json({ resultId: row.c2ResultId });
         return;
@@ -916,8 +924,11 @@ export function createConcept2Router({
       // Concept2 keeps the result; we have no local trace of it; a later
       // send reads it back and reports `source: "declaration"` for a class
       // WE derived. The VALUE is almost always identical, so nothing a rower
-      // sees is wrong — the PROVENANCE is, and provenance is the whole point
-      // of ruling R2. Bounded by how rare the race is (a delete landing
+      // sees is wrong — the PROVENANCE is, and provenance is what the 200
+      // and the `c2_weight_class` log line exist to carry, for an operator
+      // rather than for the rower (the 2026-09-04 ruling withdrew the
+      // rower-facing line; ruling R2's two fields stayed on the response).
+      // Bounded by how rare the race is (a delete landing
       // inside one send) and by the fact that it self-heals the moment the
       // rower makes any real declaration.
       type WeightClassResolution =
@@ -1162,13 +1173,18 @@ export function createConcept2Router({
           res.status(502).json({ error: "c2_error" });
           return;
         }
-        // The class and WHERE IT CAME FROM ride the response so the rower can
-        // see them on the SENT state (ruling R2). Concept2's own help makes
-        // the class the rower's DECLARATION, so a class we DERIVED is a
-        // guess — and a guess nobody is ever shown can never be corrected,
-        // even though Concept2 permits per-result editing. Neither value is
-        // stored: this is the one moment they exist, which is exactly the
-        // moment the disagreement is created.
+        // The class and WHERE IT CAME FROM ride the response for an
+        // OPERATOR, not for the rower. The 2026-09-04 ruling ("Stop
+        // talking about the weight class") withdrew the SENT state's
+        // provenance sub-line, and since the copy drop the client parses
+        // neither field on any response — the same correction the
+        // `DECLARATION_PAGE_SIZE` note above already carries. What these
+        // two buy is a disputed row being settleable AFTER the fact, here
+        // and in the `c2_weight_class` log line, which is the only other
+        // place either value is ever written. Neither is stored: this
+        // response is the one moment they exist, which is exactly the
+        // moment a class we DERIVED can diverge from the rower's own
+        // declaration.
         res.status(200).json({
           resultId: postResult.resultId,
           weightClass: resolved.weightClass,
