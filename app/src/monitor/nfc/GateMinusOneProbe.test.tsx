@@ -263,6 +263,24 @@ async function beginThroughBle(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("GateMinusOneProbe", () => {
+  it("requires restart after an arranged native stop rejection during cancellation", async () => {
+    const user = await renderReadyProbe();
+    await user.click(runButton());
+    const failure = deferred();
+    native.waits.set("nfc-stop", failure.promise);
+    await user.click(screen.getByRole("button", { name: "Cancel sample" }));
+    expect(runButton()).toBeDisabled();
+    await act(async () => failure.reject(new Error("private native release")));
+    await screen.findByText(/Cleanup failed; restart/);
+    expect(runButton()).toBeDisabled();
+    expect(native.removed).toStrictEqual(
+      expect.arrayContaining(["nfcEvent", "nfcSessionEnd", "pause", "resume"]),
+    );
+    expect(native.calls).not.toContain("nfc-start:attempt-b");
+    expect(JSON.stringify(await exported(user))).not.toContain(
+      "private native release",
+    );
+  });
   it.each(["ble-enabled", "ble-disconnect"] as const)(
     "does not publish success after foreground loss during %s",
     async (stage) => {
