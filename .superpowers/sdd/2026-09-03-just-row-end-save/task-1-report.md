@@ -86,3 +86,38 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client 
 
 The fix-round code/comment commit is `41932030`; `git status --short` was
 clean after the comment-only changes were committed.
+
+## Fix Round 2 — whole-branch review
+
+Added an idempotent guard at the start of `handleEndTap`: once either
+confirmation is staged, repeated END is ignored. This preserves the finish
+latch for running Just Row, keeps an already-paused Just Row paused, and
+prevents programmed Next→END from stacking abandonment over finish. Updated
+the inaccurate distance/finish comments and made the e2e compare the exact log
+door time with the history row's persisted display value.
+
+RED before the production guard (new regressions only):
+
+```text
+NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/session/Timer.test.tsx -t "twice|programmed final-phase Next"
+2 failed, 1 passed, 92 skipped (95)
+- programmed Next then END found the unexpected Abandon confirmation
+- running Just Row END twice then Keep going could not find RUNNING
+```
+
+GREEN after the guard and wording/e2e assertions:
+
+```text
+NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/session/Timer.test.tsx -t "twice|programmed final-phase Next"
+3 passed, 92 skipped (95)
+
+NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/session/Timer.test.tsx
+95 passed (95)
+```
+
+Prettier, `format:check`, and `git diff --check` passed. Commit
+`0bcec432 Make timer finish confirmations idempotent` was created after
+`git rev-parse --show-toplevel` confirmed the named worktree; commit hooks
+passed lint, typecheck, and E2E TypeScript membership 19/19. The worktree was
+clean after commit. Full client and e2e gates are delegated to the controller
+for this fix round.
