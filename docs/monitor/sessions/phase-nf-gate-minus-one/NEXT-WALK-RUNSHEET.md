@@ -96,7 +96,7 @@ checks pass.
 
 ```zsh
 set -Eeuo pipefail
-trap 'status=$?; (( status == 0 )) || print -u2 "NFC walk preflight failed ($status)"' EXIT
+trap 'preflight_code=$?; (( preflight_code == 0 )) || print -u2 "NFC walk preflight failed ($preflight_code)"' EXIT
 
 artifact=/tmp/ergomatic-phase-nf-ready.WQJqQu/Build/Products/Debug-iphoneos/App.app
 probe="$artifact/public/assets/GateMinusOneProbe-O_TBUSFS.js"
