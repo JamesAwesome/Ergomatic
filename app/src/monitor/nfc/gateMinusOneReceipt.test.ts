@@ -14,6 +14,57 @@ const PM5_TYPE = Array.from(
 );
 
 describe("Gate -1 receipt", () => {
+  it.each([
+    [null, "Invalid NFC event"],
+    [{}, "Invalid attemptId"],
+    [{ attemptId: "a", tag: null }, "Invalid tag"],
+    [{ attemptId: "a", tag: {} }, "Invalid tag.ndefMessage"],
+    [
+      { attemptId: "a", tag: { ndefMessage: [null] } },
+      "Invalid tag.ndefMessage[0]",
+    ],
+    ...[-1, 8, 1.5].map((tnf): [unknown, string] => [
+      {
+        attemptId: "a",
+        tag: { ndefMessage: [{ tnf, type: [], id: [], payload: [] }] },
+      },
+      "Invalid tag.ndefMessage[0].tnf",
+    ]),
+    [
+      {
+        attemptId: "a",
+        tag: {
+          ndefMessage: [{ tnf: 4, type: "private", id: [], payload: [] }],
+        },
+      },
+      "Invalid tag.ndefMessage[0].type",
+    ],
+  ])(
+    "rejects malformed native envelope %j at its declared boundary",
+    (value, message) => {
+      expect(() => decodeNfcEvent(value)).toThrowError(String(message));
+    },
+  );
+
+  it.each([null, "", "PM5\nA", "PM5 é", "PM5 name longer than payload"])(
+    "refuses absent, non-ASCII, or incomplete local name %j",
+    (name) => {
+      expect(matchAdvertisedName([1, 2, 3, 4, 5, 6, 0, 80], name)).toBeNull();
+    },
+  );
+
+  it("rejects malformed framing syntax without treating unrelated console chatter as receipt data", () => {
+    const json = serializeGateReceipt(makeCompleteReceipt());
+    expect(
+      reassembleGateReceiptFrames([
+        "other console line",
+        ...frameGateReceipt(json),
+      ]),
+    ).toBe(json);
+    expect(() =>
+      reassembleGateReceiptFrames(["NFC_GATE_RECEIPT malformed"]),
+    ).toThrowError("Invalid receipt frame");
+  });
   it("preserves an unmeasured stale-settlement count as null, never a measured zero", () => {
     const receipt = makeCompleteReceipt();
     Object.assign(receipt.attempts[0]!, { staleAttemptSettlementCount: null });
@@ -29,6 +80,60 @@ describe("Gate -1 receipt", () => {
       "blank metadata",
       (r: ReturnType<typeof makeCompleteReceipt>) => {
         r.iphone.model = " ";
+      },
+    ],
+    [
+      "wrong schema",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r, { schema: "other" });
+      },
+    ],
+    [
+      "non-array attempts",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r, { attempts: {} });
+      },
+    ],
+    [
+      "non-array endings",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r, { readerEndings: null });
+      },
+    ],
+    [
+      "malformed timestamp",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        r.capturedAtUtc = "not-a-date";
+      },
+    ],
+    [
+      "invalid timestamp date",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        r.capturedAtUtc = "2026-99-99T20:00:00Z";
+      },
+    ],
+    [
+      "wrong package",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r, { package: "other" });
+      },
+    ],
+    [
+      "wrong usage description",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r, { usageDescription: "other" });
+      },
+    ],
+    [
+      "non-array intervals",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        Object.assign(r.attempts[0]!, { matchingAdvertisementIntervalsMs: {} });
+      },
+    ],
+    [
+      "control character metadata",
+      (r: ReturnType<typeof makeCompleteReceipt>) => {
+        r.iphone.model = "iPhone\nprivate";
       },
     ],
     [

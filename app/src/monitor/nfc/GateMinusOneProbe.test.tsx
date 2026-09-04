@@ -25,6 +25,7 @@ const native = vi.hoisted(() => ({
   progress: undefined as NfcListener | undefined,
   supported: true,
   enabled: true,
+  foreground: true,
   nextId: 0,
   reset() {
     this.calls.length = 0;
@@ -41,6 +42,7 @@ const native = vi.hoisted(() => ({
     this.progress = undefined;
     this.supported = true;
     this.enabled = true;
+    this.foreground = true;
     this.nextId = 0;
   },
 }));
@@ -86,6 +88,7 @@ vi.mock("@capacitor-community/bluetooth-le", () => ({
     },
     isEnabled: async () => {
       native.calls.push("ble-enabled");
+      await native.waits.get("ble-enabled");
       return native.enabled;
     },
     requestLEScan: async (
@@ -107,8 +110,10 @@ vi.mock("@capacitor-community/bluetooth-le", () => ({
       native.calls.push(`ble-connect:${deviceId}`);
       await native.waits.get("ble-connect");
     },
-    disconnect: async (deviceId: string) =>
-      native.calls.push(`ble-disconnect:${deviceId}`),
+    disconnect: async (deviceId: string) => {
+      native.calls.push(`ble-disconnect:${deviceId}`);
+      await native.waits.get("ble-disconnect");
+    },
   },
 }));
 
@@ -129,7 +134,7 @@ vi.mock("@capacitor/app", () => ({
     getState: async () => {
       native.calls.push("app-state:foreground");
       await native.waits.get("app-state");
-      return { isActive: true };
+      return { isActive: native.foreground };
     },
   },
 }));
@@ -258,6 +263,155 @@ async function beginThroughBle(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("GateMinusOneProbe", () => {
+  it.each(["ble-enabled", "ble-disconnect"] as const)(
+    "does not publish success after foreground loss during %s",
+    async (stage) => {
+      const release = hold(stage);
+      const user = await renderReadyProbe();
+      if (stage === "ble-enabled") {
+        await user.click(runButton());
+        await act(async () => native.nfcEvent!(nfcEvent()));
+      } else {
+        await beginThroughBle(user);
+        await matches();
+      }
+      await pause();
+      await release();
+      await waitFor(() => expect(runButton()).toBeEnabled());
+      const receipt = await exported(user);
+      expect(receipt.criteria.pickerFreeBleConnect).toBe(false);
+      expect(
+        native.calls.includes("ble-requestLEScan:unfiltered:duplicates"),
+      ).toBe(stage === "ble-disconnect");
+      expect(receipt.attempts[0]!.disconnected).toBe(
+        stage === "ble-disconnect",
+      );
+    },
+  );
+
+  it("requires restart if a late registration's self-removal rejects", async () => {
+    const release = hold("nfcEvent");
+    const user = await renderReadyProbe();
+    await user.click(runButton());
+    await pause();
+    const failure = deferred();
+    native.waits.set("remove:nfcEvent", failure.promise);
+    await release();
+    await act(async () => failure.reject(new Error("private handle")));
+    await screen.findByText(/Cleanup failed; restart/);
+    expect(runButton()).toBeDisabled();
+    expect(native.calls).not.toContain("nfc-start:attempt-a");
+    expect(native.removed).toStrictEqual(
+      expect.arrayContaining(["nfcEvent", "pause", "resume"]),
+    );
+  });
+  it.each([
+    "not-json",
+    "null",
+    JSON.stringify({ scenario: "normal", reloadPending: true }),
+    JSON.stringify({
+      scenario: "webview-reload",
+      reloadPending: true,
+      iphone: {},
+      pm5: {},
+      priorAttemptId: "a",
+      priorStage: "unknown",
+    }),
+  ])(
+    "discards corrupt reload metadata %s without starting a successor",
+    async (value) => {
+      sessionStorage.setItem("ergomatic:nfc-gate-minus-one", value);
+      await renderReadyProbe();
+      expect(
+        screen.queryByRole("button", { name: "Start B" }),
+      ).not.toBeInTheDocument();
+      expect(native.calls).toStrictEqual([]);
+      expect(sessionStorage.getItem("ergomatic:nfc-gate-minus-one")).toBeNull();
+    },
+  );
+
+  it.each(["NFC", "BLE"] as const)(
+    "refuses to arm %s when the current-state query reports background",
+    async (radio) => {
+      const user = await renderReadyProbe();
+      if (radio === "NFC") native.foreground = false;
+      await user.click(runButton());
+      if (radio === "BLE") {
+        native.foreground = false;
+        await act(async () => native.nfcEvent!(nfcEvent()));
+      }
+      await waitFor(() => expect(runButton()).toBeEnabled());
+      expect(native.calls).not.toContain(
+        radio === "NFC" ? "nfc-start:attempt-a" : "ble-initialize",
+      );
+      expect((await exported(user)).attempts[0]!.connected).toBe(false);
+    },
+  );
+
+  it("operator cancellation stops a scan with no second match and retains failed evidence", async () => {
+    const user = await renderReadyProbe();
+    await beginThroughBle(user);
+    await user.click(screen.getByRole("button", { name: "Cancel sample" }));
+    await waitFor(() => expect(runButton()).toBeEnabled());
+    expect(native.calls).toContain("ble-stopLEScan");
+    expect(native.calls).not.toContain("ble-connect:device-a");
+    expect((await exported(user)).attempts[0]!.connected).toBe(false);
+  });
+
+  it.each(["malformed", "missing", "short"] as const)(
+    "retains %s NFC evidence but does not initialize BLE",
+    async (kind) => {
+      const user = await renderReadyProbe();
+      await user.click(runButton());
+      const value = nfcEvent();
+      if (kind === "malformed")
+        Object.assign(value.tag, { ndefMessage: "private" });
+      if (kind === "missing") value.tag.ndefMessage = [];
+      if (kind === "short") value.tag.ndefMessage[0]!.payload = [1, 2];
+      await act(async () => native.nfcEvent!(value));
+      await waitFor(() => expect(runButton()).toBeEnabled());
+      expect(native.calls).not.toContain("ble-initialize");
+      const logger = vi.spyOn(console, "info").mockImplementation(() => {});
+      await user.click(
+        screen.getByRole("button", { name: "Copy redacted receipt" }),
+      );
+      expect(logger.mock.calls.length > 0).toBe(kind !== "short");
+      expect(Boolean(screen.queryByText(/Receipt validation failed/))).toBe(
+        kind === "short",
+      );
+    },
+  );
+
+  it.each(["webview-reload", "stop-during-connect"] as const)(
+    "drains or stays drained if %s cannot save its reload metadata",
+    async (scenario) => {
+      const user = await renderReadyProbe();
+      const reload = vi.fn();
+      vi.stubGlobal("location", { reload });
+      await user.click(
+        screen.getByRole("button", { name: `Run ${scenario} sample` }),
+      );
+      await act(async () =>
+        native.progress!({ attemptId: "attempt-a", stage: "connect" }),
+      );
+      vi.spyOn(console, "info").mockImplementation(() => {});
+      await user.click(
+        screen.getByRole("button", { name: "Export partial receipt" }),
+      );
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("storage quota");
+      });
+      await user.click(screen.getByRole("button", { name: "Reload WebView" }));
+      await screen.findByText(
+        scenario === "webview-reload"
+          ? "Reload failed; A was stopped and drained."
+          : "Reload metadata could not be saved; do not reload.",
+      );
+      expect(native.calls).toContain("nfc-stop:attempt-a");
+      expect(reload).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem("ergomatic:nfc-gate-minus-one")).toBeNull();
+    },
+  );
   it("does not arm BLE from a record until its pending NFC start settles", async () => {
     const release = hold("nfc-start");
     const user = await renderReadyProbe();
@@ -492,6 +646,13 @@ describe("GateMinusOneProbe", () => {
       await user.click(
         screen.getByRole("button", { name: `Run ${scenario} sample` }),
       );
+      await act(async () => {
+        native.progress!({ attemptId: {}, stage });
+        native.progress!({ attemptId: "attempt-a", stage: "unknown" });
+      });
+      expect(
+        screen.queryByRole("button", { name: "Export partial receipt" }),
+      ).not.toBeInTheDocument();
       await act(async () => {
         native.progress!({ attemptId: "attempt-a", stage });
       });
