@@ -108,19 +108,45 @@ cause. After the warm/cold split, the pre-review full E2E run passed 461/461
 (2.1m). The review-round restored-tree full E2E run passed 462/462; it likewise
 does not establish a cause for the original timeout.
 
-Current fix-tree gate record: `pnpm lint`, `pnpm typecheck`, and
-`pnpm format:check` passed; `pnpm test:coverage` passed 257 files / 7063 tests
-(one skipped), with 98.73% statements and 97.14% branches; and `pnpm build`
-passed with its existing 637.87 kB Vite chunk advisory. Its HTML was read for
-recovery surfaces: `ReviewSession.tsx` 97.72% statements / 97.82% branches,
-`Today.tsx` 99.18% / 97.91%, `UnsavedWorkouts.tsx` 97.77% / 95.65%, and
-`LogSession.tsx` 98.26% / 95.56%. The changed `UnsavedWorkoutWarning.tsx` is
-80% statements / 80% branches / 100% functions / 88.88% lines: the only
-uncovered paths are its defensive null ref and jsdom's unavailable
-`scrollIntoView` true branch. The current browser witness exercises the latter
-against Chromium. Sequential `pnpm screenshots` passed 118/118 and final
-`pnpm e2e` passed 462/462. The earlier standalone `pnpm test` result is
-superseded for source coverage by the current coverage gate.
+Current combined-fix gate record: `pnpm lint`, `pnpm typecheck` (E2E
+TypeScript membership 19/19), `pnpm format:check`, and `pnpm build` plus
+`pnpm dist:grep` passed; build retains its existing Vite chunk advisory.
+The final full `pnpm test:coverage` (unit, client, **and integration**)
+passed 257 files / 7,097 tests (one skipped), at 98.74% statements, 97.14%
+branches, 98.91% functions, and 99.21% lines. This supersedes the earlier
+**scoped** `pnpm test:coverage --project unit --project client` result of 233
+files / 6,710 tests (one skipped), which intentionally did not include the
+integration project.
+
+The final review admission tests add mounted read-only witnesses for malformed
+actual index, elapsed time, distance, split, stroke rate, heart rate, rest
+distance, rest duration, and interval type; all nine `summaryDetail` members;
+and fractional/string verification bytes. A healthy mounted save witness keeps
+nullable actual observations, absent optional rest/type observations, complete
+machine detail, and integer verification bytes in their supported forms and
+asserts the persisted machine payload. These characterization tests began
+GREEN against the existing guard. A post-commit deciding-source probe bypassed
+`requireProgrammedMeasurements`; all 20 malformed witnesses then mounted the
+save-capable summary instead of the exact read-only recording. Restoring the
+guard returned the targeted run to 21/21 passed and restored
+`recoveryValidation.ts` to object hash
+`cc2fa1d0a4c6e18127a3d68ef16cfe9748455534`. Its final coverage is 100%
+statements/branches/functions/lines, so no admission branch is left without a
+behavioral disposition.
+
+Coverage HTML was read for the changed recovery surfaces:
+`ReviewSession.tsx` 97.77% statements / 97.82% branches,
+`recoveryValidation.ts` 100% / 100% / 100% / 100%,
+`postTestOffer.ts` 100% / 100% / 100% / 100%, and `LogSession.tsx` 98.26% /
+95.62% branches / 96.87% functions / 98.42% lines. `Today.tsx` remains
+99.18% / 97.91% and `UnsavedWorkouts.tsx` 97.77% / 95.65%. The changed
+`UnsavedWorkoutWarning.tsx` is 80% statements / 80% branches / 100%
+functions / 88.88% lines: the only uncovered paths are its defensive null ref
+and jsdom's unavailable `scrollIntoView` true branch; the current browser
+witness exercises the latter against Chromium. The prior full browser gate
+passed 463/463 and its sequential screenshot gate 118/118 after the product
+fixes. They remain current because this final addition changes only client
+tests and evidence, not browser/product code.
 
 Native acceptance is an approved criterion but still pending James. Its
 operator protocol is a **proposed** phone acceptance walk at
