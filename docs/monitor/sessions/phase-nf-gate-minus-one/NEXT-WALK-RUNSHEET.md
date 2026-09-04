@@ -10,5 +10,12 @@ The broader Gate -1 matrix remains incomplete; no next walk is prepared or
 approved by this result. Every phone install requires explicit permission.
 
 [REMAINING-PROOF.md](REMAINING-PROOF.md) reconciles existing evidence and names
-the next desk preparation: interrupted A → successful B recovery, with related
-cases prepared together before inviting James back.
+the remaining recovery evidence. Desk preparation has produced a signed,
+reviewed temporary recovery build; it is not installed. See
+[RECOVERY-PREPARATION.md](RECOVERY-PREPARATION.md) for actual time and limitations.
+
+[NF-RECOVERY-SETUP-v1](ZERO-SCAN-SETUP-RUNSHEET.md) has PM PASS for one explicit
+install permission followed by one unlock and a five-minute zero-scan idle
+Inspector feasibility check. No install permission has been given. It is not
+an erg or NFC invitation; the grouped recovery walk needs a separate PM review
+after the control path is demonstrated.

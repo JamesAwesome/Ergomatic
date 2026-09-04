@@ -1,0 +1,17 @@
+{
+  "artifact": "/var/folders/m8/wdf8_49130z_j4m94t3rj3w80000gn/T/ergomatic-nf-recovery.elsxwlhr/derived/Build/Products/Debug-iphoneos/App.app",
+  "bundle": "haus.waffle.ergomatic",
+  "version": "0.23.0",
+  "build": "789",
+  "executableSha256": "3d36997f85dd0e5a351790c5d972de8fe3e25ffff6f34d24000c10a558398bc7",
+  "debugDylibSha256": "af815bd62716df56453e7b0e8c1f88dfc7206ba280dafe0b9a85c4859bfd6cf4",
+  "probeSha256": "b333816b7ccf4960c2c7035298f844104af33bff351ac3fb1a18f4c02ffb07a0",
+  "fileManifestSha256": "40b250bf969f38c91af08d917465d69874ebb22d728cdfc25126a18b5c336132",
+  "cdHash": "cc3f23e6c301a8fb287b2a630036bd9f0144e9c0",
+  "nfcEntitlement": [
+    "TAG"
+  ],
+  "usageDescription": "Scan a PM5 to connect and program your workout.",
+  "strictSignatureVerified": true,
+  "installed": false
+}

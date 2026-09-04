@@ -4585,3 +4585,13 @@ This authorizes that one reinstall and requires explicit permission for each
 future phone installation. It supersedes treating earlier preparation or
 install authorization as permission to reinstall later. PM readiness approval
 does not grant device-install permission; the binding rule is in `CLAUDE.md`.
+
+
+## Zero-scan recovery setup, 2026-09-04
+
+`NF-RECOVERY-SETUP-v1` received PM PASS for one explicitly authorized
+installation and idle Inspector-control experiment. The permission reply
+comes before one ordinary unlock, allowing the five-minute total clock to
+include all physical setup without timing the consent reply. The observed
+lockState fields did not establish current launchability. Locked launch
+ends the attempt; it grants neither another install nor an NFC scan.
