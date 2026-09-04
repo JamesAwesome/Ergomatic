@@ -92,7 +92,8 @@ the strongest supported classification is intermittent and unclassified,
 including possible shared `LogSession`/save involvement—not a recovery-proof
 failure or a basis for a Task 2 production change. The final full E2E rerun on
 the restored committed tree passed 460/460; it does not erase the earlier
-failure or establish a cause.
+failure or establish a cause. After the warm/cold split was added, the final
+full E2E run passed 461/461 (2.1m).
 
 Gate record: `pnpm lint`, `pnpm typecheck`, and `pnpm format:check` passed;
 `pnpm test` and `pnpm test:coverage` passed 257 files / 7063 tests (one
