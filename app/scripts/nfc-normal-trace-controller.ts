@@ -23,6 +23,7 @@ const HARD_BUDGET_MS = 8 * 60 * 1_000;
 const CLEANUP_RESERVE_MS = 45 * 1_000;
 
 export interface ConsoleHandle {
+  isRunning: () => boolean;
   wait: () => Promise<number>;
   stopHost: () => void;
 }
@@ -108,7 +109,7 @@ async function replaceAndTerminateBundle(
 ): Promise<void> {
   const launchJson = join(captureDir, `${prefix}-replacement-launch.json`);
   const launchLog = join(captureDir, `${prefix}-replacement-launch.log`);
-  const launchTimeout = boundedTimeoutSeconds(deps.now(), deadlineMs, 15);
+  const launchTimeout = boundedTimeoutSeconds(deps.now(), deadlineMs, 12);
   await deps.run([
     "devicectl",
     "device",
@@ -130,7 +131,7 @@ async function replaceAndTerminateBundle(
 
   const terminateJson = join(captureDir, `${prefix}-terminate.json`);
   const terminateLog = join(captureDir, `${prefix}-terminate.log`);
-  const terminateTimeout = boundedTimeoutSeconds(deps.now(), deadlineMs, 10);
+  const terminateTimeout = boundedTimeoutSeconds(deps.now(), deadlineMs, 8);
   await deps.run([
     "devicectl",
     "device",
@@ -151,7 +152,7 @@ async function replaceAndTerminateBundle(
 
   const processesJson = join(captureDir, `${prefix}-processes.json`);
   const processesLog = join(captureDir, `${prefix}-processes.log`);
-  const processesTimeout = boundedTimeoutSeconds(deps.now(), deadlineMs, 8);
+  const processesTimeout = boundedTimeoutSeconds(deps.now(), deadlineMs, 6);
   await deps.run([
     "devicectl",
     "device",
@@ -169,12 +170,29 @@ async function replaceAndTerminateBundle(
   assertProcessIdentifierAbsent(json(processesJson), replacementPid);
 }
 
-function atomicDecision(path: string, decision: GateConsoleDecision): void {
+function atomicResult(path: string, result: NormalTraceResult): void {
   const temporary = `${path}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(decision, null, 2)}\n`, {
+  writeFileSync(temporary, `${JSON.stringify(result, null, 2)}\n`, {
     flag: "wx",
   });
   renameSync(temporary, path);
+}
+
+async function whileConsoleAttached<T>(
+  consoleHandle: ConsoleHandle,
+  operation: () => Promise<T>,
+): Promise<T> {
+  if (!consoleHandle.isRunning())
+    throw new Error("attached console exited before capture");
+  const result = await Promise.race([
+    operation(),
+    consoleHandle.wait().then((code) => {
+      throw new Error(`attached console exited before capture (${code})`);
+    }),
+  ]);
+  if (!consoleHandle.isRunning())
+    throw new Error("attached console exited before capture");
+  return result;
 }
 
 export async function runNormalTraceController(
@@ -239,10 +257,14 @@ export async function runNormalTraceController(
       outcome: "inconclusive",
       reasons: [
         error instanceof Error ? error.message : "controller prelaunch failed",
+        ...(cleanupVerified
+          ? []
+          : ["bundle-scoped cleanup could not be verified"]),
       ],
     };
-    atomicDecision(join(captureDir, "evidence.json"), decision);
-    return { cleanupVerified, decision };
+    const result = { cleanupVerified, decision };
+    atomicResult(join(captureDir, "evidence.json"), result);
+    return result;
   }
 
   const consoleLog = join(captureDir, "normal-console.log");
@@ -290,29 +312,41 @@ export async function runNormalTraceController(
       outcome: "inconclusive",
       reasons: [
         error instanceof Error ? error.message : "console launch failed",
+        ...(cleanupVerified
+          ? []
+          : ["bundle-scoped cleanup could not be verified"]),
       ],
     };
-    atomicDecision(join(captureDir, "evidence.json"), decision);
-    return { cleanupVerified, decision };
+    const result = { cleanupVerified, decision };
+    atomicResult(join(captureDir, "evidence.json"), result);
+    return result;
   }
 
   let runError: unknown = null;
   try {
-    await deps.acknowledge(
-      "Wake the PM5, open More Options > Connect Device, leave it on Ready for App Connection, then reply PM5.",
-      "PM5",
-      startedMs + 3 * 60_000,
+    await whileConsoleAttached(consoleHandle, () =>
+      deps.acknowledge(
+        "On the iPhone, tap YOU and scroll to NFC GATE -1 PROBE, then reply VISIBLE.",
+        "VISIBLE",
+        startedMs + 2.5 * 60_000,
+      ),
     );
-    await deps.acknowledge(
-      "On the iPhone, tap YOU and scroll to NFC GATE -1 PROBE, then reply VISIBLE.",
-      "VISIBLE",
-      startedMs + 3.5 * 60_000,
+    await whileConsoleAttached(consoleHandle, () =>
+      deps.acknowledge(
+        "Wake the PM5, open More Options > Connect Device, leave it on Ready for App Connection, then reply PM5.",
+        "PM5",
+        startedMs + 3.5 * 60_000,
+      ),
     );
+    if (!consoleHandle.isRunning())
+      throw new Error("attached console exited before capture");
     deps.notify(
       "No heart-rate gear or rowing is needed. Tap Run normal sample, then hold the phone at the same PM5 NFC spot that worked earlier. Do nothing else; I am collecting the result.",
     );
 
-    await deps.sleepUntil(cleanupDeadlineMs);
+    await whileConsoleAttached(consoleHandle, () =>
+      deps.sleepUntil(cleanupDeadlineMs),
+    );
   } catch (error) {
     runError = error;
   }
@@ -340,17 +374,20 @@ export async function runNormalTraceController(
   }
 
   let decision: GateConsoleDecision;
-  if (runError !== null) {
+  const controllerReasons = [
+    ...(runError === null
+      ? []
+      : [
+          runError instanceof Error
+            ? runError.message
+            : "controller run aborted",
+        ]),
+    ...(cleanupVerified ? [] : ["bundle-scoped cleanup could not be verified"]),
+  ];
+  if (controllerReasons.length > 0) {
     decision = {
       outcome: "inconclusive",
-      reasons: [
-        runError instanceof Error ? runError.message : "controller run aborted",
-      ],
-    };
-  } else if (!cleanupVerified) {
-    decision = {
-      outcome: "inconclusive",
-      reasons: ["bundle-scoped cleanup could not be verified"],
+      reasons: controllerReasons,
     };
   } else if (!existsSync(consoleLog)) {
     decision = {
@@ -360,8 +397,9 @@ export async function runNormalTraceController(
   } else {
     decision = classifyGateConsoleEvidence(readFileSync(consoleLog, "utf-8"));
   }
-  atomicDecision(join(captureDir, "evidence.json"), decision);
-  return { cleanupVerified, decision };
+  const result = { cleanupVerified, decision };
+  atomicResult(join(captureDir, "evidence.json"), result);
+  return result;
 }
 
 function runXcrun(args: string[]): Promise<void> {
@@ -371,7 +409,7 @@ function runXcrun(args: string[]): Promise<void> {
     const timeoutSeconds = Number(args[timeoutAt + 1]);
     const guard = setTimeout(
       () => child.kill("SIGKILL"),
-      (Number.isFinite(timeoutSeconds) ? timeoutSeconds : 1) * 1_000 + 2_000,
+      (Number.isFinite(timeoutSeconds) ? timeoutSeconds : 1) * 1_000,
     );
     child.once("error", (error) => {
       clearTimeout(guard);
@@ -398,7 +436,7 @@ function launchXcrunConsole(
   const timeoutSeconds = Number(args[timeoutAt + 1]);
   const guard = setTimeout(
     () => child.kill("SIGKILL"),
-    (Number.isFinite(timeoutSeconds) ? timeoutSeconds : 1) * 1_000 + 2_000,
+    (Number.isFinite(timeoutSeconds) ? timeoutSeconds : 1) * 1_000,
   );
   const settled = new Promise<number>((resolve, reject) => {
     child.once("error", (error) => {
@@ -411,6 +449,7 @@ function launchXcrunConsole(
     });
   });
   return Promise.resolve({
+    isRunning: () => child.exitCode === null && child.signalCode === null,
     wait: () => settled,
     stopHost: () => {
       if (child.exitCode === null && child.signalCode === null)

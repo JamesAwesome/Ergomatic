@@ -8,6 +8,7 @@ import {
   assertProcessIdentifierAbsent,
   findUniqueProcessIdentifier,
   runNormalTraceController,
+  type ConsoleHandle,
 } from "./nfc-normal-trace-controller.js";
 
 const sessionDir = join(
@@ -29,6 +30,22 @@ function positiveLog(): string {
   );
   emitGateReceipt(receipt, (line) => lines.push(`device stdout: ${line}`));
   return lines.join("\n");
+}
+
+function liveConsoleHandle(): ConsoleHandle {
+  let running = true;
+  let settle!: (code: number) => void;
+  const exited = new Promise<number>((resolve) => {
+    settle = resolve;
+  });
+  return {
+    isRunning: () => running,
+    wait: () => exited,
+    stopHost: () => {
+      running = false;
+      settle(0);
+    },
+  };
 }
 
 describe("NFC normal-trace controller", () => {
@@ -95,12 +112,14 @@ describe("NFC normal-trace controller", () => {
       launchConsole: async (args, logPath) => {
         consoleArgs = args;
         writeFileSync(logPath, positiveLog());
-        return { wait: async () => 0, stopHost: () => undefined };
+        return liveConsoleHandle();
       },
     });
 
     expect(result.decision.outcome).toBe("positive");
     expect(prompts).toHaveLength(3);
+    expect(prompts[1]).toContain("NFC GATE -1 PROBE");
+    expect(prompts[2]).toContain("Connect Device");
     expect(
       notices.some((message) => message.includes("Run normal sample")),
     ).toBe(true);
@@ -126,7 +145,10 @@ describe("NFC normal-trace controller", () => {
     ).toBe(true);
     expect(
       JSON.parse(readFileSync(join(captureDir, "evidence.json"), "utf-8")),
-    ).toMatchObject({ outcome: "positive" });
+    ).toMatchObject({
+      cleanupVerified: true,
+      decision: { outcome: "positive" },
+    });
   });
 
   it("fails closed and asks only for containment when bundle cleanup cannot be verified", async () => {
@@ -139,6 +161,7 @@ describe("NFC normal-trace controller", () => {
       now: () => nowMs,
       acknowledge: async (prompt, expected) => {
         prompts.push(prompt);
+        if (expected === "VISIBLE") throw new Error("unexpected screen");
         return expected;
       },
       notify: (message) => notices.push(message),
@@ -164,12 +187,21 @@ describe("NFC normal-trace controller", () => {
       },
       launchConsole: async (_args, logPath) => {
         writeFileSync(logPath, positiveLog());
-        return { wait: async () => 0, stopHost: () => undefined };
+        return liveConsoleHandle();
       },
     });
 
     expect(result.cleanupVerified).toBe(false);
-    expect(result.decision).toMatchObject({ outcome: "inconclusive" });
+    expect(result.decision).toMatchObject({
+      outcome: "inconclusive",
+      reasons: expect.arrayContaining([
+        "unexpected screen",
+        "bundle-scoped cleanup could not be verified",
+      ]),
+    });
+    expect(
+      JSON.parse(readFileSync(join(captureDir, "evidence.json"), "utf-8")),
+    ).toMatchObject({ cleanupVerified: false });
     expect(notices.at(-1)).toContain("side button");
   });
 
@@ -209,7 +241,7 @@ describe("NFC normal-trace controller", () => {
       },
       launchConsole: async (_args, logPath) => {
         writeFileSync(logPath, positiveLog());
-        return { wait: async () => 0, stopHost: () => undefined };
+        return liveConsoleHandle();
       },
     });
 
@@ -261,5 +293,54 @@ describe("NFC normal-trace controller", () => {
       },
     });
     expect(replacement).toBe(2);
+  });
+
+  it("aborts before PM5 or NFC when the attached console has already exited", async () => {
+    const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
+    const prompts: string[] = [];
+    let replacement = 0;
+    const result = await runNormalTraceController(captureDir, {
+      now: () => 1_000_000,
+      acknowledge: async (prompt, expected) => {
+        prompts.push(prompt);
+        return expected;
+      },
+      notify: () => undefined,
+      sleepUntil: async () => undefined,
+      run: async (args) => {
+        const jsonAt = args.indexOf("--json-output");
+        const jsonPath = jsonAt >= 0 ? args[jsonAt + 1] : undefined;
+        if (args.includes("--start-stopped")) {
+          replacement += 1;
+          writeFileSync(
+            jsonPath!,
+            JSON.stringify({
+              result: { processIdentifier: 100 + replacement },
+            }),
+          );
+        } else if (args.includes("processes")) {
+          writeFileSync(
+            jsonPath!,
+            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
+          );
+        } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
+      },
+      launchConsole: async (_args, logPath) => {
+        writeFileSync(logPath, "devicectl failed");
+        return {
+          isRunning: () => false,
+          wait: async () => 1,
+          stopHost: () => undefined,
+        };
+      },
+    });
+
+    expect(result.decision).toMatchObject({
+      outcome: "inconclusive",
+      reasons: expect.arrayContaining([
+        "attached console exited before capture",
+      ]),
+    });
+    expect(prompts).toHaveLength(1);
   });
 });
