@@ -7040,3 +7040,20 @@ plan's own tools and never with the REPO's.
   is cancelled synchronously and excluded from native pending operations.
   Technique: walk terminal transition through the drain's awaited set and
   distinguish each continuation by its exact attempt identity.
+
+### 2026-09-04 — Phase NF bounded diagnostic capture delta
+
+- **Claim:** terminal-drain capture plus capture immediately before reload
+  protects failure evidence. **Why believed:** both teardown and document
+  destruction appeared covered. **Technique:** enumerate every awaited
+  operation on every exit path; live-A `reloadWebView` bypasses `drain` and
+  can stall before the final export. Capture before its first await, then
+  refresh immediately before destruction. Follow export failure through the
+  caller's final status write so ordinary cleanup completion cannot erase it.
+- **Held:** existing session keys and allowlisted native facts suffice without
+  new identity or persistence machinery. **Technique:** trace the concrete
+  session's delegate binding and originating connect/query/read callbacks,
+  including recoverable errors; distinguish captured closure identity from
+  the mutable current slot. Separate callback delivery, missing observation,
+  console emission, host retention, and causal explanation—each proves a
+  different thing.

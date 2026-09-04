@@ -2382,11 +2382,13 @@ trigger is the whole entry.
   **Trigger:** James asks.
 - **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; HARDENED
   DESIGN APPROVED 2026-09-03; GATE -1 WALK PAUSED 2026-09-04;
-  IMPLEMENTATION UNSCHEDULED.** Two targeted NFC/BLE connections succeeded;
+  PRODUCT IMPLEMENTATION UNSCHEDULED.** Two targeted NFC/BLE connections succeeded;
   recovery and multi-tag proof remain incomplete. Further walks require PM
   approval of the exact prepared runsheet before asking James to participate.
   Evidence and desk-only close-out:
   [`SESSION-PAUSED.md`](docs/monitor/sessions/phase-nf-gate-minus-one/SESSION-PAUSED.md).
+  Approved desk-only trace/capture follow-up and verification limits:
+  [`DIAGNOSTIC-CAPTURE.md`](docs/monitor/sessions/phase-nf-gate-minus-one/DIAGNOSTIC-CAPTURE.md).
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

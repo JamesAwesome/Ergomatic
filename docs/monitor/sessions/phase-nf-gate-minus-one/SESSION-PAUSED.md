@@ -1,5 +1,8 @@
 # NFC proof paused — 2026-09-04
 
+Later, separately approved desk implementation:
+[DIAGNOSTIC-CAPTURE.md](DIAGNOSTIC-CAPTURE.md). The hardware pause remains.
+
 Desk follow-up: [FEASIBILITY.md](FEASIBILITY.md) verifies the platform/action
 assumptions and records the PM-selected narrow diagnostic-design scope. It
 does not authorize another walk or implementation.
@@ -68,8 +71,9 @@ SHA-256 remains
 Installed overlay source SHA-256 is
 `a3479c9408eabf54557bfd9995372cac030a8f60d11c00fb5c90b63e2ece962f`;
 the ignored scratch directory retains the original, diff and review report.
-The overlay is still present locally and on the last installed phone build;
-do not accidentally reuse it as a production or overlay-free test product.
+At this checkpoint the overlay was present locally and on the phone. The
+later desk implementation replaces the local dependency, not the phone build;
+see DIAGNOSTIC-CAPTURE.md. Do not reuse the phone build as the new test artifact.
 No device cleanup is claimed. No process signal or additional phone action
 was used to close this checkpoint.
 
