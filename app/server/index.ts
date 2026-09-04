@@ -157,8 +157,16 @@ for (const line of c2.bootLines) {
 // portal: a cutover step beside write approval).
 const c2WebRedirectUri = new URL("/api/concept2/callback", siteUrl).href;
 const concept2 = {
-  available: c2.available,
-  availableFor: c2.availableFor,
+  // SPREAD, never two named assignments (fix round 2). `available` and
+  // `availableFor` are mutually assignable — TypeScript's parameter
+  // bivariance lets a zero-arg function satisfy a one-arg type — so writing
+  // `availableFor: c2.available` here typechecked clean and left all 1878
+  // unit tests green while opening every gated route to every signed-in
+  // user (measured before this line was a spread). Nothing in this file is
+  // reachable from a test, so no gate could have gone red on it. Spreading
+  // means this file never writes either name, and the swap has nowhere to
+  // be written.
+  ...c2.gate,
   store: createConcept2Store(db),
   client: createC2Client({
     baseUrl: c2BaseUrl,

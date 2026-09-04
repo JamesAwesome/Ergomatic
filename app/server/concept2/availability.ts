@@ -124,13 +124,34 @@ export interface C2GateEnv {
   allowedEmails: string | undefined;
 }
 
-export interface C2Gate {
-  /** Flag AND both credentials. The unauthenticated web callback's check. */
+/** The two checks the router takes, as ONE value.
+ *
+ *  Nested rather than flat so `index.ts` can spread it — `{ ...c2.gate }` —
+ *  and never write either field name. That is not tidiness: the two are
+ *  mutually assignable (TypeScript's parameter bivariance makes a zero-arg
+ *  function satisfy a one-arg type), so a hand-written
+ *  `availableFor: c2.available` typechecks clean and opens every gated route
+ *  to every signed-in user. `index.ts` cannot be imported by a test — it
+ *  opens a real Postgres at import time — so nothing can go red on it.
+ *  Measured before this shape existed: that exact one-word swap left
+ *  `Test Files 58 passed`, `Tests 1878 passed | 1 skipped`, zero red.
+ *  Spreading makes the swap unexpressible rather than merely discouraged.
+ *
+ *  `app.ts` keeps its named wiring on purpose — the identical mutation
+ *  reddens a test there, because that hop IS reachable from a test. */
+export interface C2GateChecks {
+  /** Flag AND both credentials. The unauthenticated web callback's first
+   *  check, and `DELETE /link`'s (revocation is not per-user gated). */
   available: () => boolean;
-  /** `available()` AND the email is on `C2_ALLOWED_EMAILS`. Every
+  /** `available()` AND the email is on `C2_ALLOWED_EMAILS`. Every other
    *  authenticated route's check, and the web callback's second one once it
    *  has resolved a principal. */
   availableFor: (email: string) => boolean;
+}
+
+export interface C2Gate {
+  /** Spread this into the router deps; never name its fields. */
+  gate: C2GateChecks;
   /** For `index.ts` to print, in order. */
   bootLines: C2BootLine[];
 }
@@ -156,9 +177,11 @@ export function c2Gate(env: C2GateEnv): C2Gate {
     env.clientSecret,
   );
   return {
-    available: () => available,
-    availableFor: (email: string) =>
-      computeAvailableFor(available, allowedEmails, email),
+    gate: {
+      available: () => available,
+      availableFor: (email: string) =>
+        computeAvailableFor(available, allowedEmails, email),
+    },
     bootLines: c2BootLines(
       env.linkEnabledFlag,
       env.clientId,

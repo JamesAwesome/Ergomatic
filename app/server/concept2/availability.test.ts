@@ -139,23 +139,23 @@ describe("c2Gate: the whole gate, composed from raw env", () => {
   // puts every other rower in.
   it("a rower on ALLOWED_EMAILS but NOT on C2_ALLOWED_EMAILS is refused", () => {
     const gate = c2Gate({ ...LIVE, allowedEmails: "james@x.com" });
-    expect(gate.available()).toBe(true);
-    expect(gate.availableFor("james@x.com")).toBe(true);
+    expect(gate.gate.available()).toBe(true);
+    expect(gate.gate.availableFor("james@x.com")).toBe(true);
     // `signed-in@x.com` is the shape of a rower the SIGN-IN allowlist
     // admits; this gate has never heard of them.
-    expect(gate.availableFor("signed-in@x.com")).toBe(false);
+    expect(gate.gate.availableFor("signed-in@x.com")).toBe(false);
   });
 
   it("raw env of undefined denies everyone, with the flag and creds fully on", () => {
     const gate = c2Gate({ ...LIVE, allowedEmails: undefined });
-    expect(gate.available()).toBe(true);
-    expect(gate.availableFor("james@x.com")).toBe(false);
+    expect(gate.gate.available()).toBe(true);
+    expect(gate.gate.availableFor("james@x.com")).toBe(false);
   });
 
   it("raw env of an empty string denies everyone", () => {
-    expect(c2Gate({ ...LIVE, allowedEmails: "" }).availableFor("a@x.com")).toBe(
-      false,
-    );
+    expect(
+      c2Gate({ ...LIVE, allowedEmails: "" }).gate.availableFor("a@x.com"),
+    ).toBe(false);
   });
 
   it("parses the raw list the way the sign-in allowlist does: split, trim, lower-case, drop blanks", () => {
@@ -163,9 +163,9 @@ describe("c2Gate: the whole gate, composed from raw env", () => {
       ...LIVE,
       allowedEmails: "  James@X.com , ,other@x.com,",
     });
-    expect(gate.availableFor("JAMES@X.COM")).toBe(true);
-    expect(gate.availableFor(" other@x.com ")).toBe(true);
-    expect(gate.availableFor("nobody@x.com")).toBe(false);
+    expect(gate.gate.availableFor("JAMES@X.COM")).toBe(true);
+    expect(gate.gate.availableFor(" other@x.com ")).toBe(true);
+    expect(gate.gate.availableFor("nobody@x.com")).toBe(false);
   });
 
   it("the global gate still governs: flag off denies a listed rower", () => {
@@ -175,8 +175,8 @@ describe("c2Gate: the whole gate, composed from raw env", () => {
       clientSecret: "secret",
       allowedEmails: "james@x.com",
     });
-    expect(gate.available()).toBe(false);
-    expect(gate.availableFor("james@x.com")).toBe(false);
+    expect(gate.gate.available()).toBe(false);
+    expect(gate.gate.availableFor("james@x.com")).toBe(false);
   });
 
   it("credentials still govern: a missing secret denies a listed rower", () => {
@@ -186,8 +186,8 @@ describe("c2Gate: the whole gate, composed from raw env", () => {
       clientSecret: "",
       allowedEmails: "james@x.com",
     });
-    expect(gate.available()).toBe(false);
-    expect(gate.availableFor("james@x.com")).toBe(false);
+    expect(gate.gate.available()).toBe(false);
+    expect(gate.gate.availableFor("james@x.com")).toBe(false);
   });
 
   describe("boot lines: what the operator is told", () => {
