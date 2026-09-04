@@ -84,5 +84,5 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client 
 1 passed, 92 skipped (93)
 ```
 
-The fix-round commit is recorded below; `git status --short` was clean after
-the comment-only changes were committed.
+The fix-round code/comment commit is `41932030`; `git status --short` was
+clean after the comment-only changes were committed.
