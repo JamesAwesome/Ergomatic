@@ -4507,3 +4507,13 @@ does not match these numbers._
   at the tag, no walk owed. The ~1/10 `unit`-project flake is a register
   row, not a merge risk, and is filed with the discriminator that settles
   it (same rate with and without the branch's only `unit` file).
+
+## Walk-cost ruling, 2026-09-04
+
+James stopped an NFC walk promised at roughly ten minutes after reporting
+nearly three hours and repeated console typing. All future hardware walks
+require PM approval of the exact runsheet before requesting his readiness.
+Approval concerns demonstrated executability and total operator cost, not
+merely technical necessity. Today's endorsement is a policy ruling, not
+approval for another walk. The binding gate belongs in `CLAUDE.md`; do not
+duplicate its checklist here.

@@ -225,6 +225,40 @@ requirements).
     final gates. Pure-UI, infra, and docs PRs no longer get per-PR PM
     verdicts. Present PM verdicts with the artifact they judge; never
     merge on green CI alone where a PM gate applies.
+  - **Every hardware walk requires a separate PM readiness PASS (James,
+    2026-09-04).** This includes mid-phase, diagnostic, resumed, phone-only,
+    and zero-rowing walks. The PM judges the operator session, even when
+    its code change would not need a PM review. A phase/design approval
+    or James saying he is ready does not approve an unreviewed walk.
+    Before asking James to reserve time or operate hardware, attach the
+    PM verdict to the exact versioned runsheet. Then James chooses whether
+    and when to run it; PM approval is not permission to start a session.
+    The runsheet must name:
+    - one primary evidence target and only the cases needed to decide it;
+      each unanswered question, why desk tests/captured evidence cannot
+      settle it, the exact action and independent observable, and its
+      pass/fail/inconclusive outcome;
+    - the prepared build, desk rehearsal of controls and capture/export,
+      prefilled metadata, and the controller-owned evidence destination;
+    - TOTAL operator wall-clock cap (setup, installs, waiting, captures
+      recovery and wrap-up included), rowing/HR requirements, numbered
+      cases, maximum attempts per case (normally one; at most one
+      pre-approved retry within the same clock), and precise abort/stop
+      conditions, including broken capture;
+    - every operator interaction and typing/paste count. Default to taps
+      and automatic log collection. Any unavoidable console setup is one
+      pretested batch declared up front, not repeated commands or manual
+      receipt copying during the walk.
+    Finish builds, code review, desk debugging and capture preparation
+    before inviting James. Give complete short action blocks between
+    pieces; never ask for typing mid-piece. Start and record the agreed
+    wall-clock deadline when James begins setup or waiting for the walk.
+    At the cap, an unplanned failure, or an exhausted retry budget, STOP,
+    preserve the evidence and release James. No live repair/rebuild loop,
+    surprise case, or "one more scan". Revised scope, build, steps, timing,
+    retry or typing budgets require a new PM PASS and James's agreement
+    before another session. The hardware-walk skill's rowing budget is
+    additional to this total-time gate, not a substitute for it.
   - **They PROPOSE ledger entries; the controller lands them.** Neither
     agent writes to the repo — its own ledger, a spec, or a plan — in ANY
     checkout. The worktree is not an exception: the rule is about who owns

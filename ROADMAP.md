@@ -2381,7 +2381,13 @@ trigger is the whole entry.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
 - **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; HARDENED
-  DESIGN APPROVED 2026-09-03; IMPLEMENTATION UNSCHEDULED.** James chose a
+  DESIGN APPROVED 2026-09-03; GATE -1 WALK PAUSED 2026-09-04;
+  IMPLEMENTATION UNSCHEDULED.** Two targeted NFC/BLE connections succeeded;
+  recovery and multi-tag proof remain incomplete. Further walks require PM
+  approval of the exact prepared runsheet before asking James to participate.
+  Evidence and desk-only close-out:
+  [`SESSION-PAUSED.md`](docs/monitor/sessions/phase-nf-gate-minus-one/SESSION-PAUSED.md).
+  James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.
   A valid PM5
