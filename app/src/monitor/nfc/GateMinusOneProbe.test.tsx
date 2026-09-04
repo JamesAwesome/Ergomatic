@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { extractGateConsoleEvidence } from "../../../scripts/nfc-gate-console-receipt";
 import {
   reassembleGateReceiptFrames,
   type NfcGateReceiptV1,
@@ -752,6 +753,56 @@ describe("GateMinusOneProbe", () => {
       connected: true,
       disconnected: true,
     });
+  });
+  it("automatically exports a no-match sample through Cancel sample before and after BLE cleanup", async () => {
+    const user = await renderReadyProbe();
+    const logger = vi.spyOn(console, "info").mockImplementation(() => {});
+    const captured = () =>
+      logger.mock.calls.map(([message]) => String(message)).join("\n");
+    const releaseStop = hold("ble-stop");
+    await beginThroughBle(user);
+    await screen.findByText("Scanning for the PM5's exact local name.");
+    await act(async () =>
+      native.bleResult!({
+        device: { deviceId: "unrelated-device", name: "Other device" },
+        localName: "Other device",
+      }),
+    );
+    expect(captured()).not.toContain("NFC_GATE_RECEIPT");
+
+    // Exercise the existing UI and automatic console transport, without Copy.
+    await user.click(screen.getByRole("button", { name: "Cancel sample" }));
+    await waitFor(() => expect(native.calls).toContain("ble-stopLEScan"));
+    const beforeStop = extractGateConsoleEvidence(captured());
+    expect(beforeStop.receipt.attempts).toHaveLength(1);
+    expect(beforeStop.receipt.attempts[0]).toMatchObject({
+      scenario: "normal",
+      matchingDeviceCount: 0,
+      connected: false,
+      disconnected: false,
+      records: [
+        {
+          tnf: 4,
+          type: PM5_TYPE,
+          id: [],
+          payload: [0, 0, 0, 0, 0, 0, 0, 80, 77, 53, 32, 65, 0],
+        },
+      ],
+    });
+    expect(runButton()).toBeDisabled();
+    await matches(); // A callback already queued when Cancel was tapped.
+    expect(native.calls).not.toContain("ble-connect:device-a");
+
+    await releaseStop();
+    await screen.findByText("Sample cancelled and drained.");
+    const afterStop = extractGateConsoleEvidence(captured());
+    expect(afterStop.exportId).not.toBe(beforeStop.exportId);
+    expect(afterStop.receipt).toStrictEqual(beforeStop.receipt);
+    expect(afterStop.receipt.criteria.pickerFreeBleConnect).toBe(false);
+    expect(
+      native.calls.filter((call) => call === "ble-stopLEScan"),
+    ).toHaveLength(1);
+    expect(runButton()).toBeEnabled();
   });
   it("frames fresh strict receipts before and after a pending disconnect drain", async () => {
     const user = await renderReadyProbe();

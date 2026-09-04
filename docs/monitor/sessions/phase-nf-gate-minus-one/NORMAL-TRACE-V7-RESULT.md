@@ -18,6 +18,13 @@ controller PID to finish, and verified its exit 0 and `cleanupVerified=true`.
 The controller's frozen decision is `inconclusive: No receipt export found`.
 No retry or further phone instruction followed; James was released immediately.
 
+**Operator error:** Codex stopped capture about 3 minutes 33 seconds before
+the observation deadline, without a complete receipt or a reported abort.
+“I did it” reported James's action; it did not establish that the asynchronous
+test had finished. This departed from v7's complete-result/deadline stop rule.
+The controller correctly honored the finish signal. This was Codex's premature
+cleanup decision, not a failure by James to follow the instructions.
+
 - Setup block: 20:18:44 UTC; capture: 20:20:08–20:22:26 UTC.
 - Total operator setup/capture/wait/cleanup: **3 minutes 42 seconds**, inside
   the eight-minute cap. Agent preparation before the block: about 26 minutes,
@@ -51,8 +58,39 @@ after decoding the event and accepting the unique PM5 external record. Its
 `automaticExport` runs through `drain`/completion or controlled reload, not at
 that waiting point. The host's process termination does not execute the
 WebView's drain/export. Thus a missing advertiser can leave this walk without
-a receipt. This is an identified diagnostic coverage gap, not a radio diagnosis
-or a reason to ask James for another scan.
+a receipt when the host kills the app before its existing Cancel sample path
+can drain and export. No evidence here establishes a defect in that path or
+the reason for the missing advertisement.
+
+## Desk follow-up after unplugging
+
+The existing Cancel sample button calls `drain`, which automatically exports
+before and after BLE cleanup. The original Gate -1 plan explicitly provides
+this control for a scan that never gets its second matching advertisement.
+No new timeout, receipt schema, controller framework or app rebuild is needed
+to exercise that existing path.
+
+A focused component test now drives NFC delivery, unrelated BLE callbacks and
+the actual Cancel sample button, then feeds its automatic console output into
+the real host receipt extractor. It checks retained redacted NFC records,
+zero matching devices/connections, export before a held BLE stop, a fresh export
+after cleanup, and rejection of matching callbacks arriving after cancellation.
+It never clicks Copy redacted receipt. This is desk evidence at mocked native
+ports, not proof of on-phone button reachability or physical NFC/BLE behavior.
+
+Verification: the focused test passed; removing either the pre-cleanup or
+post-cleanup automatic export made it fail, and restoring the exact source
+returned it to PASS. Staged lint/format and project typecheck passed. The probe
+and receipt source match the pinned build's source commit. No production source
+changed, so unchanged native builds, browser E2E and full suites were not rerun.
+No phone command or additional hardware attempt occurred during this follow-up.
+
+Any future walk must collect the completed receipt before early host cleanup;
+an operator's “done” message is not a completion observable. A no-match finish
+must account for the existing Cancel sample path and its reachable UI/modal
+state before the cleanup reserve. The final deadline still stops the session
+even if evidence is missing. V7 remains exhausted; these corrections do not
+approve new hardware steps, extend its clock or authorize another scan.
 
 Gate -1 remains incomplete. This run establishes physical RF activation on
 this phone/run and reaches the BLE-scanning stage; it does not establish the

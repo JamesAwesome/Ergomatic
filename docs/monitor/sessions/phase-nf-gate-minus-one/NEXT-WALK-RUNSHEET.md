@@ -5,6 +5,14 @@ PM `/root/walk_pm` approved v7 and James explicitly authorized it. The attempt
 budget is exhausted; this retained runsheet authorizes no retry. See
 `NORMAL-TRACE-V7-RESULT.md`.
 
+**Post-run correction:** Codex terminated capture on “i did it,” before a
+complete receipt or the observation deadline. That was an execution error.
+This historical procedure also omitted the existing Cancel sample route for
+exporting a no-match result. Its desk check passes; its reachability in the
+phone's post-reader UI has not been demonstrated by this run. Do not reuse v7
+as a ready walk. A future revision needs that action feasibility accounted for
+and its own PM readiness verdict before any hardware invitation.
+
 James has now reported being on YOU and confirmed Run normal sample is visible
 and enabled. He explicitly requests blocks of instructions instead of one-tap
 exchanges. That latest instruction supersedes the earlier pacing rule. The
