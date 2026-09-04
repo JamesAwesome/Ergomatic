@@ -241,8 +241,7 @@ export interface LogInput {
   // bounds-checked at the route before this type is ever constructed, same
   // trust-boundary posture as every other field here — except that an
   // unrecognised `tz` DEGRADES to null there rather than refusing the save
-  // (`routes/data.ts`), because a Concept2 field can never cost a rower
-  // their row.
+  // (`routes/data.ts`): a Concept2 field can never cost a rower their row.
   completedAt?: Date | null;
   tz?: string | null;
   // Deliberately absent from this interface: `c2ResultId`/`c2UserId` are
