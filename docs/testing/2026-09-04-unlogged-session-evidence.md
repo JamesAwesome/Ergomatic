@@ -82,7 +82,9 @@ timed out waiting for **SESSION SAVED** after Save. The uninstrumented standard
 run retained no request/response trace; a focused rerun passed 1/1. Therefore
 the strongest supported classification is intermittent and unclassified,
 including possible shared `LogSession`/save involvement—not a recovery-proof
-failure or a basis for a Task 2 production change.
+failure or a basis for a Task 2 production change. The final full E2E rerun on
+the restored committed tree passed 460/460; it does not erase the earlier
+failure or establish a cause.
 
 Native acceptance is an approved criterion but still pending James. Its
 operator protocol is a **proposed** phone acceptance walk at
