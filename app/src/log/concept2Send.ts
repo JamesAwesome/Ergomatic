@@ -174,7 +174,20 @@ function field(body: unknown, key: string): unknown {
  *  NOT say "set your weight" (that rower's weight is not the broken
  *  thing) and it does NOT name the logbook, because this state's only
  *  control opens the PROFILE and copy must never name a destination its
- *  control cannot reach. */
+ *  control cannot reach.
+ *
+ *  THESE THREE SENTENCES SURVIVE THE 2026-09-04 RULING, AND THAT IS A
+ *  RULING TOO — do not "finish the job" by deleting them. James ruled
+ *  "Stop talking about the weight class", which removed the You card's
+ *  helper line and the SENT state's provenance sub-line. Asked whether
+ *  this refusal state should go with them, he ruled it stays, verbatim:
+ *  "That's fine to keep it's informative for a purpose."
+ *
+ *  The distinction the narrowing turns on: everywhere else the app
+ *  VOLUNTEERED the class. Here Concept2 has REFUSED the row for that
+ *  reason, and a refusal that will not say why is worse than the words.
+ *  A reader meeting the broad ruling beside a screen that says NO WEIGHT
+ *  CLASS is meeting the carve-out, not a violation. */
 const NO_WEIGHT_SET = {
   line: "Concept2 needs a weight class. Your Concept2 profile has no weight set.",
   reason: "SET YOUR WEIGHT ON CONCEPT2",

@@ -2084,6 +2084,20 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **FILED (PR2 PM gate, 2026-09-04): three PR2 items whose only home was a plan
+  or a PR body.** A plan is a record of intent, not a live register (RF14).
+  (1) **The Concept2 card's container gap is gated on a hand-composed screen,
+  not on `/you`** — the e2e case paints the sibling chain itself, so it stays
+  green if `You.tsx`'s order or `ResetBaselineSetup`'s markup changes. Closes
+  when the surface can render in a browser artifact. (2) **The client/server
+  eligibility parity test proves PREDICATE PARITY, not route enforcement** —
+  deleting the route's `422 not_eligible` branch leaves
+  `concept2Send.integration.test.ts` green; `concept2.test.ts` catches it one
+  file over. Nobody should read the parity file as the enforcement gate.
+  (3) **Bare `.c2-card-status` (5.29:1, passing) is on no screen either axe
+  sweep covers** — the linked card always overrides it with `-status-on`, so
+  the passing pairing is unswept. **XS**
+
 - **FILED (PR2 Task 4 review, 2026-09-03): `e2e/retest.spec.ts` fails under
   full-suite load, and the first recorded diagnosis was wrong.** Seen four
   times across three PR2 tasks, always green when the spec runs in isolation
