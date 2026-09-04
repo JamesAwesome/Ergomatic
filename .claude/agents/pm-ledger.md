@@ -4559,3 +4559,21 @@ one explicit scan-consent reply, eight minutes including setup/waiting, and
 no retry. Tap and tag presentation stay together; a live NFC sheet must not
 wait for another chat exchange. This does not close Gate -1 or approve
 product implementation.
+
+## NFC receipt-completion precedent, 2026-09-04
+
+V7's operator action report was mistaken for asynchronous completion, and
+host cleanup destroyed the opportunity to collect a receipt. The existing
+normal/Cancel drain emits distinct complete exports before and after cleanup;
+early host termination must wait for the latter. V8 also found a different
+installed build despite earlier successful verification: prior installation
+evidence is provenance, not current readiness.
+
+## NFC v8 readiness, 2026-09-04
+
+`NF-NORMAL-TRACE-v8` received PM PASS after restoring and independently
+verifying the pinned diagnostic and rehearsing wireless capture/cleanup
+without NFC. Its invitation is untimed and requests no setup; explicit
+scan consent starts the total eight-minute clock. One grouped physical
+block follows capture readiness. Conditional Cancel tests its previously
+unobserved reachability within that attempt, with no retry.

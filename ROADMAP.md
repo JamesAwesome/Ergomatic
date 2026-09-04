@@ -2396,14 +2396,17 @@ trigger is the whole entry.
   expired across the operator turn boundary; it authorizes no retry. See
   [`NORMAL-TRACE-V5-ABORT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V5-ABORT.md).
   The resumed preparation installed and verified the diagnostic build;
-  [`NF-NORMAL-TRACE-v7`](docs/monitor/sessions/phase-nf-gate-minus-one/NEXT-WALK-RUNSHEET.md)
+  [`NF-NORMAL-TRACE-v7`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V7-RUNSHEET.md)
   separates setup from scan consent and removes timed chat acknowledgements.
   James confirmed the enabled probe; one separately authorized v7 sample
   activated the reader and reached BLE scanning, but captured no matching PM5
   name or final receipt. Cleanup verified; no retry authorized. See
   [`NORMAL-TRACE-V7-RESULT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V7-RESULT.md) and
   [`OPERATOR-WORKFLOW-V6.md`](docs/monitor/sessions/phase-nf-gate-minus-one/OPERATOR-WORKFLOW-V6.md).
-  Another attempt still needs PM PASS and James's separate agreement.
+  [`NF-NORMAL-TRACE-v8`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V8-RUNSHEET.md)
+  received PM PASS after the diagnostic was restored and wireless capture/cleanup
+  rehearsed. Its final-export finish rule corrects v7's premature host cleanup;
+  a new scan still requires James's explicit agreement. No test clock is running.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.
