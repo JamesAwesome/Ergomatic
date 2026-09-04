@@ -48,7 +48,7 @@ NFC-name-to-picker-free-BLE path?
 | Item | Frozen value |
 | --- | --- |
 | Artifact source commit | `7e10d2897a3d9c00685374695410a59213beb679` |
-| Controller code commit | `f0688c44a3c870c1ffdc9cc09c909929411dba85` |
+| Controller code commit | `4604f3be5a04c5431dca7bf80d6c3322a006fb61` |
 | Artifact | `/tmp/ergomatic-phase-nf-ready.WQJqQu/Build/Products/Debug-iphoneos/App.app` |
 | Bundle id | `haus.waffle.ergomatic` |
 | App version/build | `0.23.0` / `789` |
@@ -58,7 +58,7 @@ NFC-name-to-picker-free-BLE path?
 | Classifier | `app/scripts/nfc-gate-console-receipt.ts` |
 | Classifier SHA-256 | `3f5f80ce914d54c410d86948416729edc79848c99663656af3c87439783f1739` |
 | Controller | `app/scripts/nfc-normal-trace-controller.ts` |
-| Controller SHA-256 | `d51850bf6053301c1319175fc8a10c6758f98ff63f997a1c14a85c98bb38eab5` |
+| Controller SHA-256 | `51ee37507e34900f3757332b1951b3ef1bddbfd5ad9d3487a6e01f440ce025a2` |
 | Code-sign CDHash | `96d980eec0b53de9446b72589d8e41324224f58a` |
 | NFC entitlement | exactly `com.apple.developer.nfc.readersession.formats = [TAG]` |
 | Usage text | `Scan a PM5 to connect and program your workout.` |
@@ -76,11 +76,11 @@ diff mismatch invalidates this runsheet; rebuilding is not a walk repair.
 | Required mechanism | What is established | Fail-closed boundary |
 | --- | --- | --- |
 | Install signed app by USB | This phone previously accepted `devicectl` installation; installed help specifies `device install app`. | Abort at 60 s or on any CoreDevice/install failure. |
-| Attached console capture | This phone previously delivered the app console through `process launch --console`; installed help says it connects standard streams and waits. | The controller sends stdout and stderr directly to one file. It does not combine `--log-output` with console capture. Missing capture is inconclusive. |
+| Attached console capture | This phone previously delivered the app console through `process launch --console`; installed help says it connects standard streams and waits. | The controller sends stdout and stderr directly to one file, watches any early child exit as an abort, and requires James to see the launched probe before the PM5 instruction. It does not combine `--log-output` with console capture. |
 | Bundle-scoped cleanup | Installed help specifies bundle launch with `--terminate-existing`, `--start-stopped`, JSON output, PID termination and process listing. The exact composed path has not yet run on this phone. | Before PM5/NFC work, the controller launches a suspended replacement for the exact bundle, requires exactly one PID from that bundle-specific launch result, kills it, and proves that PID absent. Failure aborts before the attempt. |
 | Probe navigation and metadata | Earlier phone work reached this probe; focused tests prove exact all-or-nothing prefill in the signed asset. | Missing signed-in YOU/probe or any extra input aborts. |
 | PM5 connection mode and tag | Photos establish More Options, Connect Device and PM5 432331249; two earlier reads and targeted connections succeeded. | One ordinary presentation only; no invented PM5 control or Flipper. |
-| Evidence classification | Unit tests cover Capacitor-decorated producer output, multiple complete exports, truncated newest export, absent/malformed/wrong-generation/unordered diagnostics and positive/negative/inconclusive outcomes. | The controller freezes the file only after cleanup, selects the newest-started export, never falls back past a newer incomplete export, and publishes `evidence.json` only by atomic rename. |
+| Evidence classification | Unit tests cover Capacitor-decorated producer output, multiple complete exports, truncated newest export, absent/malformed/wrong-generation/unordered diagnostics and positive/negative/inconclusive outcomes. | The controller freezes the file only after cleanup, selects the newest-started export, never falls back past a newer incomplete export, and atomically publishes both outcome and cleanup state in `evidence.json`. |
 
 The cleanup rehearsal is intentionally the only unproved CLI composition and
 happens after James's agreement but before he touches the PM5. It is bounded by
@@ -104,7 +104,7 @@ expected_root=/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktr
 
 test "$(git rev-parse --show-toplevel)" = "$expected_root"
 test -z "$(git status --porcelain)"
-git diff --exit-code f0688c44a3c870c1ffdc9cc09c909929411dba85 -- app
+git diff --exit-code 4604f3be5a04c5431dca7bf80d6c3322a006fb61 -- app
 git diff --exit-code 7e10d2897a3d9c00685374695410a59213beb679 -- \
   app \
   ':(exclude)app/scripts/nfc-gate-console-receipt.ts' \
@@ -127,7 +127,7 @@ test "$(codesign -d --verbose=4 "$artifact" 2>&1 | \
 test "$(shasum -a 256 app/scripts/nfc-gate-console-receipt.ts | awk '{print $1}')" = \
   3f5f80ce914d54c410d86948416729edc79848c99663656af3c87439783f1739
 test "$(shasum -a 256 app/scripts/nfc-normal-trace-controller.ts | awk '{print $1}')" = \
-  d51850bf6053301c1319175fc8a10c6758f98ff63f997a1c14a85c98bb38eab5
+  51ee37507e34900f3757332b1951b3ef1bddbfd5ad9d3487a6e01f440ce025a2
 capture_dir=$(mktemp -d /tmp/ergomatic-nf-normal-trace.XXXXXX)
 print -r -- "CAPTURE_DIR=$capture_dir"
 ```
@@ -154,23 +154,27 @@ Its only operator exchanges, in order, are:
 2. Controller only: install the pinned app; execute the suspended
    bundle-replacement cleanup rehearsal; start a fresh attached console launch.
    Any failure aborts before PM5/NFC work.
-3. “Wake the PM5, open More Options > Connect Device, leave it on Ready for App
+3. “On the iPhone, tap YOU and scroll to NFC GATE -1 PROBE, then reply
+   `VISIBLE`.” Stop and wait. The controller treats any attached-process exit
+   before or during this acknowledgement as an abort, so PM5/NFC work cannot
+   begin with a dead capture.
+4. “Wake the PM5, open More Options > Connect Device, leave it on Ready for App
    Connection, then reply `PM5`.” Stop and wait.
-4. “On the iPhone, tap YOU and scroll to NFC GATE -1 PROBE, then reply
-   `VISIBLE`.” Stop and wait.
 5. “No heart-rate gear or rowing is needed. Tap Run normal sample, then hold the
    phone at the same PM5 NFC spot that worked earlier. Do nothing else; I am
    collecting the result.” Stop. James sends no completion message.
 6. Controller only: at 7:15, use `--terminate-existing --start-stopped` on the
    exact bundle, extract exactly one replacement PID from that launch's JSON,
    kill it, prove that PID absent, stop/reap the attached host process, freeze
-   the console, classify, and atomically publish `evidence.json` by 8:00.
+   the console, classify, and atomically publish `cleanupVerified` plus the
+   decision in `evidence.json` by 8:00. Cleanup command caps total 26 seconds,
+   leaving 19 seconds inside the reserved window; host watchdogs add no grace.
 
 All pre- and post-launch errors converge on that bundle-scoped cleanup. If it
 cannot be verified, the only fallback instruction is “Press the iPhone side
 button once to lock it; no reply needed.” Lock is containment, not claimed
-process termination; the result is inconclusive and process state is recorded
-unknown.
+process termination; the result is inconclusive, `cleanupVerified` is false,
+and process state is recorded unknown even when another abort happened first.
 
 ## Mechanical decision
 
