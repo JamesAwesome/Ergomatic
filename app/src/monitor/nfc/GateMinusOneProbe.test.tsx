@@ -12,6 +12,7 @@ type AppListener = (state: { isActive: boolean }) => void;
 
 const native = vi.hoisted(() => ({
   calls: [] as string[],
+  starts: [] as Array<Record<string, unknown>>,
   nfcEvent: undefined as NfcListener | undefined,
   nfcSessionEnd: undefined as NfcListener | undefined,
   bleResult: undefined as BleListener | undefined,
@@ -27,6 +28,7 @@ const native = vi.hoisted(() => ({
   nextId: 0,
   reset() {
     this.calls.length = 0;
+    this.starts.length = 0;
     this.nfcEvent = undefined;
     this.nfcSessionEnd = undefined;
     this.bleResult = undefined;
@@ -65,6 +67,7 @@ vi.mock("@capgo/capacitor-nfc", () => ({
       };
     },
     startScanning: async (options: { attemptId: string }) => {
+      native.starts.push(options);
       native.calls.push(`nfc-start:${options.attemptId}`);
       await native.waits.get("nfc-start");
     },
@@ -523,6 +526,21 @@ describe("GateMinusOneProbe", () => {
       expect(native.calls.indexOf("nfc-start:attempt-b")).toBeLessThan(
         native.calls.indexOf(`release:attempt-a:${stage}`),
       );
+      expect(native.starts).toStrictEqual([
+        {
+          attemptId: "attempt-a",
+          alertMessage: "Hold your iPhone near the PM5.",
+          iosSessionType: "ndef",
+          invalidateAfterFirstRead: false,
+          gateMinusOneHoldStage: stage,
+        },
+        {
+          attemptId: "attempt-b",
+          alertMessage: "Hold your iPhone near the PM5.",
+          iosSessionType: "ndef",
+          invalidateAfterFirstRead: false,
+        },
+      ]);
       await act(async () => {
         native.nfcEvent!(nfcEvent("attempt-a"));
         native.nfcSessionEnd!({
@@ -556,9 +574,9 @@ describe("GateMinusOneProbe", () => {
     native.supported = false;
     await user.click(runButton());
     native.supported = true;
-    await user.click(runButton());
-    const staleEnd = native.nfcSessionEnd!;
     await user.click(screen.getByRole("button", { name: "Sheet cancel" }));
+    expect(native.calls).toContain("nfc-start:attempt-b");
+    const staleEnd = native.nfcSessionEnd!;
     expect(native.calls).not.toContain("nfc-stop:attempt-b");
     await act(async () => {
       native.nfcSessionEnd!({
@@ -566,7 +584,6 @@ describe("GateMinusOneProbe", () => {
         reason: "userCancelled",
       });
     });
-    await user.click(runButton());
     await user.click(screen.getByRole("button", { name: "No-tag timeout" }));
     await act(async () => {
       staleEnd({ attemptId: "attempt-b", reason: "invalidated" });
@@ -582,7 +599,6 @@ describe("GateMinusOneProbe", () => {
         reason: "sessionTimeout",
       });
     });
-    await user.click(runButton());
     await user.click(
       screen.getByRole("button", { name: "Forced invalidation" }),
     );
@@ -607,6 +623,14 @@ describe("GateMinusOneProbe", () => {
   it("arms native NFC before BLE and connects only after two exact local-name advertisements", async () => {
     const user = await renderReadyProbe();
     await beginThroughBle(user);
+    expect(native.starts).toStrictEqual([
+      {
+        attemptId: "attempt-a",
+        alertMessage: "Hold your iPhone near the PM5.",
+        iosSessionType: "ndef",
+        invalidateAfterFirstRead: false,
+      },
+    ]);
 
     await act(async () => {
       native.bleResult!({

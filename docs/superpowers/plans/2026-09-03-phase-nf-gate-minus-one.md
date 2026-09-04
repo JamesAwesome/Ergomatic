@@ -1133,6 +1133,12 @@ For every normal attempt, compare the live `localName` ASCII bytes with payload 
 
 Run three fresh attempts and retain all outcomes:
 
+Choose the probe's **Sheet cancel**, **No-tag timeout**, or **Forced
+invalidation** button while idle. Each launches a fresh normal reader attempt
+with that action fixed before native start; do not require access to the
+underlying WebView after the system reader sheet opens. The probe never calls
+`stopScanning` as a substitute for tapping the system sheet's Cancel button.
+
 1. `sheet-cancel`: tap Cancel on the system NFC sheet; expect `userCancelled`.
 2. `no-tag-timeout`: present no tag and let Core NFC end the sheet; expect `sessionTimeout`.
 3. `forced-invalidation`: present the PM5 and a second NFC tag/card together so the singleton guard invalidates; record the actual mapped reason.

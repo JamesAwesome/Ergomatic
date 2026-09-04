@@ -461,6 +461,7 @@ export default function GateMinusOneProbe() {
   async function runScenario(
     scenario: GateScenario,
     previous: ReloadMetadata | null = null,
+    endingAction: ReaderEndingAction | null = null,
   ) {
     if (
       !mounted.current ||
@@ -536,7 +537,7 @@ export default function GateMinusOneProbe() {
       matchingCounts: new Map(),
       matchingTimes: [],
       scanStartedAt: 0,
-      selectedEnding: null,
+      selectedEnding: endingAction,
     };
     activeRef.current = active;
     setBusy(true);
@@ -675,14 +676,6 @@ export default function GateMinusOneProbe() {
         "NFC setup failed; next sample is available after cleanup.",
       );
     }
-  }
-  function selectEnding(action: ReaderEndingAction) {
-    const active = activeRef.current;
-    if (!active || !owns(active) || !active.nfcActive || active.reading) return;
-    active.selectedEnding = action;
-    setStatus(
-      action + " selected; complete that genuine reader path on device.",
-    );
   }
   function exportReceipt(partial = false) {
     if (!receiptRef.current) return;
@@ -823,22 +816,28 @@ export default function GateMinusOneProbe() {
       </button>
       <button
         type="button"
-        disabled={!busy}
-        onClick={() => selectEnding("sheet-cancel")}
+        disabled={
+          !complete || busy || restart || reloadReady !== null || prior !== null
+        }
+        onClick={() => void runScenario("normal", null, "sheet-cancel")}
       >
         Sheet cancel
       </button>
       <button
         type="button"
-        disabled={!busy}
-        onClick={() => selectEnding("no-tag-timeout")}
+        disabled={
+          !complete || busy || restart || reloadReady !== null || prior !== null
+        }
+        onClick={() => void runScenario("normal", null, "no-tag-timeout")}
       >
         No-tag timeout
       </button>
       <button
         type="button"
-        disabled={!busy}
-        onClick={() => selectEnding("forced-invalidation")}
+        disabled={
+          !complete || busy || restart || reloadReady !== null || prior !== null
+        }
+        onClick={() => void runScenario("normal", null, "forced-invalidation")}
       >
         Forced invalidation
       </button>
