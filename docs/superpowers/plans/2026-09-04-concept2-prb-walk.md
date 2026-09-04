@@ -25,8 +25,12 @@ Ergomatic's link-outs are built from the **server's own** `logbookBaseUrl`
 assuming it:** on the CURRENT installed build, open a sent row's log detail
 and note which origin `View on Concept2 →` goes to.
 
-Then, in **mobile Safari — not the app** — open **that** host, and confirm the
-rower is signed in.
+Then, in **the phone's DEFAULT browser — not the app** — open **that** host,
+and confirm the rower is signed in. Check which browser that is first
+(Settings → Apps → Default Apps → Browser): the pass condition below names
+Safari only because Safari is the default on this phone unless it was
+changed. `UIApplication.open` honours the default-browser setting since
+iOS 14, so a Chrome default would open Chrome, and that is also a PASS.
 
 **This is the discriminator.** If Safari has no session, "opened signed in"
 cannot be told apart from "opened in a sheet", and W4 cannot fail honestly.
@@ -70,8 +74,9 @@ Then Run to the phone from Xcode.
 - [ ] **W3.** Tap **View on Concept2 →**. **Observe which app is now in
       front, and record which of five things happened.**
 
-  - **PASS = Safari.** URL bar, tab bar, and a **`← Ergomatic`** chip at the
-    top left.
+  - **PASS = the default browser** (Safari on this phone unless W0 found
+    otherwise). URL bar, tab bar, and a **`← Ergomatic`** chip at the top
+    left. Record which browser it was.
   - **NO (a):** the sheet appears anyway — a **`Done`** button at the top
     left, no tab bar, no URL bar.
   - **NO (b):** nothing happens at all (WebKit dropped the `noopener`
