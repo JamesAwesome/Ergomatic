@@ -919,6 +919,20 @@ often they recur.
     and every phase-close gate, and the post-merge ritual says which
     conclusion main's run reached, not just that the PR's did.
 
+29. **Leaving dead code behind with no ROADMAP row to remove it (James,
+    2026-09-04).** `openExternalUrl`'s native arm lost its last caller when
+    PR1.75b moved the account link to `ASWebAuthenticationSession`. The
+    Task 2 review of PR2 flagged it, the ruling was "decide at the
+    whole-branch review", the whole-branch review never returned to it, and
+    it shipped — with `@capacitor/browser` still a dependency for a code path
+    nothing could reach. It was found again only because the walk-fixes spec
+    happened to need that same arm. **When a change makes code
+    unreachable — an arm, a helper, a plugin, a CSS block — the same PR adds
+    a ROADMAP row naming what is dead, why, and what removes it.** A
+    "decide later" ruling is not a row; it lives in a PR body, which is a
+    presentation (RF14). Deleting the consumer and leaving the dependency is
+    RF5 with a package name.
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;
