@@ -203,6 +203,53 @@
         color: var(--ink-3);
         margin-top: 20px;
       }
+      .recovery-panel {
+        margin: 20px 0;
+        padding: 12px;
+        background: var(--surface-sunken);
+        border: 1px solid var(--rule);
+      }
+      .recovery-panel p {
+        line-height: 1.5;
+        margin: 0 0 12px;
+      }
+      .recovery-panel label {
+        display: block;
+        margin-bottom: 8px;
+      }
+      .recovery-panel select,
+      .recovery-panel textarea {
+        width: 100%;
+        min-height: 44px;
+        padding: 10px;
+        border: 1px solid var(--ink-3);
+        border-radius: var(--radius);
+        background: var(--surface);
+        color: var(--ink);
+        font: 16px var(--font-sans);
+      }
+      .recovery-panel textarea {
+        height: 150px;
+        resize: vertical;
+        margin-bottom: 12px;
+      }
+      .recovery-stack {
+        display: grid;
+        gap: 8px;
+      }
+      .recovery-stack button {
+        min-height: 44px;
+      }
+      .recovery-stack .unsaved-replace {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .recovery-stack button:disabled {
+        opacity: 1;
+        color: var(--ink-3);
+        background: var(--surface-sunken);
+        border-color: var(--ink-3);
+      }
       @media (max-width: 360px) {
         .screen {
           padding-inline: 16px;
@@ -234,7 +281,33 @@
           : dual
             ? `<div class="today-unlogged-line"><p class="today-unlogged-text"><strong>Sea Fret</strong>: unlogged session.</p><div class="today-unlogged-actions"><button class="today-unlogged-link" data-prototype="Existing timer save route.">Log it</button><button class="today-unlogged-discard" aria-label="Discard timer session without logging" data-prototype="Existing staged discard.">✕</button></div></div>`
             : "";
+        if (screenName === "today-loading" || screenName === "today-error") {
+          const loading = screenName === "today-loading";
+          const status = loading
+            ? `<p class="mono-status">${proposed ? "Loading the rest of Today…" : "LOADING…"}</p>`
+            : `<p class="unsaved-warning-copy">Couldn't load your library.${proposed ? " Your unsaved workout is still here." : ""}</p><button class="button-outline" data-prototype="Retry the library request. The retained recording is unchanged.">Retry</button>`;
+          return `<h1 class="screen-title">Today</h1>${proposed ? retained : ""}${status}`;
+        }
         return `<div class="today-title-row"><h1 class="screen-title">Today</h1><a href="#" class="today-justrow" data-prototype="Just Row is unchanged.">JUST ROW</a></div><div class="today-plan-line today-plan-line-freestyle"><span class="mono-status">FREESTYLE</span><a href="#" class="today-plan-link" data-prototype="Plan selection is unchanged.">choose a plan →</a></div>${retained}${suggestion}<p class="mono-status" style="margin-top:36px;color:var(--accent)">ALL SESSIONS</p><p class="mono-status" style="margin-top:20px">No sessions logged yet.</p>`;
+      }
+      function recovery() {
+        if (!proposed) {
+          return screenName === "review-type"
+            ? `<p class="mono-status">That workout isn't in your library.</p><a class="back-link" href="#" data-prototype="Current back navigation.">← BACK</a>`
+            : today();
+        }
+        if (screenName === "review-missing") {
+          return `<h1 class="screen-title">Recording unavailable</h1><p class="unsaved-warning-copy">This recording is no longer available. No other workout has been opened or changed.</p><button class="unsaved-review" data-view>Back to Today</button>`;
+        }
+        const heading = `<h1 class="screen-title">${safeTitle}</h1><p class="unsaved-meta">PM5 · Sep 3 · Not saved</p>`;
+        if (screenName === "review-type") {
+          return `${heading}<div class="recovery-panel"><h2 class="unsaved-warning-title">Your recording is here.</h2><p>The original workout details aren't available. Choose its workout type to save the recorded PM5 data.</p><label for="recovery-type">Workout type</label><select id="recovery-type"><option value="">Choose a type</option><option>AN</option><option>O2</option><option>AT</option><option>TR</option></select><p class="gate-frame-note">No type is guessed. The recorded measurements stay unchanged.</p></div><div class="recovery-stack"><button class="button-primary" id="recovery-save" disabled data-prototype="Saves the retained PM5 measurements with your chosen workout type through the existing save pipeline. No real data is saved by this prototype.">Save</button><button class="button-outline" data-view>Keep unsaved</button></div><p class="gate-frame-note">Recovery action area · no active plan. The existing PM5 summary remains available above these controls in the app.</p>`;
+        }
+        return `${heading}<div class="recovery-panel"><h2 class="unsaved-warning-title">Can't rebuild this workout.</h2><p>Some workout details are missing or unreadable, so we can't safely rebuild its summary. Your recording is still kept here.</p><label for="recording-data">Recording data</label><textarea id="recording-data" readonly aria-describedby="recording-note">{
+  "v": 1,
+  "title": "Hoarfrost",
+  "deviceName": "PM5"
+}</textarea><p id="recording-note" class="gate-frame-note">Abbreviated example. The app shows and copies the complete retained record, not a diagnostic log.</p><button class="button-outline" data-prototype="Copies the complete selected recording only after your tap. Copy failure leaves the text selectable and the recording unchanged.">Copy recording</button></div><div class="recovery-stack"><button class="unsaved-review" data-view>Keep unsaved</button><button class="button-outline unsaved-replace" data-prototype="Existing record-specific two-tap discard. No real record is changed here.">Discard recording</button></div>`;
       }
       function warning() {
         const connect = screenName.includes("connect");
@@ -252,7 +325,13 @@
         return `<a class="back-link" href="#" data-prototype="Back navigation is unchanged.">← BACK</a>${context}${panel}<p class="gate-frame-note">Warning action area · surrounding controls omitted</p>`;
       }
       if (isFrame) {
-        root.innerHTML = `<div class="app-shell"><main class="screen">${screenName === "today" || screenName === "both" ? today() : warning()}</main>${nav}</div>`;
+        root.innerHTML = `<div class="app-shell"><main class="screen">${screenName.startsWith("today") || screenName === "both" ? today() : screenName.startsWith("review-") ? recovery() : warning()}</main>${nav}</div>`;
+        root.addEventListener("change", (event) => {
+          if (event.target.id === "recovery-type") {
+            document.getElementById("recovery-save").disabled =
+              !event.target.value;
+          }
+        });
         root.addEventListener("click", (event) => {
           const target = event.target.closest("a,button");
           if (!target) return;
@@ -274,9 +353,14 @@
           }
         });
       } else {
-        root.innerHTML = `<main class="gate"><p class="eyebrow">ERGOMATIC · DESIGN APPROVAL PENDING</p><h1>Keep a way back to your workout.</h1><p>Review retained workouts from Today, with a safe route from the warning. These screens propose the normal flow; the recovery edge cases still need design decisions.</p><div class="gate-controls"><label>Screen<select id="screen"><option value="today">Today — completed PM5</option><option value="connect">Connect warning</option><option value="start">Start Timer warning</option><option value="both">Today — PM5 and timer retained</option></select></label><label>Orientation<select id="orientation"><option value="portrait">Portrait · 390 × 844</option><option value="landscape">Landscape · 844 × 390</option></select></label><label>Workout title<select id="title"><option value="0">Normal</option><option value="1">Long</option></select></label></div><div class="gate-pair" id="pair"><figure class="gate-frame"><figcaption>Current · v0.36.1</figcaption><iframe title="Current screen" id="before"></iframe></figure><figure class="gate-frame"><figcaption>Proposed · not implemented</figcaption><iframe title="Proposed screen" id="after"></iframe></figure></div><p class="gate-status" id="status" aria-live="polite">Try “View unsaved” in the proposed warning. Review and discard controls explain their intended action; this is a design, not the live app.</p><details><summary>Scope and checks</summary><p>Same fonts, colors, tab bar and suggestion card. Recovery sits above suggestions. No new background recording, automatic saving, queue, or changes to recorded numbers. The workout-detail frame shows the action-area context, not every target-editing control.</p><p>Portrait and landscape are real iframe viewports, not scaled pictures. Scroll inside landscape screens to reach content below the fold, as in the existing app.</p><table><thead><tr><th>Pairing</th><th>Contrast</th></tr></thead><tbody id="contrast"></tbody></table><p>Every proposed control is at least 44 × 44 CSS px. <a href="https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced.html">Target size</a> · <a href="https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html">Text contrast</a>. Recovery during loading/errors, exact source selection, and library-independent or legacy-record recovery remain design gates in the opening brief; they are not represented as already solved here.</p></details></main>`;
+        root.innerHTML = `<main class="gate"><p class="eyebrow">ERGOMATIC · NORMAL FLOW APPROVED</p><h1>Keep a way back to your workout.</h1><p>The Today card and warning actions are approved. The new “For approval” screens cover loading failures, missing library details, incomplete recordings, and a recording replaced before review.</p><div class="gate-controls"><label>Screen<select id="screen"><option value="today">Today — completed PM5</option><option value="connect">Connect warning</option><option value="start">Start Timer warning</option><option value="both">Today — PM5 and timer retained</option></select></label><label>Orientation<select id="orientation"><option value="portrait">Portrait · 390 × 844</option><option value="landscape">Landscape · 844 × 390</option></select></label><label>Workout title<select id="title"><option value="0">Normal</option><option value="1">Long</option></select></label></div><div class="gate-pair" id="pair"><figure class="gate-frame"><figcaption>Current · v0.36.1</figcaption><iframe title="Current screen" id="before"></iframe></figure><figure class="gate-frame"><figcaption>Proposed · not implemented</figcaption><iframe title="Proposed screen" id="after"></iframe></figure></div><p class="gate-status" id="status" aria-live="polite">Try “View unsaved” in the proposed warning. Review and discard controls explain their intended action; this is a design, not the live app.</p><details><summary>Scope and checks</summary><p>Same fonts, colors, tab bar and suggestion card. Recovery sits above suggestions. No new background recording, automatic saving, queue, or changes to recorded numbers. The workout-detail frame shows the action-area context, not every target-editing control.</p><p>Portrait and landscape are real iframe viewports, not scaled pictures. Scroll inside landscape screens to reach content below the fold, as in the existing app.</p><table><thead><tr><th>Pairing</th><th>Contrast</th></tr></thead><tbody id="contrast"></tbody></table><p>Every proposed control is at least 44 × 44 CSS px. <a href="https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced.html">Target size</a> · <a href="https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html">Text contrast</a>. The “For approval” screens are additional proposals, not application changes. Review is local; saving still requires the server. Incomplete recordings stay viewable and copyable, but cannot be safely saved as workouts.</p></details></main>`;
         const screenSelect = document.getElementById("screen");
         for (const [value, text] of [
+          ["today-loading", "For approval — Today loading"],
+          ["today-error", "For approval — Today error"],
+          ["review-type", "For approval — Missing library details"],
+          ["review-unreadable", "For approval — Incomplete recording"],
+          ["review-missing", "For approval — Recording replaced"],
           ["connect-both", "Connect warning — both retained"],
           ["start-both", "Start warning — both retained"],
           ["justrow-connect", "Just Row — Connect warning"],
@@ -287,6 +371,7 @@
           option.textContent = text;
           screenSelect.append(option);
         }
+        screenSelect.value = "today-error";
         const orientation = document.getElementById("orientation");
         const title = document.getElementById("title");
         function update() {

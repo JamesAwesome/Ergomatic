@@ -6,18 +6,20 @@ A retained workout must not disappear from Today while Start or Connect still
 warns that starting again will discard it. This change exposes the recording,
 offers review and save, and makes the warning point to that safe route.
 
-**Status:** opened by James on 2026-09-03 ("Let's open it"). Gate 0 is pending:
-the [rendered comparison](2026-09-03-unlogged-session-gate.html) is a proposal,
-not approved UI or application implementation. This opens the existing
-September 1 roadmap item, not another recovery phase or Codex task.
+**Status:** opened by James on 2026-09-03 ("Let's open it"). James approved
+the normal Today/warning design on 2026-09-03 ("approved"). The additional
+recovery cases below are now proposed in the
+[rendered comparison](2026-09-03-unlogged-session-gate.html), labelled
+"For approval". Implementation remains gated on those cases. This is the
+existing September 1 roadmap item, not another phase or Codex task.
 
 ## Scope and decision
 
 One coherent PR: **View unsaved workouts and save retained connected work.**
 The initial bounded visibility repair has expanded to an architectural
 recovery-flow design: loading prerequisites and source selection also prevent
-the promised access. The current rendered comparison proposes only the normal
-Today/warning treatment; it is not approval of the unresolved routing work.
+the promised access. Approval of the normal Today/warning treatment does not
+approve the additional missing-data treatment below.
 This finishes existing recovery flows. No new queue, server API, persisted
 shape, BLE reconnect, background recording, automatic saving, or arithmetic.
 Correct Resume remains deferred. This is not fast path: a mistake could lose
@@ -36,13 +38,36 @@ two-tap discard. "Not saved" does not claim the machine finished every
 interval. A live phone timer remains **Resume session**, not saveable merely
 by visiting Today. Just Row keeps its existing evidence and recovery.
 
-**Unresolved boundary, not an accepted deferral:** current-generation valid
-programmed records with a surviving library workout can reuse the save screen.
-A deleted library workout, null-id non-Just-Row record, or legacy/invalid
-frozen seed cannot. Gate 0's normal-flow mockups do not claim to solve these.
-Before implementation, decide their honest review/recovery treatment; do not
-silently turn them into manual entries, invent measurements, or close the
-overall discard-only problem while omitting these shapes.
+**Proposed boundary, awaiting approval:** valid programmed PM5 data uses the
+existing summary builder and save pipeline independently of library fetch
+success. The retained record owns its title, source and measurements. A
+matching library record supplies its current workout type and optional
+context; without that match, the rower must choose AN/O2/AT/TR before Save.
+There is no default choice. Preserve an existing workout id when supplied;
+the existing field-specific rejected-id retry may remove the link, not the
+measurements. A null-id programmed record with a chosen type stays a
+programmed log, never a Just Row or manual entry.
+
+The type choice is necessary, not a cosmetic extra: `MonitorRun` stores no
+Erg Book workout type (`app/src/monitor/monitorRun.ts:107`), and its `LogSeed`
+stores only labels/kinds and paces (`app/src/session/logDraft.ts:619`).
+`server/routes/data.ts:1460` accepts a null workout id, and
+`LogSession.tsx:804` already retries a specifically rejected id as null.
+But null id AND null type mean free row (`domain/types.ts:38`), so neither
+that pair nor a guessed O2 classification is an honest fallback here.
+
+A missing/invalid frozen seed or other unreadable summary input gets a
+read-only recording view: retained title, source, date, complete selectable
+JSON, **Copy recording**, **Keep unsaved**, and record-specific two-tap
+discard. State that the workout cannot be safely rebuilt; offer no fake
+summary, automatic reconstruction, manual fallback, or save-as-workout button.
+Copy exports that selected record, not the unrelated diagnostic-ring stash,
+and does not count as saving or authorize retirement. A failed copy shows
+failure and leaves selectable text and the record intact. This follows the
+existing explicit-tap clipboard/failure idiom in
+`app/src/workout/connected/ConnectionLogSheet.tsx:120`; no new storage or
+platform mechanism. This is a named limitation requiring James's approval,
+not a claim that every legacy record becomes saveable.
 
 Two more anchor findings are in this same work, not follow-up deferrals:
 
@@ -50,14 +75,61 @@ Two more anchor findings are in this same work, not follow-up deferrals:
   library or history requests are loading or failing. Today already takes its
   local snapshots before those early returns, but currently renders none of
   them in the error/loading branches (`Today.tsx:437`). This is a reachable
-  normal failure; it needs its own rendered loading/error treatment and gate.
+  normal failure. The proposed loading/error screens keep the recovery area
+  before the unrelated status and Retry control. No suggestion or plan state
+  is fabricated while its request is unresolved. The same recovery component
+  renders in ready/loading/error states, so Retry cannot reset its selection
+  or authorize discard.
   Review availability does not promise that an offline API save succeeds.
 - Selecting a displayed Just Row source must open THAT retained recording.
   The current common `/justrow/log` route selects by newer `completedAt`
   (`JustRowLog.tsx:108`), not selected row. This is a defensive coexistence
   case, not a newly observed normal producer. Source-bound navigation needs
-  an explicit identity/lifetime decision before implementation; mint no new
-  logical-session identity and never silently substitute the other record.
+  explicit source-bound navigation as proposed below; mint no new logical-
+  session identity and never silently substitute the other record.
+
+## Proposed recovery routing and lifetime
+
+The new Today affordances open `/session/review` with the selected source
+(`source=timer` or `source=monitor`) and the existing `startedAt` key in its
+`startedAt` query parameter. This is a selector,
+not a new session identifier or persisted record. On arrival, read only that
+source, match its key and expected mode, then retain the existing mount
+snapshot. A mismatch renders **Recording unavailable** with Back to Today;
+it never falls through to manual logging or the other Just Row source.
+`handoffStore.read(sessionKey)` already filters exactly this way
+(`app/src/monitor/handoffStore.ts:754`); the timer's existing `startedAt` is
+on `SessionRun` (`app/src/session/run.ts:68`). Do not put a revision in the
+URL: durable hydration starts at revision zero (`handoffStore.ts:494`).
+
+Keep unqualified existing finish-time routes compatible. Source-bound
+Today entries bypass Just Row's legacy newer-completion fallback
+(`JustRowLog.tsx:108`) without changing what a direct unqualified visit does.
+Open monitor records use the existing explicit interrupted-close action on
+Review, not on Today render or View unsaved. Closed records are not restamped.
+Live phone timers keep Resume; no recovery screen finishes one by mounting.
+
+| Value | Established | Lifetime and clear rule |
+| --- | --- | --- |
+| Route source/key selector | Clicked retained row | URL survives reload/back. Validated against that source on every mount; absent/replaced record is unavailable, never substituted. |
+| Selected monitor entry | Key-filtered read at summary mount | Existing snapshot and claim/retire policy; no second retained store. Reload re-reads the same key at its current revision. Existing explicit save/discard reasons remain. |
+| Selected timer run | Matched source/key read at summary mount | Existing run snapshot. A destructive completion may clear only a still-matching run, never a newer timer record. No new durable identity. |
+| User-chosen missing type | Explicit selector change | Form-local, wins over a subsequently resolving library lookup. Reset on unmount; lost on reload like unsaved reflection inputs. Never changes stored measurements. |
+| Copy result | Explicit Copy recording press | Form-local success/failure; reset on unmount. No claim, mutation or retirement. |
+
+The review route reuses the existing summary components, builders and save
+pipeline; it is not another numeric model. `source=monitor` is explicit PM5
+intent on this route, equivalent in purpose to `from=monitor` on the existing
+library log door. Invalid/missing source or key cannot select a default.
+
+The library is optional context for recovery, not the record's identity.
+Unknown `isGlobal`, expected pain and designated-test status stay unknown;
+do not award a test result from title alone. Existing plan-fetch/save rules
+and successful-save retirement remain in the shared form. The phone-timer
+summary likewise must not block review on a missing draft plus a stalled
+library request (`LogSession.tsx:1336`); use its matching draft's type when
+present, otherwise the same explicit-choice treatment if no library type is
+available. No change to the ordinary manual logging door is proposed.
 
 ## Evidence at c5015c2e (v0.36.1)
 
@@ -137,7 +209,8 @@ shows the saved record; Start no longer warns for that record. Entering the
 warning and choosing View leave stored bytes unchanged.
 
 **Mutation design:** implementation tests must fail if Today's old exclusion
-returns, the review route loses `from=monitor`, View loses its navigation,
+returns, the review route loses explicit monitor intent or selected key,
+View loses its navigation,
 View leaves Connect's staged replacement authorized, or summary arrival
 retires before a failed save. Each asserts the actual consequence. Commit
 real work before the probes. This opening draft adds no behavioral tests or
@@ -156,9 +229,13 @@ Required cases: completed/interrupted programmed PM5, timer complete/live,
 Just Row timer/PM5, both record types, memory-only same-process data, failed
 save/retry, repeated review, record-specific discard, and View canceling
 Connect's replacement authorization. The malformed/missing-library boundary
-needs its own approved observable before implementation or phase closure.
-The loading/error and source-selection findings above likewise remain design
-gates, not implicitly approved implementation details.
+is covered by the proposed explicit-type or read-only treatments, pending
+approval. Gate those paths with failed/stalled library requests, absent
+workouts, null ids, invalid/missing seeds, a late library response after a
+type choice, and source replacement before summary mount. Prove copy exports
+the selected snapshot and failure preserves it; no successful copy retires it.
+The added recovery screens and lifetime contract require approval before the
+implementation plan and task dispatches.
 
 ## Opening record
 
@@ -187,3 +264,14 @@ table ranges from 5.03:1 (accent on surface-sunken) to 17.11:1 (ink on
 surface). No horizontal overflow was observed. These are prototype checks,
 not application-flow or native acceptance. The docs-only worktree passed
 `pnpm lint`, `pnpm typecheck` and `pnpm format:check` from `app/`.
+
+After normal-flow approval, the additional recovery-case prototype was
+inspected in portrait and landscape. The type selector is 324 × 44 CSS px in
+portrait, Save is 350 × 58, Keep unsaved is 350 × 44, and Copy recording is
+142.29 × 44. Choosing AT changes the prototype Save from disabled to enabled;
+it does not submit anything. The incomplete-record frame is 390 CSS px wide
+with scroll width 390. The same computed contrast table covers the added
+controls (5.03:1 minimum; disabled text is ink-3 on surface-sunken, 6.30:1).
+Docs-only lint, typecheck, app formatting and prototype HTML formatting
+checks passed on the working tree based on 2525c143. No application test
+or hardware acceptance is claimed for these mockups.

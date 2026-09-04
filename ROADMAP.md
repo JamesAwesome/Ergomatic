@@ -1823,7 +1823,8 @@ in both orientations.**
 
 ## The unlogged-session door
 
-**Status:** OPEN at James's request, 2026-09-03; design approval pending.
+**Status:** OPEN at James's request, 2026-09-03. Normal Today/warning design
+approved 2026-09-03; additional recovery-case designs await approval.
 The September 1 item is pulled forward, not another Wave F mechanism.
 One coherent PR after rendered Gate 0 approval; no implementation yet.
 [Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)
@@ -1836,7 +1837,8 @@ discards it." and the dialog offered Cancel and Connect anyway — nothing to
 VIEW what the session holds, and no way to log it. A rower who does not want
 to lose the row has no move except to walk away.
 
-- [ ] **Approve the rendered recovery path.** Today exposes retained work
+- [x] **Approve the normal rendered recovery path.** James: "approved",
+      2026-09-03. Today exposes retained work
       above suggestions; Start/Connect/Just Row warnings offer View unsaved
       without discarding. Both orientations, long titles and both phone and
       monitor records. No new queue or automatic save.
@@ -1848,8 +1850,10 @@ to lose the row has no move except to walk away.
       not proof of that incident's exact record shape.
 - [ ] **Resolve every other guarded shape honestly.** Deleted library
       workouts, null-id non-Just-Row records and legacy/invalid frozen seeds
-      cannot use the existing save route. Their review/recovery treatment is
-      a pre-implementation decision, not a claimed or accepted fix.
+      cannot use the existing save route. Proposed: explicit type choice for
+      valid retained measurements without library metadata; read-only full
+      recording/copy/keep for data that cannot safely rebuild a summary.
+      These extra screens remain a pre-implementation approval gate.
 - [ ] **Keep the recovery destination usable.** Local records must remain
       visible when Today's unrelated requests stall/fail (`Today.tsx:437`).
       Two retained Just Row sources must each open the selected recording,
