@@ -1,6 +1,6 @@
-# Unsaved-workout phone acceptance — proposed, not run
+# Unsaved-workout phone acceptance — recovery/save confirmed by operator
 
-Governed by the approved [recovery design](../superpowers/specs/2026-09-03-unlogged-session-design.md) and the canonical `.claude/skills/hardware-walk/SKILL.md` operator contract. No budget approval, native build installation, release or rowing has occurred for this check.
+Governed by the approved [recovery design](../superpowers/specs/2026-09-03-unlogged-session-design.md) and the canonical `.claude/skills/hardware-walk/SKILL.md` operator contract. James approved the one-minute/three-capture budget on September 4. On candidate 0.36.1 (875) from `d8709c6d`, installed directly on Kaito, he explicitly confirmed successful recovery and saving. Three screenshots show Today discovery and the completion summary/save actions; they do not show saved history or an identified before/after pair. Separate landscape/no-later-warning observations remain unreported; no release or merge occurred. See the [live walk record](../../monitor/sessions/walk-2026-09-04-recovery/README.md).
 
 ## Proposed operator card
 
