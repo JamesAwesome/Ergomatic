@@ -1,7 +1,10 @@
 # NFC recovery preparation — 2026-09-04
 
-Status: signed recovery artifact built on the Mac; NOT INSTALLED. No new scan
-is authorized. No erg invitation is ready. The approved product design is
+Preparation snapshot before the authorized install: signed recovery artifact
+built on the Mac. Installation later succeeded in
+[NF-RECOVERY-SETUP-v1](ZERO-SCAN-SETUP-V1-RESULT.md); subsequent simulator
+progress is in [SIMULATOR-CONTROL-PROOF.md](SIMULATOR-CONTROL-PROOF.md).
+No new scan is authorized. No erg invitation is ready. The approved product design is
 unchanged and implementation remains gated on `REMAINING-PROOF.md`.
 
 ## Desk progress

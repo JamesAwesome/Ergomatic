@@ -50,12 +50,17 @@ An offline call to the unchanged helper's `expected_pid()` against the saved
 install/process files returned 53820, so that file-based identity check is
 established. No Inspector service or phone action was repeated to diagnose it.
 
-Actual unattended DOM/reload control remains unproven. No erg invitation is
+Actual unattended phone DOM/reload control remains unproven. No erg invitation is
 ready. The next desk correction is to retain the helper's fixed guard reason
 and safe stage/target-count observations; any new zero-scan attempt requires
 its own concrete PM review and James's agreement. Reuse this installation if a
 fresh independent identity check still matches; never infer another install
 permission from the need to finish preparation.
+
+The later [simulator rehearsal](SIMULATOR-CONTROL-PROOF.md) reproduced and
+corrected a target-label defect and proved idle reload of the real diagnostic
+component in Simulator. It does not identify this phone run's discarded guard
+reason or retrospectively pass this run.
 
 Evidence: `zero-scan-setup-v1-result.json`; private install, independent app
 listings, process listings, raw console and verified cleanup outputs under
