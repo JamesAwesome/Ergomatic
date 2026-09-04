@@ -4529,3 +4529,8 @@ was approved.
 That PASS was retired when hardening found the v3/v4 controller path could fail
 open or leave cleanup/evidence ownership ambiguous. `NF-NORMAL-TRACE-v5` is a
 new approval target; it is not covered by the historical v3 verdict.
+
+`NF-NORMAL-TRACE-v5` at `5f1c716b` received PM PASS only for its one-attempt,
+eight-minute normal trace walk. Cleanup rehearsal remains a bounded pre-NFC
+experiment; any failure aborts without retry. James still separately chooses
+whether and when to run it.
