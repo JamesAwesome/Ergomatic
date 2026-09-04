@@ -349,6 +349,36 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
         name: "no-reading",
         over: { source: "no-reading", deviceName: undefined, endedBy: null },
       },
+      // THE THREE ROWS THAT ISOLATE THE SOURCE CLAUSE, and without them
+      // neither predicate's first line can be made to go red here: the nine
+      // rows above are all `pm5` (so they only move the OTHER clauses), and
+      // the three directly above are non-`pm5` rows that ALSO fail on
+      // `endedBy`/work totals, so flipping the source clause alone leaves
+      // every one of them `false` and the mutation passes (measured — probe
+      // M40 was green against the table before these three existed).
+      //
+      // Their provenance, stated rather than implied: no door in the app
+      // posts this combination today — `LogSession.tsx`'s timer and
+      // manual/no-reading branches send neither `endedBy` nor the work pair,
+      // and `JustRowLog.tsx` sends both only under `source: "pm5"`. The WIRE
+      // accepts it (`POST /api/logs` couples `source` to `deviceName` alone,
+      // `server/logSource.ts`'s `logSourceContradiction`), an authenticated
+      // client can post it, and both predicates have a clause about it. Which
+      // is the whole point: this file exists to hold the two views of one
+      // stored row equal, and a clause no row exercises is a clause the two
+      // sides can drift on in silence.
+      {
+        name: "timer, finished, with both work columns",
+        over: { source: "timer", deviceName: undefined },
+      },
+      {
+        name: "manual, finished, with both work columns",
+        over: { source: "manual", deviceName: undefined },
+      },
+      {
+        name: "no-reading, finished, with both work columns",
+        over: { source: "no-reading", deviceName: undefined },
+      },
     ];
 
     const rows: StoredLog[] = [];
@@ -391,6 +421,9 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
       "timer: false",
       "manual: false",
       "no-reading: false",
+      "timer, finished, with both work columns: false",
+      "manual, finished, with both work columns: false",
+      "no-reading, finished, with both work columns: false",
     ]);
   });
 
