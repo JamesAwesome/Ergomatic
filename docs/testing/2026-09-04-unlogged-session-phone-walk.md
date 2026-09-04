@@ -23,6 +23,7 @@ Recordings: NO — phone walk; photographs, operator observations and saved rows
 - Preserve any pre-existing unsaved workout. Do not begin if doing so would displace it; this is not permission to discard.
 - Read the current components before giving tap instructions. Use actual controls, one instruction at a time; wait for READY before asking James to row. Nothing must tick at READY. Repeat that heart rate is not needed before the piece.
 - After completion, use a different existing workout only to stage the warning. Do not confirm replacement or begin another rowing piece. After saving, the no-warning check must not add rowing.
+- Before staging that warning, put the phone in landscape. Observe whether View unsaved, Cancel and the explicit replacement action appear above the bottom navigation without manual scrolling. Record the result in the run notes; this adds no rowing or capture request. A visibility failure does not authorize replacement or another piece.
 - On save failure, preserve the record and investigate. A second piece requires a revised approved budget.
 
 ## Import card and author preflight

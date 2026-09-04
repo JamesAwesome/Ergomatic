@@ -202,7 +202,7 @@ Run `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test --project uni
 
 Review-round ownership correction: the original Task 2 worker also owns the shared `UnsavedWorkoutWarning` component and focused tests for the captured initial-visibility defect. Reveal the existing approved warning using the established non-animated scroll/focus idiom, without changing its copy, layout, data behavior or global styling. Prove its controls are initially discoverable in the actual viewport and keyboard flow; refresh captures and mutation evidence. This keeps one implementation writer in the task fix loop. Any repair needing a new visible design or new mechanism returns to the controller before implementation. Other product changes remain under the original restriction.
 
-- [ ] **Step 1: Extend the connected writer journey before claiming recovery works.**
+- [x] **Step 1: Extend the connected writer journey before claiming recovery works.**
 
 In `connected.spec.ts`, reuse the existing fake-injection/setup style with a dedicated five-interval rest-bearing workout whose bulk import, compiled program and timeline agree. Program genuine positive rests before its boundaries, including the final boundary, as in the existing supported rest-bearing producer fixture. Keep the old zero-rest story unchanged. Start with no retained monitor record. Add a natural-finish story that delivers every interval boundary and the real fake transport's WORKOUTEND status, then the summary burst; wait for the actual producer to navigate and verify its retained `endedBy` is `finished`. Do not use `walkSurfaceToLog` for that assertion: its existing story deliberately stops during interval 1 and presses End, so it covers rower-ended retention separately. After natural completion, leave without saving via ordinary navigation, visit another workout and stage its warning, View unsaved → Today → Review & save. Pin PM5 provenance, original captured actuals and retained title. Observe no POST until Save and byte-identical retained storage across warning/View. Save, then inspect the API-created history row and verify a later start does not warn for that record. Repeat with reload between leaving and recovery so hydration is exercised. Failure/retry gets a real intercepted API failure, not a fake useLogForm.
 
@@ -210,11 +210,11 @@ Author correction during Task 2: the existing zero-rest fake encoder uses the st
 
 Run `pnpm e2e connected.spec.ts` for the new scenario. The author records RED by removing the specific Task 1 access condition in a committed tree, then restores surgically and records GREEN. This is a connected production-writer proof under supported fake transport, not evidence of natural BLE interruption incidence.
 
-- [ ] **Step 2: Register and exercise recovery rendering.**
+- [x] **Step 2: Register and exercise recovery rendering.**
 
 Add design sweeps for Today retained PM5 plus timer, warning singular/plural, missing-type summary, read-only legacy recording and unavailable recording. Use real-library-derived fixtures for healthy data and explicit legacy variants. Sweep both 390×844 and 844×390, long titles, all controls ≥44×44, axe zero violations and token checks. Cover Today pending/failed request while its retained row remains clickable. Capture these actual app variants through `screenshots.spec.ts`, open each generated image, describe content/overflow, and compute text contrast; no new pixel-diff gate.
 
-- [ ] **Step 3: Run full verification and record limits.**
+- [x] **Step 3: Run full verification and record limits.**
 
 Run from app: `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test`, `pnpm test:coverage`, `pnpm build`, `pnpm e2e`, and `pnpm screenshots`. Read touched-file coverage from HTML, not only the aggregate. Document every behavioral test's self-mutation and restore result, with exact tree and commands. Keep unrelated stacks/data untouched. Final review receives spec, plan, whole-branch diff, task reports and evidence.
 
