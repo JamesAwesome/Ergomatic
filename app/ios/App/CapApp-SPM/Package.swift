@@ -17,7 +17,7 @@ let package = Package(
         .package(name: "CapacitorCommunityKeepAwake", path: "../../../node_modules/.pnpm/@capacitor-community+keep-awake@8.0.1_@capacitor+core@8.5.0/node_modules/@capacitor-community/keep-awake"),
         .package(name: "CapacitorApp", path: "../../../node_modules/.pnpm/@capacitor+app@8.1.1_@capacitor+core@8.5.0/node_modules/@capacitor/app"),
         .package(name: "CapacitorBrowser", path: "../../../node_modules/.pnpm/@capacitor+browser@8.0.4_@capacitor+core@8.5.0/node_modules/@capacitor/browser"),
-        .package(name: "CapgoCapacitorNfc", path: "../../../node_modules/.pnpm/@capgo+capacitor-nfc@8.2.5_patch_hash=14976bff7e614e28ca5c7e82ffa00af119b9fffc4656ddfe4_c26fc9b6ec4e8f78e6cd0df3b4fd82ca/node_modules/@capgo/capacitor-nfc"),
+        .package(name: "CapgoCapacitorNfc", path: "../../../node_modules/.pnpm/@capgo+capacitor-nfc@8.2.5_patch_hash=014da14df31822c6a8187f02e02b522805daffbabae04dda4_92b909fe727748124d60aa20e83f7ea5/node_modules/@capgo/capacitor-nfc"),
         .package(name: "CapgoCapacitorSocialLogin", path: "../../../node_modules/.pnpm/@capgo+capacitor-social-login@8.4.4_@capacitor+core@8.5.0/node_modules/@capgo/capacitor-social-login")
     ],
     targets: [
