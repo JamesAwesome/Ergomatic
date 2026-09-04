@@ -111,7 +111,7 @@ denial, never clear on mismatch.
 randomness, per-type filter memory, duration ranges, or a name search
 (grepped 2026-09-04: `shuffle`, `duration slider`, `filter by name`,
 `global.*custom` — zero live hits). The type chip row in freestyle shipped
-the same day as #296 and is the surface §3 builds on.
+the same day as #296 and is the surface §2 builds on.
 
 ## 2. PR1 — random shuffle, daily freestyle type, per-type filter memory
 
