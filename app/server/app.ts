@@ -37,6 +37,15 @@ export interface AppDeps {
   // from a live router rather than a 404 from an absent one.
   concept2?: {
     available: () => boolean;
+    // Wave E per-user gate: `available()` AND the email is on
+    // `C2_ALLOWED_EMAILS` (index.ts wires `computeAvailableFor`). Every
+    // AUTHED concept2 route checks this; the unauthenticated web callback
+    // stays on `available` — see routes/concept2.ts's own comment there.
+    // REQUIRED, not optional: an optional field would need a default, and
+    // the only honest default for a fail-closed gate is one that denies
+    // everybody, which would silently disable the surface on any caller
+    // that forgot it. A compile error is the better failure.
+    availableFor: (email: string) => boolean;
     store: Concept2Store;
     client: C2Client;
     // PR1.75a: the WEB surface's redirect (the native one is a constant in
@@ -115,6 +124,7 @@ export function createApp(deps: AppDeps) {
     app.use(
       createConcept2Router({
         available: concept2Deps.available,
+        availableFor: concept2Deps.availableFor,
         store: concept2Deps.store,
         logs: deps.stores.logs,
         client: concept2Deps.client,

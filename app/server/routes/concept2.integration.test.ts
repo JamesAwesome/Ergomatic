@@ -30,6 +30,7 @@ import { createTestHistoryStore } from "../stores/testHistory.js";
 import { createWorkoutsStore } from "../stores/workouts.js";
 import { createConcept2Store } from "../stores/concept2.js";
 import { createC2Client } from "../concept2/client.js";
+import { computeAvailableFor } from "../concept2/availability.js";
 import type { Stores } from "./data.js";
 
 // Wave E PR1 Task 7 (the RF24 seam — "every test seeding PAST the
@@ -196,6 +197,24 @@ const EXPECTED_PAYLOAD = {
 
 // The web surface's registered redirect (index.ts derives it from SITE_URL;
 // here it is this test's own literal, passed as a dep).
+// Every user this file signs in. Serves as BOTH the sign-in allowlist and
+// the Wave E per-user C2 list, so the two gates agree here and each test
+// exercises the feature rather than the gate.
+const SEAM_EMAILS = new Set([
+  "seam-rf24@c2seam.test",
+  "seam-409@c2seam.test",
+  "seam-singleuse@c2seam.test",
+  "seam-refresh@c2seam.test",
+  "seam-web-a@c2seam.test",
+  "seam-web-b@c2seam.test",
+  "seam-native-a@c2seam.test",
+  "seam-native-b@c2seam.test",
+  "seam-cross@c2seam.test",
+  "seam-d1-a@c2seam.test",
+  "seam-d1-b@c2seam.test",
+  "seam-concurrent@c2seam.test",
+]);
+
 const WEB_REDIRECT_URI = "https://ergomatic.example/api/concept2/callback";
 // Wave E PR2: the Concept2 origin this deployment talks to, echoed on
 // `GET /link`. Deliberately not a production origin.
@@ -243,20 +262,7 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       baseDeps({
         sessions,
         users: createUserStore(db),
-        allowlist: new Set([
-          "seam-rf24@c2seam.test",
-          "seam-409@c2seam.test",
-          "seam-singleuse@c2seam.test",
-          "seam-refresh@c2seam.test",
-          "seam-web-a@c2seam.test",
-          "seam-web-b@c2seam.test",
-          "seam-native-a@c2seam.test",
-          "seam-native-b@c2seam.test",
-          "seam-cross@c2seam.test",
-          "seam-d1-a@c2seam.test",
-          "seam-d1-b@c2seam.test",
-          "seam-concurrent@c2seam.test",
-        ]),
+        allowlist: SEAM_EMAILS,
         // Keyed on the idToken itself (see `signIn` below) so each test
         // gets its own isolated user/rows without a real JWKS.
         nativeVerifier: async (idToken: string) => ({
@@ -268,6 +274,14 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
         stores,
         concept2: {
           available: () => true,
+          // Wave E per-user gate, wired through the REAL
+          // `computeAvailableFor` rather than a hand-set `() => true`, so
+          // this file's seam tests cross the same composition production
+          // does. Every user here is on both lists; the gate's own
+          // discrimination is pinned at the router layer
+          // (`concept2.test.ts`, "per-user gate").
+          availableFor: (email: string) =>
+            computeAvailableFor(true, SEAM_EMAILS, email),
           store: createConcept2Store(db),
           client,
           // PR1.75a: the WEB surface's redirect_uri (the native surface's

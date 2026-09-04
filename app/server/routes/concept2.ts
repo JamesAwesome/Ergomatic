@@ -45,7 +45,24 @@ export interface Concept2RouterDeps {
   // Flag AND both creds — computed at boot, closed over (plan's own
   // "Availability" line). A capability gate: every route re-checks it,
   // never just the client's rendering.
+  //
+  // Wave E per-user gate: this is now the GLOBAL half. Two routes still
+  // read it — the web callback's first check (before any principal exists;
+  // it takes `availableFor` too, at step 3b) and `DELETE /link`, where
+  // revocation is deliberately NOT per-user gated (F4 ruling). Every other
+  // authed route uses `availableFor` below.
   available: () => boolean;
+  // Wave E per-user gate (docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md):
+  // `available()` AND the email is on `C2_ALLOWED_EMAILS`
+  // (`concept2/availability.ts`'s `computeAvailableFor`, wired in
+  // `index.ts`). Unset or empty means NOBODY — the surface goes live for
+  // one account first, and widening the list is what the eventual live
+  // cutover does.
+  //
+  // A separate dep rather than a parameter on `available` because the call
+  // sites do not all have a principal at the point they check: the
+  // callback's first check runs before it has resolved one.
+  availableFor: (email: string) => boolean;
   store: Concept2Store;
   logs: LogsStore;
   client: C2Client;
@@ -215,6 +232,7 @@ function toMappingRow(row: {
 
 export function createConcept2Router({
   available,
+  availableFor,
   store,
   logs,
   client,
@@ -269,7 +287,7 @@ export function createConcept2Router({
     requireUser,
     refuseAmbiguousAuth,
     async (req, res) => {
-      if (!available()) {
+      if (!availableFor(req.user!.email)) {
         unavailableJson(res);
         return;
       }
@@ -337,6 +355,10 @@ export function createConcept2Router({
     // 1. availability — consumes NOTHING. PR1's flag-off consume was the
     //    route's last unauthenticated write, an attempt-destruction
     //    primitive that bought nothing; deleted at PR1.75a.
+    //    THE GLOBAL check, and it is first because it needs no principal:
+    //    this hop arrives from Concept2 with no credential of its own, and
+    //    a server whose flag is off should refuse before it reads a query
+    //    string. The PER-USER check is step 3b, once a principal exists.
     if (!available()) {
       sendPage(res, renderCallbackPage("unavailable"));
       return;
@@ -370,6 +392,25 @@ export function createConcept2Router({
     }
     if (!user) {
       sendPage(res, renderCallbackPage("notSignedIn"));
+      return;
+    }
+    // 3b. the PER-USER gate (F2 ruling, fix round 1). An earlier comment
+    //    here claimed a per-user check "would mean inventing a principal";
+    //    step 3 above resolves a full `SessionUser` and step 8 below
+    //    already reads `user.email` to render the Linked page, so nothing
+    //    is invented — the principal exists, and this refuses it.
+    //    Why it is not enough that the mint is gated: an attempt lives for
+    //    `ATTEMPT_MAX_AGE_MS` (15 minutes), so a rower removed from
+    //    `C2_ALLOWED_EMAILS` mid-window would otherwise complete this hop
+    //    and end up holding a link row with LIVE TOKENS — the one outcome
+    //    a one-account rollout exists to prevent.
+    //    Placed AFTER the not-signed-in exit on purpose: an anonymous
+    //    browser must be told to sign in, which is the action that page
+    //    asks for, rather than that the surface is unavailable.
+    //    Consumes NOTHING, exactly like step 1 — the same state completes
+    //    once the rower is on the list again.
+    if (!availableFor(user.email)) {
+      sendPage(res, renderCallbackPage("unavailable"));
       return;
     }
     // 4. peek (advisory)
@@ -474,7 +515,7 @@ export function createConcept2Router({
     refuseAmbiguousAuth,
     async (req, res) => {
       // 1. availability
-      if (!available()) {
+      if (!availableFor(req.user!.email)) {
         unavailableJson(res);
         return;
       }
@@ -580,7 +621,7 @@ export function createConcept2Router({
     requireUser,
     refuseAmbiguousAuth,
     async (req, res) => {
-      if (!available()) {
+      if (!availableFor(req.user!.email)) {
         // 200 on purpose (the matrix's one non-403 row) — this is a
         // capability read, not an action.
         res.json({ available: false });
@@ -630,6 +671,15 @@ export function createConcept2Router({
     requireUser,
     refuseAmbiguousAuth,
     async (req, res) => {
+      // F4 ruling (fix round 1): the GLOBAL check, not `availableFor`, and
+      // it is the only authed route where that is true. A capability gate
+      // closes USE, not revocation — gating unlink meant a rower removed
+      // from `C2_ALLOWED_EMAILS` could not disconnect their own Concept2
+      // account, so the row and its LIVE TOKENS persisted with no
+      // self-service exit, and the gate created the hazard it exists to
+      // bound. Reading stays gated (`GET /link` answers
+      // `{available:false}`), so the card is absent either way; the door
+      // out is not.
       if (!available()) {
         unavailableJson(res);
         return;
@@ -649,7 +699,7 @@ export function createConcept2Router({
     requireUser,
     refuseAmbiguousAuth,
     async (req, res) => {
-      if (!available()) {
+      if (!availableFor(req.user!.email)) {
         unavailableJson(res);
         return;
       }

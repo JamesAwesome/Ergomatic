@@ -572,12 +572,27 @@ while we are in here.
       2026-07-29 and covers 7 domain modules against today's 29. Either make
       a current full run a real enforced gate with an owned cadence, or keep
       it on-demand and retire the stale baseline as evidence. **S/M**
-- [ ] **The 23 dangling `.superpowers/` citations across 11 tracked files.**
+- [ ] **The 23 dangling `.superpowers/` citations across 14 tracked files.**
       That directory is git-excluded and unreachable to anyone but the session
       that wrote it. _"A dangling citation is worse than no citation, because it
-      reads as evidence."_ Affected: `driver.test.ts`, `docs/TESTING.md`,
-      `pm5-interface-notes.md`, and eight plans and specs. **Do NOT create
-      `docs/superpowers/sdd/` to make the paths resolve.** **S**
+      reads as evidence."_ Affected: `app/src/monitor/driver.test.ts`,
+      `docs/monitor/pm5-interface-notes.md`, and twelve files under
+      `docs/superpowers/` (seven plans, four specs, one research note).
+      **Do NOT create `docs/superpowers/sdd/` to make the paths resolve.** **S**
+      **Counted 2026-09-04, not carried** — the citation count was right and
+      the FILE count read 11 and was wrong:
+      `git grep -ln "\.superpowers/[A-Za-z0-9]" 2f258006 -- . ':!*.html'
+      ':!CLAUDE.md' ':!ROADMAP.md' ':!.claude/agents/pm-ledger.md'` lists the
+      fourteen, and the same grep without `-l` counts the twenty-three. Two
+      choices in that command are what make the number mean what the row says:
+      the pattern requires a character AFTER the slash, so a bare mention of
+      the directory is not counted as a citation into it; and the three
+      excluded files DISCUSS this debt rather than cite into it. `docs/TESTING.md`
+      and two `docs/history/` files mention the directory and are therefore
+      NOT in the fourteen — an earlier version of this row named the first of
+      them. The per-user-gate branch briefly took the count to 27 and
+      re-pointed its own four at a tracked spec before merge, so that work
+      leaves the debt unchanged.
 - [ ] **An e2e fixture that exercises a REST.** The `est-left` spec's criterion
       6 is HALF MET: no fixture drives `state: "resting"` with a scripted rest
       value. **S**
@@ -856,7 +871,9 @@ closed with zero Concept2 contact.
       soft bounds the C2 account-injection register row names:
       `UNIQUE(user_id)` + one atomic upsert at mint (one live attempt per
       user, ENFORCED at 1.75a); `ALLOWED_EMAILS`-as-revocation is a
-      separate admission-model question, not bundled here. Sequenced
+      separate admission-model question, not bundled here — see the
+      per-clause disposition below, where the per-user gate answers part
+      of it. Sequenced
       PR1.5 → PR1.75 → PR2; gates `C2_LINK_ENABLED=1` on any real cohort
       (`2026-09-01-concept2-pr15-gate.md` §6). **M**
       **Status 2026-09-02: COMPLETE across two PRs. Per-clause disposition
@@ -871,8 +888,15 @@ closed with zero Concept2 contact.
       Concept2's approval of the native `redirect_uri` — log-dev DONE
       2026-09-02, **live portal STILL OWED**; dual-route identity tests —
       DONE (1.75a); `UNIQUE(user_id)` + one atomic upsert at mint — DONE
-      (1.75a); `ALLOWED_EMAILS`-as-revocation — explicitly NOT bundled,
-      still a separate admission-model question. **PR1.5's `Browser.open` +
+      (1.75a); `ALLOWED_EMAILS`-as-revocation — **PARTLY ANSWERED
+      2026-09-04 by the per-user gate below, which is why this no longer
+      reads "explicitly NOT bundled, still a separate admission-model
+      question":** removing an email from `C2_ALLOWED_EMAILS` DOES close
+      the Concept2 surface for that rower at the next recreate, on every
+      authed route except unlink. It does NOT delete their link row or its
+      tokens, and it says nothing about the sign-in allowlist, whose
+      admission-only behaviour (`signin.ts:30-36`) is untouched — so the
+      general question stands, one capability narrower. **PR1.5's `Browser.open` +
       `browserFinished` return arm was RETIRED at 1.75b** (the callback now
       arrives in a promise); `@capacitor/browser` stays for PR2's read-only
       link-out. Device walk:
@@ -931,6 +955,28 @@ closed with zero Concept2 contact.
         They will always upload with their SAVE clock as Concept2's date.
         There is no backfill and there cannot be one — the close instant was
         never recorded. A known property of pre-PR2 rows, not a bug.
+- [x] **The per-user gate — `C2_ALLOWED_EMAILS`.** The Concept2 surface can
+      now be live for ONE account while the rest of `ALLOWED_EMAILS` never
+      meets it: the mint, the exchange, `GET /link` and the send answer on
+      `availableFor(email)` (`available()` AND the email is on a second
+      allowlist, parsed with the same `parseAllowlist`/`isAllowed` pair as
+      sign-in). Unset or empty means NOBODY. **Two routes are deliberately
+      different, both settled at fix round 1 and both against the shape this
+      row first carried:** the web callback takes the global check first
+      (it has no principal yet) and `availableFor` at step 3b once it has
+      resolved one — an attempt lives fifteen minutes, so gating only the
+      mint would let a rower removed mid-window finish the hop holding live
+      tokens; and `DELETE /link` stays on the global check, because a
+      capability gate closes USE, not a rower's ability to disconnect their
+      own account and stop leaving live tokens behind. **This CHANGES THE
+      SHAPE OF THE CUTOVER named above:** `C2_LINK_ENABLED=1` no longer
+      admits a cohort by itself, so James can walk a real link and a real
+      send on his own account against log-dev before Concept2's write
+      approval lands, and the live flip becomes "widen the list" rather
+      than "flip a flag for everyone at once". `docs/deploy.md` carries the
+      operator half, including the boot-log count and the psql remedy for
+      revoking a link on someone's behalf. Design and rulings:
+      `docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md`. **S**
 - [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open and
       RE-RULED 2026-09-03: the `weight_class` gate is answered by Concept2,
       not by the link flow. James: "I don't want that set in our app. I want
@@ -1290,7 +1336,7 @@ question, not a re-raised one.
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
-| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by two FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by THREE FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window; and, since 2026-09-04, the per-user `C2_ALLOWED_EMAILS` gate — the VICTIM must be on that list for the callback to complete at all, because the hop re-checks `availableFor(user.email)` at step 3b after resolving its principal, so on a one-account rollout the population that can be victimised is one) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**; and since 2026-09-04 "a real cohort" is itself gated on `C2_ALLOWED_EMAILS`, so the flag flip alone no longer admits one) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 | **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
