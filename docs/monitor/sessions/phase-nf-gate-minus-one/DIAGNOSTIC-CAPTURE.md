@@ -86,10 +86,12 @@ test volume remains. No phone process was polled or signalled.
 
 ## Hardware and evidence limits
 
-The phone still has the paused session's older temporary hold/release build.
-The local dependency now uses the new checked-in diagnostic patch without that
-overlay; the old overlay's source/diff/review artifacts are preserved. Do not
-treat the phone installation as the software verified by this desk work.
+At the end of the original desk session, the phone still had the paused
+session's older hold/release build. The resumed preparation installed the
+pinned diagnostic artifact and verified the installed bundle/version/build
+and installation URL; see `OPERATOR-WORKFLOW-V6.md`. The old overlay's
+source/diff/review artifacts remain preserved. Installation is not a new
+NFC result.
 
 Native generation is not a durable join to v1 receipt attempts across plugin
 instances or documents. Missing callback output means unobserved, not proof

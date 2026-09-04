@@ -8,7 +8,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import {
   classifyGateConsoleEvidence,
@@ -30,11 +29,7 @@ export interface ConsoleHandle {
 
 export interface NormalTraceDependencies {
   now: () => number;
-  acknowledge: (
-    prompt: string,
-    expected: "READY" | "PM5" | "VISIBLE",
-    deadlineMs: number,
-  ) => Promise<string>;
+  signal?: AbortSignal;
   notify: (message: string) => void;
   sleepUntil: (deadlineMs: number) => Promise<void>;
   run: (args: string[]) => Promise<void>;
@@ -42,6 +37,9 @@ export interface NormalTraceDependencies {
 }
 
 export interface NormalTraceResult {
+  startedAt: string;
+  finishedAt: string;
+  elapsedMs: number;
   cleanupVerified: boolean;
   decision: GateConsoleDecision;
 }
@@ -74,6 +72,39 @@ export function findUniqueProcessIdentifier(value: unknown): number {
   return [...found][0]!;
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+export function assertInstalledAppMatches(
+  install: unknown,
+  listing: unknown,
+): Record<string, unknown> {
+  const installations = record(record(install).result).installedApplications;
+  const apps = record(record(listing).result).apps;
+  const matchingInstalls = Array.isArray(installations)
+    ? installations.map(record).filter((app) => app.bundleID === BUNDLE)
+    : [];
+  const matchingApps = Array.isArray(apps)
+    ? apps.map(record).filter((app) => app.bundleIdentifier === BUNDLE)
+    : [];
+  const installed = matchingInstalls[0];
+  const app = matchingApps[0];
+  if (
+    matchingInstalls.length !== 1 ||
+    matchingApps.length !== 1 ||
+    app?.version !== "0.23.0" ||
+    app.bundleVersion !== "789" ||
+    typeof app.url !== "string" ||
+    !app.url.startsWith("file:///") ||
+    app.url !== installed?.installationURL
+  )
+    throw new Error("Installed app did not match the pinned installation");
+  return app;
+}
+
 function boundedTimeoutSeconds(
   nowMs: number,
   deadlineMs: number,
@@ -92,12 +123,28 @@ function json(path: string): unknown {
 export function assertProcessIdentifierAbsent(
   value: unknown,
   pid: number,
+  executable?: string,
 ): void {
   const found = new Set<number>();
   collectProcessIdentifiers(value, found);
   if (found.size === 0)
     throw new Error("Process listing did not expose process identifiers");
-  if (found.has(pid))
+  const processes = record(record(value).result).runningProcesses;
+  if (
+    executable !== undefined &&
+    (!Array.isArray(processes) ||
+      processes.some(
+        (entry) =>
+          typeof record(entry).executable !== "string" ||
+          !Number.isSafeInteger(record(entry).processIdentifier),
+      ))
+  )
+    throw new Error("Process listing did not expose runningProcesses");
+  const appRemains =
+    executable !== undefined &&
+    Array.isArray(processes) &&
+    processes.some((process) => record(process).executable === executable);
+  if (found.has(pid) || appRemains)
     throw new Error("Replacement app process remained after termination");
 }
 
@@ -106,6 +153,7 @@ async function replaceAndTerminateBundle(
   captureDir: string,
   deadlineMs: number,
   deps: NormalTraceDependencies,
+  executable: string,
 ): Promise<void> {
   const launchJson = join(captureDir, `${prefix}-replacement-launch.json`);
   const launchLog = join(captureDir, `${prefix}-replacement-launch.log`);
@@ -167,53 +215,63 @@ async function replaceAndTerminateBundle(
     "--log-output",
     processesLog,
   ]);
-  assertProcessIdentifierAbsent(json(processesJson), replacementPid);
+  assertProcessIdentifierAbsent(
+    json(processesJson),
+    replacementPid,
+    executable,
+  );
 }
 
-function atomicResult(path: string, result: NormalTraceResult): void {
+function atomicResult(path: string, result: unknown): void {
   const temporary = `${path}.tmp`;
   writeFileSync(temporary, `${JSON.stringify(result, null, 2)}\n`, {
     flag: "wx",
+    mode: 0o600,
   });
   renameSync(temporary, path);
 }
 
-async function whileConsoleAttached<T>(
-  consoleHandle: ConsoleHandle,
-  operation: () => Promise<T>,
-): Promise<T> {
-  if (!consoleHandle.isRunning())
-    throw new Error("attached console exited before capture");
-  const result = await Promise.race([
-    operation(),
-    consoleHandle.wait().then((code) => {
-      throw new Error(`attached console exited before capture (${code})`);
-    }),
+async function installedApps(
+  captureDir: string,
+  prefix: string,
+  deadlineMs: number,
+  deps: NormalTraceDependencies,
+): Promise<unknown> {
+  const path = join(captureDir, `${prefix}.json`);
+  await deps.run([
+    "devicectl",
+    "device",
+    "info",
+    "apps",
+    "--device",
+    DEVICE,
+    "--timeout",
+    String(boundedTimeoutSeconds(deps.now(), deadlineMs, 20)),
+    "--json-output",
+    path,
+    "--log-output",
+    join(captureDir, `${prefix}.log`),
   ]);
-  if (!consoleHandle.isRunning())
-    throw new Error("attached console exited before capture");
-  return result;
+  return json(path);
 }
 
-export async function runNormalTraceController(
+function timing(startedMs: number, deps: NormalTraceDependencies) {
+  const finishedMs = deps.now();
+  return {
+    startedAt: new Date(startedMs).toISOString(),
+    finishedAt: new Date(finishedMs).toISOString(),
+    elapsedMs: finishedMs - startedMs,
+  };
+}
+
+export async function prepareNormalTraceController(
   captureDir: string,
   deps: NormalTraceDependencies,
-): Promise<NormalTraceResult> {
+) {
   const startedMs = deps.now();
-  const hardDeadlineMs = startedMs + HARD_BUDGET_MS;
-  const cleanupDeadlineMs = hardDeadlineMs - CLEANUP_RESERVE_MS;
-
-  await deps.acknowledge(
-    "Connect the iPhone by USB and unlock it, then reply READY.",
-    "READY",
-    startedMs + 45_000,
-  );
+  const deadlineMs = startedMs + 120_000;
+  let reason: string | undefined;
   try {
-    const installTimeout = boundedTimeoutSeconds(
-      deps.now(),
-      cleanupDeadlineMs,
-      60,
-    );
     await deps.run([
       "devicectl",
       "device",
@@ -222,159 +280,143 @@ export async function runNormalTraceController(
       "--device",
       DEVICE,
       "--timeout",
-      String(installTimeout),
+      "60",
       "--json-output",
       join(captureDir, "install.json"),
       "--log-output",
       join(captureDir, "install.log"),
       ARTIFACT,
     ]);
-
-    // A bundle-scoped suspended replacement proves the exact cleanup mechanism
-    // before James is asked to touch the PM5 or start NFC.
+    const app = assertInstalledAppMatches(
+      json(join(captureDir, "install.json")),
+      await installedApps(captureDir, "installed-apps", deadlineMs, deps),
+    );
     await replaceAndTerminateBundle(
       "cleanup-rehearsal",
       captureDir,
-      cleanupDeadlineMs,
+      deadlineMs,
       deps,
+      `${String(app.url)}App`,
     );
   } catch (error) {
-    let cleanupVerified = false;
-    try {
-      await replaceAndTerminateBundle(
-        "prelaunch-abort-cleanup",
-        captureDir,
-        hardDeadlineMs,
-        deps,
-      );
-      cleanupVerified = true;
-    } catch {
-      deps.notify(
-        "Press the iPhone side button once to lock it; no reply needed.",
-      );
-    }
-    const decision: GateConsoleDecision = {
-      outcome: "inconclusive",
-      reasons: [
-        error instanceof Error ? error.message : "controller prelaunch failed",
-        ...(cleanupVerified
-          ? []
-          : ["bundle-scoped cleanup could not be verified"]),
-      ],
-    };
-    const result = { cleanupVerified, decision };
-    atomicResult(join(captureDir, "evidence.json"), result);
-    return result;
+    reason = error instanceof Error ? error.message : "Preparation failed";
   }
+  const result = {
+    ready: reason === undefined,
+    ...timing(startedMs, deps),
+    ...(reason === undefined ? {} : { reason }),
+  };
+  atomicResult(join(captureDir, "preparation.json"), result);
+  return result;
+}
 
-  const consoleLog = join(captureDir, "normal-console.log");
-  const consoleTimeout = boundedTimeoutSeconds(
-    deps.now(),
-    hardDeadlineMs,
-    8 * 60,
+export async function runNormalTraceController(
+  captureDir: string,
+  hardDeadlineMs: number,
+  deps: NormalTraceDependencies,
+): Promise<NormalTraceResult> {
+  const startedMs = deps.now();
+  if (
+    !Number.isFinite(hardDeadlineMs) ||
+    hardDeadlineMs - startedMs <= CLEANUP_RESERVE_MS ||
+    hardDeadlineMs - startedMs > HARD_BUDGET_MS
+  )
+    throw new Error(
+      "Capture deadline must leave cleanup time and be within eight minutes",
+    );
+  if (
+    ["normal-console.log", "evidence.json"].some((name) =>
+      existsSync(join(captureDir, name)),
+    )
+  )
+    throw new Error("Directory already contains capture evidence");
+  // Human setup and permission happen in chat before this explicit invocation.
+  // The caller supplies the agreed deadline, so setup time is not reset here.
+  const install = json(join(captureDir, "install.json"));
+  const prepared = assertInstalledAppMatches(
+    install,
+    json(join(captureDir, "installed-apps.json")),
   );
-  let consoleHandle: ConsoleHandle;
-  try {
-    consoleHandle = await deps.launchConsole(
-      [
-        "devicectl",
-        "device",
-        "process",
-        "launch",
-        "--device",
-        DEVICE,
-        "--terminate-existing",
-        "--console",
-        "--timeout",
-        String(consoleTimeout),
-        "--json-output",
-        join(captureDir, "normal-launch.json"),
-        BUNDLE,
-      ],
-      consoleLog,
-    );
-  } catch (error) {
-    let cleanupVerified = false;
-    try {
-      await replaceAndTerminateBundle(
-        "console-launch-abort-cleanup",
-        captureDir,
-        hardDeadlineMs,
-        deps,
-      );
-      cleanupVerified = true;
-    } catch {
-      deps.notify(
-        "Press the iPhone side button once to lock it; no reply needed.",
-      );
-    }
-    const decision: GateConsoleDecision = {
-      outcome: "inconclusive",
-      reasons: [
-        error instanceof Error ? error.message : "console launch failed",
-        ...(cleanupVerified
-          ? []
-          : ["bundle-scoped cleanup could not be verified"]),
-      ],
-    };
-    const result = { cleanupVerified, decision };
-    atomicResult(join(captureDir, "evidence.json"), result);
-    return result;
-  }
-
+  const executable = `${String(prepared.url)}App`;
+  const consoleLog = join(captureDir, "normal-console.log");
+  let consoleHandle: ConsoleHandle | undefined;
   let runError: unknown = null;
+  let cleanupVerified = false;
+  let finish: (() => void) | undefined;
   try {
-    await whileConsoleAttached(consoleHandle, () =>
-      deps.acknowledge(
-        "On the iPhone, tap YOU and scroll to NFC GATE -1 PROBE, then reply VISIBLE.",
-        "VISIBLE",
-        startedMs + 2.5 * 60_000,
+    assertInstalledAppMatches(
+      install,
+      await installedApps(
+        captureDir,
+        "capture-installed-apps",
+        hardDeadlineMs - CLEANUP_RESERVE_MS,
+        deps,
       ),
     );
-    await whileConsoleAttached(consoleHandle, () =>
-      deps.acknowledge(
-        "Wake the PM5, open More Options > Connect Device, leave it on Ready for App Connection, then reply PM5.",
-        "PM5",
-        startedMs + 3.5 * 60_000,
-      ),
-    );
-    if (!consoleHandle.isRunning())
-      throw new Error("attached console exited before capture");
-    deps.notify(
-      "No heart-rate gear or rowing is needed. Tap Run normal sample, then hold the phone at the same PM5 NFC spot that worked earlier. Do nothing else; I am collecting the result.",
-    );
-
-    await whileConsoleAttached(consoleHandle, () =>
-      deps.sleepUntil(cleanupDeadlineMs),
-    );
+    if (deps.signal?.aborted)
+      throw new Error("capture stopped before console launch");
+    {
+      consoleHandle = await deps.launchConsole(
+        [
+          "devicectl",
+          "device",
+          "process",
+          "launch",
+          "--device",
+          DEVICE,
+          "--terminate-existing",
+          "--console",
+          "--timeout",
+          String(boundedTimeoutSeconds(deps.now(), hardDeadlineMs, 8 * 60)),
+          "--json-output",
+          join(captureDir, "normal-launch.json"),
+          BUNDLE,
+        ],
+        consoleLog,
+      );
+      if (!consoleHandle.isRunning())
+        throw new Error("attached console exited before capture");
+      // SIGINT is an agent-owned finish request; it does not authorize a scan.
+      const finished = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      deps.signal?.addEventListener("abort", finish!, { once: true });
+      if (deps.signal?.aborted) finish!();
+      deps.notify("CAPTURE_ATTACHED");
+      await Promise.race([
+        finished,
+        deps.sleepUntil(hardDeadlineMs - CLEANUP_RESERVE_MS),
+        consoleHandle.wait().then((code) => {
+          throw new Error(`attached console exited before capture (${code})`);
+        }),
+      ]);
+      if (!consoleHandle.isRunning())
+        throw new Error("attached console exited before capture");
+    }
   } catch (error) {
     runError = error;
-  }
-
-  let cleanupVerified = false;
-  try {
-    await replaceAndTerminateBundle(
-      "normal-cleanup",
-      captureDir,
-      hardDeadlineMs,
-      deps,
-    );
-    cleanupVerified = true;
-  } catch {
-    deps.notify(
-      "Press the iPhone side button once to lock it; no reply needed.",
-    );
   } finally {
-    consoleHandle.stopHost();
+    if (finish) deps.signal?.removeEventListener("abort", finish);
     try {
-      await consoleHandle.wait();
+      await replaceAndTerminateBundle(
+        "normal-cleanup",
+        captureDir,
+        hardDeadlineMs,
+        deps,
+        executable,
+      );
+      cleanupVerified = true;
+    } catch {
+      // Device state is unknown; the host must not invent a phone instruction.
+    }
+    consoleHandle?.stopHost();
+    try {
+      await consoleHandle?.wait();
     } catch (error) {
       runError ??= error;
     }
   }
-
-  let decision: GateConsoleDecision;
-  const controllerReasons = [
+  const reasons = [
     ...(runError === null
       ? []
       : [
@@ -384,20 +426,16 @@ export async function runNormalTraceController(
         ]),
     ...(cleanupVerified ? [] : ["bundle-scoped cleanup could not be verified"]),
   ];
-  if (controllerReasons.length > 0) {
-    decision = {
-      outcome: "inconclusive",
-      reasons: controllerReasons,
-    };
-  } else if (!existsSync(consoleLog)) {
-    decision = {
-      outcome: "inconclusive",
-      reasons: ["console log was not captured"],
-    };
-  } else {
-    decision = classifyGateConsoleEvidence(readFileSync(consoleLog, "utf-8"));
-  }
-  const result = { cleanupVerified, decision };
+  const decision: GateConsoleDecision =
+    reasons.length > 0
+      ? { outcome: "inconclusive", reasons }
+      : existsSync(consoleLog)
+        ? classifyGateConsoleEvidence(readFileSync(consoleLog, "utf-8"))
+        : {
+            outcome: "inconclusive",
+            reasons: ["console log was not captured"],
+          };
+  const result = { ...timing(startedMs, deps), cleanupVerified, decision };
   atomicResult(join(captureDir, "evidence.json"), result);
   return result;
 }
@@ -427,7 +465,7 @@ function launchXcrunConsole(
   args: string[],
   logPath: string,
 ): Promise<ConsoleHandle> {
-  const descriptor = openSync(logPath, "wx");
+  const descriptor = openSync(logPath, "wx", 0o600);
   const child = spawn("xcrun", args, {
     stdio: ["ignore", descriptor, descriptor],
   });
@@ -458,50 +496,52 @@ function launchXcrunConsole(
   });
 }
 
-function acknowledgeFromStdin(
-  prompt: string,
-  expected: "READY" | "PM5" | "VISIBLE",
-  deadlineMs: number,
-): Promise<string> {
-  console.log(`OPERATOR: ${prompt}`);
-  return new Promise((resolve, reject) => {
-    const input = createInterface({ input: process.stdin, terminal: true });
-    const timeout = setTimeout(
-      () => {
-        input.close();
-        reject(new Error(`Timed out waiting for ${expected}`));
-      },
-      Math.max(0, deadlineMs - Date.now()),
-    );
-    input.once("line", (line) => {
-      clearTimeout(timeout);
-      input.close();
-      if (line.trim() !== expected) reject(new Error(`Expected ${expected}`));
-      else resolve(expected);
-    });
-  });
-}
-
 const processArgv = (globalThis as unknown as { process: { argv: string[] } })
   .process.argv;
 const invokedPath = processArgv[1];
 if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
-  const [mode, captureDir] = processArgv.slice(2);
-  if (mode !== "run" || !captureDir)
+  const [mode, captureDir, deadline] = processArgv.slice(2);
+  if (
+    (mode !== "prepare" && mode !== "capture") ||
+    !captureDir ||
+    (mode === "capture" && !deadline)
+  )
     throw new Error(
-      "Usage: pnpm exec tsx scripts/nfc-normal-trace-controller.ts run <capture-dir>",
+      "Usage: pnpm exec tsx scripts/nfc-normal-trace-controller.ts prepare <capture-dir> | capture <capture-dir> <deadline-ISO>",
     );
-  const result = await runNormalTraceController(captureDir, {
-    now: Date.now,
-    acknowledge: acknowledgeFromStdin,
-    notify: (message) => console.log(`OPERATOR: ${message}`),
-    sleepUntil: async (deadlineMs) => {
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.max(0, deadlineMs - Date.now())),
-      );
-    },
-    run: runXcrun,
-    launchConsole: launchXcrunConsole,
-  });
-  console.log(`OUTCOME: ${result.decision.outcome}`);
+  const stop = new AbortController();
+  const finish = () => stop.abort();
+  process.on("SIGINT", finish);
+  process.on("SIGTERM", finish);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const deps: NormalTraceDependencies = {
+      now: Date.now,
+      signal: stop.signal,
+      notify: (message) => console.log(message),
+      sleepUntil: (deadlineMs) =>
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, Math.max(0, deadlineMs - Date.now()));
+        }),
+      run: runXcrun,
+      launchConsole: launchXcrunConsole,
+    };
+    const result =
+      mode === "prepare"
+        ? await prepareNormalTraceController(captureDir, deps)
+        : await runNormalTraceController(
+            captureDir,
+            Date.parse(deadline!),
+            deps,
+          );
+    console.log(
+      JSON.stringify(result, (_key, value: unknown) =>
+        _key === "evidence" ? undefined : value,
+      ),
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+    process.off("SIGINT", finish);
+    process.off("SIGTERM", finish);
+  }
 }

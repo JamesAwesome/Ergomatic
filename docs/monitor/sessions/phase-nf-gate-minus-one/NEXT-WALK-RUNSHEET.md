@@ -1,206 +1,161 @@
-# NF-NORMAL-TRACE-v5 — hardened one-attempt NFC diagnostic runsheet
+# NF-NORMAL-TRACE-v6 — one normal sample after completed setup
 
-**Authorization gate: this exact version may run only after a PM explicitly
-returns PASS for `NF-NORMAL-TRACE-v5` and James separately agrees. Neither this
-file nor its commit authorizes operation of the phone or PM5.**
+**PM PASS: zero-scan screen description only. Normal sample NOT READY.**
+Reviewer `/root/walk_pm`, 2026-09-04. No scan is authorized. James has authorized preparation
+and installation. Agreeing to setup, reporting a screen, or saying the app is
+responsive does not authorize NFC. The product design remains approved and
+product implementation remains gated on incomplete hardware evidence.
 
-WALK PLAN · Observe one fresh PM5 reader activation and automatic evidence capture
+This replaces v5's timed chat acknowledgements. Installation and command
+rehearsal finish before a scan invitation. Codex gives one physical instruction
+at a time in chat; no controller waits for READY, VISIBLE or PM5 input.
 
-Total rowing: 1 piece, 0 min of actual work — hard budget
+## Purpose and cost
 
-Piece 1: Normal PM5 NFC handoff — one reader start, one tag presentation, one
-targeted BLE connect/disconnect observation; no retry and no rowing
+One question: on this iPhone 17 Pro / iOS 26.6.1 and PM5 432331249, does one
+fresh normal attempt report `ndef.rf.active`, read the known records, and
+connect/disconnect the exact live Bluetooth name without a picker?
 
-Captures you'll be asked for: 0
+The old receipts lack the new native RF-active trace. Desk tests can check
+callback handling and classification, but cannot establish its physical
+producer. This is one diagnostic sample, not the remaining Gate -1 matrix.
 
-Phone needed: YES because the physical Core NFC callback and signed native app
-are the facts under test
+- One NFC attempt, one tag presentation, zero retries. No programming, rowing,
+  heart rate, recovery, reload, background gesture, Flipper or multi-tag case.
+- No console typing, pasted commands, metadata entry, screenshots, receipt
+  copying or exports for James. Codex collects and classifies the console.
+- Agent preparation is recorded with actual elapsed time in
+  `OPERATOR-WORKFLOW-V6.md`, including installation, debugging, review and the
+  debugger interruption. It is not advertised as part of a short scan alone.
+- Before inviting the normal sample, Codex states the preparation time already
+  spent and the remaining **eight-minute total operator wall-clock cap**.
+  This cap includes UI confirmation, chat delivery/waiting, PM5 setup,
+  observation, cleanup and wrap-up. No install, rebuild or live repair fits
+  inside it. A resumed session never silently resets that clock.
+- There is no 45-second reply deadline or other per-message timer. An inactive
+  chat has no pending stdin handshake. The agreed total deadline is an ISO
+  timestamp supplied explicitly to `capture`; observation ends 45 seconds
+  before it. If chat consumes the budget, stop before scanning.
 
-Recordings: NO — the controller captures the attached native console and emits
-the decision; James captures and copies nothing
+## Prepared artifact
 
-Heart rate: NO — do not connect or wear heart-rate gear
-
-## One question and hard limits
-
-Does one fresh normal attempt on the photographed iPhone 17 Pro / PM5
-432331249 reach `ndef.rf.active` and complete the exact
-NFC-name-to-picker-free-BLE path?
-
-- The clock starts before USB/unlock setup and stops at 8:00. At 7:15 the
-  controller ends observation and begins the reserved cleanup path regardless
-  of apparent success.
-- Exactly one normal NFC sample is allowed. There is no retry, recovery,
-  background, timeout, held, reload, Flipper, multi-tag, programming or rowing
-  case.
-- James sends only `READY`, `PM5`, and `VISIBLE`. There are no commands,
-  scripts, URLs, metadata, screenshots, receipts or transcriptions for him.
-- At most 12 physical actions are allowed: USB (1), unlock (1), wake PM5 (1),
-  More Options (1), Connect Device (1), YOU (1), at most three scroll gestures,
-  Run normal sample (1), one tag presentation/hold (1), and one reserved
-  side-button lock only if verified controller cleanup fails (1).
-- A trust prompt, login flow, unidentified popup, extra scroll, missing
-  evidence, prerequisite failure or deadline aborts the walk. No live repair or
-  scope expansion is allowed.
-
-## Pinned inputs
-
-| Item | Frozen value |
+| Input | Pinned value |
 | --- | --- |
-| Artifact source commit | `7e10d2897a3d9c00685374695410a59213beb679` |
-| Controller code commit | `4604f3be5a04c5431dca7bf80d6c3322a006fb61` |
+| Source | `7e10d2897a3d9c00685374695410a59213beb679` |
 | Artifact | `/tmp/ergomatic-phase-nf-ready.WQJqQu/Build/Products/Debug-iphoneos/App.app` |
-| Bundle id | `haus.waffle.ergomatic` |
-| App version/build | `0.23.0` / `789` |
+| Bundle / version / build | `haus.waffle.ergomatic` / `0.23.0` / `789` |
 | Executable SHA-256 | `bb4e30e5387664b6f8914855ef1aa45280916394d597637871ac80abc2ff8dbf` |
 | Probe asset | `GateMinusOneProbe-O_TBUSFS.js` |
 | Probe SHA-256 | `b333816b7ccf4960c2c7035298f844104af33bff351ac3fb1a18f4c02ffb07a0` |
-| Classifier | `app/scripts/nfc-gate-console-receipt.ts` |
-| Classifier SHA-256 | `3f5f80ce914d54c410d86948416729edc79848c99663656af3c87439783f1739` |
-| Controller | `app/scripts/nfc-normal-trace-controller.ts` |
-| Controller SHA-256 | `51ee37507e34900f3757332b1951b3ef1bddbfd5ad9d3487a6e01f440ce025a2` |
-| Code-sign CDHash | `96d980eec0b53de9446b72589d8e41324224f58a` |
-| NFC entitlement | exactly `com.apple.developer.nfc.readersession.formats = [TAG]` |
+| CDHash | `96d980eec0b53de9446b72589d8e41324224f58a` |
+| NFC entitlement | exactly `[TAG]` |
 | Usage text | `Scan a PM5 to connect and program your workout.` |
-| Prefill | iPhone 17 Pro / iOS 26.6.1 / PM5 D/E / 459.069 / `PM5 432331249 Row` |
+| Prefill | iPhone 17 Pro / 26.6.1 / PM5 D/E / 459.069 / `PM5 432331249 Row` |
+| Classifier SHA-256 | `3f5f80ce914d54c410d86948416729edc79848c99663656af3c87439783f1739` |
 
-The artifact is the already verified build: focused NFC 108/108, static gates,
-normal flag-off build/dist-grep, full browser E2E 455/455 with teardown, strict
-code-sign verification, exact entitlement/usage text and unchanged `cap sync
-ios`. Controller-only files are outside the signed artifact. Any artifact hash,
-signature, entitlement, usage, probe hash, controller hash or allowed source
-diff mismatch invalidates this runsheet; rebuilding is not a walk repair.
+Source and artifact checks, installation, installed-app listing, console
+transport and bundle cleanup were performed on 2026-09-04; see the preparation
+record. Installed identity means the verified source artifact was accepted by
+CoreDevice and its installation URL matches the independently listed bundle,
+version and build. It is not a readback hash of the phone executable.
 
-## Feasibility rulings
+The classifier and signed artifact are unchanged. Reuse their recorded gates;
+do not rerun browser E2E, native builds or the whole NFC suite for this host
+controller fix. Hash/signature mismatch, changed installed URL/identity or
+changed product source stops preparation.
 
-| Required mechanism | What is established | Fail-closed boundary |
+## Action feasibility and current unresolved state
+
+| Action / starting state | Evidence | Boundary |
 | --- | --- | --- |
-| Install signed app by USB | This phone previously accepted `devicectl` installation; installed help specifies `device install app`. | Abort at 60 s or on any CoreDevice/install failure. |
-| Attached console capture | This phone previously delivered the app console through `process launch --console`; installed help says it connects standard streams and waits. | The controller sends stdout and stderr directly to one file, watches any early child exit as an abort, and requires James to see the launched probe before the PM5 instruction. It does not combine `--log-output` with console capture. |
-| Bundle-scoped cleanup | Installed help specifies bundle launch with `--terminate-existing`, `--start-stopped`, JSON output, PID termination and process listing. The exact composed path has not yet run on this phone. | Before PM5/NFC work, the controller launches a suspended replacement for the exact bundle, requires exactly one PID from that bundle-specific launch result, kills it, and proves that PID absent. Failure aborts before the attempt. |
-| Probe navigation and metadata | Earlier phone work reached this probe; focused tests prove exact all-or-nothing prefill in the signed asset. | Missing signed-in YOU/probe or any extra input aborts. |
-| PM5 connection mode and tag | Photos establish More Options, Connect Device and PM5 432331249; two earlier reads and targeted connections succeeded. | One ordinary presentation only; no invented PM5 control or Flipper. |
-| Evidence classification | Unit tests cover Capacitor-decorated producer output, multiple complete exports, truncated newest export, absent/malformed/wrong-generation/unordered diagnostics and positive/negative/inconclusive outcomes. | The controller freezes the file only after cleanup, selects the newest-started export, never falls back past a newer incomplete export, and atomically publishes both outcome and cleanup state in `evidence.json`. |
+| Install app without James typing | Actual `devicectl device install app` succeeded; matching bundle/version/build/installation URL independently listed. | Already done. Do not ask James to install or reconnect USB. |
+| Attach console to a fresh process | Actual `--terminate-existing --console` captured WebView loaded and native bridge output. | Launch JSON is written only when the attached process exits; never use its absence during capture as launch failure. Require positive WebView-loaded output and a live host before a scan. |
+| Stop the app | Actual suspended bundle replacement, PID termination and unfiltered process listing proved old and replacement PIDs absent. | No process-name guessing or unsupported NSURL predicate. |
+| YOU and probe, no modal present | Earlier device sessions reached this probe; `You.tsx` mounts the flagged component, whose normal button is enabled only with complete metadata and idle state. The signed asset contains the known prefill. | Current rendered screen and enabled normal button have NOT been observed after this installation. Do not present them as verified. First obtain a simple screen observation; no NFC during that check. |
+| PM5 More Options / Connect Device | Prior photographed PM5 and two recorded normal handoffs, `REPAIRED-NORMAL.md` and `background-final-receipt.json`. | One menu action per instruction; do not assume NFC powers up or configures the PM5. |
+| Normal button before native modal | Prior ordinary sample completed; control and handler unchanged in signed source. | Only after the current button is visible/enabled and James separately agrees to one scan. |
+| Present phone to same PM5 NFC spot with modal live | Two prior physical read/connect/disconnect samples on this phone/PM5. | No app taps or Home gesture through the modal. Stop after one presentation. |
 
-The cleanup rehearsal is intentionally the only unproved CLI composition and
-happens after James's agreement but before he touches the PM5. It is bounded by
-the same eight-minute clock. Its failure spends no NFC attempt and cannot turn
-into troubleshooting.
+The debugger used for desk screen inspection paused the app and James reported
+it unresponsive. It was detached and an ordinary foreground launch succeeded;
+no debugger or inspection console remains. This inspection did not establish
+current DOM contents. No further debugger inspection is part of the procedure.
 
-## Controller preflight — before the clock
+## Operator sequence — each numbered line is a separate exchange
 
-No device command runs during preflight. From the Phase NF worktree, run this
-as one noninteractive zsh program. `set -Eeuo pipefail` and the failure trap make
-every check fail closed; the temporary directory is created only after all
-checks pass.
+The current next step is a **zero-scan screen check**, not consent to the sample:
+“Tell me what screen Ergomatic shows.” This asks for an observation and invents
+no control. PM must judge this exact setup check alongside the proposed sample.
+If the app still does not respond, stop; do not troubleshoot while James waits.
+This one observation has no pending process or reply deadline. Its reply does
+not start the sample clock; its elapsed cost remains part of preparation.
 
-```zsh
-set -Eeuo pipefail
-trap 'preflight_code=$?; (( preflight_code == 0 )) || print -u2 "NFC walk preflight failed ($preflight_code)"' EXIT
+Once the current screen is known, use only the corresponding demonstrated
+control. The maximum remaining actions are YOU (one tap), at most three
+individual upward scrolls, wake PM5, More Options, Connect Device, Run normal
+sample, and one tag presentation. At most three short screen/menu replies are
+needed; no required magic words. If three scrolls do not expose the normal
+button with metadata already filled, stop. A login, trust dialog, unexpected
+popup, disabled sample or missing field stops the session.
 
-artifact=/tmp/ergomatic-phase-nf-ready.WQJqQu/Build/Products/Debug-iphoneos/App.app
-probe="$artifact/public/assets/GateMinusOneProbe-O_TBUSFS.js"
-expected_root=/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/phase-nf-nfc-design
+Before Run normal sample, state the remaining budget and obtain James's
+separate agreement to **one scan**. No additional confirmation is required once
+that agreement exists. With current UI ready and no modal, deliver:
 
-test "$(git rev-parse --show-toplevel)" = "$expected_root"
-test -z "$(git status --porcelain)"
-git diff --exit-code 4604f3be5a04c5431dca7bf80d6c3322a006fb61 -- app
-git diff --exit-code 7e10d2897a3d9c00685374695410a59213beb679 -- \
-  app \
-  ':(exclude)app/scripts/nfc-gate-console-receipt.ts' \
-  ':(exclude)app/scripts/nfc-gate-console-receipt.test.ts' \
-  ':(exclude)app/scripts/nfc-normal-trace-controller.ts' \
-  ':(exclude)app/scripts/nfc-normal-trace-controller.test.ts'
-test "$(shasum -a 256 "$artifact/App" | awk '{print $1}')" = \
-  bb4e30e5387664b6f8914855ef1aa45280916394d597637871ac80abc2ff8dbf
-test "$(shasum -a 256 "$probe" | awk '{print $1}')" = \
-  b333816b7ccf4960c2c7035298f844104af33bff351ac3fb1a18f4c02ffb07a0
-codesign --verify --deep --strict "$artifact"
-test "$(plutil -extract NFCReaderUsageDescription raw "$artifact/Info.plist")" = \
-  'Scan a PM5 to connect and program your workout.'
-entitlements=$(codesign -d --entitlements :- "$artifact" 2>/dev/null)
-test "$(print -r -- "$entitlements" | plutil -convert json -o - - | \
-  jq -c '."com.apple.developer.nfc.readersession.formats"')" = '["TAG"]'
-test "$(codesign -d --verbose=4 "$artifact" 2>&1 | \
-  awk -F= '/^CDHash=/{print $2}')" = \
-  96d980eec0b53de9446b72589d8e41324224f58a
-test "$(shasum -a 256 app/scripts/nfc-gate-console-receipt.ts | awk '{print $1}')" = \
-  3f5f80ce914d54c410d86948416729edc79848c99663656af3c87439783f1739
-test "$(shasum -a 256 app/scripts/nfc-normal-trace-controller.ts | awk '{print $1}')" = \
-  51ee37507e34900f3757332b1951b3ef1bddbfd5ad9d3487a6e01f440ce025a2
-capture_dir=$(mktemp -d /tmp/ergomatic-nf-normal-trace.XXXXXX)
-print -r -- "CAPTURE_DIR=$capture_dir"
-```
+1. “Tap Run normal sample.” Do not queue another tap or command.
+2. After the native activation trace is observed, “Hold the phone at the same
+   PM5 NFC spot that worked earlier.” James sends no receipt or completion
+   message. If activation is not observed, do not invent a scanning state.
 
-Do not run the controller unless the block prints one `CAPTURE_DIR` and exits
-zero. Any edit to this runsheet after PM review requires a new PM verdict even
-when the signed artifact and controller are unchanged.
+Codex owns fresh console capture and exact installed identity verification
+before these scan instructions. A fresh capture launch resets navigation: any
+pre-launch screen observation is insufficient, and the probe must be visibly
+ready again in that captured process before Run normal sample. The total
+clock includes that navigation. After the tap, Codex reads only allowlisted
+native diagnostic lines and delivers the tag instruction on observed activation;
+there is no intermediate chat acknowledgement. If the native reader expires
+before presentation, preserve the inconclusive result and stop without retry.
+On completion, cancellation or the deadline,
+Codex runs the tested cleanup, freezes evidence and tells James he is done.
+If verified cleanup fails, the sole containment instruction is “Press the
+side button once to lock the phone.” This records unknown process state,
+never successful termination. No retry follows any failure.
 
-## Timed execution — the controller is the procedure
+## Controller use (Codex only)
 
-After PM PASS and James's separate agreement, run exactly:
+From worktree `app/`, use Node 26 directly:
+`node --import tsx scripts/nfc-normal-trace-controller.ts`. The commands below
+are its arguments, never instructions for James. Avoid the pnpm wrapper for
+retained capture because its PID/signal status can differ from the controller.
 
-```zsh
-pnpm --dir app exec tsx scripts/nfc-normal-trace-controller.ts run "$capture_dir"
-```
+`prepare <directory>` installs, verifies the installed identity and rehearses
+cleanup; it exits and asks for no operator input. Preparation already performed
+in this session must not be repeated just to manufacture a new receipt.
 
-The checked-in controller is one process and one clock. It owns every variable,
-timeout, child process, capture path, cleanup route and atomic decision write;
-there are no dedicated-shell snippets to reconstruct live.
+`capture <directory> <deadline-ISO>` checks the prepared installation, attaches
+one fresh console, and observes until the explicit deadline's cleanup reserve.
+It never prints scan instructions and never reads human acknowledgements.
+Codex can signal the exact controller PID with SIGINT to finish and classify
+early. Do not send PTY Ctrl-C: it can also signal the console child. Record the
+controller PID at launch. Use the real command only
+after PM review and the agreed operator-session deadline exists.
 
-Its only operator exchanges, in order, are:
+Private setup and console evidence belongs to Codex in the existing preparation
+directory named in `OPERATOR-WORKFLOW-V6.md`; raw native console may include
+secure-storage output and must not be pasted or committed. Publish only the
+classifier's redacted diagnostics/frames/receipt and a concise provenance
+record under this session directory.
 
-1. “Connect the iPhone by USB and unlock it, then reply `READY`.” Stop and wait.
-2. Controller only: install the pinned app; execute the suspended
-   bundle-replacement cleanup rehearsal; start a fresh attached console launch.
-   Any failure aborts before PM5/NFC work.
-3. “On the iPhone, tap YOU and scroll to NFC GATE -1 PROBE, then reply
-   `VISIBLE`.” Stop and wait. The controller treats any attached-process exit
-   before or during this acknowledgement as an abort, so PM5/NFC work cannot
-   begin with a dead capture.
-4. “Wake the PM5, open More Options > Connect Device, leave it on Ready for App
-   Connection, then reply `PM5`.” Stop and wait.
-5. “No heart-rate gear or rowing is needed. Tap Run normal sample, then hold the
-   phone at the same PM5 NFC spot that worked earlier. Do nothing else; I am
-   collecting the result.” Stop. James sends no completion message.
-6. Controller only: at 7:15, use `--terminate-existing --start-stopped` on the
-   exact bundle, extract exactly one replacement PID from that launch's JSON,
-   kill it, prove that PID absent, stop/reap the attached host process, freeze
-   the console, classify, and atomically publish `cleanupVerified` plus the
-   decision in `evidence.json` by 8:00. Cleanup command caps total 26 seconds,
-   leaving 19 seconds inside the reserved window; host watchdogs add no grace.
+## Decision and stopping
 
-All pre- and post-launch errors converge on that bundle-scoped cleanup. If it
-cannot be verified, the only fallback instruction is “Press the iPhone side
-button once to lock it; no reply needed.” Lock is containment, not claimed
-process termination; the result is inconclusive, `cleanupVerified` is false,
-and process state is recorded unknown even when another abort happened first.
+The unchanged `nfc-gate-console-receipt.ts` requires generation 1, ordered
+begin/return/RF-active events and exactly one normal receipt. Exact known PM5
+records/padding/name plus one matching BLE connect/disconnect is positive;
+an RF-active complete attempt rejecting those values is negative. Missing,
+malformed, stale, truncated, duplicated or incomplete evidence is inconclusive.
+A newer incomplete export never falls back to an older complete one.
 
-## Mechanical decision
-
-The controller, not a human reading the log, returns one outcome:
-
-- **Positive:** the frozen log contains only native generation 1 and exactly
-  one ordered `ndef.begin.initiated`, `ndef.begin.returned`, and
-  `ndef.rf.active`; the newest receipt envelope is complete and canonical; it
-  contains exactly one normal attempt with the exact three PM5 records,
-  16-byte zero padding, decoded and live name `PM5 432331249 Row`, exactly one
-  matching device, connection, disconnection and picker-free BLE success.
-- **Negative:** the same fresh RF-active diagnostic proof and exactly one
-  normal receipt exist, but the mechanically checked PM5-name/record/targeted
-  BLE path rejects one or more required values. No retry follows.
-- **Inconclusive:** capture, framing, diagnostics, freshness, attempt count,
-  controller lifecycle or cleanup proof is absent, malformed, duplicated,
-  unordered or incomplete. Missing unframed diagnostics are never negative
-  evidence. A truncated newest export cannot fall back to an older one.
-
-This outcome answers only the question at the top. It does not close all nine
-Gate -1 criteria or authorize product implementation. Any later hardware
-question needs a new bounded runsheet, PM PASS and James's separate agreement.
-
-## Close-out
-
-The controller tells the operator when it has exited; Codex then tells James the
-walk is over. Codex records the frozen artifact/controller/case/outcome
-provenance and redacted evidence in this directory. There is no browser lab,
-Docker stack, screenshot, receipt copy or additional hardware case to close.
+Missing capture, process exit, identity mismatch, unknown UI, unexpected prompt,
+exhausted time or any extra attempt stops the walk. Preserve what exists and
+release James; no rebuild, debugger, live repair or additional case. This result
+cannot close all nine Gate -1 criteria or authorize product implementation.

@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import { emitGateReceipt } from "../src/monitor/nfc/gateMinusOneReceipt.js";
 import type { NfcGateReceiptV1 } from "../src/monitor/nfc/gateMinusOneReceipt.js";
 import {
+  assertInstalledAppMatches,
+  prepareNormalTraceController,
   assertProcessIdentifierAbsent,
   findUniqueProcessIdentifier,
   runNormalTraceController,
@@ -72,275 +74,314 @@ describe("NFC normal-trace controller", () => {
     ).not.toThrow();
   });
 
-  it("runs one shell-independent command path, freezes after cleanup, and classifies atomically", async () => {
-    const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
-    const commands: string[][] = [];
-    const prompts: string[] = [];
-    const notices: string[] = [];
-    let consoleArgs: string[] = [];
-    let nowMs = 1_000_000;
-    let replacement = 0;
-    const result = await runNormalTraceController(captureDir, {
-      now: () => nowMs,
-      acknowledge: async (prompt, expected) => {
-        prompts.push(prompt);
-        return expected;
-      },
-      notify: (message) => notices.push(message),
-      sleepUntil: async (deadlineMs) => {
-        nowMs = deadlineMs;
-      },
-      run: async (args) => {
-        commands.push(args);
-        const jsonAt = args.indexOf("--json-output");
-        const jsonPath = jsonAt >= 0 ? args[jsonAt + 1] : undefined;
-        if (args.includes("--start-stopped")) {
-          replacement += 1;
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({
-              result: { process: { processIdentifier: 100 + replacement } },
-            }),
-          );
-        } else if (args.includes("processes")) {
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
-          );
-        } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
-      },
-      launchConsole: async (args, logPath) => {
-        consoleArgs = args;
-        writeFileSync(logPath, positiveLog());
-        return liveConsoleHandle();
-      },
-    });
-
-    expect(result.decision.outcome).toBe("positive");
-    expect(prompts).toHaveLength(3);
-    expect(prompts[1]).toContain("NFC GATE -1 PROBE");
-    expect(prompts[2]).toContain("Connect Device");
-    expect(
-      notices.some((message) => message.includes("Run normal sample")),
-    ).toBe(true);
-    expect(
-      consoleArgs.slice(consoleArgs.indexOf("--timeout"), -1),
-    ).toStrictEqual([
-      "--timeout",
-      "480",
-      "--json-output",
-      join(captureDir, "normal-launch.json"),
-    ]);
-    expect(
-      commands.filter((args) => args.includes("--start-stopped")),
-    ).toHaveLength(2);
-    expect(
-      commands
-        .filter((args) => args.includes("--start-stopped"))
-        .every(
-          (args) =>
-            args.includes("--terminate-existing") &&
-            args.includes("haus.waffle.ergomatic"),
-        ),
-    ).toBe(true);
-    expect(
-      JSON.parse(readFileSync(join(captureDir, "evidence.json"), "utf-8")),
-    ).toMatchObject({
-      cleanupVerified: true,
-      decision: { outcome: "positive" },
-    });
+  it("rejects cleanup while the original app remains or the process list shape is missing", () => {
+    expect(() =>
+      assertProcessIdentifierAbsent(
+        {
+          result: {
+            runningProcesses: [
+              {
+                processIdentifier: 654,
+                executable: "file:///pinned/App.app/App",
+              },
+            ],
+          },
+        },
+        321,
+        "file:///pinned/App.app/App",
+      ),
+    ).toThrow("remained after termination");
+    expect(() =>
+      assertProcessIdentifierAbsent(
+        { result: [{ processIdentifier: 654 }] },
+        321,
+        "file:///pinned/App.app/App",
+      ),
+    ).toThrow("runningProcesses");
   });
 
-  it("fails closed and asks only for containment when bundle cleanup cannot be verified", async () => {
-    const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
-    const prompts: string[] = [];
-    const notices: string[] = [];
-    let nowMs = 1_000_000;
-    let launches = 0;
-    const result = await runNormalTraceController(captureDir, {
-      now: () => nowMs,
-      acknowledge: async (prompt, expected) => {
-        prompts.push(prompt);
-        if (expected === "VISIBLE") throw new Error("unexpected screen");
-        return expected;
-      },
-      notify: (message) => notices.push(message),
-      sleepUntil: async (deadlineMs) => {
-        nowMs = deadlineMs;
-      },
-      run: async (args) => {
-        const jsonAt = args.indexOf("--json-output");
-        const jsonPath = jsonAt >= 0 ? args[jsonAt + 1] : undefined;
-        if (args.includes("--start-stopped")) {
-          launches += 1;
-          if (launches === 2) throw new Error("replacement failed");
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({ result: { processIdentifier: 101 } }),
-          );
-        } else if (args.includes("processes")) {
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
-          );
-        } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
-      },
-      launchConsole: async (_args, logPath) => {
-        writeFileSync(logPath, positiveLog());
-        return liveConsoleHandle();
-      },
-    });
-
-    expect(result.cleanupVerified).toBe(false);
-    expect(result.decision).toMatchObject({
-      outcome: "inconclusive",
-      reasons: expect.arrayContaining([
-        "unexpected screen",
-        "bundle-scoped cleanup could not be verified",
-      ]),
-    });
-    expect(
-      JSON.parse(readFileSync(join(captureDir, "evidence.json"), "utf-8")),
-    ).toMatchObject({ cleanupVerified: false });
-    expect(notices.at(-1)).toContain("side button");
+  it("does not certify cleanup with an unreadable process executable", () => {
+    expect(() =>
+      assertProcessIdentifierAbsent(
+        { result: { runningProcesses: [{ processIdentifier: 654 }] } },
+        321,
+        "file:///pinned/App.app/App",
+      ),
+    ).toThrow("runningProcesses");
   });
 
-  it("routes a post-launch operator abort through immediate bundle cleanup", async () => {
+  it("records inconclusive when finishing before this capture launches", async () => {
     const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
-    const commands: string[][] = [];
-    let nowMs = 1_000_000;
-    let replacement = 0;
-    const result = await runNormalTraceController(captureDir, {
-      now: () => nowMs,
-      acknowledge: async (_prompt, expected) => {
-        if (expected === "VISIBLE") throw new Error("unexpected screen");
-        return expected;
+    const installed = {
+      bundleIdentifier: "haus.waffle.ergomatic",
+      bundleVersion: "789",
+      version: "0.23.0",
+      url: "file:///pinned/App.app/",
+    };
+    const install = {
+      result: {
+        installedApplications: [
+          { bundleID: "haus.waffle.ergomatic", installationURL: installed.url },
+        ],
       },
-      notify: () => undefined,
-      sleepUntil: async (deadlineMs) => {
-        nowMs = deadlineMs;
-      },
-      run: async (args) => {
-        commands.push(args);
-        const jsonAt = args.indexOf("--json-output");
-        const jsonPath = jsonAt >= 0 ? args[jsonAt + 1] : undefined;
-        if (args.includes("--start-stopped")) {
-          replacement += 1;
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({
-              result: { processIdentifier: 100 + replacement },
-            }),
-          );
-        } else if (args.includes("processes")) {
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
-          );
-        } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
-      },
-      launchConsole: async (_args, logPath) => {
-        writeFileSync(logPath, positiveLog());
-        return liveConsoleHandle();
-      },
-    });
-
-    expect(result).toMatchObject({
-      cleanupVerified: true,
-      decision: { outcome: "inconclusive" },
-    });
-    expect(
-      commands.filter((args) => args.includes("--start-stopped")),
-    ).toHaveLength(2);
-  });
-
-  it("routes a console-launch failure through bundle cleanup", async () => {
-    const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
-    let replacement = 0;
-    const result = await runNormalTraceController(captureDir, {
-      now: () => 1_000_000,
-      acknowledge: async (_prompt, expected) => expected,
+    };
+    writeFileSync(join(captureDir, "install.json"), JSON.stringify(install));
+    writeFileSync(
+      join(captureDir, "installed-apps.json"),
+      JSON.stringify({ result: { apps: [installed] } }),
+    );
+    const abort = new AbortController();
+    const result = await runNormalTraceController(captureDir, 1480000, {
+      now: () => 1000000,
+      signal: abort.signal,
       notify: () => undefined,
       sleepUntil: async () => undefined,
-      run: async (args) => {
-        const jsonAt = args.indexOf("--json-output");
-        const jsonPath = jsonAt >= 0 ? args[jsonAt + 1] : undefined;
-        if (args.includes("--start-stopped")) {
-          replacement += 1;
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({
-              result: { processIdentifier: 100 + replacement },
-            }),
-          );
-        } else if (args.includes("processes")) {
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
-          );
-        } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
-      },
       launchConsole: async () => {
-        throw new Error("console attach failed");
+        throw new Error("Should not launch");
+      },
+      run: async (args) => {
+        const path = args[args.indexOf("--json-output") + 1]!;
+        if (args.includes("apps")) abort.abort();
+        writeFileSync(
+          path,
+          JSON.stringify(
+            args.includes("apps")
+              ? { result: { apps: [installed] } }
+              : args.includes("--start-stopped")
+                ? { result: { process: { processIdentifier: 321 } } }
+                : {
+                    result: {
+                      runningProcesses: [
+                        {
+                          processIdentifier: 999,
+                          executable: "file:///other/App",
+                        },
+                      ],
+                    },
+                  },
+          ),
+        );
       },
     });
-
     expect(result).toMatchObject({
       cleanupVerified: true,
       decision: {
         outcome: "inconclusive",
-        reasons: ["console attach failed"],
+        reasons: ["capture stopped before console launch"],
       },
     });
-    expect(replacement).toBe(2);
   });
 
-  it("aborts before PM5 or NFC when the attached console has already exited", async () => {
+  it("preserves earlier capture files before any device command", async () => {
+    for (const name of ["normal-console.log", "evidence.json"]) {
+      const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
+      writeFileSync(join(captureDir, name), "earlier evidence");
+      const deps = {
+        now: () => 1000000,
+        notify: () => undefined,
+        sleepUntil: async () => undefined,
+        run: async () => {
+          throw new Error("Device must not run");
+        },
+        launchConsole: async () => liveConsoleHandle(),
+      };
+      await expect(
+        runNormalTraceController(captureDir, 1480000, deps),
+      ).rejects.toThrow("already contains capture evidence");
+      expect(readFileSync(join(captureDir, name), "utf-8")).toBe(
+        "earlier evidence",
+      );
+    }
+  });
+
+  it("prepares without asking for acknowledgement or starting capture", async () => {
     const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
-    const prompts: string[] = [];
-    let replacement = 0;
-    const result = await runNormalTraceController(captureDir, {
-      now: () => 1_000_000,
-      acknowledge: async (prompt, expected) => {
-        prompts.push(prompt);
-        return expected;
+    const commands: string[][] = [];
+    const notices: string[] = [];
+    const installed = {
+      bundleIdentifier: "haus.waffle.ergomatic",
+      bundleVersion: "789",
+      version: "0.23.0",
+      url: "file:///pinned/App.app/",
+    };
+    const install = {
+      result: {
+        installedApplications: [
+          { bundleID: "haus.waffle.ergomatic", installationURL: installed.url },
+        ],
       },
+    };
+    let now = 1000000;
+    const result = await prepareNormalTraceController(captureDir, {
+      now: () => now,
+      notify: (message) => notices.push(message),
+      sleepUntil: async () => {
+        throw new Error("Preparation must not wait for people");
+      },
+      launchConsole: async () => {
+        throw new Error("Preparation must not capture");
+      },
+      run: async (args) => {
+        commands.push(args);
+        const path = args[args.indexOf("--json-output") + 1]!;
+        writeFileSync(
+          path,
+          JSON.stringify(
+            args.includes("install")
+              ? install
+              : args.includes("apps")
+                ? { result: { apps: [installed] } }
+                : args.includes("--start-stopped")
+                  ? { result: { process: { processIdentifier: 321 } } }
+                  : {
+                      result: {
+                        runningProcesses: [
+                          {
+                            processIdentifier: 999,
+                            executable: "file:///other/App",
+                          },
+                        ],
+                      },
+                    },
+          ),
+        );
+        now += 1000;
+      },
+    });
+    expect(result).toMatchObject({ ready: true, elapsedMs: 5000 });
+    expect(commands[0]).toContain("install");
+    expect(commands[1]).toContain("apps");
+    expect(notices).toStrictEqual([]);
+    expect(
+      JSON.parse(readFileSync(join(captureDir, "preparation.json"), "utf-8")),
+    ).toStrictEqual(result);
+  });
+
+  it("rejects installed identity or installation URL differing from the pinned install", () => {
+    const installed = {
+      bundleIdentifier: "haus.waffle.ergomatic",
+      bundleVersion: "789",
+      version: "0.23.0",
+      url: "file:///pinned/App.app/",
+    };
+    const install = {
+      result: {
+        installedApplications: [
+          { bundleID: "haus.waffle.ergomatic", installationURL: installed.url },
+        ],
+      },
+    };
+    expect(
+      assertInstalledAppMatches(install, { result: { apps: [installed] } }),
+    ).toStrictEqual(installed);
+    for (const changed of [
+      { ...installed, bundleIdentifier: "wrong" },
+      { ...installed, bundleVersion: "788" },
+      { ...installed, version: "0.22.0" },
+      { ...installed, url: "file:///other/App.app/" },
+    ]) {
+      expect(() =>
+        assertInstalledAppMatches(install, { result: { apps: [changed] } }),
+      ).toThrow("Installed app did not match");
+    }
+  });
+
+  it("captures without reinstall or scan prompts and permits finish-now with evidence classification", async () => {
+    const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
+    const installed = {
+      bundleIdentifier: "haus.waffle.ergomatic",
+      bundleVersion: "789",
+      version: "0.23.0",
+      url: "file:///pinned/App.app/",
+    };
+    writeFileSync(
+      join(captureDir, "install.json"),
+      JSON.stringify({
+        result: {
+          installedApplications: [
+            {
+              bundleID: "haus.waffle.ergomatic",
+              installationURL: installed.url,
+            },
+          ],
+        },
+      }),
+    );
+    writeFileSync(
+      join(captureDir, "installed-apps.json"),
+      JSON.stringify({ result: { apps: [installed] } }),
+    );
+    const commands: string[][] = [];
+    const notices: string[] = [];
+    const abort = new AbortController();
+    const handle = liveConsoleHandle();
+    const result = await runNormalTraceController(captureDir, 1480000, {
+      now: () => 1000000,
+      signal: abort.signal,
+      notify: (message) => notices.push(message),
+      sleepUntil: () => {
+        abort.abort();
+        return new Promise(() => undefined);
+      },
+      run: async (args) => {
+        commands.push(args);
+        const path = args[args.indexOf("--json-output") + 1]!;
+        writeFileSync(
+          path,
+          JSON.stringify(
+            args.includes("apps")
+              ? { result: { apps: [installed] } }
+              : args.includes("--start-stopped")
+                ? { result: { process: { processIdentifier: 321 } } }
+                : {
+                    result: {
+                      runningProcesses: [
+                        {
+                          processIdentifier: 999,
+                          executable: "file:///other/App",
+                        },
+                      ],
+                    },
+                  },
+          ),
+        );
+      },
+      launchConsole: async (_args, path) => {
+        writeFileSync(path, positiveLog());
+        return handle;
+      },
+    });
+    expect(result).toMatchObject({
+      cleanupVerified: true,
+      decision: { outcome: "positive" },
+    });
+    expect(commands.filter((args) => args.includes("install"))).toHaveLength(0);
+    expect(
+      commands.filter((args) => args.includes("--start-stopped")),
+    ).toHaveLength(1);
+    expect(notices).toStrictEqual(["CAPTURE_ATTACHED"]);
+    expect(handle.isRunning()).toBe(false);
+    expect(
+      JSON.parse(readFileSync(join(captureDir, "evidence.json"), "utf-8")),
+    ).toStrictEqual(result);
+  });
+
+  it("refuses expired or over-budget capture deadlines before device commands", async () => {
+    const run = async () => {
+      throw new Error("Device must not run");
+    };
+    const deps = {
+      now: () => 1000000,
       notify: () => undefined,
       sleepUntil: async () => undefined,
-      run: async (args) => {
-        const jsonAt = args.indexOf("--json-output");
-        const jsonPath = jsonAt >= 0 ? args[jsonAt + 1] : undefined;
-        if (args.includes("--start-stopped")) {
-          replacement += 1;
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({
-              result: { processIdentifier: 100 + replacement },
-            }),
-          );
-        } else if (args.includes("processes")) {
-          writeFileSync(
-            jsonPath!,
-            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
-          );
-        } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
-      },
-      launchConsole: async (_args, logPath) => {
-        writeFileSync(logPath, "devicectl failed");
-        return {
-          isRunning: () => false,
-          wait: async () => 1,
-          stopHost: () => undefined,
-        };
-      },
-    });
-
-    expect(result.decision).toMatchObject({
-      outcome: "inconclusive",
-      reasons: expect.arrayContaining([
-        "attached console exited before capture",
-      ]),
-    });
-    expect(prompts).toHaveLength(1);
+      run,
+      launchConsole: async () => liveConsoleHandle(),
+    };
+    await expect(
+      runNormalTraceController("/unused", 1030000, deps),
+    ).rejects.toThrow("deadline");
+    await expect(
+      runNormalTraceController("/unused", 1480001, deps),
+    ).rejects.toThrow("deadline");
   });
 });

@@ -2391,12 +2391,16 @@ trigger is the whole entry.
   Approved desk-only trace/capture follow-up and verification limits:
   [`DIAGNOSTIC-CAPTURE.md`](docs/monitor/sessions/phase-nf-gate-minus-one/DIAGNOSTIC-CAPTURE.md).
   The retired v3 approval does not authorize its hardened replacement.
-  [`NF-NORMAL-TRACE-v5`](docs/monitor/sessions/phase-nf-gate-minus-one/NEXT-WALK-RUNSHEET.md)
+  `NF-NORMAL-TRACE-v5`
   received PM PASS but aborted before installation when its controller timer
   expired across the operator turn boundary; it authorizes no retry. See
   [`NORMAL-TRACE-V5-ABORT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V5-ABORT.md).
-  Another attempt needs a new bounded runsheet, PM PASS and James's separate
-  agreement.
+  The resumed preparation installed and verified the diagnostic build;
+  [`NF-NORMAL-TRACE-v6`](docs/monitor/sessions/phase-nf-gate-minus-one/NEXT-WALK-RUNSHEET.md)
+  separates setup from scan consent and removes timed chat acknowledgements.
+  Current phone UI remains unverified; no new scan is authorized. See
+  [`OPERATOR-WORKFLOW-V6.md`](docs/monitor/sessions/phase-nf-gate-minus-one/OPERATOR-WORKFLOW-V6.md).
+  Another attempt still needs PM PASS and James's separate agreement.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

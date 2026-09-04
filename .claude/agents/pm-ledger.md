@@ -4540,3 +4540,12 @@ operator turn boundary before the acknowledgement reached the controller. The
 walk aborted before installation with zero NFC attempts and no PM5 action. v5
 authorizes no retry; a replacement must remove that transport-timer defect and
 receive a new PM verdict.
+
+## NFC operator-readiness precedent, 2026-09-04
+
+Debugger-based UI inspection itself paused Ergomatic's main thread.
+A successful launch after detachment does not prove responsiveness or
+probe reachability. `NF-NORMAL-TRACE-v6` received PM PASS only for one
+untimed, zero-scan screen description; the normal sample remained
+NOT READY pending actual current-screen evidence. Do not promote that
+narrow observation verdict into permission for the hardware sample.
