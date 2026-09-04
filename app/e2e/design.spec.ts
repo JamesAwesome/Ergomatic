@@ -9849,22 +9849,28 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
 // component's exact markup regardless of how the file is formatted on disk;
 // the empty act column in the 1g fixture must stay `:empty` to collapse.
 //
-// WHAT IT DOES NOT PROVE: that the card is reachable on You. It is not, yet —
-// Task 8 mounts it and the e2e stack runs with `C2_LINK_ENABLED` unset
-// (`compose.yml`'s `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`, exported by
-// neither `e2e.sh` nor `screenshots.sh`), so the route answers
-// `{available:false}` and the card renders `null` on every screen in this
-// suite today. The end-to-end version is owed at Task 8/11.
+// WHAT IT DOES NOT PROVE: that the card is reachable on You. Task 8 HAS now
+// mounted it (`You.tsx`, between Reset baseline setup and the DIAGNOSTICS
+// row), so the mount itself is real and `You.test.tsx` pins it; what is
+// still missing is a browser walk of it, because this stack runs with
+// `C2_LINK_ENABLED` unset (`compose.yml`'s `C2_LINK_ENABLED:
+// ${C2_LINK_ENABLED:-}`, exported by neither `e2e.sh` nor
+// `screenshots.sh`), so the route answers `{available:false}` and the card
+// renders `null` on every screen in this suite. Every case below therefore
+// paints the component's own committed markup instead of visiting /you.
+// The end-to-end version is owed at Task 11.
 //
 // Boxes are read off `.c2-card-tell` and `.c2-card-act`, which are `div`s and
 // therefore block-level; an inline element reports 0 for every box metric,
 // which is the measurement error RF21's own example shipped.
 test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)", () => {
-  async function loadCard(page: Page, fixture: string): Promise<void> {
-    const markup = readFileSync(
-      path.join(process.cwd(), "e2e/fixtures", fixture),
-      { encoding: "utf-8" },
-    ).replace(/>\s+</g, "><");
+  function fixtureMarkup(fixture: string): string {
+    return readFileSync(path.join(process.cwd(), "e2e/fixtures", fixture), {
+      encoding: "utf-8",
+    }).replace(/>\s+</g, "><");
+  }
+
+  async function paint(page: Page, inner: string): Promise<void> {
     await page.goto("/", { waitUntil: "load" });
     await page.waitForFunction(
       () =>
@@ -9874,8 +9880,12 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
     );
     await page.evaluate((html) => {
       document.body.innerHTML = `<div class="app-shell">${html}</div>`;
-    }, markup);
+    }, inner);
     await expect(page.locator(".c2-card")).toBeVisible();
+  }
+
+  async function loadCard(page: Page, fixture: string): Promise<void> {
+    await paint(page, fixtureMarkup(fixture));
   }
 
   /** Both columns' boxes in one round trip. */
@@ -10009,6 +10019,64 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
           .locator(".c2-card-act")
           .evaluate((el) => getComputedStyle(el).display),
       ).toBe("none");
+    }
+  });
+
+  test("the card stands off the row above it on You, in both orientations", async ({
+    page,
+  }) => {
+    // THE GAP NOTHING ELSE HERE CAN SEE, and it is the sibling block's own
+    // defect one screen over: every other case in this file measures boxes
+    // INSIDE the card, so nothing measured the card's OWN box and a
+    // bordered card butted flush against the Reset baseline setup button
+    // could not redden anything. It did butt flush — measured
+    // `reset -> card = 0` in this engine before `.c2-card` declared a
+    // margin, because `.reset-baselines` is `margin-top: 12px` with no
+    // bottom, `.c2-card` declared none at all, and `.you-screen` is a flex
+    // column (so nothing collapses in from a neighbour either).
+    //
+    // 12 is BOTH authorities agreeing, unlike the send block's case, where
+    // the frames said 12 and the screen's own rhythm said 20/24 and the
+    // difference went to James: the amendment's in-situ frames separate
+    // every child of `.frame` by `gap: 12px`, AND every block on the real
+    // You screen already stands off its neighbour by 12
+    // (`.baselines-card`, `.retest`, `.reset-baselines`, `.diag-row` are
+    // each `margin-top: 12px`). Transcribed as an INDEPENDENT literal, so
+    // retuning `index.css` cannot retune this test with it (RF21).
+    //
+    // THE COMPOSITION is You's own sibling chain, and only the two
+    // NEIGHBOURS are hand-written: `<main class="screen you-screen">` and
+    // the `.reset-baselines` wrapper around a `.button-outline` are
+    // `You.tsx` and `you/ResetBaselineSetup.tsx`'s own literal output at
+    // the slot the card was mounted into, and the card itself is the
+    // committed fixture that `Concept2Card.test.tsx` pins as the
+    // component's output. So this test can go stale only if the SCREEN's
+    // markup changes, never if the card's does.
+    //
+    // NOTHING is asserted about the gap BELOW: `.you-screen .diag-row` is
+    // `margin-top: auto`, so that distance is whatever the flex column has
+    // left over and is viewport- and content-dependent by design (the
+    // row's own `border-top` is what separates it when the space runs
+    // out). A bottom margin on `.c2-card` would be absorbed by that `auto`
+    // rather than seen, which is why the card declares none.
+    const inSitu = [
+      `<main class="screen you-screen">`,
+      `<div class="reset-baselines"><button type="button" class="button-outline">Reset baseline setup</button></div>`,
+      fixtureMarkup("c2-card-unlinked.html"),
+      `<a class="diag-row" href="/you/diagnostics"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></a>`,
+      `</main>`,
+    ].join("");
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await paint(page, inSitu);
+      const [reset, card] = await Promise.all([
+        page.locator(".reset-baselines").boundingBox(),
+        page.locator(".c2-card").boundingBox(),
+      ]);
+      if (reset === null || card === null) {
+        throw new Error("the in-situ composition did not render");
+      }
+      expect(card.y - (reset.y + reset.height)).toBe(12);
     }
   });
 });

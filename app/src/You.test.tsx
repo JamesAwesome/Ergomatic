@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi, describe, it, expect, afterEach } from "vitest";
+import { vi, describe, it, expect, afterEach, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import You from "./You";
+import { api } from "./api";
 
 // Fix round 2 (P1a-device): same idiom `AppRoutes.test.tsx` already uses
 // for `JustRowObserver` — `import.meta.env.DEV` is `true` under Vitest, so
@@ -11,6 +12,48 @@ import You from "./You";
 // file (`monitor/Concept2LinkProbe.test.tsx`); no test in this file cares
 // about its content.
 vi.mock("./monitor/Concept2LinkProbe", () => ({ default: () => null }));
+
+// Wave E PR2 Task 8: You now mounts the PRODUCT Concept2 card, whose hook
+// reads `GET /api/concept2/link` on every mount. That read has to be
+// answered for the WHOLE FILE, not only in the new cases — before this
+// mock every test here ran the read through the real `src/api.ts`, whose
+// relative-URL `fetch` rejects under jsdom, and the rejection landed after
+// the assertions as a `setFailed` outside `act()`, painting the
+// read-failed panel (which renders the text `CONCEPT2`) onto tests that
+// never asked for a card.
+//
+// `./api` is mocked rather than `./api/useConcept2Link`, which would test
+// the mock. `src/api.ts` exports exactly one symbol, so this factory is
+// total. The card's DEFAULT answer is `{available:false}` — the state
+// every deployment is in today — so no existing test's screen changes; a
+// case that wants a card sets `c2Link.body` first.
+//
+// EVERY OTHER PATH IS DELEGATED TO GLOBAL `fetch`, which is what the real
+// `api()` does. That is not tidiness: this file's baseline-reset test
+// stubs `fetch` and counts `/api/baselines` GETs through it, so a factory
+// that answered everything itself would silently break it (the editor
+// would never load and its `2k split` field would never be found).
+//
+// `vi.hoisted` because `vi.mock`'s factory is hoisted above ordinary
+// declarations: a plain `const` referenced inside it throws "Cannot access
+// before initialization".
+const c2Link = vi.hoisted(() => ({ body: { available: false } as unknown }));
+
+vi.mock("./api", () => ({
+  api: vi.fn(async (path: string, init?: RequestInit) =>
+    path === "/api/concept2/link"
+      ? new Response(JSON.stringify(c2Link.body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      : fetch(path, init),
+  ),
+}));
+
+beforeEach(() => {
+  c2Link.body = { available: false };
+  vi.mocked(api).mockClear();
+});
 
 function renderYou(user = { id: "u1", email: "a@x.com", name: "Ada Rower" }) {
   return render(
@@ -134,5 +177,58 @@ describe("You", () => {
     renderYou(user);
     const row = screen.getByRole("link", { name: "DIAGNOSTICS" });
     expect(row).toHaveAttribute("href", "/you/diagnostics");
+  });
+});
+
+describe("You: the Concept2 card", () => {
+  const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+
+  it("renders the Concept2 card between the baseline reset and the diagnostics row", async () => {
+    // DOCUMENT ORDER, not presence: the DIAGNOSTICS row's own comment
+    // requires it stay the LAST child, and presence alone would pass with
+    // the card sitting below it.
+    c2Link.body = { available: true, linked: false };
+    renderYou(user);
+    const card = await screen.findByRole("region", { name: "CONCEPT2" });
+    const reset = screen.getByRole("button", { name: /Reset baseline setup/i });
+    const diagnostics = screen.getByRole("link", { name: /DIAGNOSTICS/ });
+    const following = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(reset.compareDocumentPosition(card) & following).toBeTruthy();
+    expect(card.compareDocumentPosition(diagnostics) & following).toBeTruthy();
+  });
+
+  it("passes the signed-in rower's own email to the card, so the identity line names both principals", async () => {
+    // Gate 0 amendment 1c. The card cannot fetch this: `Me` is You's prop,
+    // and the whole point of the line is that it names BOTH principals.
+    c2Link.body = {
+      available: true,
+      linked: true,
+      c2UserId: 2211,
+      c2Username: "jamesawesome",
+      needsReauth: false,
+      logbookBaseUrl: "https://log-dev.concept2.com",
+    };
+    renderYou({ id: "u1", email: "james@jamestheaweso.me", name: "James A" });
+    expect(
+      await screen.findByText(
+        "Concept2 jamesawesome · Ergomatic james@jamestheaweso.me",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("renders no Concept2 card at all when the server reports the surface unavailable", async () => {
+    // The whole-screen half of Concept2Card's own unit case: You itself
+    // must not reserve space, add a heading, or draw a hairline for an
+    // absent card. Awaiting POSITIVE observables first — a section of You
+    // that is always there, and the card's own mount read — so the absence
+    // is asserted against a settled screen rather than one that has not
+    // rendered yet.
+    renderYou(user);
+    expect(await screen.findByText("BASELINES")).toBeTruthy();
+    await waitFor(() =>
+      expect(vi.mocked(api)).toHaveBeenCalledWith("/api/concept2/link"),
+    );
+    expect(screen.queryByRole("region", { name: "CONCEPT2" })).toBeNull();
+    expect(screen.queryByText("CONNECT TO CONCEPT2")).toBeNull();
   });
 });

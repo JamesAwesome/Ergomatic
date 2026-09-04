@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
 import BaselineEditor from "./you/BaselineEditor";
+import Concept2Card from "./you/Concept2Card";
 import ResetBaselineSetup from "./you/ResetBaselineSetup";
 import RetestShortcut from "./you/RetestShortcut";
 
@@ -87,6 +88,24 @@ export default function You({
           2's Reset onboarding ruling). Sits with the BASELINES section it
           destroys, below the shortcut. */}
       <ResetBaselineSetup onReset={() => setResetGeneration((g) => g + 1)} />
+      {/* Wave E PR2, Surface 1 (board + Gate 0 amendment 2026-09-03). The
+          rower's only door to the Concept2 link. Renders NOTHING unless
+          the server reports `available: true` — a capability gate, not a
+          cosmetic hide (spec §Architecture 8), so You looks exactly as it
+          does today on any deployment with `C2_LINK_ENABLED` unset, which
+          is every deployment until the flag flip.
+          ABOVE the dev-only probe and the DIAGNOSTICS row, both of which
+          keep their own positions (the probe is a walk instrument, not a
+          product surface; the row's own comment requires it stay last).
+          BELOW Reset baseline setup, which is a decision this task made
+          rather than one the amendment drew: every in-situ frame that
+          shows the card (1a, 1c, 1f, 1f-b, 1f-c, 1i, 1j) omits the RESET
+          BASELINE SETUP ghost entirely, and the only frames that draw
+          that ghost (1h, the no-card comparison) omit the card — so the
+          page never puts the two in one frame and cannot settle their
+          order. Keeping Reset directly under the BASELINES group it
+          destroys is what decides it. */}
+      <Concept2Card email={user.email} />
       {/* No SETTINGS section: the mock's settings rows (PRE-WORKOUT
           COUNTDOWN, PACE TOLERANCE, ACCENT COLOR) are filler
           (DEVIATIONS.md/handoff README §7) and are deliberately not

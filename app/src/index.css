@@ -10039,12 +10039,39 @@ section:not(.news-pinned) .news-row:last-of-type {
    THE ONE VALUE THIS BLOCK REFUSES: --ink-4 on --surface-sunken measures
    4.48:1 and FAILS. The panel's muted line (.c2-card-panel-reason) is
    therefore --ink-3, not the --ink-4 every other muted line on this card
-   uses. Anything added to .c2-card-panel later inherits that constraint. */
+   uses. Anything added to .c2-card-panel later inherits that constraint.
+
+   `margin: 12px 0 0` — TASK 8, and both authorities name the same number,
+   which is what makes it an implementer's call rather than a Gate 0 one
+   (the sibling `.c2-send` block had to send its 12-vs-24 question to
+   James, because there the frames said 12 and the screen's own rhythm
+   said 20/24). The amendment's in-situ frames separate every child of the
+   phone frame by `.frame { gap: 12px }`, AND every block on the real You
+   screen already stands off its neighbour by 12: `.baselines-card`,
+   `.retest`, `.reset-baselines` and `.diag-row` are each
+   `margin-top: 12px`.
+
+   The rule exists because it was MISSING and nothing could say so. This
+   card declared no margin; its preceding sibling on You,
+   `.reset-baselines`, is `margin-top: 12px` with no bottom; `.you-screen`
+   is a flex column, so no neighbour's margin collapses in either.
+   Measured in the real engine before the fix: `reset -> card = 0`. A
+   bordered card touched the Reset baseline setup button. That is the
+   `.c2-send` defect one screen over — every other gate on this card
+   measures boxes INSIDE it, so nothing measured the card's own — and
+   `e2e/design.spec.ts`'s "the card stands off the row above it on You" is
+   the assertion that closes it.
+
+   Bottom stays 0 on purpose: `.you-screen .diag-row` below is
+   `margin-top: auto`, so a bottom margin here would be absorbed by that
+   `auto` rather than seen, and when the column overflows (no `auto` room
+   left) the row's own `border-top` is what separates them. */
 .c2-card {
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   padding: 16px;
+  margin: 12px 0 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
