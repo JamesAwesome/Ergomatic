@@ -25,7 +25,8 @@ Correct Resume remains deferred. This is not fast path: a mistake could lose
 a record. A non-TRIAD full cycle is possible only while claim/retire identity,
 timing and reasons, successful-save behavior and recorded values stay
 unchanged. Re-scope before implementation if that boundary cannot hold.
-The phase remains OPEN. Task 1 implementation and Task 2 browser evidence
+The phase remains OPEN. Task 1 implementation and Task 2 browser evidence,
+including the two-orientation recovery matrix and initial landscape safe exit,
 are complete; the proposed phone acceptance walk, phase-close review and any
 merge decision remain pending James. Browser proof does not replace that native
 acceptance.

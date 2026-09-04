@@ -27,7 +27,8 @@ The design registrations cover 390×844 and 844×390: retained PM5 plus timer,
 singular/plural warnings, missing-type Save-disabled summary, read-only legacy
 Copy/Keep, unavailable Back Today, and retained Today rows while the library
 request is pending or fails. Every registered control has a ≥44 px target and
-the axe scans have zero WCAG 2A/2AA violations. The generated Mac captures
+the axe scans have zero WCAG 2A/2AA violations, and the combined sweeps check
+the existing token/ink contrast oracle. The generated Mac captures
 map state to image as follows (each pair is portrait/landscape):
 
 - PM5 Today: `recovery-today-portrait.png`, `recovery-today-landscape.png`;
@@ -54,17 +55,15 @@ map state to image as follows (each pair is portrait/landscape):
   `recovery-today-failed-landscape.png`. Healthy Review is
   `recovery-review.png`.
 
-All 29 recovery captures, including the initial-position and action-focused
-variants, were opened. They measure exactly 390×844 or
-844×390; wrapped long titles do not create horizontal overflow. Healthy,
-missing-type, legacy, unavailable, pending, and failed surfaces remain clear
-at their recorded viewport. The warning images intentionally show a different
-landscape observation: in
-`recovery-warning-singular-landscape.png` and
-`recovery-warning-plural-landscape.png`, the warning begins below the 390 px
-viewport/nav, so **View unsaved**, **Cancel**, and **Connect anyway** are not
-initially visible and require ordinary vertical page scroll. This is recorded
-for phase-close usability review, not silently treated as no-overflow proof.
+All 29 recovery captures, including initial-position and action-focused
+variants, were opened. They measure exactly 390×844 or 844×390; wrapped long
+titles do not create horizontal overflow. Healthy, missing-type, legacy,
+unavailable, pending, and failed surfaces remain clear at their recorded
+viewport. The refreshed 844×390 singular and plural warning captures show the
+mounted, non-animated centered reveal: **View unsaved**, **Cancel**, and
+**Connect anyway** all sit above the fixed Main nav; **View unsaved** starts
+focused and Tab reaches Cancel. This is an intentional programmatic viewport
+position, not a claim that the unscrolled document has no vertical extent.
 Ink `rgb(27,26,23)` on page `rgb(244,241,232)` measures 15.41:1.
 
 Sensitivity ran after real test commits and restored every source hash with
@@ -84,16 +83,30 @@ its `readonly` oracle (three of the four registration cases still passed);
 four passed again. This maps every new connected/design behavior to a red
 deciding-source probe; no production source remains changed.
 
+Review-round safe-exit sensitivity removed the warning's focus/center-reveal
+effect after commit. The real 844×390 browser witness failed with **View
+unsaved** bottom `458.59375` beyond fixed-nav y `345`; restoring with
+`apply_patch` returned the source to SHA-256
+`13c2bf6291ee336f62aab4a26572299f7cd0b12a03f4a1682d6ef351486064f0` and the
+focused witness passed. The same focused unit caller test asserts initial View
+focus, and the recovery design sweeps now execute token/contrast checks in
+both orientations for singular, plural, BOTH-source, fallback, pending, and
+failed states.
+
 The full E2E run recorded 459 passes and one unrelated-to-scenario but not
 yet unrelated-to-code symptom: `retest.spec.ts` "Phase BL RACE THE 2K reaches"
 timed out waiting for **SESSION SAVED** after Save. The uninstrumented standard
-run retained no request/response trace; a focused rerun passed 1/1. Therefore
-the strongest supported classification is intermittent and unclassified,
-including possible shared `LogSession`/save involvement—not a recovery-proof
-failure or a basis for a Task 2 production change. The final full E2E rerun on
-the restored committed tree passed 460/460; it does not erase the earlier
-failure or establish a cause. After the warm/cold split was added, the final
-full E2E run passed 461/461 (2.1m).
+run retained no request/response trace. The focused, real-stack rerun passed
+1/1 with one `POST /api/logs` → 201 and a 2K payload; it now attaches its
+safe-fixture readiness, method/path/status, and body (without auth headers) on
+any future failure. This eliminates neither the original request nor a shared
+`LogSession`/save cause: the strongest supported classification remains
+intermittent and unclassified, not a recovery-proof failure or a basis for a
+Task 2 production change. The prior full E2E rerun on the restored committed
+tree passed 460/460; it does not erase the earlier failure or establish a
+cause. After the warm/cold split, the pre-review full E2E run passed 461/461
+(2.1m). The review-round restored-tree full E2E run passed 462/462; it likewise
+does not establish a cause for the original timeout.
 
 Gate record: `pnpm lint`, `pnpm typecheck`, and `pnpm format:check` passed;
 `pnpm test` and `pnpm test:coverage` passed 257 files / 7063 tests (one

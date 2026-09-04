@@ -1826,8 +1826,8 @@ in both orientations.**
 **Status:** OPEN at James's request, 2026-09-03. Normal Today/warning design
 approved 2026-09-03; additional recovery-case designs approved 2026-09-04.
 Gate 0, implementation, browser recovery proof and generated desktop captures
-are complete; the proposed native acceptance walk, phase-close review and merge
-decision remain pending James.
+(including the initial landscape safe exit) are complete; the proposed native
+acceptance walk, phase-close review and merge decision remain pending James.
 [Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)
 and [comparison](docs/superpowers/specs/2026-09-03-unlogged-session-gate.html).
 **S–M.** Full cycle; non-TRIAD only while retirement, stored shapes and
@@ -1865,8 +1865,10 @@ to lose the row has no move except to walk away.
 - [x] **Prove preservation across the browser path.** Production writer to warning
       to Today to PM5 summary to saved history; failed-save retry, cold-start
       hydration, both records, and View canceling Connect's staged replacement.
-      Preserve existing save/discard/replacement retirement. Native walk and
-      phase-close review remain required before exit. Evidence:
+      The 844×390 mounted warning puts the focused View safe exit and its
+      keyboard follow-on above Main nav. Preserve existing save/discard/
+      replacement retirement. Native walk and phase-close review remain required
+      before exit. Evidence:
       `docs/testing/2026-09-04-unlogged-session-evidence.md`.
 
 ---
