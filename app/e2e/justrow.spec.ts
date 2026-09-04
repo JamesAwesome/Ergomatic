@@ -250,7 +250,7 @@ test.describe("Just Row: the whole flow", () => {
 // and the record reads `TIMER` everywhere it names its door. Entered at
 // the door and walked to the detail through the real POST validator and a
 // real GET (RF24: the one test that STARTS upstream of every producer —
-// the SessionRun the door mints, the actual ▶ freezes, the body Save
+// the SessionRun the door mints, the actual END freezes, the body Save
 // posts — and asserts downstream of every reader).
 //
 // The wait after Start Timer is REAL time, not a fake clock: the Timer's
@@ -302,7 +302,7 @@ test.describe("Just Row: without the monitor", () => {
     // meta line naming the TIMER door, TIME alone — no DISTANCE cell, no
     // AVG SPLIT cell, no dash standing in for either. The TIME figure is at
     // least the three seconds stood on the clock above: `0:00` here would
-    // mean ▶ froze nothing (criterion 1's shape at this layer).
+    // mean END froze nothing (criterion 1's shape at this layer).
     await expect(page).toHaveURL(/\/justrow\/log$/);
     await expect(page.getByRole("heading", { name: "Just Row" })).toBeVisible();
     await expect(page.locator(".justrow-meta")).toContainText("TIMER");
@@ -452,8 +452,8 @@ test.describe("Just Row: standing in for a plan session", () => {
       "SESSION 1 OF 84",
     );
 
-    // The phone-timed door, three real seconds on the clock, then ▶ →
-    // Finish — the same walk `Just Row: without the monitor` takes.
+    // The phone-timed door, three real seconds on the clock, then the
+    // supported Next phase → Finish alternate path.
     await page.getByRole("link", { name: "JUST ROW" }).click();
     await page.getByRole("button", { name: "Start Timer" }).click();
     await expect(page).toHaveURL(/\/session\/run$/);

@@ -67,3 +67,22 @@ the existing `isFreeRow` mode discriminant, so programmed END behavior is
 preserved. The e2e run emitted only the existing unset Cloudflare-token and
 large-chunk build warnings; all 455 tests passed. No contradiction or concern
 remains.
+
+## Fix Round 1
+
+Swept the owned files for stale wording. Timer comments now describe the
+shared Just Row finish trigger (`▶` or `END`), distinguish the programmed
+workout END abandonment latch, and describe the shared freeze/actual behavior
+without assigning it to ▶ alone. The phone-timed e2e comments now name END as
+the exercised trigger and identify Next phase as the supported alternate path.
+No production behavior changed.
+
+Covering command and output:
+
+```text
+NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/session/Timer.test.tsx -t "END → stages Finish"
+1 passed, 92 skipped (93)
+```
+
+The fix-round commit is recorded below; `git status --short` was clean after
+the comment-only changes were committed.
