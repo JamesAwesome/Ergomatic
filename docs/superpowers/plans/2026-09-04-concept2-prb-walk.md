@@ -1,8 +1,8 @@
 # PR B — the link-outs leave the app (device walk card)
 
 > **Run every block in `bash`** — type `bash`, paste, and `exit` when done.
-> These are bash snippets and this machine's default shell is fish, which
-> handles some of them differently. Nothing here is translated on the fly.
+> These are bash snippets. Every block was pasted into this machine's fish
+> (4.8.1) too and behaved the same, so this is convention, not a requirement.
 
 **What this proves:** that tapping a Concept2 link-out on the phone opens the
 phone's default browser, signed in, on the rower's own row. **Nothing in this
