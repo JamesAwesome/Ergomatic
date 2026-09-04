@@ -54,12 +54,17 @@ function SelectedReview({ search }: { search: string }) {
     const run = selected.kind === "timer" ? selected.run : selected.entry.run;
     try {
       requireFiniteRecording(run);
-      const totals =
-        selected.kind === "timer"
-          ? selected.run.actuals[0]
-          : freeRowTotals(selected.entry.run);
-      if (totals == null) throw new Error("No measurements");
-      requireFiniteRecording(totals);
+      if (selected.kind === "timer") {
+        if (!Number.isFinite(selected.run.actuals[0]?.elapsedSeconds))
+          throw new Error("No measurements");
+      } else {
+        const totals = freeRowTotals(selected.entry.run);
+        if (
+          !Number.isFinite(totals?.seconds) ||
+          !Number.isFinite(totals?.meters)
+        )
+          throw new Error("No measurements");
+      }
     } catch {
       return (
         <ReadOnlyRecording

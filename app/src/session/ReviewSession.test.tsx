@@ -9,6 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, Link } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 import { compileProgram } from "../../domain/monitor/program.js";
 import { buildDraft, DRAFT_KEY } from "./draft";
 import { advance, buildFreeRowRun, buildRun } from "./engine";
@@ -16,6 +17,7 @@ import { buildLogSeed } from "./logDraft";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../monitor/monitorRun";
 import { RUN_KEY } from "./run";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import type { PlanState } from "../api/usePlan";
 import { reviewLocation } from "./reviewSelector";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
@@ -77,11 +79,63 @@ function timerWorkout() {
     run = advance(run, new Date("2026-09-04T13:15:00.000Z"));
   return { run, draft };
 }
+function designatedTest(source: "timer" | "monitor") {
+  const testWorkout: LibraryWorkout = {
+    ...ONBOARDING_LIBRARY_WORKOUTS.find((w) => w.title === "2K Test")!,
+    id: "retained-2k-test",
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+  };
+  const built = buildRun(
+    buildDraft(testWorkout),
+    null,
+    new Date("2026-09-04T12:00:00.000Z"),
+  );
+  const timer = advance(
+    {
+      ...built,
+      actuals: {
+        0: {
+          elapsedSeconds: 473.6,
+          splitSeconds: 118.4,
+          actualSource: "stopwatch",
+        },
+      },
+    },
+    new Date("2026-09-04T12:07:53.600Z"),
+  );
+  const program = compileProgram(built.phases);
+  if ("code" in program) throw new Error(program.message);
+  const pm5 = monitor({
+    workoutId: testWorkout.id,
+    title: testWorkout.title,
+    program,
+    logSeed: buildLogSeed(built.phases, null),
+    actuals: [
+      {
+        index: 0,
+        elapsedSeconds: 473.6,
+        distanceMeters: 2000,
+        avgSplit: 118.4,
+        avgSpm: 30,
+        avgHeartRateBpm: 168,
+        restDistanceMeters: 0,
+      },
+    ],
+  });
+  const run = source === "timer" ? timer : pm5;
+  localStorage.setItem(
+    source === "timer" ? RUN_KEY : MONITOR_RUN_KEY,
+    JSON.stringify(run),
+  );
+  return { testWorkout, run };
+}
 let library:
   | { state: "ready"; workouts: LibraryWorkout[] }
   | { state: "loading" }
   | { state: "error"; retry: () => void };
 let api: ReturnType<typeof vi.fn>;
+let plan: PlanState;
 beforeEach(() => {
   vi.resetModules();
   vi.doUnmock("./PostWorkoutSummary");
@@ -91,12 +145,13 @@ beforeEach(() => {
   vi.doMock("../api/useBaselines", () => ({
     useBaselines: () => ({ state: "ready", baselines: BASELINES }),
   }));
-  vi.doMock("../api/usePlan", () => ({
-    usePlan: () => ({
-      state: "ready",
-      plan: { planKey: null, doneN: 0, sequence: [] },
-    }),
-  }));
+  plan = {
+    state: "ready",
+    plan: { planKey: null, doneN: 0, sequence: [] },
+    choose: vi.fn(),
+    reset: vi.fn(),
+  };
+  vi.doMock("../api/usePlan", () => ({ usePlan: () => plan }));
   api = vi.fn(
     async () =>
       new Response(JSON.stringify({ id: "saved-log" }), { status: 201 }),
@@ -131,6 +186,170 @@ async function open(
 }
 
 describe("selected recording recovery", () => {
+  it.each(["timer", "monitor"] as const)(
+    "selected %s known designated test preserves measured save, offer and history",
+    async (source) => {
+      const { testWorkout, run } = designatedTest(source);
+      library = { state: "ready", workouts: [testWorkout] };
+      await open(reviewLocation(source, run.startedAt));
+      await screen.findByRole("heading", { name: "2K Test" });
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(
+        await screen.findByRole("heading", { name: "Set your 2k baseline?" }),
+      ).toBeVisible();
+      expect(screen.getByText("1:58.4")).toBeVisible();
+      const logs = api.mock.calls.filter(([path]) => path === "/api/logs");
+      expect(logs).toHaveLength(1);
+      expect(JSON.parse(logs[0]![1].body)).toMatchObject({
+        workoutId: "retained-2k-test",
+        workoutTitle: "2K Test",
+        workoutType: "AN",
+        source: source === "monitor" ? "pm5" : "timer",
+        timeSeconds: 473.6,
+        avgSplitSeconds: 118.4,
+        advancesPlan: false,
+      });
+      expect(JSON.parse(logs[0]![1].body).distanceMeters).toBe(
+        source === "monitor" ? 2000 : undefined,
+      );
+      const history = api.mock.calls.filter(
+        ([path]) => path === "/api/test-history",
+      );
+      expect(history).toHaveLength(1);
+      expect(JSON.parse(history[0]![1].body)).toStrictEqual({
+        distance: "2k",
+        splitSeconds: 118.4,
+        logId: "saved-log",
+      });
+      expect(
+        localStorage.getItem(source === "timer" ? RUN_KEY : MONITOR_RUN_KEY),
+      ).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+      expect(
+        await screen.findByRole("heading", { name: "Today" }),
+      ).toBeVisible();
+      expect(
+        api.mock.calls.filter(([path]) => path === "/api/baselines"),
+      ).toHaveLength(0);
+    },
+  );
+  it.each(["timer", "monitor"] as const)(
+    "selected %s unknown designated title saves without awarding an offer or test history",
+    async (source) => {
+      const { run } = designatedTest(source);
+      library = { state: "ready", workouts: [] };
+      await open(reviewLocation(source, run.startedAt));
+      await screen.findByRole("heading", { name: "2K Test" });
+      await userEvent.selectOptions(
+        screen.getByRole("combobox", { name: "Workout type" }),
+        "TR",
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(
+        await screen.findByRole("heading", { name: "Today" }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("heading", { name: "Set your 2k baseline?" }),
+      ).not.toBeInTheDocument();
+      const logs = api.mock.calls.filter(([path]) => path === "/api/logs");
+      expect(logs).toHaveLength(1);
+      expect(JSON.parse(logs[0]![1].body)).toMatchObject({
+        workoutId: "retained-2k-test",
+        workoutTitle: "2K Test",
+        workoutType: "TR",
+        source: source === "monitor" ? "pm5" : "timer",
+        timeSeconds: 473.6,
+        avgSplitSeconds: 118.4,
+      });
+      expect(JSON.parse(logs[0]![1].body).distanceMeters).toBe(
+        source === "monitor" ? 2000 : undefined,
+      );
+      expect(
+        api.mock.calls.filter(
+          ([path]) => path === "/api/test-history" || path === "/api/baselines",
+        ),
+      ).toHaveLength(0);
+      expect(
+        localStorage.getItem(source === "timer" ? RUN_KEY : MONITOR_RUN_KEY),
+      ).toBeNull();
+    },
+  );
+  it.each([
+    ["timer", "loading"],
+    ["timer", "error"],
+    ["monitor", "loading"],
+    ["monitor", "error"],
+  ] as const)(
+    "selected %s saves while plan is %s without asserting advancesPlan",
+    async (source, state) => {
+      const run = source === "timer" ? timerWorkout().run : monitor();
+      localStorage.setItem(
+        source === "timer" ? RUN_KEY : MONITOR_RUN_KEY,
+        JSON.stringify(run),
+      );
+      plan = state === "loading" ? { state } : { state, retry: vi.fn() };
+      await open(reviewLocation(source, run.startedAt));
+      expect(
+        await screen.findByRole("heading", { name: "Stationary Front" }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: /Log against plan/ }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(
+        await screen.findByRole("heading", { name: "Today" }),
+      ).toBeVisible();
+      expect(api).toHaveBeenCalledTimes(1);
+      expect(api.mock.calls[0]![0]).toBe("/api/logs");
+      const body = JSON.parse(api.mock.calls[0]![1].body);
+      expect(body).not.toHaveProperty("advancesPlan");
+      expect(body).toMatchObject({
+        workoutId: "retained-workout",
+        workoutType: "AT",
+        source: source === "monitor" ? "pm5" : "timer",
+        timeSeconds: source === "monitor" ? 120 : 900,
+      });
+      expect(
+        localStorage.getItem(source === "timer" ? RUN_KEY : MONITOR_RUN_KEY),
+      ).toBeNull();
+    },
+  );
+  it.each([
+    ["null totals", null],
+    ["empty totals", {}],
+    ["missing seconds", { workDistanceMeters: 450 }],
+    ["missing meters", { workElapsedSeconds: 120 }],
+    ["null seconds", { workElapsedSeconds: null, workDistanceMeters: 450 }],
+    ["null meters", { workElapsedSeconds: 120, workDistanceMeters: null }],
+    ["string seconds", { workElapsedSeconds: "120", workDistanceMeters: 450 }],
+    ["string meters", { workElapsedSeconds: 120, workDistanceMeters: "450" }],
+    ["boolean seconds", { workElapsedSeconds: true, workDistanceMeters: 450 }],
+    ["boolean meters", { workElapsedSeconds: 120, workDistanceMeters: false }],
+  ])(
+    "malformed Just Row %s preserves full read-only recording without save",
+    async (_label, totals) => {
+      const run = monitor({
+        mode: "justrow",
+        workoutId: null,
+        title: "Just Row",
+        summaryTotals: totals as never,
+      });
+      localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+      await open();
+      expect(
+        screen.getByRole("textbox", { name: "Recording data" }),
+      ).toHaveValue(JSON.stringify(run, null, 2));
+      expect(
+        screen.queryByRole("button", { name: "Save" }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("link", { name: "Keep unsaved" }));
+      expect(
+        await screen.findByRole("heading", { name: "Today" }),
+      ).toBeVisible();
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(JSON.stringify(run));
+      expect(api).not.toHaveBeenCalled();
+    },
+  );
   it("programmed monitor discard retires the selected key only and returns to Today", async () => {
     const run = monitor();
     const timer = timerFreeRow();
