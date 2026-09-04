@@ -1,5 +1,9 @@
 # NFC next walk
 
+**Start at the erg with [OPERATOR-CARD.md](OPERATOR-CARD.md).** Exact commands,
+instruction blocks and finish rules are staged; latest-install wireless capture
+and cleanup were verified at 21:55 UTC. No further planning/build/review is due.
+
 Current candidate: [NF-NORMAL-TRACE-v8](NORMAL-TRACE-V8-RUNSHEET.md).
 The pinned diagnostic 0.23.0 (789) is restored and independently verified;
 wireless console capture and cleanup passed without an NFC attempt.
