@@ -4517,3 +4517,11 @@ Approval concerns demonstrated executability and total operator cost, not
 merely technical necessity. Today's endorsement is a policy ruling, not
 approval for another walk. The binding gate belongs in `CLAUDE.md`; do not
 duplicate its checklist here.
+
+## Phase NF one-attempt trace walk, 2026-09-04
+
+`NF-NORMAL-TRACE-v3` received PM PASS for one 8-minute normal NFC diagnostic
+attempt on the pinned build and photographed hardware, with zero
+rowing/captures, no retry, 11 physical actions, three one-word acknowledgements,
+and controller-owned automatic evidence. No broader NFC walk or implementation
+was approved.

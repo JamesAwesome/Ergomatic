@@ -5,8 +5,9 @@ manual receipt copying and records native facts needed to distinguish a reader
 request from actual RF activation. It does not implement the product Scan NFC
 button or authorize another hardware session.
 
-Runtime and tests under review: `0e034b48..bb3c3dbc`. Native and browser gates
-pass. No walk is ready.
+Runtime and tests under review: `0e034b48..7e10d289`. Native and browser gates
+pass. One bounded next walk now has PM PASS but remains unscheduled pending
+James's separate agreement.
 
 ## What changed
 
@@ -94,5 +95,32 @@ that RF never activated. Console emission is not a host durability receipt or
 a causal explanation for the earlier failure. No saved receipt or gate
 criterion was retroactively promoted. Gate -1 remains NO-GO/incomplete.
 
-A future walk still requires PM PASS on an exact, feasibility-checked runsheet
-and James's separate agreement under `CLAUDE.md`. No walk is scheduled.
+`NF-NORMAL-TRACE-v3` at `6d10fc80` has PM PASS for one pinned normal attempt:
+8 minutes including setup, zero rowing/HR/captures, one attempt with no retry,
+at most 11 physical actions and three one-word acknowledgements, with evidence
+captured by the controller. James's separate agreement is still required. No
+recovery, background, held, reload, timeout, Flipper, multi-tag, programming or
+product-implementation work is approved.
+
+## Prepared diagnostic artifact
+
+The optional `VITE_NFC_GATE_MINUS_ONE_PREFILL` diagnostic build value now
+populates the five already-known phone/PM5 fields so the operator types no
+metadata. Absent, malformed or partial input leaves the fields empty and the
+sample disabled; retained reload metadata still takes precedence. The focused
+NFC suite passed 108/108, static checks passed, the normal flag-off build passed
+`dist:grep` and excluded both hardware values and the variable name, and the
+full browser regression passed 455/455 with teardown.
+
+The signed Debug artifact from app-source commit `7e10d289` is
+`/tmp/ergomatic-phase-nf-ready.WQJqQu/Build/Products/Debug-iphoneos/App.app`.
+Its executable SHA-256 is
+`bb4e30e5387664b6f8914855ef1aa45280916394d597637871ac80abc2ff8dbf`;
+its probe asset SHA-256 is
+`b333816b7ccf4960c2c7035298f844104af33bff351ac3fb1a18f4c02ffb07a0`.
+Strict/deep code-sign verification passed, CDHash is
+`96d980eec0b53de9446b72589d8e41324224f58a`, the effective NFC entitlement is
+exactly TAG, and the usage string is unchanged. `cap sync ios` left the tracked
+tree clean. The controller-only strict reassembly command also reconstructed
+the retained real normal frames byte-for-byte, so the approved run has no
+operator copy step.
