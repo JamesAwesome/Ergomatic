@@ -72,9 +72,13 @@ export interface Concept2RouterDeps {
 // `haus.waffle.ergomatic` (app/ios/App/App.xcodeproj/project.pbxproj's
 // PRODUCT_BUNDLE_IDENTIFIER). Registered at log-dev 2026-09-02 (James);
 // live-portal registration is a cutover step beside write approval
-// (ROADMAP's C2 register row). Until PR1.75b ships the
-// ASWebAuthenticationSession plugin nothing on the device can receive it —
-// the design's named intentional interval, harmless while the flag is off.
+// (ROADMAP's C2 register row). The device CAN receive this now: PR1.75b
+// shipped the ASWebAuthenticationSession plugin (merged `3e15378e`), so the
+// design's named intentional interval — a native redirect nothing on the
+// phone could accept — is CLOSED. What is left before the flag flips is
+// Concept2's own side: write approval, and registration of this exact URI on
+// the LIVE portal under the application name "Ergomatic" (log-dev is
+// registered, live is not).
 export const NATIVE_REDIRECT_URI = "haus.waffle.ergomatic://oauth/callback";
 
 // Design §3: a bearer mint must DECLARE it can receive the native redirect.
@@ -119,11 +123,14 @@ const TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 // the failure mode still exists, just fifty deep — after 50 consecutive
 // app-written rows with no other declaration among them, producer 1
 // legitimately has nothing to read and the send falls to the profile
-// derivation. That case is VISIBLE, not silent, and both halves are gated:
-// the SENT state names which producer answered (ruling R2's
-// `weightClassSource`, asserted by "a page that is ALL ours falls to the
-// profile …"), and this route's `c2_weight_class` log line carries
-// `ourRowsSkipped`, which reads 50 in exactly this case.
+// derivation. That case is ANSWERABLE, not silent, and both halves are
+// gated: this route's 200 carries `weightClassSource` (ruling R2's field,
+// asserted by "a page that is ALL ours falls to the profile …"), and its
+// `c2_weight_class` log line carries `ourRowsSkipped`, which reads 50 in
+// exactly this case. Answerable by an OPERATOR, off the record rather than
+// off the screen — the 2026-09-04 ruling ("Stop talking about the weight
+// class") withdrew the SENT state's provenance sub-line, so no rower-facing
+// surface names the producer. This comment used to say the SENT state did.
 const DECLARATION_PAGE_SIZE = 50;
 
 // Same shape as `routes/data.ts`'s own `UUID_RE` (that file's own comment:
@@ -442,10 +449,11 @@ export function createConcept2Router({
         // observation 3) — the numeric id is the fallback so the page
         // never renders an empty identity.
         //
-        // `||`, not `??` (observation 18): an empty username is a string
-        // and would render "Concept2  is now connected to Ergomatic …" —
-        // under a comment that used to claim this page "never renders an
-        // empty identity".
+        // `||`, not `??` (observation 18): an empty username is a string,
+        // so `??` would let it through and render "Concept2  is now
+        // connected to Ergomatic …". The claim above is TRUE at this head
+        // and was not before PR2 Task 3 step 5b changed this operator; the
+        // guard is what earns the claim, which is why both stay.
         //
         // `account #<id>`, not `#<id>`: ONE spelling of the numeric
         // identity across both surfaces. The card's `identityLine`

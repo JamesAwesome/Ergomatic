@@ -378,10 +378,26 @@ export const sessionLogs = pgTable(
     c2UserId: integer("c2_user_id"),
     // completedAt: the client's MonitorRun.completedAt — C2's `date` is
     // the END of the workout and logged_at is save-time, minutes-to-hours
-    // later (anchor K3). tz: the client's IANA zone; posted at save from
-    // PR2 on, or written by the upload route's first legacy send (plan
-    // deviation 2 — the payload's date must be stable across retries
-    // because C2's dedup key is second-granular).
+    // later (anchor K3). tz: the client's IANA zone.
+    //
+    // WHO WRITES THEM, as of Wave E PR2 (this comment used to say "posted
+    // at save from PR2 on", which was a requirement addressed to a future
+    // PR; it is now a description of the code). The producer is
+    // `src/session/completionStamp.ts`'s `completionStamp()`, spread into
+    // the save body at BOTH monitor doors — `session/LogSession.tsx` and
+    // `justrow/JustRowLog.tsx` — so every row saved by this build or later
+    // carries both fields. An unrecognised zone DEGRADES to null on
+    // `POST /api/logs` (routes/data.ts) rather than refusing the save: a
+    // Concept2 field can never cost a rower their row.
+    //
+    // Rows saved BEFORE that build read both back null, permanently — the
+    // close instant was never recorded, so no backfill is possible.
+    // `completed_at IS NULL` is what distinguishes them in the database.
+    // For those rows the upload route derives the date from logged_at and
+    // PERSISTS the upload request's own zone onto this column on first use
+    // (plan deviation 2 — the payload's date must be stable across retries
+    // because C2's dedup key is second-granular), which is the only way
+    // this column is ever written server-side.
     completedAt: timestamp("completed_at", { withTimezone: true }),
     tz: text("tz"),
   },

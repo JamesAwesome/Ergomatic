@@ -236,9 +236,13 @@ export interface LogInput {
   // the client's MonitorRun.completedAt and IANA zone, optional/nullable,
   // same convention as `deviceName`/`thumbs`/`endedBy` above — absent or
   // explicit null both store null (an older client, or a save this phase
-  // doesn't post either field for, stores nothing). Posted at save from
-  // PR2 on; bounds-checked at the route before this type is ever
-  // constructed, same trust-boundary posture as every other field here.
+  // doesn't post either field for, stores nothing). Both monitor doors post
+  // them on every save as of Wave E PR2 (`src/session/completionStamp.ts`);
+  // bounds-checked at the route before this type is ever constructed, same
+  // trust-boundary posture as every other field here — except that an
+  // unrecognised `tz` DEGRADES to null there rather than refusing the save
+  // (`routes/data.ts`), because a Concept2 field can never cost a rower
+  // their row.
   completedAt?: Date | null;
   tz?: string | null;
   // Deliberately absent from this interface: `c2ResultId`/`c2UserId` are

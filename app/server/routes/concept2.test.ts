@@ -2728,12 +2728,13 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(client.fetchMe).not.toHaveBeenCalled();
   });
 
-  it("a page that is ALL ours falls to the profile, and the SENT state says so", async () => {
+  it("a page that is ALL ours falls to the profile, and the 200 says so", async () => {
     // The residue that survives at fifty, made visible rather than silent:
     // after 50 consecutive app-written rows with no other declaration among
-    // them, producer 1 legitimately has nothing to read. The rower is told
-    // which producer answered rather than being handed a class with no
-    // provenance.
+    // them, producer 1 legitimately has nothing to read. `weightClassSource`
+    // on this response is where that is answerable — for an OPERATOR, not
+    // for the rower: the 2026-09-04 ruling withdrew the SENT state's
+    // provenance sub-line, so no rower-facing surface names the producer.
     const ids = Array.from({ length: 50 }, (_, i) => 9001 + i);
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
