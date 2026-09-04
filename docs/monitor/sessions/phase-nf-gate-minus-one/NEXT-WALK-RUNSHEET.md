@@ -1,8 +1,8 @@
-# NF-NORMAL-TRACE-v2 — one-attempt NFC diagnostic runsheet
+# NF-NORMAL-TRACE-v3 — one-attempt NFC diagnostic runsheet
 
-**Status: DRAFT FOR PM REVIEW. This is not authorization to operate the phone
-or PM5. A PM PASS on this exact version and James's separate agreement are both
-required before the walk.**
+**Authorization gate: this exact version may run only after a PM explicitly
+returns PASS for `NF-NORMAL-TRACE-v3` and James separately agrees. Neither this
+file nor its commit authorizes operation of the phone or PM5.**
 
 WALK PLAN · Observe one fresh PM5 reader activation and automatic evidence capture
 
@@ -99,7 +99,10 @@ before the walk, the controller:
 
 1. Rechecks the artifact path, both SHA-256 values, strict/deep code signature,
    CDHash, usage text and exact TAG entitlement against the pinned table.
-2. Rechecks source HEAD is the pinned commit and the worktree is clean.
+2. Rechecks the worktree is clean and
+   `git diff --exit-code 7e10d2897a3d9c00685374695410a59213beb679 -- app`
+   is empty. Later documentation-only commits may advance HEAD; any app diff
+   invalidates this artifact and runsheet.
 3. Creates one temporary capture directory and prepares, but does not yet run,
    these installed-tool commands:
 
@@ -193,6 +196,10 @@ Docker stack to tear down.
 
 - `NF-NORMAL-TRACE-v1`: NOT READY. The card began its clock after USB/unlock
   setup and did not count every physical interaction.
-- `NF-NORMAL-TRACE-v2`: pending review. The same 8-minute cap now begins before
-  all setup, and the 11-action / three-word operator budgets are explicit and
-  binding.
+- `NF-NORMAL-TRACE-v2`: NOT READY. Its preflight incorrectly required branch
+  HEAD to equal the older app-source commit even though the runsheet itself was
+  committed later.
+- `NF-NORMAL-TRACE-v3`: the same 8-minute cap begins before all setup, the
+  11-action / three-word operator budgets are binding, and provenance is pinned
+  by a clean worktree plus an empty `app/` diff against the artifact's source
+  commit rather than contradictory HEAD equality.
