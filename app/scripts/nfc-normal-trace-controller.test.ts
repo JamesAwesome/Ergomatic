@@ -50,6 +50,7 @@ describe("NFC normal-trace controller", () => {
     const commands: string[][] = [];
     const prompts: string[] = [];
     const notices: string[] = [];
+    let consoleArgs: string[] = [];
     let nowMs = 1_000_000;
     let replacement = 0;
     const result = await runNormalTraceController(captureDir, {
@@ -78,7 +79,8 @@ describe("NFC normal-trace controller", () => {
           writeFileSync(jsonPath!, JSON.stringify({ result: { devices: [] } }));
         } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
       },
-      launchConsole: async (_args, logPath) => {
+      launchConsole: async (args, logPath) => {
+        consoleArgs = args;
         writeFileSync(logPath, positiveLog());
         return { wait: async () => 0, stopHost: () => undefined };
       },
@@ -89,6 +91,14 @@ describe("NFC normal-trace controller", () => {
     expect(
       notices.some((message) => message.includes("Run normal sample")),
     ).toBe(true);
+    expect(
+      consoleArgs.slice(consoleArgs.indexOf("--timeout"), -1),
+    ).toStrictEqual([
+      "--timeout",
+      "480",
+      "--json-output",
+      join(captureDir, "normal-launch.json"),
+    ]);
     expect(
       commands.filter((args) => args.includes("--start-stopped")),
     ).toHaveLength(2);

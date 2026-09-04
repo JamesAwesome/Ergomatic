@@ -243,8 +243,8 @@ export async function runNormalTraceController(
   const consoleLog = join(captureDir, "normal-console.log");
   const consoleTimeout = boundedTimeoutSeconds(
     deps.now(),
-    cleanupDeadlineMs,
-    6 * 60,
+    hardDeadlineMs,
+    8 * 60,
   );
   let consoleHandle: ConsoleHandle;
   try {
