@@ -593,6 +593,9 @@ describe("GateMinusOneProbe", () => {
         staleIdDroppedCount: 3,
       });
       expect(complete.criteria.staleACannotAffectB).toBe(true);
+      expect(native.calls.includes("nfc-stop:attempt-a")).toBe(
+        scenario !== "webview-reload",
+      );
     },
   );
 
