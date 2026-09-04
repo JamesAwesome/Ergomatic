@@ -1126,6 +1126,7 @@ describe("GateMinusOneProbe", () => {
     await user.click(
       screen.getByRole("button", { name: "Export partial receipt" }),
     );
+    const manualFrameCount = logger.mock.calls.length;
     const release = hold("remove:nfcEvent");
     let failFirstAutomaticCapture = true;
     logger.mockImplementation(() => {
@@ -1141,7 +1142,15 @@ describe("GateMinusOneProbe", () => {
     await screen.findByText(
       "Receipt validation failed; raw or malformed evidence was not exported.",
     );
-    expect(logger).toHaveBeenCalled();
+    const finalFrames = logger.mock.calls
+      // The failed reload-entry fragment is one call; drain then emits its
+      // entry receipt before this post-cleanup final receipt.
+      .slice(manualFrameCount + 3)
+      .map(([message]) => message as string);
+    expect(finalFrames).toHaveLength(2);
+    expect(
+      JSON.parse(reassembleGateReceiptFrames(finalFrames)) as NfcGateReceiptV1,
+    ).toMatchObject({ attempts: [{ scenario: "webview-reload" }] });
     expect(native.calls).toContain("nfc-stop:attempt-a");
     expect(reload).not.toHaveBeenCalled();
     logger.mockRestore();
