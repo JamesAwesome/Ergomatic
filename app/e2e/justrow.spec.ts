@@ -250,15 +250,15 @@ test.describe("Just Row: the whole flow", () => {
 // and the record reads `TIMER` everywhere it names its door. Entered at
 // the door and walked to the detail through the real POST validator and a
 // real GET (RF24: the one test that STARTS upstream of every producer —
-// the SessionRun the door mints, the actual ▶ freezes, the body Save
+// the SessionRun the door mints, the actual END freezes, the body Save
 // posts — and asserts downstream of every reader).
 //
 // The wait after Start Timer is REAL time, not a fake clock: the Timer's
 // count-up is wall-clock based (criterion 5's invariant), so the recorded
 // TIME must be at least the seconds this test genuinely stood on the
-// screen — `0:00` there would mean ▶ recorded nothing.
+// screen — `0:00` there would mean END recorded nothing.
 test.describe("Just Row: without the monitor", () => {
-  test("Today → Start Timer → count-up → ▶ → Finish session → time-only log door → history chip → TIMER detail", async ({
+  test("Today → Start Timer → count-up → END → Finish session → time-only log door → history chip → TIMER detail", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -292,9 +292,9 @@ test.describe("Just Row: without the monitor", () => {
       timeout: 10_000,
     });
 
-    // ▶ stages the finish (handoff `ClockFinish.dc.html`, verbatim from the
-    // shipped Timer) rather than advancing: a free row has no next phase.
-    await page.getByRole("button", { name: "Next phase" }).click();
+    // END stages the existing finish flow: a free row has no next phase, so
+    // this is the phone-timed row's direct route to the same confirmation.
+    await page.getByRole("button", { name: "END →" }).click();
     await expect(page.getByText("Finish this session?")).toBeVisible();
     await page.getByRole("button", { name: "Finish session" }).click();
 
@@ -302,14 +302,17 @@ test.describe("Just Row: without the monitor", () => {
     // meta line naming the TIMER door, TIME alone — no DISTANCE cell, no
     // AVG SPLIT cell, no dash standing in for either. The TIME figure is at
     // least the three seconds stood on the clock above: `0:00` here would
-    // mean ▶ froze nothing (criterion 1's shape at this layer).
+    // mean END froze nothing (criterion 1's shape at this layer). Capture
+    // the exact door value so history must read back this same persisted
+    // value, not merely pass an independent range check.
     await expect(page).toHaveURL(/\/justrow\/log$/);
     await expect(page.getByRole("heading", { name: "Just Row" })).toBeVisible();
     await expect(page.locator(".justrow-meta")).toContainText("TIMER");
     await expect(page.getByText("TIME", { exact: true })).toBeVisible();
-    await expect(page.locator(".justrow-log-numvalue")).toHaveText(
-      /^0:(0[3-9]|[1-5]\d)$/,
-    );
+    const savedTime = (
+      await page.locator(".justrow-log-numvalue").textContent()
+    )?.trim();
+    expect(savedTime).toMatch(/^0:(0[3-9]|[1-5]\d)$/);
     await expect(page.getByText("DISTANCE")).toHaveCount(0);
     await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
     await expect(page.getByText("—")).toHaveCount(0);
@@ -338,7 +341,7 @@ test.describe("Just Row: without the monitor", () => {
     await expect(row.locator(".free-row-chip")).toHaveText("JR");
     await expect(row.locator(".type-badge")).toHaveCount(0);
     await expect(row.locator(".today-log-hero")).toHaveText(
-      /^TIME 0:(0[3-9]|[1-5]\d)$/,
+      `TIME ${savedTime}`,
     );
 
     // The detail (handoff `Detail.dc.html`, criterion 3): the meta line
@@ -452,8 +455,8 @@ test.describe("Just Row: standing in for a plan session", () => {
       "SESSION 1 OF 84",
     );
 
-    // The phone-timed door, three real seconds on the clock, then ▶ →
-    // Finish — the same walk `Just Row: without the monitor` takes.
+    // The phone-timed door, three real seconds on the clock, then the
+    // supported Next phase → Finish alternate path.
     await page.getByRole("link", { name: "JUST ROW" }).click();
     await page.getByRole("button", { name: "Start Timer" }).click();
     await expect(page).toHaveURL(/\/session\/run$/);
