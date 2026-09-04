@@ -2,7 +2,12 @@
 
 Governed by the approved [recovery design](../superpowers/specs/2026-09-03-unlogged-session-design.md) and the canonical `.claude/skills/hardware-walk/SKILL.md` operator contract. James approved the one-minute/three-capture budget on September 4. On candidate 0.36.1 (875) from `d8709c6d`, installed directly on Kaito, he explicitly confirmed successful recovery and saving. Three screenshots show Today discovery and the completion summary/save actions; they do not show saved history or an identified before/after pair. Separate landscape/no-later-warning observations remain unreported; no release or merge occurred. See the [live walk record](../../monitor/sessions/walk-2026-09-04-recovery/README.md).
 
-## Proposed operator card
+PM phase-close review passed the feature's bounded native-door criterion using
+these images and James's explicit recovery/Save/Today-clear confirmations.
+This does not mark every planned observation complete. No further rowing or
+captures are required; integration, PR CI and merge approval remain separate.
+
+## Approved operator card (planned observations, not a completion checklist)
 
 WALK PLAN · Recover and save a completed programmed workout after leaving its summary
 

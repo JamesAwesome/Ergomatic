@@ -1312,9 +1312,11 @@ Gate 0 and both task reviews are complete; browser recovery proof and generated
 captures include the initial landscape safe exit. Automated gates pass.
 James's approved September 4 follow-up resolved the final verification-byte
 admission gap; scoped review found no new findings. The antagonist cleared
-the proposed one-minute protocol's structural coverage, not native acceptance;
-the actual walk, PM phase-close judgment and
-merge decision remain pending James.
+the proposed one-minute protocol's structural coverage. On build 875, James
+confirmed native recovery, successful Save and removal from Today; three
+phone screenshots are recorded. PM phase-close review passed that bounded
+native-door criterion, not every proposed protocol observation. Current-main
+integration, PR checks and James's merge decision remain pending.
 This is separate from Wave F, whose dependency cleared on 2026-09-04; that
 closeout does not substitute for this feature's own approvals or acceptance.
 [Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)

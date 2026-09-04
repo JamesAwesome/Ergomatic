@@ -11,8 +11,8 @@ commit `c1e2c4c7` adds the missing admission checks and mounted witnesses, with
 fresh gates and sensitivity probes recorded below. The one authorized scoped
 rereview of `1829dea2..11d9a122` returned **ADDRESSED**, with no new findings:
 the guard matches the server contract and failed admission preserves the exact
-recording in read-only fallback. Native acceptance, PM phase-close judgment
-and merge approval remain pending.
+recording in read-only fallback. Native-door acceptance and PM phase-close
+review subsequently passed as bounded below. Merge approval remains pending.
 
 The connected browser journey drives the real fake transport through five
 `w 100m max r0.1` intervals: six-second positive rests, five resting-state
@@ -233,8 +233,15 @@ changes only validation logic and mounted unit tests, with no CSS, layout,
 copy, or browser fixture change; the prior 118/118
 visual run is historical evidence only.
 
-Native acceptance is an approved criterion but still pending James. Its
-operator protocol is a **proposed** phone acceptance walk at
-`docs/testing/2026-09-04-unlogged-session-phone-walk.md`; browser evidence
-does not replace hardware approval, rowing, phase-close review, or merge
-authorization.
+Native-door acceptance passed on build 875 (`d8709c6d`), Kaito iPhone 17 Pro
+on iOS 26.6.1, against the production API reporting `04b7964e`. James
+explicitly confirmed recovery, successful Save and removal from Today's
+unsaved section. Three portrait screenshots show Today discovery and the
+completion summary/save actions. The [phone record](../monitor/sessions/walk-2026-09-04-recovery/README.md)
+transcribes each and preserves the exact operator confirmations. PM phase-close
+review passed this bounded native-door criterion. An identified before/after
+summary pair, saved-history image, native landscape warning visibility and a
+later Start/Connect no-warning observation are not independently established.
+No repeat rowing or extra captures are required for this claim ceiling.
+Latest main `2f258006` is not integrated into the walked candidate; integration,
+PR CI and James's merge authorization remain separate pending gates.

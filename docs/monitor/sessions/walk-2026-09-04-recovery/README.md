@@ -78,7 +78,22 @@ The approved protocol is
 The app identifies the monitor as PM5 432331249 Row; no physical serial-label
 photo or firmware version was captured. This confirmation is limited to
 this phone and reported run, not a wire, arithmetic or firmware-general oracle.
-PM phase-close judgment and merge approval are not established by this report.
+PM phase-close review returned **PASS for the bounded native-door criterion**:
+explicit recovery/Save/Today-clear confirmations plus the three screenshots
+meet the feature spec's phone-door requirement. It did not sign off every
+proposed protocol observation. No additional product/native blocker was
+established, and no more rowing or captures are required. The existing browser
+producer journeys supply the separately claimed payload/history/no-warning
+proof; they are not native numerical verification.
+
+The strongest objection was the missing native landscape and identified
+before/after/history evidence. The PM accepted the narrower feature criterion
+without asserting those observations. This adds no new standing ledger rule.
+New main `2f258006` was not part of this candidate; integration, applicable
+fresh verification, PR CI and James's explicit merge approval remain pending.
+After an approved merge, the PM recommends a minor TestFlight release for the
+native-visible recovery capability, with notes and the actual tag range checked
+then. No release, merge or upload is authorized by this verdict.
 
 No walk Docker stack was started: this native candidate targets the existing
 production API. The earlier automated-test stack is not a phone evidence source.

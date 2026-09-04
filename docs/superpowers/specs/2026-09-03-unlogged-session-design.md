@@ -31,11 +31,13 @@ but left a verification-byte admission gap: empty or out-of-range integer
 arrays reached Save and were rejected by the server. James approved one focused
 follow-up on September 4 ("appproved"); the fix and automated verification are
 complete, and scoped review cleared the fix with no new findings. This is not
-merge or native-walk approval. The recovery matrix and landscape safe-exit evidence are
-recorded. The antagonist cleared the
-proposed one-minute phone protocol's structural coverage, not native
-acceptance. The actual walk, PM phase-close judgment and any merge decision
-remain pending James. Browser proof does not replace native acceptance.
+merge approval. The recovery matrix and browser landscape safe-exit evidence
+are recorded. James subsequently approved and performed phone acceptance on
+build 875: recovery, Save and removal from Today are explicitly confirmed,
+with three phone screenshots. PM phase-close review passed the bounded
+native-door criterion; the detailed protocol's missing observations are
+disclosed in the walk record, not promoted to proven outcomes. Current-main
+integration, PR checks and James's merge decision remain pending.
 
 The warning's new **View unsaved** action navigates through the same cancel
 cleanup as Cancel. It must not authorize a replacement. Today is the common
