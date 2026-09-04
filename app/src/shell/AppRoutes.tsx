@@ -27,6 +27,7 @@ import LogSession from "../session/LogSession";
 import Timer from "../session/Timer";
 import JustRow from "../justrow/JustRow";
 import JustRowLog from "../justrow/JustRowLog";
+import ReviewSession from "../session/ReviewSession";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
@@ -226,6 +227,7 @@ export default function AppRoutes({
         <Route path="/session/run" element={<Timer />} />
         <Route path="/session/complete" element={<CompleteRedirect />} />
         <Route path="/session/log" element={<LogSession />} />
+        <Route path="/session/review" element={<ReviewSession />} />
         {JustRowObserver && (
           <Route
             path="/justrow/observe"

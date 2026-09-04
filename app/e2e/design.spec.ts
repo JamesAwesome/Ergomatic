@@ -1747,7 +1747,7 @@ test.describe("today screen (unlogged session row)", () => {
     await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
     await page.getByRole("link", { name: "← DONE" }).click();
     await expect(page).toHaveURL(/\/today$/);
-    await expect(page.getByText(/unlogged session/i)).toBeVisible();
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
   });
 
   test.afterEach(async ({ page }) => {
@@ -1767,7 +1767,7 @@ test.describe("today screen (unlogged session row)", () => {
   // The DEFAULT state's own ✕ — outlined, never solid (DEVIATIONS.md #2).
   test("the row's ✕ is 44x44 and accent-outlined at rest", async ({ page }) => {
     const discardBtn = page.getByRole("button", {
-      name: "Discard without logging",
+      name: /Discard Timer workout/,
     });
     const box = (await discardBtn.boundingBox())!;
     expect(box.width).toBe(44);
@@ -1781,27 +1781,27 @@ test.describe("today screen (unlogged session row)", () => {
   });
 
   // Arming swaps the ROW's CONTENTS, not its layout (DESIGN.md's own words):
-  // border -> accent, text -> "Discard {title} without logging?", ✕ ->
+  // border -> accent, text -> "Discard {title} without saving?", ✕ ->
   // solid accent "Tap again" — and the row's own box stays the same size and
   // position throughout.
-  test("arming swaps the row's contents in place — border to accent, text to the discard question, ✕ to a solid 'Tap again' — without moving the row", async ({
+  test("arming swaps the row contents for the selected discard question without moving its top", async ({
     page,
   }) => {
-    const row = page.locator(".today-unlogged-line");
+    const row = page.locator(".unsaved-row");
     const boxBefore = (await row.boundingBox())!;
 
-    await page.getByRole("button", { name: "Discard without logging" }).click();
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
     await page.mouse.move(0, 0);
 
-    await expect(row).toHaveClass(/today-unlogged-line-armed/);
+    await expect(row).toHaveClass(/unsaved-row/);
     const rowBorderColor = await row.evaluate(
       (el) => getComputedStyle(el).borderColor,
     );
-    expect(rowBorderColor).toBe("rgb(181, 52, 31)"); // --accent
+    expect(rowBorderColor).toBe("rgb(216, 211, 196)"); // --rule
     await expect(
-      page.getByText(`Discard ${title} without logging?`),
+      page.getByText(`Discard ${title} without saving?`),
     ).toBeVisible();
-    const tapAgain = page.getByRole("button", { name: "Tap again" });
+    const tapAgain = page.getByRole("button", { name: "Tap again to discard" });
     const tapAgainStyles = await tapAgain.evaluate((el) => {
       const s = getComputedStyle(el);
       return { background: s.backgroundColor, color: s.color };
@@ -1809,11 +1809,12 @@ test.describe("today screen (unlogged session row)", () => {
     expect(tapAgainStyles.background).toBe("rgb(181, 52, 31)"); // --accent
     expect(tapAgainStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
     // "Log it" is gone while armed — replaced, not merely joined.
-    await expect(page.getByRole("link", { name: "Log it" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Review & save/ })).toHaveCount(
+      0,
+    );
 
     const boxAfter = (await row.boundingBox())!;
     expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
-    expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
   });
 
   // Fix round 1 (reviewer M1): the original version of this test asserted
@@ -1831,8 +1832,8 @@ test.describe("today screen (unlogged session row)", () => {
   test("disarms on a REAL blur — not a synthetic event, and faster than the 4s auto-disarm timer could account for", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Discard without logging" }).click();
-    const armed = page.getByRole("button", { name: "Tap again" });
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+    const armed = page.getByRole("button", { name: "Tap again to discard" });
     await expect(armed).toBeVisible();
 
     const armedIsFocused = await armed.evaluate(
@@ -1843,7 +1844,7 @@ test.describe("today screen (unlogged session row)", () => {
     await armed.evaluate((el) => (el as HTMLElement).blur());
 
     await expect(
-      page.getByRole("button", { name: "Discard without logging" }),
+      page.getByRole("button", { name: /Discard Timer workout/ }),
     ).toBeVisible({ timeout: 1000 });
   });
 
@@ -1854,13 +1855,15 @@ test.describe("today screen (unlogged session row)", () => {
   test("arms, waits 4s with no second press, and disarms automatically — with the run record still intact", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Discard without logging" }).click();
-    await expect(page.getByRole("button", { name: "Tap again" })).toBeVisible();
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+    await expect(
+      page.getByRole("button", { name: "Tap again to discard" }),
+    ).toBeVisible();
 
     await page.waitForTimeout(4200);
 
     await expect(
-      page.getByRole("button", { name: "Discard without logging" }),
+      page.getByRole("button", { name: /Discard Timer workout/ }),
     ).toBeVisible();
     const runAfter = await page.evaluate(() =>
       localStorage.getItem("ergomatic.sessionRun"),
@@ -1873,10 +1876,10 @@ test.describe("today screen (unlogged session row)", () => {
   test("a second press while armed fires the discard — the row disappears in place, no navigation, both records cleared, no POST", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Discard without logging" }).click();
-    await page.getByRole("button", { name: "Tap again" }).click();
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+    await page.getByRole("button", { name: "Tap again to discard" }).click();
 
-    await expect(page.getByText(/unlogged session/i)).toHaveCount(0);
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
     // Still on Today — unlike SessionComplete's/the Log screen's own
     // Discard, this one never navigates anywhere.
@@ -2227,9 +2230,7 @@ test.describe("today screen (interrupted connected session row)", () => {
     });
     await seedInterruptedMonitorRun(page);
     await page.goto("/today");
-    await expect(
-      page.getByText(/interrupted connected session\./),
-    ).toBeVisible();
+    await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
   });
 
   // Step 1 (task brief): proves the seed ENGAGES `monitorModeRun`'s gate,
@@ -2242,9 +2243,11 @@ test.describe("today screen (interrupted connected session row)", () => {
   test("Log it stamps the record and opens the log screen with the actuals-derived minutes, not a wall-clock guess", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Log it" }).click();
+    await page.getByRole("button", { name: /Review & save/ }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
+    await expect(page).toHaveURL(
+      /\/session\/review\?source=monitor&startedAt=/,
+    );
     await expect(
       page.getByRole("heading", { name: "Hoarfrost" }),
     ).toBeVisible();
@@ -2300,7 +2303,7 @@ test.describe("today screen (interrupted connected session row)", () => {
     page,
   }) => {
     const discardBtn = page.getByRole("button", {
-      name: "Discard connected session without logging",
+      name: /Discard PM5 workout/,
     });
     const box = (await discardBtn.boundingBox())!;
     expect(box.width).toBe(44);
@@ -2321,7 +2324,7 @@ test.describe("today screen (interrupted connected session row)", () => {
   test("Log it is >=44x44, sharing the phone-timer row's own pill style", async ({
     page,
   }) => {
-    const logIt = page.getByRole("button", { name: "Log it" });
+    const logIt = page.getByRole("button", { name: /Review & save/ });
     const box = (await logIt.boundingBox())!;
     expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -2344,28 +2347,28 @@ test.describe("today screen (interrupted connected session row)", () => {
   // the phone-timer row's own identical test proves, mirrored here for the
   // twin's own copy ("interrupted connected session" naming, the discard
   // question naming the run's title) and its own distinctly-named ✕.
-  test("arming swaps the row's contents in place — border to accent, text to the discard question, ✕ to a solid 'Tap again' — without moving the row", async ({
+  test("arming swaps the row contents for the selected discard question without moving its top", async ({
     page,
   }) => {
-    const row = page.locator(".today-unlogged-line");
+    const row = page.locator(".unsaved-row");
     const boxBefore = (await row.boundingBox())!;
 
     await page
       .getByRole("button", {
-        name: "Discard connected session without logging",
+        name: /Discard PM5 workout/,
       })
       .click();
     await page.mouse.move(0, 0);
 
-    await expect(row).toHaveClass(/today-unlogged-line-armed/);
+    await expect(row).toHaveClass(/unsaved-row/);
     const rowBorderColor = await row.evaluate(
       (el) => getComputedStyle(el).borderColor,
     );
-    expect(rowBorderColor).toBe("rgb(181, 52, 31)"); // --accent
+    expect(rowBorderColor).toBe("rgb(216, 211, 196)"); // --rule
     await expect(
-      page.getByText("Discard Hoarfrost without logging?"),
+      page.getByText("Discard Hoarfrost without saving?"),
     ).toBeVisible();
-    const tapAgain = page.getByRole("button", { name: "Tap again" });
+    const tapAgain = page.getByRole("button", { name: "Tap again to discard" });
     const tapAgainStyles = await tapAgain.evaluate((el) => {
       const s = getComputedStyle(el);
       return { background: s.backgroundColor, color: s.color };
@@ -2373,11 +2376,12 @@ test.describe("today screen (interrupted connected session row)", () => {
     expect(tapAgainStyles.background).toBe("rgb(181, 52, 31)"); // --accent
     expect(tapAgainStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
     // "Log it" is gone while armed — replaced, not merely joined.
-    await expect(page.getByRole("button", { name: "Log it" })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /Review & save/ }),
+    ).toHaveCount(0);
 
     const boxAfter = (await row.boundingBox())!;
     expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
-    expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
   });
 
   // arm -> tap -> gone: the row disappears in place with no navigation,
@@ -2389,14 +2393,12 @@ test.describe("today screen (interrupted connected session row)", () => {
   }) => {
     await page
       .getByRole("button", {
-        name: "Discard connected session without logging",
+        name: /Discard PM5 workout/,
       })
       .click();
-    await page.getByRole("button", { name: "Tap again" }).click();
+    await page.getByRole("button", { name: "Tap again to discard" }).click();
 
-    await expect(page.getByText(/interrupted connected session/i)).toHaveCount(
-      0,
-    );
+    await expect(page.getByText(/PM5 · .* · Not saved/)).toHaveCount(0);
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
 

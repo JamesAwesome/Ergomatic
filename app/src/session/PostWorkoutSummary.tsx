@@ -581,6 +581,8 @@ export interface PostWorkoutSummaryProps {
    *  contained ReactNode this screen only places" idiom as `discardSlot`
    *  above. `undefined` renders nothing extra, same as `children`. */
   stripSlot?: ReactNode;
+  beforeSaveSlot?: ReactNode;
+  saveDisabled?: boolean;
   /** The diagnostics rows (MONITOR LOG · COPY / RECORDING · DOWNLOAD) —
    *  §2F: "SURVIVE below the stack." Rendered as children rather than a
    *  named slot: both are self-contained, state-owning components in
@@ -620,6 +622,8 @@ export default function PostWorkoutSummary({
   series,
   backFallback = "/today",
   stripSlot,
+  beforeSaveSlot,
+  saveDisabled = false,
   children,
 }: PostWorkoutSummaryProps) {
   const { meta, heroes, rows, caption } = model;
@@ -664,7 +668,7 @@ export default function PostWorkoutSummary({
           : "summary-save-secondary"
       }
       onClick={onSaveWithoutLogging}
-      disabled={saving}
+      disabled={saving || saveDisabled}
     >
       {plan === null ? "Save" : "Save without logging"}
     </button>
@@ -678,7 +682,7 @@ export default function PostWorkoutSummary({
           demoteForOnboarding ? "summary-save-secondary" : "summary-save-lead"
         }
         onClick={onLogAgainstPlan}
-        disabled={saving}
+        disabled={saving || saveDisabled}
       >
         {logAgainstPlanLabel}
       </button>
@@ -739,6 +743,7 @@ export default function PostWorkoutSummary({
           duplicated here. */}
       <TraceChart series={series} />
 
+      {beforeSaveSlot}
       <div className="action-stack summary-save-stack">
         {saveError !== null && <p className="field-error">{saveError}</p>}
         {saveButtons}

@@ -1894,38 +1894,126 @@ button.back-link:disabled,
    `--surface-sunken` fill (the mockup's own `#efeade`, an exact match) and
    a 52px min-height — this task's own first pass used 64px and the page
    background, neither of which the mockup actually specifies. */
-.today-unlogged-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 52px;
-  background: var(--surface-sunken);
+.unsaved-group {
+  margin: 0 0 20px;
+}
+.unsaved-heading {
+  margin: 0 0 8px;
+  font: 12px var(--font-mono);
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+}
+.unsaved-row {
+  padding: 12px;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  padding: 8px 12px;
-  margin: 0 0 16px;
+  background: var(--surface-sunken);
+  margin: 0 0 8px;
 }
-
-/* Task 3: arming — border only, same accent the L4-armed button system
-   fills solid elsewhere; this row stays outlined even armed, since filling
-   it solid would compete with the suggestion card right below for
-   attention the way DEVIATIONS.md's #2 already ruled out for L4 itself. */
-.today-unlogged-line-armed {
+.unsaved-title {
+  font-size: 16px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.unsaved-meta {
+  font-size: 13px;
+  margin: 6px 0 12px;
+  color: var(--ink-3);
+}
+.unsaved-actions {
+  display: flex;
+  gap: 8px;
+}
+.unsaved-actions .today-unlogged-link {
+  flex: 1;
+}
+.unsaved-warning-title {
+  font-size: 17px;
+  margin: 0 0 8px;
+}
+.unsaved-warning-copy {
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0 0 12px;
+  color: var(--ink-2);
+}
+.unsaved-review {
+  text-decoration: none;
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 16px var(--font-sans);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.unsaved-secondary {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.unsaved-secondary button {
+  flex: 1;
+}
+.unsaved-secondary .unsaved-replace {
+  color: var(--accent);
   border-color: var(--accent);
 }
-
-.today-unlogged-text {
-  font-size: 13px;
-  color: var(--ink-3);
-  margin: 0;
+.recovery-panel {
+  margin: 20px 0;
+  padding: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule);
 }
-
-.today-unlogged-actions {
-  display: flex;
-  align-items: center;
+.recovery-panel p {
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.recovery-panel label {
+  display: block;
+  margin-bottom: 8px;
+}
+.recovery-panel select,
+.recovery-panel textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px;
+  border: 1px solid var(--ink-3);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: 16px var(--font-sans);
+}
+.recovery-panel textarea {
+  height: 150px;
+  resize: vertical;
+  margin-bottom: 12px;
+}
+.recovery-stack {
+  display: grid;
   gap: 8px;
-  flex-shrink: 0;
+}
+.recovery-stack button {
+  min-height: 44px;
+}
+.recovery-stack .unsaved-replace {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.recovery-stack button:disabled {
+  opacity: 1;
+  color: var(--ink-3);
+  background: var(--surface-sunken);
+  border-color: var(--ink-3);
+}
+@media (max-width: 360px) {
+  .screen {
+    padding-inline: 16px;
+  }
 }
 
 /* Fix round 1 (reviewer, row chrome vs mockup.html:164-178): "Log it"

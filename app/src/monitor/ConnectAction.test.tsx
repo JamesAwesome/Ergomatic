@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { compileProgram } from "../../domain/monitor/program.js";
@@ -126,7 +127,11 @@ function connectAsTaskFiveWill(): void {
 }
 
 function renderConnect() {
-  render(<ConnectAction onProceed={connectAsTaskFiveWill} />);
+  render(
+    <MemoryRouter>
+      <ConnectAction onProceed={connectAsTaskFiveWill} />
+    </MemoryRouter>,
+  );
 }
 
 describe("ConnectAction: the destruction it stands in front of", () => {
@@ -163,7 +168,7 @@ describe("ConnectAction: the guard", () => {
     expect(loadMonitorRun()).not.toBeNull();
     expect(
       screen.queryByText(
-        "You have an unlogged session. Connecting discards it.",
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
       ),
     ).not.toBeInTheDocument();
   });
@@ -178,7 +183,7 @@ describe("ConnectAction: the guard", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       // Not merely "still present" — byte-identical, and no monitor run
@@ -202,7 +207,7 @@ describe("ConnectAction: the guard", () => {
       expect(screen.getByRole("button", { name: "Connect" })).toBeVisible();
       expect(
         screen.queryByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).not.toBeInTheDocument();
       expect(loadRun()).toStrictEqual(runA);
@@ -238,7 +243,7 @@ describe("ConnectAction: the guard", () => {
       ).toBeInTheDocument();
       expect(
         screen.queryByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).not.toBeInTheDocument();
       expect(loadRun()).toStrictEqual(live);
@@ -279,7 +284,7 @@ describe("ConnectAction: the guard", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(
@@ -291,19 +296,21 @@ describe("ConnectAction: the guard", () => {
   it("uses the house panel classes, not a new confirm idiom", async () => {
     saveRun(unloggedSessionRun());
     const { container } = render(
-      <ConnectAction onProceed={connectAsTaskFiveWill} />,
+      <MemoryRouter>
+        <ConnectAction onProceed={connectAsTaskFiveWill} />
+      </MemoryRouter>,
     );
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(container.querySelector(".baseline-confirm")).not.toBeNull();
-    expect(container.querySelector(".baseline-confirm-line")).not.toBeNull();
-    expect(container.querySelector(".baseline-actions")).not.toBeNull();
+    expect(container.querySelector(".unsaved-warning-copy")).not.toBeNull();
+    expect(container.querySelector(".unsaved-secondary")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
       "button-outline",
     );
     expect(screen.getByRole("button", { name: "Connect anyway" })).toHaveClass(
-      "button-primary",
+      "button-outline",
     );
   });
 
@@ -336,7 +343,9 @@ describe("ConnectAction: the guard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(
-      screen.getByText("You have an unlogged session. Connecting discards it."),
+      screen.getByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
     ).toBeInTheDocument();
     expect(loadRun()).not.toBeNull();
     expect(loadMonitorRun()).toBeNull();
@@ -385,7 +394,9 @@ describe("ConnectAction: the guard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(
-      screen.getByText("You have an unlogged session. Connecting discards it."),
+      screen.getByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
     ).toBeInTheDocument();
   });
 });
@@ -402,6 +413,43 @@ describe("ConnectAction: the guard", () => {
 // describe block to prove — this file has no real hook/transport to
 // reach "armed" with.
 describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", () => {
+  it.each([false, true])(
+    "View unsaved cancels Connect authorization and preserves both records (timer also retained: %s)",
+    async (both) => {
+      localStorage.clear();
+      resetHandoffStoreForTests();
+      connectAsTaskFiveWill();
+      if (both) saveRun(unloggedSessionRun());
+      const before = currentUnretiredHandoff();
+      const timer = loadRun();
+      render(
+        <MemoryRouter initialEntries={["/connect"]}>
+          <Routes>
+            <Route
+              path="/connect"
+              element={<ConnectAction onProceed={connectAsTaskFiveWill} />}
+            />
+            <Route path="/today" element={<h1>Today</h1>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      expect(
+        screen.getByRole("heading", {
+          name: both
+            ? "You have unsaved workouts."
+            : "You have an unsaved workout.",
+        }),
+      ).toBeVisible();
+      await userEvent.click(
+        screen.getByRole("button", { name: "View unsaved" }),
+      );
+      expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
+      expect(takeStagedRetireHandoff()).toStrictEqual([]);
+      expect(currentUnretiredHandoff()).toStrictEqual(before);
+      expect(loadRun()).toStrictEqual(timer);
+    },
+  );
   beforeEach(() => {
     localStorage.clear();
     resetHandoffStoreForTests();
@@ -513,7 +561,9 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(
-      screen.getByText("You have an unlogged session. Connecting discards it."),
+      screen.getByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
     ).toBeInTheDocument();
     expect(takeStagedRetireHandoff()).toStrictEqual([]);
   });

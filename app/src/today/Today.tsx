@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { freeRowTotals } from "../justrow/totals";
+import { Link } from "react-router-dom";
+import UnsavedWorkouts from "./UnsavedWorkouts";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
@@ -35,15 +35,12 @@ import type {
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
-import { loadMonitorRun, completeInterruptedRun } from "../monitor/monitorRun";
+import { loadMonitorRun } from "../monitor/monitorRun";
 import {
-  commit as commitHandoff,
   hydrate as hydrateHandoff,
   read as readHandoff,
-  retire as retireHandoff,
   type HandoffEntry,
 } from "../monitor/handoffStore";
-import { useStagedDiscard } from "../session/useStagedDiscard";
 import DoorsCard from "./DoorsCard";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import {
@@ -434,6 +431,51 @@ export default function Today() {
     }
   }, []);
 
+  return (
+    <main className="screen">
+      <div className="today-title-row">
+        <h1 className="screen-title">Today</h1>
+        <Link to="/justrow" className="today-justrow">
+          JUST ROW
+        </Link>
+      </div>
+      {run !== null && run.completedAt === null && (
+        <div className="today-resume-card">
+          <span className="today-resume-label">SESSION IN PROGRESS</span>
+          <h2 className="today-resume-title">{run.title}</h2>
+          <span className="today-resume-elapsed">
+            {fmtDuration(elapsedSinceStart(run, new Date()) / 60)} elapsed
+          </span>
+          <Link to="/session/run" className="today-resume-button">
+            Resume session
+          </Link>
+        </div>
+      )}
+      <UnsavedWorkouts run={run} monitorEntry={monitorEntry} />
+      <TodayContent
+        workoutsState={workoutsState}
+        baselinesState={baselinesState}
+        planState={planState}
+        preferencesState={preferencesState}
+        recentLogsState={recentLogsState}
+      />
+    </main>
+  );
+}
+
+function TodayContent({
+  workoutsState,
+  baselinesState,
+  planState,
+  preferencesState,
+  recentLogsState,
+}: {
+  workoutsState: ReturnType<typeof useWorkouts>;
+  baselinesState: ReturnType<typeof useBaselines>;
+  planState: ReturnType<typeof usePlan>;
+  preferencesState: ReturnType<typeof usePreferences>;
+  recentLogsState: ReturnType<typeof useRecentLogs>;
+}) {
   if (
     workoutsState.state === "loading" ||
     baselinesState.state === "loading" ||
@@ -441,12 +483,7 @@ export default function Today() {
     preferencesState.state === "loading" ||
     recentLogsState.state === "loading"
   ) {
-    return (
-      <main className="screen">
-        <h1 className="screen-title">Today</h1>
-        <p className="mono-status">LOADING…</p>
-      </main>
-    );
+    return <p className="mono-status">LOADING…</p>;
   }
 
   if (workoutsState.state === "error") {
@@ -516,8 +553,6 @@ export default function Today() {
       preferences={preferencesState.preferences}
       plan={planState.plan}
       logs={recentLogsState.logs}
-      run={run}
-      monitorEntry={monitorEntry}
     />
   );
 }
@@ -530,356 +565,12 @@ function ErrorScreen({
   retry: () => void;
 }) {
   return (
-    <main className="screen">
-      <h1 className="screen-title">Today</h1>
+    <section>
       <p className="mono-status">{message}</p>
       <button type="button" className="button-outline" onClick={retry}>
         Retry
       </button>
-    </main>
-  );
-}
-
-/** The completed-but-unlogged line's own Discard (Task 3, ui-fix round;
- *  DESIGN.md "Items 2 + 3" — "Today's unlogged row"). Split out as its own
- *  component (not inlined in `TodayView`) specifically so its
- *  `useStagedDiscard`/`dismissed` state lives in a subtree TodayView never
- *  re-renders as a side effect of — see the render-site comment on why that
- *  matters for the suggestion card.
- *
- *  Arming swaps the ROW'S CONTENTS, not its layout: the DEFAULT state's
- *  "{title}: unlogged session." line, "Log it" link, and outlined ✕ button
- *  become the ARMED state's "Discard {title} without logging?" line and a
- *  single solid-accent "Tap again" button — same `.today-unlogged-line`
- *  wrapper, same border-box sizing, so the row's height and position never
- *  move (the mockup's own DEFAULT/ARMED pair, implemented as one row).
- *  Firing removes the row in place (`dismissed`) with no navigation — unlike
- *  the post-workout summary's own Discard (`PostWorkoutSummary`'s
- *  `discardSlot`), which leaves this screen entirely. */
-function UnloggedRow({ run }: { run: SessionRun }) {
-  const discard = useStagedDiscard();
-  const [dismissed, setDismissed] = useState(false);
-  const armedButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Fix round 1 (reviewer M1): arming swaps in a STRUCTURALLY DIFFERENT
-  // element (a bare `<button>` replacing a `<div><Link/><button/></div>`),
-  // unlike the summary's own discard button (`PostWorkoutSummary`'s
-  // `discardSlot`, `LogSession.tsx`'s `handleDiscardClick`) whose class/copy
-  // just changes in place — React unmounts the pressed ✕ and mounts a
-  // brand-new "Tap again" node at the same tree position, which does NOT
-  // inherit focus (measured: the real activeElement fell back to `<body>`).
-  // Without an explicit re-focus here, `onBlur` below can never fire from
-  // a real tap-away — nothing is focused for a later blur to leave.
-  // Focusing the new node the instant it mounts restores the same "focus
-  // follows the armed control" behavior the summary's own discard
-  // button/WorkoutDetail get for free from keeping one DOM node armed in
-  // place.
-  useEffect(() => {
-    if (discard.armed) armedButtonRef.current?.focus();
-  }, [discard.armed]);
-
-  if (dismissed) return null;
-
-  function handleClick() {
-    if (discard.armed) {
-      discard.fire();
-      setDismissed(true);
-    } else {
-      discard.arm();
-    }
-  }
-
-  return (
-    <div
-      className={
-        discard.armed
-          ? "today-unlogged-line today-unlogged-line-armed"
-          : "today-unlogged-line"
-      }
-    >
-      {discard.armed ? (
-        <>
-          <p className="today-unlogged-text">
-            Discard <strong>{run.title}</strong> without logging?
-          </p>
-          <button
-            type="button"
-            ref={armedButtonRef}
-            className="today-unlogged-discard-armed"
-            onClick={handleClick}
-            onBlur={discard.disarm}
-          >
-            Tap again
-          </button>
-        </>
-      ) : (
-        <>
-          <p className="today-unlogged-text">
-            <strong>{run.title}</strong>: unlogged session.
-          </p>
-          <div className="today-unlogged-actions">
-            {/* The run record is the source LogSession.tsx itself reads, so
-                this link carries no state/params of its own.
-
-                THIS ROW HOLDS A `SessionRun` — the phone-timer record —
-                never the `MonitorRun` `UnloggedMonitorRow`'s own justrow
-                branch routes. A free-row timer run (`mode: "justrow"`,
-                Just Row without the monitor, spec 2026-09-02 §Mechanism
-                piece 5) goes to its own door: `/session/log` reads the
-                workout DRAFT a free row never had, and would bounce. */}
-            <Link
-              to={run.mode === "justrow" ? "/justrow/log" : "/session/log"}
-              className="today-unlogged-link"
-            >
-              Log it
-            </Link>
-            <button
-              type="button"
-              className="today-unlogged-discard"
-              onClick={handleClick}
-              onBlur={discard.disarm}
-              aria-label="Discard without logging"
-            >
-              ✕
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-/** `UnloggedRow`'s twin (F6 spec 2b, Task 4) — Today's OTHER interrupted-
- *  session line, for a `MonitorRun` the rower is closing through this
- *  screen rather than through the monitor itself (`run !== null &&
- *  run.completedAt === null` at the render site below is the ONE structural
- *  difference from `UnloggedRow`'s own gate: a completed-but-unlogged
- *  `MonitorRun` is ruled OUT of 2b, unlike the `SessionRun` case, because
- *  7C's own log path already owns that record's "finished, not yet logged"
- *  state — see `connectGuardStage`'s own comment in `monitorRun.ts` on why
- *  a `MonitorRun` visible here is always a DEAD one, never one still being
- *  driven).
- *
- *  Same twin discipline as `UnloggedRow` itself (this file's own copy of
- *  the armed-focus effect, `useStagedDiscard`, and the row-owns-its-state
- *  reasoning above), and the same reason it owns its own state rather than
- *  `TodayView` reading it: arming/firing this row must never recompute
- *  `TodayView`'s own `suggestion`.
- *
- *  Exhaustively, what differs from `UnloggedRow`:
- *  - the copy ("interrupted connected session.", never "ended"/"finished" —
- *    house style, no unverified claim about how the session stopped);
- *  - "Log it" is a `<button>` that STAMPS the record
- *    (`completeInterruptedRun`, the door Task 1 built) before navigating,
- *    not a bare `<Link>` — the stamp is what turns the log screen's own
- *    `monitorModeRun` gate honest for an interrupted record (Task 3);
- *  - the discard body retires the entry alone, never
- *    `useStagedDiscard().fire()` — that hook clears the phone-timer's own
- *    draft/run records, the WRONG ones for a `MonitorRun`. The diagnostics
- *    stash (`ergomatic:last-monitor-log`/`ergomatic:last-rowed-log`,
- *    `sessionStorage`) is left standing on purpose: a rower who reports a
- *    bug right after discarding still has the wire trace to hand over;
- *  - the null-`workoutId` handling — RECONCILED, Phase JR PR 2. This
- *    bullet used to call it "the null-`workoutId` latent … unreachable
- *    today: only `WorkoutDetail`'s Connect flow programs a `MonitorRun`".
- *    `beginFreeRow` is the second producer that comment was waiting for,
- *    and a free row's null id is the NORMAL case now, not a latent: it
- *    gets its own "Log it" routing to `/justrow/log` (the route that
- *    serves an id-less record), while a null id on a NON-free record
- *    keeps the honest suppression — that is still a record with no route
- *    to serve it.
- *
- *  Distinct accessible name on the ✕ (antagonist correction, this task's
- *  brief): `UnloggedRow`'s own "Discard without logging" would otherwise
- *  destroy a DIFFERENT record under the same announced name whenever both
- *  rows render at once — a WCAG name-role-value defect this house's own AA
- *  bar does not allow. */
-function UnloggedMonitorRow({ entry }: { entry: HandoffEntry }) {
-  const discard = useStagedDiscard();
-  const navigate = useNavigate();
-  const [dismissed, setDismissed] = useState(false);
-  const armedButtonRef = useRef<HTMLButtonElement>(null);
-  // Hand-off store design spec (rev 4), §6: `entry` is `Today()`'s own
-  // retained mount snapshot, threaded down unchanged — `run` here is that
-  // snapshot's `.run`, same derivation `LogSession.tsx`'s own monitor
-  // branch uses, kept as a local so every reference below (`run.title`,
-  // `run.workoutId`, …) is byte-identical to before this rewrite.
-  const run = entry.run;
-
-  // Same structurally-different-node fix `UnloggedRow`'s own effect
-  // documents: arming here swaps in a bare `<button>` at the same tree
-  // position too, which does not inherit focus on its own.
-  useEffect(() => {
-    if (discard.armed) armedButtonRef.current?.focus();
-  }, [discard.armed]);
-
-  if (dismissed) return null;
-
-  function handleDiscardClick() {
-    if (discard.armed) {
-      // Not discard.fire(): that clears the draft and the phone-timer run,
-      // the wrong records for a MonitorRun. The diagnostics stash is KEPT
-      // on purpose (spec 2b: a rower reporting a bug right after
-      // discarding keeps the evidence).
-      //
-      // Hand-off store design spec (rev 4), §5, plan Task 4: routes
-      // through `retire()`, key-bound to this row's OWN retained
-      // `{sessionKey, revision}` (§5's census row: "Today discard door |
-      // the entry its row rendered (key-bound) | Today's confirm — copy
-      // unchanged and still true"), never a direct `clearMonitorRun()`.
-      discard.disarm();
-      retireHandoff(
-        [{ sessionKey: entry.sessionKey, revision: entry.revision }],
-        "today-discard",
-      );
-      setDismissed(true);
-    } else {
-      discard.arm();
-    }
-  }
-
-  function handleLogIt() {
-    // Stamping is the rower's ruling, not the app's: it is what opens
-    // the monitor log screen's own `monitorModeRun` gate for an
-    // interrupted record (session/LogSession.tsx, Task 3).
-    //
-    // Hand-off store design spec (rev 4), plan Task 4: replaces Task 3's
-    // own STOPGAP (`saveMonitorRun(completeInterruptedRun(...))`, called
-    // directly on raw storage) with a real store commit —
-    // `commitHandoff(entry.sessionKey, entry.revision, stamped)` — so the
-    // log door's own `monitorModeEntry` (which now reads via the store,
-    // not `loadMonitorRun()`) sees the stamped record in the SAME process
-    // without depending on a coincidental durable write.
-    //
-    // **A deliberate, narrow exception to "the hook is the sole production
-    // committer" (spec §1, homed at Task 4's review — see that section's
-    // own "One named exception" paragraph):** that rule protects a LIVE
-    // producer's own `lastAcceptedRevisionRef` discipline from a second
-    // writer racing it. This row renders ONLY for a DEAD session —
-    // `TodayView`'s own render condition is `completedAt === null` on an
-    // entry with no live hook (this component's own header comment:
-    // "Today has no live monitor hook") — so there is no producer ref for
-    // this commit to race, and the single-unretired-session invariant
-    // means no OTHER hook can hold this exact key while it sits here
-    // unretired. `entry.revision` is the exact CAS guard every other
-    // caller uses.
-    //
-    // **The return value below is discarded on purpose (RF25's own tell —
-    // a lower layer reports a failure and the caller proceeds regardless —
-    // so this paragraph is that rule's required justification, not a
-    // shrug): a refusal here is caught by TWO instruments, not merely "a
-    // degrade."** (1) the store's own `commit-refused` receipt fires
-    // unconditionally on any CAS miss, independent of whether this call
-    // site reads the result — the SAME observability every other
-    // `commit()` caller relies on, never invented here. (2) the log
-    // door's own counted miss: a refused commit leaves the stamped record
-    // out of the store, so `monitorModeEntry`'s own re-read at the log
-    // door's mount finds the OLD (still-open or already-retired) entry
-    // and records one of its own named misses via `recordLogDoorMiss`
-    // (`"not-completed"` if the close never landed, `"no-run"` if the key
-    // was retired in the meantime) — the same "any miss falls through
-    // untouched" contract this door already promises for every other
-    // `monitorModeRun` miss, not a special case invented for this call
-    // site.
-    //
-    // Plan Task 3 review (M8): `completeInterruptedRun` is idempotent —
-    // it returns `run` UNCHANGED (same reference) when already closed —
-    // and this row only renders while `run.completedAt === null`
-    // (`TodayView`'s own render condition above), so the identity check
-    // below is currently always true in practice. Kept anyway as a cheap
-    // no-op guard rather than an unconditional re-commit of bytes already
-    // on record, in case a future render path ever reaches this handler
-    // with an already-closed `run`.
-    const stamped = completeInterruptedRun(run, new Date());
-    if (stamped !== run) {
-      commitHandoff(entry.sessionKey, entry.revision, stamped);
-    }
-    // Phase JR PR 2: a free row's log door is its own route — there is no
-    // workout id for `/library/:id/log` to match, and that route's monitor
-    // gate would (correctly) refuse the record. `completeInterruptedRun`
-    // above is a no-op for an already-closed record, so both the open
-    // (walked-away, stamp "interrupted") and closed (link-drop) cases pass
-    // through this one handler.
-    if (run.mode === "justrow") {
-      void navigate("/justrow/log");
-      return;
-    }
-    void navigate(`/library/${run.workoutId}/log?from=monitor`);
-  }
-
-  if (discard.armed) {
-    return (
-      <div className="today-unlogged-line today-unlogged-line-armed">
-        <p className="today-unlogged-text">
-          Discard <strong>{run.title}</strong> without logging?
-        </p>
-        <button
-          type="button"
-          ref={armedButtonRef}
-          className="today-unlogged-discard-armed"
-          onClick={handleDiscardClick}
-          onBlur={discard.disarm}
-        >
-          Tap again
-        </button>
-      </div>
-    );
-  }
-
-  // Phase JR PR 2: the free row's copy carries ITS NUMBERS, so "Log it"
-  // visibly means "keep these" (the approved board's own line), and no
-  // word suggests the row can be picked back up — the monitor does not
-  // advertise while a Just Row is open (N1), so recovery can only ever
-  // mean logging what we have. Totals resolve through the same helper the
-  // log door reads, so the row and the door can never name two numbers
-  // for one record. A free-row record whose burst AND trace are both
-  // empty falls back to the shipped interrupted copy.
-  const freeRowNumbers = run.mode === "justrow" ? freeRowTotals(run) : null;
-
-  return (
-    <div className="today-unlogged-line">
-      <p className="today-unlogged-text">
-        {freeRowNumbers !== null ? (
-          <>
-            <strong>{run.title}</strong>:{" "}
-            {fmtDuration(freeRowNumbers.seconds / 60)} ·{" "}
-            {new Intl.NumberFormat("en-US").format(
-              Math.round(freeRowNumbers.meters),
-            )}{" "}
-            m, not logged.
-          </>
-        ) : (
-          <>
-            <strong>{run.title}</strong>: interrupted connected session.
-          </>
-        )}
-      </p>
-      <div className="today-unlogged-actions">
-        {/* Gate 1 of 2 (exit criterion 4): a free row's "Log it" exists
-            despite its null workoutId — the null-suppression below is
-            about records with no route to serve them, and /justrow/log is
-            exactly that route. Non-free null-id records keep the honest
-            suppression. */}
-        {(run.workoutId !== null || run.mode === "justrow") && (
-          <button
-            type="button"
-            className="today-unlogged-link"
-            onClick={handleLogIt}
-          >
-            Log it
-          </button>
-        )}
-        <button
-          type="button"
-          className="today-unlogged-discard"
-          onClick={handleDiscardClick}
-          onBlur={discard.disarm}
-          aria-label="Discard connected session without logging"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
+    </section>
   );
 }
 
@@ -1056,8 +747,6 @@ function TodayView({
   preferences,
   plan,
   logs,
-  run,
-  monitorEntry,
 }: {
   library: LibraryWorkout[];
   // Null the moment EITHER side is null (the app-wide partial-pair
@@ -1069,18 +758,11 @@ function TodayView({
   preferences: PreferencesData;
   plan: PlanData;
   logs: RecentLog[];
-  run: SessionRun | null;
-  // Hand-off store design spec (rev 4), plan Task 4: the full retained
-  // entry, not a bare `MonitorRun` — `UnloggedMonitorRow`'s own
-  // discard/Log-it handlers need the revision (see `Today()`'s own comment
-  // on `monitorEntry` for why).
-  monitorEntry: HandoffEntry | null;
 }) {
   const today = todayDateString();
   // Read once per render — this screen has no ticking display (unlike
   // Timer.tsx's own repaint interval); F2's resume card only needs a single
   // "elapsed so far" reading, not a live-updating stopwatch.
-  const now = new Date();
   // plan.sequence always has 84 entries while a plan is active; doneN
   // reaches 84 once every session has been logged (each advancing log
   // increments it — server/stores/logs.ts's own upsert) — treated the same
@@ -1374,7 +1056,7 @@ function TodayView({
   }
 
   return (
-    <main className="screen">
+    <>
       {/* PHASE JR PR 2 — the free row's door, two words, top right (Gate 0,
           James, 2026-09-01: "a button in the top right that only says Just
           Row").
@@ -1384,12 +1066,7 @@ function TodayView({
           apparatus: ruling 4 makes it visible with or without a baseline,
           and a rower who has not set one up yet is exactly the rower most
           likely to want to just pull. */}
-      <div className="today-title-row">
-        <h1 className="screen-title">Today</h1>
-        <Link to="/justrow" className="today-justrow">
-          JUST ROW
-        </Link>
-      </div>
+
       {/* Phase 6I (condition carried into BL PR C's doors): the whole
           plan/freestyle line, type-swap chips and descriptor word are
           "plan apparatus" (spec's own words) — hidden entirely while the
@@ -1477,60 +1154,6 @@ function TodayView({
             </Link>
           </div>
         ))}
-
-      {/* F2 (whole-branch review, spec Resilience #6): a cold start (the OS
-          killed the app mid-session — real on iOS) lands here with nothing
-          else surfacing the live/unlogged run otherwise; Start on the
-          suggestion card below only ever REPLACES it (WorkoutDetail.tsx's
-          own staged "in progress"/"unlogged" confirm already guards that —
-          verified, not re-implemented here). Keyed off `run` alone, not the
-          draft: F3a stamped `title` straight onto the run record for
-          exactly this card, so it never needs to also read `SessionDraft`.
-          Rendered ABOVE the suggestion card — the screen's most prominent
-          element when a live run exists, per the brief. */}
-      {run !== null && run.completedAt === null && (
-        <div className="today-resume-card">
-          <span className="today-resume-label">SESSION IN PROGRESS</span>
-          <h2 className="today-resume-title">{run.title}</h2>
-          <span className="today-resume-elapsed">
-            {fmtDuration(elapsedSinceStart(run, now) / 60)} elapsed
-          </span>
-          <Link to="/session/run" className="today-resume-button">
-            Resume session
-          </Link>
-        </div>
-      )}
-      {/* Quieter than the resume card, deliberately (F2's own call): no
-          accent banner, just the workout's name plus a real "Log it" action
-          (Phase 6C Task 2) and — Task 3 (ui-fix round) — a staged Discard.
-          `UnloggedRow` owns ITS OWN `useStagedDiscard`/dismissed state
-          rather than TodayView reading it: a state change scoped to that
-          child component re-renders only the row, never TodayView itself,
-          which is what keeps `suggestion` (computed in TodayView's own
-          render body below) from ever recomputing — and therefore from
-          ever re-shuffling the suggestion card — as a side effect of
-          arming or firing the discard. */}
-      {run !== null && run.completedAt !== null && <UnloggedRow run={run} />}
-      {/* F6 spec 2b, Task 4: the twin row for a dead `MonitorRun`. Condition
-          is `completedAt === null` ON PURPOSE — the opposite sense from
-          `UnloggedRow`'s own gate just above — because a completed-but-
-          unlogged `MonitorRun` is ruled OUT of 2b (`UnloggedMonitorRow`'s
-          own doc comment explains why). Does not touch the stale-draft
-          guard effect above; `todayGuard.pin.test.ts` pins that guard
-          byte-identical. */}
-      {/* Phase JR PR 2 (exit criterion 4, gate 2 of 2): a FREE ROW renders
-          whether the record is open OR closed. The `completedAt === null`
-          rule above exists because a completed programmed record belongs to
-          7C's own log path — but a free row has no such path: a link drop
-          CLOSES its record, and under the old gate that close made the row
-          invisible, which is exactly the branch ruling 9's correction (F2)
-          found. Recovery here means "log what we have", never resume — the
-          monitor does not advertise while a Just Row is open (N1). */}
-      {monitorEntry !== null &&
-        (monitorEntry.run.completedAt === null ||
-          monitorEntry.run.mode === "justrow") && (
-          <UnloggedMonitorRow entry={monitorEntry} />
-        )}
 
       {/* Phase BL PR C: the three-door onboarding card (canvas Main)
           replaces the entire suggestion apparatus — header
@@ -1694,6 +1317,6 @@ function TodayView({
           </ul>
         )}
       </section>
-    </main>
+    </>
   );
 }

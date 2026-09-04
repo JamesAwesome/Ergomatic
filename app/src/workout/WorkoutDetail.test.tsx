@@ -212,6 +212,30 @@ async function renderDetail(initialPath = "/library/w1") {
   );
 }
 
+it("Start warning opens Today without replacing the retained run or draft", async () => {
+  mockHooks(BASELINES);
+  const draft = buildDraft(WORKOUT);
+  saveDraft(draft);
+  const run = completedRunFor(draft);
+  saveRun(run);
+  const { default: WorkoutDetail } = await import("./WorkoutDetail");
+  render(
+    <MemoryRouter initialEntries={["/library/w1"]}>
+      <Routes>
+        <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/today" element={<h1>Today</h1>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Start Timer" }),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "View unsaved" }));
+  expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
+  expect(loadRun()).toStrictEqual(run);
+  expect(loadDraft()).toStrictEqual(draft);
+});
+
 // Renders WorkoutDetail alongside sibling links to other /library/:id
 // paths, all matched by the SAME <Route>, so clicking one changes just the
 // :id param rather than unmounting/remounting the route element — the
@@ -700,7 +724,7 @@ describe("WorkoutDetail", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Starting a new one discards it.",
+          /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(
@@ -813,7 +837,7 @@ describe("WorkoutDetail", () => {
       expect(loadMonitorRun()).toStrictEqual(connected);
       expect(
         screen.getByText(
-          "You have an unlogged session. Starting a new one discards it.",
+          /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(loadDraft()).toBeNull();
@@ -868,7 +892,7 @@ describe("WorkoutDetail", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Starting a new one discards it.",
+          /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(
@@ -922,7 +946,7 @@ describe("WorkoutDetail", () => {
       );
       expect(
         screen.getByText(
-          "You have an unlogged session. Starting a new one discards it.",
+          /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
 
@@ -1694,7 +1718,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       expect(loadMonitorRun()).toStrictEqual(connected);
       expect(
         screen.getByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
@@ -1839,7 +1863,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(

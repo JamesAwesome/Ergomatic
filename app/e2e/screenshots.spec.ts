@@ -772,7 +772,10 @@ test("today-unlogged", async ({ page }) => {
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   await page.getByRole("link", { name: "← DONE" }).click();
   await expect(page).toHaveURL(/\/today$/);
-  await expect(page.getByText(/unlogged session/i)).toBeVisible();
+  await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+  // Recovery intentionally precedes fetch completion; this capture also
+  // needs the suggestion beneath it, not a transient loading frame.
+  await expect(page.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
 
   // DEFAULT: title + "unlogged session.", Log it, and the outlined ✕.
   await page.screenshot({
@@ -781,8 +784,10 @@ test("today-unlogged", async ({ page }) => {
 
   // ARMED: the same row's contents swapped in place — border to accent,
   // the discard question, and a solid "Tap again" replacing Log it/✕.
-  await page.getByRole("button", { name: "Discard without logging" }).click();
-  await expect(page.getByRole("button", { name: "Tap again" })).toBeVisible();
+  await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+  await expect(
+    page.getByRole("button", { name: "Tap again to discard" }),
+  ).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-unlogged-armed.png"),
   });
@@ -917,7 +922,8 @@ test("today-interrupted", async ({ page }) => {
   });
 
   await page.goto("/today");
-  await expect(page.getByText(/interrupted connected session\./)).toBeVisible();
+  await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-interrupted.png"),
