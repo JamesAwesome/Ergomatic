@@ -7,10 +7,10 @@ warns that starting again will discard it. This change exposes the recording,
 offers review and save, and makes the warning point to that safe route.
 
 **Status:** opened by James on 2026-09-03 ("Let's open it"). James approved
-the normal Today/warning design on 2026-09-03 ("approved"). The additional
-recovery cases below are now proposed in the
-[rendered comparison](2026-09-03-unlogged-session-gate.html), labelled
-"For approval". Implementation remains gated on those cases. This is the
+the normal Today/warning design on 2026-09-03 ("approved") and the additional
+recovery cases on 2026-09-04 ("Approve"). The
+[rendered comparison](2026-09-03-unlogged-session-gate.html) records both
+approvals. Gate 0 is clear for planning and implementation. This is the
 existing September 1 roadmap item, not another phase or Codex task.
 
 ## Scope and decision
@@ -18,15 +18,14 @@ existing September 1 roadmap item, not another phase or Codex task.
 One coherent PR: **View unsaved workouts and save retained connected work.**
 The initial bounded visibility repair has expanded to an architectural
 recovery-flow design: loading prerequisites and source selection also prevent
-the promised access. Approval of the normal Today/warning treatment does not
-approve the additional missing-data treatment below.
+the promised access. Both the normal and missing-data treatments are approved.
 This finishes existing recovery flows. No new queue, server API, persisted
 shape, BLE reconnect, background recording, automatic saving, or arithmetic.
 Correct Resume remains deferred. This is not fast path: a mistake could lose
 a record. A non-TRIAD full cycle is possible only while claim/retire identity,
 timing and reasons, successful-save behavior and recorded values stay
 unchanged. Re-scope before implementation if that boundary cannot hold.
-The phase remains OPEN/DESIGN, not ready for implementation.
+The phase remains OPEN; implementation follows plan hardening.
 
 The warning's new **View unsaved** action navigates through the same cancel
 cleanup as Cancel. It must not authorize a replacement. Today is the common
@@ -38,7 +37,7 @@ two-tap discard. "Not saved" does not claim the machine finished every
 interval. A live phone timer remains **Resume session**, not saveable merely
 by visiting Today. Just Row keeps its existing evidence and recovery.
 
-**Proposed boundary, awaiting approval:** valid programmed PM5 data uses the
+**Approved boundary:** valid programmed PM5 data uses the
 existing summary builder and save pipeline independently of library fetch
 success. The retained record owns its title, source and measurements. A
 matching library record supplies its current workout type and optional
@@ -66,7 +65,7 @@ and does not count as saving or authorize retirement. A failed copy shows
 failure and leaves selectable text and the record intact. This follows the
 existing explicit-tap clipboard/failure idiom in
 `app/src/workout/connected/ConnectionLogSheet.tsx:120`; no new storage or
-platform mechanism. This is a named limitation requiring James's approval,
+platform mechanism. This is a named limitation approved by James,
 not a claim that every legacy record becomes saveable.
 
 Two more anchor findings are in this same work, not follow-up deferrals:
@@ -88,7 +87,7 @@ Two more anchor findings are in this same work, not follow-up deferrals:
   explicit source-bound navigation as proposed below; mint no new logical-
   session identity and never silently substitute the other record.
 
-## Proposed recovery routing and lifetime
+## Approved recovery routing and lifetime
 
 The new Today affordances open `/session/review` with the selected source
 (`source=timer` or `source=monitor`) and the existing `startedAt` key in its
@@ -229,13 +228,12 @@ Required cases: completed/interrupted programmed PM5, timer complete/live,
 Just Row timer/PM5, both record types, memory-only same-process data, failed
 save/retry, repeated review, record-specific discard, and View canceling
 Connect's replacement authorization. The malformed/missing-library boundary
-is covered by the proposed explicit-type or read-only treatments, pending
-approval. Gate those paths with failed/stalled library requests, absent
+is covered by the approved explicit-type or read-only treatments.
+Gate those paths with failed/stalled library requests, absent
 workouts, null ids, invalid/missing seeds, a late library response after a
 type choice, and source replacement before summary mount. Prove copy exports
 the selected snapshot and failure preserves it; no successful copy retires it.
-The added recovery screens and lifetime contract require approval before the
-implementation plan and task dispatches.
+The added recovery screens and lifetime contract were approved on 2026-09-04.
 
 ## Opening record
 

@@ -1824,9 +1824,9 @@ in both orientations.**
 ## The unlogged-session door
 
 **Status:** OPEN at James's request, 2026-09-03. Normal Today/warning design
-approved 2026-09-03; additional recovery-case designs await approval.
+approved 2026-09-03; additional recovery-case designs approved 2026-09-04.
 The September 1 item is pulled forward, not another Wave F mechanism.
-One coherent PR after rendered Gate 0 approval; no implementation yet.
+Rendered Gate 0 is clear; planning and implementation proceed as one coherent PR.
 [Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)
 and [comparison](docs/superpowers/specs/2026-09-03-unlogged-session-gate.html).
 **S–M.** Full cycle; non-TRIAD only while retirement, stored shapes and
@@ -1850,17 +1850,17 @@ to lose the row has no move except to walk away.
       not proof of that incident's exact record shape.
 - [ ] **Resolve every other guarded shape honestly.** Deleted library
       workouts, null-id non-Just-Row records and legacy/invalid frozen seeds
-      cannot use the existing save route. Proposed: explicit type choice for
+      cannot use the existing save route. Approved: explicit type choice for
       valid retained measurements without library metadata; read-only full
       recording/copy/keep for data that cannot safely rebuild a summary.
-      These extra screens remain a pre-implementation approval gate.
+      James approved these extra screens on 2026-09-04 ("Approve").
 - [ ] **Keep the recovery destination usable.** Local records must remain
       visible when Today's unrelated requests stall/fail (`Today.tsx:437`).
       Two retained Just Row sources must each open the selected recording,
       not the current newer-timestamp choice (`JustRowLog.tsx:108`). The
       second is a defensive coexistence case, not an observed normal flow.
-      These expand the opening to routing design; render and approve the
-      error/loading treatment and resolve selection lifetime before building.
+      The error/loading treatment and selection lifetime were approved with
+      the additional recovery cases on 2026-09-04.
 - [ ] **Prove preservation across the path.** Production writer to warning
       to Today to PM5 summary to saved history; failed-save retry, cold-start
       hydration, both records, and View canceling Connect's staged replacement.
