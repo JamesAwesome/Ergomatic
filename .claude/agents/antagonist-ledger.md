@@ -7016,6 +7016,55 @@ plan's own tools and never with the REPO's.
   retained same-device routes, and the MISSED producer/server/reader seam
   survived the attack.
 
+## 2026-09-03 — Unlogged-session door, phase-open anchor
+
+- **“Putting retained records on Today makes them reachable” missed the
+  destination’s prerequisite requests.** Local snapshots exist before Today
+  returns loading/error screens for unrelated plan, preference, baseline and
+  history fetches. **Technique:** trace every early return between the local
+  reader and its rendered recovery control; a working destination route is
+  not proof that its local content can render.
+- **“Each displayed row can reuse the existing Just Row save route” failed
+  selected-record identity.** Both sources navigate to one route whose
+  consumer chooses the newer completion timestamp, regardless of the row
+  selected. Coexistence is a defensive, violated-invariant state, not a proven
+  normal producer. **Technique:** give sibling records different identities
+  and trace each affordance through the destination’s actual selection rule;
+  deterministic recency is not deterministic user intent.
+- **The dual-record design’s discard confirmation named the first record
+  even when the second was selected.** A shared title variable survived the
+  per-row render. **Technique:** exercise every destructive sibling against
+  distinct titles and sources; a correctly labelled trigger does not prove
+  its confirmation names the same subject.
+- **VETTED GROUND:** the completed-programmed Today exclusion is real;
+  explicit monitor-route intent and frozen-seed validation preserve existing
+  programmed provenance; missing-library/legacy recovery remains a
+  pre-implementation decision; View can cancel existing staged authorization
+  without inventing device state, reconnect behavior, or another session
+  lifetime.
+
+### 2026-09-04 — Unlogged-session recovery delta: extracted bodies do not inherit caller gates
+
+**Claim:** selecting the exact retained monitor record and successfully building its existing summary is sufficient admission for the new recovery route.
+
+**Why it looked sound:** Today already closes interrupted records on Review, and both legacy summary doors reject open monitor records.
+
+**Finding:** the legacy closure checks belong to their adapters (`LogSession.tsx:333`, `JustRowLog.tsx:72`), not the reused builders. `buildMonitorLogSteps` checks frozen-seed alignment (`logDraft.ts:857`); `buildMonitorModel` accepts absent completion time (`summaryModel.ts:1194`). Direct/reloaded review URLs bypass Today's close action. Require a closed selected monitor snapshot before summary/claim/save; an open selection is unavailable. Route mounting never closes it.
+
+**Technique:** follow admission from every entry point, then remove the old caller mentally and inspect what the extracted callee actually guarantees. Exact record identity and readable data do not establish eligibility. Pin direct-open deep links and refused-close behavior, not only the happy Today click.
+
+**Related seam:** do not label the existing rower-End fake story natural completion. Its actual terminal producer must supply WORKOUTEND, reach the hook's `"finished"` writer, and survive leave/recovery before that producer-consumer claim is earned.
+
+**Prescribed-code lens:** absent/empty/duplicate selector inputs, independent encoded output, missing-type submit guard, visible copy failure and the producer-to-history seam held. No further code finding; hardening ends here. The selector blocks passed the author's isolated typecheck, lint and behavioral paste-test before review. This is plan evidence, not implementation or hardware acceptance.
+
+## 2026-09-04 — Unlogged-session EXIT: a short native recovery walk is structurally sufficient, not native clearance
+
+- **Held:** the proposed one-minute, no-rest programmed piece can exercise the new recovery door; the positive-rest browser fixture initially suggested another rest-bearing walk might be necessary. **Technique:** trace each new admission/navigation gate to its actual predicate: retained monitor presence, completed selected entry, exact source/key and explicit View/Save actions—not resting frames or interval count. No additional rowing justified.
+- **Held:** both warm and cold browser legs traverse the complete producer-to-history recovery journey; cold hydration is not merely a Today-card check. **Technique:** follow both invocations through the conditional reload into the shared warning/View/failed-Save/retry/history body, and check literal retained actuals against fresh API detail.
+- **Held:** the failed-Save proof survives the existing series-sacrifice fallback. **Technique:** inspect the saver branch and require both first-button POSTs to fail, retained bytes and no history row afterward, then a separate explicit button press producing the third POST. One injected 500 would prove the wrong state.
+- **Held:** original/recovered phone photographs prove preservation, not independent arithmetic; persisted history is a separate server-read witness. **Technique:** trace the history detail reader to GET /api/logs/:id and retain the protocol's explicit rejection of same-frame PM5 and independent arithmetic claims.
+- **Determinism/platform ceiling:** exact selection and explicit transitions are deterministic. Focus/center-scroll is a standard browser request, not proof that every action clears fixed navigation on the phone. PRIMARY: https://html.spec.whatwg.org/multipage/interaction.html#dom-focus-dev and https://drafts.csswg.org/cssom-view/#determine-the-scroll-into-view-position. The proposed landscape-before-warning observation tests the actual native result without extra rowing/captures.
+- **Verdict/limits:** protocol and bounded evidence PASS; no native or phase clearance. Separate final-review fixes and refreshed candidate evidence, budget approval, exact candidate/build/API identity, actual native evidence and PM close remain prerequisites. RC-8 zero-rest fake behavior stays excluded; the prior SESSION SAVED timeout remains intermittent/unclassified. Read-only pass; broad suites/mutations not rerun; no phone, account, install, rowing or repository writes.
 ### 2026-09-03 — Wave E PR2 client plan (harden Lens 1)
 
 - **The spec's PRIMARY mapping branch was unreachable because the two PRs that

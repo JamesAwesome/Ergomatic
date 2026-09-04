@@ -9,9 +9,10 @@ import { compileProgram } from "../domain/monitor/program.js";
 import type { WorkoutProgram } from "../domain/monitor/program.js";
 import type { IntervalActual } from "../domain/monitor/types.js";
 import { buildDraft, startDraft } from "../src/session/draft";
-import { buildRun } from "../src/session/engine";
+import { advance, buildRun } from "../src/session/engine";
 import { buildLogSeed } from "../src/session/logDraft";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../src/monitor/monitorRun";
+import { RUN_KEY, type SessionRun } from "../src/session/run";
 
 /** Deletes a signed-in user's own (non-global) workout by title, so a
  *  design-sweep test that has to create real data via bulk import doesn't
@@ -1747,7 +1748,7 @@ test.describe("today screen (unlogged session row)", () => {
     await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
     await page.getByRole("link", { name: "← DONE" }).click();
     await expect(page).toHaveURL(/\/today$/);
-    await expect(page.getByText(/unlogged session/i)).toBeVisible();
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
   });
 
   test.afterEach(async ({ page }) => {
@@ -1764,10 +1765,26 @@ test.describe("today screen (unlogged session row)", () => {
     await assertNoA11yViolations(page);
   });
 
+  // The recovery-specific mobile rule must leave the shared screen inset
+  // intact at the narrowest supported portrait width. A global `.screen`
+  // override here would silently affect every other screen too.
+  test("recovery keeps the shared 20px inline inset at 360px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 844 });
+
+    const insets = await page.locator("main.screen").evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { left: style.paddingLeft, right: style.paddingRight };
+    });
+
+    expect(insets).toStrictEqual({ left: "20px", right: "20px" });
+  });
+
   // The DEFAULT state's own ✕ — outlined, never solid (DEVIATIONS.md #2).
   test("the row's ✕ is 44x44 and accent-outlined at rest", async ({ page }) => {
     const discardBtn = page.getByRole("button", {
-      name: "Discard without logging",
+      name: /Discard Timer workout/,
     });
     const box = (await discardBtn.boundingBox())!;
     expect(box.width).toBe(44);
@@ -1780,28 +1797,23 @@ test.describe("today screen (unlogged session row)", () => {
     expect(styles.borderColor).toBe("rgb(181, 52, 31)"); // --accent
   });
 
-  // Arming swaps the ROW's CONTENTS, not its layout (DESIGN.md's own words):
-  // border -> accent, text -> "Discard {title} without logging?", ✕ ->
-  // solid accent "Tap again" — and the row's own box stays the same size and
-  // position throughout.
-  test("arming swaps the row's contents in place — border to accent, text to the discard question, ✕ to a solid 'Tap again' — without moving the row", async ({
+  // Arming replaces the ROW's CONTENTS with the selected discard question
+  // and solid accent "Tap again" action. The confirmation follows its
+  // content-sized layout; the approved ruling does not promise a fixed row
+  // height, accent border, or unchanged page position.
+  test("arming swaps the row contents for the selected discard question", async ({
     page,
   }) => {
-    const row = page.locator(".today-unlogged-line");
-    const boxBefore = (await row.boundingBox())!;
+    const row = page.locator(".unsaved-row");
 
-    await page.getByRole("button", { name: "Discard without logging" }).click();
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
     await page.mouse.move(0, 0);
 
-    await expect(row).toHaveClass(/today-unlogged-line-armed/);
-    const rowBorderColor = await row.evaluate(
-      (el) => getComputedStyle(el).borderColor,
-    );
-    expect(rowBorderColor).toBe("rgb(181, 52, 31)"); // --accent
+    await expect(row).toHaveClass(/unsaved-row/);
     await expect(
-      page.getByText(`Discard ${title} without logging?`),
+      page.getByText(`Discard ${title} without saving?`),
     ).toBeVisible();
-    const tapAgain = page.getByRole("button", { name: "Tap again" });
+    const tapAgain = page.getByRole("button", { name: "Tap again to discard" });
     const tapAgainStyles = await tapAgain.evaluate((el) => {
       const s = getComputedStyle(el);
       return { background: s.backgroundColor, color: s.color };
@@ -1809,11 +1821,9 @@ test.describe("today screen (unlogged session row)", () => {
     expect(tapAgainStyles.background).toBe("rgb(181, 52, 31)"); // --accent
     expect(tapAgainStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
     // "Log it" is gone while armed — replaced, not merely joined.
-    await expect(page.getByRole("link", { name: "Log it" })).toHaveCount(0);
-
-    const boxAfter = (await row.boundingBox())!;
-    expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
-    expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
+    await expect(page.getByRole("link", { name: /Review & save/ })).toHaveCount(
+      0,
+    );
   });
 
   // Fix round 1 (reviewer M1): the original version of this test asserted
@@ -1831,8 +1841,8 @@ test.describe("today screen (unlogged session row)", () => {
   test("disarms on a REAL blur — not a synthetic event, and faster than the 4s auto-disarm timer could account for", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Discard without logging" }).click();
-    const armed = page.getByRole("button", { name: "Tap again" });
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+    const armed = page.getByRole("button", { name: "Tap again to discard" });
     await expect(armed).toBeVisible();
 
     const armedIsFocused = await armed.evaluate(
@@ -1843,7 +1853,7 @@ test.describe("today screen (unlogged session row)", () => {
     await armed.evaluate((el) => (el as HTMLElement).blur());
 
     await expect(
-      page.getByRole("button", { name: "Discard without logging" }),
+      page.getByRole("button", { name: /Discard Timer workout/ }),
     ).toBeVisible({ timeout: 1000 });
   });
 
@@ -1854,13 +1864,15 @@ test.describe("today screen (unlogged session row)", () => {
   test("arms, waits 4s with no second press, and disarms automatically — with the run record still intact", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Discard without logging" }).click();
-    await expect(page.getByRole("button", { name: "Tap again" })).toBeVisible();
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+    await expect(
+      page.getByRole("button", { name: "Tap again to discard" }),
+    ).toBeVisible();
 
     await page.waitForTimeout(4200);
 
     await expect(
-      page.getByRole("button", { name: "Discard without logging" }),
+      page.getByRole("button", { name: /Discard Timer workout/ }),
     ).toBeVisible();
     const runAfter = await page.evaluate(() =>
       localStorage.getItem("ergomatic.sessionRun"),
@@ -1873,10 +1885,10 @@ test.describe("today screen (unlogged session row)", () => {
   test("a second press while armed fires the discard — the row disappears in place, no navigation, both records cleared, no POST", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Discard without logging" }).click();
-    await page.getByRole("button", { name: "Tap again" }).click();
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+    await page.getByRole("button", { name: "Tap again to discard" }).click();
 
-    await expect(page.getByText(/unlogged session/i)).toHaveCount(0);
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
     // Still on Today — unlike SessionComplete's/the Log screen's own
     // Discard, this one never navigates anywhere.
@@ -2227,9 +2239,7 @@ test.describe("today screen (interrupted connected session row)", () => {
     });
     await seedInterruptedMonitorRun(page);
     await page.goto("/today");
-    await expect(
-      page.getByText(/interrupted connected session\./),
-    ).toBeVisible();
+    await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
   });
 
   // Step 1 (task brief): proves the seed ENGAGES `monitorModeRun`'s gate,
@@ -2242,9 +2252,11 @@ test.describe("today screen (interrupted connected session row)", () => {
   test("Log it stamps the record and opens the log screen with the actuals-derived minutes, not a wall-clock guess", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Log it" }).click();
+    await page.getByRole("button", { name: /Review & save/ }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
+    await expect(page).toHaveURL(
+      /\/session\/review\?source=monitor&startedAt=/,
+    );
     await expect(
       page.getByRole("heading", { name: "Hoarfrost" }),
     ).toBeVisible();
@@ -2300,7 +2312,7 @@ test.describe("today screen (interrupted connected session row)", () => {
     page,
   }) => {
     const discardBtn = page.getByRole("button", {
-      name: "Discard connected session without logging",
+      name: /Discard PM5 workout/,
     });
     const box = (await discardBtn.boundingBox())!;
     expect(box.width).toBe(44);
@@ -2321,7 +2333,7 @@ test.describe("today screen (interrupted connected session row)", () => {
   test("Log it is >=44x44, sharing the phone-timer row's own pill style", async ({
     page,
   }) => {
-    const logIt = page.getByRole("button", { name: "Log it" });
+    const logIt = page.getByRole("button", { name: /Review & save/ });
     const box = (await logIt.boundingBox())!;
     expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -2344,28 +2356,28 @@ test.describe("today screen (interrupted connected session row)", () => {
   // the phone-timer row's own identical test proves, mirrored here for the
   // twin's own copy ("interrupted connected session" naming, the discard
   // question naming the run's title) and its own distinctly-named ✕.
-  test("arming swaps the row's contents in place — border to accent, text to the discard question, ✕ to a solid 'Tap again' — without moving the row", async ({
+  test("arming swaps the row contents for the selected discard question without moving its top", async ({
     page,
   }) => {
-    const row = page.locator(".today-unlogged-line");
+    const row = page.locator(".unsaved-row");
     const boxBefore = (await row.boundingBox())!;
 
     await page
       .getByRole("button", {
-        name: "Discard connected session without logging",
+        name: /Discard PM5 workout/,
       })
       .click();
     await page.mouse.move(0, 0);
 
-    await expect(row).toHaveClass(/today-unlogged-line-armed/);
+    await expect(row).toHaveClass(/unsaved-row/);
     const rowBorderColor = await row.evaluate(
       (el) => getComputedStyle(el).borderColor,
     );
-    expect(rowBorderColor).toBe("rgb(181, 52, 31)"); // --accent
+    expect(rowBorderColor).toBe("rgb(216, 211, 196)"); // --rule
     await expect(
-      page.getByText("Discard Hoarfrost without logging?"),
+      page.getByText("Discard Hoarfrost without saving?"),
     ).toBeVisible();
-    const tapAgain = page.getByRole("button", { name: "Tap again" });
+    const tapAgain = page.getByRole("button", { name: "Tap again to discard" });
     const tapAgainStyles = await tapAgain.evaluate((el) => {
       const s = getComputedStyle(el);
       return { background: s.backgroundColor, color: s.color };
@@ -2373,11 +2385,12 @@ test.describe("today screen (interrupted connected session row)", () => {
     expect(tapAgainStyles.background).toBe("rgb(181, 52, 31)"); // --accent
     expect(tapAgainStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
     // "Log it" is gone while armed — replaced, not merely joined.
-    await expect(page.getByRole("button", { name: "Log it" })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /Review & save/ }),
+    ).toHaveCount(0);
 
     const boxAfter = (await row.boundingBox())!;
     expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
-    expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
   });
 
   // arm -> tap -> gone: the row disappears in place with no navigation,
@@ -2389,14 +2402,12 @@ test.describe("today screen (interrupted connected session row)", () => {
   }) => {
     await page
       .getByRole("button", {
-        name: "Discard connected session without logging",
+        name: /Discard PM5 workout/,
       })
       .click();
-    await page.getByRole("button", { name: "Tap again" }).click();
+    await page.getByRole("button", { name: "Tap again to discard" }).click();
 
-    await expect(page.getByText(/interrupted connected session/i)).toHaveCount(
-      0,
-    );
+    await expect(page.getByText(/PM5 · .* · Not saved/)).toHaveCount(0);
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
 
@@ -9948,6 +9959,326 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
       await expect(page.locator(".onb-screen")).toBeVisible();
       await assertNoFailingInk4Labels(page);
     }
+  });
+});
+
+// Recovery is a stored-record render surface, so these are deliberately
+// direct seeds. The connected writer-to-history journey lives in
+// connected.spec.ts; this suite registers every recovery rendering state.
+test.describe("unlogged recovery render registrations", () => {
+  const longTitle =
+    "A retained PM5 workout with a deliberately long title that must wrap cleanly";
+
+  async function seedRecovery(page: Page, run: MonitorRun): Promise<void> {
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: MONITOR_RUN_KEY,
+      value: JSON.stringify(run),
+    });
+    // `ReviewSession` hydrates its key-filtered store at module load; reload
+    // makes this a real cold retained-storage render, not prior test memory.
+    await page.reload();
+  }
+
+  function buildCompletedTimerRun(workoutId: string): SessionRun {
+    const hoarfrost = library("Hoarfrost");
+    const startedAt = new Date("2026-09-04T12:00:00.000Z");
+    const draft = buildDraft({
+      id: workoutId,
+      title: `${longTitle} timer`,
+      type: hoarfrost.type as WorkoutType,
+      steps: hoarfrost.steps,
+    });
+    let run = buildRun(startDraft(draft), DESIGN_BASELINES, startedAt);
+    for (let hour = 1; run.completedAt === null; hour += 1)
+      run = advance(run, new Date(startedAt.getTime() + hour * 60 * 60 * 1000));
+    return run;
+  }
+
+  test("Today keeps a long-title retained PM5 row reachable in portrait, landscape, and a failed library fetch", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery@e2e.test",
+      name: "Recovery Design Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const run = {
+      ...buildCompletedMonitorRun(workoutId),
+      title: longTitle,
+    };
+    await seedRecovery(page, run);
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/today");
+      const review = page.getByRole("button", {
+        name: `Review & save PM5 workout ${longTitle}`,
+      });
+      await expect(review).toBeVisible();
+      await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
+      await sweep(page);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBe(viewport.width);
+    }
+
+    await page.route("**/api/workouts", (route) =>
+      route.fulfill({ status: 500, body: "library unavailable" }),
+    );
+    await page.reload();
+    await expect(page.getByText("Couldn't load your library.")).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: `Review & save PM5 workout ${longTitle}`,
+      }),
+    ).toBeVisible();
+    await sweep(page);
+  });
+
+  test("review renders missing-type, read-only legacy, and unavailable dispositions without a save affordance leak", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-variants@e2e.test",
+      name: "Recovery Variant Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const base = { ...buildCompletedMonitorRun(workoutId), title: longTitle };
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await seedRecovery(page, {
+        ...base,
+        workoutId: "missing-library-record",
+      });
+      await page.goto(
+        `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
+      );
+      await expect(
+        page.getByRole("combobox", { name: "Workout type" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+      await sweep(page);
+
+      await seedRecovery(page, {
+        ...base,
+        // Explicit legacy shape: a stored programmed recording predating the
+        // frozen log seed cannot safely rebuild a summary and must stay
+        // read-only rather than falling back to a manual form.
+        logSeed: undefined,
+      });
+      await page.goto(
+        `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
+      );
+      await expect(
+        page.getByRole("heading", { name: "Can't rebuild this workout." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("textbox", { name: "Recording data" }),
+      ).toHaveAttribute("readonly", "");
+      await expect(
+        page.getByRole("button", { name: "Copy recording" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Keep unsaved" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+      await sweep(page);
+
+      await page.goto(
+        "/session/review?source=monitor&startedAt=missing-record",
+      );
+      await expect(
+        page.getByRole("heading", { name: "Recording unavailable" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Back to Today" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+      await sweep(page);
+    }
+  });
+
+  test("Today keeps the retained PM5 row reachable while its library request is pending or failed in both orientations", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-fetch@e2e.test",
+      name: "Recovery Fetch Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const run = { ...buildCompletedMonitorRun(workoutId), title: longTitle };
+    await seedRecovery(page, run);
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      let releasePending: (() => void) | undefined;
+      const pending = new Promise<void>((resolve) => {
+        releasePending = resolve;
+      });
+      let resolveHandled: (() => void) | undefined;
+      const handled = new Promise<void>((resolve) => {
+        resolveHandled = resolve;
+      });
+      await page.route("**/api/workouts", async (route) => {
+        await pending;
+        await route.continue();
+        resolveHandled?.();
+      });
+      await page.goto("/today", { waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByRole("button", {
+          name: `Review & save PM5 workout ${longTitle}`,
+        }),
+      ).toBeVisible();
+      await sweep(page);
+      releasePending?.();
+      await handled;
+      await page.unroute("**/api/workouts");
+
+      await page.route("**/api/workouts", (route) =>
+        route.fulfill({ status: 500, body: "library unavailable" }),
+      );
+      await page.goto("/today");
+      await expect(page.getByText("Couldn't load your library.")).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: `Review & save PM5 workout ${longTitle}`,
+        }),
+      ).toBeVisible();
+      await sweep(page);
+      await page.unroute("**/api/workouts");
+    }
+  });
+
+  test("Today renders both retained sources and Connect warns singular then plural in both orientations", async ({
+    page,
+  }) => {
+    const targetTitle = "Recovery warning target";
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-warning@e2e.test",
+      name: "Recovery Warning Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const monitor = {
+      ...buildCompletedMonitorRun(workoutId),
+      title: longTitle,
+    };
+    await seedRecovery(page, monitor);
+    await importBulk(
+      page,
+      [`${targetTitle} | AN | easy | 1`, "w 1' max"].join("\n"),
+    );
+    const timer = buildCompletedTimerRun(workoutId);
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.evaluate((key) => localStorage.removeItem(key), RUN_KEY);
+      await page.reload();
+      await page.goto("/library");
+      await page
+        .locator(".workout-row")
+        .filter({ hasText: targetTitle })
+        .click();
+      await page.getByRole("button", { name: "Connect" }).click();
+      await expect(
+        page.getByRole("heading", { name: "You have an unsaved workout." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "View unsaved" }),
+      ).toBeVisible();
+      await sweep(page);
+      await page.getByRole("button", { name: "Cancel" }).click();
+
+      await page.evaluate(
+        ({ key, value }) => localStorage.setItem(key, value),
+        {
+          key: RUN_KEY,
+          value: JSON.stringify(timer),
+        },
+      );
+      await page.reload();
+      await page.goto("/today");
+      await expect(
+        page.getByRole("heading", { name: "UNSAVED WORKOUTS" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: /Review & save Timer workout/ }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /Review & save PM5 workout/ }),
+      ).toBeVisible();
+      await sweep(page);
+
+      await page.goto("/library");
+      await page
+        .locator(".workout-row")
+        .filter({ hasText: targetTitle })
+        .click();
+      await page.getByRole("button", { name: "Connect" }).click();
+      await expect(
+        page.getByRole("heading", { name: "You have unsaved workouts." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "View unsaved" }),
+      ).toBeVisible();
+      await sweep(page);
+      await page.getByRole("button", { name: "Cancel" }).click();
+    }
+    await cleanupByTitle(page, targetTitle);
+  });
+
+  test("landscape warning reveals the safe View exit above navigation and begins its keyboard flow there", async ({
+    page,
+  }) => {
+    const targetTitle = "Recovery warning safe exit target";
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-safe-exit@e2e.test",
+      name: "Recovery Safe Exit Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    await seedRecovery(page, buildCompletedMonitorRun(workoutId));
+    await importBulk(
+      page,
+      [`${targetTitle} | AN | easy | 1`, "w 1' max"].join("\n"),
+    );
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: targetTitle }).click();
+    await page.getByRole("button", { name: "Connect" }).click();
+
+    const view = page.getByRole("button", { name: "View unsaved" });
+    const nav = page.getByRole("navigation", { name: "Main" });
+    await expect(view).toBeVisible();
+    const [viewBox, navBox] = await Promise.all([
+      view.boundingBox(),
+      nav.boundingBox(),
+    ]);
+    expect(viewBox).not.toBeNull();
+    expect(navBox).not.toBeNull();
+    expect(viewBox!.y).toBeGreaterThanOrEqual(0);
+    expect(viewBox!.y + viewBox!.height).toBeLessThanOrEqual(navBox!.y);
+    await expect(view).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await cleanupByTitle(page, targetTitle);
   });
 });
 

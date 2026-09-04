@@ -29,6 +29,7 @@ import ConnectAction from "../monitor/ConnectAction";
 import type { RunIdentity } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { useStartWorkout } from "../session/useStartWorkout";
+import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
@@ -209,6 +210,7 @@ function WorkoutDetailView({
     handleStart,
     confirmReplace,
     cancelReplace,
+    unsavedCount,
   } = useStartWorkout(workout, nudges);
   const navigate = useNavigate();
   // Whatever origin THIS screen was itself entered from (Today's suggestion
@@ -497,12 +499,22 @@ function WorkoutDetailView({
           <button type="button" className="button-l2" onClick={handleStart}>
             Start Timer
           </button>
+        ) : replaceStage === "unlogged" ? (
+          <UnsavedWorkoutWarning
+            count={unsavedCount}
+            replacement="Starting a new one"
+            replaceLabel="Replace session"
+            onReplace={confirmReplace}
+            onCancel={cancelReplace}
+            onView={() => {
+              cancelReplace();
+              void navigate("/today");
+            }}
+          />
         ) : (
           <div className="baseline-confirm">
             <p className="baseline-confirm-line">
-              {replaceStage === "unlogged"
-                ? "You have an unlogged session. Starting a new one discards it."
-                : "A session is in progress. Replace it?"}
+              A session is in progress. Replace it?
             </p>
             <div className="baseline-actions">
               <button

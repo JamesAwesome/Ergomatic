@@ -636,7 +636,7 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     expect(draftAfter).toBeNull();
 
     // No unlogged line — there's no completed-but-unlogged run left to show.
-    await expect(page.getByText(/unlogged session/i)).toHaveCount(0);
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toHaveCount(0);
     // The plan's own session counter never moved — discarding is not
     // logging, so `doneN` was never touched.
     await expect(page.locator(".today-plan-line")).toContainText(
@@ -1263,7 +1263,7 @@ test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 
     // Warned, not walked past — and still on the detail screen.
     await expect(
       page.getByText(
-        "You have an unlogged session. Starting a new one discards it.",
+        /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
       ),
     ).toBeVisible();
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -1310,7 +1310,7 @@ test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 
 
     await expect(
       page.getByText(
-        "You have an unlogged session. Starting a new one discards it.",
+        /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
       ),
     ).toBeVisible();
     await expect(
@@ -1393,7 +1393,9 @@ test.describe("Phase 7B Task 5: Connect over a real (not seeded) unlogged sessio
     await page.getByRole("button", { name: "Connect", exact: true }).click();
 
     await expect(
-      page.getByText("You have an unlogged session. Connecting discards it."),
+      page.getByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
     ).toBeVisible();
     // Not walked past — the Connect trigger itself is gone, the panel
     // replaced it, and NOTHING has been written to the monitor side yet.
@@ -1536,7 +1538,7 @@ test.describe("LT-0: the manual door's own staged discard, driven through a forc
     await page.getByRole("button", { name: "Start" }).click();
     await expect(
       page.getByText(
-        "You have an unlogged session. Starting a new one discards it.",
+        /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
       ),
     ).toBeVisible();
     await page.getByRole("button", { name: "Cancel" }).click();
@@ -1567,7 +1569,7 @@ test.describe("LT-0: the manual door's own staged discard, driven through a forc
     await page.getByRole("button", { name: "Start" }).click();
     await expect(
       page.getByText(
-        "You have an unlogged session. Starting a new one discards it.",
+        /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
       ),
     ).toHaveCount(0);
   });

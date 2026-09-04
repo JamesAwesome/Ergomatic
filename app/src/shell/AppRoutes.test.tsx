@@ -56,6 +56,20 @@ beforeEach(() => {
 });
 
 describe("AppRoutes", () => {
+  it("keeps an invalid selected review at its honest unavailable state rather than redirecting to Today", async () => {
+    render(
+      <MemoryRouter initialEntries={["/session/review?source=monitor"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Recording unavailable" }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Back to Today" })).toHaveAttribute(
+      "href",
+      "/today",
+    );
+  });
   // NOT a proof of declaration order: react-router-dom 7.18.2 ranks a
   // static path segment ("import") over a dynamic one (":id") regardless of
   // which route is registered first in AppRoutes.tsx, so this test would

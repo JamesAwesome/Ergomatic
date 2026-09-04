@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useStagedDiscard } from "../session/useStagedDiscard";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import {
@@ -84,7 +85,7 @@ function timerFreeRowRun(): SessionRun | null {
   return run;
 }
 
-type DoorEntry =
+export type DoorEntry =
   { kind: "monitor"; entry: HandoffEntry } | { kind: "timer"; run: SessionRun };
 
 /** The ring `kind` filed when both records exist at once — greppable in a
@@ -142,12 +143,63 @@ function timerElapsedSeconds(run: SessionRun): number | null {
 const PAIN_LEVELS = [1, 2, 3, 4, 5];
 
 export default function JustRowLog() {
-  const navigate = useNavigate();
   // A mount snapshot on purpose, like `LogSession`'s own doors: the record
   // is closed, so nothing enriches it after mount, and re-reading on every
   // render would make a mid-save retire yank the form out from under the
   // rower.
   const [door] = useState(doorEntry);
+  return door === null ? (
+    <Navigate to="/today" replace />
+  ) : (
+    <JustRowSummary door={door} context="legacy" />
+  );
+}
+
+export function JustRowSummary({
+  door,
+  context,
+}: {
+  door: DoorEntry;
+  context: "legacy" | "review";
+}) {
+  const navigate = useNavigate();
+  const discard = useStagedDiscard();
+  const recoveryActions =
+    context === "review" ? (
+      <div className="action-stack">
+        <Link to="/today" className="button-outline">
+          Keep unsaved
+        </Link>
+        <button
+          type="button"
+          className={
+            discard.armed ? "summary-discard-armed" : "summary-discard"
+          }
+          onBlur={discard.disarm}
+          onClick={() => {
+            if (!discard.armed) {
+              discard.arm();
+              return;
+            }
+            discard.disarm();
+            if (door.kind === "monitor")
+              retireHandoff(
+                [
+                  {
+                    sessionKey: door.entry.sessionKey,
+                    revision: door.entry.revision,
+                  },
+                ],
+                "monitor-discard",
+              );
+            else if (loadRun()?.startedAt === door.run.startedAt) clearRun();
+            void navigate("/today");
+          }}
+        >
+          {discard.armed ? "Tap again to discard" : "DISCARD WITHOUT SAVING"}
+        </button>
+      </div>
+    ) : null;
   // The pair's one input beyond the record: `LogSession`'s own rule for
   // which plan the stack may name — a RESOLVED fetch with an active key.
   // Loading and errored both read as "no plan" here, exactly as they do
@@ -174,19 +226,16 @@ export default function JustRowLog() {
           "save-success",
         );
       } else if (door?.kind === "timer") {
-        clearRun();
+        if (loadRun()?.startedAt === door.run.startedAt) clearRun();
       }
       void navigate("/today/log");
     });
   void held; // the targets question does not exist here; see the header.
 
-  if (door === null) {
-    return <Navigate to="/today" replace />;
-  }
-
   if (door.kind === "timer") {
     return (
       <TimerDoor
+        recoveryActions={recoveryActions}
         run={door.run}
         plan={plan}
         pain={pain}
@@ -341,6 +390,7 @@ export default function JustRowLog() {
         disabled={saving || totals === null}
         onSave={handleSave}
       />
+      {recoveryActions}
     </main>
   );
 }
@@ -351,6 +401,7 @@ export default function JustRowLog() {
  *  alone — no DISTANCE cell, no AVG SPLIT cell, and no dash standing in for
  *  either. Save is disabled only when the run carries no actual. */
 function TimerDoor({
+  recoveryActions,
   run,
   plan,
   pain,
@@ -361,6 +412,7 @@ function TimerDoor({
   saveError,
   onSave,
 }: {
+  recoveryActions: ReactNode;
   run: SessionRun;
   plan: PlanData | null;
   pain: number | null;
@@ -407,6 +459,7 @@ function TimerDoor({
           if (elapsed !== null) onSave(elapsed, advancesPlan);
         }}
       />
+      {recoveryActions}
     </main>
   );
 }

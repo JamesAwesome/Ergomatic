@@ -46,11 +46,17 @@ export interface PostTestOffer {
 export function postTestOffer(input: {
   workoutTitle: string;
   workoutIsGlobal: boolean;
+  linkedWorkoutTitle: string | null;
   avgSplitSeconds: number | undefined;
   completedFullDistance: boolean;
 }): PostTestOffer | null {
   if (input.avgSplitSeconds === undefined) return null;
-  if (!isOnboardingTitle(input.workoutTitle) || !input.workoutIsGlobal) {
+  if (
+    !input.workoutIsGlobal ||
+    input.linkedWorkoutTitle === null ||
+    input.workoutTitle !== input.linkedWorkoutTitle ||
+    !isOnboardingTitle(input.linkedWorkoutTitle)
+  ) {
     return null;
   }
   if (!input.completedFullDistance) return null;
@@ -58,7 +64,7 @@ export function postTestOffer(input: {
     return null;
   }
   return {
-    distance: input.workoutTitle === ONBOARDING_TITLES.k2 ? "2k" : "6k",
+    distance: input.linkedWorkoutTitle === ONBOARDING_TITLES.k2 ? "2k" : "6k",
     splitSeconds: input.avgSplitSeconds,
   };
 }

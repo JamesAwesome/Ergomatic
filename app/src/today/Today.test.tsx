@@ -16,6 +16,8 @@ import type { PlanData, PlanSequenceItem } from "../api/usePlan";
 import type { RecentLog } from "../api/useRecentLogs";
 import type { WorkoutType } from "../../domain/types.js";
 import { phases } from "../../domain/expand.js";
+import { compileProgram } from "../../domain/monitor/program.js";
+import { buildLogSeed } from "../session/logDraft";
 import { buildDraft, type SessionDraft, DRAFT_KEY } from "../session/draft";
 import { advance, buildFreeRowRun, buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
@@ -2422,9 +2424,7 @@ describe("Today (F2: session resume / unlogged)", () => {
     expect(
       screen.queryByRole("button", { name: /discard/i }),
     ).not.toBeInTheDocument();
-    expect(
-      document.querySelector(".today-unlogged-line"),
-    ).not.toBeInTheDocument();
+    expect(document.querySelector(".unsaved-row")).not.toBeInTheDocument();
   });
 
   it("shows a quieter line naming the workout, with a real Log it action, when the run is already complete (completed-but-unlogged)", async () => {
@@ -2439,12 +2439,15 @@ describe("Today (F2: session resume / unlogged)", () => {
     await renderToday();
 
     expect(screen.getByText("Filling Low")).toBeVisible();
-    expect(screen.getByText(/unlogged session/i)).toBeVisible();
+    expect(screen.getByText(/UNSAVED WORKOUT/)).toBeVisible();
     // Phase 6C Task 2: the placeholder copy ("6C will log it here") is
     // replaced by a real link to the screen that now exists.
-    const logLink = screen.getByRole("link", { name: "Log it" });
+    const logLink = screen.getByRole("link", { name: /Review & save/ });
     expect(logLink).toBeVisible();
-    expect(logLink).toHaveAttribute("href", "/session/log");
+    expect(logLink).toHaveAttribute(
+      "href",
+      `/session/review?source=timer&startedAt=${encodeURIComponent(run.startedAt)}`,
+    );
     // Quieter than the resume card, per the brief: no "SESSION IN PROGRESS"
     // banner, no Resume-session link.
     expect(screen.queryByText("SESSION IN PROGRESS")).not.toBeInTheDocument();
@@ -2472,10 +2475,13 @@ describe("Today (F2: session resume / unlogged)", () => {
     mockReady();
     await renderToday();
 
-    expect(screen.getByText(/unlogged session/i)).toBeVisible();
+    expect(screen.getByText(/UNSAVED WORKOUT/)).toBeVisible();
     expect(screen.getByText("Just Row")).toBeVisible();
-    const logLink = screen.getByRole("link", { name: "Log it" });
-    expect(logLink).toHaveAttribute("href", "/justrow/log");
+    const logLink = screen.getByRole("link", { name: /Review & save/ });
+    expect(logLink).toHaveAttribute(
+      "href",
+      `/session/review?source=timer&startedAt=${encodeURIComponent(run.startedAt)}`,
+    );
   });
 
   it("renders neither the resume card nor the unlogged line when there is no run record at all", async () => {
@@ -2483,7 +2489,7 @@ describe("Today (F2: session resume / unlogged)", () => {
     await renderToday();
 
     expect(screen.queryByText("SESSION IN PROGRESS")).not.toBeInTheDocument();
-    expect(screen.queryByText(/unlogged session/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/UNSAVED WORKOUT/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Resume session" }),
     ).not.toBeInTheDocument();
@@ -2493,7 +2499,7 @@ describe("Today (F2: session resume / unlogged)", () => {
 // Task 3 (ui-fix round): the unlogged line's own staged Discard —
 // DESIGN.md's "Today's unlogged row" — a 44×44 accent-outlined ✕ that arms
 // IN PLACE (border → accent, text → "Discard {title} without logging?", ✕
-// → solid accent "Tap again"), fires with no navigation, and must never
+// → solid accent "Tap again to discard"), fires with no navigation, and must never
 // disturb the suggestion card underneath.
 function unloggedRunFor(startedAt: Date, completedAt: Date): SessionRun {
   const built = liveRunFor(startedAt);
@@ -2505,6 +2511,27 @@ function unloggedRunFor(startedAt: Date, completedAt: Date): SessionRun {
 }
 
 describe("Today (Task 3: unlogged row's staged Discard)", () => {
+  it("a timer row cannot discard a newer timer or newly queued draft", async () => {
+    const run = unloggedRunFor(
+      new Date("2026-09-04T11:00:00.000Z"),
+      new Date("2026-09-04T11:30:00.000Z"),
+    );
+    localStorage.setItem(RUN_KEY, JSON.stringify(run));
+    mockReady();
+    await renderToday();
+    const nextRun = { ...run, startedAt: "newer-key" };
+    const nextDraft = buildDraft(WARM_FRONT);
+    localStorage.setItem(RUN_KEY, JSON.stringify(nextRun));
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(nextDraft));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+    expect(localStorage.getItem(RUN_KEY)).toBe(JSON.stringify(nextRun));
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(JSON.stringify(nextDraft));
+  });
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -2522,22 +2549,24 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     expect(cardBefore).toBeTruthy();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     );
 
     // The row's contents swap — title, ✕, and "Log it" are all replaced by
     // the armed copy, not merely joined by it.
-    expect(document.querySelector(".today-unlogged-text")?.textContent).toBe(
-      "Discard Filling Low without logging?",
+    expect(document.querySelector(".unsaved-warning-copy")?.textContent).toBe(
+      "Discard Filling Low without saving?",
     );
     expect(
-      screen.getByRole("button", { name: "Tap again" }),
+      screen.getByRole("button", { name: "Tap again to discard" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Log it" }),
+      screen.queryByRole("link", { name: /Review & save/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Discard without logging" }),
+      screen.queryByRole("button", {
+        name: "Discard Timer workout Filling Low",
+      }),
     ).not.toBeInTheDocument();
 
     // The suggestion card is byte-identical — arming the row re-rendered
@@ -2570,15 +2599,15 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     await renderToday();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     );
-    const armed = screen.getByRole("button", { name: "Tap again" });
+    const armed = screen.getByRole("button", { name: "Tap again to discard" });
     expect(document.activeElement).toBe(armed);
 
     act(() => armed.blur());
 
     expect(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     ).toBeInTheDocument();
     expect(localStorage.getItem(RUN_KEY)).not.toBeNull();
   });
@@ -2594,16 +2623,16 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     vi.useFakeTimers();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     );
     expect(
-      screen.getByRole("button", { name: "Tap again" }),
+      screen.getByRole("button", { name: "Tap again to discard" }),
     ).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(4000));
 
     expect(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     ).toBeInTheDocument();
   });
 
@@ -2623,14 +2652,16 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
       ?.getAttribute("href");
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Tap again" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
 
     // Gone in place — no "unlogged session" line, no armed controls, and
     // still on Today (no navigation at all, unlike the post-workout
     // summary's own Discard, which leaves the screen).
-    expect(screen.queryByText(/unlogged session/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/UNSAVED WORKOUT/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /discard/i }),
     ).not.toBeInTheDocument();
@@ -2664,6 +2695,119 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
 // DIFFERENT rower's-in-progress-phone-timer concern this row must never
 // touch), and the null-`workoutId` latent (no Log it at all).
 describe("Today (2b): the interrupted connected session row", () => {
+  it("a refused interrupted close opens unavailable without claiming or changing the newer open revision", async () => {
+    const run = makeMonitorRun({ completedAt: null });
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+    mockReady();
+    const { default: Today } = await import("./Today");
+    const { default: ReviewSession } = await import("../session/ReviewSession");
+    const store = await import("../monitor/handoffStore");
+    const receipts: unknown[] = [];
+    store.setReceiptChannel((receipt) => receipts.push(receipt));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    render(
+      <MemoryRouter initialEntries={["/today"]}>
+        <Routes>
+          <Route path="/today" element={<Today />} />
+          <Route path="/session/review" element={<ReviewSession />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const newer = { ...run, title: "Still open, newer revision" };
+    store.commit(run.startedAt, 0, newer);
+    expect(store.read()?.revision).toBe(1);
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Review & save PM5 workout Stationary Front",
+      }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Recording unavailable" }),
+    ).toBeVisible();
+    expect(store.read()?.run).toStrictEqual(newer);
+    expect(
+      receipts.filter((r) => (r as { kind: string }).kind === "claim"),
+    ).toHaveLength(0);
+    expect(
+      fetchSpy.mock.calls.filter(([, init]) => init?.method === "POST"),
+    ).toHaveLength(0);
+  });
+  it.each([
+    ["useWorkouts", "workouts", []],
+    ["useBaselines", "baselines", BASELINES],
+    ["usePlan", "plan", FREESTYLE_PLAN],
+    ["usePreferences", "preferences", DEFAULT_PREFS],
+    ["useRecentLogs", "logs", []],
+  ] as const)(
+    "keeps recovery mounted through %s loading, error, Retry and ready",
+    async (hook, field, value) => {
+      localStorage.setItem(
+        MONITOR_RUN_KEY,
+        JSON.stringify(
+          makeMonitorRun({ completedAt: "2026-09-04T12:30:00.000Z" }),
+        ),
+      );
+      let state: Record<string, unknown> = { state: "loading" };
+      const retry = vi.fn(() => {
+        state = { state: "ready", [field]: value };
+      });
+      vi.doMock("../api/useWorkouts", () => ({
+        useWorkouts: () =>
+          hook === "useWorkouts"
+            ? state
+            : { state: "ready", workouts: [WARM_FRONT] },
+      }));
+      vi.doMock("../api/useBaselines", () => ({
+        useBaselines: () =>
+          hook === "useBaselines"
+            ? state
+            : { state: "ready", baselines: BASELINES },
+      }));
+      vi.doMock("../api/usePlan", () => ({
+        usePlan: () =>
+          hook === "usePlan" ? state : { state: "ready", plan: FREESTYLE_PLAN },
+      }));
+      vi.doMock("../api/usePreferences", () => ({
+        usePreferences: () =>
+          hook === "usePreferences"
+            ? state
+            : { state: "ready", preferences: DEFAULT_PREFS },
+      }));
+      vi.doMock("../api/useRecentLogs", () => ({
+        useRecentLogs: () =>
+          hook === "useRecentLogs" ? state : { state: "ready", logs: [] },
+      }));
+      const { default: Today } = await import("./Today");
+      const view = () => (
+        <MemoryRouter>
+          <Today />
+        </MemoryRouter>
+      );
+      const result = render(view());
+      expect(
+        screen.getByRole("button", {
+          name: "Review & save PM5 workout Stationary Front",
+        }),
+      ).toBeVisible();
+      state = { state: "error", retry };
+      result.rerender(view());
+      await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await userEvent.click(
+        screen.getByRole("button", {
+          name: "Discard PM5 workout Stationary Front",
+        }),
+      );
+      result.rerender(view());
+      expect(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      ).toBeVisible();
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      );
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    },
+  );
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -2677,15 +2821,17 @@ describe("Today (2b): the interrupted connected session row", () => {
     await renderToday();
 
     const row = screen
-      .getByText(/interrupted connected session\./)
-      .closest(".today-unlogged-line");
+      .getByText(/PM5 · .* · Not saved/)
+      .closest(".unsaved-row");
     if (!row) throw new Error("row not found");
     const rowScope = within(row as HTMLElement);
     expect(rowScope.getByText("Stationary Front")).toBeVisible();
-    expect(rowScope.getByRole("button", { name: "Log it" })).toBeVisible();
+    expect(
+      rowScope.getByRole("button", { name: /Review & save/ }),
+    ).toBeVisible();
     expect(
       rowScope.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     ).toBeVisible();
   });
@@ -2693,23 +2839,63 @@ describe("Today (2b): the interrupted connected session row", () => {
   it("shows no row when there is no MonitorRun record at all", async () => {
     mockReady();
     await renderToday();
-    expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/PM5 · .* · Not saved/)).not.toBeInTheDocument();
   });
 
-  it("shows no row for a completed MonitorRun — a completed-but-unlogged monitor record is ruled OUT of 2b", async () => {
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify(makeMonitorRun({ completedAt: new Date().toISOString() })),
+  it("reviews a completed programmed PM5 from Today without posting or opening manual entry", async () => {
+    const built = buildRun(
+      buildDraft(WARM_FRONT),
+      BASELINES,
+      new Date("2026-09-04T12:00:00.000Z"),
     );
+    const program = compileProgram(built.phases);
+    if ("code" in program) throw new Error(program.message);
+    const run = makeMonitorRun({
+      program,
+      logSeed: buildLogSeed(built.phases, BASELINES),
+      actuals: [
+        {
+          index: 0,
+          elapsedSeconds: 120,
+          distanceMeters: 450,
+          avgSplit: 133.3,
+          avgSpm: 24,
+          avgHeartRateBpm: null,
+          restDistanceMeters: 0,
+        },
+      ],
+      completedAt: "2026-09-04T12:30:00.000Z",
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
     mockReady();
-    await renderToday();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const { default: Today } = await import("./Today");
+    const { default: ReviewSession } = await import("../session/ReviewSession");
+    render(
+      <MemoryRouter initialEntries={["/today"]}>
+        <Routes>
+          <Route path="/today" element={<Today />} />
+          <Route path="/session/review" element={<ReviewSession />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Review & save PM5 workout Stationary Front",
+      }),
+    );
     expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
+      await screen.findByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    expect(screen.getByText(/PM5 \(test\)/)).toBeVisible();
+    expect(screen.queryByText("NO MONITOR READING")).not.toBeInTheDocument();
+    expect(
+      fetchSpy.mock.calls.filter(([, init]) => init?.method === "POST"),
+    ).toHaveLength(0);
+    expect(JSON.parse(localStorage.getItem(MONITOR_RUN_KEY)!)).toMatchObject({
+      completedAt: "2026-09-04T12:30:00.000Z",
+    });
   });
-
   it("Log it stamps the interrupted door and lands on the monitor log route", async () => {
     localStorage.setItem(
       MONITOR_RUN_KEY,
@@ -2723,17 +2909,19 @@ describe("Today (2b): the interrupted connected session row", () => {
       <MemoryRouter initialEntries={["/today"]}>
         <Routes>
           <Route path="/today" element={<Today />} />
-          <Route path="/library/:id/log" element={<LogRouteProbe />} />
+          <Route path="/session/review" element={<LogRouteProbe />} />
         </Routes>
       </MemoryRouter>,
     );
     await screen.findByRole("heading", { name: "Today" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Log it" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Review & save/ }),
+    );
 
     expect(
       await screen.findByText(
-        "LOG ROUTE PROBE id=w-warmfront search=?from=monitor",
+        `LOG ROUTE PROBE id= search=?source=monitor&startedAt=${encodeURIComponent(JSON.parse(localStorage.getItem(MONITOR_RUN_KEY)!).startedAt)}`,
       ),
     ).toBeVisible();
 
@@ -2790,17 +2978,19 @@ describe("Today (2b): the interrupted connected session row", () => {
     await renderToday();
 
     const row = screen
-      .getByText(/interrupted connected session\./)
-      .closest(".today-unlogged-line");
+      .getByText(/PM5 · .* · Not saved/)
+      .closest(".unsaved-row");
     if (!row) throw new Error("row not found");
     const rowScope = within(row as HTMLElement);
 
     await userEvent.click(
       rowScope.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     );
-    await userEvent.click(rowScope.getByRole("button", { name: "Tap again" }));
+    await userEvent.click(
+      rowScope.getByRole("button", { name: "Tap again to discard" }),
+    );
 
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
     // The wrong records — Discard clears the MONITOR record only.
@@ -2811,9 +3001,7 @@ describe("Today (2b): the interrupted connected session row", () => {
     );
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(rowedLog);
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/PM5 · .* · Not saved/)).not.toBeInTheDocument();
     // No navigation: still on Today.
     expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
   });
@@ -2828,17 +3016,17 @@ describe("Today (2b): the interrupted connected session row", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     );
-    const armed = screen.getByRole("button", { name: "Tap again" });
+    const armed = screen.getByRole("button", { name: "Tap again to discard" });
     expect(document.activeElement).toBe(armed);
 
     act(() => armed.blur());
 
     expect(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     ).toBeInTheDocument();
     expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
@@ -2855,23 +3043,23 @@ describe("Today (2b): the interrupted connected session row", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     );
     expect(
-      screen.getByRole("button", { name: "Tap again" }),
+      screen.getByRole("button", { name: "Tap again to discard" }),
     ).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(4000));
 
     expect(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     ).toBeInTheDocument();
   });
 
-  it("an anonymous run (workoutId null) gets the row without Log it — unreachable today (only WorkoutDetail programs), latent per spec", async () => {
+  it("an anonymous programmed run still offers source-bound review", async () => {
     localStorage.setItem(
       MONITOR_RUN_KEY,
       JSON.stringify(makeMonitorRun({ completedAt: null, workoutId: null })),
@@ -2879,13 +3067,11 @@ describe("Today (2b): the interrupted connected session row", () => {
     mockReady();
     await renderToday();
 
-    expect(screen.getByText(/interrupted connected session\./)).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "Log it" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText(/PM5 · .* · Not saved/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Review & save/ })).toBeVisible();
     expect(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     ).toBeVisible();
   });
@@ -2943,7 +3129,7 @@ describe("Today (§10 row 9): a memory-only unlogged row, present before reload 
       </MemoryRouter>,
     );
     await screen.findByRole("heading", { name: "Today" });
-    expect(screen.getByText(/interrupted connected session\./)).toBeVisible();
+    expect(screen.getByText(/PM5 · .* · Not saved/)).toBeVisible();
     // Unmount before the second render — RTL does not auto-clean between
     // two renders inside the SAME test, only between tests.
     before.unmount();
@@ -2961,9 +3147,7 @@ describe("Today (§10 row 9): a memory-only unlogged row, present before reload 
       </MemoryRouter>,
     );
     await screen.findByRole("heading", { name: "Today" });
-    expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/PM5 · .* · Not saved/)).not.toBeInTheDocument();
 
     // §9.5, stated plainly (review correction): `receipts` was captured
     // via `setReceiptChannel` on the PRE-reload module instance, and this
@@ -2974,7 +3158,7 @@ describe("Today (§10 row 9): a memory-only unlogged row, present before reload 
     // all, so nothing the reloaded process does could ever appear here
     // either way). THE GATE for "the vanish is real" is the pair of DOM
     // assertions above: the row visible before reload
-    // (`screen.getByText(/interrupted connected session\./)`,
+    // (`screen.getByText(/PM5 · .* · Not saved/)`,
     // pre-`unmount()`) and absent after
     // (`queryByText(...).not.toBeInTheDocument()`, post-reload) — that
     // pair is what a broken hydrate() or a broken reload would actually
@@ -3699,13 +3883,13 @@ describe("Today (JR): the free row's recovery row", () => {
       <MemoryRouter initialEntries={["/today"]}>
         <Routes>
           <Route path="/today" element={<Today />} />
-          <Route path="/justrow/log" element={<p>JUSTROW LOG DOOR</p>} />
+          <Route path="/session/review" element={<p>JUSTROW LOG DOOR</p>} />
         </Routes>
       </MemoryRouter>,
     );
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Log it" }),
+      await screen.findByRole("button", { name: /Review & save/ }),
     );
     expect(await screen.findByText("JUSTROW LOG DOOR")).toBeInTheDocument();
     // Exit criterion 5's third member, asserted on the FREE row rather
@@ -3731,7 +3915,9 @@ describe("Today (JR): the free row's recovery row", () => {
     mockReady();
     await renderToday();
 
-    expect(await screen.findByRole("button", { name: "Log it" })).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: /Review & save/ }),
+    ).toBeVisible();
   });
 
   it("carries the numbers and no word implying the row can be resumed", async () => {
@@ -3744,16 +3930,14 @@ describe("Today (JR): the free row's recovery row", () => {
 
     // The board's copy, verbatim: the numbers ON the row, so "Log it"
     // visibly means "keep these". 620 s → 10:20; 2,480 m.
-    expect(
-      await screen.findByText(/10:20 · 2,480 m, not logged\./),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/10:20 · 2,480 m/)).toBeInTheDocument();
     // The monitor stops advertising while a Just Row is open, so nothing
     // here may suggest reconnection (capture finding N1).
     expect(screen.queryByText(/resume/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/reconnect/i)).not.toBeInTheDocument();
   });
 
-  it("a completed PROGRAMMED record stays ruled out of the row — the widening is free-row only", async () => {
+  it("a completed programmed record also retains its review action", async () => {
     localStorage.setItem(
       MONITOR_RUN_KEY,
       JSON.stringify(makeMonitorRun({ completedAt: new Date().toISOString() })),
@@ -3761,9 +3945,7 @@ describe("Today (JR): the free row's recovery row", () => {
     mockReady();
     await renderToday();
 
-    expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Log it" })).toBeNull();
+    expect(screen.queryByText(/PM5 · .* · Not saved/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Review & save/ })).toBeVisible();
   });
 });

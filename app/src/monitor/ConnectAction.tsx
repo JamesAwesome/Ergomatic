@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { loadRun } from "../session/run";
+import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
 import {
   currentUnretired as currentUnretiredHandoff,
@@ -119,6 +122,12 @@ export default function ConnectAction({
   // blocks the immediate `onProceed()` AND picks the panel's copy, so the
   // two can never disagree about which case triggered the stage.
   const [stage, setStage] = useState<ConnectGuardStage>(null);
+  const [unsavedCount, setUnsavedCount] = useState(0);
+  const navigate = useNavigate();
+  function cancel() {
+    discardStagedRetireHandoff();
+    setStage(null);
+  }
 
   // Task 5 review fix round: stages the AUTHORIZATION in the STORE, not
   // local state — `handoffStore.ts`'s own `stagedRetireSet` doc comment
@@ -133,6 +142,11 @@ export default function ConnectAction({
   // briefly (and wrongly) lived here at press time.
   function handleConnect() {
     const monitorEntry = currentUnretiredHandoff();
+    const run = loadRun();
+    setUnsavedCount(
+      Number(run !== null && run.completedAt !== null) +
+        Number(monitorEntry !== null),
+    );
     stageRetireHandoff(
       monitorEntry !== null
         ? [
@@ -151,13 +165,26 @@ export default function ConnectAction({
     onProceed();
   }
 
+  if (stage === "unlogged")
+    return (
+      <UnsavedWorkoutWarning
+        count={unsavedCount}
+        replacement="Connecting"
+        replaceLabel="Connect anyway"
+        onReplace={onProceed}
+        onCancel={cancel}
+        onView={() => {
+          cancel();
+          void navigate("/today");
+        }}
+      />
+    );
+
   if (stage !== null) {
     return (
       <div className="baseline-confirm">
         <p className="baseline-confirm-line">
-          {stage === "unlogged"
-            ? "You have an unlogged session. Connecting discards it."
-            : "A session is in progress. Replace it?"}
+          A session is in progress. Replace it?
         </p>
         <div className="baseline-actions">
           {/* Task 5 re-review (F-3, 2026-08-30): a refused confirm must
@@ -165,14 +192,7 @@ export default function ConnectAction({
               unrelated Connect press to inherit — `discardStagedRetire`
               is a no-op when `handleConnect` staged nothing (the common
               case), and receipted when it discards something real (F-4). */}
-          <button
-            type="button"
-            className="button-outline"
-            onClick={() => {
-              discardStagedRetireHandoff();
-              setStage(null);
-            }}
-          >
+          <button type="button" className="button-outline" onClick={cancel}>
             Cancel
           </button>
           {/* Task 5 review fix round: straight to `onProceed`, with no

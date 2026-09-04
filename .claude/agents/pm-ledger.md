@@ -4540,6 +4540,19 @@ does not match these numbers._
   wall time, so the three-second split heuristic alone does not prove an
   explicit discontinuity redundant. No safeguards are waived by deferral.
 
+## 2026-09-03 — Unlogged-session door
+
+"Unlogged" is a reachability contract, not a promise that every loadable
+MonitorRun can be auto-logged. A retained programmed row can reuse the PM5
+door only when its route identity and frozen seed satisfy that door's gate;
+deleted-workout, null-id non-Just-Row and legacy/invalid-seed records need an
+honest recovery decision, never silent manual fallback. A warning that can
+cover phone and monitor records must navigate to a generic non-destructive
+review surface, not pretend its boolean guard identifies one recording.
+Evidence: `LogSession.tsx`'s `monitorModeEntry` and pre-monitor library gate;
+`Today.tsx`'s completed-programmed exclusion; phase-open PM source review
+at c5015c2e. James opened this existing item, not Correct Resume.
+
 ## 2026-09-04 — Wave F closed on the narrowed contract
 
 - **GO: archive after the docs-only closeout; no new release needed.** The

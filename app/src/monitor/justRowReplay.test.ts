@@ -266,10 +266,12 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     );
     // The closed record renders the row (gate 2's free-row widening), the
     // numbers are the machine's own, and Log it is offered (gate 1's).
+    expect(await screen.findByText(/6:34 · 1,396 m/)).toBeInTheDocument();
     expect(
-      await screen.findByText(/6:34 · 1,396 m, not logged\./),
+      screen.getByRole("button", {
+        name: "Review & save PM5 workout Just Row",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Log it" })).toBeInTheDocument();
     todayView.unmount();
 
     // READER 2 — the log door, the same module epoch, reading the store

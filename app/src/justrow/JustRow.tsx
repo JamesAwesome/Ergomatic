@@ -10,7 +10,8 @@ import {
   retire as retireHandoff,
 } from "../monitor/handoffStore";
 import { buildFreeRowRun } from "../session/engine";
-import { saveRun } from "../session/run";
+import { loadRun, saveRun } from "../session/run";
+import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 // Review #1, finding 4: the keep-awake lock. The programmed flow acquires
 // it in ConnectedInterstitial's mount effect; this screen bypasses that
 // component entirely, and without its own acquire the phone sleeps mid-row
@@ -454,6 +455,7 @@ export default function JustRow() {
 function StartTimerAction() {
   const navigate = useNavigate();
   const [stage, setStage] = useState<ConnectGuardStage>(null);
+  const [unsavedCount, setUnsavedCount] = useState(0);
   const [startError, setStartError] = useState<string | null>(null);
 
   function proceed() {
@@ -473,7 +475,13 @@ function StartTimerAction() {
   }
 
   function handleStart() {
-    const staged = connectGuardStage(currentUnretiredHandoff() !== null);
+    const monitor = currentUnretiredHandoff();
+    const run = loadRun();
+    setUnsavedCount(
+      Number(run !== null && run.completedAt !== null) +
+        Number(monitor !== null),
+    );
+    const staged = connectGuardStage(monitor !== null);
     if (staged !== null) {
       setStage(staged);
       return;
@@ -481,13 +489,26 @@ function StartTimerAction() {
     proceed();
   }
 
+  if (stage === "unlogged")
+    return (
+      <UnsavedWorkoutWarning
+        count={unsavedCount}
+        replacement="Starting a new one"
+        replaceLabel="Replace session"
+        onReplace={proceed}
+        onCancel={() => setStage(null)}
+        onView={() => {
+          setStage(null);
+          void navigate("/today");
+        }}
+      />
+    );
+
   if (stage !== null) {
     return (
       <div className="baseline-confirm">
         <p className="baseline-confirm-line">
-          {stage === "unlogged"
-            ? "You have an unlogged session. Starting a new one discards it."
-            : "A session is in progress. Replace it?"}
+          A session is in progress. Replace it?
         </p>
         <div className="baseline-actions">
           <button

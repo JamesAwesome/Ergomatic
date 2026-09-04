@@ -1380,33 +1380,71 @@ in both orientations.**
   Evidence: the 2026-08-31 Log-detail photograph; `traceModel.ts`'s own
   header ("NEITHER `t` NOR `d` IS A WORK-ONLY QUANTITY").
 
-## The unlogged-session door (post-Wave F, unopened)
+## The unlogged-session door
 
-**Status:** filed by James on 2026-09-01, on the phone; separate from Wave F,
-whose dependency cleared on 2026-09-04. Its own opening and design gate
-(user-visible copy and layout) are not granted by that closeout. **S–M.**
-Not triad unless (b) below changes when a record retires.
+**Status:** OPEN at James's request, 2026-09-03. Normal Today/warning design
+approved 2026-09-03; additional recovery-case designs approved 2026-09-04.
+Gate 0 and both task reviews are complete; browser recovery proof and generated
+captures include the initial landscape safe exit. Automated gates pass.
+James's approved September 4 follow-up resolved the final verification-byte
+admission gap; scoped review found no new findings. The antagonist cleared
+the proposed one-minute protocol's structural coverage. On build 875, James
+confirmed native recovery, successful Save and removal from Today; three
+phone screenshots are recorded. PM phase-close review passed that bounded
+native-door criterion, not every proposed protocol observation. James then
+authorized "Merge when green". Main `2f258006` is integrated; combined-tree
+verification and scoped integration review passed. PR CI remains the merge gate.
+This is separate from Wave F, whose dependency cleared on 2026-09-04; that
+closeout does not substitute for this feature's own approvals or acceptance.
+[Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)
+and [comparison](docs/superpowers/specs/2026-09-03-unlogged-session-gate.html).
+**S–M.** Full cycle; non-TRIAD only while retirement, stored shapes and
+recorded-number semantics remain unchanged.
 
 **What and why:** Connect showed "You have an unlogged session. Connecting
 discards it." and the dialog offered Cancel and Connect anyway — nothing to
 VIEW what the session holds, and no way to log it. A rower who does not want
 to lose the row has no move except to walk away.
 
-- [ ] **A rower with an unlogged session can only discard it.** What the
-      code offers today: the guard dialog (`ConnectAction.tsx:159`) never
-      says WHERE the session lives; Today renders a recovery row for a
-      finished `SessionRun` (`UnloggedRow`) and for an OPEN or Just Row
-      `MonitorRun` (`UnloggedMonitorRow`), but a COMPLETED, PROGRAMMED
-      `MonitorRun` is ruled out of that row on the theory that "7C's own log
-      path already owns" it (`Today.tsx:647-651`) — a path that exists only
-      on the arrival WorkoutDetail navigates to at finish, so after a reload
-      or a navigation away that record has no door at all (INFERENCE from
-      those comments; not reproduced on hardware). Owed: (a) establish which
-      record James's dialog was staged on — `connectGuardStage`
-      (`monitorRun.ts:1544`) stages the same sentence for three shapes;
-      (b) a way to see the unlogged session's contents and log it, from the
-      dialog or from Today, for every shape the guard can stage; (c) the
-      dialog names the way there instead of a bare Cancel.
+- [x] **Approve the normal rendered recovery path.** James: "approved",
+      2026-09-03. Today exposes retained work
+      above suggestions; Start/Connect/Just Row warnings offer View unsaved
+      without discarding. Both orientations, long titles and both phone and
+      monitor records. No new queue or automatic save.
+- [x] **Close the completed-programmed PM5 hole.** At c5015c2e,
+      `Today.tsx:1529` hides these records while guards protect them;
+      `Today.test.tsx:2701` explicitly pins the omission. Re-enter the PM5
+      summary, never the manual form. James's precise retained record remains
+      uncaptured; the source/test-confirmed gap is sufficient to open repair,
+      not proof of that incident's exact record shape.
+- [x] **Resolve every other guarded shape honestly.** Deleted library
+      workouts, null-id non-Just-Row records and legacy/invalid frozen seeds
+      cannot use the existing save route. Approved: explicit type choice for
+      valid retained measurements without library metadata; read-only full
+      recording/copy/keep for data that cannot safely rebuild a summary.
+      James approved these extra screens on 2026-09-04 ("Approve").
+- [x] **Keep the recovery destination usable.** Local records must remain
+      visible when Today's unrelated requests stall/fail (`Today.tsx:437`).
+      Two retained Just Row sources must each open the selected recording,
+      not the current newer-timestamp choice (`JustRowLog.tsx:108`). The
+      second is a defensive coexistence case, not an observed normal flow.
+      The error/loading treatment and selection lifetime were approved with
+      the additional recovery cases on 2026-09-04.
+- [x] **Prove preservation across the browser path.** Production writer to warning
+      to Today to PM5 summary to saved history; failed-save retry, cold-start
+      hydration, both records, and View canceling Connect's staged replacement.
+      The 844×390 mounted warning puts the focused View safe exit and its
+      keyboard follow-on above Main nav. Preserve existing save/discard/
+      replacement retirement. Native walk and phase-close review remain required
+      before exit. Evidence:
+      `docs/testing/2026-09-04-unlogged-session-evidence.md`.
+- [x] **Close final review's verification-byte admission gap.** The selected
+      programmed route must refuse arrays outside the existing server contract
+      (1–32 integers, each 0–255) before mounting Save. Empty/out-of-range
+      integer arrays previously passed and produced a rejected Save. Keep the
+      recording in the approved read-only treatment; no repair or byte dropping.
+      James approved one focused follow-up after the final-wave limit on
+      September 4; its scoped review cleared the tested fix with no new findings.
 
 ---
 
@@ -1414,7 +1452,7 @@ to lose the row has no move except to walk away.
 
 | Item                                       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Evidence                     |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| **RC-8**                                   | Correct the fake's contradictions of the real wire. **3 of 5 corrected** in #182 T1 (`ergMachineType`, `intervalRestTimeSeconds`, `splitIntervalType`); the other two read as already conditional and want verification. Residual: `fake.ts`'s `toMachineIndex` is resting-conditional while `intervalIndex.ts`'s `toActualIndex` is unconditional. **Merged with LL's reconnect precondition — one piece of fake work, and specced apart it gets done twice** | `phase-rc.md`, `phase-ll.md` |
+| **RC-8**                                   | Correct the fake's contradictions of the real wire. **3 of 5 corrected** in #182 T1 (`ergMachineType`, `intervalRestTimeSeconds`, `splitIntervalType`); the other two read as already conditional and want verification. Residual: `fake.ts`'s `toMachineIndex` is resting-conditional while `intervalIndex.ts`'s `toActualIndex` is unconditional. **Merged with LL's reconnect precondition — one piece of fake work, and specced apart it gets done twice** | `phase-rc.md`, `phase-ll.md`, `docs/testing/2026-09-04-unlogged-session-evidence.md` |
 | **RC-13**                                  | The avg-pace verdict zero-fires on a rapid re-arm: `program()` inside `FINISH_GRACE_MS` cancels the pending deadline instead of draining it. **James, 2026-08-31: FIX IT here** — drain the deadline rather than cancel. Not covered by the close-out corpus (no committed capture re-arms inside 3 s; closest pieces are 148.1 s apart), so the gate is a synthetic replay with a stated mutation                                                             | `phase-rc.md`                |
 | **RC-14**                                  | The avg-pace verdict zero-fires on an ORDINARY finish (walk 2026-08-25, W-2). **Distinct from RC-13; do not fold.** Replay through the walk's own commit `c219ee0` DOES produce the verdict, eliminating the wire, the driver's response and ring eviction; **two survivors — it threw, or something outside the driver dropped the entry.** **James, 2026-08-31: do NOT hunt it; INSTRUMENT it** so the next occurrence names which survivor it was, instead of another silent zero. Per RF19, the instrument ships in the same change | `phase-rc.md`                |
 | **RC-38**                                  | Transcribe `OBJ_WORKOUTTYPE_T` — see Phase PROTO above. Pulled forward alone by James on 2026-08-31 while the rest of the sweep is held                                                                                                                                                                                                                                                                                                                       | `phase-rc.md`                |
