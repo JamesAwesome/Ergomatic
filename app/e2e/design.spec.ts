@@ -1765,6 +1765,22 @@ test.describe("today screen (unlogged session row)", () => {
     await assertNoA11yViolations(page);
   });
 
+  // The recovery-specific mobile rule must leave the shared screen inset
+  // intact at the narrowest supported portrait width. A global `.screen`
+  // override here would silently affect every other screen too.
+  test("recovery keeps the shared 20px inline inset at 360px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 844 });
+
+    const insets = await page.locator("main.screen").evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { left: style.paddingLeft, right: style.paddingRight };
+    });
+
+    expect(insets).toStrictEqual({ left: "20px", right: "20px" });
+  });
+
   // The DEFAULT state's own ✕ — outlined, never solid (DEVIATIONS.md #2).
   test("the row's ✕ is 44x44 and accent-outlined at rest", async ({ page }) => {
     const discardBtn = page.getByRole("button", {
