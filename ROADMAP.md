@@ -2381,7 +2381,7 @@ trigger is the whole entry.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
 - **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; HARDENED
-  DESIGN APPROVED 2026-09-03; V7 NORMAL TRACE INCONCLUSIVE ON
+  DESIGN APPROVED 2026-09-03; V8 NORMAL TRACE PASSED ON
   2026-09-04; BROADER GATE -1 WALK REMAINS PAUSED; PRODUCT IMPLEMENTATION
   UNSCHEDULED.** Two targeted NFC/BLE connections succeeded;
   recovery and multi-tag proof remain incomplete. Further walks require PM
@@ -2404,9 +2404,12 @@ trigger is the whole entry.
   [`NORMAL-TRACE-V7-RESULT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V7-RESULT.md) and
   [`OPERATOR-WORKFLOW-V6.md`](docs/monitor/sessions/phase-nf-gate-minus-one/OPERATOR-WORKFLOW-V6.md).
   [`NF-NORMAL-TRACE-v8`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V8-RUNSHEET.md)
-  received PM PASS after the diagnostic was restored and wireless capture/cleanup
-  rehearsed. Its final-export finish rule corrects v7's premature host cleanup;
-  a new scan still requires James's explicit agreement. No test clock is running.
+  passed its one separately authorized normal sample: NFC RF-active trace,
+  exact-name targeted BLE connect/disconnect, both automatic exports and verified
+  cleanup, in 1 minute 46 seconds. See
+  [`NORMAL-TRACE-V8-RESULT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V8-RESULT.md).
+  Its final-export finish rule corrects v7's premature host cleanup. The attempt
+  budget is exhausted; no additional walk is approved or running.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

@@ -1,6 +1,10 @@
 # NF-NORMAL-TRACE-v8 — collect the final receipt before cleanup
 
-**PM PASS — `/root/walk_pm`, 2026-09-04. No scan authorized yet.**
+**COMPLETED — positive normal trace; cleanup verified in 1 minute 46 seconds.**
+See `NORMAL-TRACE-V8-RESULT.md`. The one-attempt budget is exhausted; this
+retained procedure and its historical PM approval authorize no further scan.
+
+**Pre-run PM PASS — `/root/walk_pm`, 2026-09-04.**
 The reviewer independently verified the restored installation and wireless
 rehearsal, and approved this exact one-attempt protocol with no remaining
 readiness findings. Consent must still arrive before the eight-minute clock

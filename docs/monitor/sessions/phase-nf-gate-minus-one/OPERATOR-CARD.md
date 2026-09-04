@@ -1,5 +1,9 @@
 # V8 operator card — use this at the erg
 
+**COMPLETED: do not execute again.** V8's one authorized scan passed; cleanup
+was verified at 22:29:37 UTC. See `NORMAL-TRACE-V8-RESULT.md`. The commands and
+instructions below are retained execution history, not a new scan permission.
+
 Preparation is complete. Follow the PM-approved `NORMAL-TRACE-V8-RUNSHEET.md`;
 do not restart research, planning, reviews, builds, installation or test suites.
 Every phone install requires its own explicit permission. No scan is authorized
