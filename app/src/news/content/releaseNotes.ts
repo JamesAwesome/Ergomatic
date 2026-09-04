@@ -5,6 +5,19 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.37.0: git log v0.36.1..main --oneline at 52901126.
+    // #292 is the item below. #290's Concept2 link/send surfaces stay dark
+    // behind C2_LINK_ENABLED (set-but-empty in production at release), and
+    // its stored completion timestamp has no standalone rower-facing change.
+    // #291 closes Wave F's native hardware evidence in docs only. This
+    // notes/capture PR adds no behavior.
+    version: "v0.37.0",
+    date: "2026-09-04",
+    items: [
+      "A finished workout you leave without saving now waits on Today under UNSAVED WORKOUT. Review & save opens its original summary so you can save or discard it; the warning before another workout now has View unsaved instead of making discard the only way forward.",
+    ],
+  },
+  {
     // v0.36.1: git log v0.36.0..origin/main --oneline at 9baa4fa7.
     // #288 is the item below; #287 defers Correct Resume in docs only,
     // with nothing tester-visible. This notes/capture PR adds no behavior.
