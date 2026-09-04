@@ -9,9 +9,10 @@ import { compileProgram } from "../domain/monitor/program.js";
 import type { WorkoutProgram } from "../domain/monitor/program.js";
 import type { IntervalActual } from "../domain/monitor/types.js";
 import { buildDraft, startDraft } from "../src/session/draft";
-import { buildRun } from "../src/session/engine";
+import { advance, buildRun } from "../src/session/engine";
 import { buildLogSeed } from "../src/session/logDraft";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../src/monitor/monitorRun";
+import { RUN_KEY, type SessionRun } from "../src/session/run";
 
 /** Deletes a signed-in user's own (non-global) workout by title, so a
  *  design-sweep test that has to create real data via bulk import doesn't
@@ -9970,6 +9971,21 @@ test.describe("unlogged recovery render registrations", () => {
     await page.reload();
   }
 
+  function buildCompletedTimerRun(workoutId: string): SessionRun {
+    const hoarfrost = library("Hoarfrost");
+    const startedAt = new Date("2026-09-04T12:00:00.000Z");
+    const draft = buildDraft({
+      id: workoutId,
+      title: `${longTitle} timer`,
+      type: hoarfrost.type as WorkoutType,
+      steps: hoarfrost.steps,
+    });
+    let run = buildRun(startDraft(draft), DESIGN_BASELINES, startedAt);
+    for (let hour = 1; run.completedAt === null; hour += 1)
+      run = advance(run, new Date(startedAt.getTime() + hour * 60 * 60 * 1000));
+    return run;
+  }
+
   test("Today keeps a long-title retained PM5 row reachable in portrait, landscape, and a failed library fetch", async ({
     page,
   }) => {
@@ -10026,48 +10042,191 @@ test.describe("unlogged recovery render registrations", () => {
     const workoutId = await libraryWorkoutId(page, "Hoarfrost");
     const base = { ...buildCompletedMonitorRun(workoutId), title: longTitle };
 
-    await seedRecovery(page, { ...base, workoutId: "missing-library-record" });
-    await page.goto(
-      `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
-    );
-    await expect(
-      page.getByRole("combobox", { name: "Workout type" }),
-    ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
-    await assertTapTargets(page);
-    await assertNoA11yViolations(page);
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await seedRecovery(page, {
+        ...base,
+        workoutId: "missing-library-record",
+      });
+      await page.goto(
+        `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
+      );
+      await expect(
+        page.getByRole("combobox", { name: "Workout type" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+      await assertTapTargets(page);
+      await assertNoA11yViolations(page);
 
-    await seedRecovery(page, {
-      ...base,
-      // Explicit legacy shape: a stored programmed recording predating the
-      // frozen log seed cannot safely rebuild a summary and must stay
-      // read-only rather than falling back to a manual form.
-      logSeed: undefined,
+      await seedRecovery(page, {
+        ...base,
+        // Explicit legacy shape: a stored programmed recording predating the
+        // frozen log seed cannot safely rebuild a summary and must stay
+        // read-only rather than falling back to a manual form.
+        logSeed: undefined,
+      });
+      await page.goto(
+        `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
+      );
+      await expect(
+        page.getByRole("heading", { name: "Can't rebuild this workout." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("textbox", { name: "Recording data" }),
+      ).toHaveAttribute("readonly", "");
+      await expect(
+        page.getByRole("button", { name: "Copy recording" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Keep unsaved" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+      await assertTapTargets(page);
+      await assertNoA11yViolations(page);
+
+      await page.goto(
+        "/session/review?source=monitor&startedAt=missing-record",
+      );
+      await expect(
+        page.getByRole("heading", { name: "Recording unavailable" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Back to Today" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+      await assertTapTargets(page);
+      await assertNoA11yViolations(page);
+    }
+  });
+
+  test("Today keeps the retained PM5 row reachable while its library request is pending or failed in both orientations", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-fetch@e2e.test",
+      name: "Recovery Fetch Tester",
     });
-    await page.goto(
-      `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
-    );
-    await expect(
-      page.getByRole("heading", { name: "Can't rebuild this workout." }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("textbox", { name: "Recording data" }),
-    ).toHaveAttribute("readonly", "");
-    await expect(
-      page.getByRole("button", { name: "Copy recording" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Keep unsaved" }),
-    ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const run = { ...buildCompletedMonitorRun(workoutId), title: longTitle };
+    await seedRecovery(page, run);
 
-    await page.goto("/session/review?source=monitor&startedAt=missing-record");
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      let releasePending: (() => void) | undefined;
+      const pending = new Promise<void>((resolve) => {
+        releasePending = resolve;
+      });
+      let resolveHandled: (() => void) | undefined;
+      const handled = new Promise<void>((resolve) => {
+        resolveHandled = resolve;
+      });
+      await page.route("**/api/workouts", async (route) => {
+        await pending;
+        await route.continue();
+        resolveHandled?.();
+      });
+      await page.goto("/today", { waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByRole("button", {
+          name: `Review & save PM5 workout ${longTitle}`,
+        }),
+      ).toBeVisible();
+      await assertTapTargets(page);
+      await assertNoA11yViolations(page);
+      releasePending?.();
+      await handled;
+      await page.unroute("**/api/workouts");
+
+      await page.route("**/api/workouts", (route) =>
+        route.fulfill({ status: 500, body: "library unavailable" }),
+      );
+      await page.goto("/today");
+      await expect(page.getByText("Couldn't load your library.")).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: `Review & save PM5 workout ${longTitle}`,
+        }),
+      ).toBeVisible();
+      await assertTapTargets(page);
+      await assertNoA11yViolations(page);
+      await page.unroute("**/api/workouts");
+    }
+  });
+
+  test("Today renders both retained sources and Connect warns singular then plural in both orientations", async ({
+    page,
+  }) => {
+    const targetTitle = "Recovery warning target";
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-warning@e2e.test",
+      name: "Recovery Warning Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const monitor = {
+      ...buildCompletedMonitorRun(workoutId),
+      title: longTitle,
+    };
+    await seedRecovery(page, monitor);
+    await importBulk(
+      page,
+      [`${targetTitle} | AN | easy | 1`, "w 1' max"].join("\n"),
+    );
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/library");
+      await page
+        .locator(".workout-row")
+        .filter({ hasText: targetTitle })
+        .click();
+      await page.getByRole("button", { name: "Connect" }).click();
+      await expect(
+        page.getByRole("heading", { name: "You have an unsaved workout." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "View unsaved" }),
+      ).toBeVisible();
+      await assertTapTargets(page);
+      await assertNoA11yViolations(page);
+      await page.getByRole("button", { name: "Cancel" }).click();
+    }
+
+    const timer = buildCompletedTimerRun(workoutId);
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: RUN_KEY,
+      value: JSON.stringify(timer),
+    });
+    await page.reload();
+    await page.goto("/today");
     await expect(
-      page.getByRole("heading", { name: "Recording unavailable" }),
+      page.getByRole("heading", { name: "UNSAVED WORKOUTS" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Back to Today" }),
+      page.getByRole("link", { name: /Review & save Timer workout/ }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /Review & save PM5 workout/ }),
+    ).toBeVisible();
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: targetTitle }).click();
+    await page.getByRole("button", { name: "Connect" }).click();
+    await expect(
+      page.getByRole("heading", { name: "You have unsaved workouts." }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "View unsaved" }),
+    ).toBeVisible();
+    await cleanupByTitle(page, targetTitle);
   });
 });

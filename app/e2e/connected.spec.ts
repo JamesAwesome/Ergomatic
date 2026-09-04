@@ -1299,8 +1299,22 @@ test.describe("unlogged workout recovery — connected producer to retained hist
       page.getByRole("button", { name: `Review & save PM5 workout ${title}` }),
     ).toBeVisible();
 
+    // The in-process recovery leg proves the row can be opened immediately
+    // after leaving the monitor handoff, before any store is reconstructed.
+    await page
+      .getByRole("button", { name: `Review & save PM5 workout ${title}` })
+      .click();
+    await expect(page).toHaveURL(
+      /\/session\/review\?source=monitor&startedAt=/,
+    );
+    await expect(page.locator("h1.screen-title")).toHaveText(title);
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await page.getByRole("link", { name: "← DONE" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+
     // This reload is the cold hydration leg: no in-memory store state may
-    // make the retained row happen to work before the warning journey starts.
+    // make the retained row happen to work before the warning and Save
+    // journey starts.
     await page.reload();
     await expect(
       page.getByRole("button", { name: `Review & save PM5 workout ${title}` }),

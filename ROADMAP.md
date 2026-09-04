@@ -1825,8 +1825,9 @@ in both orientations.**
 
 **Status:** OPEN at James's request, 2026-09-03. Normal Today/warning design
 approved 2026-09-03; additional recovery-case designs approved 2026-09-04.
-The September 1 item is pulled forward, not another Wave F mechanism.
-Rendered Gate 0 is clear; planning and implementation proceed as one coherent PR.
+Gate 0, implementation, browser recovery proof and generated desktop captures
+are complete; the proposed native acceptance walk, phase-close review and merge
+decision remain pending James.
 [Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)
 and [comparison](docs/superpowers/specs/2026-09-03-unlogged-session-gate.html).
 **S–M.** Full cycle; non-TRIAD only while retirement, stored shapes and
@@ -1842,30 +1843,31 @@ to lose the row has no move except to walk away.
       above suggestions; Start/Connect/Just Row warnings offer View unsaved
       without discarding. Both orientations, long titles and both phone and
       monitor records. No new queue or automatic save.
-- [ ] **Close the completed-programmed PM5 hole.** At c5015c2e,
+- [x] **Close the completed-programmed PM5 hole.** At c5015c2e,
       `Today.tsx:1529` hides these records while guards protect them;
       `Today.test.tsx:2701` explicitly pins the omission. Re-enter the PM5
       summary, never the manual form. James's precise retained record remains
       uncaptured; the source/test-confirmed gap is sufficient to open repair,
       not proof of that incident's exact record shape.
-- [ ] **Resolve every other guarded shape honestly.** Deleted library
+- [x] **Resolve every other guarded shape honestly.** Deleted library
       workouts, null-id non-Just-Row records and legacy/invalid frozen seeds
       cannot use the existing save route. Approved: explicit type choice for
       valid retained measurements without library metadata; read-only full
       recording/copy/keep for data that cannot safely rebuild a summary.
       James approved these extra screens on 2026-09-04 ("Approve").
-- [ ] **Keep the recovery destination usable.** Local records must remain
+- [x] **Keep the recovery destination usable.** Local records must remain
       visible when Today's unrelated requests stall/fail (`Today.tsx:437`).
       Two retained Just Row sources must each open the selected recording,
       not the current newer-timestamp choice (`JustRowLog.tsx:108`). The
       second is a defensive coexistence case, not an observed normal flow.
       The error/loading treatment and selection lifetime were approved with
       the additional recovery cases on 2026-09-04.
-- [ ] **Prove preservation across the path.** Production writer to warning
+- [x] **Prove preservation across the browser path.** Production writer to warning
       to Today to PM5 summary to saved history; failed-save retry, cold-start
       hydration, both records, and View canceling Connect's staged replacement.
       Preserve existing save/discard/replacement retirement. Native walk and
-      phase-close review before exit.
+      phase-close review remain required before exit. Evidence:
+      `docs/testing/2026-09-04-unlogged-session-evidence.md`.
 
 ---
 

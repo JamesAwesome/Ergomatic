@@ -25,7 +25,10 @@ Correct Resume remains deferred. This is not fast path: a mistake could lose
 a record. A non-TRIAD full cycle is possible only while claim/retire identity,
 timing and reasons, successful-save behavior and recorded values stay
 unchanged. Re-scope before implementation if that boundary cannot hold.
-The phase remains OPEN; implementation follows plan hardening.
+The phase remains OPEN. Task 1 implementation and Task 2 browser evidence
+are complete; the proposed phone acceptance walk, phase-close review and any
+merge decision remain pending James. Browser proof does not replace that native
+acceptance.
 
 The warning's new **View unsaved** action navigates through the same cancel
 cleanup as Cancel. It must not authorize a replacement. Today is the common
@@ -113,13 +116,13 @@ Today's explicit Review action may close it. Test direct-open links and a
 refused close, since the reused builders do not enforce the legacy adapters'
 closure condition.
 
-| Value | Established | Lifetime and clear rule |
-| --- | --- | --- |
-| Route source/key selector | Clicked retained row | URL survives reload/back. Validated against that source on every mount; absent/replaced record is unavailable, never substituted. |
-| Selected monitor entry | Key-filtered read at summary mount | Existing snapshot and claim/retire policy; no second retained store. Reload re-reads the same key at its current revision. Existing explicit save/discard reasons remain. |
-| Selected timer run | Matched source/key read at summary mount | Existing run snapshot. A destructive completion may clear only a still-matching run, never a newer timer record. No new durable identity. |
-| User-chosen missing type | Explicit selector change | Form-local, wins over a subsequently resolving library lookup. Reset on unmount; lost on reload like unsaved reflection inputs. Never changes stored measurements. |
-| Copy result | Explicit Copy recording press | Form-local success/failure; reset on unmount. No claim, mutation or retirement. |
+| Value                     | Established                              | Lifetime and clear rule                                                                                                                                                   |
+| ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Route source/key selector | Clicked retained row                     | URL survives reload/back. Validated against that source on every mount; absent/replaced record is unavailable, never substituted.                                         |
+| Selected monitor entry    | Key-filtered read at summary mount       | Existing snapshot and claim/retire policy; no second retained store. Reload re-reads the same key at its current revision. Existing explicit save/discard reasons remain. |
+| Selected timer run        | Matched source/key read at summary mount | Existing run snapshot. A destructive completion may clear only a still-matching run, never a newer timer record. No new durable identity.                                 |
+| User-chosen missing type  | Explicit selector change                 | Form-local, wins over a subsequently resolving library lookup. Reset on unmount; lost on reload like unsaved reflection inputs. Never changes stored measurements.        |
+| Copy result               | Explicit Copy recording press            | Form-local success/failure; reset on unmount. No claim, mutation or retirement.                                                                                           |
 
 The review route reuses the existing summary components, builders and save
 pipeline; it is not another numeric model. `source=monitor` is explicit PM5

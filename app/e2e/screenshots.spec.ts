@@ -10,9 +10,10 @@ import { compileProgram } from "../domain/monitor/program.js";
 import type { WorkoutProgram } from "../domain/monitor/program.js";
 import type { IntervalActual } from "../domain/monitor/types.js";
 import { buildDraft, startDraft } from "../src/session/draft";
-import { buildRun } from "../src/session/engine";
+import { advance, buildRun } from "../src/session/engine";
 import { buildLogSeed } from "../src/session/logDraft";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../src/monitor/monitorRun";
+import { RUN_KEY, type SessionRun } from "../src/session/run";
 
 // Committed into docs/screenshots/ for PR bodies. NOT diff-asserted — a
 // human judges these, this spec only judges "did it render" (see
@@ -952,6 +953,22 @@ async function seedRecoveryScreenshotRun(page: Page): Promise<MonitorRun> {
   return run;
 }
 
+function buildCompletedTimerScreenshotRun(workoutId: string): SessionRun {
+  const hoarfrost = library("Hoarfrost");
+  const startedAt = new Date("2026-09-04T12:00:00.000Z");
+  const draft = buildDraft({
+    id: workoutId,
+    title: "Retained timer workout with a deliberately long title for recovery",
+    type: hoarfrost.type as WorkoutType,
+    steps: hoarfrost.steps,
+  });
+  let run = buildRun(startDraft(draft), MONITOR_FIXTURE_BASELINES, startedAt);
+  for (let hour = 1; run.completedAt === null; hour += 1) {
+    run = advance(run, new Date(startedAt.getTime() + hour * 60 * 60 * 1000));
+  }
+  return run;
+}
+
 test("recovery-today-portrait", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-recovery-portrait@e2e.test",
@@ -997,6 +1014,231 @@ test("recovery-review-read-only", async ({ page }) => {
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "recovery-review.png"),
   });
+});
+
+test("recovery-today-both-sources-and-warning-singular-plural", async ({
+  page,
+}) => {
+  const target = "Screenshot recovery warning target";
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-both@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const monitor = await seedRecoveryScreenshotRun(page);
+  if (monitor.workoutId === null) {
+    throw new Error("recovery timer fixture requires its library workout id");
+  }
+  const timer = buildCompletedTimerScreenshotRun(monitor.workoutId);
+  await importBulk(page, [`${target} | AN | easy | 1`, "w 1' max"].join("\n"));
+
+  for (const [name, viewport] of [
+    ["portrait", { width: 390, height: 844 }],
+    ["landscape", { width: 844, height: 390 }],
+  ] as const) {
+    await page.setViewportSize(viewport);
+    await page.goto("/today");
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: target }).click();
+    await page.getByRole("button", { name: "Connect" }).click();
+    await expect(
+      page.getByRole("heading", { name: "You have an unsaved workout." }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-warning-singular-${name}.png`),
+    });
+    if (name === "landscape") {
+      await page
+        .getByRole("button", { name: "View unsaved" })
+        .scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(
+          SCREENSHOTS_DIR,
+          "recovery-warning-singular-landscape-actions.png",
+        ),
+      });
+    }
+    await page.getByRole("button", { name: "Cancel" }).click();
+  }
+
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: RUN_KEY,
+    value: JSON.stringify(timer),
+  });
+  await page.reload();
+  for (const [name, viewport] of [
+    ["portrait", { width: 390, height: 844 }],
+    ["landscape", { width: 844, height: 390 }],
+  ] as const) {
+    await page.setViewportSize(viewport);
+    await page.goto("/today");
+    await expect(
+      page.getByRole("heading", { name: "UNSAVED WORKOUTS" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-today-both-${name}.png`),
+    });
+    await page
+      .getByRole("link", { name: /Review & save Timer workout/ })
+      .evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `recovery-today-both-${name}-timer-actions.png`,
+      ),
+    });
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: target }).click();
+    await page.getByRole("button", { name: "Connect" }).click();
+    await expect(
+      page.getByRole("heading", { name: "You have unsaved workouts." }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-warning-plural-${name}.png`),
+    });
+    if (name === "landscape") {
+      await page
+        .getByRole("button", { name: "View unsaved" })
+        .scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(
+          SCREENSHOTS_DIR,
+          "recovery-warning-plural-landscape-actions.png",
+        ),
+      });
+    }
+    await page.getByRole("button", { name: "Cancel" }).click();
+  }
+  await cleanupByTitle(page, target);
+});
+
+test("recovery-review-missing-type-legacy-and-unavailable", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-fallbacks@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const base = await seedRecoveryScreenshotRun(page);
+  const reviewUrl = (startedAt: string) =>
+    `/session/review?source=monitor&startedAt=${encodeURIComponent(startedAt)}`;
+
+  for (const [name, viewport] of [
+    ["portrait", { width: 390, height: 844 }],
+    ["landscape", { width: 844, height: 390 }],
+  ] as const) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: MONITOR_RUN_KEY,
+      value: JSON.stringify({ ...base, workoutId: "missing-library-record" }),
+    });
+    await page.reload();
+    await page.goto(reviewUrl(base.startedAt));
+    await expect(
+      page.getByRole("combobox", { name: "Workout type" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-missing-type-${name}.png`),
+    });
+    await page
+      .getByRole("combobox", { name: "Workout type" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `recovery-missing-type-${name}-actions.png`,
+      ),
+    });
+
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: MONITOR_RUN_KEY,
+      value: JSON.stringify({ ...base, logSeed: undefined }),
+    });
+    await page.reload();
+    await page.goto(reviewUrl(base.startedAt));
+    await expect(
+      page.getByRole("heading", { name: "Can't rebuild this workout." }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-read-only-${name}.png`),
+    });
+    await page
+      .getByRole("button", { name: "Copy recording" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `recovery-read-only-${name}-copy-actions.png`,
+      ),
+    });
+    await page
+      .getByRole("link", { name: "Keep unsaved" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `recovery-read-only-${name}-keep-actions.png`,
+      ),
+    });
+
+    await page.goto("/session/review?source=monitor&startedAt=missing-record");
+    await expect(
+      page.getByRole("heading", { name: "Recording unavailable" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-unavailable-${name}.png`),
+    });
+  }
+});
+
+test("recovery-today-pending-and-failed-library-request", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-fetch@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await seedRecoveryScreenshotRun(page);
+
+  for (const [name, viewport] of [
+    ["portrait", { width: 390, height: 844 }],
+    ["landscape", { width: 844, height: 390 }],
+  ] as const) {
+    await page.setViewportSize(viewport);
+    let releasePending: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      releasePending = resolve;
+    });
+    let resolveHandled: (() => void) | undefined;
+    const handled = new Promise<void>((resolve) => {
+      resolveHandled = resolve;
+    });
+    await page.route("**/api/workouts", async (route) => {
+      await pending;
+      await route.continue();
+      resolveHandled?.();
+    });
+    await page.goto("/today", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-today-pending-${name}.png`),
+    });
+    releasePending?.();
+    await handled;
+    await page.unroute("**/api/workouts");
+
+    await page.route("**/api/workouts", (route) =>
+      route.fulfill({ status: 500, body: "library unavailable" }),
+    );
+    await page.goto("/today");
+    await expect(page.getByText("Couldn't load your library.")).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-today-failed-${name}.png`),
+    });
+    await page.unroute("**/api/workouts");
+  }
 });
 
 // Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1, Gate 0
