@@ -496,6 +496,47 @@ export function describeStoreContracts(
     });
 
     describe("logs", () => {
+      // Wave E PR2 (observation 29). `sentC2ResultIds` is what stops the
+      // weight-class declaration read from laundering OUR OWN derived guess
+      // back as the rower's declaration on their next send. Both scopes are
+      // load-bearing and neither is visible to `pnpm typecheck` — the fake
+      // ends `as unknown as LogsStore` — so the contract suite is where the
+      // real store and the fake are held to the same answer.
+      it("sentC2ResultIds returns only THIS user's rows for THIS Concept2 account, and never a null result id", async () => {
+        const stores = await makeStores();
+        const mine = await stores.makeUser();
+        const theirs = await stores.makeUser();
+
+        const sentToA = await stores.logs.create(mine, logInput());
+        const sentToB = await stores.logs.create(mine, logInput());
+        const neverSent = await stores.logs.create(mine, logInput());
+        const someoneElses = await stores.logs.create(theirs, logInput());
+
+        await stores.logs.recordC2Result(mine, sentToA.id, 111, 2211);
+        // The SAME user, a DIFFERENT Concept2 account: a row written while
+        // account B was linked says nothing about account A, and excluding
+        // it would silently drop a real declaration out of A's page.
+        await stores.logs.recordC2Result(mine, sentToB.id, 222, 9999);
+        await stores.logs.recordC2Result(theirs, someoneElses.id, 333, 2211);
+
+        expect([
+          ...(await stores.logs.sentC2ResultIds(mine, 2211)),
+        ]).toStrictEqual([111]);
+        expect([
+          ...(await stores.logs.sentC2ResultIds(mine, 9999)),
+        ]).toStrictEqual([222]);
+        expect([
+          ...(await stores.logs.sentC2ResultIds(theirs, 2211)),
+        ]).toStrictEqual([333]);
+        // `neverSent` carries a null `c2_result_id` and must never appear as
+        // an id at all (a `null` in the Set would exclude nothing and read
+        // as a row we wrote).
+        expect(neverSent.id).toBeTruthy();
+        expect(await stores.logs.sentC2ResultIds(mine, 4444)).toStrictEqual(
+          new Set(),
+        );
+      });
+
       it("create bumps plan_state.done_n atomically, verified via planState.get", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();

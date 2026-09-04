@@ -61,3 +61,31 @@ describe("openExternalUrl", () => {
     expect(navigateWeb).not.toHaveBeenCalled();
   });
 });
+
+describe("openReadOnlyUrl", () => {
+  it("web: opens a new context, never the current document", async () => {
+    const openWebInNewTab = vi.fn();
+    const navigateWeb = vi.fn();
+    vi.doMock("../platform", () => ({ isNative: () => false }));
+    vi.doMock("./webNavigate", () => ({ navigateWeb, openWebInNewTab }));
+    vi.resetModules();
+    const { openReadOnlyUrl } = await import("./externalBrowser");
+    await openReadOnlyUrl("https://log-dev.concept2.com/profile/2211/log/339");
+    expect(openWebInNewTab).toHaveBeenCalledWith(
+      "https://log-dev.concept2.com/profile/2211/log/339",
+    );
+    expect(navigateWeb).not.toHaveBeenCalled();
+  });
+
+  it("native: goes through the plugin wrapper, which presents a sheet the rower dismisses back into the app", async () => {
+    const openNativeExternalUrl = vi.fn(async () => Promise.resolve());
+    vi.doMock("../platform", () => ({ isNative: () => true }));
+    vi.doMock("../native/externalBrowser", () => ({ openNativeExternalUrl }));
+    vi.resetModules();
+    const { openReadOnlyUrl } = await import("./externalBrowser");
+    await openReadOnlyUrl("https://log-dev.concept2.com/profile/2211/log/339");
+    expect(openNativeExternalUrl).toHaveBeenCalledWith(
+      "https://log-dev.concept2.com/profile/2211/log/339",
+    );
+  });
+});

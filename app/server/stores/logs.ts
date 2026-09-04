@@ -245,9 +245,12 @@ export interface LogInput {
   // the client's MonitorRun.completedAt and IANA zone, optional/nullable,
   // same convention as `deviceName`/`thumbs`/`endedBy` above — absent or
   // explicit null both store null (an older client, or a save this phase
-  // doesn't post either field for, stores nothing). Posted at save from
-  // PR2 on; bounds-checked at the route before this type is ever
-  // constructed, same trust-boundary posture as every other field here.
+  // doesn't post either field for, stores nothing). Both monitor doors post
+  // them on every save as of Wave E PR2 (`src/session/completionStamp.ts`);
+  // bounds-checked at the route before this type is ever constructed, same
+  // trust-boundary posture as every other field here — except that an
+  // unrecognised `tz` DEGRADES to null there rather than refusing the save
+  // (`routes/data.ts`): a Concept2 field can never cost a rower their row.
   completedAt?: Date | null;
   tz?: string | null;
   // Deliberately absent from this interface: `c2ResultId`/`c2UserId` are
@@ -987,6 +990,44 @@ export function createLogsStore(db: Db) {
         .where(and(eq(sessionLogs.userId, userId), eq(sessionLogs.id, id)))
         .returning({ id: sessionLogs.id });
       return rows.length === 1;
+    },
+
+    // Wave E PR2 (observation 29): the Concept2 result ids THIS app wrote to
+    // the given Concept2 account, so the declaration read can exclude them.
+    // Owner-scoped AND account-scoped: result ids live in Concept2's
+    // namespace, and a row written while account A was linked says nothing
+    // about account B — scoping to the LIVE link's `c2UserId` is what makes
+    // this correct across a relink. Served by the existing
+    // `session_logs_user_id_idx`; no new index (the per-user row count here
+    // is the rower's own log, and the eligible population measured on prod
+    // was 6 of 20 rows).
+    //
+    // The null is handled by a TYPE NARROWING, not by a WHERE clause, and
+    // the difference is the point: `c2_result_id` is nullable, so the
+    // compiler is right to insist, but `recordC2Result` is the only writer
+    // of either column and writes both in one statement — so no supported
+    // path produces a row with a matching non-null `c2_user_id` and a null
+    // `c2_result_id`. An `isNotNull()` predicate would therefore have been
+    // an unfalsifiable guard sold as a check (deleting it left the contract
+    // suite green; see task-3-fix-1-report.md). The `filter` below is what
+    // the type genuinely requires and costs no claim, and it also removes
+    // the `as number` cast the predicate version needed.
+    async sentC2ResultIds(
+      userId: string,
+      c2UserId: number,
+    ): Promise<Set<number>> {
+      const rows = await db
+        .select({ c2ResultId: sessionLogs.c2ResultId })
+        .from(sessionLogs)
+        .where(
+          and(
+            eq(sessionLogs.userId, userId),
+            eq(sessionLogs.c2UserId, c2UserId),
+          ),
+        );
+      return new Set(
+        rows.map((r) => r.c2ResultId).filter((id): id is number => id !== null),
+      );
     },
 
     // Wave E PR1 Task 6, plan deviation 2: legacy-row upload persist-on-

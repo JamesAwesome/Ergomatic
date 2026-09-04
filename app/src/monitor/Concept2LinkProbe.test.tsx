@@ -80,7 +80,6 @@ describe("Concept2LinkProbe", () => {
     mockLink({
       available: true,
       linked: true,
-      weightClass: "H",
       c2UserId: 2211,
       needsReauth: true,
     });
@@ -90,7 +89,7 @@ describe("Concept2LinkProbe", () => {
 
     expect(
       await screen.findByText(
-        /Link status: linked \(C2 user 2211, H, needs re-auth\)/i,
+        /Link status: linked \(C2 user 2211, needs re-auth\)/i,
       ),
     ).toBeInTheDocument();
   });
@@ -99,7 +98,6 @@ describe("Concept2LinkProbe", () => {
     mockLink({
       available: true,
       linked: true,
-      weightClass: "H",
       c2UserId: 2211,
     });
     vi.resetModules();
@@ -168,7 +166,7 @@ describe("Concept2LinkProbe", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("tapping Start real link calls startLink with weight class H (the card offers no selector)", async () => {
+  it("tapping Start real link calls startLink with NO argument (ruling i: nothing about the rower travels to the mint)", async () => {
     const startLink = vi.fn(async () => ({ kind: "cancelled" }) as const);
     mockLink({ available: true, linked: false }, startLink);
     vi.resetModules();
@@ -180,7 +178,7 @@ describe("Concept2LinkProbe", () => {
       screen.getByRole("button", { name: /start real link/i }),
     );
 
-    expect(startLink).toHaveBeenCalledExactlyOnceWith({ weightClass: "H" });
+    expect(startLink).toHaveBeenCalledExactlyOnceWith();
   });
 
   it("reports a successful link AND whether the callback carried state (the walk's own measurement)", async () => {
@@ -189,7 +187,6 @@ describe("Concept2LinkProbe", () => {
         ({
           kind: "linked",
           c2UserId: 2211,
-          weightClass: "H",
           stateEchoed: false,
         }) as const,
     );
@@ -257,7 +254,6 @@ describe("Concept2LinkProbe", () => {
         ({
           kind: "linked",
           c2UserId: 2211,
-          weightClass: "H",
           stateEchoed: true,
         }) as const,
     );
@@ -489,7 +485,7 @@ describe("Concept2LinkProbe", () => {
           state: "abc",
         });
       if (path === "/api/concept2/exchange")
-        return jsonResponse({ linked: true, c2UserId: 2211, weightClass: "H" });
+        return jsonResponse({ linked: true, c2UserId: 2211 });
       if (path === "/api/concept2/link") {
         linkReads += 1;
         return linkReads === 1
@@ -498,7 +494,6 @@ describe("Concept2LinkProbe", () => {
               available: true,
               linked: true,
               c2UserId: 2211,
-              weightClass: "H",
               needsReauth: false,
             });
       }
@@ -522,7 +517,7 @@ describe("Concept2LinkProbe", () => {
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(
-        screen.getByText(/Link status: linked \(C2 user 2211, H\)/i),
+        screen.getByText(/Link status: linked \(C2 user 2211\)/i),
       ).toBeInTheDocument();
     });
   });

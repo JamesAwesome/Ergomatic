@@ -1,9 +1,14 @@
 // Wave E PR1.5, narrowed at PR1.75b: opens an external URL for the rower.
-// `adapters/linkFlow.ts`'s WEB arm is the consumer today (a full-page
-// navigation to Concept2's consent screen, whose outcome is read from
-// `GET /api/concept2/link` on the next mount); PR2's read-only "View on
-// Concept2" link-out is the next one, and it is why `@capacitor/browser`
-// stays a dependency.
+// Two exports, one per intent. `openExternalUrl` serves the OAuth consent
+// hop, and `adapters/linkFlow.ts`'s WEB arm is its only consumer (a
+// full-page navigation to Concept2's consent screen, whose outcome is read
+// from `GET /api/concept2/link` on the next mount). `openReadOnlyUrl`
+// (PR2 Task 2) serves the read-only link-outs the rower comes BACK from,
+// and it is why `@capacitor/browser` stays a dependency. That consumer is
+// no longer pending: `log/Concept2SendBlock.tsx` calls it for both of its
+// link-row labels — "View on Concept2 →" (2c/2d) and "OPEN CONCEPT2
+// PROFILE" (2i) — so this file's two exports now have one production
+// consumer each.
 //
 // **`onBrowserFinished`/`onNativeBrowserFinished` were REMOVED at PR1.75b**
 // (2026-09-02-concept2-pr175-app-bind-design.md §4): with the native link on
@@ -31,15 +36,17 @@
 // `src/native/externalBrowser.ts`'s own doc comment.
 
 import { isNative } from "../platform";
-import { navigateWeb } from "./webNavigate";
+import { navigateWeb, openWebInNewTab } from "./webNavigate";
 
 /**
  * Opens `url` for the rower to complete the Concept2 OAuth consent screen.
  * Web: synchronous plain navigation. Native: async — resolves once
  * `Browser.open` has handed off to `SFSafariViewController`; the app has no
- * further say over that surface until the rower returns. On native this is
- * used only for read-only link-outs; the Concept2 link itself does not go
- * through here (see `adapters/linkFlow.ts`).
+ * further say over that surface until the rower returns. Its only production
+ * consumer is `adapters/linkFlow.ts`'s WEB arm; the NATIVE link goes through
+ * `ASWebAuthenticationSession` instead (PR1.75b), and PR2's read-only
+ * link-outs go through `openReadOnlyUrl` below — so nothing reaches this
+ * function's native arm today.
  *
  * `isNative()` is always `false` under Vitest/Playwright (no Capacitor
  * native runtime in a browser context — `adapters/appLifecycle.ts`'s own
@@ -55,4 +62,25 @@ export function openExternalUrl(url: string): void | Promise<void> {
     );
   }
   navigateWeb(url);
+}
+
+/**
+ * Opens `url` for a READ-ONLY look the rower comes back from — PR2's
+ * "View on Concept2" link-out. Distinct from `openExternalUrl` above on
+ * the web arm only: that one navigates this document (correct for the
+ * OAuth hop) and would throw the rower out of the app with the log row
+ * lost. Native takes the same `SFSafariViewController` sheet either way,
+ * which the rower dismisses straight back into Ergomatic.
+ *
+ * This is also why callers render a `<button>` rather than an
+ * `<a href>`: inside the Capacitor WebView a plain anchor drives the
+ * WebView ITSELF to concept2.com, with no way back.
+ */
+export function openReadOnlyUrl(url: string): void | Promise<void> {
+  if (isNative()) {
+    return import("../native/externalBrowser").then(
+      ({ openNativeExternalUrl }) => openNativeExternalUrl(url),
+    );
+  }
+  openWebInNewTab(url);
 }

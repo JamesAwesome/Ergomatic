@@ -1,4 +1,4 @@
-// A one-line module of its own — not folded into `externalBrowser.ts` —
+// A two-function module of its own — not folded into `externalBrowser.ts` —
 // purely so `externalBrowser.test.ts` can replace it with `vi.doMock`, the
 // exact idiom this codebase already uses for `../platform`/`../native/*`
 // (`appLifecycle.test.ts`, `monitorTransport.test.ts`). A same-module
@@ -18,4 +18,14 @@
 // call — see that test file's own header for the full account.
 export function navigateWeb(url: string): void {
   window.location.assign(url);
+}
+
+/** A NEW browsing context, never this document. Split from `navigateWeb`
+ *  above because the two are opposites for the rower: that one unloads the
+ *  SPA (right for the OAuth consent hop, where the app is meant to leave),
+ *  this one keeps the app on screen behind a read-only look at Concept2's
+ *  logbook. `noopener,noreferrer` because the opened page is a third
+ *  party's and has no business holding a handle on us. */
+export function openWebInNewTab(url: string): void {
+  window.open(url, "_blank", "noopener,noreferrer");
 }

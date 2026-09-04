@@ -128,7 +128,30 @@ function tokenBody(accessToken: string, refreshToken: string) {
 // design's §7 field census (measured live on log-dev 2026-09-02) names
 // `username`; it is read as optional (plan observation 3).
 function meBody(c2UserId: number, username = "jmorelli") {
+  // Wave E PR2: `weight`/`gender` are deliberately ABSENT here. This seam's
+  // sends must resolve their class from the DECLARATION list below, so a
+  // profile that could answer would hide a broken producer 1.
   return { data: { id: c2UserId, username } };
+}
+
+// Wave E PR2: one page of the rower's own Concept2 results, shaped as the
+// list endpoint returns it (MEASURED 2026-09-03 on log-dev: date-descending,
+// every row carrying `weight_class`). This is the seam's PRODUCER for the
+// class that ends up on the wire — `EXPECTED_PAYLOAD.weight_class` is read
+// from HERE, through `fetchResults` -> `pickDeclaredWeightClass` ->
+// `buildC2Payload`, and not from any stored column.
+function resultsListBody(weightClass: "H" | "L" = "H") {
+  return {
+    data: [
+      {
+        id: 85400,
+        type: "rower",
+        weight_class: weightClass,
+        date_utc: "2026-08-20 10:00:30",
+        date: "2026-08-20 06:00:30",
+      },
+    ],
+  };
 }
 
 // Task 5's own fixture (mapping.test.ts / concept2.test.ts's
@@ -174,6 +197,9 @@ const EXPECTED_PAYLOAD = {
 // The web surface's registered redirect (index.ts derives it from SITE_URL;
 // here it is this test's own literal, passed as a dep).
 const WEB_REDIRECT_URI = "https://ergomatic.example/api/concept2/callback";
+// Wave E PR2: the Concept2 origin this deployment talks to, echoed on
+// `GET /link`. Deliberately not a production origin.
+const LOGBOOK_BASE_URL = "https://log-dev.concept2.test";
 // An INDEPENDENT literal, never `routes/concept2.ts`'s exported constant
 // (RF21's PR #228 lesson: a test that imports the value it exists to pin
 // retunes itself when the value changes and can never go red on it).
@@ -247,6 +273,7 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
           // PR1.75a: the WEB surface's redirect_uri (the native surface's
           // is `routes/concept2.ts`'s NATIVE_REDIRECT_URI constant).
           webRedirectUri: WEB_REDIRECT_URI,
+          logbookBaseUrl: LOGBOOK_BASE_URL,
         },
       }),
     );
@@ -291,7 +318,7 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
     const res = await request(app)
       .post("/api/concept2/connect")
       .set("Cookie", cookie)
-      .send({ weightClass: "H" });
+      .send({});
     expect(res.status).toBe(200);
     expect(
       new URL(res.body.authorizeUrl as string).searchParams.get("redirect_uri"),
@@ -305,7 +332,7 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       .set("Authorization", bearer)
       // Design §3: a bearer mint must DECLARE it can receive the native
       // redirect, or the route answers 409 update_required.
-      .send({ weightClass: "H", linkClient: "webauth-1" });
+      .send({ linkClient: "webauth-1" });
     expect(res.status).toBe(200);
     expect(
       new URL(res.body.authorizeUrl as string).searchParams.get("redirect_uri"),
@@ -315,7 +342,11 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
 
   // `fetch` stub answering the token + me endpoints (and, when asked, the
   // results endpoint) — every body a committed transcript.
-  function stubC2(opts: { c2UserId: number; results?: "201" | "409" }) {
+  function stubC2(opts: {
+    c2UserId: number;
+    results?: "201" | "409";
+    declared?: "H" | "L";
+  }) {
     fetchMock.mockImplementation(async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);
       if (url.endsWith("/oauth/access_token")) {
@@ -323,6 +354,13 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       }
       if (url.endsWith("/api/users/me")) {
         return jsonResponse(200, meBody(opts.c2UserId));
+      }
+      // The results endpoint serves TWO calls now: a GET list (the
+      // declaration read, `?number=<page size>`) and the POST that sends
+      // the row. Split on the query rather than on the method so the arm
+      // that answers is the one the URL actually names.
+      if (url.includes("/api/users/me/results?number=")) {
+        return jsonResponse(200, resultsListBody(opts.declared ?? "H"));
       }
       if (url.endsWith("/api/users/me/results")) {
         return opts.results === "409"
@@ -372,6 +410,12 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       if (url.endsWith("/api/users/me")) {
         return jsonResponse(200, meBody(2211));
       }
+      // Wave E PR2: the declaration read. The class this seam puts on the
+      // wire is produced HERE — read out of Concept2's own results list,
+      // never out of a stored column.
+      if (url.includes("/api/users/me/results?number=")) {
+        return jsonResponse(200, resultsListBody("H"));
+      }
       if (url.endsWith("/api/users/me/results")) {
         return jsonResponse(201, RAW_201_BODY);
       }
@@ -406,7 +450,11 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       .set("Authorization", bearer)
       .send({ tz: "America/New_York" });
     expect(uploaded.status).toBe(200);
-    expect(uploaded.body).toStrictEqual({ resultId: 85557 });
+    expect(uploaded.body).toStrictEqual({
+      resultId: 85557,
+      weightClass: "H",
+      weightClassSource: "declaration",
+    });
 
     const stored = await request(app)
       .get(`/api/logs/${logId}`)
@@ -437,6 +485,12 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
         // D1: its own Concept2 account — 2211 is already this database's
         // seam-rf24 link.
         return jsonResponse(200, meBody(2212));
+      }
+      // Wave E PR2: the declaration read. The class this seam puts on the
+      // wire is produced HERE — read out of Concept2's own results list,
+      // never out of a stored column.
+      if (url.includes("/api/users/me/results?number=")) {
+        return jsonResponse(200, resultsListBody("H"));
       }
       if (url.endsWith("/api/users/me/results")) {
         return jsonResponse(409, RAW_409_BODY);
@@ -512,6 +566,12 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       if (url.endsWith("/oauth/access_token")) {
         return jsonResponse(200, tokenBody("at-rotated", "rt-rotated"));
       }
+      // Wave E PR2: the declaration read. The class this seam puts on the
+      // wire is produced HERE — read out of Concept2's own results list,
+      // never out of a stored column.
+      if (url.includes("/api/users/me/results?number=")) {
+        return jsonResponse(200, resultsListBody("H"));
+      }
       if (url.endsWith("/api/users/me/results")) {
         return jsonResponse(201, RAW_201_BODY);
       }
@@ -536,7 +596,6 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       accessToken: "stale-access-token",
       refreshToken: "stale-refresh-token",
       expiresAt: new Date(Date.now() - 1000),
-      weightClass: "H",
     });
 
     const uploaded = await request(app)
@@ -544,7 +603,11 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       .set("Authorization", bearer)
       .send({ tz: "America/New_York" });
     expect(uploaded.status).toBe(200);
-    expect(uploaded.body).toStrictEqual({ resultId: 85557 });
+    expect(uploaded.body).toStrictEqual({
+      resultId: 85557,
+      weightClass: "H",
+      weightClassSource: "declaration",
+    });
 
     const link = await concept2Store.getLink(userId);
     expect(link?.accessToken).toBe("at-rotated");
@@ -572,7 +635,7 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
 
       const link = await createConcept2Store(db).getLink(userId);
       expect(link?.c2UserId).toBe(2215);
-      expect(link?.weightClass).toBe("H");
+      expect(link?.c2Username).toBe("jmorelli");
       // The exchange went to the wire with the WEB redirect.
       expect(tokenCalls()).toHaveLength(1);
       expect(tokenCallRedirect()).toBe(WEB_REDIRECT_URI);
@@ -621,7 +684,6 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       expect(res.body).toStrictEqual({
         linked: true,
         c2UserId: 3311,
-        weightClass: "H",
       });
       expect(tokenCalls()).toHaveLength(1);
       expect(tokenCallRedirect()).toBe(NATIVE_REDIRECT_URI);
@@ -637,7 +699,7 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       const res = await request(app)
         .post("/api/concept2/connect")
         .set("Authorization", bearer)
-        .send({ weightClass: "H" });
+        .send({});
       expect(res.status).toBe(409);
       expect(res.body).toStrictEqual({ error: "update_required" });
       // Design §3: it "issues nothing" — proven against Postgres, not
@@ -802,11 +864,11 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
         request(app)
           .post("/api/concept2/connect")
           .set("Authorization", bearer)
-          .send({ weightClass: "H", linkClient: "webauth-1" }),
+          .send({ linkClient: "webauth-1" }),
         request(app)
           .post("/api/concept2/connect")
           .set("Authorization", bearer)
-          .send({ weightClass: "H", linkClient: "webauth-1" }),
+          .send({ linkClient: "webauth-1" }),
       ]);
       expect(r1.status).toBe(200);
       expect(r2.status).toBe(200);

@@ -70,6 +70,8 @@ function baseRow(overrides: Partial<StoredLog> = {}): StoredLog {
     // the timer-door fixtures say `timer` (RF3: fixtures look like rows
     // the migration's backfill would actually produce).
     source: "manual",
+    c2ResultId: null,
+    c2UserId: null,
     steps: [],
     avgSplitSeconds: null,
     timeSeconds: null,

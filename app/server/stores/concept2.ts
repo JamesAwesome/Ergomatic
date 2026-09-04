@@ -16,7 +16,6 @@ import { isUniqueViolation, pgConstraint } from "./errors.js";
 const ATTEMPTS_NONCE_PK = "concept2_auth_attempts_pkey";
 const LINKS_C2_USER_ID_UNIQUE = "concept2_links_c2_user_id_unique";
 
-export type WeightClass = "H" | "L";
 // Wave E PR1.75a (2026-09-02-concept2-pr175-app-bind-design.md §1): which
 // surface minted an attempt — derived by the route from `req.authVia`,
 // never from the client body.
@@ -25,16 +24,19 @@ export type LinkSurface = "native" | "web";
 // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD):
 // mirrors `db/schema.ts`'s `concept2Links` row shape exactly. Tokens are
 // never serialized to any client response — routes/concept2.ts owns that
-// projection down to `{linked, weightClass, c2UserId, needsReauth}`, the
-// account's numeric id but never a token (PR2's sent-state/
-// View-on-Concept2 needs).
+// projection down to `{linked, c2UserId, c2Username, logbookBaseUrl,
+// needsReauth}`, the account's numeric id and name but never a token
+// (PR2's sent-state/View-on-Concept2 needs).
 export interface Concept2Link {
   userId: string;
   c2UserId: number;
+  /** Wave E PR2 (ruling ii). Required-and-nullable on the ROW, while
+   *  `upsertLink`'s input field is optional — see that method's own
+   *  comment for why the asymmetry is deliberate. */
+  c2Username: string | null;
   accessToken: string;
   refreshToken: string;
   expiresAt: Date;
-  weightClass: WeightClass;
   needsReauthAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -54,7 +56,6 @@ export type WithLinkLockOutcome<T> =
 export interface NewConcept2Attempt {
   nonce: string;
   userId: string;
-  weightClass: WeightClass;
   surface: LinkSurface;
 }
 
@@ -62,16 +63,16 @@ export interface NewConcept2Attempt {
 // error a presenter gets, never whether the row is consumed.
 export interface PeekedConcept2Attempt {
   userId: string;
-  weightClass: WeightClass;
   surface: LinkSurface;
 }
 
 // `consumeAttemptFor`'s projection. `userId` and `surface` are predicate
 // INPUTS to that statement, so returning them could never disagree with
-// the arguments (a green gate that cannot go red, RF21) — only the two
-// things the caller does not already know come back.
+// the arguments (a green gate that cannot go red, RF21) — only the thing
+// the caller does not already know comes back. Wave E PR2, ruling i: the
+// weight class used to ride here too; the column it was read from is gone
+// (migration 0023) and the class is read from Concept2 at send time.
 export interface ConsumedConcept2Attempt {
-  weightClass: WeightClass;
   fresh: boolean;
 }
 
@@ -131,10 +132,19 @@ export function createConcept2Store(db: Db) {
       userId: string,
       link: {
         c2UserId: number;
+        /** Wave E PR2. OPTIONAL on the input and `null` by default, while
+         *  the COLUMN and `getLink`'s projection stay required-and-nullable.
+         *  The asymmetry is deliberate and measured: a required input
+         *  reaches 53 existing call sites through three builders
+         *  (`LINK_INPUT`/`freshLink`, `link()`, `makeFakeConcept2Store`),
+         *  none of which has a username to give — while both PRODUCTION
+         *  writers pass one explicitly, so nothing real depends on the
+         *  default. A caller that HAS a username must still say so; a
+         *  caller that has none does not have to say `null`. */
+        c2Username?: string | null;
         accessToken: string;
         refreshToken: string;
         expiresAt: Date;
-        weightClass: WeightClass;
       },
     ): Promise<void> {
       try {
@@ -143,19 +153,19 @@ export function createConcept2Store(db: Db) {
           .values({
             userId,
             c2UserId: link.c2UserId,
+            c2Username: link.c2Username ?? null,
             accessToken: link.accessToken,
             refreshToken: link.refreshToken,
             expiresAt: link.expiresAt,
-            weightClass: link.weightClass,
           })
           .onConflictDoUpdate({
             target: concept2Links.userId,
             set: {
               c2UserId: link.c2UserId,
+              c2Username: link.c2Username ?? null,
               accessToken: link.accessToken,
               refreshToken: link.refreshToken,
               expiresAt: link.expiresAt,
-              weightClass: link.weightClass,
               needsReauthAt: null,
               updatedAt: sql`now()`,
             },
@@ -232,7 +242,7 @@ export function createConcept2Store(db: Db) {
     },
 
     // Mint is ONE atomic statement (design §2): `INSERT ... ON CONFLICT
-    // (user_id) DO UPDATE SET nonce, surface, weight_class, created_at`.
+    // (user_id) DO UPDATE SET nonce, surface, created_at`.
     // Updating the PK in DO UPDATE is legal; two concurrent mints serialize
     // on `concept2_auth_attempts_user_id_unique` and exactly one row
     // survives — PROVEN by `concept2.integration.test.ts`'s deterministic
@@ -262,7 +272,6 @@ export function createConcept2Store(db: Db) {
           .values({
             nonce: a.nonce,
             userId: a.userId,
-            weightClass: a.weightClass,
             surface: a.surface,
           })
           .onConflictDoUpdate({
@@ -270,7 +279,6 @@ export function createConcept2Store(db: Db) {
             set: {
               nonce: a.nonce,
               surface: a.surface,
-              weightClass: a.weightClass,
               createdAt: sql`now()`,
             },
           });
@@ -289,7 +297,6 @@ export function createConcept2Store(db: Db) {
       const rows = await db
         .select({
           userId: concept2AuthAttempts.userId,
-          weightClass: concept2AuthAttempts.weightClass,
           surface: concept2AuthAttempts.surface,
         })
         .from(concept2AuthAttempts)
@@ -298,7 +305,7 @@ export function createConcept2Store(db: Db) {
     },
 
     // ONE conditional statement (design §2): `DELETE ... WHERE nonce=$1 AND
-    // user_id=$2 AND surface=$3 RETURNING weight_class, <fresh>`. The
+    // user_id=$2 AND surface=$3 RETURNING <fresh>`. The
     // identity/surface predicate lives IN the statement, so a wrong
     // principal or wrong surface consumes nothing by construction, not by
     // step order. Freshness rides as a computed column exactly as PR1's
@@ -323,12 +330,11 @@ export function createConcept2Store(db: Db) {
           ),
         )
         .returning({
-          weightClass: concept2AuthAttempts.weightClass,
           fresh: sql<boolean>`${concept2AuthAttempts.createdAt} >= now() - make_interval(secs => ${maxAgeMs / 1000})`,
         });
       const row = rows[0];
       if (!row) return null;
-      return { weightClass: row.weightClass, fresh: row.fresh };
+      return { fresh: row.fresh };
     },
 
     // Sweeps attempts nobody ever completed (the browser hop was

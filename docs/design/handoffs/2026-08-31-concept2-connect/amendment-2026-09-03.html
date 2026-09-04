@@ -1,0 +1,3159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Concept2 connect + send · Gate 0 amendment 2026-09-03</title>
+    <style>
+      /* ---------------------------------------------------------------
+         SELF-CONTAINED. No network, no subresource, no script.
+         Colour values are `app/src/theme/tokens.css`'s, verbatim.
+         Type FACES are system stacks: the app ships Newsreader / Archivo /
+         IBM Plex Mono, which this page cannot fetch. Every SIZE, WEIGHT,
+         LETTER-SPACING and COLOUR is the app's; only the glyph shapes
+         differ. Where that matters (mono label tracking) it is called out.
+         --------------------------------------------------------------- */
+      :root {
+        --page: #f4f1e8;
+        --surface: #fffdf7;
+        --surface-sunken: #efeade;
+        --ink: #1b1a17;
+        --ink-2: #3f3c35;
+        --ink-3: #57544c;
+        --ink-4: #6f6a5f;
+        --rule: #d8d3c4;
+        --rule-2: #ded8c9;
+        --rule-3: #c9c3b2;
+        --accent: #b5341f;
+        --on-color: #fffdf7;
+        --radius: 2px;
+        --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        /* Callback-page palette (server template, callbackPage.ts) */
+        --cb-ground: #f6f3ec;
+        --cb-ink: #1c1a17;
+        --cb-label: #5f5a50;
+        --cb-rule: #d9d3c6;
+        --cb-panel: #fffdf8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px 24px 96px;
+        background: #e6e2d6;
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 26px;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 19px;
+        margin: 48px 0 4px;
+        border-top: 2px solid var(--ink);
+        padding-top: 14px;
+      }
+      h3 {
+        font-size: 15px;
+        margin: 28px 0 10px;
+      }
+      p.lede {
+        max-width: 62rem;
+        margin: 0 0 10px;
+      }
+      code,
+      kbd {
+        font-family: var(--font-mono);
+        font-size: 0.92em;
+        background: #fffdf7;
+        border: 1px solid var(--rule);
+        padding: 0 3px;
+      }
+      table.kv {
+        border-collapse: collapse;
+        margin: 10px 0 18px;
+        background: var(--surface);
+        font-size: 13px;
+      }
+      table.kv th,
+      table.kv td {
+        border: 1px solid var(--rule);
+        padding: 5px 9px;
+        text-align: left;
+        vertical-align: top;
+      }
+      table.kv th {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        background: var(--surface-sunken);
+        white-space: nowrap;
+      }
+      table.kv td.num {
+        font-family: var(--font-mono);
+        white-space: nowrap;
+      }
+      .pass {
+        color: #1d5c2a;
+        font-weight: 700;
+      }
+      .fail {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      /* ---- badges -------------------------------------------------- */
+      .badge {
+        display: inline-block;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        padding: 2px 6px;
+        border: 1px solid currentColor;
+        border-radius: 2px;
+        vertical-align: 2px;
+      }
+      .b-new {
+        color: #1d4e89;
+      }
+      .b-changed {
+        color: var(--accent);
+      }
+      .b-same {
+        color: var(--ink-3);
+      }
+
+      /* ---- artboards ----------------------------------------------- */
+      .boards {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 28px;
+        align-items: flex-start;
+        margin: 14px 0 6px;
+      }
+      .board {
+        flex: 0 0 auto;
+      }
+      .board-cap {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--ink-2);
+        margin: 0 0 6px;
+        max-width: 390px;
+      }
+      .board-cap.wide {
+        max-width: 844px;
+      }
+      .frame {
+        width: 390px;
+        height: 844px;
+        background: var(--page);
+        border: 1px solid #b8b2a3;
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        padding: 16px 16px 0;
+        gap: 12px;
+      }
+      .frame.land {
+        width: 844px;
+        height: 390px;
+      }
+      .frame-dim {
+        position: absolute;
+        right: 4px;
+        bottom: 3px;
+        font-family: var(--font-mono);
+        font-size: 9px;
+        color: #a09a8c;
+        letter-spacing: 0.08em;
+      }
+
+      /* ---- You screen furniture (real classes' real values) --------- */
+      .you-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .avatar {
+        width: 44px;
+        height: 44px;
+        flex: 0 0 44px;
+        border-radius: 50%;
+        background: var(--ink);
+        color: var(--on-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-mono);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .you-identity {
+        min-width: 0;
+        flex: 1;
+      }
+      .you-name {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .you-email {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-3);
+        overflow-wrap: anywhere;
+      }
+      .section-heading {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        color: var(--ink);
+        margin: 4px 0 0;
+      }
+      .ghost {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: var(--radius);
+        height: 96px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: #a09a8c;
+      }
+      .ghost.tall {
+        height: 148px;
+      }
+      .ghost.short {
+        height: 56px;
+      }
+      .diag-row {
+        margin-top: auto;
+        margin-bottom: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-height: 44px;
+        border-top: 1px solid var(--rule);
+        padding-top: 12px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        color: var(--ink-3);
+      }
+
+      /* ---- the Concept2 card --------------------------------------- */
+      .c2card {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: var(--radius);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .c2head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+      .c2label {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        color: var(--ink);
+      }
+      .c2status {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--ink-4);
+        white-space: nowrap;
+      }
+      .c2status.on {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .c2explain {
+        margin: 0;
+        font-size: 14px;
+        color: var(--ink);
+      }
+      .c2helper {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+      .c2identity {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-3);
+        overflow-wrap: anywhere;
+      }
+      .hair {
+        height: 1px;
+        background: var(--rule-2);
+        margin: 0;
+      }
+      .c2foot {
+        margin: 0;
+        text-align: center;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        color: var(--ink-4);
+      }
+      /* RF5: the .wc-* weight-class control rules are DELETED with the
+         control itself (2026-09-03 ruling). No frame on this page renders
+         one. */
+      .btn-primary {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--ink);
+        border: 1px solid var(--ink);
+        border-radius: 0;
+        color: var(--on-color);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+      }
+      /* .btn-primary.dim deleted with it: nothing dims Connect any more,
+         because nothing gates it. */
+      .btn-outline {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: 1px solid var(--ink);
+        border-radius: 0;
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .btn-outline.inert {
+        border-color: var(--rule-3);
+        color: var(--ink-3);
+      }
+      .btn-danger {
+        min-height: 52px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: 1px solid var(--accent);
+        border-radius: 0;
+        color: var(--accent);
+        font-family: var(--font-sans);
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .btn-danger.armed {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--on-color);
+      }
+      .panel {
+        background: var(--surface-sunken);
+        border: 1px solid var(--rule);
+        border-radius: var(--radius);
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .panel-label {
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        color: var(--ink);
+      }
+      .panel-line {
+        margin: 0;
+        font-size: 14px;
+        color: var(--ink);
+      }
+      .panel-reason {
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        color: var(--ink-3);
+      }
+
+      /* ---- log detail furniture ------------------------------------ */
+      .eyebrow {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        color: var(--ink-3);
+        margin: 0;
+      }
+      .backlink {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--ink);
+        margin: 0;
+      }
+      .log-title {
+        font-size: 22px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .log-meta {
+        font-size: 12px;
+        color: var(--ink-3);
+        margin: 0;
+      }
+      .plan-foot {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+      .btn-l4 {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        background: transparent;
+        font-family: var(--font-sans);
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+      .sendcard {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .send-line {
+        margin: 0;
+        font-size: 13px;
+        color: var(--ink-2);
+      }
+      .send-linkrow {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--accent);
+      }
+
+      /* ---- callback page reproduction ------------------------------ */
+      .cb {
+        background: var(--cb-ground);
+        color: var(--cb-ink);
+        font-family: var(--font-sans);
+        font-size: 17px;
+        line-height: 1.45;
+        border: 1px solid #b8b2a3;
+        overflow: hidden;
+        position: relative;
+      }
+      .cb-main {
+        max-width: 34rem;
+        margin: 12vh auto 0;
+        padding: 0 20px;
+      }
+      .cb.land .cb-main {
+        margin-top: 4vh;
+      }
+      .cb section {
+        background: var(--cb-panel);
+        border: 1px solid var(--cb-rule);
+        border-top: 3px solid var(--accent);
+        border-radius: 2px;
+        padding: 20px 22px 22px;
+      }
+      .cb .status {
+        margin: 0 0 14px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        color: var(--cb-label);
+      }
+      .cb h1 {
+        margin: 0 0 14px;
+        font-size: 20px;
+        line-height: 1.3;
+        font-weight: 700;
+        border: 0;
+        padding: 0;
+      }
+      .cb .action {
+        margin: 0;
+        padding-top: 14px;
+        border-top: 1px solid var(--cb-rule);
+        color: var(--cb-label);
+      }
+      .strike {
+        text-decoration: line-through;
+        color: var(--ink-4);
+      }
+      ul.tight {
+        margin: 6px 0 14px;
+        padding-left: 20px;
+        max-width: 62rem;
+      }
+      ul.tight li {
+        margin-bottom: 5px;
+      }
+      .callout {
+        background: var(--surface);
+        border-left: 3px solid var(--accent);
+        padding: 10px 14px;
+        margin: 12px 0 18px;
+        max-width: 62rem;
+      }
+      .callout p {
+        margin: 0 0 6px;
+      }
+      .callout p:last-child {
+        margin-bottom: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Concept2 connect + send — Gate 0 amendment</h1>
+    <p class="lede">
+      <strong>2026-09-03 · Wave E PR2 · amends the board approved 2026-08-31</strong>
+      (<code>docs/design/handoffs/2026-08-31-concept2-connect/README.md</code>,
+      <code>Concept2 connect.dc.html</code>).
+      <strong>Revised 2026-09-04: the app says nothing about the weight
+      class.</strong> James, 2026-09-04 &mdash; &quot;Stop talking about the
+      weight class.&quot; He has now ruled twice: first that the app must not
+      ASK for it (ruling i, 2026-09-03), now that it must not TALK about it.
+      Both places this page had the app volunteer it &mdash; 1a's helper line
+      and 2c's provenance sub-line &mdash; are withdrawn below, in the sections
+      that argued for them rather than in an appendix. <strong>2i is
+      untouched</strong>: it draws only when Concept2 has REFUSED the send for
+      that reason, and a refusal that will not say why is worse than the words.
+      Every frame below is at real
+      proportions: 390&times;844 portrait, 844&times;390 landscape. Colour values
+      are <code>app/src/theme/tokens.css</code>'s, verbatim; contrast is computed
+      (WCAG relative luminance) and printed in the last section.
+    </p>
+    <p class="lede">
+      Frames are badged <span class="badge b-same">UNCHANGED</span> (the approved
+      board, reproduced for comparison), <span class="badge b-changed">CHANGED</span>
+      (approved copy or shape that this amendment moves, with the reason and the
+      <code>file:line</code> that forces it), and
+      <span class="badge b-new">NEW</span> (a state the board has no frame for).
+      <strong>Nothing here is implemented. This document IS the gate.</strong>
+    </p>
+
+    <div class="callout">
+      <p><strong>Why an amendment at all.</strong> The board was approved before
+      PR1, PR1.5, PR1.75a and PR1.75b existed. Four of its frames describe
+      behaviour the shipped server and native code cannot produce, and
+      several states the shipped code CAN reach have no frame. Each is named below with
+      the line that settles it.</p>
+      <p>Type FACES on this page are system stacks. The app ships Newsreader /
+      Archivo / IBM Plex Mono; sizes, weights, tracking and colour are the
+      app's, glyph shapes are not. Mono tracking reads slightly wider here.</p>
+    </div>
+
+    <h2>0 · The substantive changes, up front</h2>
+    <table class="kv">
+      <tr>
+        <th>#</th><th>Board says</th><th>Amendment</th><th>Forced by</th>
+      </tr>
+      <tr>
+        <td class="num">1</td>
+        <td>1a's weight-class ask is <em>conditional</em>: "do NOT ask H/L if
+          Concept2 already has a weight class on the account."</td>
+        <td><strong>There is no ask at all, and since 2026-09-04 no mention
+          either.</strong> The WEIGHT CLASS section, its segmented control and
+          its helper are gone; Connect is live on first paint. <strong>Nothing
+          replaces them.</strong> An earlier revision of this row put one helper
+          line in their place &mdash; &quot;Your weight class comes from
+          Concept2.&quot; &mdash; and that line is WITHDRAWN, not merely
+          reworded: a rower who is never asked has no question outstanding, so
+          an unprompted answer is the app raising a Concept2 concept nobody put
+          to it. 1a is now the explanation, the hairline, Connect and its
+          footnote.</td>
+        <td><strong>James, 2026-09-03:</strong> &quot;I don't want that set in
+          our app. I want it to be set on Concept2's side.&quot; Measured the
+          same day on log-dev: a result POSTed without
+          <code>weight_class</code> is refused <strong>422</strong>
+          (<code>{"errors":{"weight_class":["The weight class field is
+          required."]}}</code>), and <code>GET /api/users/me</code> carries
+          <code>weight</code> and <code>gender</code> but no
+          <code>weight_class</code> &mdash; so the class is READ FROM CONCEPT2
+          at send time and stored by us nowhere. <strong>Corrected
+          2026-09-03:</strong> an earlier revision of this row said
+          &quot;derived&quot;, which named the wrong producer. Concept2's own
+          help says the rower <em>designates</em> the class per piece, so the
+          server reads their most recent declaration first and derives from
+          the profile only as a fallback (see 2i). Supersedes both the
+          board's conditional ask and this amendment's earlier
+          &quot;unconditional&quot; answer. <strong>Extended 2026-09-04</strong>
+          (James: &quot;Stop talking about the weight class&quot;): the same
+          ruling that removed the question now removes the sentence that
+          answered it. What the server does is unchanged &mdash; declaration
+          first, profile as fallback &mdash; and the rower hears about it in
+          exactly one place, 2i, and only when Concept2 refuses the send.</td>
+      </tr>
+      <tr>
+        <td class="num">2</td>
+        <td>1c Linked is "just LINKED &check;, helper line, unlink".</td>
+        <td><strong>Adds an identity line</strong> naming both principals.</td>
+        <td>ROADMAP's C2-account-injection row: "detect-identity treatment (the
+          callback/linked card naming which account the link goes to) ships with
+          PR2's surface".</td>
+      </tr>
+      <tr>
+        <td class="num">3</td>
+        <td>1b carries a <strong>Cancel</strong> button, and a second
+          "CONFIRMING THE LINK / Checking the link with Concept2" variant.</td>
+        <td><strong>Both removed.</strong> One panel, no buttons.</td>
+        <td>Native: the consent sheet covers the app, so nothing behind it is
+          tappable and the outcome arrives in
+          <code>startLink</code>'s promise (<code>adapters/linkFlow.ts:282-333</code>).
+          Web: <code>openExternalUrl</code> is
+          <code>window.location.assign</code> (<code>adapters/webNavigate.ts</code>),
+          so the document unloads. Neither surface can present a Cancel or a
+          confirming state to a rower.</td>
+      </tr>
+      <tr>
+        <td class="num">4</td>
+        <td>2c Sent line reads "Accepted by Concept2 &middot; Aug 27, 11:31".</td>
+        <td><strong>"Accepted by Concept2." — no timestamp.</strong></td>
+        <td>Nothing stores one. <code>session_logs</code> gained exactly
+          <code>c2_result_id</code> and <code>c2_user_id</code>
+          (<code>server/db/schema.ts:377-378</code>); there is no acceptance
+          timestamp column and inventing one from <code>loggedAt</code> would
+          print a different event's clock.</td>
+      </tr>
+      <tr>
+        <td class="num">5</td>
+        <td>2d Duplicate's link-out reads "Open your Concept2 logbook &rarr;"
+          (generic).</td>
+        <td><strong>"View on Concept2 &rarr;" with the result id</strong>, same as
+          2c.</td>
+        <td>C2's 409 body names the colliding id and the route stores it before
+          responding (<code>server/routes/concept2.ts:890-898</code>), so the
+          specific row is reachable. Also: 2d is
+          <em>session-transient</em> — after any remount the row reads SENT
+          (2c), because that write is durable.</td>
+      </tr>
+      <tr>
+        <td class="num">7</td>
+        <td>2c Sent shows the result id and nothing about the class.</td>
+        <td><strong>The board's answer STANDS, and this row is
+          WITHDRAWN.</strong> A revision of this page proposed a second mono
+          sub-line naming the class that was sent and which producer supplied
+          it (&quot;WEIGHT CLASS H &middot; FROM YOUR LAST CONCEPT2 ROW&quot; /
+          &quot;&hellip; FROM YOUR CONCEPT2 WEIGHT&quot;). It is withdrawn:
+          <strong>2c is the result id and nothing else</strong>, on the send
+          that just happened and on every later visit alike.</td>
+        <td><strong>James, 2026-09-04:</strong> &quot;Stop talking about the
+          weight class.&quot; The argument this row used to carry &mdash; that
+          a DERIVED class is a guess written to a third-party record, and that
+          Concept2's per-result editing makes a visible guess a fixable one
+          &mdash; names a real cost, and the ruling accepts it. Where it lands
+          instead: the class and its producer stay on the route's 200 and in
+          the send's log line, so an operator can still answer &quot;which
+          producer answered&quot; for a disputed row; the rower is not shown a
+          category they were never asked about, and the correction, if it is
+          ever wanted, belongs on Concept2's own per-result editor rather than
+          on a line here that can only name the problem.</td>
+      </tr>
+      <tr>
+        <td class="num">9</td>
+        <td>The declaration is read from Concept2's results list as it comes.</td>
+        <td><strong>The read excludes every result id this app wrote, and a page
+          whose only rows are ours counts as NO declaration.</strong> This row
+          STANDS after 2026-09-04, with a different justification: it was argued
+          as protecting row 7's line, and row 7 is withdrawn.</td>
+        <td>Concept2's list contains the rows we posted, its 201 echoes the class
+          we sent, and nothing on the row marks it as ours. Reading our own
+          writes back as an oracle is RF11 one level up. <strong>Restated
+          2026-09-04, now that no line is at stake:</strong> without the
+          exclusion, one derived guess becomes permanent. Send 1 derives H from
+          the profile and posts it; send 2 reads that H back as the rower's own
+          declaration and stops consulting the profile at all &mdash; so a rower
+          who later corrects their Concept2 weight keeps getting the old class
+          forever, and no screen would now say a word about it. The exclusion is
+          about what we SEND, not about what we say, which is why the withdrawal
+          of row 7 does not touch it.</td>
+      </tr>
+      <tr>
+        <td class="num">10</td>
+        <td>2i's sentences name where to go, one per reason.</td>
+        <td><strong>All three say &quot;open Concept2 to check it&quot;, and the
+          shared middle sentence says what WE could not do</strong> rather than
+          what the rower should fix.</td>
+        <td>One sentence sent the rower to pick a class &quot;on a result in your
+          Concept2 logbook&quot; beneath a button that opens the profile, where it
+          cannot be picked. And an implausible weight is most likely our own unit
+          inference being wrong, so blaming their weight sends them after a field
+          that is probably fine.</td>
+      </tr>
+      <tr>
+        <td class="num">11</td>
+        <td>Copy carries a second clause that reassures, or repeats a control
+          already on screen: &quot;&hellip; &middot; YOU COME BACK HERE&quot;,
+          &quot;&hellip; &middot; OPENS YOUR CONCEPT2 LOGBOOK&quot;,
+          &quot;Nothing changed.&quot;, &quot;This row is unchanged.&quot;,
+          &quot;&hellip; then send this row again.&quot;</td>
+        <td><strong>Every rendered string is mechanical: it says what is true,
+          once.</strong> The footnote is &quot;OPENS CONCEPT2 IN YOUR
+          BROWSER&quot;; the id line is &quot;RESULT 339&quot;; the failure is
+          &quot;The send didn't reach Concept2.&quot;; the refusals are two
+          short clauses (&quot;Concept2 needs a weight class. Your Concept2
+          profile has no weight set.&quot;) naming no destination.</td>
+        <td><strong>James, 2026-09-03:</strong> &quot;check the prose and make
+          it a bit more mechanical &hellip; that can just be 'OPENS CONCEPT2 IN
+          YOUR BROWSER'&quot;. Each dropped clause was either reassurance the
+          rower did not ask for, or a restatement of a control already on
+          screen &mdash; the <em>Send again</em> button says send again, and
+          <em>View on Concept2</em> says where it opens. Supersedes the board's
+          &quot;copy is final as rendered&quot; note for these strings.</td>
+      </tr>
+      <tr>
+        <td class="num">12</td>
+        <td>Three REASON lines end in a wire token, uppercased:
+          &quot;&hellip; &middot; NOT MONITOR&quot; from
+          <code>not_monitor</code>, and &quot;&hellip; &middot;
+          NOWINDOW&quot; / &quot;&hellip; &middot; CANNOTSTART&quot; from a
+          <code>LinkOutcome</code> kind and a Capacitor error code.</td>
+        <td><strong>Every token gets words written for a rower, or is
+          dropped.</strong> NO MONITOR USED &middot; DIDN'T FINISH &middot; NO
+          WORK TIME OR METERS for the three eligibility tokens; one sentence,
+          &quot;THIS DEVICE COULDN'T OPEN CONCEPT2&quot;, for all four
+          device-open failures. Also &quot;CONCEPT2 REFUSED THE LINK&quot;, not
+          &quot;THE EXCHANGE&quot; (an OAuth word, not a rowing one), and
+          &quot;THE BROWSER LEFT CONCEPT2&quot;.</td>
+        <td><strong>James, 2026-09-03:</strong> &quot;'REASON: CONCEPT2 WON'T
+          TAKE THIS ROW &middot; NOT MONITOR' is a bit awkward &hellip; I'd
+          check for similar prose awkwardness.&quot; It read that way because
+          nobody wrote it: the line appended
+          <code>reason.toUpperCase().replace(/_/g, " ")</code>, so an enum
+          member became copy. <strong>Cost, stated:</strong> the plugin code no
+          longer shows on a plain build, where nothing else carries it. Filed
+          in ROADMAP as a Diagnostics entry rather than kept on screen.</td>
+      </tr>
+      <tr>
+        <td class="num">8</td>
+        <td>2i offers only &quot;OPEN CONCEPT2 PROFILE&quot;, pointed at
+          <code>{origin}/profile/{id}</code>, with one sentence for every
+          reason.</td>
+        <td><strong>It keeps a &quot;Send again&quot; &mdash; drawn as the ink
+          outline 2e gives Retry send, 48px &mdash; targets the id-less
+          <code>{origin}/profile</code>, and carries three sentences for the
+          route's four reasons.</strong></td>
+        <td>The frame's own copy said &quot;send this row again&quot; and gave
+          no way to; the link-out returns to a still-mounted block on native.
+          The id-bearing path was MEASURED to render a public read-only card
+          with no weight and no form. And a profile Concept2 cannot classify at
+          all must not be told to set a weight that is not the broken thing.
+          <strong>Fix round 1 (2026-09-03):</strong> the frames drew Send again
+          as <code>.btn-l4</code>, the 44px accent control six frames on this
+          page give <em>Delete session</em> on the same screen, while &sect;2i's own
+          callout called it &quot;the level-4 button 2e already uses for Retry
+          send&quot; &mdash; which 2e does not use. Redrawn as the ink outline:
+          a re-send must not wear a delete's vocabulary, and accent already has
+          its one declared job here (&sect;5).</td>
+      </tr>
+      <tr>
+        <td class="num">6</td>
+        <td>The 401/403 callback pages say "Sign in to Ergomatic
+          <span class="strike">here</span>" — where "here" is plain text, no
+          anchor.</td>
+        <td><strong>Reworded</strong> so no word poses as a link.</td>
+        <td><code>server/concept2/callbackPage.ts:52-56</code>: the template emits
+          no anchors and no subresources on purpose (the callback URL carries
+          <code>code</code>; RFC 9700 §4.2). "here" therefore points at nothing.</td>
+      </tr>
+    </table>
+
+    <h2>1 · You tab — the Concept2 card</h2>
+    <p class="lede">
+      Card idiom unchanged: <code>--surface</code> ground,
+      <code>1px --rule</code> border, 2px radius, 16px padding, 12px gap; mono
+      <code>CONCEPT2</code> label left, mono status right. The card sits between
+      <em>Reset baseline setup</em> and the DIAGNOSTICS row on You
+      (<code>src/You.tsx:89-115</code>).
+    </p>
+
+    <h3>1a Unlinked, asking nothing <span class="badge b-changed">CHANGED</span></h3>
+    <p class="lede">
+      Copy is the board's, verbatim, minus what the two 2026-09 rulings
+      removed. The WEIGHT CLASS section, its two-column segmented control, its
+      &quot;Concept2 requires a weight class. Asked once, at connect.&quot; ask
+      and its 61.5/75&nbsp;kg helper are all GONE, and so is the rule that kept
+      Connect inert until a class was picked. <strong>Connect is live on first
+      paint.</strong>
+    </p>
+    <p class="lede">
+      <strong>Nothing stands in their place. Revised 2026-09-04, replacing
+      this paragraph rather than appending to it:</strong> the revision that
+      removed the ask put one helper line above the button in its stead
+      (&quot;Your weight class comes from Concept2.&quot;, 12px
+      <code>--ink-3</code>). That line is WITHDRAWN &mdash; James, 2026-09-04:
+      &quot;Stop talking about the weight class.&quot; It was written to stop a
+      rower wondering where the question went, and a rower who was never asked
+      is not wondering; all it does is raise a Concept2 category on a card that
+      neither collects it, shows it, nor can open the page that holds it.
+    </p>
+    <p class="lede">
+      <strong>The card now collects nothing at all, and says nothing about the
+      class either</strong> &mdash; no radiogroup, no input, no draft state, no
+      helper. That is the two rulings' whole visible effect on this surface, and
+      it is why the two frames below are one frame: there is no &quot;nothing
+      picked&quot; and &quot;picked&quot; pair any more, because there is
+      nothing to pick.
+    </p>
+    <p class="lede">
+      <strong>The hairline STAYS, and the frames are what say so.</strong> 1a
+      still draws a rule between the explanation and the action, which is where
+      1c, 1f, 1f-b and 1j draw theirs; only the landscape frames drop it,
+      because the 20px column gap has taken the job over
+      (<code>.c2-card-body-split .c2-card-hair { display: none }</code>). What
+      changed is what sits under it: the button, directly.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1a &middot; PORTRAIT &middot; in situ on You &middot; nothing to pick</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <p class="c2explain">
+              Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-primary">CONNECT TO CONCEPT2</div>
+            <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER</p>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1a &middot; LANDSCAPE &middot; two-column card interior (board 3a's shape, kept)</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <p class="c2explain">
+                  Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.
+                </p>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center">
+                <div class="btn-primary">CONNECT TO CONCEPT2</div>
+                <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER</p>
+              </div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1b Opening Concept2 <span class="badge b-changed">CHANGED</span></h3>
+    <div class="callout">
+      <p><strong>Cancel is gone, and so is the "CONFIRMING THE LINK" variant.</strong>
+      Neither has a reachable presser:</p>
+      <ul class="tight">
+        <li><strong>Native.</strong> <code>startLink</code> awaits
+          <code>ASWebAuthenticationSession</code>
+          (<code>adapters/linkFlow.ts:172-272</code>). The sheet is presented over
+          the app, so this panel is behind it and no tap can land. When the sheet
+          dismisses, the promise resolves and the card leaves this state
+          directly.</li>
+        <li><strong>Web.</strong> <code>openExternalUrl</code> calls
+          <code>window.location.assign</code>
+          (<code>adapters/webNavigate.ts</code>) and the SPA unloads. There is no
+          document left to render a Cancel on, and no "return" event: the rower
+          lands on the server's callback page and comes back to the app on their
+          own, at which point the card's mount read of
+          <code>GET /api/concept2/link</code> is what reveals the outcome.</li>
+      </ul>
+      <p>The panel is therefore visible only in the mint window (the
+      <code>POST /api/concept2/connect</code> round trip), where there is nothing
+      yet to cancel.</p>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1b &middot; PORTRAIT &middot; card detail at real width (390px column)</p>
+        <div class="frame">
+          <p class="section-heading" style="visibility: hidden">.</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">WAITING</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">OPENING CONCEPT2</p>
+              <p class="panel-line">Approve access on Concept2's page.</p>
+            </div>
+          </div>
+          <p class="board-cap" style="margin-top: 10px">
+            REMOVED FROM THE BOARD, SHOWN STRUCK FOR THE RECORD:
+          </p>
+          <div class="c2card" style="opacity: 0.55">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">WAITING</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label strike">WAITING FOR CONCEPT2</p>
+              <p class="panel-line strike">
+                Approve access in the browser. On return, this card confirms the
+                link.
+              </p>
+              <div class="btn-outline inert strike" style="min-height: 44px">Cancel</div>
+            </div>
+            <div class="panel">
+              <p class="panel-label strike">CONFIRMING THE LINK</p>
+              <p class="panel-line strike">Checking the link with Concept2.</p>
+            </div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1b &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">WAITING</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">OPENING CONCEPT2</p>
+              <p class="panel-line">Approve access on Concept2's page.</p>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1c Linked, with the identity line <span class="badge b-new">NEW LINE</span></h3>
+    <p class="lede">
+      The line names both principals in the same order the server's Linked
+      callback page does ("Concept2 <em>X</em> is now connected to Ergomatic
+      <em>Y</em>", <code>server/concept2/callbackPage.ts:156</code>), so a rower
+      who saw that page recognises the card. 12px <code>--ink-3</code>,
+      <code>overflow-wrap: anywhere</code> (a long address must not push the card
+      a line taller — the same fix <code>.you-identity</code> already carries,
+      <code>src/You.tsx:58-61</code>). No weight class is shown &mdash; as of
+      the 2026-09-03 ruling there is none to show, on this card or any other,
+      and as of 2026-09-04 no card mentions one either.
+    </p>
+    <div class="callout">
+      <p><strong>The username is only renderable if ruling (ii) lands on B.</strong>
+      <code>GET /api/concept2/link</code> returns
+      <code>{available, linked, weightClass, c2UserId, needsReauth}</code> today
+      (the <code>weightClass</code> key is itself dropped by the 2026-09-03
+      ruling, in the same PR)
+      (<code>server/routes/concept2.ts:535-546</code>) and
+      <code>concept2_links</code> stores no username
+      (<code>server/db/schema.ts</code>, the Concept2 block). Both variants are
+      rendered below; the numeric one is what ships with no server change.</p>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1c &middot; PORTRAIT &middot; in situ &middot; variant B (username stored) &mdash; RECOMMENDED</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <p class="c2helper">
+              Finished monitor rows can be sent from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">1c &middot; PORTRAIT &middot; variant A (no server change) &amp; the long-address case</p>
+        <div class="frame">
+          <p class="board-cap">VARIANT A &mdash; numeric account id</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 account #2211 &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <p class="c2helper">
+              Finished monitor rows can be sent from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <p class="board-cap" style="margin-top: 14px">
+            WRAPPING &mdash; variant B, a long address and a long username
+          </p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 a-really-quite-long-logbook-name &middot; Ergomatic
+              james.awesome.rowing.account@jamestheaweso.me
+            </p>
+            <p class="c2helper">
+              Finished monitor rows can be sent from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide">1c &middot; LANDSCAPE &middot; variant B</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <p class="c2identity">
+                  Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+                </p>
+                <p class="c2helper">
+                  Finished monitor rows can be sent from the log.
+                </p>
+              </div>
+              <div class="btn-danger">Unlink Concept2</div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1d Unlink armed <span class="badge b-same">UNCHANGED</span></h3>
+    <p class="lede">
+      Two-tap, 4 s auto-disarm, stated in the footnote. Copy is the board's,
+      verbatim. Filled <code>--accent</code> with <code>--on-color</code> label
+      (5.94:1). The identity line stays visible while armed: the rower is about to
+      destroy a named grant and should see which one.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1d &middot; PORTRAIT &middot; armed</p>
+        <div class="frame">
+          <p class="section-heading" style="visibility: hidden">.</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="hair"></div>
+            <p class="c2explain">
+              Unlink removes this app's access. Rows already sent stay on
+              Concept2.
+            </p>
+            <div class="btn-danger armed">Tap again to unlink</div>
+            <p class="c2foot">DISARMS ON ITS OWN AFTER 4 SECONDS</p>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1d &middot; LANDSCAPE &middot; armed</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="hair"></div>
+            <p class="c2explain">
+              Unlink removes this app's access. Rows already sent stay on
+              Concept2.
+            </p>
+            <div class="btn-danger armed">Tap again to unlink</div>
+            <p class="c2foot">DISARMS ON ITS OWN AFTER 4 SECONDS</p>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1e Link failed <span class="badge b-changed">CHANGED</span></h3>
+    <p class="lede">
+      Board copy kept verbatim; a mono REASON line is added beneath it. The
+      reason exists because <code>LinkOutcome</code> has seventeen members
+      (<code>adapters/linkFlow.ts</code>, the <code>export type
+      LinkOutcome</code> union) and a tester reporting "it didn't
+      work" with no discriminator costs a walk. It is <code>--ink-3</code> on the
+      sunken panel, not <code>--ink-4</code>: that pairing measures 4.48:1 and
+      fails AA (see §4).
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1e &middot; PORTRAIT &middot; three representative reasons</p>
+        <div class="frame">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">THE LINK DIDN'T FINISH</p>
+              <p class="panel-line">
+                The connection didn't complete. Nothing was linked.
+              </p>
+              <p class="panel-reason">REASON: CONCEPT2 REFUSED THE LINK &middot; 502</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Try again</div>
+          </div>
+          <div class="c2card" style="margin-top: 14px">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">THE LINK DIDN'T FINISH</p>
+              <p class="panel-line">
+                You cancelled at Concept2. Nothing was linked.
+              </p>
+              <p class="panel-reason">REASON: DECLINED AT CONCEPT2</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Try again</div>
+          </div>
+          <div class="c2card" style="margin-top: 14px">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">THE LINK DIDN'T FINISH</p>
+              <p class="panel-line">
+                That Concept2 account is already connected to a different
+                Ergomatic account.
+              </p>
+              <p class="panel-reason">REASON: ALREADY LINKED ELSEWHERE &middot; 409</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Try again</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1e &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">THE LINK DIDN'T FINISH</p>
+              <p class="panel-line">
+                The connection didn't complete. Nothing was linked.
+              </p>
+              <p class="panel-reason">REASON: CONCEPT2 REFUSED THE LINK &middot; 502</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Try again</div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <p class="lede">The full outcome &rarr; copy table (every one of the
+      seventeen <code>LinkOutcome</code> members has a home; none falls through
+      silently). Seventeen members, sixteen rows: <code>busy</code> and
+      <code>exchangeFailed</code> each take TWO rows because they branch
+      (on <code>source</code> and on <code>error</code>), while the four
+      device-open failures share ONE row because they render one sentence.</p>
+    <table class="kv">
+      <tr><th>LinkOutcome</th><th>Card state</th><th>Panel line</th><th>REASON line</th></tr>
+      <tr><td class="num">linked</td><td>1c</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="num">navigating</td><td>1b</td><td>Approve access on Concept2's page.</td><td>&mdash;</td></tr>
+      <tr><td class="num">declined</td><td>1e</td><td>You cancelled at Concept2. Nothing was linked.</td><td>DECLINED AT CONCEPT2</td></tr>
+      <tr><td class="num">cancelled</td><td>1a</td><td>&mdash; (returns to the unlinked card; the rower dismissed the sheet themselves)</td><td>&mdash;</td></tr>
+      <tr><td class="num">abandoned</td><td>1e</td><td>board copy</td><td>THE BROWSER LEFT CONCEPT2</td></tr>
+      <tr><td class="num">updateRequired</td><td>1g</td><td>Update Ergomatic to link your Concept2 account.</td><td>&mdash;</td></tr>
+      <tr><td class="num">stateMismatch</td><td>1e</td><td>board copy</td><td>THE RETURN DIDN'T MATCH THIS ATTEMPT</td></tr>
+      <tr><td class="num">malformed</td><td>1e</td><td>board copy</td><td>CONCEPT2 SENT SOMETHING WE COULDN'T READ</td></tr>
+      <tr><td class="num">exchangeFailed &middot; error <code>already_linked_elsewhere</code></td><td>1e</td><td>That Concept2 account is already connected to a different Ergomatic account.</td><td>ALREADY LINKED ELSEWHERE &middot; 409</td></tr>
+      <tr><td class="num">exchangeFailed &middot; any other error</td><td>1e</td><td>board copy</td><td>CONCEPT2 REFUSED THE LINK &middot; &lt;status&gt;</td></tr>
+      <tr><td class="num">serverError</td><td>1e</td><td>board copy</td><td>ERGOMATIC'S SERVER DIDN'T ANSWER &middot; &lt;status&gt;</td></tr>
+      <tr><td class="num">mintFailed</td><td>1e</td><td>board copy</td><td>COULDN'T START THE LINK &middot; &lt;status&gt;</td></tr>
+      <tr><td class="num">networkError</td><td>1e</td><td>board copy</td><td>NO CONNECTION</td></tr>
+      <tr><td class="num">busy &middot; source <code>guard</code></td><td>1b</td><td>Approve access on Concept2's page.</td><td>&mdash; (the rower's own previous tap is still working)</td></tr>
+      <tr><td class="num">busy &middot; source <code>sheet</code></td><td>1e</td><td>board copy</td><td>A LINK IS ALREADY OPEN &middot; CLOSE IT AND TRY AGAIN</td></tr>
+      <tr><td class="num">noWindow / noContext / contextInvalid / pluginError</td><td>1e</td><td>board copy</td><td>THIS DEVICE COULDN'T OPEN CONCEPT2 <em>(no code, no kind &mdash; change 12)</em></td></tr>
+    </table>
+    <div class="callout">
+      <p><strong>The two <code>busy</code> members WERE indistinguishable, and
+      the two rows above are now buildable.</strong> When this page was
+      approved, <code>adapters/linkFlow.ts</code>'s <code>pluginRejection</code>
+      carried a comment requiring the card to tell them apart &mdash; "PR2's
+      card must therefore not render one string for both <code>busy</code>
+      sources: the JS guard means 'your last tap is still working', the
+      plugin's means 'a sheet is already up and your fresh mint just superseded
+      the attempt it belongs to'" &mdash; while both
+      <code>startLink</code>'s <code>linkInFlight</code> guard and
+      <code>pluginRejection</code>'s <code>case&nbsp;"busy"</code> returned a
+      bare <code>{kind:"busy"}</code>. The union could not express what the
+      comment required, so the table above was written against a change that
+      had not been made.</p>
+      <p><strong>That change has since landed</strong> (PR2 Task 1, with the
+      rest of Task 2's adapter work still to follow). The member is now
+      <code>{ kind: "busy"; source: "guard" | "sheet" }</code>;
+      <code>startLink</code>'s guard answers <code>source:&nbsp;"guard"</code>
+      and <code>pluginRejection</code>'s case answers
+      <code>source:&nbsp;"sheet"</code>; and
+      <code>you/concept2CardModel.ts</code>'s <code>describeFailure</code> is
+      the consumer that splits on it, returning <code>null</code> for the guard
+      row and the 1e panel for the sheet row exactly as the table says. The
+      contingency this callout used to describe &mdash; "without it, both rows
+      collapse to the 1b reading and the comment must be retired instead"
+      &mdash; no longer applies.</p>
+      <p><strong>Citations here name symbols, not line
+      numbers.</strong> The three this callout originally carried
+      (<code>:148-155</code>, <code>:287</code>, <code>:156</code>) were all
+      wrong within a day of being written, because the file they point into
+      keeps changing. A quoted sentence survives a fold; a line number does
+      not.</p>
+    </div>
+
+    <h3>1f Needs re-auth <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      The board has no frame for this and the shipped server produces it:
+      <code>GET /api/concept2/link</code> returns
+      <code>needsReauth: true</code> (<code>server/routes/concept2.ts:545</code>)
+      once a refresh 400/401s, and the upload route refuses with
+      <code>409 needs_reauth</code> (<code>:617-620</code>). It is
+      <strong>sticky</strong>: the link row survives, only
+      re-consent clears it (spec §Architecture 6). A linked card that said plain
+      LINKED &check; over a dead grant would send every row to a 409.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1f &middot; PORTRAIT &middot; in situ</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+            <div class="btn-primary">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1f &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div class="panel">
+                <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+                <p class="panel-line">
+                  Your link is kept. Reconnect to send rows again.
+                </p>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div class="btn-primary">RECONNECT CONCEPT2</div>
+                <div class="btn-danger">Unlink Concept2</div>
+              </div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <p class="lede">
+      <strong>Reconnect asks nothing, and there is nothing it could ask.</strong>
+      It calls the same argument-free <code>startLink()</code> Connect does, and
+      the only thing that can disable it is an attempt already in flight. An
+      earlier revision of this amendment drew a state (1k) for a stored weight
+      class that could not be read back &mdash; a RECONNECT button nothing could
+      press, plus a re-ask to rescue it. <strong>Both are withdrawn by the
+      2026-09-03 ruling:</strong> there is no stored class, so there is nothing
+      to be unreadable. That is also the PII bound holding in its strongest
+      form &mdash; exit criterion 3 now reads &quot;NO new user attribute&quot;.
+    </p>
+    <div class="callout">
+      <p><strong>The landscape frame above draws the identity line in the
+      wrong place, and the shipped card does not follow it.</strong> This is
+      the only frame on the page that puts <code>.c2identity</code> ABOVE the
+      two-column grid; 1a, 1c, 1i and 1j all put their telling content inside
+      it. The shipped card has one rule &mdash; what it TELLS the rower goes in
+      the left column, what it ASKS them to DO goes in the right &mdash; so the
+      identity line is in the left column here too, exactly as 1c and 1j draw
+      it. Recorded here rather than under 1f-b, because this frame is the one
+      a reader opens to see the shape that changed.</p>
+    </div>
+
+    <h3>1f-b Needs re-auth, and the reconnect failed <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      <strong>Added by fix round 1 of Task 4, on the implementer's finding.</strong>
+      Every failure panel on this card is gated on the account being UNLINKED,
+      so a RECONNECT that failed rendered nothing at all: the rower tapped,
+      the attempt failed, and the screen was identical to before the tap. That
+      is the same silence 1j exists to forbid one control over, and the same
+      class as RF25 &mdash; a lower layer reported a failure and the surface
+      proceeded as though nothing had happened.
+    </p>
+    <p class="lede">
+      <strong>No new copy is invented here.</strong> The line and the REASON are
+      whatever <code>describeFailure</code> already returns for the outcome
+      (the full outcome &rarr; copy table above), rendered in 1e's own panel
+      chrome under 1e's own <code>THE LINK DIDN'T FINISH</code> label. The
+      frames below show <code>exchangeFailed</code> with a 502, which is the
+      same row 1e's first frame draws. <strong>The link is KEPT and RECONNECT
+      stays live</strong> &mdash; that is 1f's whole point, and it makes the
+      recovery one tap rather than an unlink and a fresh link.
+    </p>
+    <p class="lede">
+      Placement: BELOW the &quot;CONCEPT2 STOPPED ACCEPTING THIS LINK&quot;
+      panel and ABOVE the RECONNECT button, so the reading order is what is
+      wrong, then what just went wrong, then the control that fixes it &mdash;
+      the same order 1j uses for its own refusal.
+      <strong>No new colour pairing:</strong> the panel is the sunken panel
+      1b/1e/1f/1g/1i/1j already paint, so its label and line are
+      <code>--ink</code> on <code>--surface-sunken</code> (14.50:1) and its
+      REASON is <code>--ink-3</code> on <code>--surface-sunken</code> (6.30:1)
+      &mdash; both existing rows in &sect;4, and the second is the row that
+      exists because <code>--ink-4</code> there measures 4.48:1 and fails.
+      Every tappable is unchanged: RECONNECT 48px, Unlink 52px.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1f-b &middot; PORTRAIT &middot; in situ</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+            <div class="panel">
+              <p class="panel-label">THE LINK DIDN'T FINISH</p>
+              <p class="panel-line">
+                The connection didn't complete. Nothing was linked.
+              </p>
+              <p class="panel-reason">REASON: CONCEPT2 REFUSED THE LINK &middot; 502</p>
+            </div>
+            <div class="btn-primary">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1f-b &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <p class="c2identity">
+                  Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+                </p>
+                <div class="panel">
+                  <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+                  <p class="panel-line">
+                    Your link is kept. Reconnect to send rows again.
+                  </p>
+                </div>
+                <div class="panel">
+                  <p class="panel-label">THE LINK DIDN'T FINISH</p>
+                  <p class="panel-line">
+                    The connection didn't complete. Nothing was linked.
+                  </p>
+                  <p class="panel-reason">REASON: CONCEPT2 REFUSED THE LINK &middot; 502</p>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div class="btn-primary">RECONNECT CONCEPT2</div>
+                <div class="btn-danger">Unlink Concept2</div>
+              </div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <p class="lede">
+      <strong>The identity line moves into the telling column in landscape</strong>,
+      where 1f alone leaves it above the grid. That is the shipped card's one
+      rule showing through &mdash; what the card TELLS the rower goes left, what
+      it ASKS them to DO goes right &mdash; and it is the reading this page's
+      other five gridded frames (1a, 1c, 1f-c, 1i, 1j) already take. (Six, with
+      1f-b itself: SEVEN frames on this page are gridded in landscape, and 1f
+      is the only one of them that puts telling content above the grid.)
+    </p>
+
+    <h3>1f-c Needs re-auth, on a build too old to link <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      <strong>Drawn rather than described, because the client can render this
+      sentence.</strong> A RECONNECT can come back
+      <code>409 update_required</code>: the mint answers it for any build
+      predating the <code>WebAuth</code> plugin, regardless of link state
+      (<code>server/routes/concept2.ts:244-247</code>), and
+      <code>needsReauth</code> is sticky &mdash; so a rower on an old build
+      sits in exactly this state and taps RECONNECT.
+    </p>
+    <p class="lede">
+      It is 1f-b with one panel swapped. <code>updateRequired</code> is NOT a
+      failure, so it carries no line of its own in the outcome table and never
+      reaches the failure panel; it draws 1g's copy, verbatim, in the same slot
+      1f-b's failure panel uses. <strong>No Try again</strong>, for 1g's own
+      reason: retrying the same build cannot succeed. RECONNECT stays live
+      because the rower CAN act &mdash; by updating the app &mdash; and the
+      link is kept either way. <strong>Until fix round 2 of Task 4 this
+      rendered nothing at all</strong>, which is the same silence 1f-b exists
+      to remove, one outcome over.
+      <strong>No new colour pairing:</strong> both panels are the sunken panel
+      every other panel state paints &mdash; label and line <code>--ink</code>
+      on <code>--surface-sunken</code> (14.50:1), and this state has no REASON
+      line at all. Tappables unchanged: RECONNECT 48px, Unlink 52px.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1f-c &middot; PORTRAIT &middot; in situ</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+            <div class="panel">
+              <p class="panel-label">UPDATE NEEDED</p>
+              <p class="panel-line">
+                Update Ergomatic to link your Concept2 account.
+              </p>
+            </div>
+            <div class="btn-primary">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1f-c &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <p class="c2identity">
+                  Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+                </p>
+                <div class="panel">
+                  <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+                  <p class="panel-line">
+                    Your link is kept. Reconnect to send rows again.
+                  </p>
+                </div>
+                <div class="panel">
+                  <p class="panel-label">UPDATE NEEDED</p>
+                  <p class="panel-line">
+                    Update Ergomatic to link your Concept2 account.
+                  </p>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <div class="btn-primary">RECONNECT CONCEPT2</div>
+                <div class="btn-danger">Unlink Concept2</div>
+              </div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1g Update required <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      Copy is the design's, verbatim
+      (<code>2026-09-02-concept2-pr175-app-bind-design.md</code> §3: "Update
+      Ergomatic to link your Concept2 account."). Reachable when an installed
+      native build predates the <code>WebAuth</code> plugin: the mint answers
+      <code>409 update_required</code> and issues nothing
+      (<code>server/routes/concept2.ts:244-247</code>). No Try again button &mdash;
+      retrying the same build cannot succeed.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1g &middot; PORTRAIT</p>
+        <div class="frame">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">UPDATE NEEDED</p>
+              <p class="panel-line">
+                Update Ergomatic to link your Concept2 account.
+              </p>
+            </div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1g &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">UPDATE NEEDED</p>
+              <p class="panel-line">
+                Update Ergomatic to link your Concept2 account.
+              </p>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1h Unavailable <span class="badge b-new">NEW</span></h3>
+    <p class="lede">
+      <code>{available: false}</code> arrives with HTTP 200
+      (<code>server/routes/concept2.ts:524-529</code>) &mdash; a flag-off server
+      reads exactly like an unlinked one unless the client distinguishes them,
+      which is the trap <code>Concept2LinkProbe.tsx:118-121</code> already names.
+      <strong>No card renders at all</strong> (board: "a capability gate, not a
+      cosmetic hide"). Both frames are You with the card simply absent, and this
+      is the state every deployment is in today.
+    </p>
+    <div class="callout">
+      <p><strong>A failed READ is not this state, and an earlier revision of
+      this page said it was.</strong> That reading &mdash; "a card that cannot
+      say what it is showing shows nothing" &mdash; is right about a card that
+      has not finished loading and wrong about one whose read was refused: it
+      draws a fault as a capability answer, and tells a rower whose deployment
+      does have Concept2 that it does not. The two are separated below as
+      <strong>1i</strong>, which has its own copy, its own REASON and a Retry.
+      The pre-first-read case keeps 1h's silence, because nothing is yet known
+      and there is nothing to say.</p>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1h &middot; PORTRAIT &middot; You with no Concept2 card (flag off, or the read failed)</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1h &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost">BASELINE EDITOR</div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1i The read failed <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      <strong>Not the same answer as 1h, and not drawn the same way.</strong>
+      <code>{available:false}</code> means "this deployment has no Concept2" and
+      renders nothing. A read that FAILED means "we could not find out" &mdash; a
+      fault, on a deployment that may well have Concept2 &mdash; and drawing it as
+      absence tells the rower something untrue about their own account.
+      <code>api()</code> resolves on any status
+      (<code>src/api.ts</code> does not throw on non-2xx), so a 401 or a 502
+      arrives as an ordinary response and has to be turned into this state
+      explicitly. The REASON carries the status, for the same reason 1e's does:
+      a tester reporting "the Concept2 card is broken" with no discriminator
+      costs a walk. When the request never completed at all, it reads
+      <code>REASON: NO CONNECTION</code>.
+    </p>
+    <p class="lede">
+      <strong>Where it is NOT shown:</strong> the log row. The You card is the
+      sole discovery surface and owns the retry; a second Concept2 error panel on
+      a screen about a rowing session is noise the rower cannot act on from
+      there, so the Send block stays silent on a failed read exactly as it does
+      when no account is linked.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1i &middot; PORTRAIT &middot; in situ on You</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">COULDN'T READ</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">COULDN'T READ CONCEPT2</p>
+              <p class="panel-line">Couldn't reach Concept2 linking.</p>
+              <p class="panel-reason">REASON: THE SERVER ANSWERED 502</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Retry</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">1i &middot; PORTRAIT &middot; the offline reading, beside 1h for comparison</p>
+        <div class="frame">
+          <p class="board-cap">REQUEST NEVER COMPLETED</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">COULDN'T READ</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">COULDN'T READ CONCEPT2</p>
+              <p class="panel-line">Couldn't reach Concept2 linking.</p>
+              <p class="panel-reason">REASON: NO CONNECTION</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Retry</div>
+          </div>
+          <p class="board-cap" style="margin-top: 14px">
+            1h FOR COMPARISON &mdash; flag off, nothing renders at all
+          </p>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide">1i &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">COULDN'T READ</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div class="panel">
+                <p class="panel-label">COULDN'T READ CONCEPT2</p>
+                <p class="panel-line">Couldn't reach Concept2 linking.</p>
+                <p class="panel-reason">REASON: THE SERVER ANSWERED 502</p>
+              </div>
+              <div class="btn-outline" style="min-height: 52px">Retry</div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>1j The unlink was refused <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      A destructive action the server refused. Without this frame the only
+      visible effect of a failed <code>DELETE /api/concept2/link</code> is the
+      two-tap arm clearing &mdash; which reads either as "nothing happened" or,
+      worse, as "it worked and the card is wrong". <strong>The line says the link
+      is UNCHANGED explicitly</strong>, because the dangerous reading of a failed
+      destructive action is that it half-worked. This is RF25's shape at the UI
+      seam: a lower layer reported a failure and the caller must not proceed as
+      though it succeeded.
+    </p>
+    <p class="lede">
+      The panel sits ABOVE the Unlink control, so the rower reads the outcome and
+      then sees the button that produced it. The identity line stays visible: the
+      grant named there is still live, which is the whole point. A 404 is NOT a
+      failure here &mdash; another tab already unlinked, which is the outcome we
+      wanted (<code>src/log/FromTheLog.tsx:365-371</code> takes the identical line
+      for <code>DELETE /api/logs/:id</code>).
+    </p>
+    <div class="callout">
+      <p><strong>The landscape frame below omits the linked helper line
+      ("Finished monitor rows can be sent from the log."), and the build does
+      not follow it.</strong> 1j's PORTRAIT frame draws that helper and 1c's
+      LANDSCAPE frame draws it too &mdash; and 1c is the same linked, gridded
+      state. Two frames of one state disagreeing is a drawing inconsistency
+      rather than a decision anyone made, and dropping a sentence on
+      orientation alone would be a behaviour change nobody asked for, so the
+      card follows 1c and renders the helper in both orientations. Recorded
+      here rather than by redrawing the frame, so a reader meets the
+      divergence where it is.</p>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1j &middot; PORTRAIT &middot; in situ, after a refused second tap</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <p class="c2helper">
+              Finished monitor rows can be sent from the log.
+            </p>
+            <div class="panel">
+              <p class="panel-label">UNLINK DIDN'T HAPPEN</p>
+              <p class="panel-line">Couldn't unlink. Your link is unchanged.</p>
+              <p class="panel-reason">REASON: THE SERVER ANSWERED 500</p>
+            </div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">1j &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <p class="c2identity">
+                  Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+                </p>
+                <div class="panel">
+                  <p class="panel-label">UNLINK DIDN'T HAPPEN</p>
+                  <p class="panel-line">Couldn't unlink. Your link is unchanged.</p>
+                  <p class="panel-reason">REASON: THE SERVER ANSWERED 500</p>
+                </div>
+              </div>
+              <div class="btn-danger">Unlink Concept2</div>
+            </div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h2>2 · Log detail — the Send block</h2>
+    <p class="lede">
+      Placement: after the "Logged to &lt;plan&gt;" footer and BEFORE
+      <em>Delete session</em>. The board says "end of the log-detail scroll, after
+      the Logged to &lt;plan&gt; line"; the delete affordance's own placement rule
+      is "bottom of the view, below the plan footer &mdash; last, quiet, away from
+      Edit" (<code>src/log/FromTheLog.tsx:564-569</code>). Both hold only in this
+      order, and it is the order rendered here.
+    </p>
+    <div class="callout">
+      <p><strong>The board points at the wrong file.</strong> Its "About the
+      Design Files" section says Surface 2 goes in "<code>app/src/log/LogRow.tsx</code>
+      area". <code>LogRow.tsx:221-281</code> is the LIST row's content, rendered
+      inside a <code>&lt;Link&gt;</code> on Today and History
+      (<code>HistoryList.tsx:188-198</code>, <code>Today.tsx:1683-1693</code>) &mdash;
+      an interactive control there would nest a button inside an anchor, and the
+      list projection does not even carry the fields the send state needs. The
+      board's own §Surface 2 says "Log detail", which is
+      <code>FromTheLog.tsx</code>. That is where it goes.</p>
+    </div>
+    <p class="lede">
+      Renders only when the account is linked AND the row qualifies:
+      <code>source === "pm5"</code> AND <code>endedBy === "finished"</code> AND
+      both work columns present &mdash; the client mirror of
+      <code>server/concept2/mapping.ts:60-72</code>. Otherwise absent entirely, no
+      pointer, no disabled control.
+    </p>
+
+    <h3>2a Idle &middot; 2b Sending <span class="badge b-same">UNCHANGED</span></h3>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2a &middot; PORTRAIT &middot; in situ, foot of the log-detail scroll</p>
+        <div class="frame">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="backlink">&larr; LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <p class="log-meta">AUG 27 &middot; HELD &middot; 3/5</p>
+          <div class="ghost short">HEROES</div>
+          <div class="ghost">INTERVALS</div>
+          <div class="ghost short">MACHINE CONFIRMED &middot; WORK ONLY</div>
+          <div class="ghost short">PACE / RATE TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT SENT</span>
+            </div>
+            <div class="btn-outline">Send to Concept2</div>
+            <p class="c2helper">
+              Sends this row's work time and meters to your Concept2 logbook.
+            </p>
+          </div>
+          <div class="btn-l4" style="margin-top: 10px">Delete session</div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">2b &middot; PORTRAIT &middot; sending</p>
+        <div class="frame">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="backlink">&larr; LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <p class="log-meta">AUG 27 &middot; HELD &middot; 3/5</p>
+          <div class="ghost short">HEROES</div>
+          <div class="ghost">INTERVALS</div>
+          <div class="ghost short">MACHINE CONFIRMED &middot; WORK ONLY</div>
+          <div class="ghost short">PACE / RATE TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">SENDING</span>
+            </div>
+            <div class="btn-outline inert">Sending to Concept2 &hellip;</div>
+            <p class="c2helper">
+              Sends this row's work time and meters to your Concept2 logbook.
+            </p>
+          </div>
+          <div class="btn-l4" style="margin-top: 10px">Delete session</div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>2c Sent <span class="badge b-changed">CHANGED</span></h3>
+    <p class="lede">
+      <strong>2c is the result id and nothing else. Revised 2026-09-04, and
+      this paragraph REPLACES the four that argued the other way</strong>
+      &mdash; they are not kept below as history, because a withdrawn argument
+      left standing beside its withdrawal is read as the design. A revision of
+      this page added a second mono sub-line beside <code>RESULT 339</code>
+      naming the class that had just been sent and which producer supplied it
+      (<strong>WEIGHT CLASS H &middot; FROM YOUR LAST CONCEPT2 ROW</strong>, or
+      <strong>&hellip; FROM YOUR CONCEPT2 WEIGHT</strong> when we derived it).
+      <strong>That line is withdrawn.</strong> James, 2026-09-04: &quot;Stop
+      talking about the weight class.&quot;
+    </p>
+    <p class="lede">
+      <strong>What the withdrawn line was FOR, stated plainly, because the
+      ruling accepts its cost rather than denying it.</strong> Concept2's own
+      help makes the class the rower's <em>declaration</em> (&quot;you must
+      designate L or H for every piece that you enter&quot;), so when we cannot
+      read one and derive it from their profile weight instead, we are guessing
+      at a competition category and writing it to a permanent third-party
+      record. The line existed so that guess was visible at the moment it was
+      written, while Concept2's own per-result editor could still repair it.
+      Removing it means a derived class is now written and never shown.
+    </p>
+    <p class="lede">
+      <strong>Where the provenance went instead.</strong> The route's 200 still
+      carries <code>weightClass</code> and <code>weightClassSource</code>, and
+      the send's log line still records which producer answered &mdash; so
+      &quot;which class did we send for that row, and who decided it&quot; is
+      still answerable, by an operator, off the record rather than off the
+      screen. And the guess cannot compound: the declaration read excludes every
+      result id this app wrote (&sect;0 row 9), so one derived class does not
+      come back as the rower's own declaration on the next send. That rule was
+      argued as protecting this line; it stands on its own, because what it
+      really protects is the class we SEND.
+    </p>
+    <p class="lede">
+      The result id is the whole of the state either way. Nothing about the
+      class was ever stored by us, so the withdrawn line only ever drew on the
+      response of the send that had just happened; every later visit already
+      rendered 2c exactly as the frames below now draw it, on every visit.
+    </p>
+    <p class="lede">
+      The timestamp is removed. Nothing stores when Concept2 accepted the row:
+      <code>session_logs</code> gained <code>c2_result_id</code> and
+      <code>c2_user_id</code> and nothing else
+      (<code>server/db/schema.ts:377-378</code>). Rendering
+      <code>loggedAt</code> there would print the save clock under a line that
+      says "Accepted by Concept2", which is a different event.
+      The result-id footnote is the durable evidence and it stays.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2c &middot; PORTRAIT &middot; in situ</p>
+        <div class="frame">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="backlink">&larr; LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <p class="log-meta">AUG 27 &middot; HELD &middot; 3/5</p>
+          <div class="ghost short">HEROES</div>
+          <div class="ghost">INTERVALS</div>
+          <div class="ghost short">MACHINE CONFIRMED &middot; WORK ONLY</div>
+          <div class="ghost short">PACE / RATE TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line">Accepted by Concept2.</p>
+            <div class="send-linkrow">View on Concept2 &rarr;</div>
+            <p class="c2foot" style="text-align: left">
+              RESULT 339
+            </p>
+          </div>
+          <div class="btn-l4" style="margin-top: 10px">Delete session</div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">2c &middot; the withdrawn TIMESTAMP, struck, for comparison</p>
+        <div class="frame">
+          <p class="board-cap">BOARD (approved 2026-08-31)</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line strike">Accepted by Concept2 &middot; Aug 27, 11:31</p>
+            <div class="send-linkrow strike" style="color: var(--ink-4)">View on Concept2 &rarr;</div>
+            <p class="c2foot" style="text-align: left">
+              RESULT 339
+            </p>
+          </div>
+          <p class="board-cap" style="margin-top: 16px">AMENDED</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line">Accepted by Concept2.</p>
+            <div class="send-linkrow">View on Concept2 &rarr;</div>
+            <p class="c2foot" style="text-align: left">
+              RESULT 339
+            </p>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide">2c &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <div class="ghost short">HEROES &middot; INTERVALS &middot; MACHINE CONFIRMED &middot; TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line">Accepted by Concept2.</p>
+            <div class="send-linkrow">View on Concept2 &rarr;</div>
+            <p class="c2foot" style="text-align: left">
+              RESULT 339
+            </p>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>"View on Concept2 &rarr;" is a button, not an anchor, and it does
+      not navigate this document.</strong> On native a plain
+      <code>&lt;a href&gt;</code> would drive the Capacitor WebView itself to
+      concept2.com with no way back; on web today's only adapter
+      (<code>openExternalUrl</code>) is
+      <code>window.location.assign</code> (<code>adapters/webNavigate.ts</code>),
+      which is right for the OAuth hop and wrong for a read-only look. PR2 adds a
+      second adapter arm that opens a new context on web and
+      <code>SFSafariViewController</code> on native. Both surfaces come back to
+      Ergomatic with the row still on screen. The row is 44px tall.</p>
+    </div>
+
+    <h3>2c-b Sent, with no link-out <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      The same SENT row, drawn on a deployment whose
+      <code>GET /api/concept2/link</code> carried no
+      <code>logbookBaseUrl</code> &mdash; an older image mid rolling deploy, or
+      an origin that arrived empty. The link-out cannot be built, and that part
+      is fine. What was NOT fine is that the result id was gated on the
+      link-out's own condition, so this row rendered
+      <strong>&quot;Accepted by Concept2.&quot; and nothing else</strong>: no
+      id, no link, and no way for a tester to say WHICH row landed.
+      Amendment change 4 removed the timestamp on the grounds that &quot;the
+      result id below is the durable evidence&quot; &mdash; so this was that
+      evidence disappearing.
+    </p>
+    <p class="lede">
+      The id now renders on its own condition: <strong>RESULT 339</strong>,
+      same mono, same <code>--ink-4</code> (5.29:1 on <code>--surface</code>).
+      Since the 2026-09-03 copy pass it reads the same in the ordinary frame
+      too &mdash; the line says the id and nothing else &mdash; so the only
+      difference between these two frames is that the button is absent here.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2c-b &middot; PORTRAIT &middot; beside 2c, for comparison</p>
+        <div class="frame">
+          <p class="board-cap">2c &middot; the ordinary case</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line">Accepted by Concept2.</p>
+            <div class="send-linkrow">View on Concept2 &rarr;</div>
+            <p class="c2foot" style="text-align: left">
+              RESULT 339
+            </p>
+          </div>
+          <p class="board-cap" style="margin-top: 16px">2c-b &middot; no origin from the server</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line">Accepted by Concept2.</p>
+            <p class="c2foot" style="text-align: left">RESULT 339</p>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">2c-b &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <div class="ghost short">HEROES &middot; INTERVALS &middot; MACHINE CONFIRMED &middot; TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SENT</span>
+            </div>
+            <p class="send-line">Accepted by Concept2.</p>
+            <p class="c2foot" style="text-align: left">RESULT 339</p>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>2d Duplicate <span class="badge b-changed">CHANGED</span></h3>
+    <p class="lede">
+      Body copy is the board's. The link-out changes from the generic "Open your
+      Concept2 logbook &rarr;" to the specific "View on Concept2 &rarr;" plus the
+      result id, because C2's 409 names the colliding id and the route stores it
+      before answering (<code>server/routes/concept2.ts:875-899</code>). No retry,
+      as approved.
+    </p>
+    <div class="callout">
+      <p><strong>This state is session-transient and the record should say so.</strong>
+      Because the 409's id is written durably, the next mount of this screen reads
+      <code>c2ResultId</code> off the row and renders <strong>2c SENT</strong>.
+      2d is what the rower sees in the seconds after the tap that collided, and
+      never again. That is correct (the row IS on Concept2), and it means 2d
+      cannot be captured by a screenshot that seeds state and reloads &mdash; only
+      by driving the tap.</p>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2d &middot; PORTRAIT</p>
+        <div class="frame">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="backlink">&larr; LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <p class="log-meta">AUG 27 &middot; HELD &middot; 3/5</p>
+          <div class="ghost short">HEROES</div>
+          <div class="ghost">INTERVALS</div>
+          <div class="ghost short">MACHINE CONFIRMED &middot; WORK ONLY</div>
+          <div class="ghost short">PACE / RATE TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">ALREADY THERE</span>
+            </div>
+            <p class="send-line">
+              Concept2 already has this row: same date, time and distance.
+            </p>
+            <div class="send-linkrow">View on Concept2 &rarr;</div>
+            <p class="c2foot" style="text-align: left">
+              RESULT 339
+            </p>
+          </div>
+          <div class="btn-l4" style="margin-top: 10px">Delete session</div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">2d &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <div class="ghost short">HEROES &middot; INTERVALS &middot; MACHINE CONFIRMED &middot; TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">ALREADY THERE</span>
+            </div>
+            <p class="send-line">
+              Concept2 already has this row: same date, time and distance.
+            </p>
+            <div class="send-linkrow">View on Concept2 &rarr;</div>
+            <p class="c2foot" style="text-align: left">
+              RESULT 339
+            </p>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>2e Failed <span class="badge b-changed">CHANGED</span> &middot; 2f Reconnect needed <span class="badge b-new">NEW</span></h3>
+    <p class="lede">
+      2e keeps the board's copy and gains the same mono REASON line 1e does, for
+      the same reason: the route answers with six distinguishable typed failures
+      and "it didn't work" is not one of them. 2f is new &mdash; the upload route
+      returns <code>409 needs_reauth</code>
+      (<code>server/routes/concept2.ts:617-620</code>) and retrying cannot help,
+      so there is no Retry button; the fix lives on You.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2e &middot; PORTRAIT &middot; two representative reasons</p>
+        <div class="frame">
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SEND FAILED</span>
+            </div>
+            <p class="send-line">
+              The send didn't reach Concept2.
+            </p>
+            <p class="panel-reason">REASON: CONCEPT2 ERROR &middot; 502</p>
+            <div class="btn-outline">Retry send</div>
+          </div>
+          <div class="sendcard" style="margin-top: 14px">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SEND FAILED</span>
+            </div>
+            <p class="send-line">
+              The send didn't reach Concept2.
+            </p>
+            <p class="panel-reason">REASON: NO CONNECTION</p>
+            <div class="btn-outline">Retry send</div>
+          </div>
+          <p class="board-cap" style="margin-top: 16px">2f &middot; RECONNECT NEEDED</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="send-line">
+              Concept2 stopped accepting this link. Reconnect on the You tab.
+            </p>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">2e &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <div class="ghost short">HEROES &middot; INTERVALS &middot; MACHINE CONFIRMED &middot; TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SEND FAILED</span>
+            </div>
+            <p class="send-line">
+              The send didn't reach Concept2.
+            </p>
+            <p class="panel-reason">REASON: CONCEPT2 ERROR &middot; 502</p>
+            <div class="btn-outline">Retry send</div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <p class="lede">The upload route's answers &rarr; block state, keyed on
+      <code>body.error</code> and never on status alone (409 carries three
+      different meanings at <code>server/routes/concept2.ts:614/618/897</code>):</p>
+    <table class="kv">
+      <tr><th>Response</th><th>State</th><th>REASON line</th></tr>
+      <tr><td class="num">200 <code>{resultId}</code></td><td>2c Sent <em>(a 200 whose body carries no numeric <code>resultId</code> is not a send &mdash; it falls to 2e, one row down from the bottom)</em></td><td>&mdash;</td></tr>
+      <tr><td class="num">409 <code>duplicate</code></td><td>2d Already there <em>(likewise: no numeric <code>c2ResultId</code> means nothing was recorded and there is nothing to link to &mdash; 2e)</em></td><td>&mdash;</td></tr>
+      <tr><td class="num">409 <code>needs_reauth</code></td><td>2f</td><td>&mdash;</td></tr>
+      <tr><td class="num">409 <code>unlinked</code></td><td>block disappears (re-read the link; the rower unlinked in another tab)</td><td>&mdash;</td></tr>
+      <tr><td class="num">422 <code>not_eligible</code></td><td><strong>2h</strong> (the client predicate and the server's disagree &mdash; the server wins, and the rower is told so rather than watching the block vanish)</td><td>CONCEPT2 WON'T TAKE THIS ROW &middot; &lt;REASON&gt;</td></tr>
+      <tr><td class="num">422 <code>no_weight_class</code></td><td><strong>2i</strong> (2026-09-03 ruling: Concept2's own profile carries no usable weight, so no class can be derived. The ONE send failure the rower can repair &mdash; and not here). <strong>Key on <code>body.error</code>, never on the 422</strong>: the two 422s render differently and only this one offers a way out</td><td>SET YOUR WEIGHT ON CONCEPT2</td></tr>
+      <tr><td class="num">403 <code>unavailable</code></td><td>block disappears (flag flipped off mid-session)</td><td>&mdash;</td></tr>
+      <tr><td class="num">502 <code>c2_error</code></td><td>2e</td><td>CONCEPT2 ERROR &middot; 502</td></tr>
+      <tr><td class="num">400 <code>tz &hellip;</code></td><td>2e</td><td>COULDN'T READ THIS DEVICE'S TIME ZONE</td></tr>
+      <tr><td class="num">404</td><td>2e</td><td>THIS ROW IS GONE</td></tr>
+      <tr><td class="num">network throw</td><td>2e</td><td>NO CONNECTION</td></tr>
+      <tr><td class="num">a 200 or a 409 <code>duplicate</code> with no numeric id in the body</td><td>2e</td><td>CONCEPT2 SENT SOMETHING WE COULDN'T READ</td></tr>
+      <tr><td class="num">any other status</td><td>2e</td><td>COULDN'T SEND THIS ROW &middot; &lt;status&gt;</td></tr>
+    </table>
+    <p class="lede">
+      <em>The last two rows are new in Task 5's fix round 1, and they draw
+      strings the build already produced.</em> The catch-all is the direct
+      sibling of 1e's <code>mintFailed</code> row (COULDN'T START THE LINK
+      &middot; &lt;status&gt;), and it is REACHABLE, not defensive: the upload
+      route carries two middlewares ahead of its own handler
+      (<code>server/routes/concept2.ts</code>'s
+      <code>router.post("/api/concept2/results/:logId", requireUser,
+      refuseAmbiguousAuth, &hellip;)</code>) and each answers before any
+      <code>body.error</code> this table knows exists &mdash; an expired or
+      absent session 401s <code>{error:"unauthenticated"}</code>, and a bearer
+      that disagrees with the cookie beside it 400s
+      <code>{error:"ambiguous_auth"}</code> with no <code>field</code>, so it
+      lands here and not in the tz row above. The malformed row reuses the sentence 1e already renders for
+      <code>malformed</code> on the sibling surface &mdash; the build had been
+      inventing two of its own for the two shapes, and a rower cannot act on
+      them differently. Which shape it was belongs in the send's log line.
+    </p>
+
+    <h3>2h Concept2 won't take this row <span class="badge b-new">NEW STATE</span></h3>
+    <p class="lede">
+      A <code>422 not_eligible</code>. The board and the table above folded
+      this in with <code>unlinked</code> and <code>unavailable</code> as
+      &quot;the block disappears&quot;, and for those two that is right: they
+      mean the block's own preconditions stopped holding &mdash; the rower
+      unlinked in another tab, or the flag went off &mdash; and there is
+      nothing to say and nothing to retry.
+    </p>
+    <p class="lede">
+      <strong>A 422 is a different fact.</strong> It means the client mirror of
+      the eligibility fence and the server's own copy answered
+      <em>differently about the same row</em> &mdash; the exact drift the
+      cross-tree seam test exists to detect. Drawn as absence, the rower taps
+      Send and watches a control that was there a second ago simply stop
+      existing, and the divergence is reported to nobody. It gets the 2e
+      chrome, the 2e copy, and a REASON that names what Concept2 objected to.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2h &middot; PORTRAIT &middot; two of the three server reasons</p>
+        <div class="frame">
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SEND FAILED</span>
+            </div>
+            <p class="send-line">
+              The send didn't reach Concept2.
+            </p>
+            <p class="panel-reason">
+              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; DIDN'T FINISH
+            </p>
+            <div class="btn-outline">Retry send</div>
+          </div>
+          <div class="sendcard" style="margin-top: 14px">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SEND FAILED</span>
+            </div>
+            <p class="send-line">
+              The send didn't reach Concept2.
+            </p>
+            <p class="panel-reason">
+              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NO WORK TIME OR METERS
+            </p>
+            <div class="btn-outline">Retry send</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">2h &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <div class="ghost short">HEROES &middot; INTERVALS &middot; MACHINE CONFIRMED &middot; TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">SEND FAILED</span>
+            </div>
+            <p class="send-line">
+              The send didn't reach Concept2.
+            </p>
+            <p class="panel-reason">
+              REASON: CONCEPT2 WON'T TAKE THIS ROW &middot; NO MONITOR USED
+            </p>
+            <div class="btn-outline">Retry send</div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>A written phrase per token, never the token itself.</strong>
+      <code>eligibilityFailure</code> returns exactly three, and each has words
+      chosen for a rower: <code>not_monitor</code> &rarr; <strong>NO MONITOR
+      USED</strong> (the row's source is not the PM5, so nothing was connected
+      when it was rowed), <code>not_finished</code> &rarr; <strong>DIDN'T
+      FINISH</strong> (terminated, or no ending recorded at all),
+      <code>no_work_totals</code> &rarr; <strong>NO WORK TIME OR
+      METERS</strong> (the two numbers the send helper says it sends). A 422
+      carrying no recognisable reason reads NOT ELIGIBLE, and the token goes to
+      the send's log line rather than onto the screen. <strong>Corrected
+      2026-09-03 (change 12):</strong> an earlier drawing appended
+      <code>reason.toUpperCase().replace(/_/g, " ")</code>, so this panel read
+      &quot;NOT MONITOR&quot; &mdash; an enum member in the costume of copy.
+      Retry send stays, deliberately: a rower who sees this should be able to
+      try once and report what happened, and the divergence it reveals is a
+      bug on our side, not a state the rower caused.</p>
+      <p><strong>The table above is corrected in the same breath:</strong> its
+      <code>422 not_eligible</code> row now reads &quot;2h&quot; with the
+      REASON line, not &quot;block disappears&quot;.</p>
+    </div>
+
+    <h3>2i Concept2 has no class for you <span class="badge b-new">NEW STATE</span> <span class="badge b-changed">REDRAWN 2026-09-03</span></h3>
+    <p class="lede">
+      <strong>The 2026-09-03 ruling's own state, redrawn.</strong> James: &quot;I
+      don't want that set in our app. I want it to be set on Concept2's
+      side.&quot; So the app asks nothing &mdash; but Concept2 still requires a
+      <code>weight_class</code> on every rower result (measured: a POST without
+      it is refused <strong>422</strong>). The server now reads the rower's own
+      most recent <strong>declaration</strong> first &mdash; Concept2's help says
+      <em>&quot;you must designate L or H for every piece that you enter&quot;</em>,
+      so the declaration is the vendor's own producer &mdash; and falls back to
+      deriving one from the profile's weight. This frame is what the rower sees
+      when <strong>neither</strong> can supply one.
+    </p>
+    <p class="lede">
+      <strong>Two things changed since the first drawing of this frame, and both
+      were the frame contradicting itself.</strong>
+    </p>
+    <ul class="tight">
+      <li><strong>It keeps a &quot;Send again&quot;.</strong> The earlier draft
+        removed it, reasoning that &quot;the server would read the same
+        unchanged profile and refuse again&quot;. That is true only if the rower
+        ignores the sentence directly above the button, which is the one thing
+        this state exists to make them not do. The 1g parallel was false:
+        nothing a rower can do fixes a stale app build, while
+        <em>everything</em> here is fixable in one visit &mdash; which is why the
+        state has a link-out at all. On native the link-out is
+        <code>SFSafariViewController</code>, chosen precisely because it
+        <em>returns to the app</em>, so the rower comes back to this still-mounted
+        block. Without a Send again there is no way to finish the instruction
+        except navigating away and back. <strong>It is the ink outline 2e draws
+        for Retry send, not the accent control &mdash; fix round 1; see the
+        callout below the frames.</strong></li>
+      <li><strong>Four server reasons, three sentences.</strong> The route answers
+        <code>reason</code> as one of <code>no_weight</code>,
+        <code>unreadable_weight</code>, <code>implausible_weight</code>,
+        <code>no_gender</code>. The two middle ones share a rendering, because the
+        rower's action is identical. <strong><code>no_gender</code> does
+        not</strong>: Concept2's category is two-valued with gendered thresholds,
+        so that profile has no derivable class at all, and its weight is not the
+        broken thing. Telling that rower to set a weight sends them after a field
+        that is fine.</li>
+      <li><strong>Every sentence is answerable from the one control this state
+        has, and none of them names a destination that control cannot
+        reach.</strong> An earlier drawing told the <code>no_gender</code> rower to
+        &quot;pick lightweight or heavyweight on a result in your Concept2
+        logbook&quot; beneath a button that opens the PROFILE &mdash; and the class
+        is per-result, so the profile is the one page where it cannot be picked.
+        All three sentences now say <em>open Concept2 to check it</em>. The shared
+        middle sentence also stopped blaming the rower's weight: an implausible
+        number is most likely OUR unit inference being wrong, so it says what we
+        could not do. The two tokens stay distinct on the wire so the send's log
+        line can tell a value we could not parse from one that parsed and was
+        absurd.</li>
+      <li><strong>There is deliberately no fourth sentence for an unrecognised
+        token.</strong> A token we do not know means Concept2's side gave us
+        something we could not turn into a class, which is what the third sentence
+        already says. That keeps the set of sentences the client can produce equal
+        to the set drawn on this page.</li>
+    </ul>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2i &middot; PORTRAIT &middot; <code>no_weight</code></p>
+        <div class="frame">
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">NO WEIGHT CLASS</span>
+            </div>
+            <p class="send-line">
+              Concept2 needs a weight class. Your Concept2 profile has no weight set.
+            </p>
+            <p class="panel-reason">REASON: SET YOUR WEIGHT ON CONCEPT2</p>
+            <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+            <div class="btn-outline">Send again</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">2i &middot; the other two sentences, same chrome</p>
+        <div class="frame">
+          <p class="board-cap"><code>unreadable_weight</code> / <code>implausible_weight</code></p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">NO WEIGHT CLASS</span>
+            </div>
+            <p class="send-line">
+              Concept2 needs a weight class. We couldn't read the weight on your Concept2 profile.
+            </p>
+            <p class="panel-reason">REASON: COULDN'T READ YOUR CONCEPT2 WEIGHT</p>
+            <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+            <div class="btn-outline">Send again</div>
+          </div>
+          <p class="board-cap" style="margin-top: 16px"><code>no_gender</code></p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">NO WEIGHT CLASS</span>
+            </div>
+            <p class="send-line">
+              Concept2 needs a weight class. We couldn't work one out from your Concept2 profile.
+            </p>
+            <p class="panel-reason">REASON: COULDN'T GET A CLASS FROM CONCEPT2</p>
+            <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+            <div class="btn-outline">Send again</div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide">2i &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <div class="ghost short">HEROES &middot; INTERVALS &middot; MACHINE CONFIRMED &middot; TRACE</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">NO WEIGHT CLASS</span>
+            </div>
+            <p class="send-line">
+              Concept2 needs a weight class. Your Concept2 profile has no weight set.
+            </p>
+            <p class="panel-reason">REASON: SET YOUR WEIGHT ON CONCEPT2</p>
+            <div class="send-linkrow">OPEN CONCEPT2 PROFILE</div>
+            <div class="btn-outline">Send again</div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>No new colour pairing, restated as numbers rather than
+      asserted.</strong> Status <code>--ink</code> on <code>--surface</code>
+      17.11:1; the send line <code>--ink-2</code> on <code>--surface</code>
+      10.81:1; the REASON <code>--ink-3</code> on <code>--surface</code>
+      7.43:1; the link-out label <code>--accent</code> on <code>--surface</code>
+      5.94:1; Send again's label <code>--ink</code> on <code>--surface</code>
+      17.11:1. All of them are rows in &sect;4 already. The link-out row is 44px,
+      the same as View on Concept2 &mdash; and it is a <strong>button</strong>
+      for the same reason that one is: inside the Capacitor WebView a plain
+      anchor drives the WebView itself to concept2.com with no way back.</p>
+      <p><strong>Send again is the ink outline 2e draws for Retry send &mdash;
+      48px, <code>--ink</code> border, <code>--ink</code> label, i.e.
+      <code>.btn-outline</code>. REDRAWN 2026-09-03 (fix round 1), because the
+      four frames above and this paragraph used to disagree and this paragraph
+      was wrong about 2e as well.</strong> The frames drew Send again as
+      <code>.btn-l4</code> &mdash; 44px, <code>--accent</code> border,
+      <code>--accent</code> label, and carrying the identical inline
+      <code>margin-top: 10px</code> &mdash; which is what it was copied from:
+      <strong>six frames on this page draw <em>Delete session</em> with exactly
+      that class and exactly that inline style</strong> (2a, 2b, 2c, 2d and
+      both 2g frames), and unlike Send again every one of them sits OUTSIDE the
+      sendcard. This paragraph meanwhile called it
+      "the level-4 button 2e already uses for Retry send", and 2e does not use
+      the level-4 button: every <code>Retry send</code> on this page is a bare
+      <code>.btn-outline</code>. The sentence named one treatment and pointed at
+      another.</p>
+      <p><strong>Two reasons the ink outline wins, beyond the callout being the
+      half that was right about 2e.</strong> A non-destructive re-send must not
+      wear the vocabulary this page gives a DELETE on the same screen &mdash;
+      that is a rower reading "this removes something" off the button that
+      sends one. And <code>--accent</code> already carries a declared job on
+      this surface (&sect;5, the link-out); a second, unrelated accent control
+      here would be another one, which is precisely the drift &sect;5 exists to
+      stop. Inside the card the outline also carries no inline margin: the
+      <code>.sendcard</code>'s own 10px flex gap already spaces it, and
+      <code>.btn-l4</code>'s <code>margin-bottom: 16px</code> is furniture for a
+      control that sits OUTSIDE the card.</p>
+      <p><strong>The destination CHANGED, and the measurement that was cited for
+      the old one is evidence against it.</strong> The earlier draft pointed at
+      <code>{origin}/profile/{id}</code> on the strength of
+      <code>curl -sI &hellip;/profile/2211</code> answering <strong>200</strong>.
+      Fetching the <em>body</em> (2026-09-03, 13862 bytes) shows a public
+      read-only card &mdash; &quot;Login Sign Up &hellip; james morelli Age: 38
+      Country: United States Logbook ID: 2211 Member since: August 21, 2026&quot;
+      &mdash; with no weight, no form and no edit control. <strong>A page that
+      renders to a signed-out fetcher is by construction not the rower's own
+      account form.</strong> Probed the same day: <code>/profile</code> (no id)
+      <strong>302s to <code>/login</code></strong>, which is the
+      authenticated-self signature; <code>/profile/edit</code>,
+      <code>/account</code>, <code>/settings</code> and
+      <code>/preferences</code> all 404. So the button targets the
+      <strong>id-less</strong> <code>{origin}/profile</code>.</p>
+      <p><strong>And it opens signed out, which is why the id-less path
+      matters.</strong> The native arm is <code>SFSafariViewController</code>,
+      whose website data has been isolated from Safari since iOS 11 (SECONDARY;
+      it is the same isolation that forced the OAuth hop onto
+      <code>ASWebAuthenticationSession</code>). The rower's Concept2 session
+      lives in Safari's jar, so the sheet lands them at a sign-in and the id-less
+      path takes them to their own account afterwards.</p>
+      <p><strong>The target is PROVISIONAL, and the gate should read it as
+      such.</strong> No status code can say which Concept2 page carries the
+      weight and weight-class fields; one logged-in glance can, and that glance
+      is a step in the same desk session as exit criterion 3b. If it names a
+      different page, the constant moves and this frame does not.</p>
+      <p>The origin comes from the server's own <code>logbookBaseUrl</code>,
+      never a hardcoded <code>log.concept2.com</code>, which would 404 for the
+      whole sandbox phase; if that origin is missing, the button does not render
+      and the sentence, the REASON and <strong>Send again</strong> still name the
+      repair.</p>
+    </div>
+
+    <h3>2g Absent <span class="badge b-same">UNCHANGED</span></h3>
+    <p class="lede">
+      Not linked, or a non-qualifying row (manual, timer, no-reading, terminated,
+      or missing work columns): the block does not render, ever. No pointer, no
+      disabled control. The You card is the sole discovery surface.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">2g &middot; PORTRAIT &middot; a timer row, linked account, nothing between the footer and Delete</p>
+        <div class="frame">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="backlink">&larr; LOG</p>
+          <p class="log-title">Just row</p>
+          <p class="log-meta">AUG 26 &middot; 2/5</p>
+          <div class="ghost short">HEROES</div>
+          <div class="ghost">INTERVALS</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 3</p>
+          <div class="btn-l4" style="margin-top: 10px">Delete session</div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">2g &middot; LANDSCAPE</p>
+        <div class="frame land">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="log-title">Just row</p>
+          <div class="ghost short">HEROES &middot; INTERVALS</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 3</p>
+          <div class="btn-l4" style="margin-top: 10px">Delete session</div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h2>3 · The callback pages, as the server renders them</h2>
+    <p class="lede">
+      Reproduced from <code>server/concept2/callbackPage.ts</code> &mdash; the
+      real template's own CSS string (<code>:104-113</code>), including its
+      landscape rule (<code>@media (orientation: landscape) and (max-height:500px)
+      { main { margin-top: 4vh } }</code>). Eight pages, all
+      <span class="badge b-same">UNCHANGED</span> except the two marked. These
+      were Gate 0-approved on 2026-09-02 and BUILT at PR1.75a; they are reproduced
+      here because the rower meets them mid-flow and the amendment's 1b/1e frames
+      only make sense beside them.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">200 LINKED &middot; PORTRAIT <span class="badge b-same">UNCHANGED</span></p>
+        <div class="frame cb" style="padding: 0; display: block">
+          <div class="cb-main">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; LINKED &middot; HTTP 200</p>
+              <h1>Concept2 jamesawesome is now connected to Ergomatic james@jamestheaweso.me.</h1>
+              <p class="action">Return to the app.</p>
+            </section>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">401 NOT SIGNED IN &middot; PORTRAIT <span class="badge b-changed">CHANGED</span></p>
+        <div class="frame cb" style="padding: 0; display: block">
+          <div class="cb-main">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; NOT SIGNED IN &middot; HTTP 401</p>
+              <h1>No Ergomatic session in this browser.</h1>
+              <p class="action">
+                Open Ergomatic in this browser and sign in, then start the link
+                again from the app.
+              </p>
+            </section>
+            <p style="margin-top: 18px; font-size: 13px; color: var(--cb-label)">
+              WAS: "Sign in to Ergomatic
+              <span class="strike">here</span>, then start the link again from
+              the app." &mdash; "here" is plain text, not a link
+              (<code>callbackPage.ts:52-56</code>), so it names a destination it
+              cannot take you to.
+            </p>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">403 WRONG ACCOUNT &middot; PORTRAIT <span class="badge b-changed">CHANGED</span></p>
+        <div class="frame cb" style="padding: 0; display: block">
+          <div class="cb-main">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; WRONG ACCOUNT &middot; HTTP 403</p>
+              <h1>This link was started by a different Ergomatic account.</h1>
+              <p class="action">
+                Sign in as that account in this browser, or start a new link from
+                the account you're using.
+              </p>
+            </section>
+            <p style="margin-top: 18px; font-size: 13px; color: var(--cb-label)">
+              WAS: "Sign in as that account
+              <span class="strike">here</span>, or start a new link&hellip;"
+            </p>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">409 ALREADY LINKED &middot; PORTRAIT <span class="badge b-same">UNCHANGED</span></p>
+        <div class="frame cb" style="padding: 0; display: block">
+          <div class="cb-main">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; ALREADY LINKED &middot; HTTP 409</p>
+              <h1>That Concept2 account is already connected to a different Ergomatic account.</h1>
+              <p class="action">Return to the app.</p>
+            </section>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">400 EXPIRED &middot; PORTRAIT <span class="badge b-same">UNCHANGED</span></p>
+        <div class="frame cb" style="padding: 0; display: block">
+          <div class="cb-main">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; EXPIRED &middot; HTTP 400</p>
+              <h1>This link has expired or was already used.</h1>
+              <p class="action">Return to the app and start again.</p>
+            </section>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">400 INCOMPLETE &middot; PORTRAIT <span class="badge b-same">UNCHANGED</span></p>
+        <div class="frame cb" style="padding: 0; display: block">
+          <div class="cb-main">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; INCOMPLETE &middot; HTTP 400</p>
+              <h1>This link is missing required parameters.</h1>
+              <p class="action">Return to the app and start again.</p>
+            </section>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">403 UNAVAILABLE &middot; PORTRAIT <span class="badge b-same">UNCHANGED</span></p>
+        <div class="frame cb" style="padding: 0; display: block">
+          <div class="cb-main">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; UNAVAILABLE &middot; HTTP 403</p>
+              <h1>Concept2 linking is not available right now.</h1>
+              <p class="action">Return to the app.</p>
+            </section>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">502 FAILED &middot; PORTRAIT <span class="badge b-same">UNCHANGED</span></p>
+        <div class="frame cb" style="padding: 0; display: block">
+          <div class="cb-main">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; FAILED &middot; HTTP 502</p>
+              <h1>Concept2 could not complete the connection.</h1>
+              <p class="action">Return to the app and try again.</p>
+            </section>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <p class="lede">Landscape, the two changed pages (the template's own
+      <code>max-height: 500px</code> rule drops the top margin from 12vh to 4vh):</p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide">401 NOT SIGNED IN &middot; LANDSCAPE</p>
+        <div class="frame land cb" style="padding: 0; display: block">
+          <div class="cb-main" style="margin-top: 4vh">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; NOT SIGNED IN &middot; HTTP 401</p>
+              <h1>No Ergomatic session in this browser.</h1>
+              <p class="action">
+                Open Ergomatic in this browser and sign in, then start the link
+                again from the app.
+              </p>
+            </section>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">403 WRONG ACCOUNT &middot; LANDSCAPE</p>
+        <div class="frame land cb" style="padding: 0; display: block">
+          <div class="cb-main" style="margin-top: 4vh">
+            <section>
+              <p class="status">CONCEPT2 LINK &middot; WRONG ACCOUNT &middot; HTTP 403</p>
+              <h1>This link was started by a different Ergomatic account.</h1>
+              <p class="action">
+                Sign in as that account in this browser, or start a new link from
+                the account you're using.
+              </p>
+            </section>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+
+    <h2>4 · Contrast, computed</h2>
+    <p class="lede">
+      WCAG 2.x relative luminance, computed (not eyeballed) with
+      <code>(L<sub>hi</sub>+0.05)/(L<sub>lo</sub>+0.05)</code> over sRGB values
+      linearised at the 0.04045 threshold. Every pairing this amendment's frames
+      actually paint is listed. AA text floor is 4.5:1; non-text graphics
+      (borders, rules) are held to 3:1 only where they carry meaning, and are
+      marked DECORATIVE where they do not.
+    </p>
+    <table class="kv">
+      <tr><th>Where</th><th>Foreground</th><th>Background</th><th>Ratio</th><th>AA</th></tr>
+      <tr><td>card body copy, section labels, LINKED &check; status</td><td class="num">--ink #1b1a17</td><td class="num">--surface #fffdf7</td><td class="num">17.11:1</td><td class="pass">PASS</td></tr>
+      <tr><td>2c/2d/2e send lines</td><td class="num">--ink-2 #3f3c35</td><td class="num">--surface #fffdf7</td><td class="num">10.81:1</td><td class="pass">PASS</td></tr>
+      <tr><td>helpers, identity line</td><td class="num">--ink-3 #57544c</td><td class="num">--surface #fffdf7</td><td class="num">7.43:1</td><td class="pass">PASS</td></tr>
+      <tr><td>NOT LINKED / WAITING / NOT SENT status, footnotes</td><td class="num">--ink-4 #6f6a5f</td><td class="num">--surface #fffdf7</td><td class="num">5.29:1</td><td class="pass">PASS</td></tr>
+      <tr><td>sunken panel label + line (1b, 1e, 1f, 1g)</td><td class="num">--ink #1b1a17</td><td class="num">--surface-sunken #efeade</td><td class="num">14.50:1</td><td class="pass">PASS</td></tr>
+      <tr><td><strong>REASON line on the sunken panel</strong></td><td class="num">--ink-3 #57544c</td><td class="num">--surface-sunken #efeade</td><td class="num">6.30:1</td><td class="pass">PASS</td></tr>
+      <tr><td>1i / 1j panel label + line (COULDN'T READ CONCEPT2, UNLINK DIDN'T HAPPEN)</td><td class="num">--ink #1b1a17</td><td class="num">--surface-sunken #efeade</td><td class="num">14.50:1</td><td class="pass">PASS</td></tr>
+      <tr><td>1i / 1j REASON line (status, or NO CONNECTION)</td><td class="num">--ink-3 #57544c</td><td class="num">--surface-sunken #efeade</td><td class="num">6.30:1</td><td class="pass">PASS</td></tr>
+      <tr><td>1i COULDN'T READ status, top right of the card</td><td class="num">--ink-4 #6f6a5f</td><td class="num">--surface #fffdf7</td><td class="num">5.29:1</td><td class="pass">PASS</td></tr>
+      <tr><td>1i Retry label and its 1px border</td><td class="num">--ink #1b1a17</td><td class="num">--surface #fffdf7</td><td class="num">17.11:1</td><td class="pass">PASS</td></tr>
+      <tr><td><strong>the value this amendment REFUSES for panel text</strong></td><td class="num">--ink-4 #6f6a5f</td><td class="num">--surface-sunken #efeade</td><td class="num">4.48:1</td><td class="fail">FAIL &mdash; never on the panel</td></tr>
+      <tr><td>Unlink label, View on Concept2 link-out (outline state)</td><td class="num">--accent #b5341f</td><td class="num">--surface #fffdf7</td><td class="num">5.94:1</td><td class="pass">PASS</td></tr>
+      <tr><td>Unlink ARMED label (1d)</td><td class="num">--on-color #fffdf7</td><td class="num">--accent #b5341f</td><td class="num">5.94:1</td><td class="pass">PASS</td></tr>
+      <tr><td>CONNECT / RECONNECT primary label</td><td class="num">--on-color #fffdf7</td><td class="num">--ink #1b1a17</td><td class="num">17.11:1</td><td class="pass">PASS</td></tr>
+      <tr><td>card text over the page ground (landscape overflow cases)</td><td class="num">--ink-3 #57544c</td><td class="num">--page #f4f1e8</td><td class="num">6.69:1</td><td class="pass">PASS</td></tr>
+      <tr><td>DIAGNOSTICS row (context only)</td><td class="num">--ink-3 #57544c</td><td class="num">--page #f4f1e8</td><td class="num">6.69:1</td><td class="pass">PASS</td></tr>
+      <tr><td>inert Connect / inert Send label</td><td class="num">--ink-3 #57544c</td><td class="num">--surface #fffdf7</td><td class="num">7.43:1</td><td class="pass">PASS</td></tr>
+      <tr><td>inert control border</td><td class="num">--rule-3 #c9c3b2</td><td class="num">--surface #fffdf7</td><td class="num">1.73:1</td><td>DECORATIVE &mdash; the label carries the state, never the border alone</td></tr>
+      <tr><td>card border, hairline</td><td class="num">--rule #d8d3c4 / --rule-2 #ded8c9</td><td class="num">--surface #fffdf7</td><td class="num">1.47 / 1.40:1</td><td>DECORATIVE</td></tr>
+      <tr><td>callback page statement</td><td class="num">#1c1a17</td><td class="num">panel #fffdf8</td><td class="num">17.08:1</td><td class="pass">PASS</td></tr>
+      <tr><td>callback page status + action</td><td class="num">#5f5a50</td><td class="num">panel #fffdf8</td><td class="num">6.74:1</td><td class="pass">PASS</td></tr>
+      <tr><td>callback page ground (behind the panel)</td><td class="num">#1c1a17</td><td class="num">#f6f3ec</td><td class="num">15.67:1</td><td class="pass">PASS</td></tr>
+      <tr><td>callback page top rule</td><td class="num">#b5341f</td><td class="num">#fffdf8</td><td class="num">5.94:1</td><td>rule only, never text</td></tr>
+    </table>
+    <p class="lede">
+      <strong>1f-b, 1f-c, 1i and 1j introduce no new pairing</strong> &mdash;
+      that is the result, stated rather than assumed. All four reuse the sunken panel
+      and the outline button the earlier states already paint, so every one of
+      their colours was already computed above; the four rows naming them exist
+      so the table can be read as covering every frame rather than every token.
+      The one value this page refuses (<code>--ink-4</code> on
+      <code>--surface-sunken</code>, 4.48:1) applies to them too: their REASON
+      lines are <code>--ink-3</code>. 1f-b in particular adds a SECOND sunken
+      panel to a card that already had one and no colour that was not on this
+      table before it, and 1f-c adds a second sunken panel and no colour at
+      all &mdash; it has no REASON line.
+    </p>
+    <p class="lede">
+      Every tappable in every frame is &ge; 44px: Connect / Reconnect 48;
+      <strong>every button in the Send block &mdash; Send to Concept2, its inert
+      Sending twin, 2e/2h's Retry send and 2i's Send again &mdash; 48</strong>
+      (fix round 1: Send again joins that list, having been drawn as the 44px
+      accent Delete control until the ruling below);
+      <strong>every LIVE outline button inside a c2card &mdash; both Try again
+      and Retry &mdash; 52</strong>, Unlink 52, the link-out rows (View on
+      Concept2, and 2i's OPEN CONCEPT2 PROFILE) 44, Delete 44.
+      <em>Corrected in Task 4's fix round 4:</em> this sentence used to read
+      "Retry 48, 1i's Retry 52", and no frame on this page draws a 48px Retry.
+      All seven <strong>live</strong> in-card outline buttons carry an inline
+      <code>min-height: 52px</code> (four Try agains, three Retrys, zero bare).
+      <em>Corrected again in Task 5's fix round 1:</em> that sentence said
+      "all seven <code>.btn-outline</code>s inside a card frame", which is an
+      absolute over a mechanical class, and a nesting-aware scan of this page
+      counts <strong>eight</strong>. The eighth is the inert, struck
+      <code>Cancel</code> at 44px in the 1b/1d block under "REMOVED FROM THE
+      BOARD, SHOWN STRUCK FOR THE RECORD" &mdash; not a live control, which is
+      why the substance holds and only the count was wrong. The remaining
+      in-card buttons are all live and all 52. Outside the card sit the
+      thirteen You-row Sign out chips, which carry their OWN inline 44px
+      (the earlier wording called them "unstyled" three words before quoting
+      that number), and Surface 2's Send block, which carries none.
+      The build had been aligned to this sentence rather than to the
+      drawings and shipped 1e's Try again 4px short. <strong>The frames are
+      the authority; a summary sentence is not &mdash; and an absolute over a
+      class the page can grow is a census that will go stale again.</strong>
+    </p>
+    <p class="lede">
+      <strong>2i introduces no new colour pairing</strong> &mdash; but the
+      sentence that said so named the wrong backgrounds, and fix round 1
+      corrects it rather than appending to it. <strong>2i has no sunken panel:
+      every one of its four frames draws the sentence and the REASON as direct
+      children of the <code>.sendcard</code></strong>, whose ground is
+      <code>--surface</code>, not <code>--surface-sunken</code>. So its line is
+      <code>--ink-2</code> on <code>--surface</code> (10.81:1, row 2) and its
+      REASON is <code>--ink-3</code> on <code>--surface</code> (7.43:1, row 3)
+      &mdash; not the 14.50:1 and 6.30:1 this paragraph used to claim, which are
+      the 1e/1f panel's numbers on a chrome 2i does not use. Its two controls
+      are the link-out row (<code>--accent</code> on <code>--surface</code>,
+      5.94:1) and <strong>Send again</strong>, which since the fix round is the
+      ink outline (<code>--ink</code> on <code>--surface</code>, 17.11:1, row 1).
+      All four ratios are rows in the table above; the conclusion held, the
+      arithmetic behind it did not.
+    </p>
+
+    <h2>5 · Accent's fifth job, declared</h2>
+    <div class="callout">
+      <p><code>docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md:39-41</code>:
+      "Accent red now means exactly four things: the level-1 action, a resolved
+      split or duration, a destructive control, the active tab mark."</p>
+      <p>Unlink is job 3 and needs no dispensation.
+      <strong>The Send block's link-out row is not any of the four.</strong>
+      <em>Census re-run 2026-09-03 (fix round 1), because 2i was drawn after
+      this section was written and the wording said "a single link-out".</em>
+      Accent's candidate here is ONE control class with TWO labels, never two
+      controls: <strong>View on Concept2 &rarr;</strong> (2c, 2d) and
+      <strong>OPEN CONCEPT2 PROFILE</strong> (2i), which are mutually
+      exclusive states of the same 44px link row. Measured rather than
+      asserted, because this page has twice shipped a census that went stale:
+      <code>grep -n send-linkrow</code> returns thirteen lines &mdash; the CSS
+      rule, this sentence, and eleven drawn rows, of which seven read
+      <em>View on Concept2 &rarr;</em> (one of those the struck one in 2c's
+      withdrawn comparison, which carries an inline
+      <code>color: var(--ink-4)</code> and is therefore not an accent element
+      at all) and four read <em>OPEN CONCEPT2 PROFILE</em>. Two labels, no
+      third. After Send again's redraw to the ink outline
+      <strong>no other accent element is painted anywhere on Surface 2</strong>
+      &mdash; the block's every other control and label is <code>--ink</code>,
+      <code>--ink-2</code>, <code>--ink-3</code> or <code>--ink-4</code>. That
+      is what keeps this a single dispensation rather than a growing set, and
+      it is the second reason 2i's re-send must not be accent: a Send again in
+      <code>--accent</code> would have made this section's exception two
+      unrelated things at once, which is the drift it exists to stop. The
+      precedent for a fifth candidate is <code>--action-connect</code>
+      (<code>src/theme/tokens.css:33-41</code>), which was given its own token
+      rather than made accent's fifth meaning. Two ways to settle it, and PR2
+      must pick one rather than quietly painting a fifth thing red:</p>
+      <ul class="tight">
+        <li><strong>Accept it as a documented deviation</strong> &mdash; the board
+          rendered it in <code>#b5341f</code> and James approved that render on
+          2026-08-31; record a <code>DEVIATIONS.md</code> row saying accent now
+          also means "leaves the app for the rower's own record". One row, no
+          token, no repaint.</li>
+        <li><strong>Give it <code>--ink</code> with an underline</strong> &mdash;
+          keeps the four-meaning rule literally true; costs the link-out its
+          visual pull on a screen that has no other coloured element.</li>
+      </ul>
+      <p>Recommended: the first. The rule's purpose is that accent not become
+      "selected" or a fifth workout type; one link-out row on one screen &mdash;
+      whichever of its two labels the state calls for &mdash; is a different
+      kind of exception, and the alternative is a token nothing else would ever
+      use.</p>
+    </div>
+
+    <h2>6 · What this gate is asking for</h2>
+    <ul class="tight">
+      <li>The changes in §0, each individually.</li>
+      <li><strong>Ruling (i) is already ANSWERED and is here for the record,
+        not for a decision (James, 2026-09-03):</strong> &quot;I don't want that
+        set in our app. I want it to be set on Concept2's side.&quot; What this
+        gate asks about it is the RENDERED consequence &mdash; §1a with no
+        ask, and 2i (redrawn). <strong>Extended 2026-09-04</strong> (James:
+        &quot;Stop talking about the weight class&quot;), and this bullet is
+        rewritten rather than annotated: a revision of this page also asked
+        about a new provenance sub-line on 2c and a helper line on 1a, and both
+        are WITHDRAWN. The rendered consequence is now 1a with no ask and no
+        mention, 2c as the board drew it (the result id alone), and 2i
+        unchanged &mdash; the one surface where the phrase survives, because
+        there Concept2 has refused the send for that reason.</li>
+      <li><strong>The frame this revision REDREW, and why it was wrong rather
+        than merely thin:</strong> <strong>2i</strong> told the rower to
+        &quot;send this row again&quot; and offered no way to, pointed at a page
+        measured to be a public read-only card, and gave one sentence to four
+        server reasons including one where the rower's weight is not the broken
+        thing. It is a copy-and-control change on chrome that already exists and
+        introduces no new idiom. <em>This bullet named TWO frames until
+        2026-09-04.</em> The second was 2c, redrawn to name the class we may
+        have guessed; that redraw is withdrawn by the ruling above and 2c is
+        back to the board's own shape, so the cost it named &mdash; a guess
+        written to a permanent Concept2 record and shown to nobody &mdash; is
+        accepted rather than answered on screen (&sect;2c says where the
+        provenance went instead).</li>
+      <li>Ruling (ii): identity line variant A (numeric) or B (stored username).
+        B is rendered as the recommendation and costs one nullable column.</li>
+      <li>Ruling (iii): the reworded 401/403 callback lines (§3).</li>
+      <li>The new states: 1f needs-reauth, 1g update-required, 1h unavailable,
+        <strong>1i the read failed</strong>, <strong>1j the unlink was
+        refused</strong>, 2f row-level reconnect, <strong>2c-b sent with no
+        link-out</strong>, <strong>2h Concept2 won't take this row</strong>,
+        <strong>2i Concept2 has no class for you</strong>, and the REASON
+        lines.</li>
+      <li><strong>The three states added 2026-09-03, each because the state is
+        REACHABLE and the earlier drawing of it was wrong rather than
+        missing:</strong> 2c-b replaces a SENT row that showed no result id at
+        all when the server sent no logbook origin; 2h replaces a block that
+        vanished under the rower's finger when the two eligibility predicates
+        disagreed; <strong>2i is the ruling's own state</strong> &mdash; the one
+        place a rower learns that the class we no longer ask for is missing
+        where it now lives, with a button that takes them there. Each one costs
+        a line of copy or a control that already exists elsewhere on the same
+        card &mdash; none introduces a new idiom.
+        <strong>1k is WITHDRAWN</strong> by the same ruling: it existed to
+        re-ask for a stored class that could not be read back, and there is no
+        stored class.</li>
+      <li><strong>1h's split into 1h and 1i specifically</strong> &mdash; an
+        earlier revision drew a refused read as absence, and separating them is
+        the one change on this page that alters what a rower is TOLD rather than
+        how it looks.</li>
+      <li>§5's accent ruling.</li>
+    </ul>
+    <p class="lede">
+      Nothing is implemented until these are approved. Plan:
+      <code>docs/superpowers/plans/2026-09-03-concept2-pr2-client.md</code>.
+    </p>
+  </body>
+</html>

@@ -9,6 +9,7 @@ import {
   type HandoffEntry,
 } from "../monitor/handoffStore";
 import { usePlan, type PlanData } from "../api/usePlan";
+import { completionStamp } from "../session/completionStamp";
 import { useLogForm } from "../session/LogSession";
 import { recordLogDoorEntry } from "../session/logDoorDiagnostics";
 import { clearRun, loadRun, type SessionRun } from "../session/run";
@@ -316,6 +317,12 @@ export function JustRowSummary({
           : {}),
         ...(run.series !== undefined ? { series: run.series } : {}),
         ...(run.endedBy !== undefined ? { endedBy: run.endedBy } : {}),
+        // Wave E PR2 Task 6: the app's OTHER `source: "pm5"` producer, so
+        // it posts the same pair the programmed monitor door does — the
+        // run's own close stamp plus this device's zone. A free row that
+        // ends `finished` is as uploadable as any other, and without this
+        // its Concept2 date would be the moment Save was tapped.
+        ...completionStamp(run),
       },
       { advancesPlan },
     );

@@ -778,6 +778,22 @@ function makeFakeLogsStore(
       byUser.set(userId, rows);
       return true;
     },
+    // Wave E PR2 (observation 29): mirrors the real store's owner-scoped
+    // AND account-scoped read (stores/logs.ts's own comment) — a row
+    // written while a DIFFERENT Concept2 account was linked says nothing
+    // about this one, so it must not be excluded from this account's
+    // declaration read. The null is a TYPE NARROWING and not a claimed
+    // guard, mirroring the real store's own shape for the reason its
+    // comment gives.
+    async sentC2ResultIds(userId: string, c2UserId: number) {
+      const rows = byUser.get(userId) ?? [];
+      return new Set(
+        rows
+          .filter((r) => r.c2UserId === c2UserId)
+          .map((r) => r.c2ResultId)
+          .filter((id): id is number => id !== null),
+      );
+    },
     // Wave E PR1 Task 6, plan deviation 2: mirrors the real store's
     // `tz IS NULL` guard (stores/logs.ts's own comment) — a row that
     // already carries a tz is left untouched, never overwritten.
@@ -959,10 +975,13 @@ export function makeFakeConcept2Store(
       links.set(userId, {
         userId,
         c2UserId: link.c2UserId,
+        // Wave E PR2: mirrors the real store's own `?? null` — the input
+        // field is OPTIONAL and the stored column is required-and-nullable
+        // (stores/concept2.ts's `upsertLink` comment records the asymmetry).
+        c2Username: link.c2Username ?? null,
         accessToken: link.accessToken,
         refreshToken: link.refreshToken,
         expiresAt: link.expiresAt,
-        weightClass: link.weightClass,
         needsReauthAt: null,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -1034,7 +1053,6 @@ export function makeFakeConcept2Store(
       if (!row) return null;
       return {
         userId: row.userId,
-        weightClass: row.weightClass,
         surface: row.surface,
       };
     },
@@ -1054,7 +1072,7 @@ export function makeFakeConcept2Store(
       }
       attempts.delete(nonce);
       const ageMs = clock().getTime() - row.createdAt.getTime();
-      return { weightClass: row.weightClass, fresh: ageMs <= maxAgeMs };
+      return { fresh: ageMs <= maxAgeMs };
     },
 
     async deleteExpiredAttempts(maxAgeMs: number) {

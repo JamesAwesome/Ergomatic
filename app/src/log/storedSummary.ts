@@ -266,6 +266,17 @@ export interface StoredLog {
   // `restSeconds`/`restMeters` above.
   workSeconds: number | null;
   workMeters: number | null;
+  // Wave E PR1 (spec §Stored shapes): C2's own result id, and WHICH
+  // Concept2 account accepted it. Both server-written at upload, never
+  // client input (`server/stores/logs.ts`'s own comment: "c2ResultId/
+  // c2UserId are NEVER client input"). Required-and-nullable, the same
+  // convention as `machineWorkSeconds` above: `GET /api/logs/:id` returns
+  // `db.select()` over every column (`stores/logs.ts`'s `get()`), so
+  // "absent" is not a shape this row can carry; `null` is the common case.
+  // PR2 is the first reader — the sent state renders only when
+  // `c2UserId` matches the LIVE link's (spec anchor F8).
+  c2ResultId: number | null;
+  c2UserId: number | null;
 }
 
 /** §5D: the read-back's own three pieces. `empty` is the "all four null"

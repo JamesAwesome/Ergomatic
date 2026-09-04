@@ -10145,6 +10145,376 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin: 8px 0 0;
 }
 
+/* Wave E PR2, Surface 1 (board 1a-1e + Gate 0 amendment 1f-1j). House card
+   idiom: --surface ground, 1px --rule, 2px radius, 16px padding, 12px gap
+   — the board's own values, which are tokens.css's verbatim.
+
+   Contrast, computed (WCAG relative luminance), NOT eyeballed (RF6):
+   --ink on --surface 17.11:1 · --ink-2 on --surface 10.81:1 · --ink-3 on
+   --surface 7.43:1 · --ink-4 on --surface 5.29:1 · --ink on
+   --surface-sunken 14.50:1 · --ink-3 on --surface-sunken 6.30:1 ·
+   --accent on --surface 5.94:1 · --on-color on --accent 5.94:1 ·
+   --on-color on --ink 17.11:1. All clear the 4.5:1 AA floor.
+
+   THE ONE VALUE THIS BLOCK REFUSES: --ink-4 on --surface-sunken measures
+   4.48:1 and FAILS. The panel's muted line (.c2-card-panel-reason) is
+   therefore --ink-3, not the --ink-4 every other muted line on this card
+   uses. Anything added to .c2-card-panel later inherits that constraint.
+
+   `margin: 12px 0 0` — TASK 8, and both authorities name the same number,
+   which is what makes it an implementer's call rather than a Gate 0 one
+   (the sibling `.c2-send` block had to send its 12-vs-24 question to
+   James, because there the frames said 12 and the screen's own rhythm
+   said 20/24). The amendment's in-situ frames separate every child of the
+   phone frame by `.frame { gap: 12px }`, AND every block on the real You
+   screen already stands off its neighbour by 12: `.baselines-card`,
+   `.retest`, `.reset-baselines` and `.diag-row` are each
+   `margin-top: 12px`.
+
+   The rule exists because it was MISSING and nothing could say so. This
+   card declared no margin; its preceding sibling on You,
+   `.reset-baselines`, is `margin-top: 12px` with no bottom; `.you-screen`
+   is a flex column, so no neighbour's margin collapses in either.
+   Measured in the real engine before the fix: `reset -> card = 0`. A
+   bordered card touched the Reset baseline setup button. That is the
+   `.c2-send` defect one screen over — every other gate on this card
+   measures boxes INSIDE it, so nothing measured the card's own — and
+   `e2e/design.spec.ts`'s "the card stands off the row above it on You" is
+   the assertion that closes it.
+
+   Bottom stays 0 on purpose: `.you-screen .diag-row` below is
+   `margin-top: auto`, so a bottom margin here would be absorbed by that
+   `auto` rather than seen, and when the column overflows (no `auto` room
+   left) the row's own `border-top` is what separates them. */
+.c2-card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.c2-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+/* THE TELL / ACT PAIR (fix round 1, R1). One rule, not five special cases:
+   what the card TELLS the rower is `.c2-card-tell`, what it ASKS them to DO
+   is `.c2-card-act`, and the pair is in the DOM in every state so the
+   landscape rule at the foot of this block is structural rather than
+   per-state guesswork.
+
+   Portrait is deliberately IDENTICAL to what these children rendered as
+   direct flex children of `.c2-card`: three nested 12px-gap flex columns
+   compose to the same single 12px rhythm, so nothing about the approved
+   portrait frames moves. `.c2-card-head` stays OUTSIDE the pair — every
+   frame in the amendment draws it full width above the split. */
+.c2-card-body,
+.c2-card-tell,
+.c2-card-act {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 1b and 1g have nothing to DO — an OPENING or UPDATE NEEDED panel and no
+   control at all — so their act column renders with no child node and would
+   otherwise contribute a stray 12px flex gap under the panel, in BOTH
+   orientations. That gap is this rule's whole job. React emits no text node
+   for a false branch, so the div is genuinely `:empty` in those states.
+
+   It is NOT what keeps those two panels full width in landscape; `-split`
+   does, by not being applied to them. An earlier revision justified
+   `grid-auto-flow: column` on the grounds that "one declaration serves both
+   shapes" — one column when act is empty, two when it is not — and that
+   argument counted the wrong shapes. 1d and 1e are single-column on the
+   page too, and BOTH have a non-empty act column, so auto-flow could never
+   have produced their layout; meanwhile the two states it did handle are
+   handled by `-split` anyway. The landscape grid is now the page's own
+   literal `1fr 1fr`. */
+.c2-card-act:empty {
+  display: none;
+}
+
+.c2-card-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.c2-card-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+.c2-card-status-on {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Gate 0 amendment 1c. `overflow-wrap: anywhere` for the same reason
+   `.you-identity` carries `min-width: 0` (You.tsx's own comment): a long
+   address must not push this card a whole line taller. */
+.c2-card-identity {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.c2-card-explain {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.c2-card-helper {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.c2-card-foot {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+
+.c2-card-hair {
+  margin: 0;
+  border: 0;
+  height: 1px;
+  background: var(--rule-2);
+}
+
+.c2-card-panel {
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.c2-card-panel-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.c2-card-panel-line {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* --ink-3, NOT --ink-4: see this block's own header. 6.30:1 on
+   --surface-sunken, against 4.48:1 for the value it would otherwise
+   inherit from .c2-card-foot's family. */
+.c2-card-panel-reason {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.c2-card-primary {
+  min-height: 48px;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--on-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+/* Reachable from ONE condition only: `busy`, an attempt already in flight
+   (Concept2Card.tsx's Connect and RECONNECT both read `disabled={busy}`).
+   The board's original "until a class is picked, Connect is dimmed and
+   inert" is retired — ruling (i), 2026-09-03, removed the question, so
+   Connect is live on first paint and this rule paints a tap that is
+   already working, never a control waiting on an answer.
+   The LABEL carries the state as well as the border, because a
+   border-only distinction would be a 1.73:1 signal (--rule-3 on
+   --surface); --ink-3 on --surface is 7.43:1. */
+.c2-card-primary:disabled {
+  background: transparent;
+  border-color: var(--rule-3);
+  color: var(--ink-3);
+}
+
+/* The page's outline button as the FRAMES draw it, 52px and 15px.
+
+   MEASURED (fix round 4, D1), because the previous revision of this comment
+   got it backwards from the page's prose instead of its markup: every LIVE
+   `.btn-outline` inside a `c2card` frame carries an inline
+   `min-height: 52px` — SEVEN of them, four "Try again" and three "Retry",
+   with zero bare ones.
+
+   CORRECTED (Task 5 fix round 1, F3): the word "live" is load-bearing and
+   was missing. A nesting-aware scan counts EIGHT `.btn-outline`s inside a
+   `c2card`, not seven. The eighth is the inert, struck "Cancel" at 44px in
+   the 1b/1d block the page marks "REMOVED FROM THE BOARD, SHOWN STRUCK FOR
+   THE RECORD" — a drawing of a control that no longer exists, so it changes
+   nothing about this rule, but "SEVEN of them" was an absolute over a
+   mechanical class and the class already had an eighth member. Written, of
+   all rounds, in the one whose subject was a census going stale.
+
+   The other `.btn-outline`s on the page are the You-row "Sign out" chips —
+   THIRTEEN of them, each carrying its OWN inline `min-height: 44px`, so
+   "unstyled" was the wrong word for them and this comment used it three
+   words before quoting that number — and Surface 2's Send block, which
+   genuinely carries none. All outside the card. So the class's own 48px
+   default never reaches a Concept2 card button, and shipping
+   `min-height: 48px` here made 1e's Try again 4px shorter than every frame
+   that draws it.
+   `.c2-card-retry-tall` existed to carry the 52px for 1i alone and is
+   deleted with the premise that invented it.
+
+   §4's summary prose said "Retry 48, 1i's Retry 52". No frame draws a 48px
+   Retry, so that sentence had no referent — and it is what this rule got
+   aligned to instead of the drawings. Corrected on the page in the same
+   commit; the frames are the authority, a summary sentence is not.
+
+   15px 600-weight is NOT WCAG "large text" (that needs 18.66px bold or
+   24px), so the 4.5:1 floor still applies and is met: --ink on --surface,
+   17.11:1. No input is involved, so the 16px iOS-zoom rule does not. */
+.c2-card-retry {
+  min-height: 52px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Board 1c/1d. Accent's third canonical job, a destructive control
+   (docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md), so it needs no
+   dispensation — unlike the log row's link-out, which is recorded as a
+   DEVIATIONS row (this PR's Task 13). Outlined at rest, filled when armed:
+   index.css's own "4 · destructive" comment sets that vocabulary. */
+.c2-card-danger {
+  min-height: 52px;
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.c2-card-danger-armed {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-color);
+}
+
+/* Landscape: the two-column card interior, for the SEVEN frames the
+   amendment draws that way and no others (fix round 2, F1; census refreshed
+   in fix round 4, D2).
+
+   MEASURED over the page, not read off it. A script over every
+   `class="frame land"` block reports `grid-template-columns: 1fr 1fr;
+   gap: 20px` on 1a, 1c, 1f, 1f-b, 1f-c, 1i and 1j, and NO grid on 1b, 1d, 1e
+   and 1g — four un-gridded frames, not two. It also reports that 1d's
+   landscape frame DRAWS A HAIRLINE. A previous revision of this block
+   asserted the opposite of both, and shipped 1d and 1e as two columns with
+   1d's hairline suppressed; 1d is badged UNCHANGED on the page, i.e.
+   inherited from the approved board, so that was a silent redraw of approved
+   work. A later one said SIX and went stale the day 1f-c was drawn — a
+   census in a comment is a measurement with an expiry date, so re-run the
+   script when a frame is added.
+
+   Everything here is therefore scoped to `.c2-card-body-split`, which the
+   component applies from a predicate over state, not a list of frame ids
+   (`Concept2Card.tsx`'s `singleColumn` and its comment: single column iff
+   the rower is armed to unlink, or is unlinked and an attempt has just
+   opened, failed, or hit a build too old to link). The scoping is what keeps
+   1b, 1d, 1e and 1g single-column and 1d's hairline visible.
+
+   `grid-template-columns: 1fr 1fr` — the page's own declaration, verbatim.
+   The earlier `grid-auto-flow: column` + `grid-auto-columns: 1fr` was there
+   to serve the empty-act states as one column, but every state that needs
+   one column is now excluded from this rule outright, and two of the four
+   (1d, 1e) have a NON-empty act column that auto-flow could never have
+   collapsed. There is nothing left for it to do.
+
+   BARE `@media (orientation: landscape)`: this file's only landscape idiom.
+   `grep -n "@media" src/index.css` shows six blocks, none with a width or
+   height clause. `padding`/`gap` are NOT overridden here — the page has no
+   landscape override at all and renders `.c2card` at 16px/12px in both
+   orientations; an earlier revision shipped 14px/16px and 10px, which were
+   invented (F7).
+
+   THE INNER GAPS, with one departure stated as one (fix round 4, D3). The
+   10px act gap IS the page's, uniformly: every landscape act wrapper it
+   draws (1a, 1f, 1f-b, 1f-c) is 10px. The 8px tell gap is the page's in FOUR
+   of five — 1c, 1f-b, 1f-c and 1j — while 1a's tell wrapper is 10px, and
+   1f and 1i have no tell wrapper at all (a bare panel). We ship 8px for
+   every split state, so 1a's telling column is 2px tighter than its frame.
+   Taken deliberately rather than matched: reproducing it needs a per-state
+   gap rule, which is the per-frame special-casing this scoping exists to
+   avoid, for a 2px difference between two lines of text. Cheap to overrule —
+   one rule keyed off the unlinked-idle state — if a reviewer wants the frame
+   exactly.
+
+   `align-items: center` uniformly, including 1a, which is the one gridded
+   frame without it. Reviewed and closed with no action: the page's act
+   column carries `justify-content: center`, and with no background, border
+   or divider on either column the painted result is identical.
+
+   Hairlines are hidden only INSIDE a split body, where the 20px column gap
+   already marks the break. 1d keeps its hairline because 1d is never split.
+
+   NO NEW COLOUR PAIRING. Layout only — no `color`, no `background`, no
+   `border` — so every ratio in this block's own header still holds. */
+@media (orientation: landscape) {
+  .c2-card-body-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .c2-card-body-split .c2-card-tell {
+    gap: 8px;
+  }
+
+  .c2-card-body-split .c2-card-act {
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .c2-card-body-split .c2-card-hair {
+    display: none;
+  }
+}
+
 /* ── PHASE JR PR 2: THE FREE ROW ─────────────────────────────────────────
    Gate 0 board `docs/design/handoffs/2026-09-01-just-row/`, approved
    2026-09-01. Every value here is lifted from an existing idiom rather
@@ -10252,4 +10622,185 @@ section:not(.news-pinned) .news-row:last-of-type {
   .connected-pane-live .connected-band:has(.connected-band-cell:only-child) {
     justify-content: flex-end;
   }
+}
+
+/* Wave E PR2, Surface 2 (board 2a-2e + Gate 0 amendment 2f/2h/2i). Same
+   house card as `.c2-card`, at the amendment's own `.sendcard` values:
+   14px/16px padding, 10px gap, `--surface` ground, 1px `--rule`,
+   `--radius`.
+
+   Contrast, computed (RF6) with the WCAG relative-luminance formula over
+   tokens.css's own hexes, never eyeballed:
+     --ink   on --surface 17.11:1  (CONCEPT2 label, lit status)
+     --ink-2 on --surface 10.81:1  (the send lines)
+     --ink-3 on --surface  7.43:1  (helper, REASON, disabled action label)
+     --ink-4 on --surface  5.29:1  (the RESULT foot, dim status)
+     --accent on --surface  5.94:1 (both link-outs)
+   All clear the 4.5:1 AA floor. Nothing on this block sits on
+   `--surface-sunken`, so the `--ink-4` 4.48:1 failure that forces
+   `.c2-card-panel-reason` up to `--ink-3` does not reach here.
+
+   THE TWO LINK-OUTS ARE ACCENT'S FIFTH JOB, outside the four
+   docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md names — and this is the
+   surface that actually paints it (the `.c2-card` block above cites the
+   same exception for THIS rule, not for one of its own). To be given a
+   DEVIATIONS row rather than its own token, per Gate 0 amendment §5 and
+   James's ruling: the four-meaning rule exists to stop accent meaning
+   "selected" or a fifth workout type, and one link-out row on one screen
+   is a different exception. The row is owed by this PR's Task 13 and does
+   NOT exist yet — `docs/design/DEVIATIONS.md` mentions Concept2 nowhere
+   (grepped, zero hits). Do not read this paragraph as the record.
+
+   `margin: 12px 0 0` — FIX ROUND 2, and the number is the page's, not a
+   guess. Every §2 frame separates the sendcard from the `Logged to <plan>`
+   line above it by `.frame { gap: 12px }`, and the frames are the
+   authority.
+
+   The rule exists because it was MISSING and nothing could say so. This
+   block declared no margin; its preceding sibling on a plan row,
+   `.log-plan-footer`, is `margin: 20px 0 0` with no bottom; both are block
+   children of the same `<main>`. Measured in the real engine before the
+   fix: `footer -> card = 0`. A bordered card touched the plan line. That
+   is D1's own shape one level out — the height gate measures the two
+   CONTROL boxes, so nothing measured the CONTAINER's, and `e2e/design.
+   spec.ts`'s "the card stands off the line above it" is the assertion that
+   closes it.
+
+   NOT the screen's own 20/24px section rhythm (`.summary-intervals` and
+   `.trace-figure` are both `margin: 0 0 24px`). 24 would be defensible and
+   is a Gate 0 decision rather than an implementer's, so it goes to James
+   as a question in the PR rather than being chosen here.
+
+   Bottom stays 0 on purpose: `.log-delete-trigger` below owns `24px 0 0`,
+   and adjacent-sibling margins collapse to the larger, so a bottom margin
+   here would be either dead or a silent override of a neighbour's spacing.
+   The e2e assertion pins that 24 too, for exactly that reason. */
+.c2-send {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.c2-send-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.c2-send-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.c2-send-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+/* Carried by every state from 2c on — NOT by 2b SENDING, which the page
+   draws as a bare `.c2status` exactly like 2a. See the component's own
+   `statusLit`. */
+.c2-send-status-on {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.c2-send-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.c2-send-helper {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.c2-send-reason {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.c2-send-foot {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+
+/* 48px, which is the class's OWN default and not an oversight: the
+   amendment's `.btn-outline` rule is `min-height: 48px`, and — unlike
+   every `.btn-outline` inside a `c2card`, which carries an inline
+   `min-height: 52px` — the four Send-block buttons the page draws
+   (`Send to Concept2`, `Sending to Concept2 …`, `Retry send`,
+   `Send again`) carry no inline override at all. `.c2-card`'s own block
+   comment already records that measurement. D1 one surface over was a 4px
+   error nothing measured; the e2e height gate on these two classes is why
+   this one cannot repeat.
+
+   `Send again` JOINED that list in this task's fix round 1, and the page
+   moved rather than this rule (ruling R5). §2i's frames drew it as
+   `.btn-l4` — 44px, accent border, accent label: the control that page
+   gives Delete session on the same screen — while §2i's own callout called
+   it "the level-4 button 2e already uses for Retry send", which 2e does
+   not use. Both were corrected on the artifact: a non-destructive re-send
+   must not wear a delete's vocabulary, and --accent already has its one
+   declared job on this surface (the link-out, amendment §5), so a second
+   accent control here would be the drift that section exists to stop.
+
+   15px 600-weight is NOT WCAG "large text" (18.66px bold / 24px), so the
+   4.5:1 floor applies and is met: --ink on --surface, 17.11:1. */
+.c2-send-action {
+  min-height: 48px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Reachable from ONE condition: the send in flight (2b). The LABEL carries
+   the state as well as the border, because a border-only distinction would
+   be a 1.73:1 signal (--rule-3 on --surface); --ink-3 on --surface is
+   7.43:1. */
+.c2-send-action:disabled {
+  border-color: var(--rule-3);
+  color: var(--ink-3);
+}
+
+/* The page's `.send-linkrow`, at its own 44px. A BUTTON styled as a link,
+   not an anchor — see the component for why. Left-aligned and full width,
+   so the whole row is the target rather than just the words. */
+.c2-send-linkout {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
 }

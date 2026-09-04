@@ -56,6 +56,7 @@ import {
   measuredIntervalCount,
   type SummaryModel,
 } from "./summaryModel";
+import { completionStamp } from "./completionStamp";
 import { postTestOffer, type PostTestOffer } from "./postTestOffer";
 import PostTestPrompt from "./PostTestPrompt";
 import MissingWorkoutType from "./MissingWorkoutType";
@@ -647,6 +648,11 @@ export interface LogFormFields {
   machineSummary?: {
     verificationBytes?: readonly number[];
   } & Partial<MachineSummaryDetail>;
+  // Concept2 save provenance is meaningful only for PM5 completions. The
+  // paired fields are produced by the completed run itself, never by the
+  // later Save tap; other doors leave both absent.
+  completedAt?: string | null;
+  tz?: string;
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
@@ -2258,6 +2264,7 @@ export function ProgrammedMonitorSummary({
         distanceMeters: model.heroes.distanceMeters,
         series: monitorRun.series,
         endedBy: monitorRun.endedBy,
+        ...completionStamp(monitorRun),
         workSeconds: monitorRun.workSeconds,
         workMeters: monitorRun.workMeters,
         restSeconds: monitorRun.restSeconds,
