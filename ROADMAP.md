@@ -2381,7 +2381,7 @@ trigger is the whole entry.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
 - **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; HARDENED
-  DESIGN APPROVED 2026-09-03; V5 NORMAL TRACE WALK ABORTED PRE-DEVICE ON
+  DESIGN APPROVED 2026-09-03; V7 NORMAL TRACE INCONCLUSIVE ON
   2026-09-04; BROADER GATE -1 WALK REMAINS PAUSED; PRODUCT IMPLEMENTATION
   UNSCHEDULED.** Two targeted NFC/BLE connections succeeded;
   recovery and multi-tag proof remain incomplete. Further walks require PM
@@ -2396,9 +2396,12 @@ trigger is the whole entry.
   expired across the operator turn boundary; it authorizes no retry. See
   [`NORMAL-TRACE-V5-ABORT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V5-ABORT.md).
   The resumed preparation installed and verified the diagnostic build;
-  [`NF-NORMAL-TRACE-v6`](docs/monitor/sessions/phase-nf-gate-minus-one/NEXT-WALK-RUNSHEET.md)
+  [`NF-NORMAL-TRACE-v7`](docs/monitor/sessions/phase-nf-gate-minus-one/NEXT-WALK-RUNSHEET.md)
   separates setup from scan consent and removes timed chat acknowledgements.
-  Current phone UI remains unverified; no new scan is authorized. See
+  James confirmed the enabled probe; one separately authorized v7 sample
+  activated the reader and reached BLE scanning, but captured no matching PM5
+  name or final receipt. Cleanup verified; no retry authorized. See
+  [`NORMAL-TRACE-V7-RESULT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V7-RESULT.md) and
   [`OPERATOR-WORKFLOW-V6.md`](docs/monitor/sessions/phase-nf-gate-minus-one/OPERATOR-WORKFLOW-V6.md).
   Another attempt still needs PM PASS and James's separate agreement.
   James chose a

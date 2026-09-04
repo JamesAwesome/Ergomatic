@@ -4549,3 +4549,13 @@ probe reachability. `NF-NORMAL-TRACE-v6` received PM PASS only for one
 untimed, zero-scan screen description; the normal sample remained
 NOT READY pending actual current-screen evidence. Do not promote that
 narrow observation verdict into permission for the hardware sample.
+
+## NFC grouped-walk ruling, 2026-09-04
+
+James explicitly replaced one-step chat exchanges with short instruction
+blocks. After he confirmed YOU and the enabled normal button on the installed
+build, `NF-NORMAL-TRACE-v7` received PM PASS for one normal sample: two blocks,
+one explicit scan-consent reply, eight minutes including setup/waiting, and
+no retry. Tap and tag presentation stay together; a live NFC sheet must not
+wait for another chat exchange. This does not close Gate -1 or approve
+product implementation.
