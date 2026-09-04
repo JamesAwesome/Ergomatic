@@ -1186,11 +1186,13 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
 test.describe("unlogged workout recovery — connected producer to retained history", () => {
   test.setTimeout(120_000);
 
-  test("a naturally finished PM5 workout survives warning/View/reload, a failed Save, and retry with its original actuals", async ({
-    page,
-  }) => {
-    const title = `Retained PM5 Actuals ${RUN_ID}`;
-    const nextTitle = `Recovery Warning Target ${RUN_ID}`;
+  async function assertNaturalFinishRecovery(
+    page: Page,
+    coldHydrated: boolean,
+  ): Promise<void> {
+    const journey = coldHydrated ? "cold" : "in-process";
+    const title = `Retained PM5 Actuals ${journey} ${RUN_ID}`;
+    const nextTitle = `Recovery Warning Target ${journey} ${RUN_ID}`;
     const deviceName = "PM5 102938475";
     const postAttempts: {
       url: string;
@@ -1201,7 +1203,7 @@ test.describe("unlogged workout recovery — connected producer to retained hist
     await walkToReady(
       page,
       title,
-      `retained-pm5-${RUN_ID}@e2e.test`,
+      `retained-pm5-${journey}-${RUN_ID}@e2e.test`,
       deviceName,
       buildNaturalFinishEvents(),
       {
@@ -1299,26 +1301,18 @@ test.describe("unlogged workout recovery — connected producer to retained hist
       page.getByRole("button", { name: `Review & save PM5 workout ${title}` }),
     ).toBeVisible();
 
-    // The in-process recovery leg proves the row can be opened immediately
-    // after leaving the monitor handoff, before any store is reconstructed.
-    await page
-      .getByRole("button", { name: `Review & save PM5 workout ${title}` })
-      .click();
-    await expect(page).toHaveURL(
-      /\/session\/review\?source=monitor&startedAt=/,
-    );
-    await expect(page.locator("h1.screen-title")).toHaveText(title);
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-    await page.getByRole("link", { name: "← DONE" }).click();
-    await expect(page).toHaveURL(/\/today$/);
-
-    // This reload is the cold hydration leg: no in-memory store state may
-    // make the retained row happen to work before the warning and Save
-    // journey starts.
-    await page.reload();
-    await expect(
-      page.getByRole("button", { name: `Review & save PM5 workout ${title}` }),
-    ).toBeVisible();
+    if (coldHydrated) {
+      // This reload is the cold hydration leg: no in-memory store state may
+      // make the retained row happen to work before the warning and Save
+      // journey starts. The in-process invocation reaches the exact same
+      // warning/View/retry/history assertions below without this reload.
+      await page.reload();
+      await expect(
+        page.getByRole("button", {
+          name: `Review & save PM5 workout ${title}`,
+        }),
+      ).toBeVisible();
+    }
     await importBulk(page, BULK_TEXT(nextTitle));
     await page.locator(".workout-row").filter({ hasText: nextTitle }).click();
     await page.getByRole("button", { name: "Connect" }).click();
@@ -1478,7 +1472,15 @@ test.describe("unlogged workout recovery — connected producer to retained hist
 
     await cleanupByTitle(page, title);
     await cleanupByTitle(page, nextTitle);
-  });
+  }
+
+  test("a naturally finished PM5 workout completes recovery in process with its original actuals", async ({
+    page,
+  }) => assertNaturalFinishRecovery(page, false));
+
+  test("a naturally finished PM5 workout completes cold-hydrated recovery with its original actuals", async ({
+    page,
+  }) => assertNaturalFinishRecovery(page, true));
 });
 
 // Phase LL Task 3 (link-truth design spec §3), exit criteria 2/3, in a real
