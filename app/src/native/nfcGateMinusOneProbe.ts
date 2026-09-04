@@ -13,7 +13,10 @@ export interface GateNativePort {
   onNfcSessionEnd(
     listener: (event: unknown) => void,
   ): Promise<GateRemoveListener>;
-  currentAppState(): Promise<"foreground" | "background">;
+  isAppActive(): Promise<boolean>;
+  onAppActivity(
+    listener: (isActive: boolean) => void,
+  ): Promise<GateRemoveListener>;
   onAppState(
     listener: (state: "foreground" | "background") => void,
   ): Promise<GateRemoveListener>;
@@ -60,8 +63,14 @@ export const gateNativePort: GateNativePort = {
     const handle = await CapacitorNfc.addListener("nfcSessionEnd", listener);
     return async () => handle.remove();
   },
-  async currentAppState() {
-    return (await App.getState()).isActive ? "foreground" : "background";
+  async isAppActive() {
+    return (await App.getState()).isActive;
+  },
+  async onAppActivity(listener) {
+    const handle = await App.addListener("appStateChange", ({ isActive }) =>
+      listener(isActive),
+    );
+    return async () => handle.remove();
   },
   async onAppState(listener) {
     const pause = await App.addListener("pause", () => listener("background"));

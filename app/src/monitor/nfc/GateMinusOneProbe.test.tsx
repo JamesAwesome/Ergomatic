@@ -16,7 +16,8 @@ const native = vi.hoisted(() => ({
   nfcEvent: undefined as NfcListener | undefined,
   nfcSessionEnd: undefined as NfcListener | undefined,
   bleResult: undefined as BleListener | undefined,
-  appState: undefined as AppListener | undefined,
+  appResume: undefined as AppListener | undefined,
+  appActivity: undefined as AppListener | undefined,
   appPause: undefined as AppListener | undefined,
   stoppedBle: false,
   matchingIds: new Set<string>(),
@@ -33,7 +34,8 @@ const native = vi.hoisted(() => ({
     this.nfcEvent = undefined;
     this.nfcSessionEnd = undefined;
     this.bleResult = undefined;
-    this.appState = undefined;
+    this.appResume = undefined;
+    this.appActivity = undefined;
     this.appPause = undefined;
     this.stoppedBle = false;
     this.matchingIds.clear();
@@ -123,18 +125,24 @@ vi.mock("@capacitor/app", () => ({
       if (!native.calls.includes("app-listener"))
         native.calls.push("app-listener");
       if (name === "pause") native.appPause = listener;
-      else native.appState = listener;
+      if (name === "resume") native.appResume = listener;
+      if (name === "appStateChange") {
+        native.calls.push("app-activity-listener");
+        native.appActivity = listener;
+      }
       await native.waits.get(name);
       return {
         remove: async () => {
           native.removed.push(name);
+          await native.waits.get(`remove:${name}`);
         },
       };
     },
     getState: async () => {
-      native.calls.push("app-state:foreground");
+      native.calls.push("app-state:active-query");
+      const isActive = native.foreground;
       await native.waits.get("app-state");
-      return { isActive: native.foreground };
+      return { isActive };
     },
   },
 }));
@@ -262,7 +270,223 @@ async function beginThroughBle(user: ReturnType<typeof userEvent.setup>) {
   await waitFor(() => expect(native.bleResult).toBeTypeOf("function"));
 }
 
+async function beginInactiveHandoff(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(runButton());
+  native.foreground = false;
+  await act(async () => native.nfcEvent!(nfcEvent()));
+  await screen.findByText("NFC reader session ended.");
+}
+
+async function activate() {
+  native.foreground = true;
+  await act(async () => native.appActivity!({ isActive: true }));
+}
+
 describe("GateMinusOneProbe", () => {
+  it("reobserves activity lost during listener removal before starting BLE", async () => {
+    const user = await renderReadyProbe();
+    await beginInactiveHandoff(user);
+    const retiredActivity = native.appActivity!;
+    const releaseRemoval = hold("remove:appStateChange");
+    await activate();
+    await waitFor(() => expect(native.removed).toContain("appStateChange"));
+    native.foreground = false;
+    await act(async () => retiredActivity({ isActive: false }));
+    await releaseRemoval();
+    expect(native.calls).not.toContain("ble-initialize");
+    await waitFor(() =>
+      expect(
+        native.calls.filter((call) => call === "app-activity-listener"),
+      ).toHaveLength(2),
+    );
+    await act(async () => retiredActivity({ isActive: true }));
+    expect(native.calls).not.toContain("ble-initialize");
+    await activate();
+    await waitFor(() => expect(native.bleResult).toBeTypeOf("function"));
+    await matches();
+    await waitFor(() => expect(runButton()).toBeEnabled());
+    expect((await exported(user)).attempts[0]).toMatchObject({
+      connected: true,
+      disconnected: true,
+    });
+    expect(
+      native.removed.filter((name) => name === "appStateChange"),
+    ).toHaveLength(2);
+  });
+  it("does not lose activation delivered before a stale inactive snapshot resolves", async () => {
+    const user = await renderReadyProbe();
+    await user.click(runButton());
+    native.foreground = false;
+    const releaseQuery = hold("app-state");
+    await act(async () => native.nfcEvent!(nfcEvent()));
+    await waitFor(() =>
+      expect(
+        native.calls.filter((call) => call === "app-state:active-query"),
+      ).toHaveLength(2),
+    );
+    await activate();
+    expect(native.calls).not.toContain("ble-initialize");
+    await releaseQuery();
+    await waitFor(() => expect(native.bleResult).toBeTypeOf("function"));
+    await matches();
+    await waitFor(() => expect(runButton()).toBeEnabled());
+    expect((await exported(user)).attempts[0]!.connected).toBe(true);
+  });
+
+  it("does not accept a stale active snapshot over a newer inactive event", async () => {
+    const user = await renderReadyProbe();
+    await user.click(runButton());
+    const releaseQuery = hold("app-state");
+    await act(async () => native.nfcEvent!(nfcEvent()));
+    await waitFor(() =>
+      expect(
+        native.calls.filter((call) => call === "app-state:active-query"),
+      ).toHaveLength(2),
+    );
+    native.foreground = false;
+    await act(async () => native.appActivity!({ isActive: false }));
+    await releaseQuery();
+    await screen.findByText("NFC reader session ended.");
+    expect(native.calls).not.toContain("ble-initialize");
+    await activate();
+    await waitFor(() => expect(native.bleResult).toBeTypeOf("function"));
+    await matches();
+    expect((await exported(user)).attempts[0]!.connected).toBe(true);
+  });
+
+  it.each(["Cancel", "background", "unmount"] as const)(
+    "%s cancels an inactive handoff and stale activation cannot authorize B",
+    async (ending) => {
+      const user = await renderReadyProbe();
+      await beginInactiveHandoff(user);
+      const staleActivity = native.appActivity!;
+      if (ending === "Cancel")
+        await user.click(screen.getByRole("button", { name: "Cancel sample" }));
+      else if (ending === "background") await pause();
+      else cleanup();
+      await waitFor(() => expect(native.removed).toContain("appStateChange"));
+      expect(native.calls).not.toContain("ble-initialize");
+      native.foreground = true;
+      await act(async () => staleActivity({ isActive: true }));
+      if (ending === "unmount") await renderReadyProbe();
+      await waitFor(() => expect(runButton()).toBeEnabled());
+      await user.click(runButton());
+      native.foreground = false;
+      await act(async () => native.nfcEvent!(nfcEvent("attempt-b")));
+      await screen.findByText("NFC reader session ended.");
+      await act(async () => staleActivity({ isActive: true }));
+      expect(native.calls).not.toContain("ble-initialize");
+      await activate();
+      await waitFor(() => expect(native.bleResult).toBeTypeOf("function"));
+      await matches();
+      await waitFor(() => expect(runButton()).toBeEnabled());
+      expect(
+        native.calls.filter((call) => call === "ble-initialize"),
+      ).toHaveLength(1);
+      expect((await exported(user)).attempts.at(-1)).toMatchObject({
+        connected: true,
+        disconnected: true,
+      });
+    },
+  );
+
+  it("self-removes a late activity registration after cancellation without querying or arming BLE", async () => {
+    const user = await renderReadyProbe();
+    await user.click(runButton());
+    const releaseListener = hold("appStateChange");
+    await act(async () => native.nfcEvent!(nfcEvent()));
+    await waitFor(() =>
+      expect(native.calls).toContain("app-activity-listener"),
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel sample" }));
+    expect(runButton()).toBeDisabled();
+    await releaseListener();
+    await waitFor(() => expect(runButton()).toBeEnabled());
+    expect(
+      native.removed.filter((name) => name === "appStateChange"),
+    ).toHaveLength(1);
+    expect(
+      native.calls.filter((call) => call === "app-state:active-query"),
+    ).toHaveLength(1);
+    expect(native.calls).not.toContain("ble-initialize");
+  });
+
+  it.each(["activation", "cancel"] as const)(
+    "latches restart when activity listener removal rejects during %s",
+    async (ending) => {
+      const user = await renderReadyProbe();
+      await beginInactiveHandoff(user);
+      const failure = deferred();
+      native.waits.set("remove:appStateChange", failure.promise);
+      if (ending === "activation") await activate();
+      else
+        await user.click(screen.getByRole("button", { name: "Cancel sample" }));
+      await waitFor(() => expect(native.removed).toContain("appStateChange"));
+      expect(runButton()).toBeDisabled();
+      await act(async () =>
+        failure.reject(new Error("private activity handle")),
+      );
+      await screen.findByText(/Cleanup failed; restart/);
+      expect(runButton()).toBeDisabled();
+      expect(native.calls).not.toContain("ble-initialize");
+      expect(native.removed).toStrictEqual(
+        expect.arrayContaining(["pause", "resume"]),
+      );
+      expect(JSON.stringify(await exported(user))).not.toContain(
+        "private activity handle",
+      );
+    },
+  );
+
+  it("waits after NFC stop for actual activation, never resume alone, then connects once", async () => {
+    const user = await renderReadyProbe();
+    await user.click(runButton());
+    const releaseStop = hold("nfc-stop");
+    native.foreground = false;
+    await act(async () => native.nfcEvent!(nfcEvent()));
+    expect(native.calls).not.toContain("app-activity-listener");
+    expect(native.calls).not.toContain("ble-initialize");
+    await releaseStop();
+    await waitFor(() =>
+      expect(
+        native.calls.filter((call) => call === "app-state:active-query"),
+      ).toHaveLength(2),
+    );
+    expect(runButton()).toBeDisabled();
+    await act(async () => native.appResume!({ isActive: true }));
+    expect(native.calls).not.toContain("ble-initialize");
+    await act(async () => native.appActivity!({ isActive: false }));
+    expect(native.calls).not.toContain("ble-initialize");
+    native.foreground = true;
+    await act(async () => {
+      native.appActivity!({ isActive: true });
+      native.appActivity!({ isActive: true });
+    });
+    await waitFor(() => expect(native.bleResult).toBeTypeOf("function"));
+    await matches();
+    await waitFor(() => expect(runButton()).toBeEnabled());
+    expect(
+      native.calls.filter((call) => call === "ble-initialize"),
+    ).toHaveLength(1);
+    expect(
+      native.calls.filter((call) => call === "ble-connect:device-a"),
+    ).toHaveLength(1);
+    expect(
+      native.calls.filter((call) => call === "ble-disconnect:device-a"),
+    ).toHaveLength(1);
+    expect(
+      native.removed.filter((name) => name === "appStateChange"),
+    ).toHaveLength(1);
+    const receipt = await exported(user);
+    expect(receipt.attempts[0]).toMatchObject({
+      connected: true,
+      disconnected: true,
+      matchingDeviceCount: 1,
+    });
+    expect(receipt.attempts[0]!.records[0]!.payload).toStrictEqual([
+      0, 0, 0, 0, 0, 0, 0, 80, 77, 53, 32, 65, 0,
+    ]);
+  });
   it("requires restart after an arranged native stop rejection during cancellation", async () => {
     const user = await renderReadyProbe();
     await user.click(runButton());
@@ -348,23 +572,14 @@ describe("GateMinusOneProbe", () => {
     },
   );
 
-  it.each(["NFC", "BLE"] as const)(
-    "refuses to arm %s when the current-state query reports background",
-    async (radio) => {
-      const user = await renderReadyProbe();
-      if (radio === "NFC") native.foreground = false;
-      await user.click(runButton());
-      if (radio === "BLE") {
-        native.foreground = false;
-        await act(async () => native.nfcEvent!(nfcEvent()));
-      }
-      await waitFor(() => expect(runButton()).toBeEnabled());
-      expect(native.calls).not.toContain(
-        radio === "NFC" ? "nfc-start:attempt-a" : "ble-initialize",
-      );
-      expect((await exported(user)).attempts[0]!.connected).toBe(false);
-    },
-  );
+  it("refuses initial NFC without positive activity", async () => {
+    const user = await renderReadyProbe();
+    native.foreground = false;
+    await user.click(runButton());
+    await waitFor(() => expect(runButton()).toBeEnabled());
+    expect(native.calls).not.toContain("nfc-start:attempt-a");
+    expect((await exported(user)).attempts[0]!.connected).toBe(false);
+  });
 
   it("operator cancellation stops a scan with no second match and retains failed evidence", async () => {
     const user = await renderReadyProbe();
@@ -934,11 +1149,12 @@ describe("GateMinusOneProbe", () => {
         "app-listener",
         "nfc-listener:nfcEvent",
         "nfc-listener:nfcSessionEnd",
-        "app-state:foreground",
+        "app-state:active-query",
         "nfc-start:attempt-a",
         "nfc-stop:attempt-a",
         "nfc-listeners-removed",
-        "app-state:foreground",
+        "app-activity-listener",
+        "app-state:active-query",
         "ble-initialize",
         "ble-enabled",
         "ble-requestLEScan:unfiltered:duplicates",

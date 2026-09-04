@@ -33,7 +33,9 @@ interface Active {
   metadata: Metadata;
   pending: Set<Promise<unknown>>;
   nfcRemovers: GateRemoveListener[];
+  activityRemovers: GateRemoveListener[];
   otherRemovers: GateRemoveListener[];
+  cancelActivityWait: (() => void) | null;
   nfcActive: boolean;
   nfcReady: boolean;
   earlyNfcEvent: unknown;
@@ -254,6 +256,7 @@ export default function GateMinusOneProbe() {
   ): Promise<void> {
     if (active.drainPromise) return active.drainPromise;
     active.terminal = true;
+    active.cancelActivityWait?.();
     if (mounted.current) {
       setReloadReady(null);
       setExportedPartial(false);
@@ -283,6 +286,7 @@ export default function GateMinusOneProbe() {
         });
       }
       await remove(active, active.nfcRemovers);
+      await remove(active, active.activityRemovers);
       await remove(active, active.otherRemovers);
       if (activeRef.current === active) activeRef.current = null;
       if (mounted.current) {
@@ -340,15 +344,64 @@ export default function GateMinusOneProbe() {
       await drain(active, "BLE scan/connect failed.");
     }
   }
-  async function startBle(active: Active) {
-    if (
-      (await pending(active, () => gateNativePort.currentAppState())) !==
-        "foreground" ||
-      !owns(active)
-    ) {
-      await drain(active, "App is backgrounded; BLE was not armed.");
-      return;
+  async function waitForActivity(active: Active): Promise<boolean> {
+    let cancelled = false;
+    let wake: (() => void) | null = null;
+    const cancel = () => {
+      cancelled = true;
+      wake?.();
+    };
+    active.cancelActivityWait = cancel;
+    try {
+      while (owns(active) && !cancelled) {
+        const observed = { isActive: false, revision: 0, retired: false };
+        await listen(
+          active,
+          () =>
+            gateNativePort.onAppActivity((isActive) => {
+              if (!owns(active) || cancelled || observed.retired) return;
+              observed.isActive = isActive;
+              observed.revision += 1;
+              wake?.();
+            }),
+          active.activityRemovers,
+        );
+        if (!owns(active) || cancelled) return false;
+        const revision = observed.revision;
+        const isActive = await pending(active, () =>
+          gateNativePort.isAppActive(),
+        );
+        if (!owns(active) || cancelled) return false;
+        // An event delivered during the query outranks its possibly older snapshot.
+        if (observed.revision === revision) observed.isActive = isActive;
+        while (owns(active) && !cancelled && !observed.isActive) {
+          setStatus("NFC reader session ended.");
+          // This JS rendezvous is not a native primitive: drain must never await it.
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+          wake = null;
+        }
+        if (!owns(active) || cancelled) return false;
+        await remove(active, active.activityRemovers);
+        observed.retired = true;
+        if (active.cleanupFailed) {
+          await drain(active);
+          return false;
+        }
+        if (!owns(active) || cancelled) return false;
+        if (observed.isActive) return true;
+        // Activity changed during native removal: observe/query again before BLE.
+      }
+      return false;
+    } finally {
+      cancel();
+      if (active.cancelActivityWait === cancel)
+        active.cancelActivityWait = null;
     }
+  }
+  async function startBle(active: Active) {
+    if (!(await waitForActivity(active)) || !owns(active)) return;
     await pending(active, () => gateNativePort.initializeBle());
     if (!owns(active)) return;
     const enabled = await pending(active, () => gateNativePort.isBleEnabled());
@@ -523,7 +576,9 @@ export default function GateMinusOneProbe() {
       metadata,
       pending: new Set(),
       nfcRemovers: [],
+      activityRemovers: [],
       otherRemovers: [],
+      cancelActivityWait: null,
       nfcActive: false,
       nfcReady: false,
       earlyNfcEvent: null,
@@ -633,12 +688,15 @@ export default function GateMinusOneProbe() {
         );
         if (!owns(active)) return;
       }
-      const state = await pending(active, () =>
-        gateNativePort.currentAppState(),
+      const isActive = await pending(active, () =>
+        gateNativePort.isAppActive(),
       );
       if (!owns(active)) return;
-      if (state !== "foreground") {
-        await drain(active, "App is backgrounded; NFC was not armed.");
+      if (!isActive) {
+        await drain(
+          active,
+          "NFC setup failed; next sample is available after cleanup.",
+        );
         return;
       }
       active.nfcActive = true;

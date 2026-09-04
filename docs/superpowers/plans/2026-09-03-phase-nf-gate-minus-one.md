@@ -176,6 +176,7 @@ The implementation/test owners are Task 2's `Active`, `pending`, `listen`,
 |---|---|---|---|
 | `activeRef`, `Active.attemptId`, `entry`, `metadata` | `runScenario` | completed drain, or successful explicit live-native document transfer after listener retirement | ordinary teardown drains; live reload preserves native A for B's coordinator replacement; entry retained in exported document receipt; fresh attempt on re-arm |
 | `pending`, listener remover arrays, `nfcActive`, `bleActive`, `connectedDevice` | same `Active` construction; updated at each native primitive | settled native calls and resource release | teardown waits; no B while nonempty/uncertain; never persisted |
+| Activity listener, latest activity/event revision, wait resolver/cancel slot | one post-read handoff, observer before snapshot | success removes the handle; terminal transition synchronously cancels the waiter before drain awaits | late handle self-removes; removal failure requires restart; native registration/query promises enter `pending`, unresolved JS activity wait never does; no timer or state crosses re-arm/reload |
 | `terminal`, `drainPromise`, `cleanupFailed` | same `Active` construction | never reset on an old attempt | first terminal wins; failed cleanup sets document restart latch |
 | `reading`, `finalizing`, `nfcReady`, `earlyNfcEvent`, `scanReady`, `holdStage`, `priorReleased` | same `Active` construction | discarded after drain; early event consumed after start acknowledgment | stop duplicate continuations and premature success; B gets no hold stage |
 | `payload`, matching IDs/counts/times, first ID, scan start, selected ending | same `Active` construction | discarded after drain | receipt keeps only allowed measurements/records; raw IDs remain memory-only |
@@ -601,7 +602,8 @@ export interface GateNativePort {
   onNfcSessionEnd(
     listener: (event: unknown) => void,
   ): Promise<GateRemoveListener>;
-  currentAppState(): Promise<"foreground" | "background">;
+  isAppActive(): Promise<boolean>;
+  onAppActivity(listener: (isActive: boolean) => void): Promise<GateRemoveListener>;
   onAppState(
     listener: (state: "foreground" | "background") => void,
   ): Promise<GateRemoveListener>;
@@ -853,11 +855,12 @@ expect(calls).toStrictEqual([
   "app-listener",
   "nfc-listener:nfcEvent",
   "nfc-listener:nfcSessionEnd",
-  "app-state:foreground",
+  "app-state:active-query",
   "nfc-start:attempt-a",
   "nfc-stop:attempt-a",
   "nfc-listeners-removed",
-  "app-state:foreground",
+  "app-activity-listener",
+  "app-state:active-query",
   "ble-initialize",
   "ble-enabled",
   "ble-requestLEScan:unfiltered:duplicates",
@@ -915,8 +918,14 @@ export const gateNativePort: GateNativePort = {
     const handle = await CapacitorNfc.addListener("nfcSessionEnd", listener);
     return async () => handle.remove();
   },
-  async currentAppState() {
-    return (await App.getState()).isActive ? "foreground" : "background";
+  async isAppActive() {
+    return (await App.getState()).isActive;
+  },
+  async onAppActivity(listener) {
+    const handle = await App.addListener("appStateChange", ({ isActive }) =>
+      listener(isActive),
+    );
+    return async () => handle.remove();
   },
   async onAppState(listener) {
     const pause = await App.addListener("pause", () => listener("background"));
@@ -990,13 +999,13 @@ No other event name or plugin method is accepted.
 4. Call `gateNativePort.startNfc({ attemptId, alertMessage: "Hold your iPhone near the PM5.", gateMinusOneHoldStage })`; omit the last field for ordinary scenarios and map `stop-during-connect`, `stop-during-query`, and `stop-during-read` to `connect`, `query`, and `read`. The native adapter adds `iosSessionType: "ndef"` and `invalidateAfterFirstRead: false` exactly.
 5. On an exact-ID NDEF event, await the native-start acknowledgment before consuming an early record, decode every record, call and await `gateNativePort.stopNfc(attemptId)`, then remove both NFC listeners. The stop-induced ending is not an operator cancellation: installed `NfcPlugin.swift`'s `didInvalidateWithError` calls `notifySessionEnd` before `resolveNdefStopCalls`. Suppress that same-attempt ending during the record handoff, but still reject/count other attempt IDs.
 6. Find the one record whose TNF is `4` and whose type bytes exactly equal the literal external type.
-7. Call `gateNativePort.initializeBle()`, require `await gateNativePort.isBleEnabled()` to be true, and call `gateNativePort.startUnfilteredBleScan(callback)`. The adapter translates that call only to `BleClient.requestLEScan({ allowDuplicates: true }, callback)`, with no `services`, `namePrefix`, or display options.
+7. After acknowledged NFC stop and NFC listener removal, register the current attempt's `onAppActivity` observer before querying `isAppActive()`. False means not active, not background: retain the handoff with existing status `NFC reader session ended.` until a positive snapshot or actual activation; resume alone never authorizes BLE. An event delivered during the query outranks its possibly older snapshot. Remove the activity listener before starting BLE; if activity becomes false during removal, observe/query again. Then call `gateNativePort.initializeBle()`, require `await gateNativePort.isBleEnabled()` to be true, and call `gateNativePort.startUnfilteredBleScan(callback)`. The adapter translates that call only to `BleClient.requestLEScan({ allowDuplicates: true }, callback)`, with no `services`, `namePrefix`, or display options. Duplicate/stale activity cannot start another handoff, mutate a successor, or remove its listener.
 8. For each callback, read `result.localName` only for the name and `result.device.deviceId` for identity (installed BLE `ScanResult.device` contract). A result matches only when `result.localName` exactly equals the operator-recorded name shown by this PM5 and `matchAdvertisedName(payload, result.localName)` returns non-null. Store the first matching `deviceId` only in component memory; the receipt stores only elapsed times and the count of distinct matching IDs.
 9. Stop after the same matching device produces a second callback. Await `stopLEScan`; if more than one distinct matching device was observed, do not connect. Otherwise connect to the retained ID, then disconnect it, recording both outcomes.
 10. Expose **Cancel sample** for a scan that never reaches a second match; it awaits `stopLEScan` and records a failed criterion rather than inventing a timeout.
 11. Render raw bytes only on the device screen. **Copy redacted receipt** strictly serializes, writes the redacted JSON to the clipboard, and emits bounded `NFC_GATE_RECEIPT` fragment/end messages. Each export has its own sequence identity and declared base64 length; incomplete, truncated, mixed, duplicate or post-end fragments cannot complete an export. Every native console message remains below Capacitor's installed 4068-character argument cap.
 12. Install/rebuild the DEBUG overlay before any held-stage scenario. Each `stop-during-*` scenario waits for A's exact held stage, stops/drains A, then exposes **Export partial receipt**. In contrast, `webview-reload` holds connect and keeps native A live through export and reload; only the old document's listeners are retired. Use the attached Safari Web Inspector's stable-ID controls below while the system reader sheet covers the WebView. Only after export does **Reload WebView** become available; the controller verifies the complete attached-console export before invoking it. Store only `{ scenario, reloadPending: true, priorAttemptId, priorStage, iphone, pm5 }` under `ergomatic:nfc-gate-minus-one`. The next mount validates that metadata and immediately clears storage. **Start B** starts an unheld reader with fresh identity and installs the overlay progress listener; its acknowledged native start replaces/drains any live A before the probe releases only A's held stage. No mount-time release. All old-record, ending, and progress IDs are rejected; B's complete connect/disconnect is required before its conditional stale-A criterion can become true. The controller combines every captured document, retaining failed attempts, and establishes the whole-matrix criterion externally; the unmeasured settlement count remains null.
-13. Abort and drain the current NFC or BLE operation on unmount and on the port's foreground-loss callback; call `gateNativePort.currentAppState()` immediately before NFC start and again before BLE initialization so an already-backgrounded app cannot arm either radio operation.
+13. Abort and drain on Cancel, unmount, and the port's actual pause-driven background callback. Synchronously cancel the activity waiter at terminal transition before drain awaits native primitives; never add the unresolved JS waiter to `Active.pending`. Retain native registration/query ownership and late-handle removal, and latch restart on uncertain cleanup. Before initial NFC start require positive `gateNativePort.isAppActive()`; otherwise reuse `NFC setup failed; next sample is available after cleanup.` No automatic activity deadline, guessed delay, new native bridge, or atomic OS-state lease is implied.
 
 The probe records capability-call start/finish with `performance.now()`. It records each matching-advertisement timestamp relative to `requestLEScan` invocation, so the receipt carries first-match latency and repeat intervals without choosing a product deadline or collision window.
 
