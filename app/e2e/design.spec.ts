@@ -10012,8 +10012,7 @@ test.describe("unlogged recovery render registrations", () => {
       });
       await expect(review).toBeVisible();
       await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
-      await assertTapTargets(page);
-      await assertNoA11yViolations(page);
+      await sweep(page);
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth),
       ).toBe(viewport.width);
@@ -10029,6 +10028,7 @@ test.describe("unlogged recovery render registrations", () => {
         name: `Review & save PM5 workout ${longTitle}`,
       }),
     ).toBeVisible();
+    await sweep(page);
   });
 
   test("review renders missing-type, read-only legacy, and unavailable dispositions without a save affordance leak", async ({
@@ -10058,8 +10058,7 @@ test.describe("unlogged recovery render registrations", () => {
         page.getByRole("combobox", { name: "Workout type" }),
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
-      await assertTapTargets(page);
-      await assertNoA11yViolations(page);
+      await sweep(page);
 
       await seedRecovery(page, {
         ...base,
@@ -10084,8 +10083,7 @@ test.describe("unlogged recovery render registrations", () => {
         page.getByRole("link", { name: "Keep unsaved" }),
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
-      await assertTapTargets(page);
-      await assertNoA11yViolations(page);
+      await sweep(page);
 
       await page.goto(
         "/session/review?source=monitor&startedAt=missing-record",
@@ -10097,8 +10095,7 @@ test.describe("unlogged recovery render registrations", () => {
         page.getByRole("link", { name: "Back to Today" }),
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
-      await assertTapTargets(page);
-      await assertNoA11yViolations(page);
+      await sweep(page);
     }
   });
 
@@ -10138,8 +10135,7 @@ test.describe("unlogged recovery render registrations", () => {
           name: `Review & save PM5 workout ${longTitle}`,
         }),
       ).toBeVisible();
-      await assertTapTargets(page);
-      await assertNoA11yViolations(page);
+      await sweep(page);
       releasePending?.();
       await handled;
       await page.unroute("**/api/workouts");
@@ -10154,8 +10150,7 @@ test.describe("unlogged recovery render registrations", () => {
           name: `Review & save PM5 workout ${longTitle}`,
         }),
       ).toBeVisible();
-      await assertTapTargets(page);
-      await assertNoA11yViolations(page);
+      await sweep(page);
       await page.unroute("**/api/workouts");
     }
   });
@@ -10179,12 +10174,15 @@ test.describe("unlogged recovery render registrations", () => {
       page,
       [`${targetTitle} | AN | easy | 1`, "w 1' max"].join("\n"),
     );
+    const timer = buildCompletedTimerRun(workoutId);
 
     for (const viewport of [
       { width: 390, height: 844 },
       { width: 844, height: 390 },
     ]) {
       await page.setViewportSize(viewport);
+      await page.evaluate((key) => localStorage.removeItem(key), RUN_KEY);
+      await page.reload();
       await page.goto("/library");
       await page
         .locator(".workout-row")
@@ -10197,36 +10195,81 @@ test.describe("unlogged recovery render registrations", () => {
       await expect(
         page.getByRole("button", { name: "View unsaved" }),
       ).toBeVisible();
-      await assertTapTargets(page);
-      await assertNoA11yViolations(page);
+      await sweep(page);
+      await page.getByRole("button", { name: "Cancel" }).click();
+
+      await page.evaluate(
+        ({ key, value }) => localStorage.setItem(key, value),
+        {
+          key: RUN_KEY,
+          value: JSON.stringify(timer),
+        },
+      );
+      await page.reload();
+      await page.goto("/today");
+      await expect(
+        page.getByRole("heading", { name: "UNSAVED WORKOUTS" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: /Review & save Timer workout/ }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /Review & save PM5 workout/ }),
+      ).toBeVisible();
+      await sweep(page);
+
+      await page.goto("/library");
+      await page
+        .locator(".workout-row")
+        .filter({ hasText: targetTitle })
+        .click();
+      await page.getByRole("button", { name: "Connect" }).click();
+      await expect(
+        page.getByRole("heading", { name: "You have unsaved workouts." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "View unsaved" }),
+      ).toBeVisible();
+      await sweep(page);
       await page.getByRole("button", { name: "Cancel" }).click();
     }
+    await cleanupByTitle(page, targetTitle);
+  });
 
-    const timer = buildCompletedTimerRun(workoutId);
-    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
-      key: RUN_KEY,
-      value: JSON.stringify(timer),
+  test("landscape warning reveals the safe View exit above navigation and begins its keyboard flow there", async ({
+    page,
+  }) => {
+    const targetTitle = "Recovery warning safe exit target";
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-safe-exit@e2e.test",
+      name: "Recovery Safe Exit Tester",
     });
-    await page.reload();
-    await page.goto("/today");
-    await expect(
-      page.getByRole("heading", { name: "UNSAVED WORKOUTS" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: /Review & save Timer workout/ }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /Review & save PM5 workout/ }),
-    ).toBeVisible();
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    await seedRecovery(page, buildCompletedMonitorRun(workoutId));
+    await importBulk(
+      page,
+      [`${targetTitle} | AN | easy | 1`, "w 1' max"].join("\n"),
+    );
+    await page.setViewportSize({ width: 844, height: 390 });
     await page.goto("/library");
     await page.locator(".workout-row").filter({ hasText: targetTitle }).click();
     await page.getByRole("button", { name: "Connect" }).click();
-    await expect(
-      page.getByRole("heading", { name: "You have unsaved workouts." }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "View unsaved" }),
-    ).toBeVisible();
+
+    const view = page.getByRole("button", { name: "View unsaved" });
+    const nav = page.getByRole("navigation", { name: "Main" });
+    await expect(view).toBeVisible();
+    const [viewBox, navBox] = await Promise.all([
+      view.boundingBox(),
+      nav.boundingBox(),
+    ]);
+    expect(viewBox).not.toBeNull();
+    expect(navBox).not.toBeNull();
+    expect(viewBox!.y).toBeGreaterThanOrEqual(0);
+    expect(viewBox!.y + viewBox!.height).toBeLessThanOrEqual(navBox!.y);
+    await expect(view).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeFocused();
     await cleanupByTitle(page, targetTitle);
   });
 });

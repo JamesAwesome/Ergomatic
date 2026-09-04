@@ -1195,7 +1195,7 @@ test.describe("unlogged workout recovery — connected producer to retained hist
     const nextTitle = `Recovery Warning Target ${journey} ${RUN_ID}`;
     const deviceName = "PM5 102938475";
     const postAttempts: {
-      url: string;
+      pathname: string;
       body: Record<string, unknown>;
       interceptedStatus: 500 | null;
     }[] = [];
@@ -1347,7 +1347,7 @@ test.describe("unlogged workout recovery — connected producer to retained hist
       // Save a real 500; only the second button press may reach the API.
       if (postAttempts.length < 2) {
         postAttempts.push({
-          url: route.request().url(),
+          pathname: new URL(route.request().url()).pathname,
           body,
           interceptedStatus: 500,
         });
@@ -1359,7 +1359,7 @@ test.describe("unlogged workout recovery — connected producer to retained hist
         return;
       }
       postAttempts.push({
-        url: route.request().url(),
+        pathname: new URL(route.request().url()).pathname,
         body,
         interceptedStatus: null,
       });
@@ -1382,13 +1382,13 @@ test.describe("unlogged workout recovery — connected producer to retained hist
     ).toBeVisible();
     expect(postAttempts).toHaveLength(2);
     expect(
-      postAttempts.map(({ url, interceptedStatus }) => ({
-        url,
+      postAttempts.map(({ pathname, interceptedStatus }) => ({
+        pathname,
         interceptedStatus,
       })),
     ).toEqual([
-      { url: "http://127.0.0.1:8251/api/logs", interceptedStatus: 500 },
-      { url: "http://127.0.0.1:8251/api/logs", interceptedStatus: 500 },
+      { pathname: "/api/logs", interceptedStatus: 500 },
+      { pathname: "/api/logs", interceptedStatus: 500 },
     ]);
     expect(postAttempts[0]!.body).toMatchObject({
       workoutTitle: title,
@@ -1431,7 +1431,7 @@ test.describe("unlogged workout recovery — connected producer to retained hist
     await expect(page).toHaveURL(/\/today$/);
     expect(postAttempts).toHaveLength(3);
     expect(postAttempts[2]).toMatchObject({
-      url: "http://127.0.0.1:8251/api/logs",
+      pathname: "/api/logs",
       interceptedStatus: null,
     });
     expect(

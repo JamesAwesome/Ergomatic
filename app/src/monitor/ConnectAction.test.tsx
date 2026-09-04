@@ -441,9 +441,9 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
             : "You have an unsaved workout.",
         }),
       ).toBeVisible();
-      await userEvent.click(
-        screen.getByRole("button", { name: "View unsaved" }),
-      );
+      const view = screen.getByRole("button", { name: "View unsaved" });
+      expect(view).toHaveFocus();
+      await userEvent.click(view);
       expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
       expect(takeStagedRetireHandoff()).toStrictEqual([]);
       expect(currentUnretiredHandoff()).toStrictEqual(before);

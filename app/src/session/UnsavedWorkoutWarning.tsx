@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 export default function UnsavedWorkoutWarning({
   count,
   replacement,
@@ -14,6 +16,17 @@ export default function UnsavedWorkoutWarning({
   replaceLabel: string;
 }) {
   const plural = count > 1;
+  const viewRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null) return;
+    view.focus();
+    if (typeof view.scrollIntoView === "function") {
+      view.scrollIntoView({ block: "center" });
+    }
+  }, []);
+
   return (
     <div className="baseline-confirm">
       <h2 className="unsaved-warning-title">
@@ -24,7 +37,12 @@ export default function UnsavedWorkoutWarning({
         <br />
         {replacement} discards {plural ? "them" : "it"}.
       </p>
-      <button type="button" className="unsaved-review" onClick={onView}>
+      <button
+        ref={viewRef}
+        type="button"
+        className="unsaved-review"
+        onClick={onView}
+      >
         View unsaved
       </button>
       <div className="unsaved-secondary">

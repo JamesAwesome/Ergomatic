@@ -80,14 +80,62 @@ test.describe("Phase BL: the You re-test shortcut", () => {
     await expect(page).toHaveURL(/\/session\/log$/);
 
     // Fresh account, no plan chosen: the lone `Save` leads alone.
-    await page.getByRole("button", { name: "Save" }).click();
+    const logResponses: {
+      method: string;
+      pathname: string;
+      status: number;
+      body: string | null;
+    }[] = [];
+    const recordLogResponse = (response: {
+      url(): string;
+      status(): number;
+      request(): { method(): string; postData(): string | null };
+    }) => {
+      if (new URL(response.url()).pathname !== "/api/logs") return;
+      const request = response.request();
+      logResponses.push({
+        method: request.method(),
+        pathname: "/api/logs",
+        status: response.status(),
+        body: request.postData(),
+      });
+    };
+    page.on("response", recordLogResponse);
+    try {
+      await page.getByRole("button", { name: "Save" }).click();
 
-    // THE POST-SAVE PROMPT (spec M6: after the save, never above the
-    // save stack) — the measured split offered as the 2k baseline.
-    await expect(page.getByText("SESSION SAVED")).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Set your 2k baseline?" }),
-    ).toBeVisible();
+      // THE POST-SAVE PROMPT (spec M6: after the save, never above the
+      // save stack) — the measured split offered as the 2k baseline.
+      await expect(page.getByText("SESSION SAVED")).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Set your 2k baseline?" }),
+      ).toBeVisible();
+      expect(logResponses).toHaveLength(1);
+      expect(logResponses[0]).toMatchObject({
+        method: "POST",
+        pathname: "/api/logs",
+        status: 201,
+        body: expect.stringContaining('"workoutTitle":"2K Test"'),
+      });
+    } finally {
+      page.off("response", recordLogResponse);
+      await test.info().attach("2k-save-trace", {
+        body: JSON.stringify(
+          {
+            fixture: {
+              freshAccount: true,
+              workoutTitle: K2_TITLE,
+              elapsed: "08:00",
+              readyAt: "/session/log",
+            },
+            logResponses,
+          },
+          null,
+          2,
+        ),
+        contentType: "application/json",
+      });
+    }
     const measured = (await page
       .locator(".posttest-value")
       .textContent()) as string;
