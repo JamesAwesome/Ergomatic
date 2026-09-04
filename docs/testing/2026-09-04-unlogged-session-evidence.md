@@ -183,6 +183,53 @@ passed 463/463 and its sequential screenshot gate 118/118 after the product
 fixes. They remain current because this final addition changes only client
 tests and evidence, not browser/product code.
 
+The authorized verification-byte follow-up closes the final rereview's only
+residual, but is **fixed and awaiting its one scoped rereview**, not review
+clearance. `recoveryValidation.ts` now admits an optional `verificationBytes`
+field only when it is a JSON array of 1–32 integer bytes in 0–255; it leaves
+the original array untouched and sends all other persisted shapes to the
+existing read-only recovery path. Before that production edit, mounted empty,
+33-byte, `[-1]`, and `[256]` recordings each RED-failed because they mounted a
+save-capable summary. Object, string, and null non-array characterization
+cases were already GREEN/read-only; that fact is not presented as a new RED
+history. Green witnesses save `[0]` and a 32-byte array ending in `255`, and
+assert the actual `machineSummary.verificationBytes` POST payload byte-for-byte.
+
+Post-commit deciding-source probes used `apply_patch` and restored
+`recoveryValidation.ts` exactly to SHA-256
+`b64ede8847db4c620682402a9a49032d96ee6e692d91deee50130174446fe143`.
+Removing the length checks made the empty/33-byte mounted read-only witnesses
+RED; removing range checks made the negative/256 witnesses RED. Tightening
+each accepted boundary also made its Save witness RED: 1→2 bytes, 32→31 bytes,
+0→1, and 255→254. The `Array.isArray` predicate has no independently
+observable JSON-persisted mutation: object and null fail at the subsequent
+length/iteration operations, strings reach the finite-number rejection, and
+JSON has no persistable numeric non-array iterable (sets and typed arrays
+serialize as objects). The mounted non-array cases and complete 100% branch
+coverage therefore exercise its reachable behavior without inventing a
+non-JSON producer solely for a redundant mutation.
+
+Current authorized-follow-up gates: `pnpm lint`, `pnpm typecheck` (E2E
+TypeScript membership 19/19), `pnpm format:check`, `git diff --check`, and
+`pnpm build && pnpm dist:grep` passed; the build retains the existing Vite
+chunk advisory. Fresh full `pnpm test:coverage` (unit, client, and
+integration) passed 257 files / 7,106 tests (one skipped), at 98.74%
+statements, 97.15% branches, 98.91% functions, and 99.21% lines.
+`recoveryValidation.ts` is 100% statements (44/44), branches (42/42),
+functions (5/5), and lines (41/41). The first fresh full `pnpm e2e` run had
+one failure, `e2e/retest.spec.ts:169` “declining the offer keeps the baselines
+untouched”: after Save, the heading `Set your 2k baseline?` was not found
+within 5 seconds. Playwright emitted an `error-context.md`, but subsequent
+passing reruns cleaned it; its `2k-save-trace` response/readiness attachment
+does not cover this decline test (it is attached only to the preceding
+accept-offer test), so no captured request/response data establishes a cause.
+The real-stack isolated decline rerun passed 1/1 and the fresh restored-tree
+full rerun passed 463/463 in 2.2 minutes. The symptom remains intermittent
+and unclassified. Screenshots were deliberately not rerun: this follow-up
+changes only validation logic and mounted unit tests, with no CSS, layout,
+copy, browser fixture, or browser product behavior change; the prior 118/118
+visual run is historical evidence only.
+
 Native acceptance is an approved criterion but still pending James. Its
 operator protocol is a **proposed** phone acceptance walk at
 `docs/testing/2026-09-04-unlogged-session-phone-walk.md`; browser evidence
