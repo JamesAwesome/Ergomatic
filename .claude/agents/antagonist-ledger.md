@@ -6974,3 +6974,44 @@ plan's own tools and never with the REPO's.
   same walk had settled. `grep -rn "freezes whenever\|FREEZES whenever" app docs
   ROADMAP.md` takes ten seconds and is the difference between "(b) is done" and
   "(b) is done in one of four places".
+
+## 2026-09-03 — Reattaching a connection without re-owning the old state (lens 1, single pass)
+
+- **“The logical record owns the actuals, so a fresh driver need not receive
+  them” was false.** The disposable driver's private run state also decided
+  duplicate refusal, cumulative subtraction, final-summary reconciliation,
+  boundary attribution, and finish grace. **Technique: before replacing a
+  stateful object, enumerate every reader of its discarded fields and classify
+  each field as connection state, logical-run state, or diagnostic-only state;
+  naming the surviving database record is not a lifetime proof.**
+- **“A connection generation identifies reconnect work” was incomplete.** A
+  connect can outlive its UI deadline and resolve after Cancel, while native
+  serializes the cleanup behind that connect; a later loss can also replace the
+  reconnect authority while retaining the same logical session and device. The
+  design needed distinct token, reconnect-attempt, and base-attempt IDs, bounded
+  phases, and exact triple-matched late teardown before retry. **Technique: every
+  cancellable async operation gets an identity independent of the object it may
+  eventually create, plus a terminal rule for success after invalidation.**
+- **“Three fresh notifications form a current cohort” was a heuristic disguised
+  by the word cohort.** The feeds are independently delivered; the first triple
+  can mix PM5 instants. Compatibility may release, but a destructive mismatch
+  now requires repeated 0x0031-led evidence over the existing time window, and
+  both false-release and false-close directions stay named. **Technique: write
+  the assembly rule for every multi-feed verdict, then give destructive and
+  non-destructive outcomes different evidence thresholds.**
+- **“The reattach path wrote nothing” had no hardware oracle on native.** Driver
+  logs miss sample-rate and direct error-detail paths. The proof moved to a
+  generation-scoped counter at the lowest shared transport write seam, with one
+  mutation per forbidden write and a still-connected Terminate positive control.
+  **Technique: a negative side-effect invariant belongs below every producer of
+  that side effect; logging from one producer is not an oracle.**
+- **“Server first, client second” did not imply safe rollback.** A loaded web
+  client or distributed native build can keep writing after a nominal client
+  rollback. The additive server reader therefore remains deployed until every
+  capable writer is withdrawn. **Technique: rollout prose must name forward
+  compatibility, already-loaded clients, native distribution, and rollback
+  order separately.**
+- **VETTED GROUND:** base-handle retention with fresh wrappers, typed adapter
+  provenance, confirmed local-disconnect authority, explicit series breaks,
+  retained same-device routes, and the MISSED producer/server/reader seam
+  survived the attack.
