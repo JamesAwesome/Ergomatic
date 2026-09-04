@@ -2381,18 +2381,19 @@ trigger is the whole entry.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
 - **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; HARDENED
-  DESIGN APPROVED 2026-09-03; ONE NORMAL TRACE WALK PM-APPROVED 2026-09-04,
-  AWAITING JAMES'S SEPARATE AGREEMENT; BROADER GATE -1 WALK REMAINS PAUSED;
-  PRODUCT IMPLEMENTATION UNSCHEDULED.** Two targeted NFC/BLE connections succeeded;
+  DESIGN APPROVED 2026-09-03; NORMAL TRACE WALK RE-HARDENED 2026-09-04 AND
+  AWAITING FRESH PM REVIEW; BROADER GATE -1 WALK REMAINS PAUSED; PRODUCT
+  IMPLEMENTATION UNSCHEDULED.** Two targeted NFC/BLE connections succeeded;
   recovery and multi-tag proof remain incomplete. Further walks require PM
   approval of the exact prepared runsheet before asking James to participate.
   Evidence and desk-only close-out:
   [`SESSION-PAUSED.md`](docs/monitor/sessions/phase-nf-gate-minus-one/SESSION-PAUSED.md).
   Approved desk-only trace/capture follow-up and verification limits:
   [`DIAGNOSTIC-CAPTURE.md`](docs/monitor/sessions/phase-nf-gate-minus-one/DIAGNOSTIC-CAPTURE.md).
-  The only approved next hardware scope is the one-attempt, eight-minute
-  [`NF-NORMAL-TRACE-v3`](docs/monitor/sessions/phase-nf-gate-minus-one/NEXT-WALK-RUNSHEET.md);
-  it does not run until James separately agrees.
+  The retired v3 approval does not authorize its hardened replacement. The only
+  candidate next hardware scope is the one-attempt, eight-minute
+  [`NF-NORMAL-TRACE-v5`](docs/monitor/sessions/phase-nf-gate-minus-one/NEXT-WALK-RUNSHEET.md);
+  it requires a fresh PM PASS and then James's separate agreement.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

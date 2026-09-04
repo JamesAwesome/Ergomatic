@@ -6,8 +6,9 @@ request from actual RF activation. It does not implement the product Scan NFC
 button or authorize another hardware session.
 
 Runtime and tests under review: `0e034b48..7e10d289`. Native and browser gates
-pass. One bounded next walk now has PM PASS but remains unscheduled pending
-James's separate agreement.
+pass. The bounded next walk was re-hardened after its prior PM review and is not
+authorized until the exact replacement receives a fresh PM PASS and James then
+separately agrees.
 
 ## What changed
 
@@ -95,12 +96,13 @@ that RF never activated. Console emission is not a host durability receipt or
 a causal explanation for the earlier failure. No saved receipt or gate
 criterion was retroactively promoted. Gate -1 remains NO-GO/incomplete.
 
-`NF-NORMAL-TRACE-v3` at `6d10fc80` has PM PASS for one pinned normal attempt:
-8 minutes including setup, zero rowing/HR/captures, one attempt with no retry,
-at most 11 physical actions and three one-word acknowledgements, with evidence
-captured by the controller. James's separate agreement is still required. No
-recovery, background, held, reload, timeout, Flipper, multi-tag, programming or
-product-implementation work is approved.
+`NF-NORMAL-TRACE-v3` at `6d10fc80` received PM PASS, but its manual controller
+shapes were retired after hardening found fail-open evidence and cleanup seams.
+Its replacement, `NF-NORMAL-TRACE-v5`, keeps the eight-minute, zero-rowing,
+zero-capture, one-attempt boundary and moves execution and outcome decisions
+into tested controller code. v5 still requires fresh PM PASS and James's later
+separate agreement. No recovery, background, held, reload, timeout, Flipper,
+multi-tag, programming or product-implementation work is approved.
 
 ## Prepared diagnostic artifact
 

@@ -7057,3 +7057,34 @@ plan's own tools and never with the REPO's.
   the mutable current slot. Separate callback delivery, missing observation,
   console emission, host retention, and causal explanation—each proves a
   different thing.
+
+### 2026-09-04 — Phase NF normal-trace walk hardening
+
+- **Techniques:** Trace evidence from its producer through platform decoration
+  into the exact parser. Exercise raw log to decision with prefixed lines,
+  multiple exports and a truncated newest export; never fall back past newer
+  incomplete evidence.
+- Treat absence in an unframed diagnostic stream as inconclusive unless an
+  explicit same-session terminal summary exists. Bind freshness mechanically
+  with a new process, generation 1 only and exactly one receipt attempt.
+- Grep every writer before treating an initialized receipt field as evidence.
+  A `null` or zero that no selected scenario populates is unobserved, not proof
+  of a behavior.
+- Execute a runsheet's shell as one program, not adjacent command shapes. Probe
+  unset, empty, wrong and valid values; make preflight failure atomic; and trace
+  variables, pipelines and background jobs across every shell boundary.
+- Bind cleanup to application identity before acting. A bundle-scoped
+  replacement launch may yield the only PID eligible for termination; prove
+  that replacement absent afterward. Locking a phone is containment, not
+  process termination.
+- For a growing log with pre- and post-cleanup exports, freeze the producer
+  before selecting the authoritative newest envelope. Publish evidence only by
+  atomic rename after classification succeeds.
+- A receipt extractor is not an outcome gate. Drive absent, malformed and
+  valued diagnostics plus positive, negative and inconclusive receipts through
+  an independent classifier for generation, event order, record shape, device
+  name and BLE outcome.
+- When a CLI offers both log redirection and stdout streaming, establish which
+  file owns evidence for the exact option set. Reserve cleanup inside the same
+  absolute operator deadline, and compare the literal operator instruction to
+  the heart-rate and rowing contract it claims to satisfy.

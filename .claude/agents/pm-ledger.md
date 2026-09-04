@@ -4525,3 +4525,7 @@ attempt on the pinned build and photographed hardware, with zero
 rowing/captures, no retry, 11 physical actions, three one-word acknowledgements,
 and controller-owned automatic evidence. No broader NFC walk or implementation
 was approved.
+
+That PASS was retired when hardening found the v3/v4 controller path could fail
+open or leave cleanup/evidence ownership ambiguous. `NF-NORMAL-TRACE-v5` is a
+new approval target; it is not covered by the historical v3 verdict.
