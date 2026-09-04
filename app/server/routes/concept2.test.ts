@@ -43,6 +43,13 @@ function fakeSessionStore(): SessionStore {
   const users: Record<string, SessionUser> = {
     "token-a": userA,
     "token-b": userB,
+    // Wave E per-user gate: userA's OWN id, carrying the address in a
+    // different case. Google hands us whatever case the account was
+    // created with, and `req.user!.email` goes straight into
+    // `availableFor` — so the CANDIDATE side of `isAllowed` is a
+    // production path, not a harness detail, and it needs a session that
+    // can exercise it.
+    "token-a-mixedcase": { ...userA, email: userA.email.toUpperCase() },
   };
   return {
     resolveSession: async (token: string) => {
@@ -59,6 +66,8 @@ function fakeSessionStore(): SessionStore {
 
 const asA = (req: request.Test) => req.set("Authorization", "Bearer token-a");
 const asB = (req: request.Test) => req.set("Authorization", "Bearer token-b");
+const asAMixedCase = (req: request.Test) =>
+  req.set("Authorization", "Bearer token-a-mixedcase");
 // The web surface: the SAME fake session tokens, carried as the
 // `erg_session` cookie instead of a bearer.
 const asACookie = (req: request.Test) =>
@@ -711,11 +720,24 @@ describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
 
   // `parseAllowlist` lower-cases and trims both sides; the entry a human
   // types into a host `.env` is not the string Google hands us.
-  it("an entry that differs only in case and padding still admits the rower", async () => {
+  // BOTH sides of `isAllowed`, because each is a separate production path
+  // and a test that moved only one would pass through a mutation to the
+  // other. The ENTRY side is what a human typed into a host `.env`
+  // (padded, upper-cased); the CANDIDATE side is `req.user!.email`, which
+  // is whatever case Google's account carries.
+  it("a list entry that differs only in case and padding still admits the rower", async () => {
     const { app } = buildApp({
       c2AllowedEmails: `  ${userA.email.toUpperCase()} , `,
     });
     const res = await asA(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("a signed-in email that differs only in case from the list entry still admits the rower", async () => {
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A });
+    const res = await asAMixedCase(
       request(app).post("/api/concept2/connect").send(NATIVE_MINT),
     );
     expect(res.status).toBe(200);
