@@ -12,7 +12,8 @@ fresh gates and sensitivity probes recorded below. The one authorized scoped
 rereview of `1829dea2..11d9a122` returned **ADDRESSED**, with no new findings:
 the guard matches the server contract and failed admission preserves the exact
 recording in read-only fallback. Native-door acceptance and PM phase-close
-review subsequently passed as bounded below. Merge approval remains pending.
+review subsequently passed as bounded below. James subsequently authorized
+"Merge when green"; combined-tree verification and PR CI remain required.
 
 The connected browser journey drives the real fake transport through five
 `w 100m max r0.1` intervals: six-second positive rests, five resting-state
@@ -243,5 +244,37 @@ review passed this bounded native-door criterion. An identified before/after
 summary pair, saved-history image, native landscape warning visibility and a
 later Start/Connect no-warning observation are not independently established.
 No repeat rowing or extra captures are required for this claim ceiling.
-Latest main `2f258006` is not integrated into the walked candidate; integration,
-PR CI and James's merge authorization remain separate pending gates.
+Main `2f258006` is not part of the walked candidate. It was subsequently
+integrated in `0816445c`, after James authorized "Merge when green". The
+combined-tree gates below passed; exact-head PR CI remains required.
+
+## Current combined-tree integration verification
+
+Integration `0816445c` preserves the selected programmed recovery body and
+upstream Concept2 completion metadata together. The PM5 Save receives the
+selected run's `completedAt` and timezone through `completionStamp`; timer
+saves remain unstamped. Both recovery and Concept2 design registration blocks
+survive the merge. Scoped source review at `f56a1b83` returned PASS, no findings.
+
+Commit `f56a1b83` extends the existing selected monitor/timer Save witness to
+assert the paired PM5 fields and their absence for timer. It began GREEN 2/2,
+not RED-first. After committing, removing the PM5 stamp made the monitor case
+fail: expected completedAt `2026-09-04T12:30:00.000Z`, received undefined.
+Restoration returned 2/2 and LogSession SHA-256
+`1eda16fab823f9f4e83cf961f611b378cf39b7fcd9fecb4994b637b538f86a7b`.
+
+Fresh `pnpm lint`, `pnpm typecheck` (E2E census 20/20), `pnpm format:check`,
+`git diff --check`, `pnpm build` and `pnpm dist:grep` passed. Full coverage
+passed 264 files, 7,317 tests and one skipped, at 98.76% statements / 97.19%
+branches / 98.94% functions / 99.24% lines. Coverage HTML records
+`completionStamp.ts` 100/100/100/100, `LogSession.tsx`
+98.26/95.62/96.87/98.42, `ReviewSession.tsx` 97.77/97.82/100/97.67, and
+`JustRowLog.tsx` 95.18/86.45/100/100 in the same metric order.
+
+Full E2E passed 487/487 (2.3 minutes). The sequential combined screenshot
+suite passed 126/126; linked Concept2, sent-log and recovery captures were
+opened and inspected. Date/fixture-only regenerated PNG churn was restored;
+no new capture changes were retained. The earlier unclassified retest failures
+remain historical observations, not findings attributed away by this pass.
+This combined-tree browser verification does not relabel the earlier native
+build as containing the incoming Concept2 changes.

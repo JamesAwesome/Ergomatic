@@ -1391,8 +1391,9 @@ admission gap; scoped review found no new findings. The antagonist cleared
 the proposed one-minute protocol's structural coverage. On build 875, James
 confirmed native recovery, successful Save and removal from Today; three
 phone screenshots are recorded. PM phase-close review passed that bounded
-native-door criterion, not every proposed protocol observation. Current-main
-integration, PR checks and James's merge decision remain pending.
+native-door criterion, not every proposed protocol observation. James then
+authorized "Merge when green". Main `2f258006` is integrated; combined-tree
+verification and scoped integration review passed. PR CI remains the merge gate.
 This is separate from Wave F, whose dependency cleared on 2026-09-04; that
 closeout does not substitute for this feature's own approvals or acceptance.
 [Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)

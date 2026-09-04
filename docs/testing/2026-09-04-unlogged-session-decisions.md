@@ -54,3 +54,7 @@ in this order. They do not authorize merge, release or native acceptance.
 James supplied that direction on September 4 ("appproved"), authorizing one
 focused implementation and scoped review of the remaining verification-byte
 gap. This does not approve merge, release or native acceptance.
+
+After the separate phone acceptance and PM phase-close verdict, James explicitly
+requested "Merge when green". This authorizes the PR and merge after combined-tree
+verification, integration review and CI, not a TestFlight release.

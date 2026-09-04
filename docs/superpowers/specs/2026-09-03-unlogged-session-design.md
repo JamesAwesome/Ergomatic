@@ -36,8 +36,9 @@ are recorded. James subsequently approved and performed phone acceptance on
 build 875: recovery, Save and removal from Today are explicitly confirmed,
 with three phone screenshots. PM phase-close review passed the bounded
 native-door criterion; the detailed protocol's missing observations are
-disclosed in the walk record, not promoted to proven outcomes. Current-main
-integration, PR checks and James's merge decision remain pending.
+disclosed in the walk record, not promoted to proven outcomes. James then
+authorized "Merge when green". Main `2f258006` is integrated; combined-tree
+verification and scoped integration review passed. PR CI remains the merge gate.
 
 The warning's new **View unsaved** action navigates through the same cancel
 cleanup as Cancel. It must not authorize a replacement. Today is the common

@@ -5,7 +5,8 @@ Governed by the approved [recovery design](../superpowers/specs/2026-09-03-unlog
 PM phase-close review passed the feature's bounded native-door criterion using
 these images and James's explicit recovery/Save/Today-clear confirmations.
 This does not mark every planned observation complete. No further rowing or
-captures are required; integration, PR CI and merge approval remain separate.
+captures are required. James subsequently authorized "Merge when green";
+combined-tree integration verification and PR CI remain separate requirements.
 
 ## Approved operator card (planned observations, not a completion checklist)
 
