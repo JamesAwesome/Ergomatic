@@ -327,7 +327,7 @@ export async function startLink(): Promise<LinkOutcome> {
       state: string;
     };
     if (!native) {
-      await openExternalUrl(authorizeUrl);
+      openExternalUrl(authorizeUrl);
       return { kind: "navigating" };
     }
     return await completeNative(authorizeUrl, state);
