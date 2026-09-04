@@ -143,8 +143,14 @@ describe("GateMinusOneProbe", () => {
     await beginThroughBle(user);
 
     await act(async () => {
-      native.bleResult!({ deviceId: "device-a", localName: "PM5 A" });
-      native.bleResult!({ deviceId: "device-a", localName: "PM5 A" });
+      native.bleResult!({
+        device: { deviceId: "device-a" },
+        localName: "PM5 A",
+      });
+      native.bleResult!({
+        device: { deviceId: "device-a" },
+        localName: "PM5 A",
+      });
     });
 
     await waitFor(() =>
@@ -173,15 +179,28 @@ describe("GateMinusOneProbe", () => {
     await beginThroughBle(user);
 
     await act(async () => {
-      native.bleResult!({ deviceId: "device-name", device: { name: "PM5 A" } });
-      native.bleResult!({ deviceId: "device-prefix", localName: "PM5" });
+      native.bleResult!({ device: { deviceId: "device-name", name: "PM5 A" } });
+      native.bleResult!({
+        device: { deviceId: "device-prefix" },
+        localName: "PM5",
+      });
+      native.bleResult!({ deviceId: "root-only", localName: "PM5 A" });
     });
     expect(screen.getByText("Matching device count: 0")).toBeInTheDocument();
 
     await act(async () => {
-      native.bleResult!({ deviceId: "device-a", localName: "PM5 A" });
-      native.bleResult!({ deviceId: "device-b", localName: "PM5 A" });
-      native.bleResult!({ deviceId: "device-a", localName: "PM5 A" });
+      native.bleResult!({
+        device: { deviceId: "device-a" },
+        localName: "PM5 A",
+      });
+      native.bleResult!({
+        device: { deviceId: "device-b" },
+        localName: "PM5 A",
+      });
+      native.bleResult!({
+        device: { deviceId: "device-a" },
+        localName: "PM5 A",
+      });
     });
 
     await waitFor(() => {
@@ -203,15 +222,19 @@ describe("GateMinusOneProbe", () => {
       .mockRejectedValueOnce(new Error("stop failed"));
 
     await act(async () => {
-      native.bleResult!({ deviceId: "device-a", localName: "PM5 A" });
-      native.bleResult!({ deviceId: "device-a", localName: "PM5 A" });
+      native.bleResult!({
+        device: { deviceId: "device-a" },
+        localName: "PM5 A",
+      });
+      native.bleResult!({
+        device: { deviceId: "device-a" },
+        localName: "PM5 A",
+      });
     });
 
     await waitFor(() => {
       expect(stopBleScan).toHaveBeenCalledOnce();
-      expect(
-        screen.getByText(/Scan stop failed: stop failed/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/BLE scan\/connect failed/)).toBeInTheDocument();
       expect(native.calls).not.toContain("ble-connect:device-a");
     });
   });

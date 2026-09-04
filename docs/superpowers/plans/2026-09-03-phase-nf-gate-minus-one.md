@@ -1061,7 +1061,7 @@ Expected: build succeeds; usage-description output is exactly `Scan a PM5 to con
 
 - [ ] **Step 3: Record device metadata from authoritative device screens**
 
-On iPhone, copy model and iOS version from Settings > General > About. On the PM5, copy model and firmware from More Options > Utilities > Product ID and More Options > Utilities > Product ID > Firmware, then copy the advertised name shown on **Connect Device**. Enter all five values into the probe before starting a scenario; the serializer refuses blanks.
+On iPhone, copy model and iOS version from Settings > General > About. On the PM5, follow displayed labels through More Utilities if necessary to **Product ID**; that screen displays both model and firmware. Then copy the advertised name shown on **Connect Device**. Enter all five values into the probe before starting a scenario; the serializer refuses blanks.
 
 - [ ] **Step 4: Run the exact-package normal NDEF-to-BLE-connect leg**
 
@@ -1092,7 +1092,7 @@ Set `readerEndingSemanticsObserved` true only when all three actions ran and the
 
 - [ ] **Step 7: Exercise background and process-live WebView reload**
 
-Run `background`: start A, background the app while its NFC sheet is live, resume, and require A to settle/drain before a fresh B starts and completes. Run `webview-reload`: start A, use the probe's **Reload WebView** control while native A is live, then start B; require every retained A event to carry A's ID and be ignored by the new document, and require B to complete. Neither scenario may leave an NFC sheet or BLE callback alive after completion.
+Run `background`: start A, background the app while its NFC sheet is live, resume, and require A to settle/drain before a fresh B starts and completes. Run `webview-reload`: start A and wait for its held-stage observation. Before reload, the probe emits a bounded, redacted `NFC_GATE_RECEIPT` partial; the controller reconstructs and verifies every fragment in the attached fresh `xcrun devicectl device process launch --device <resolved-device> --console haus.waffle.ergomatic` stream before asking the operator to reload (no guessed delivery sleep). After reload, start B, then release A's one held stage; collect the final bounded export and assemble partials plus final through the strict serializer without discarding failed attempts/endings. Require every retained A event to carry A's ID and be ignored by the new document, and require B to complete. Neither scenario may leave an NFC sheet or BLE callback alive after completion.
 
 - [ ] **Step 8: Run deterministic stop-during-connect/query/read device legs with a DEBUG-only overlay**
 
@@ -1202,7 +1202,7 @@ For each of `connect`, `query`, and `read`:
 
 1. Start A with that stage selected.
 2. On `nfcGateProgress(A, stage)`, call and await `gateNativePort.stopNfc(A)`.
-3. Reload the WebView, start B, then call and await `gateNativePort.releaseGateProgress(A, stage)`.
+3. Export and controller-verify the complete bounded partial receipt, reload the WebView, start B, then call and await `gateNativePort.releaseGateProgress(A, stage)`.
 4. Require no A record/end event to settle or clear B, and require B to read normally.
 5. Record each exact-ID mismatch rejected by the new document as `staleIdDroppedCount`; require `staleAttemptSettlementCount` to remain zero.
 
@@ -1322,7 +1322,7 @@ If `GO`, keep the exact dependency, checked-in patch/native tests, SPM dependenc
 
 If the architecture is GO but reader-ending actions collapsed, also mark the copy delta as awaiting James's rendered Gate 0 approval; do not execute the product plan until that approval exists.
 
-If `NO-GO`, use `apply_patch` plus `pnpm --dir app remove @capgo/capacitor-nfc`, then run the exact `vite build` plus `cap sync ios` pair below to remove the dependency, patch binding/file, SPM dependency, usage description, entitlement file/reference, and `CODE_SIGN_ENTITLEMENTS`. Keep the redacted receipt, capture, README correction, and report. Change the spec status to NO-GO and name the failed criterion; do not write a product plan.
+If `NO-GO`, use `apply_patch` plus `pnpm --dir app remove @capgo/capacitor-nfc`, then remove the two `COPY patches ./patches` Docker dependency-cache inputs as part of removing the patch. Run the exact `vite build` plus `cap sync ios` pair below to remove the dependency, patch binding/file, SPM dependency, usage description, entitlement file/reference, and `CODE_SIGN_ENTITLEMENTS`. Keep the redacted receipt, capture, README correction, and report. Change the spec status to NO-GO and name the failed criterion; do not write a product plan.
 
 ```bash
 VITE_API_BASE=https://ergomatic.waffle.haus VITE_GOOGLE_IOS_CLIENT_ID=896004543555-9m5cf46vdgf57dv1r68u7stad6ngi304.apps.googleusercontent.com pnpm --dir app exec vite build

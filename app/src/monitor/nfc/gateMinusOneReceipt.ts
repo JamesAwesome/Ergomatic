@@ -14,13 +14,18 @@ export interface DecodedNfcEvent {
   records: RedactedNfcRecord[];
 }
 
-type GateScenario =
+export type GateScenario =
   | "normal"
   | "stop-during-connect"
   | "stop-during-query"
   | "stop-during-read"
-  | "reload"
-  | "stress";
+  | "background"
+  | "webview-reload";
+
+export type ReaderEndingAction =
+  "sheet-cancel" | "no-tag-timeout" | "forced-invalidation";
+export type ReaderEndingReason =
+  "userCancelled" | "sessionTimeout" | "invalidated";
 
 export interface NfcGateReceiptV1 {
   schema: "ergomatic/nfc-gate-minus-one/v1";
@@ -33,7 +38,7 @@ export interface NfcGateReceiptV1 {
   attempts: Array<{
     scenario: GateScenario;
     atUtc: string;
-    capabilityLatencyMs: number;
+    capabilityLatencyMs: number | null;
     records: RedactedNfcRecord[];
     decodedName: string | null;
     liveLocalName: string | null;
@@ -47,8 +52,8 @@ export interface NfcGateReceiptV1 {
     staleAttemptSettlementCount: number;
   }>;
   readerEndings: Array<{
-    action: "sheet-cancel" | "no-tag-timeout" | "forced-invalidation";
-    observedReason: string | null;
+    action: ReaderEndingAction;
+    observedReason: ReaderEndingReason | null;
   }>;
   criteria: {
     rawNdefShape: boolean;
@@ -151,7 +156,21 @@ export function matchAdvertisedName(
 }
 
 export function redactNfcRecord(record: RedactedNfcRecord): RedactedNfcRecord {
-  if (record.payload.length < 7) throw new Error("NFC payload is too short");
+  const isPm5BleInfo =
+    record.tnf === 4 &&
+    record.type.length === PM5_NFC_TYPE_BYTES.length &&
+    record.type.every((byte, index) => byte === PM5_NFC_TYPE_BYTES[index]);
+  if (!isPm5BleInfo) {
+    return {
+      tnf: record.tnf,
+      type: [...record.type],
+      id: [...record.id],
+      payload: [...record.payload],
+    };
+  }
+  if (record.payload.length < 7) {
+    throw new Error("PM5 NFC payload is too short");
+  }
   return {
     tnf: record.tnf,
     type: [...record.type],
@@ -160,13 +179,59 @@ export function redactNfcRecord(record: RedactedNfcRecord): RedactedNfcRecord {
   };
 }
 
+const CRITERIA_KEYS = [
+  "rawNdefShape",
+  "exactType",
+  "paddingRuleObserved",
+  "exactLocalNameBridge",
+  "pickerFreeBleConnect",
+  "signedReader",
+  "readerEndingSemanticsObserved",
+  "nativeIdentityAndDrain",
+  "staleACannotAffectB",
+] as const;
+
+const ENDING_REASONS = new Set<ReaderEndingReason>([
+  "userCancelled",
+  "sessionTimeout",
+  "invalidated",
+]);
+
+function criterionVerdict(criteria: NfcGateReceiptV1["criteria"]): boolean {
+  return CRITERIA_KEYS.every((key) => criteria[key] === true);
+}
+
+function requireReceiptShape(receipt: Omit<NfcGateReceiptV1, "verdict">): void {
+  if (receipt.schema !== "ergomatic/nfc-gate-minus-one/v1") {
+    throw new Error("Invalid receipt schema");
+  }
+  if (
+    !Array.isArray(receipt.attempts) ||
+    !Array.isArray(receipt.readerEndings)
+  ) {
+    throw new Error("Invalid receipt collection");
+  }
+  for (const key of CRITERIA_KEYS) {
+    if (typeof receipt.criteria[key] !== "boolean") {
+      throw new Error(`Invalid receipt criterion: ${key}`);
+    }
+  }
+  for (const ending of receipt.readerEndings) {
+    if (
+      ending.observedReason !== null &&
+      !ENDING_REASONS.has(ending.observedReason)
+    ) {
+      throw new Error("Invalid reader ending reason");
+    }
+  }
+}
+
 export function serializeGateReceipt(
   receipt: Omit<NfcGateReceiptV1, "verdict">,
 ): string {
+  requireReceiptShape(receipt);
   const criteria = receipt.criteria;
-  const verdict = Object.values(criteria).every((value) => value)
-    ? "GO"
-    : "NO-GO";
+  const verdict = criterionVerdict(criteria) ? "GO" : "NO-GO";
   const safeReceipt: NfcGateReceiptV1 = {
     schema: receipt.schema,
     capturedAtUtc: receipt.capturedAtUtc,
@@ -217,4 +282,89 @@ export function serializeGateReceipt(
     verdict,
   };
   return `${JSON.stringify(safeReceipt, null, 2)}\n`;
+}
+
+const FRAME_PREFIX = "NFC_GATE_RECEIPT";
+const FRAME_VERSION = "v1";
+const FRAME_CHUNK_SIZE = 3000;
+
+function base64Encode(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64Decode(value: string): string {
+  const binary = atob(value);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+/** Bounded console messages survive Capacitor's per-argument 4068-char cap. */
+export function frameGateReceipt(serialized: string): string[] {
+  const encoded = base64Encode(serialized);
+  const total = Math.max(1, Math.ceil(encoded.length / FRAME_CHUNK_SIZE));
+  const frames = Array.from({ length: total }, (_, index) => {
+    const chunk = encoded.slice(
+      index * FRAME_CHUNK_SIZE,
+      (index + 1) * FRAME_CHUNK_SIZE,
+    );
+    return `${FRAME_PREFIX} ${FRAME_VERSION} fragment ${index + 1}/${total} ${chunk}`;
+  });
+  frames.push(`${FRAME_PREFIX} ${FRAME_VERSION} end ${total}`);
+  return frames;
+}
+
+export function reassembleGateReceiptFrames(frames: readonly string[]): string {
+  const chunks = new Map<number, string>();
+  let total: number | null = null;
+  let ended = false;
+  for (const frame of frames) {
+    const fragment =
+      /^NFC_GATE_RECEIPT v1 fragment (\d+)\/(\d+) ([A-Za-z0-9+/=]+)$/.exec(
+        frame,
+      );
+    if (fragment !== null) {
+      const index = Number(fragment[1]);
+      const declaredTotal = Number(fragment[2]);
+      if (
+        !Number.isSafeInteger(index) ||
+        !Number.isSafeInteger(declaredTotal) ||
+        index < 1 ||
+        index > declaredTotal ||
+        (total !== null && total !== declaredTotal) ||
+        chunks.has(index)
+      ) {
+        throw new Error("Invalid receipt fragment");
+      }
+      total = declaredTotal;
+      chunks.set(index, fragment[3]!);
+      continue;
+    }
+    const end = /^NFC_GATE_RECEIPT v1 end (\d+)$/.exec(frame);
+    if (end !== null) {
+      if (ended || total === null || Number(end[1]) !== total) {
+        throw new Error("Invalid receipt end frame");
+      }
+      ended = true;
+    }
+  }
+  if (!ended || total === null || chunks.size !== total) {
+    throw new Error("Incomplete receipt frames");
+  }
+  return base64Decode(
+    Array.from({ length: total }, (_, index) => chunks.get(index + 1)!).join(
+      "",
+    ),
+  );
+}
+
+export function emitGateReceipt(
+  receipt: Omit<NfcGateReceiptV1, "verdict">,
+  logger: (message: string) => void = console.info,
+): string {
+  const serialized = serializeGateReceipt(receipt);
+  for (const frame of frameGateReceipt(serialized)) logger(frame);
+  return serialized;
 }

@@ -6,6 +6,7 @@ RUN npm install -g pnpm@11.17.0
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile
 
 COPY . .
@@ -33,6 +34,7 @@ RUN npm install -g pnpm@11.17.0
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=build /app/dist/server ./dist/server

@@ -1,111 +1,109 @@
 import { useEffect, useRef, useState } from "react";
 import {
   decodeNfcEvent,
+  emitGateReceipt,
   matchAdvertisedName,
   PM5_NFC_TYPE_BYTES,
-  serializeGateReceipt,
+  type GateScenario,
   type NfcGateReceiptV1,
+  type ReaderEndingAction,
+  type ReaderEndingReason,
   type RedactedNfcRecord,
 } from "./gateMinusOneReceipt";
-// The disposable probe's injected boundary intentionally lives in native/;
-// it does not import a Capacitor package into this component.
-// eslint-disable-next-line no-restricted-imports
+// eslint-disable-next-line no-restricted-imports -- disposable native boundary
 import {
   gateNativePort,
   type GateNfcStage,
   type GateRemoveListener,
 } from "../../native/nfcGateMinusOneProbe";
 
-type Scenario =
-  | "normal"
-  | "stop-during-connect"
-  | "stop-during-query"
-  | "stop-during-read"
-  | "reload"
-  | "stress";
-
 interface Metadata {
   iphone: { model: string; iosVersion: string };
   pm5: { model: string; firmware: string; advertisedNameShown: string };
 }
-
-interface ActiveAttempt {
+interface Active {
   attemptId: string;
-  scenario: Scenario;
+  receiptIndex: number;
+  scenario: GateScenario;
   metadata: Metadata;
   nfcRemovers: GateRemoveListener[];
   appRemover: GateRemoveListener | null;
+  stageRemover: GateRemoveListener | null;
   nfcActive: boolean;
   bleActive: boolean;
+  terminal: boolean;
   finalizing: boolean;
   payload: number[] | null;
   firstDeviceId: string | null;
   matchingIds: Set<string>;
   matchingCounts: Map<string, number>;
-  scanStartedAt: number | null;
   matchingTimes: number[];
+  scanStartedAt: number | null;
+  selectedEnding: ReaderEndingAction | null;
+}
+interface ReloadMetadata {
+  scenario: "webview-reload";
+  priorAttemptId: string;
+  priorStage: GateNfcStage;
+  iphone: Metadata["iphone"];
+  pm5: Metadata["pm5"];
 }
 
 const STORAGE_KEY = "ergomatic:nfc-gate-minus-one";
-const USAGE_DESCRIPTION = "Scan a PM5 to connect and program your workout.";
+const USAGE = "Scan a PM5 to connect and program your workout.";
+const ENDINGS = new Set<ReaderEndingReason>([
+  "userCancelled",
+  "sessionTimeout",
+  "invalidated",
+]);
+const OVERLAY = new Set<GateScenario>([
+  "stop-during-connect",
+  "stop-during-query",
+  "stop-during-read",
+  "webview-reload",
+]);
+const now = () => performance.now();
+const stageFor = (scenario: GateScenario): GateNfcStage | undefined =>
+  scenario === "stop-during-query"
+    ? "query"
+    : scenario === "stop-during-read"
+      ? "read"
+      : scenario === "stop-during-connect" || scenario === "webview-reload"
+        ? "connect"
+        : undefined;
+const exactType = (record: RedactedNfcRecord) =>
+  record.tnf === 4 &&
+  record.type.length === PM5_NFC_TYPE_BYTES.length &&
+  record.type.every((byte, index) => byte === PM5_NFC_TYPE_BYTES[index]);
 
-function monotonicNow(): number {
-  return performance.now();
+function attempt(scenario: GateScenario) {
+  return {
+    scenario,
+    atUtc: new Date().toISOString(),
+    capabilityLatencyMs: null,
+    records: [],
+    decodedName: null,
+    liveLocalName: null,
+    trailingPayloadBytes: [],
+    firstMatchingAdvertisementMs: null,
+    matchingAdvertisementIntervalsMs: [],
+    matchingDeviceCount: 0,
+    connected: false,
+    disconnected: false,
+    staleIdDroppedCount: 0,
+    staleAttemptSettlementCount: 0,
+  };
 }
-
-function stageForScenario(scenario: Scenario): GateNfcStage | undefined {
-  if (scenario === "stop-during-connect") return "connect";
-  if (scenario === "stop-during-query") return "query";
-  if (scenario === "stop-during-read") return "read";
-  return undefined;
-}
-
-function nfcTypeMatches(record: RedactedNfcRecord): boolean {
-  return (
-    record.tnf === 4 &&
-    record.type.length === PM5_NFC_TYPE_BYTES.length &&
-    record.type.every((byte, index) => byte === PM5_NFC_TYPE_BYTES[index])
-  );
-}
-
-function emptyReceipt(
-  metadata: Metadata,
-  scenario: Scenario,
-  capabilityLatencyMs: number,
-): Omit<NfcGateReceiptV1, "verdict"> {
+function document(metadata: Metadata): Omit<NfcGateReceiptV1, "verdict"> {
   return {
     schema: "ergomatic/nfc-gate-minus-one/v1",
     capturedAtUtc: new Date().toISOString(),
-    iphone: {
-      model: metadata.iphone.model,
-      iosVersion: metadata.iphone.iosVersion,
-    },
-    pm5: {
-      model: metadata.pm5.model,
-      firmware: metadata.pm5.firmware,
-      advertisedNameShown: metadata.pm5.advertisedNameShown,
-    },
+    iphone: { ...metadata.iphone },
+    pm5: { ...metadata.pm5 },
     signedEntitlement: [],
-    usageDescription: USAGE_DESCRIPTION,
+    usageDescription: USAGE,
     package: "@capgo/capacitor-nfc@8.2.5",
-    attempts: [
-      {
-        scenario,
-        atUtc: new Date().toISOString(),
-        capabilityLatencyMs,
-        records: [],
-        decodedName: null,
-        liveLocalName: null,
-        trailingPayloadBytes: [],
-        firstMatchingAdvertisementMs: null,
-        matchingAdvertisementIntervalsMs: [],
-        matchingDeviceCount: 0,
-        connected: false,
-        disconnected: false,
-        staleIdDroppedCount: 0,
-        staleAttemptSettlementCount: 0,
-      },
-    ],
+    attempts: [],
     readerEndings: [],
     criteria: {
       rawNdefShape: false,
@@ -120,9 +118,35 @@ function emptyReceipt(
     },
   };
 }
-
-function firstAttempt(receipt: Omit<NfcGateReceiptV1, "verdict">) {
-  return receipt.attempts[0]!;
+function ending(
+  value: unknown,
+): { attemptId: string; reason: ReaderEndingReason | null } | null {
+  if (typeof value !== "object" || value === null) return null;
+  const event = value as { attemptId?: unknown; reason?: unknown };
+  if (typeof event.attemptId !== "string" || event.attemptId === "")
+    return null;
+  return {
+    attemptId: event.attemptId,
+    reason:
+      typeof event.reason === "string" &&
+      ENDINGS.has(event.reason as ReaderEndingReason)
+        ? (event.reason as ReaderEndingReason)
+        : null,
+  };
+}
+function progress(
+  value: unknown,
+): { attemptId: string; stage: GateNfcStage } | null {
+  if (typeof value !== "object" || value === null) return null;
+  const event = value as { attemptId?: unknown; stage?: unknown };
+  if (
+    typeof event.attemptId !== "string" ||
+    (event.stage !== "connect" &&
+      event.stage !== "query" &&
+      event.stage !== "read")
+  )
+    return null;
+  return { attemptId: event.attemptId, stage: event.stage };
 }
 
 export default function GateMinusOneProbe() {
@@ -138,100 +162,113 @@ export default function GateMinusOneProbe() {
   const [status, setStatus] = useState(
     "Enter the device metadata to arm a sample.",
   );
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [uiActivity, setUiActivity] = useState<{
-    scenario: Scenario;
-    bleActive: boolean;
-  } | null>(null);
-  const activeRef = useRef<ActiveAttempt | null>(null);
-  const priorAttemptIdRef = useRef<string | null>(null);
-
-  function updateAttempt(
-    update: (attempt: NfcGateReceiptV1["attempts"][number]) => void,
-  ) {
+  const [uiActive, setUiActive] = useState(false);
+  const [activeScenario, setActiveScenario] = useState<GateScenario | null>(
+    null,
+  );
+  const activeRef = useRef<Active | null>(null);
+  const reloadRef = useRef<ReloadMetadata | null>(null);
+  const owns = (active: Active) =>
+    activeRef.current === active && !active.terminal;
+  const update = (
+    active: Active,
+    fn: (entry: NfcGateReceiptV1["attempts"][number]) => void,
+  ) =>
     setReceipt((current) => {
-      if (current === null) return current;
-      const next = {
-        ...current,
-        attempts: current.attempts.map((attempt) => ({ ...attempt })),
-        criteria: { ...current.criteria },
-      };
-      update(firstAttempt(next));
-      return next;
+      if (
+        current === null ||
+        current.attempts[active.receiptIndex] === undefined
+      )
+        return current;
+      const attempts = current.attempts.map((entry) => ({ ...entry }));
+      fn(attempts[active.receiptIndex]!);
+      return { ...current, attempts };
     });
-  }
-
-  async function removeNfcListeners(active: ActiveAttempt): Promise<void> {
+  const stale = (active: Active) =>
+    update(active, (entry) => {
+      entry.staleIdDroppedCount += 1;
+    });
+  async function removeNfc(active: Active) {
     const removers = active.nfcRemovers.splice(0);
-    await Promise.all(removers.map(async (remove) => remove()));
+    await Promise.all(removers.map((remove) => remove()));
   }
-
-  async function removeAppListener(active: ActiveAttempt): Promise<void> {
-    const remove = active.appRemover;
-    active.appRemover = null;
-    if (remove !== null) await remove();
-  }
-
-  async function abortAndDrain(active: ActiveAttempt): Promise<void> {
+  async function drain(active: Active, message?: string) {
+    if (active.terminal) return;
+    active.terminal = true;
+    if (activeRef.current === active) activeRef.current = null;
+    setUiActive(false);
+    setActiveScenario(null);
+    let failed = false;
     if (active.nfcActive) {
       active.nfcActive = false;
       try {
         await gateNativePort.stopNfc(active.attemptId);
       } catch {
-        // The receipt documents observed failures; cleanup still continues.
+        failed = true;
       }
     }
-    await removeNfcListeners(active);
+    try {
+      await removeNfc(active);
+    } catch {
+      failed = true;
+    }
     if (active.bleActive) {
       active.bleActive = false;
       try {
         await gateNativePort.stopBleScan();
       } catch {
-        // There is no safe connect after a stop failure.
+        failed = true;
       }
     }
-    await removeAppListener(active);
-    if (activeRef.current === active) activeRef.current = null;
-    setUiActivity(null);
+    try {
+      await active.stageRemover?.();
+    } catch {
+      failed = true;
+    }
+    active.stageRemover = null;
+    try {
+      await active.appRemover?.();
+    } catch {
+      failed = true;
+    }
+    active.appRemover = null;
+    if (message !== undefined)
+      setStatus(
+        failed
+          ? "Cleanup failed; restart the diagnostic build before another sample."
+          : message,
+      );
   }
-
-  async function completeScan(active: ActiveAttempt): Promise<void> {
-    if (active.finalizing) return;
+  async function completeScan(active: Active) {
+    if (!owns(active) || active.finalizing) return;
     active.finalizing = true;
     active.bleActive = false;
-    setUiActivity({ scenario: active.scenario, bleActive: false });
     try {
       await gateNativePort.stopBleScan();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setScanError(`Scan stop failed: ${message}`);
-      updateAttempt((attempt) => {
-        attempt.matchingDeviceCount = active.matchingIds.size;
+      if (!owns(active)) return;
+      update(active, (entry) => {
+        entry.matchingDeviceCount = active.matchingIds.size;
       });
-      await removeAppListener(active);
-      setUiActivity(null);
-      return;
-    }
-
-    updateAttempt((attempt) => {
-      attempt.matchingDeviceCount = active.matchingIds.size;
-    });
-    if (active.matchingIds.size !== 1 || active.firstDeviceId === null) {
-      setStatus("BLE collision observed; connection intentionally blocked.");
-      await removeAppListener(active);
-      setUiActivity(null);
-      return;
-    }
-
-    try {
-      await gateNativePort.connectBle(active.firstDeviceId, () => undefined);
-      updateAttempt((attempt) => {
-        attempt.connected = true;
+      if (active.matchingIds.size !== 1 || active.firstDeviceId === null) {
+        await drain(
+          active,
+          "BLE collision observed; connection intentionally blocked.",
+        );
+        return;
+      }
+      const deviceId = active.firstDeviceId;
+      await gateNativePort.connectBle(deviceId, () => undefined);
+      if (!owns(active)) {
+        await gateNativePort.disconnectBle(deviceId).catch(() => undefined);
+        return;
+      }
+      update(active, (entry) => {
+        entry.connected = true;
       });
-      await gateNativePort.disconnectBle(active.firstDeviceId);
-      updateAttempt((attempt) => {
-        attempt.disconnected = true;
-        attempt.matchingDeviceCount = 1;
+      await gateNativePort.disconnectBle(deviceId);
+      if (!owns(active)) return;
+      update(active, (entry) => {
+        entry.disconnected = true;
       });
       setReceipt((current) =>
         current === null
@@ -245,107 +282,126 @@ export default function GateMinusOneProbe() {
               },
             },
       );
-      setStatus("BLE connect and disconnect observed.");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(`BLE connect/disconnect failed: ${message}`);
-    } finally {
-      await removeAppListener(active);
-      if (activeRef.current === active) activeRef.current = null;
-      setUiActivity(null);
+      await drain(active, "BLE connect and disconnect observed.");
+    } catch {
+      await drain(
+        active,
+        "BLE scan/connect failed; next sample is available after cleanup.",
+      );
     }
   }
-
-  async function startBle(active: ActiveAttempt): Promise<void> {
-    if (activeRef.current !== active) return;
-    if ((await gateNativePort.currentAppState()) !== "foreground") {
-      setStatus("App is backgrounded; BLE was not armed.");
-      await abortAndDrain(active);
+  async function startBle(active: Active) {
+    if (!owns(active)) return;
+    if (
+      (await gateNativePort.currentAppState()) !== "foreground" ||
+      !owns(active)
+    ) {
+      await drain(active, "App is backgrounded; BLE was not armed.");
       return;
     }
     await gateNativePort.initializeBle();
-    if (!(await gateNativePort.isBleEnabled())) {
-      setStatus("Bluetooth is disabled; no scan started.");
-      await removeAppListener(active);
+    if (!owns(active)) return;
+    if (!(await gateNativePort.isBleEnabled()) || !owns(active)) {
+      await drain(active, "Bluetooth is disabled; no scan started.");
       return;
     }
-    active.scanStartedAt = monotonicNow();
+    active.scanStartedAt = now();
     active.bleActive = true;
-    setUiActivity({ scenario: active.scenario, bleActive: true });
-    await gateNativePort.startUnfilteredBleScan((result) => {
+    await gateNativePort.startUnfilteredBleScan((value) => {
       if (
-        activeRef.current !== active ||
+        !owns(active) ||
         active.finalizing ||
-        active.payload === null
+        active.payload === null ||
+        typeof value !== "object" ||
+        value === null
       )
         return;
-      if (typeof result !== "object" || result === null) return;
-      const candidate = result as { deviceId?: unknown; localName?: unknown };
-      if (typeof candidate.deviceId !== "string") return;
-      const localName = candidate.localName;
-      if (typeof localName !== "string") return;
-      if (localName !== active.metadata.pm5.advertisedNameShown) return;
-      const match = matchAdvertisedName(active.payload, localName);
-      if (match === null) return;
-
-      const elapsed = monotonicNow() - active.scanStartedAt!;
+      const result = value as {
+        localName?: unknown;
+        device?: { deviceId?: unknown };
+      };
+      const deviceId = result.device?.deviceId;
+      const localName = result.localName;
+      if (
+        typeof deviceId !== "string" ||
+        typeof localName !== "string" ||
+        localName !== active.metadata.pm5.advertisedNameShown
+      )
+        return;
+      const matched = matchAdvertisedName(active.payload, localName);
+      if (matched === null) return;
+      const elapsed = now() - active.scanStartedAt!;
       active.matchingTimes.push(elapsed);
-      active.matchingIds.add(candidate.deviceId);
+      active.matchingIds.add(deviceId);
       active.matchingCounts.set(
-        candidate.deviceId,
-        (active.matchingCounts.get(candidate.deviceId) ?? 0) + 1,
+        deviceId,
+        (active.matchingCounts.get(deviceId) ?? 0) + 1,
       );
-      if (active.firstDeviceId === null)
-        active.firstDeviceId = candidate.deviceId;
-      updateAttempt((attempt) => {
-        attempt.decodedName = match.decodedName;
-        attempt.liveLocalName = localName;
-        attempt.trailingPayloadBytes = match.trailingPayloadBytes;
-        attempt.firstMatchingAdvertisementMs = active.matchingTimes[0] ?? null;
-        attempt.matchingAdvertisementIntervalsMs = active.matchingTimes
+      if (active.firstDeviceId === null) active.firstDeviceId = deviceId;
+      update(active, (entry) => {
+        entry.decodedName = matched.decodedName;
+        entry.liveLocalName = localName;
+        entry.trailingPayloadBytes = matched.trailingPayloadBytes;
+        entry.firstMatchingAdvertisementMs = active.matchingTimes[0] ?? null;
+        entry.matchingAdvertisementIntervalsMs = active.matchingTimes
           .slice(1)
-          .map((value, index) => value - active.matchingTimes[index]!);
-        attempt.matchingDeviceCount = active.matchingIds.size;
+          .map((time, index) => time - active.matchingTimes[index]!);
+        entry.matchingDeviceCount = active.matchingIds.size;
       });
-
-      if ((active.matchingCounts.get(candidate.deviceId) ?? 0) >= 2) {
+      if ((active.matchingCounts.get(deviceId) ?? 0) >= 2)
         void completeScan(active);
-      }
     });
+    if (!owns(active)) {
+      await gateNativePort.stopBleScan().catch(() => undefined);
+      return;
+    }
     setStatus("Scanning for the PM5's exact local name.");
   }
-
-  async function handleNfcEvent(
-    active: ActiveAttempt,
-    value: unknown,
-  ): Promise<void> {
-    if (activeRef.current !== active) return;
+  async function handleNfc(active: Active, value: unknown) {
+    if (!owns(active)) return;
     let decoded;
     try {
       decoded = decodeNfcEvent(value);
-    } catch (error: unknown) {
-      setStatus(
-        error instanceof Error ? error.message : "Malformed NFC event.",
-      );
+    } catch {
+      setStatus("Malformed NFC event.");
       return;
     }
-    if (decoded.attemptId !== active.attemptId) return;
-    updateAttempt((attempt) => {
-      attempt.records = decoded.records;
+    if (decoded.attemptId !== active.attemptId) {
+      stale(active);
+      return;
+    }
+    update(active, (entry) => {
+      entry.records = decoded.records;
     });
     try {
       await gateNativePort.stopNfc(active.attemptId);
-    } finally {
-      active.nfcActive = false;
-      await removeNfcListeners(active);
-    }
-    const pm5Record = decoded.records.find(nfcTypeMatches);
-    if (pm5Record === undefined) {
-      setStatus("No exact PM5 NFC external-type record was observed.");
-      await removeAppListener(active);
+    } catch {
+      await drain(
+        active,
+        "NFC stop failed; restart the diagnostic build before another sample.",
+      );
       return;
     }
-    active.payload = pm5Record.payload;
+    active.nfcActive = false;
+    try {
+      await removeNfc(active);
+    } catch {
+      await drain(
+        active,
+        "NFC listener cleanup failed; restart the diagnostic build before another sample.",
+      );
+      return;
+    }
+    if (!owns(active)) return;
+    const record = decoded.records.find(exactType);
+    if (record === undefined) {
+      await drain(
+        active,
+        "No exact PM5 NFC external-type record was observed.",
+      );
+      return;
+    }
+    active.payload = record.payload;
     setReceipt((current) =>
       current === null
         ? current
@@ -355,14 +411,38 @@ export default function GateMinusOneProbe() {
               ...current.criteria,
               rawNdefShape: true,
               exactType: true,
-              paddingRuleObserved: pm5Record.payload.length >= 7,
             },
           },
     );
     await startBle(active);
   }
-
-  async function runScenario(scenario: Scenario): Promise<void> {
+  async function addOverlay(active: Active) {
+    if (!OVERLAY.has(active.scenario)) return;
+    const wanted = stageFor(active.scenario)!;
+    const remover = await gateNativePort.onGateProgress((value) => {
+      const event = progress(value);
+      if (event === null || event.attemptId !== active.attemptId) {
+        stale(active);
+        return;
+      }
+      if (event.stage !== wanted) return;
+      if (active.scenario === "webview-reload")
+        setStatus(
+          "A reached the held stage. Verify the partial receipt in the controller console, then reload.",
+        );
+      else
+        void drain(
+          active,
+          `Observed ${event.stage}; A was stopped and drained.`,
+        );
+    });
+    if (!owns(active)) {
+      await remover().catch(() => undefined);
+      return;
+    }
+    active.stageRemover = remover;
+  }
+  async function runScenario(scenario: GateScenario) {
     if (activeRef.current !== null) return;
     const metadata: Metadata = {
       iphone: { model: iphoneModel.trim(), iosVersion: iosVersion.trim() },
@@ -380,197 +460,225 @@ export default function GateMinusOneProbe() {
       !metadata.pm5.advertisedNameShown
     )
       return;
-
-    setScanError(null);
-    const attemptId = crypto.randomUUID();
-    const active: ActiveAttempt = {
-      attemptId,
+    const current = receipt ?? document(metadata);
+    const active: Active = {
+      attemptId: crypto.randomUUID(),
+      receiptIndex: current.attempts.length,
       scenario,
       metadata,
       nfcRemovers: [],
       appRemover: null,
+      stageRemover: null,
       nfcActive: false,
       bleActive: false,
+      terminal: false,
       finalizing: false,
       payload: null,
       firstDeviceId: null,
       matchingIds: new Set(),
       matchingCounts: new Map(),
-      scanStartedAt: null,
       matchingTimes: [],
+      scanStartedAt: null,
+      selectedEnding: null,
     };
     activeRef.current = active;
-    setUiActivity({ scenario, bleActive: false });
-    setStatus("Checking NFC capability.");
-    const capabilityStartedAt = monotonicNow();
+    setUiActive(true);
+    setActiveScenario(scenario);
+    setReceipt({
+      ...current,
+      attempts: [...current.attempts, attempt(scenario)],
+    });
+    const started = now();
     try {
       const supported = await gateNativePort.isNfcSupported();
-      const capabilityLatencyMs = monotonicNow() - capabilityStartedAt;
-      setReceipt(emptyReceipt(metadata, scenario, capabilityLatencyMs));
+      if (!owns(active)) return;
+      update(active, (entry) => {
+        entry.capabilityLatencyMs = now() - started;
+      });
       if (!supported) {
-        setStatus("NFC is not supported on this device.");
-        activeRef.current = null;
-        setUiActivity(null);
+        await drain(active, "NFC is not supported on this device.");
         return;
       }
-      active.appRemover = await gateNativePort.onAppState((state) => {
-        if (state === "background") void abortAndDrain(active);
+      const appRemover = await gateNativePort.onAppState((state) => {
+        if (state === "background")
+          void drain(active, "App backgrounded; radio operations drained.");
       });
-      active.nfcRemovers.push(
-        await gateNativePort.onNfcEvent((event) => {
-          void handleNfcEvent(active, event);
-        }),
-      );
-      active.nfcRemovers.push(
-        await gateNativePort.onNfcSessionEnd((event) => {
-          const reason =
-            typeof event === "object" && event !== null && "reason" in event
-              ? String((event as { reason: unknown }).reason)
-              : null;
-          setReceipt((current) =>
-            current === null
-              ? current
-              : {
-                  ...current,
-                  readerEndings: [
-                    ...current.readerEndings,
-                    { action: "forced-invalidation", observedReason: reason },
-                  ],
+      if (!owns(active)) {
+        await appRemover().catch(() => undefined);
+        return;
+      }
+      active.appRemover = appRemover;
+      const nfcRemover = await gateNativePort.onNfcEvent((event) => {
+        void handleNfc(active, event);
+      });
+      if (!owns(active)) {
+        await nfcRemover().catch(() => undefined);
+        return;
+      }
+      active.nfcRemovers.push(nfcRemover);
+      const endingRemover = await gateNativePort.onNfcSessionEnd((value) => {
+        const event = ending(value);
+        if (event === null || event.attemptId !== active.attemptId) {
+          stale(active);
+          return;
+        }
+        setReceipt((state) =>
+          state === null
+            ? state
+            : {
+                ...state,
+                readerEndings: [
+                  ...state.readerEndings,
+                  {
+                    action: active.selectedEnding ?? "forced-invalidation",
+                    observedReason: event.reason,
+                  },
+                ],
+                criteria: {
+                  ...state.criteria,
+                  readerEndingSemanticsObserved:
+                    event.reason !== null ||
+                    state.criteria.readerEndingSemanticsObserved,
                 },
-          );
-        }),
-      );
-      if ((await gateNativePort.currentAppState()) !== "foreground") {
-        setStatus("App is backgrounded; NFC was not armed.");
-        await abortAndDrain(active);
+              },
+        );
+        void drain(active, "NFC reader session ended.");
+      });
+      if (!owns(active)) {
+        await endingRemover().catch(() => undefined);
+        return;
+      }
+      active.nfcRemovers.push(endingRemover);
+      await addOverlay(active);
+      if (
+        !owns(active) ||
+        (await gateNativePort.currentAppState()) !== "foreground"
+      ) {
+        await drain(active, "App is backgrounded; NFC was not armed.");
         return;
       }
       active.nfcActive = true;
-      const holdStage = stageForScenario(scenario);
+      const stage = stageFor(scenario);
       await gateNativePort.startNfc({
-        attemptId,
+        attemptId: active.attemptId,
         alertMessage: "Hold your iPhone near the PM5.",
-        ...(holdStage === undefined
-          ? {}
-          : { gateMinusOneHoldStage: holdStage }),
+        ...(stage === undefined ? {} : { gateMinusOneHoldStage: stage }),
       });
+      if (!owns(active)) {
+        await gateNativePort.stopNfc(active.attemptId).catch(() => undefined);
+        return;
+      }
+      const prior = reloadRef.current;
+      if (scenario === "webview-reload" && prior !== null) {
+        reloadRef.current = null;
+        await gateNativePort.releaseGateProgress(
+          prior.priorAttemptId,
+          prior.priorStage,
+        );
+      }
       setStatus("Hold your iPhone near the PM5.");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(`NFC setup failed: ${message}`);
-      await abortAndDrain(active);
+    } catch {
+      await drain(
+        active,
+        "NFC setup failed; next sample is available after cleanup.",
+      );
     }
   }
-
-  async function cancelSample(): Promise<void> {
+  async function selectEnding(action: ReaderEndingAction) {
     const active = activeRef.current;
-    if (active === null || !active.bleActive || active.finalizing) return;
-    active.finalizing = true;
-    active.bleActive = false;
-    setUiActivity({ scenario: active.scenario, bleActive: false });
-    try {
-      await gateNativePort.stopBleScan();
-      setStatus("Sample cancelled before a second matching advertisement.");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setScanError(`Scan stop failed: ${message}`);
-    } finally {
-      updateAttempt((attempt) => {
-        attempt.matchingDeviceCount = active.matchingIds.size;
-      });
-      await removeAppListener(active);
-      if (activeRef.current === active) activeRef.current = null;
-      setUiActivity(null);
-    }
+    if (active === null || !owns(active)) return;
+    active.selectedEnding = action;
+    if (action === "sheet-cancel")
+      await drain(
+        active,
+        "Reader sheet cancellation selected; observe its native ending if emitted.",
+      );
+    else
+      setStatus(
+        `${action} selected; complete that genuine reader path on device.`,
+      );
   }
-
-  async function copyReceipt(): Promise<void> {
-    if (receipt === null) return;
-    const json = serializeGateReceipt(receipt);
-    await navigator.clipboard.writeText(json);
-    console.info(`NFC_GATE_RECEIPT ${json}`);
-  }
-
-  function reloadWebView(): void {
+  function reloadWebView() {
     const active = activeRef.current;
+    const stage = active === null ? undefined : stageFor(active.scenario);
     if (
       active === null ||
-      (active.scenario !== "reload" && active.scenario !== "stress")
+      active.scenario !== "webview-reload" ||
+      stage === undefined ||
+      receipt === null
     )
       return;
+    emitGateReceipt(receipt);
     sessionStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        scenario: active.scenario,
-        reloadPending: true,
+        scenario: "webview-reload",
         priorAttemptId: active.attemptId,
+        priorStage: stage,
         iphone: active.metadata.iphone,
         pm5: active.metadata.pm5,
-      }),
+      } satisfies ReloadMetadata),
     );
     location.reload();
   }
-
   useEffect(() => {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     sessionStorage.removeItem(STORAGE_KEY);
-    if (raw === null) return;
+    if (raw === null) return undefined;
     try {
-      const parsed = JSON.parse(raw) as { priorAttemptId?: unknown };
+      const parsed = JSON.parse(raw) as Partial<ReloadMetadata>;
       if (
+        parsed.scenario !== "webview-reload" ||
         typeof parsed.priorAttemptId !== "string" ||
-        parsed.priorAttemptId === ""
+        (parsed.priorStage !== "connect" &&
+          parsed.priorStage !== "query" &&
+          parsed.priorStage !== "read") ||
+        parsed.iphone === undefined ||
+        parsed.pm5 === undefined
       )
-        return;
-      priorAttemptIdRef.current = parsed.priorAttemptId;
-      void Promise.all(
-        (["connect", "query", "read"] as const).map((stage) =>
-          gateNativePort.releaseGateProgress(
-            parsed.priorAttemptId as string,
-            stage,
-          ),
-        ),
-      ).catch(() => undefined);
+        return undefined;
+      reloadRef.current = parsed as ReloadMetadata;
+      const timer = window.setTimeout(() => {
+        setIphoneModel(parsed.iphone!.model);
+        setIosVersion(parsed.iphone!.iosVersion);
+        setPm5Model(parsed.pm5!.model);
+        setPm5Firmware(parsed.pm5!.firmware);
+        setAdvertisedName(parsed.pm5!.advertisedNameShown);
+        setStatus(
+          "Partial receipt exported. Start B, then A's held continuation will be released.",
+        );
+      }, 0);
+      return () => window.clearTimeout(timer);
     } catch {
-      // Malformed stale diagnostic state is intentionally discarded.
+      /* discard malformed opaque reload metadata */
     }
+    return undefined;
   }, []);
-
+  // The cleanup intentionally owns the mount's current attempt; re-subscribing
+  // on each render would race the same native handles it is draining.
   useEffect(
     () => () => {
       const active = activeRef.current;
-      if (active === null) return;
-      void (async () => {
-        if (active.nfcActive) {
-          try {
-            await gateNativePort.stopNfc(active.attemptId);
-          } catch {
-            // Continue draining every resolved listener and radio operation.
-          }
-        }
-        await Promise.all(active.nfcRemovers.map(async (remove) => remove()));
-        if (active.bleActive) {
-          try {
-            await gateNativePort.stopBleScan();
-          } catch {
-            // Teardown must not strand the app-state listener.
-          }
-        }
-        if (active.appRemover !== null) await active.appRemover();
-      })();
+      if (active !== null) void drain(active);
     },
-    [],
+    [], // eslint-disable-line react-hooks/exhaustive-deps -- mount-owned native drain
   );
-
-  const metadataComplete = Boolean(
+  const complete = Boolean(
     iphoneModel.trim() &&
     iosVersion.trim() &&
     pm5Model.trim() &&
     pm5Firmware.trim() &&
     advertisedName.trim(),
   );
-  const first = receipt === null ? null : firstAttempt(receipt);
-
+  const latest = receipt?.attempts.at(-1) ?? null;
+  const scenarios: GateScenario[] = [
+    "normal",
+    "stop-during-connect",
+    "stop-during-query",
+    "stop-during-read",
+    "background",
+    "webview-reload",
+  ];
   return (
     <section data-nfc-gate-minus-one="NFC Gate -1 disposable device probe">
       <h2 className="section-heading">NFC GATE -1 PROBE</h2>
@@ -610,20 +718,11 @@ export default function GateMinusOneProbe() {
         />
       </label>
       <div>
-        {(
-          [
-            "normal",
-            "stop-during-connect",
-            "stop-during-query",
-            "stop-during-read",
-            "reload",
-            "stress",
-          ] as const
-        ).map((scenario) => (
+        {scenarios.map((scenario) => (
           <button
             type="button"
             key={scenario}
-            disabled={!metadataComplete || uiActivity !== null}
+            disabled={!complete || uiActive}
             onClick={() => void runScenario(scenario)}
           >
             {scenario === "normal"
@@ -634,24 +733,53 @@ export default function GateMinusOneProbe() {
       </div>
       <button
         type="button"
-        disabled={uiActivity?.bleActive !== true}
-        onClick={() => void cancelSample()}
+        disabled={!uiActive}
+        onClick={() =>
+          void drain(activeRef.current!, "Sample cancelled and drained.")
+        }
       >
         Cancel sample
       </button>
-      {uiActivity?.scenario === "reload" ||
-      uiActivity?.scenario === "stress" ? (
+      <button
+        type="button"
+        disabled={!uiActive}
+        onClick={() => void selectEnding("sheet-cancel")}
+      >
+        Sheet cancel
+      </button>
+      <button
+        type="button"
+        disabled={!uiActive}
+        onClick={() => void selectEnding("no-tag-timeout")}
+      >
+        No-tag timeout
+      </button>
+      <button
+        type="button"
+        disabled={!uiActive}
+        onClick={() => void selectEnding("forced-invalidation")}
+      >
+        Forced invalidation
+      </button>
+      {activeScenario === "webview-reload" ? (
         <button type="button" onClick={reloadWebView}>
           Reload WebView
         </button>
       ) : null}
       <p>{status}</p>
-      {scanError === null ? null : <p>{scanError}</p>}
-      <p>{`Matching device count: ${first?.matchingDeviceCount ?? 0}`}</p>
-      {first === null ? null : (
+      <p>{`Matching device count: ${latest?.matchingDeviceCount ?? 0}`}</p>
+      {latest === null ? null : (
         <>
-          <p>{`Raw NFC records: ${JSON.stringify(first.records)}`}</p>
-          <button type="button" onClick={() => void copyReceipt()}>
+          <p>{`Raw NFC records: ${JSON.stringify(latest.records)}`}</p>
+          <button
+            type="button"
+            onClick={() => {
+              if (receipt !== null) {
+                const json = emitGateReceipt(receipt);
+                void navigator.clipboard.writeText(json);
+              }
+            }}
+          >
             Copy redacted receipt
           </button>
         </>

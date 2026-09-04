@@ -3,9 +3,15 @@ import {
   decodeNfcEvent,
   matchAdvertisedName,
   redactNfcRecord,
+  frameGateReceipt,
+  reassembleGateReceiptFrames,
   serializeGateReceipt,
 } from "./gateMinusOneReceipt";
 import type { NfcGateReceiptV1 } from "./gateMinusOneReceipt";
+
+const PM5_TYPE = Array.from(
+  new TextEncoder().encode("concept2.com:bleconnectinfo"),
+);
 
 describe("Gate -1 receipt", () => {
   it("rejects malformed bridge bytes", () => {
@@ -33,20 +39,26 @@ describe("Gate -1 receipt", () => {
     expect(matchAdvertisedName(payload, "pm5 42")).toBeNull();
   });
 
-  it("zeros only six address bytes", () => {
+  it("zeros only PM5 address bytes and preserves sidecar records byte-for-byte", () => {
     expect(
       redactNfcRecord({
         tnf: 4,
-        type: [99],
+        type: PM5_TYPE,
         id: [8],
         payload: [1, 2, 3, 4, 5, 6, 1, 80, 77, 53],
       }),
     ).toStrictEqual({
       tnf: 4,
-      type: [99],
+      type: PM5_TYPE,
       id: [8],
       payload: [0, 0, 0, 0, 0, 0, 1, 80, 77, 53],
     });
+    expect(
+      redactNfcRecord({ tnf: 1, type: [84], id: [], payload: [1, 2] }),
+    ).toStrictEqual({ tnf: 1, type: [84], id: [], payload: [1, 2] });
+    expect(() =>
+      redactNfcRecord({ tnf: 4, type: PM5_TYPE, id: [], payload: [1, 2] }),
+    ).toThrow("PM5 NFC payload is too short");
   });
 
   it("derives NO-GO and strips untrusted identity fields", () => {
@@ -63,6 +75,30 @@ describe("Gate -1 receipt", () => {
     expect(JSON.parse(serialized).verdict).toBe("NO-GO");
     expect(serialized).not.toContain("attempt-a");
     expect(serialized).not.toContain("device-id");
+  });
+
+  it("reconstructs a receipt larger than Capacitor's 4068-character console argument cap", () => {
+    const receipt = makeCompleteReceipt();
+    receipt.attempts = Array.from({ length: 40 }, () => ({
+      ...receipt.attempts[0]!,
+      records: [
+        {
+          tnf: 4,
+          type: [99],
+          id: [],
+          payload: Array.from({ length: 240 }, (_, index) => index % 256),
+        },
+      ],
+    }));
+    const serialized = serializeGateReceipt(receipt);
+    expect(serialized.length).toBeGreaterThan(4068);
+    const nativeConsole = frameGateReceipt(serialized).map((message) =>
+      message.slice(0, 4068),
+    );
+    expect(reassembleGateReceiptFrames(nativeConsole)).toBe(serialized);
+    expect(() =>
+      reassembleGateReceiptFrames(nativeConsole.slice(0, -1)),
+    ).toThrow("Incomplete receipt frames");
   });
 });
 
