@@ -47,6 +47,8 @@
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Ergomatic connects to your Concept2 PM5 monitor over Bluetooth to program workouts and record your splits.</string>
+	<key>NFCReaderUsageDescription</key>
+	<string>Scan a PM5 to connect and program your workout.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
