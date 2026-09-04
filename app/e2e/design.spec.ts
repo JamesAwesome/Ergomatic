@@ -9952,3 +9952,122 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
     }
   });
 });
+
+// Recovery is a stored-record render surface, so these are deliberately
+// direct seeds. The connected writer-to-history journey lives in
+// connected.spec.ts; this suite registers every recovery rendering state.
+test.describe("unlogged recovery render registrations", () => {
+  const longTitle =
+    "A retained PM5 workout with a deliberately long title that must wrap cleanly";
+
+  async function seedRecovery(page: Page, run: MonitorRun): Promise<void> {
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: MONITOR_RUN_KEY,
+      value: JSON.stringify(run),
+    });
+    // `ReviewSession` hydrates its key-filtered store at module load; reload
+    // makes this a real cold retained-storage render, not prior test memory.
+    await page.reload();
+  }
+
+  test("Today keeps a long-title retained PM5 row reachable in portrait, landscape, and a failed library fetch", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery@e2e.test",
+      name: "Recovery Design Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const run = {
+      ...buildCompletedMonitorRun(workoutId),
+      title: longTitle,
+    };
+    await seedRecovery(page, run);
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/today");
+      const review = page.getByRole("button", {
+        name: `Review & save PM5 workout ${longTitle}`,
+      });
+      await expect(review).toBeVisible();
+      await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
+      await assertTapTargets(page);
+      await assertNoA11yViolations(page);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBe(viewport.width);
+    }
+
+    await page.route("**/api/workouts", (route) =>
+      route.fulfill({ status: 500, body: "library unavailable" }),
+    );
+    await page.reload();
+    await expect(page.getByText("Couldn't load your library.")).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: `Review & save PM5 workout ${longTitle}`,
+      }),
+    ).toBeVisible();
+  });
+
+  test("review renders missing-type, read-only legacy, and unavailable dispositions without a save affordance leak", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-variants@e2e.test",
+      name: "Recovery Variant Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const base = { ...buildCompletedMonitorRun(workoutId), title: longTitle };
+
+    await seedRecovery(page, { ...base, workoutId: "missing-library-record" });
+    await page.goto(
+      `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
+    );
+    await expect(
+      page.getByRole("combobox", { name: "Workout type" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+
+    await seedRecovery(page, {
+      ...base,
+      // Explicit legacy shape: a stored programmed recording predating the
+      // frozen log seed cannot safely rebuild a summary and must stay
+      // read-only rather than falling back to a manual form.
+      logSeed: undefined,
+    });
+    await page.goto(
+      `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
+    );
+    await expect(
+      page.getByRole("heading", { name: "Can't rebuild this workout." }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Recording data" }),
+    ).toHaveAttribute("readonly", "");
+    await expect(
+      page.getByRole("button", { name: "Copy recording" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Keep unsaved" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+
+    await page.goto("/session/review?source=monitor&startedAt=missing-record");
+    await expect(
+      page.getByRole("heading", { name: "Recording unavailable" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Back to Today" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+  });
+});

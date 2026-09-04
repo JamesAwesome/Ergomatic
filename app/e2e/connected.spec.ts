@@ -104,6 +104,32 @@ const BULK_TEXT = (title: string): string =>
     "w 100m max",
   ].join("\n");
 
+// The recovery producer has its own complete, rest-bearing fixture. The
+// positive trailing rest makes each 0x0037/0x0038 boundary a genuine
+// resting-state, forward-attributed PM5 boundary — the supported multi-piece
+// fake path. This is deliberately separate from the long-standing zero-rest
+// surface walk above, whose purpose is unrelated paused/resumed rendering.
+const NATURAL_FINISH_PROGRAM = {
+  intervals: Array.from({ length: 5 }, (_, i) => ({
+    type: "work" as const,
+    kind: "distance" as const,
+    value: 100,
+    targetSplit: null,
+    displaySpm: i === 0 ? 22 : null,
+    restSeconds: 6,
+  })),
+};
+
+const NATURAL_FINISH_BULK_TEXT = (title: string): string =>
+  [
+    `${title} | AN | easy | 1`,
+    "w 100m max @22 r0.1",
+    "w 100m max r0.1",
+    "w 100m max r0.1",
+    "w 100m max r0.1",
+    "w 100m max r0.1",
+  ].join("\n");
+
 interface FakeStatusEventLike {
   atMs: number;
   kind: "status";
@@ -113,6 +139,8 @@ interface FakeStatusEventLike {
   spm: number;
   currentSplit: number;
   heartRateBpm: number | null;
+  restDistanceMeters?: number;
+  restSeconds?: number;
   programIntervalIndex: number;
 }
 
@@ -134,6 +162,10 @@ interface FakeBoundaryEventLike {
   };
   cumulativeElapsedSeconds: number;
   cumulativeDistanceMeters: number;
+  burst?: {
+    summaryAtMsOffset?: number;
+    verificationAtMsOffset?: number;
+  };
 }
 
 // `pm5/parse.ts`'s own ordinal, copied here as a plain number (this file has
@@ -152,6 +184,9 @@ interface FakeBoundaryEventLike {
 // intervals, not for the session to reach all of them, and scripting that
 // many status ticks would only make this spec slower for no more coverage.
 const WORKOUTSTATE_INTERVALWORKTIME = 4;
+const WORKOUTSTATE_INTERVALWORKDISTANCE = 5;
+const WORKOUTSTATE_INTERVALREST = 3;
+const WORKOUTSTATE_WORKOUTEND = 10;
 
 /** The story's own start, in virtual milliseconds — see this file's header
  *  for why it is neither "right after connect()" nor "tens of seconds
@@ -320,6 +355,100 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
   ];
 }
 
+/** A complete five-piece, rest-bearing distance workout through the same fake
+ * transport used by the connected walk. Every work status carries THIS
+ * interval's counters; each positive programmed rest receives its real
+ * resting-state boundary, whose forward-attributed machine index normalizes
+ * to the same interval. The final boundary is followed by WORKOUTEND, then
+ * its normal summary burst releases the retained handoff. */
+function buildNaturalFinishEvents(): (
+  FakeStatusEventLike | FakeBoundaryEventLike
+)[] {
+  const start = 30_000;
+  const actuals = [
+    { elapsedSeconds: 20, avgSpm: 21, avgHeartRateBpm: 131 },
+    { elapsedSeconds: 21, avgSpm: 22, avgHeartRateBpm: 132 },
+    { elapsedSeconds: 22, avgSpm: 23, avgHeartRateBpm: 133 },
+    { elapsedSeconds: 23, avgSpm: 24, avgHeartRateBpm: 134 },
+    { elapsedSeconds: 24, avgSpm: 25, avgHeartRateBpm: 135 },
+  ];
+  let cumulativeElapsedSeconds = 0;
+  let cumulativeDistanceMeters = 0;
+  return actuals.flatMap((actual, index) => {
+    const atMs = start + index * 1000;
+    cumulativeElapsedSeconds += actual.elapsedSeconds + 6;
+    cumulativeDistanceMeters += 112;
+    const events: (FakeStatusEventLike | FakeBoundaryEventLike)[] = [
+      {
+        atMs,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKDISTANCE,
+        elapsedSeconds: 10,
+        distanceMeters: 50,
+        spm: actual.avgSpm,
+        currentSplit: 100,
+        heartRateBpm: actual.avgHeartRateBpm,
+        programIntervalIndex: index,
+      },
+    ];
+    events.push({
+      // A PM5 reaches the positive trailing rest before delivering this
+      // split pair. The fake enforces this state/program relationship and
+      // uses it to encode the actual characteristic's forward index.
+      atMs: atMs + 400,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALREST,
+      elapsedSeconds: 2,
+      distanceMeters: 4,
+      spm: 0,
+      currentSplit: 0,
+      heartRateBpm: actual.avgHeartRateBpm,
+      restDistanceMeters: 4,
+      restSeconds: 4,
+      programIntervalIndex: index,
+    });
+    events.push({
+      atMs: atMs + 500,
+      kind: "boundary",
+      actual: {
+        index,
+        elapsedSeconds: actual.elapsedSeconds,
+        distanceMeters: 100,
+        avgSpm: actual.avgSpm,
+        avgHeartRateBpm: actual.avgHeartRateBpm,
+        restDistanceMeters: 12,
+      },
+      cumulativeElapsedSeconds,
+      cumulativeDistanceMeters,
+      ...(index === actuals.length - 1
+        ? {
+            // The final split arrives while the PM still reports work;
+            // terminal status follows it, then the usual 0x0039/0x003F
+            // handoff. The offsets preserve that real ordering.
+            burst: {
+              summaryAtMsOffset: 700,
+              verificationAtMsOffset: 750,
+            },
+          }
+        : {}),
+    });
+    if (index === actuals.length - 1) {
+      events.push({
+        atMs: atMs + 600,
+        kind: "status",
+        workoutState: WORKOUTSTATE_WORKOUTEND,
+        elapsedSeconds: actual.elapsedSeconds,
+        distanceMeters: 100,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: null,
+        programIntervalIndex: index,
+      });
+    }
+    return events;
+  });
+}
+
 // `delayWritesMs` (`transports/index.ts`'s own `InjectedFakeScript` field):
 // with instant (same-microtask) writes, pairing/programming resolve within
 // a fraction of one animation frame — too fast for
@@ -338,6 +467,7 @@ async function injectFakeMonitor(
   // param defaults to it) — S3's own test is the first caller to pass a
   // shorter, boundary-free timeline of its own.
   events: (FakeStatusEventLike | FakeBoundaryEventLike)[] = buildStoryEvents(),
+  program = FIXTURE_PROGRAM,
 ): Promise<void> {
   await page.addInitScript(
     ({ program, events, deviceName: name, delayWritesMs }) => {
@@ -349,7 +479,7 @@ async function injectFakeMonitor(
       };
     },
     {
-      program: FIXTURE_PROGRAM,
+      program,
       events,
       deviceName,
       delayWritesMs: INTERSTITIAL_WRITE_DELAY_MS,
@@ -470,11 +600,18 @@ async function walkToReady(
   // (`buildStoryEvents()`), exactly what every pre-existing call site got
   // before this parameter existed.
   events?: (FakeStatusEventLike | FakeBoundaryEventLike)[],
+  fixture: {
+    program: typeof FIXTURE_PROGRAM;
+    bulkText: (title: string) => string;
+  } = {
+    program: FIXTURE_PROGRAM,
+    bulkText: BULK_TEXT,
+  },
 ): Promise<void> {
-  await injectFakeMonitor(page, deviceName, events);
+  await injectFakeMonitor(page, deviceName, events, fixture.program);
   await signInViaBackdoor(page, { email, name: "Connected Walk Tester" });
   await setBaselines(page);
-  await importBulk(page, BULK_TEXT(title));
+  await importBulk(page, fixture.bulkText(title));
   await page.locator(".workout-row").filter({ hasText: title }).click();
   await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
@@ -1039,6 +1176,294 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
 
     await walkSurfaceToLog(page, title, deviceName);
     await cleanupByTitle(page, title);
+  });
+});
+
+// This starts before the producer and reaches the history reader after the
+// stored handoff is consumed. It deliberately does not reuse walkSurfaceToLog:
+// that helper proves a rower-ended interval-one session, while this journey
+// needs the fake's real WORKOUTEND + final boundary + burst ordering.
+test.describe("unlogged workout recovery — connected producer to retained history", () => {
+  test.setTimeout(120_000);
+
+  test("a naturally finished PM5 workout survives warning/View/reload, a failed Save, and retry with its original actuals", async ({
+    page,
+  }) => {
+    const title = `Retained PM5 Actuals ${RUN_ID}`;
+    const nextTitle = `Recovery Warning Target ${RUN_ID}`;
+    const deviceName = "PM5 102938475";
+    const postAttempts: {
+      url: string;
+      body: Record<string, unknown>;
+      interceptedStatus: 500 | null;
+    }[] = [];
+
+    await walkToReady(
+      page,
+      title,
+      `retained-pm5-${RUN_ID}@e2e.test`,
+      deviceName,
+      buildNaturalFinishEvents(),
+      {
+        program: NATURAL_FINISH_PROGRAM,
+        bulkText: NATURAL_FINISH_BULK_TEXT,
+      },
+    );
+
+    // Fine-grained ticks preserve the fake's chronological event/burst
+    // ordering. The scripted producer begins at 30 s, safely after the
+    // real connect/program/ready sequence; 500 × 100 ms crosses its final
+    // 34.5 s boundary and 0x0039/0x003F burst without a giant-tick shortcut.
+    for (let i = 0; i < 500; i += 1) {
+      await page.evaluate(() => window.__pm5FakeControls__?.tick(100));
+    }
+
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
+    await expect(page.locator("h1.screen-title")).toHaveText(title);
+
+    const retainedBeforeLeave = await page.evaluate(() => {
+      const raw = localStorage.getItem("ergomatic.monitorRun");
+      return raw === null ? null : JSON.parse(raw);
+    });
+    expect(retainedBeforeLeave).toMatchObject({
+      title,
+      deviceName,
+      terminated: false,
+      endedBy: "finished",
+      summaryTotals: {
+        workElapsedSeconds: 110,
+        workDistanceMeters: 500,
+      },
+      actuals: [
+        {
+          index: 0,
+          elapsedSeconds: 20,
+          distanceMeters: 100,
+          avgSplit: 100,
+          avgSpm: 21,
+          avgHeartRateBpm: 131,
+          restDistanceMeters: 12,
+          restSeconds: 6,
+        },
+        {
+          index: 1,
+          elapsedSeconds: 21,
+          distanceMeters: 100,
+          avgSplit: 105,
+          avgSpm: 22,
+          avgHeartRateBpm: 132,
+          restDistanceMeters: 12,
+          restSeconds: 6,
+        },
+        {
+          index: 2,
+          elapsedSeconds: 22,
+          distanceMeters: 100,
+          avgSplit: 110,
+          avgSpm: 23,
+          avgHeartRateBpm: 133,
+          restDistanceMeters: 12,
+          restSeconds: 6,
+        },
+        {
+          index: 3,
+          elapsedSeconds: 23,
+          distanceMeters: 100,
+          avgSplit: 115,
+          avgSpm: 24,
+          avgHeartRateBpm: 134,
+          restDistanceMeters: 12,
+          restSeconds: 6,
+        },
+        {
+          index: 4,
+          elapsedSeconds: 24,
+          distanceMeters: 100,
+          avgSplit: 120,
+          avgSpm: 25,
+          avgHeartRateBpm: 135,
+          restDistanceMeters: 12,
+          restSeconds: 6,
+        },
+      ],
+    });
+    expect(retainedBeforeLeave.series).toMatchObject({
+      samples: expect.any(Array),
+    });
+    expect(retainedBeforeLeave.series.samples.length).toBeGreaterThan(0);
+
+    await expect(page.getByRole("link", { name: "← DONE" })).toBeVisible();
+    await page.getByRole("link", { name: "← DONE" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    await expect(
+      page.getByRole("button", { name: `Review & save PM5 workout ${title}` }),
+    ).toBeVisible();
+
+    // This reload is the cold hydration leg: no in-memory store state may
+    // make the retained row happen to work before the warning journey starts.
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: `Review & save PM5 workout ${title}` }),
+    ).toBeVisible();
+    await importBulk(page, BULK_TEXT(nextTitle));
+    await page.locator(".workout-row").filter({ hasText: nextTitle }).click();
+    await page.getByRole("button", { name: "Connect" }).click();
+    await expect(
+      page.getByRole("heading", { name: "You have an unsaved workout." }),
+    ).toBeVisible();
+
+    const bytesAtWarning = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.monitorRun"),
+    );
+    expect(bytesAtWarning).not.toBeNull();
+    await expect(
+      page.getByRole("button", { name: "View unsaved" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "View unsaved" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    expect(
+      await page.evaluate(() => localStorage.getItem("ergomatic.monitorRun")),
+    ).toBe(bytesAtWarning);
+    await expect(
+      page.getByRole("button", { name: `Review & save PM5 workout ${title}` }),
+    ).toBeVisible();
+
+    await page.route("**/api/logs", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      const body = JSON.parse(route.request().postData() ?? "{}") as Record<
+        string,
+        unknown
+      >;
+      // The shared saver intentionally retries a failed series-bearing POST
+      // once without its optional series. Make BOTH requests from the first
+      // Save a real 500; only the second button press may reach the API.
+      if (postAttempts.length < 2) {
+        postAttempts.push({
+          url: route.request().url(),
+          body,
+          interceptedStatus: 500,
+        });
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "intentional save failure" }),
+        });
+        return;
+      }
+      postAttempts.push({
+        url: route.request().url(),
+        body,
+        interceptedStatus: null,
+      });
+      await route.continue();
+    });
+
+    await page
+      .getByRole("button", { name: `Review & save PM5 workout ${title}` })
+      .click();
+    await expect(page).toHaveURL(
+      /\/session\/review\?source=monitor&startedAt=/,
+    );
+    await expect(page.locator("h1.screen-title")).toHaveText(title);
+    await expect(page.getByText(/MONITOR LOG/)).toBeVisible();
+    expect(postAttempts).toHaveLength(0);
+
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(
+      page.getByText("Couldn't save this session. Try again."),
+    ).toBeVisible();
+    expect(postAttempts).toHaveLength(2);
+    expect(
+      postAttempts.map(({ url, interceptedStatus }) => ({
+        url,
+        interceptedStatus,
+      })),
+    ).toEqual([
+      { url: "http://127.0.0.1:8251/api/logs", interceptedStatus: 500 },
+      { url: "http://127.0.0.1:8251/api/logs", interceptedStatus: 500 },
+    ]);
+    expect(postAttempts[0]!.body).toMatchObject({
+      workoutTitle: title,
+      source: "pm5",
+      endedBy: "finished",
+      timeSeconds: 110,
+      distanceMeters: 500,
+      machineWorkSeconds: 110,
+      machineWorkMeters: 500,
+    });
+    expect(postAttempts[0]!.body.steps).toMatchObject([
+      { actualSeconds: 20, meters: 100, actualSource: "pm5" },
+      { actualSeconds: 21, meters: 100, actualSource: "pm5" },
+      { actualSeconds: 22, meters: 100, actualSource: "pm5" },
+      { actualSeconds: 23, meters: 100, actualSource: "pm5" },
+      { actualSeconds: 24, meters: 100, actualSource: "pm5" },
+    ]);
+    expect(postAttempts[0]!.body.series).toMatchObject({
+      samples: expect.any(Array),
+    });
+    expect(postAttempts[1]!.body).not.toHaveProperty("series");
+    expect(postAttempts[1]!.body.steps).toMatchObject([
+      { actualSeconds: 20, meters: 100, actualSource: "pm5" },
+      { actualSeconds: 21, meters: 100, actualSource: "pm5" },
+      { actualSeconds: 22, meters: 100, actualSource: "pm5" },
+      { actualSeconds: 23, meters: 100, actualSource: "pm5" },
+      { actualSeconds: 24, meters: 100, actualSource: "pm5" },
+    ]);
+    expect(
+      await page.evaluate(() => localStorage.getItem("ergomatic.monitorRun")),
+    ).toBe(bytesAtWarning);
+    const logsAfterFailedSave = (await page.evaluate(() =>
+      fetch("/api/logs").then((response) => response.json()),
+    )) as { workoutTitle: string }[];
+    expect(logsAfterFailedSave.some((log) => log.workoutTitle === title)).toBe(
+      false,
+    );
+
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    expect(postAttempts).toHaveLength(3);
+    expect(postAttempts[2]).toMatchObject({
+      url: "http://127.0.0.1:8251/api/logs",
+      interceptedStatus: null,
+    });
+    expect(
+      await page.evaluate(() => localStorage.getItem("ergomatic.monitorRun")),
+    ).toBeNull();
+    await page.unroute("**/api/logs");
+
+    const logs = (await page.evaluate(() =>
+      fetch("/api/logs").then((response) => response.json()),
+    )) as { id: string; workoutTitle: string }[];
+    const saved = logs.find((log) => log.workoutTitle === title);
+    expect(saved).toBeDefined();
+    const history = (await page.evaluate(
+      (id) => fetch(`/api/logs/${id}`).then((response) => response.json()),
+      saved!.id,
+    )) as {
+      endedBy: string | null;
+      machineWorkSeconds: number | null;
+      machineWorkMeters: number | null;
+      steps: { actualSeconds: number | null; meters: number | null }[];
+    };
+    expect(history.endedBy).toBe("finished");
+    expect(history.machineWorkSeconds).toBe(110);
+    expect(history.machineWorkMeters).toBe(500);
+    expect(history.steps.map((step) => step.actualSeconds)).toEqual([
+      20, 21, 22, 23, 24,
+    ]);
+    expect(history.steps.map((step) => step.meters)).toEqual([
+      100, 100, 100, 100, 100,
+    ]);
+
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: nextTitle }).click();
+    await page.getByRole("button", { name: "Connect" }).click();
+    await expect(
+      page.getByRole("heading", { name: "You have an unsaved workout." }),
+    ).toHaveCount(0);
+
+    await cleanupByTitle(page, title);
+    await cleanupByTitle(page, nextTitle);
   });
 });
 

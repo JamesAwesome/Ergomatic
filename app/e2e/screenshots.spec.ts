@@ -930,6 +930,75 @@ test("today-interrupted", async ({ page }) => {
   });
 });
 
+// Retained-workout recovery captures are direct stored variants; the genuine
+// writer journey is intentionally owned by connected.spec.ts. These images
+// register the recovery controls in both phone orientations for visual review.
+function buildRecoveryScreenshotRun(workoutId: string): MonitorRun {
+  return {
+    ...buildInterruptedMonitorRun(workoutId),
+    title: "Retained PM5 workout with a deliberately long title for recovery",
+    completedAt: "2026-09-04T12:30:00.000Z",
+    endedBy: "finished",
+  };
+}
+
+async function seedRecoveryScreenshotRun(page: Page): Promise<MonitorRun> {
+  const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+  const run = buildRecoveryScreenshotRun(workoutId);
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: MONITOR_RUN_KEY,
+    value: JSON.stringify(run),
+  });
+  return run;
+}
+
+test("recovery-today-portrait", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-portrait@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await seedRecoveryScreenshotRun(page);
+  await page.goto("/today");
+  await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "recovery-today-portrait.png"),
+  });
+});
+
+test("recovery-today-landscape", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await seedRecoveryScreenshotRun(page);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto("/today");
+  await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "recovery-today-landscape.png"),
+  });
+});
+
+test("recovery-review-read-only", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-read-only@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const run = await seedRecoveryScreenshotRun(page);
+  // A cold load makes the review module hydrate this selected stored key.
+  await page.reload();
+  await page.goto(
+    `/session/review?source=monitor&startedAt=${encodeURIComponent(run.startedAt)}`,
+  );
+  await expect(page.getByRole("heading", { name: run.title })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "recovery-review.png"),
+  });
+});
+
 // Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1, Gate 0
 // CLEARED 2026-08-31): the log door's own drop strip. Same lightweight
 // direct-seed idiom as `buildInterruptedMonitorRun`/`today-interrupted`
