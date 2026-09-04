@@ -302,14 +302,17 @@ test.describe("Just Row: without the monitor", () => {
     // meta line naming the TIMER door, TIME alone — no DISTANCE cell, no
     // AVG SPLIT cell, no dash standing in for either. The TIME figure is at
     // least the three seconds stood on the clock above: `0:00` here would
-    // mean END froze nothing (criterion 1's shape at this layer).
+    // mean END froze nothing (criterion 1's shape at this layer). Capture
+    // the exact door value so history must read back this same persisted
+    // value, not merely pass an independent range check.
     await expect(page).toHaveURL(/\/justrow\/log$/);
     await expect(page.getByRole("heading", { name: "Just Row" })).toBeVisible();
     await expect(page.locator(".justrow-meta")).toContainText("TIMER");
     await expect(page.getByText("TIME", { exact: true })).toBeVisible();
-    await expect(page.locator(".justrow-log-numvalue")).toHaveText(
-      /^0:(0[3-9]|[1-5]\d)$/,
-    );
+    const savedTime = (
+      await page.locator(".justrow-log-numvalue").textContent()
+    )?.trim();
+    expect(savedTime).toMatch(/^0:(0[3-9]|[1-5]\d)$/);
     await expect(page.getByText("DISTANCE")).toHaveCount(0);
     await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
     await expect(page.getByText("—")).toHaveCount(0);
@@ -338,7 +341,7 @@ test.describe("Just Row: without the monitor", () => {
     await expect(row.locator(".free-row-chip")).toHaveText("JR");
     await expect(row.locator(".type-badge")).toHaveCount(0);
     await expect(row.locator(".today-log-hero")).toHaveText(
-      /^TIME 0:(0[3-9]|[1-5]\d)$/,
+      `TIME ${savedTime}`,
     );
 
     // The detail (handoff `Detail.dc.html`, criterion 3): the meta line

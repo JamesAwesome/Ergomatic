@@ -532,6 +532,9 @@ export default function Timer() {
   const hasEstimate = hasRemainingEstimate(currentRun.phases, currentRun.index);
 
   function handleEndTap() {
+    // A confirmation owns the decision surface: repeated END presses are
+    // idempotent and must not replace the finish latch or stack panels.
+    if (endStaged || finishStaged) return;
     // A phone-timed Just Row has no programmed workout to abandon. Route its
     // END press through the existing final-phase finish state machine so the
     // same freeze, Keep going, and Finish session behavior is shared with ▶.
@@ -967,10 +970,11 @@ export default function Timer() {
           </div>
         </div>
       ) : finishStaged ? (
-        // Non-distance only (▶ and Just Row END, absent in distance mode,
-        // set `finishStaged`). Same BaselineEditor-idiom panel as the
-        // programmed END confirm uses — a staged confirm, not a modal — with its own
-        // copy/handlers (fix round, spec review F5).
+        // ▶ and Just Row END stage this for a final non-distance phase; the
+        // final distance phase can stage it through `handleDistanceNext` too.
+        // Same BaselineEditor-idiom panel as the programmed END confirm uses
+        // — a staged confirm, not a modal — with its own copy/handlers (fix
+        // round, spec review F5).
         <div className="timer-end-confirm">
           <p className="timer-end-copy">Finish this session?</p>
           <div className="timer-end-actions">

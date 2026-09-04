@@ -952,11 +952,10 @@ describe("Timer — controls", () => {
     expect(screen.getByText("RUNNING")).toBeInTheDocument();
   });
 
-  // Defensive (fix round): ▶ must not stack a SECOND staged confirm on top
-  // of END's own — reaching the last phase's ▶ while the abandon confirm is
-  // already showing is a corner a rower could genuinely hit (nothing hides
-  // the control row while END is staged).
-  it("▶ on the last phase no-ops while END is already staged", async () => {
+  // Defensive (fix round): END must not stack a SECOND staged confirm on top
+  // of ▶'s finish confirm — the header control remains reachable while a
+  // finish decision is staged.
+  it("programmed final-phase Next then END keeps only the finish confirm", async () => {
     mockKeepAwake();
     const draft = buildDraft({
       id: "id-one-phase-3",
@@ -977,15 +976,17 @@ describe("Timer — controls", () => {
     runAtIndex(run, 0);
     await renderTimer();
 
-    await userEvent.click(screen.getByRole("button", { name: "END →" }));
-    expect(screen.getByText(/Abandon this session\?/)).toBeInTheDocument();
-
     await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
+    expect(screen.getByText(/Finish this session\?/)).toBeInTheDocument();
 
-    // Still just the abandon confirm — no finish confirm stacked on top,
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+
+    // Still just the finish confirm — no abandon confirm stacked on top,
     // and definitely not completed.
-    expect(screen.getByText(/Abandon this session\?/)).toBeInTheDocument();
-    expect(screen.queryByText(/Finish this session\?/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Finish this session\?/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Abandon this session\?/),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
   });
 
@@ -2341,5 +2342,40 @@ describe("Timer — Just Row without the monitor (mode justrow, no draft)", () =
     expect(loadRun()?.actuals).toStrictEqual({
       0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 12 },
     });
+  });
+
+  it("running Just Row END twice then Keep going resumes the clock", async () => {
+    mockKeepAwake();
+    saveRun(buildFreeRowRun(FIXED_NOW));
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 12_000));
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    expect(screen.getByText("Finish this session?")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+
+    expect(screen.getByText("RUNNING")).toBeInTheDocument();
+    await repaintAt(20_000);
+    expect(heroText()).toBe("0:20");
+  });
+
+  it("already-paused Just Row END twice then Keep going remains paused", async () => {
+    mockKeepAwake();
+    saveRun(buildFreeRowRun(FIXED_NOW));
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 12_000));
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    expect(screen.getByText("Finish this session?")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+    await repaintAt(20_000);
+    expect(heroText()).toBe("0:12");
   });
 });
