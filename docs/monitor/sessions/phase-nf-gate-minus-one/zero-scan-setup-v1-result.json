@@ -1,0 +1,21 @@
+{
+  "session": "NF-RECOVERY-SETUP-v1",
+  "outcome": "inconclusive",
+  "installedIdentityVerified": true,
+  "installationCount": 1,
+  "version": "0.23.0",
+  "build": "789",
+  "startedAt": "2026-09-04T23:14:24.721754+00:00",
+  "finishedAt": "2026-09-04T23:16:02.545Z",
+  "totalElapsedMs": 97823,
+  "installationElapsedMs": 5110,
+  "cleanupVerified": true,
+  "webViewLoaded": true,
+  "nativeDiagnosticsCount": 0,
+  "nfcStartMethodLines": 0,
+  "inspectorOutput": {
+    "stage": "preflight-stopped",
+    "errorType": "RuntimeError"
+  },
+  "rawConsoleSha256": "691eb9753d0a6d45e189d2809e9d7320b19389d069f07eabbe4991e3e28193a5"
+}

@@ -1,7 +1,8 @@
 # NF-RECOVERY-SETUP-v1
 
-Status: PM PASS for this exact zero-scan scope; no install permission and no
-scan permission.
+Status: COMPLETED — DO NOT EXECUTE AGAIN. One authorized install succeeded;
+idle Inspector readiness remained inconclusive. See `ZERO-SCAN-SETUP-V1-RESULT.md`.
+The one-install budget is consumed; no further install or scan is authorized.
 
 Purpose: determine whether Codex can select, operate and reselect the existing
 probe document through Web Inspector without operator console typing. This is

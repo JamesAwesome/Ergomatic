@@ -14,8 +14,9 @@ the remaining recovery evidence. Desk preparation has produced a signed,
 reviewed temporary recovery build; it is not installed. See
 [RECOVERY-PREPARATION.md](RECOVERY-PREPARATION.md) for actual time and limitations.
 
-[NF-RECOVERY-SETUP-v1](ZERO-SCAN-SETUP-RUNSHEET.md) has PM PASS for one explicit
-install permission followed by one unlock and a five-minute zero-scan idle
-Inspector feasibility check. No install permission has been given. It is not
-an erg or NFC invitation; the grouped recovery walk needs a separate PM review
-after the control path is demonstrated.
+[NF-RECOVERY-SETUP-v1](ZERO-SCAN-SETUP-RUNSHEET.md) is now completed. James
+explicitly authorized one install; it succeeded and was independently verified.
+The idle Inspector check stopped at an unidentified RuntimeError guard, and
+bundle cleanup was verified within 1m38. See
+[the result](ZERO-SCAN-SETUP-V1-RESULT.md). No NFC scan occurred. The install
+permission is consumed; there is no approved retry or new erg invitation.
