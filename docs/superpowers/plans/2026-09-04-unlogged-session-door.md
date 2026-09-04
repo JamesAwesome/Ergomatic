@@ -70,7 +70,7 @@ No additional session refs, counters, module caches or storage keys are authoriz
 - `UnsavedWorkoutWarning` receives `count: number`, `replacement: "Connecting" | "Starting a new one"`, `onView: () => void`, `onCancel: () => void`, `onReplace: () => void`, and `replaceLabel: string`. In-progress guard presentation remains unchanged.
 - Review mode is explicit required selected-record input to shared summary bodies, never inferred from a nullable optional prop. Existing unqualified route adapters own their legacy selectors separately.
 
-- [ ] **Step 1: Write route-selector tests and reproduce the existing dead end.**
+- [x] **Step 1: Write route-selector tests and reproduce the existing dead end.**
 
 The complete selector test is:
 
@@ -114,7 +114,7 @@ Run `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project cl
 
 Change the old Today completed-programmed omission test into a routed recovery regression: replace its minimal empty-interval/missing-seed fixture with real library → draft/buildRun → compiled program/buildLogSeed data, render Today with the actual review route, select Review & save, assert retained title and PM5 summary, no manual form and no POST. Run the focused case before changing production; the absent action must make it RED. Extend that same component harness one behavior at a time using the acceptance table below; each gets its own RED/GREEN cycle, not a later coverage-only sweep.
 
-- [ ] **Step 2: Add the source selector.**
+- [x] **Step 2: Add the source selector.**
 
 `app/src/session/reviewSelector.ts`:
 
@@ -144,7 +144,7 @@ export function reviewLocation(
 
 Run the selector command again: all its cases pass. The key is opaque existing identity, not a timestamp to normalize or compare.
 
-- [ ] **Step 3: Route selected snapshots to the existing summary bodies.**
+- [x] **Step 3: Route selected snapshots to the existing summary bodies.**
 
 Register `/session/review` in `AppRoutes`. `ReviewSession` reads location.search and renders a child keyed by that search. The child lazily parses and reads only the named source: monitor `read(startedAt)` after module-level hydrate; timer `loadRun()` then exact startedAt match. Invalid selector, absent/mismatching record, or live timer renders Recording unavailable + Back to Today, with no automatic redirect to another summary. Mode comes only from the matched record (timer workout/justrow, monitor justrow versus existing programmed legacy mode); no caller-selected mode and no new stored identity.
 
@@ -162,17 +162,17 @@ Use existing `buildSummaryModel`/log-step builders in a non-mutating try/catch b
 
 `PostWorkoutSummary` may expose a `beforeSaveSlot?: ReactNode` (same presentation-slot idiom as its existing `stripSlot`) to place the missing-type field immediately before its action stack, and `saveDisabled?: boolean` default false, ORed with `saving` on both save actions. Recovery's submit handler still checks the type independently; disabling a control alone is not a save guard. Existing callers that omit both props remain unchanged.
 
-- [ ] **Step 4: Put recovery before Today fetch-dependent content.**
+- [x] **Step 4: Put recovery before Today fetch-dependent content.**
 
 Move the existing row implementations to `UnsavedWorkouts`; update their obsolete exclusion comments. Today retains its existing snapshots/hooks and renders one stable recovery component before a child containing the ready/loading/error branches. Do not put separate recovery instances inside those branches: fetch completion must not reset a two-tap arm. Include every retained monitor entry, completed or interrupted, and completed timer entries; keep live timer Resume accessible. Display retained title/source/start date and Not saved, with accessible action names distinguishing both source and title.
 
 Timer Review links use `reviewLocation("timer", run.startedAt)`. Monitor Review runs the existing explicit interrupted-close action only if still open, then navigates to `reviewLocation("monitor", entry.sessionKey)`. A refused close must lead to an honest unavailable/read-only state, not silently save an open record or fall through to manual. Existing record-specific Today discard reason stays `today-discard`. Scope timer clear to the clicked record. Recovery remains visible for every unrelated request loading/error; only the lower content shows loading/Retry.
 
-- [ ] **Step 5: Give every unsaved warning the safe exit.**
+- [x] **Step 5: Give every unsaved warning the safe exit.**
 
 At guard staging, count completed timer plus current monitor records for singular/plural copy. Do not change the priority or replacement behavior of an in-progress timer guard. Use `UnsavedWorkoutWarning` for ConnectAction, WorkoutDetail's Start warning, and JustRow's Start Timer warning (including ConnectAction when used there). Copy is "You have an unsaved workout." / "You have unsaved workouts." followed by review-from-Today and explicit replacement consequence. View unsaved is primary; Cancel and red-outlined replacement are secondary. Connect's View calls the SAME cancel cleanup (`discardStagedRetireHandoff`, reset stage) then navigates Today. Start View resets its existing local stage then navigates; no draft/run/monitor mutation. Do not retire on View, Cancel, summary mount or failed save.
 
-- [ ] **Step 6: Finish focused coverage and commit the implementation.**
+- [x] **Step 6: Finish focused coverage and commit the implementation.**
 
 | Fixture / ordering                                                          | Independent observable                                                                                          |
 | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -202,7 +202,9 @@ Run `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test --project uni
 
 - [ ] **Step 1: Extend the connected writer journey before claiming recovery works.**
 
-In `connected.spec.ts`, reuse the existing fake-injection/setup style and compiled five-interval workout. Start with no retained monitor record. Add a natural-finish story that delivers every interval boundary and the real fake transport's WORKOUTEND status, then the summary burst; wait for the actual producer to navigate and verify its retained `endedBy` is `finished`. Do not use `walkSurfaceToLog` for that assertion: its existing story deliberately stops during interval 1 and presses End, so it covers rower-ended retention separately. After natural completion, leave without saving via ordinary navigation, visit another workout and stage its warning, View unsaved → Today → Review & save. Pin PM5 provenance, original captured actuals and retained title. Observe no POST until Save and byte-identical retained storage across warning/View. Save, then inspect the API-created history row and verify a later start does not warn for that record. Repeat with reload between leaving and recovery so hydration is exercised. Failure/retry gets a real intercepted API failure, not a fake useLogForm.
+In `connected.spec.ts`, reuse the existing fake-injection/setup style with a dedicated five-interval rest-bearing workout whose bulk import, compiled program and timeline agree. Program genuine positive rests before its boundaries, including the final boundary, as in the existing supported rest-bearing producer fixture. Keep the old zero-rest story unchanged. Start with no retained monitor record. Add a natural-finish story that delivers every interval boundary and the real fake transport's WORKOUTEND status, then the summary burst; wait for the actual producer to navigate and verify its retained `endedBy` is `finished`. Do not use `walkSurfaceToLog` for that assertion: its existing story deliberately stops during interval 1 and presses End, so it covers rower-ended retention separately. After natural completion, leave without saving via ordinary navigation, visit another workout and stage its warning, View unsaved → Today → Review & save. Pin PM5 provenance, original captured actuals and retained title. Observe no POST until Save and byte-identical retained storage across warning/View. Save, then inspect the API-created history row and verify a later start does not warn for that record. Repeat with reload between leaving and recovery so hydration is exercised. Failure/retry gets a real intercepted API failure, not a fake useLogForm.
+
+Author correction during Task 2: the existing zero-rest fake encoder uses the status-field index mapping for boundary actuals, producing duplicate/shifted indices for a multi-interval rowing-state timeline. This reproduces the existing ROADMAP RC-8 residual, owned by the combined fake/reconnect-precondition work. The dedicated rest-bearing fixture is the supported producer for this recovery proof, not a fix or clearance of that encoder. Never insert fictitious resting states into a zero-rest program or weaken the independent five-actual oracle. Record the reproduction against RC-8, without creating another backlog entry; production normalization, stored shapes and measurement meaning remain unchanged.
 
 Run `pnpm e2e connected.spec.ts` for the new scenario. The author records RED by removing the specific Task 1 access condition in a committed tree, then restores surgically and records GREEN. This is a connected production-writer proof under supported fake transport, not evidence of natural BLE interruption incidence.
 
