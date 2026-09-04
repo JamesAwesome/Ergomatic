@@ -2381,21 +2381,22 @@ trigger is the whole entry.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
 - **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; HARDENED
-  DESIGN APPROVED 2026-09-03; HARDENED NORMAL TRACE WALK PM-APPROVED
-  2026-09-04 AND AWAITING JAMES'S SEPARATE AGREEMENT; BROADER GATE -1 WALK
-  REMAINS PAUSED; PRODUCT IMPLEMENTATION UNSCHEDULED.** Two targeted NFC/BLE
-  connections succeeded;
+  DESIGN APPROVED 2026-09-03; V5 NORMAL TRACE WALK ABORTED PRE-DEVICE ON
+  2026-09-04; BROADER GATE -1 WALK REMAINS PAUSED; PRODUCT IMPLEMENTATION
+  UNSCHEDULED.** Two targeted NFC/BLE connections succeeded;
   recovery and multi-tag proof remain incomplete. Further walks require PM
   approval of the exact prepared runsheet before asking James to participate.
   Evidence and desk-only close-out:
   [`SESSION-PAUSED.md`](docs/monitor/sessions/phase-nf-gate-minus-one/SESSION-PAUSED.md).
   Approved desk-only trace/capture follow-up and verification limits:
   [`DIAGNOSTIC-CAPTURE.md`](docs/monitor/sessions/phase-nf-gate-minus-one/DIAGNOSTIC-CAPTURE.md).
-  The retired v3 approval does not authorize its hardened replacement. The only
-  approved next hardware scope is the one-attempt, eight-minute
-  [`NF-NORMAL-TRACE-v5`](docs/monitor/sessions/phase-nf-gate-minus-one/NEXT-WALK-RUNSHEET.md);
-  exact runsheet `5f1c716b` has PM PASS and does not run until James separately
-  agrees.
+  The retired v3 approval does not authorize its hardened replacement.
+  [`NF-NORMAL-TRACE-v5`](docs/monitor/sessions/phase-nf-gate-minus-one/NEXT-WALK-RUNSHEET.md)
+  received PM PASS but aborted before installation when its controller timer
+  expired across the operator turn boundary; it authorizes no retry. See
+  [`NORMAL-TRACE-V5-ABORT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V5-ABORT.md).
+  Another attempt needs a new bounded runsheet, PM PASS and James's separate
+  agreement.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

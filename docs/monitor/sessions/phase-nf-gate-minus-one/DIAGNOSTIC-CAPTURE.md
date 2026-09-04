@@ -7,8 +7,9 @@ button or authorize another hardware session.
 
 Runtime and tests under review: `0e034b48..7e10d289`. Native and browser gates
 pass. The bounded next walk was re-hardened after its prior PM review;
-`NF-NORMAL-TRACE-v5` at `5f1c716b` now has PM PASS and remains unscheduled until
-James separately agrees.
+`NF-NORMAL-TRACE-v5` at `5f1c716b` received PM PASS but aborted before any
+device command when its `READY` timer expired across the operator turn
+boundary. It authorizes no retry.
 
 ## What changed
 
@@ -100,10 +101,11 @@ criterion was retroactively promoted. Gate -1 remains NO-GO/incomplete.
 shapes were retired after hardening found fail-open evidence and cleanup seams.
 Its replacement, `NF-NORMAL-TRACE-v5`, keeps the eight-minute, zero-rowing,
 zero-capture, one-attempt boundary and moves execution and outcome decisions
-into tested controller code. v5 at `5f1c716b` has PM PASS and still requires
-James's later separate agreement. No recovery, background, held, reload,
-timeout, Flipper, multi-tag, programming or product-implementation work is
-approved.
+into tested controller code. v5 at `5f1c716b` received PM PASS and James
+separately agreed to start it. The run then aborted pre-device as recorded in
+`NORMAL-TRACE-V5-ABORT.md`; any replacement needs a new runsheet and PM PASS.
+No recovery, background, held, reload, timeout, Flipper, multi-tag, programming
+or product-implementation work is approved.
 
 ## Prepared diagnostic artifact
 

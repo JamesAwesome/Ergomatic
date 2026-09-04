@@ -4534,3 +4534,9 @@ new approval target; it is not covered by the historical v3 verdict.
 eight-minute normal trace walk. Cleanup rehearsal remains a bounded pre-NFC
 experiment; any failure aborts without retry. James still separately chooses
 whether and when to run it.
+
+James agreed to start v5, but its 45-second `READY` timer expired across the
+operator turn boundary before the acknowledgement reached the controller. The
+walk aborted before installation with zero NFC attempts and no PM5 action. v5
+authorizes no retry; a replacement must remove that transport-timer defect and
+receive a new PM verdict.
