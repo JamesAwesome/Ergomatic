@@ -1,14 +1,22 @@
-# Wave E walk fallout — the link-outs leave the app, and Unlink stops shouting
+# Wave E walk fallout — the link-outs leave the app, and Concept2 becomes a row
 
-**Date:** 2026-09-04 · **Status:** REV 1, for Gate 0
+**Date:** 2026-09-04 · **Status:** REV 2, for Gate 0
 **Wave:** E (ROADMAP "Wave E — The Concept2 logbook", opened 2026-08-31).
 Fallout from the first real walk of the shipped surface, not a new phase.
-**Risk class:** NOT TRIAD. No stored shape, no number's meaning, no auth —
-PR B removes a platform branch and PR A repaints one control. Gate skips are
-spoken in §7 rather than left silent.
+**Risk class:** NOT TRIAD. No stored shape, no number's meaning, no auth.
+PR B removes a platform branch; PR A moves an existing surface behind a row
+and a screen without changing what it can do. Gate skips are spoken in §7
+rather than left silent, and REV 2 un-skips two of REV 1's.
 **Predecessors:** `docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`
 (the wave), `docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md`
 (the cohort gate this walk ran behind).
+**What REV 2 changed:** REV 1 proposed re-tiering the Unlink button. James
+chose a different shape on 2026-09-04 — the whole card becomes a row, with
+everything behind it, the way Diagnostics already works. §5.1 is rewritten
+around that; the measurement that killed `.button-l4` is kept and its
+conclusion is superseded, not appended to. The link-out half (§3, §4.1, §4.2,
+§5.2, §5.3, §6.2, §6.3) is unchanged from REV 1 except where the PR order
+moved.
 
 ---
 
@@ -20,8 +28,7 @@ real Concept2 account, sent a real row, and Concept2's logbook showed the
 workout's own end time — which is the thing the close-stamp work existed for.
 The feature works.
 
-Two things about it are wrong, and both are about what happens when the rower
-taps a link that leads to Concept2.
+Two things about it are wrong.
 
 **First, the link-outs open in an in-app sheet that is signed out.** Tapping
 "View on Concept2 →" on a row we just sent does not show the row. It shows
@@ -31,19 +38,32 @@ fix James ruled is to leave the app properly: open these links in the phone's
 default browser, where the rower is already signed in. His words: _"opening in
 safari is fine because it will be clear you're changing apps."_
 
-**Second, the Unlink button on the linked card is too loud.** It is the only
-control on a healthy linked card, and it is drawn as the heaviest thing there —
-full width, accent-outlined, 52px, taller than the card's own primary action in
-every state that renders one. A rower whose account is linked and working should
-not be looking at a disconnect button as the loudest element on the card.
+**Second, the Concept2 card is too much screen for something a rower touches
+twice.** The complaint James actually made was about one control — the Unlink
+button is "too loud" — and REV 1 answered it by re-tiering that button. On
+2026-09-04 he chose a bigger shape instead: _"maybe we put it in a sub-menu
+like diagnostics."_ The whole card leaves You. You gets one quiet row that
+says what state the link is in; Connect, the identity line, every panel and
+Unlink live on a screen behind it. That is the shape DIAGNOSTICS already has
+(`app/src/you/Diagnostics.tsx`), and following it rather than inventing one is
+most of §5.1.
 
-They ship as two PRs, **the Unlink weight first**, because it can be proven by
-capture and an e2e pin while the link-out change cannot be proven by CI at all
-and needs a device in a hand.
+**The row has to earn its place, and that is the hard part.** The card draws
+eleven states today (`app/e2e/design.spec.ts`, "it partitions all eleven drawn
+frames correctly") and can render two more the design page never drew. A row
+carries one line. §5.1 says which states reach that line and which only exist
+behind it, and why the partition is forced by the code rather than chosen.
+
+**They ship as two PRs, and REV 2 recommends the order flips.** REV 1 put the
+Unlink change first because it was small and CI-provable while the link-out
+change needs a device. It is no longer small: it is a new route, a new screen,
+a redrawn discovery surface and a Gate 0 of its own. Meanwhile the link-out
+change fixes a link that today shows a privacy page instead of the rower's own
+row. §7 states the recommendation; the ruling is James's.
 
 ---
 
-## 2 · Decisions already made (James, walk of 2026-09-03, recorded 2026-09-04)
+## 2 · Decisions already made (James, walk of 2026-09-03 and 2026-09-04)
 
 These are rulings. They are recorded here so the design starts from them; they
 are not re-opened by this spec.
@@ -57,8 +77,17 @@ are not re-opened by this spec.
    no-weight refusal. Verbatim: _"the no-weight should externally link to
    concept 2."_ That button is the rower's only remedy for what blocked their
    send, so it stays and it leaves the app like the others.
-3. **The Unlink button gets a quieter treatment.**
-4. **Two PRs, the Unlink weight first.**
+3. **The whole Concept2 surface moves behind a row on You, Diagnostics-shaped.**
+   Verbatim, 2026-09-04: the Unlink button is _"too loud"_, and _"maybe we put
+   it in a sub-menu like diagnostics."_ **This supersedes REV 1's ruling 3**
+   ("the Unlink button gets a quieter treatment"), which is withdrawn rather
+   than kept alongside: the button is not re-tiered at all in REV 2, because a
+   control on a screen the rower opened on purpose is allowed to be the loudest
+   thing there. §5.1 carries the argument and keeps REV 1's measurement.
+4. **Two PRs.** REV 1's "the Unlink weight first" was ruled on a premise ruling
+   3 has now removed — that this was a small button-weight change. It is not,
+   and REV 2 therefore does not treat the order as settled. §7 recommends the
+   flip and states why; **the order is James's to rule at Gate 0.**
 
 ---
 
@@ -205,6 +234,65 @@ What goes with it is enumerated in §6.3.
 
 ---
 
+### 3.7 The precedent, read rather than assumed
+
+**PRIMARY, our own tree, read 2026-09-04.** James named Diagnostics. Every
+part of it that this design copies is listed here, and every part it departs
+from is listed with the reason, so the departures are decisions rather than
+drift.
+
+**What is followed, verbatim in shape:**
+
+- **The row.** `app/src/You.tsx:142-145` — a `<Link to="/you/diagnostics"
+  state={{ from: "/you" }} className="diag-row">` holding a label `<span>` and
+  an `aria-hidden` chevron `<span>`. `.diag-row` (`app/src/index.css`) is a
+  44px (`var(--tap)`) mono row, 12px, `letter-spacing: 0.08em`, `--ink-3` on
+  `--page`, with a `border-top: 1px solid var(--rule-2)` and no fill.
+- **The screen.** `app/src/you/Diagnostics.tsx` — `<main className="screen
+  overlay-screen" tabIndex={0}>`, a `<BackLink fallback="/you" />` first, then
+  an `<h1 className="screen-title">`. `.overlay-screen` (`index.css`) is
+  `position: fixed; inset: 0` on `--page` at `z-index: 10`, with the tab bar
+  explicitly kept above it (`index.css`, the `z-index` comment at the tab-bar
+  rule).
+- **The route.** `app/src/shell/AppRoutes.tsx:241-260` — registered FLAT
+  (`/you/diagnostics` is a sibling of `/you`, not a nested child) and inside
+  the `{user && onSignedOut && …}` fragment (`AppRoutes.tsx:241-260`). Not listed
+  in `HIDDEN_TABBAR_PREFIXES` (`AppRoutes.tsx:50-64`), so the tab bar stays drawn.
+- **The back chain.** The row supplies `state={{ from: "/you" }}`; the screen's
+  `BackLink` resolves it through `resolveBackTarget` (`shell/BackLink.tsx:27-30`)
+  and falls back to `/you` when there is no `from` — a deep link or a cold
+  load. Both halves are needed; neither is optional.
+
+**What is departed from, and why:**
+
+- **Diagnostics has no data of its own.** Its own header says so verbatim:
+  _"No data of its own: a static menu, so there is nothing here to read on
+  mount and nothing to keep in sync."_ This screen reads
+  `GET /api/concept2/link` on mount, on every foreground and on a bfcache
+  restore (`api/useConcept2Link.ts:200-215`), and holds four pieces of attempt
+  state (`you/Concept2Card.tsx:86-92`). Every question §5.1 has to answer comes
+  from that one difference.
+- **The DIAGNOSTICS row carries no state, and this one must.** A stateless row
+  is honest for a menu of tools; it is not honest for a link that can break
+  while the rower is not looking. §5.1's state table is the whole of that
+  argument.
+- **Diagnostics is a menu; this is a leaf.** `/you/diagnostics` exists to hold
+  future tools ("the extensible home for every diagnostic tool that follows").
+  `/you/concept2` holds one thing and is not claiming otherwise.
+- **`.diag-row` is written for exactly one row, and the M-3 rule that pins it
+  says so.** `.you-screen .diag-row { margin-top: auto }` (`index.css`) carries
+  the comment _"`.diag-row` is used ONLY on the You screen (grep confirmed,
+  single JSX site)"_, and the grep still returns one site
+  (`grep -rn 'diag-row' app/src --include="*.tsx" | grep -v '\.test\.'` →
+  `src/You.tsx:142`, one hit, 2026-09-04). A second row carrying an `auto` top
+  margin is a **flex free-space split**, not a second row beneath the first:
+  CSS Flexbox §8.1 distributes positive free space equally among auto margins
+  on the main axis (SECONDARY — spec text, not measured in this engine).
+  Invariant R7 in §5.1 states what must be true instead, and leaves the
+  mechanism to the plan.
+
+---
+
 ## 4 · What these changes falsify, and the Gate 0 they therefore owe
 
 **Both PRs need a Gate 0 amendment, even though PR B moves no pixel.** A
@@ -268,10 +356,31 @@ Per the standing design gate, James approves the **rendered** thing, at real
 proportions, in both orientations, against what it replaces, with every colour
 pairing's contrast ratio computed and stated as a number.
 
-- **PR A:** the linked card at rest, redrawn, beside today's `you-concept2-
-  linked.png`; and the armed card, unchanged, beside it — so the escalation
-  from rest to armed is visible as a pair. Portrait and landscape. Numbers in
-  §5.1.
+- **PR A** is now a redrawn discovery surface plus a new screen, so its
+  artifact is a new amendment page, not a pair of before/after frames:
+  - **You, with the row, in each of the four values §5.1 assigns to it**
+    (`NOT LINKED`, `LINKED ✓`, `RECONNECT NEEDED`, `COULDN'T READ`), portrait
+    and landscape, each beside today's committed capture of the same state
+    (`docs/screenshots/you-concept2-unlinked.png`, `you-concept2-linked.png`,
+    `you-concept2-read-failed.png`, `you-concept2-landscape.png`). The
+    before/after pair is the point: what a rower loses from You is the whole
+    question.
+  - **You with no row at all** (the surface unavailable), beside the same, so
+    the silence is approved rather than assumed.
+  - **The two rows together at the foot of You** — CONCEPT2 and DIAGNOSTICS —
+    in both the short-content case (space above the group) and the
+    tall-content case (no space left). This adjacency has never been drawn and
+    it is what R7 exists to protect.
+  - **The screen**, portrait and landscape, in every state §5.1 assigns to it.
+    The amendment page already draws eleven of them as cards; what is new is
+    the chrome around them (BackLink, title, and whatever the head becomes)
+    and the two states the page never drew (§5.1's table rows 13 and 14).
+  - **The copy question, drawn rather than described.** The screen's frame
+    contains the word Concept2 twice — once as the screen's own title and once
+    as the card's `<h2>CONCEPT2</h2>` head (`you/Concept2Card.tsx:318-327`).
+    Gate 0 rules on which survives; §5.1 states the measured cost of each
+    answer, because one of them spends invariant R6.
+  - **Numbers**, from §5.1's table: every pairing on the row and on the screen.
 - **PR B:** no frame changes, so the artifact is the **withdrawal**: §4.1's
   sentence struck on the amendment page and replaced by what §5.3 can honestly
   promise, plus the three corrected code comments quoted in the Gate 0 note.
@@ -281,114 +390,390 @@ pairing's contrast ratio computed and stated as a number.
 
 ## 5 · The design
 
-### 5.1 PR A — the Unlink control stops being the loudest thing on the card
+### 5.1 PR A — Concept2 becomes a row on You and a screen behind it
 
-#### What is actually there today, measured
+#### The shape
+
+`You` loses `<Concept2Card email={user.email} />` (`You.tsx`, between Reset
+baseline setup and the DIAGNOSTICS row) and gains **one row** in the same
+idiom as DIAGNOSTICS: a label, a state line, a chevron, 44px, mono, no fill.
+Tapping it opens **`/you/concept2`**, an overlay screen carrying the card
+exactly as it is today. Connect, Reconnect, the identity line, all six panels,
+Unlink and its arm live there and nowhere else.
+
+Everything structural is Diagnostics', named part by part in §3.7. What
+follows is the part Diagnostics cannot answer, because Diagnostics has no
+state.
+
+#### The state question, which is the whole of this design
+
+**The card's real state space, measured.** The brief says ten drawn states.
+The repo's own count is eleven, and the component can render two more:
+
+- `app/e2e/design.spec.ts`'s Concept2 block and `you/Concept2Card.tsx:286-315`
+  both say **eleven drawn frames** — 1a, 1b, 1c, 1d, 1e, 1f, 1f-b, 1f-c, 1g,
+  1i, 1j — plus **1h**, which draws nothing at all.
+- `Concept2Card.tsx:294-296` says the `singleColumn` predicate "answers the two
+  states the page never drew (an in-flight attempt on the reauth card, and 1f-c
+  before it was drawn)". 1f-c has since been drawn; **the in-flight attempt on
+  the reauth card has not**, and reading the render gates finds two more that
+  have not either: **armed while the link needs re-auth** (`link.linked &&
+  armed` is unconditional at `Concept2Card.tsx:500-523`; `needsReauth` does not
+  suppress it) and **a refused unlink on a reauth card** (`:411`, same gate).
+  So three undrawn combinations, not two. The in-flight one is worth Gate 0's
+  attention on its own: `!link.linked && opening` gates the OPENING CONCEPT2
+  panel (`:429`), so a RECONNECT in flight draws **no panel at all** — both
+  buttons simply go `disabled` and nothing on the card says why.
+
+**The partition, and it is forced rather than chosen.** Ten of those states
+are born from a tap and live in `Concept2Card`'s own `useState` — `outcome`,
+`busy`, `armed`, `unlinkFailed` (`Concept2Card.tsx:86-92`). `/you/concept2` is
+a **sibling route**, not a nested child (`AppRoutes.tsx` registers flat
+routes), so returning to You unmounts the card and discards all four. There is
+no path on which the row is mounted while any of them is set:
+
+- **Native.** The consent leg is `ASWebAuthenticationSession`
+  (`adapters/linkFlow.ts:332`) — a modal over a live WebView. The rower cannot
+  navigate the app underneath it.
+- **Web.** `startLink` hands off with `openExternalUrl` → `navigateWeb` →
+  `window.location.assign` (`adapters/webNavigate.ts:19-21`), which unloads the
+  document. The rower returns by browser Back **to `/you/concept2`**, whose
+  `pageshow` handler clears the attempt anyway (`Concept2Card.tsx:117-136`).
+
+So: **the row shows what the SERVER last said; the screen shows what the last
+TAP did.** That is not a taste call. Putting an attempt state on the row would
+require lifting `outcome`/`busy`/`armed`/`unlinkFailed` above the route into a
+context or a store, which nothing here asks for and which invariant I1 (the
+card never infers the link from an outcome) exists to discourage.
+
+**The table.** "Unreachable" means the row cannot be on screen while that state
+holds, for the reason above — not that it was judged unimportant.
+
+| # | card state | the ROW says | drawn on |
+| --- | --- | --- | --- |
+| 1 | 1a unlinked, at rest | `NOT LINKED` | row + screen |
+| 2 | 1b opening | (unreachable) | screen only |
+| 3 | 1c linked and healthy | `LINKED ✓` | row + screen |
+| 4 | 1d unlink armed | (unreachable) | screen only |
+| 5 | 1e link attempt failed | (unreachable) | screen only |
+| 6 | 1f needs re-auth | `RECONNECT NEEDED` | row + screen |
+| 7 | 1f-b re-auth + failed attempt | (unreachable) | screen only |
+| 8 | 1f-c re-auth + update required | (unreachable) | screen only |
+| 9 | 1g update required, unlinked | (unreachable) | screen only |
+| 10 | 1i read failed | `COULDN'T READ`, conditionally — R4 | row + screen |
+| 11 | 1j unlink refused | (unreachable) | screen only |
+| 12 | 1h unavailable | nothing at all | neither |
+| 13 | armed while needing re-auth (never drawn) | (unreachable) | screen only |
+| 14 | unlink refused while needing re-auth (never drawn) | (unreachable) | screen only |
+| 15 | RECONNECT in flight (never drawn; no panel, buttons disabled) | (unreachable) | screen only |
+
+**Four values and an absence. The row mints no copy of its own:** all four
+strings are ones `Concept2Card` already renders — `LINKED ✓`,
+`RECONNECT NEEDED`, `NOT LINKED` (`Concept2Card.tsx:278-284`) and
+`COULDN'T READ` (`:227`). The card's fifth status value, `WAITING`, is the
+opening state and is therefore unreachable on the row; the row never says it.
+No new string means no new copy decision and no second spelling of a state to
+drift apart.
+
+**Why each of the four earns the row, stated as a product judgement:**
+
+- **`RECONNECT NEEDED` is the one that makes this a design gate rather than a
+  refactor.** It is set from the server's own `needs_reauth_at`
+  (`server/routes/concept2.ts`, the GET `/link` handler) and it is sticky: the
+  rower did nothing to cause it and nothing in the app resolves it on its own.
+  **And nothing else in the app tells them.** `grep -rn "needsReauth" app/src
+  --include="*.ts" --include="*.tsx" | grep -v '\.test\.'` (2026-09-04)
+  returns 13 lines across exactly three files — `api/useConcept2Link.ts` (the
+  type), `monitor/Concept2LinkProbe.tsx` (dev-only, absent from a release
+  build), and `you/Concept2Card.tsx`. `grep -c needsReauth
+  app/src/log/Concept2SendBlock.tsx` → **0**: the log's Send block gates on
+  `!link.linked` alone (`Concept2SendBlock.tsx:77`), so a rower whose link has
+  gone stale is still offered Send and still fails. The You surface is their
+  only warning, and a row that hides it behind a tap removes the only warning
+  there is.
+- **`LINKED ✓` is what makes the row worth reading when nothing is wrong.** A
+  door with no answer is a door the rower opens to learn nothing has changed.
+- **`NOT LINKED` is the discovery state** — the reason the surface exists at
+  all. It is also the state most rowers will be in.
+- **`COULDN'T READ` is carried because the alternative is a lie.**
+  `useConcept2Link.ts:126-136` is explicit that a failed read and
+  `available: false` are different answers and that _"drawing them the same way
+  tells a rower whose server does have it that it does not."_ R4 scopes when
+  that applies rather than dropping it.
+
+#### What happens when the surface is unavailable — and one thing today gets wrong
+
+**Today, for `available: false`, both surfaces render nothing.** The card
+returns `null` (`Concept2Card.tsx:259`) and the Send block returns `null`
+(`Concept2SendBlock.tsx:77`). The server answers `200 {available:false}` — a
+capability read, not an error (`server/routes/concept2.ts`, the GET `/link`
+handler's own comment: _"200 on purpose (the matrix's one non-403 row) — this
+is a capability read, not an action"_) — for any rower off `C2_ALLOWED_EMAILS`
+as well as any deployment with the flag unset. **The row disappearing is
+exactly the behaviour the card already had**, and this design keeps it.
+
+**But the brief's premise is not quite true of a FAILED read, and that is a
+live defect.** `Concept2Card.tsx:220` branches on `failed !== null` **before**
+the availability check at `:259`. So a read that never succeeded draws the
+COULDN'T READ card regardless of whether this rower has Concept2 at all. On
+production today that means: **any rower who opens You while offline sees a
+CONCEPT2 error panel about a feature gated to one account.** It is reachable
+on every deployment and every account, and the committed capture
+`docs/screenshots/you-concept2-read-failed.png` is a picture of it (its fixture
+serves 502 to the FIRST read — `app/e2e/screenshots.spec.ts`,
+`link: { status: 502 }`).
+
+**R4 closes it without new state.** The hook already retains the last good
+`link` across a failed re-read, deliberately (`useConcept2Link.ts:126-136`:
+_"a failed re-read deliberately leaves the last good `link` in place"_). So
+"have we ever been told this account has Concept2" is already expressible as
+`link !== null && link.available`, with no new ref, no new lifetime, and
+nothing for RF27 to tabulate.
+
+**The cost, stated rather than buried:** a cohort rower whose *first* read of a
+visit fails sees no row and therefore cannot reach the Retry. Their remedy is
+the automatic re-read the hook already performs on every foreground and on
+every fresh visit to You (`useConcept2Link.ts:200-215`) — one tab-switch
+instead of one tap. **The trade is one tap for one rower against a Concept2
+error panel shown to every rower who has no Concept2, and that is the
+recommendation.** It is a change to what a rower sees, so Gate 0 rules it; if
+Gate 0 declines, the row inherits today's ordering unchanged and the defect
+stays as it is, named here.
+
+**The screen is the asymmetric half, and the asymmetry is the principle.** A
+surface the rower did not ask for may go quiet when it does not know; a screen
+the rower deliberately opened must always answer. So:
+
+- `/you/concept2` renders its chrome — BackLink and title — in **every** state,
+  including before the first read resolves and on a read that failed. It never
+  renders nothing, because a blank screen with no way out is the worst thing on
+  this list.
+- On the screen, a failed read always draws 1i's panel and its Retry, retained
+  link or not.
+- Reached with `available: false` — possible only by a typed URL or a stale
+  history entry, since the row is absent — the screen returns the rower to
+  `/you` rather than drawing a blank or naming a capability they do not have.
+  `AppRoutes.tsx`'s own `<Route path="*" element={<Navigate to="/today"
+  replace />} />` is the house idiom for a route with nothing behind it.
+
+#### Where the transient states live, and what the rower sees coming back
+
+The brief asks it directly: the rower taps Connect on the sub-screen, the sheet
+opens, what does the row behind it say and what do they see on return?
+
+**The row is not behind it.** `/you/concept2` is a route, not a modal; You is
+unmounted while the rower is on the screen. On native the consent view sits
+over the screen, and on web the document is gone. There is no frame in which a
+row and an open attempt coexist.
+
+**On return:** native resolves inside `startLink`'s promise and the screen
+draws 1b → the outcome, exactly as the card does on You today. Web returns by
+Back to `/you/concept2`; `pageshow` clears the attempt (`Concept2Card.tsx:127-136`)
+and the mount read reports the truth. **Neither path changes**, because the
+card's own code does not change. What changes is only which route it happens
+on, and both handlers key on document events, not on a path.
+
+**Then the rower presses BACK.** They land on `/you` (the row's
+`state={{from:"/you"}}`, or `BackLink`'s `/you` fallback on a cold load), You
+mounts, the hook reads, and the row shows the server's answer — which after a
+successful link is `LINKED ✓`. The attempt state they left behind is gone, and
+that is correct: it described a tap, and the tap is finished.
+
+#### Unlink: no new tier, and the arm stays
+
+**REV 1's conclusion is superseded, and this is the sentence that replaces it.**
+The Unlink control's classes, heights and colours **do not change**.
+`.c2-card-danger` keeps its 52px accent outline at rest and its accent fill
+armed. The complaint was that it was the loudest thing on a card the rower did
+not ask to see; the answer is that the card is no longer on You. On a screen
+whose only job is this link, the destructive control being prominent in the
+linked state is correct — in that state it is the only thing there is to do.
+
+REV 1's measurement of the alternative tier is kept below because it is still
+true and still useful; what is withdrawn is the conclusion it fed
+(`.button-outline` for the rest state, `align-self: flex-start`, a re-captured
+pair). None of that is built.
+
+**The two-tap arm stays, with its 4-second disarm.** Three reasons, and the
+third is the binding one:
+
+1. **Relocation does not make the action less destructive.** Unlinking revokes
+   the grant; re-linking is a full OAuth round trip through Concept2's consent
+   page. One tap is still not enough confirmation for that.
+2. **The arm is doing disclosure work, not only mis-tap work.** The sentence
+   _"Unlink removes this app's access. Rows already sent stay on Concept2."_
+   (`Concept2Card.tsx:399-402`) renders **only while armed**. Removing the arm
+   means either losing that sentence or making it permanent — a new copy
+   decision and a new frame, for a problem nobody reported.
+3. **James complained about volume, not friction.** A spec does not get to
+   spend a ruling it was not given.
+
+**Invariant I2 changes one word and nothing else.** It reads today that the arm
+can never survive leaving You; it now reads that the arm can never survive
+leaving **the screen it was made on**. The mechanism that guarantees it is
+unchanged — `useEffect(() => disarm, [disarm])` (`Concept2Card.tsx:105`) runs
+its cleanup on unmount, and a route change unmounts the card exactly as leaving
+You did. **The comment at `Concept2Card.tsx:102-104` names You by name and is
+corrected in place, not appended to.**
+
+#### REV 1's measurement, kept — the conclusion it fed is superseded
 
 Read from `app/src/index.css` and `app/src/theme/tokens.css` on 2026-09-04;
-ratios computed, not judged (`#fffdf7` surface throughout):
+ratios computed with the WCAG 2.x sRGB relative-luminance formula, not judged.
 
 | control | class | min-height | width | border / label | contrast |
 | --- | --- | --- | --- | --- | --- |
-| Unlink, at rest | `.c2-card-danger` (index.css:10420) | 52px | full (parent `.c2-card-act` is `flex-direction: column`, index.css) | `--accent` `#b5341f` on transparent | 5.94:1 |
-| Unlink, armed | `+ .c2-card-danger-armed` (index.css:10431) | 52px (inherited) | full | `--on-color` on `--accent` fill | 5.94:1 |
-| Connect / Reconnect | `.c2-card-primary` (index.css:10341) | **48px** | full | `--on-color` on `--ink` fill | 17.11:1 |
+| Unlink, at rest | `.c2-card-danger` (index.css:10420) | 52px | full (parent `.c2-card-act` is a flex column) | `--accent` `#b5341f` on transparent over `--surface` | 5.94:1 |
+| Unlink, armed | `+ .c2-card-danger-armed` (index.css:10431) | 52px | full | `--on-color` on `--accent` fill | 5.94:1 |
+| Connect / Reconnect | `.c2-card-primary` (index.css:10341) | 48px | full | `--on-color` on `--ink` fill | 17.11:1 |
 | Retry | `.c2-card-retry` (index.css:10404) | 52px | full | `--ink` on transparent | 17.11:1 |
-| Sign out (same screen, card above) | `.button-outline` (index.css:162) | **44px** | content (`display: inline-flex`, `padding: 0 16px`) | `--ink` on transparent | 17.11:1 |
+| Sign out (You, card above) | `.button-outline` (index.css:162) | 44px | content | `--ink` on transparent | 17.11:1 |
 
-So the complaint is exact: at rest, Unlink is **4px taller than the card's
-primary action**, full width, and the only accent-coloured element on the card.
+**`.button-l4` was never a quieter tier, and that finding stands.**
+`app/src/log/FromTheLog.tsx:582` renders `className="button-l4
+log-delete-trigger"`, and `.log-delete-trigger` (index.css:2719) sets
+`margin: 24px 0 0` **and nothing else** — its own comment says so: _"no new
+interactive rule needed, only this spacing"_. The tier itself (`.button-l4`,
+index.css:344-353) is `min-height: 52px`, `border: 1px solid var(--accent)`,
+`color: var(--accent)`, `font-size: 16px`, `width: 100%`. Against
+`.c2-card-danger` that is identical on every axis that carries loudness,
+differing only in corner radius. **So the brief's two named references are one
+tier, and adopting it would have changed nothing a rower would call volume.**
+That is still true and it is still the reason no tier swap appears in REV 2 —
+but REV 2 does not swap tiers at all, so it is now a recorded negative result
+rather than an argument for a different class.
 
-#### The brief's proposed tier does not deliver "quieter" — measured
+#### The row's own numbers
 
-The brief says `.button-l4` and the log detail's own delete trigger are the
-house quiet destructive treatment. **They are the same control, and it is not
-quieter.** `app/src/log/FromTheLog.tsx:582` renders
-`className="button-l4 log-delete-trigger"`, and `.log-delete-trigger`
-(index.css:2719) sets `margin: 24px 0 0` **and nothing else** — its own comment
-says so: _"no new interactive rule needed, only this spacing"_. The tier itself
-(`.button-l4`, index.css:344-353) is `min-height: 52px`, `border: 1px solid
-var(--accent)`, `color: var(--accent)`, `font-size: 16px`, `width: 100%` (from
-the shared base at index.css:229-242).
+Tokens: `--page #f4f1e8`, `--surface #fffdf7`, `--ink #1b1a17`,
+`--ink-3 #57544c`, `--ink-4 #6f6a5f` (`app/src/theme/tokens.css`). The row sits
+on `--page`.
 
-Against `.c2-card-danger` that is **identical in every dimension that carries
-loudness** — same height, same width behaviour, same accent border, same accent
-label, same size and weight. The only differences are `border-radius`
-(`var(--radius)` vs `0`) and a `--surface` fill against a transparent one over
-the same `--surface` card. Swapping to `.button-l4` would change the corner
-radius and nothing a rower would call volume. This is recorded as a
-contradiction with the brief in §9.
+| element | colour | ratio on `--page` | floor |
+| --- | --- | --- | --- |
+| row label `CONCEPT2` | `--ink-3` | **6.69:1** | 4.5:1 ✓ |
+| row state line, all four values | `--ink-3` | **6.69:1** | 4.5:1 ✓ |
+| chevron (`aria-hidden`) | `--ink-3` | **6.69:1** | decorative |
+| hit target | `min-height: var(--tap)` = **44px** | | 44px ✓ |
+
+`--ink-4` on `--page` is **4.76:1** and would also pass if Gate 0 prefers the
+state line dimmer than the label; `--ink` is **15.41:1** if it prefers it
+darker. All three are stated so the gate can rule on a number rather than an
+impression. **`--accent` gains no new use** — it is 5.35:1 on `--page` and
+appears nowhere on the row.
+
+One thing the card does that the row must decide: `.c2-card-status-on`
+(`index.css`) draws `--ink` at weight 600 whenever `link.linked` is true, which
+means **`LINKED ✓` and `RECONNECT NEEDED` are drawn identically today** and are
+told apart only by the word. On a one-line row that is worse than on a card.
+Gate 0 rules whether `RECONNECT NEEDED` gets its own weight; the spec's
+recommendation is that it does not get `--accent` (R8), and that if it needs
+distinction it takes `--ink` at 600 against `--ink-3` for the other three.
 
 #### The invariants (what must be true)
 
-- **U1 — rest is not the peak.** On a linked card the rest-state Unlink is
-  never the visually heaviest control on that card, and never taller or wider
-  than the card's primary action in any state that renders one.
-- **U2 — arming escalates.** The armed state is at least as prominent as the
-  rest state, and visibly distinct from it. A destructive confirm may shout;
-  a destructive *offer* may not.
-- **U3 — the floors hold in every state.** Every state of the control clears
-  44×44 px, and every text/background pairing clears 4.5:1, with the ratio
-  stated as a number.
-- **U4 — no fourth tier.** The rest state's values are an existing tier's
-  values, named by that tier's class, plus at most a positional rule. The
-  precedent is `.log-delete-trigger` itself: spacing only, no new interactive
-  rule.
-- **U5 — the accent census does not grow.** Whatever is chosen, `--accent`
-  gains no new meaning. The DEVIATIONS row for `.c2-send-linkout`
-  (`docs/design/DEVIATIONS.md:241`) is untouched and no second row is minted.
+- **R1 — the row says what the server said.** Its state line is one of the four
+  strings `Concept2Card` already renders. The row mints no copy of its own.
+- **R2 — the row never shows attempt state.** No value of the row depends on
+  `outcome`, `busy`, `armed` or `unlinkFailed`.
+- **R3 — a broken link is visible without a tap.** `needsReauth` reaches the
+  row. This is the invariant the whole design is at risk of losing, and the one
+  a reviewer should attack first.
+- **R4 — silence means "we have never been told this account has Concept2".**
+  The row draws only once a successful read has reported `available: true`; a
+  failed read draws `COULDN'T READ` on the row only over a retained available
+  link, never as the first thing a rower has ever been told about Concept2.
+- **R5 — a screen the rower asked for always answers.** `/you/concept2` renders
+  BackLink and title in every state, including pre-first-read and read-failed.
+  With `available: false` it returns the rower to `/you`. It never renders
+  nothing.
+- **R6 — the card's markup does not change.** The screen mounts `Concept2Card`
+  as it is. **What that buys, measured:** the four committed fixtures
+  (`app/e2e/fixtures/c2-card-{armed,read-failed,unlinked,update-required}.html`),
+  `Concept2Card.test.tsx`'s whole-`innerHTML` equality gate ("the e2e fixtures
+  ARE this component's output"), and **five of the six tests** in
+  `design.spec.ts`'s Concept2 describe (`design.spec.ts:10427, :10446, :10465,
+  :10481, :10521` — the split, the two hairline cases, the control-height table
+  and 1g) stay green **without being retuned**. The sixth (`:10554`, the
+  in-situ standoff) dies for a different reason and is the row below. A gate
+  that does not move is a gate that can still go red on something else.
+  **If Gate 0 rules the card's `CONCEPT2` head must go** (§4.3's copy
+  question), R6 is spent and the price is: four fixtures regenerated, one
+  equality test updated, one `.c2-card-head` CSS rule reconsidered because the
+  status chip would be alone in a `space-between` head. That is the whole
+  price; it is not large, but it should be paid knowingly.
+- **R7 — the two doors at the foot of You read as one group.** Exactly one
+  auto top margin separates the group from the content above it, not one per
+  row. Stated as an invariant, not a mechanism: §3.7 records why (`.diag-row`'s
+  own M-3 rule assumes a single site) and the plan chooses how.
+- **R8 — no new tier and no new accent.** The Unlink control's classes are
+  unchanged, `--accent`'s census does not grow, and
+  `docs/design/DEVIATIONS.md`'s one Concept2 row (line 241, the Send block's
+  link-out) is untouched and no second row is minted.
+- **R9 — Unlink keeps its two-tap arm and its 4-second disarm**, and the arm
+  cannot survive leaving the screen it was made on.
+- **R10 — the row is the only Concept2 thing on You.** After this change
+  `grep -n 'Concept2Card' app/src/You.tsx` returns nothing and You imports no
+  Concept2 component other than the row. **That grep returns 2 today** (the
+  import at `You.tsx:6` and the mount at `:119`), which is what makes it a
+  check rather than decoration — `grep -n 'c2-card' app/src/You.tsx` already
+  returns nothing, because You names the component and never the class, and
+  would have been an RF21 gate that cannot go red.
 
-#### The recommendation Gate 0 rules on
+#### What it costs elsewhere, named file by file
 
-**Rest becomes `.button-outline`; armed stays exactly as it is.**
+Every row was read on 2026-09-04 against this worktree at base `2148f978`.
 
-- Rest: `.button-outline` — 44px, `--ink` on `--surface` at **17.11:1**,
-  content-width, ink border. It is the tier the **same screen** already uses
-  for **Sign out**, one card above (`app/src/You.tsx:68`) — the nearest sibling
-  action there is: revoking an authorisation the rower granted. Reusing it
-  makes the two reads as one family instead of two.
-- Armed: unchanged `.c2-card-danger c2-card-danger-armed` — 52px, `--on-color`
-  on `--accent` at **5.94:1**, full width. The escalation from a 44px ink
-  outline to a 52px full-width accent fill is now legible as an escalation,
-  which it currently is not (52 → 52, accent → accent).
-- One positional rule is needed and only one: `.c2-card-act` is a flex column
-  whose items stretch, so an `inline-flex` button still fills the width unless
-  it is given `align-self: flex-start`. That single declaration is the whole
-  CSS addition, and it is `.log-delete-trigger`'s own shape.
-- **Consequence worth naming:** the linked card at rest then paints no
-  `--accent` at all. U5 is satisfied by subtraction rather than by argument.
+| file | what changes | why it is on this list |
+| --- | --- | --- |
+| `app/src/You.tsx` | the card mount (`<Concept2Card email={user.email} />`) becomes the row; its ~20-line comment block is rewritten in place | that comment records **James's 2026-09-04 "AS SHIPPED" position ruling**, made on captures of the CARD among BASELINES and Reset. A mono row at the foot beside DIAGNOSTICS is an adjacency that ruling never saw, so **it does not transfer** — Gate 0 re-rules the position |
+| `app/src/you/Concept2Row.tsx` (new) | the row; calls `useConcept2Link` | You must not learn any Concept2 state itself; the hook belongs with the row |
+| `app/src/you/Concept2Screen.tsx` (new) | the screen; BackLink, title, mounts `Concept2Card` | Diagnostics' shape (§3.7) |
+| `app/src/shell/AppRoutes.tsx` | one flat route `/you/concept2` **inside** the `{user && onSignedOut && …}` fragment | the screen needs `user.email` for `identityLine` (`you/concept2CardModel.ts:38`; `You.tsx` passes it today) and there is no context to read it from. Not added to `HIDDEN_TABBAR_PREFIXES` |
+| `app/src/index.css` | the row's rule; the doors-group rule (R7); the M-3 block's "single JSX site" comment corrected in place | the grep that comment cites stops returning one hit |
+| `app/src/index.css`, `.c2-card` | its `margin: 12px 0 0` loses its justification | the 12px was ruled against `.reset-baselines` on You (`design.spec.ts`'s in-situ test and its "12 is BOTH authorities agreeing" comment). On the new screen the neighbour is a title, and the number has to be re-argued or re-ruled |
+| `app/src/You.test.tsx` | the three Concept2 cases (`You.test.tsx:183-234`) become row cases; the document-order case gains a second row to order against | they assert `.c2-card` on You |
+| `app/src/you/Concept2Screen.test.tsx` (new) | R5's cases: chrome in every state, the `available:false` redirect, the back target | R5 is the invariant with no existing gate |
+| `app/src/you/Concept2Card.test.tsx` | **untouched under R6** | the card does not change |
+| `app/e2e/concept2.spec.ts` | `openYou`'s sentinel breaks; six card tests re-route | `openYou` asserts `page.locator(".diag-row")` `toBeVisible()` (`:310`) — **a second `.diag-row` is a Playwright strict-mode violation** and every test through that helper throws. Card tests at `:324, :353, :394, :638, :666, :743`; the five Send-block tests at `:431, :460, :511, :539, :567` are unaffected |
+| `app/e2e/screenshots.spec.ts` | the same sentinel at `:6180`; the five You captures change subject | `you-concept2-read-failed`'s fake serves 502 to the FIRST read, which under R4 draws no row — it must serve one good read first, or move to the screen |
+| `app/e2e/design.spec.ts` | the in-situ test "the card stands off the row above it on You" (`:10554`) is **falsified outright** — its `inSitu` composition hand-writes `.reset-baselines`, the card fixture and a `.diag-row`. The block header's "Task 8 HAS now mounted it (`You.tsx`, between Reset baseline setup and the DIAGNOSTICS row)" is corrected in place | the card is not on You any more. The describe's other five tests are untouched under R6 |
+| `docs/screenshots/` | `you-concept2-{unlinked,linked,armed,read-failed,landscape}.png` all draw the card on You | all five change subject. The three `log-concept2-*.png` are Surface 2 and are untouched |
+| `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-03.html` | 14 frames stop describing what ships | **measured**, see the script below: 54 frames, 24 draw the card, **12 of those draw it inside a You column**, and 2 more draw You without it. Per RF9 the page is reconciled — the superseded in-situ frames struck **on** the page — rather than left as accidental history |
+| `docs/design/handoffs/.../README.md` | reconciled wherever it describes the card as living on You | same reason |
+| `ROADMAP.md` | the two rows §10 already owes | RF17 |
 
-**The alternative, if Gate 0 prefers one class over two:** keep the
-`.c2-card-danger` name and restyle its *rest* rule to `.button-outline`'s
-values, moving `min-height: 52px` onto `.c2-card-danger-armed` so the armed
-state keeps its height. Same rendered result, one class instead of two, at the
-cost of a tier that exists only here. The recommendation is the first, because
-U4 asks for an existing tier by name and this is that tier.
+**The frame census is a script, not a transcribed number** (a census in a
+document is a measurement with an expiry date):
 
-**What it costs elsewhere, checked:**
+```bash
+cd docs/design/handoffs/2026-08-31-concept2-connect && python3 - <<'EOF'
+import re
+s = open('amendment-2026-09-03.html').read()
+opens = list(re.finditer(r'<div class="(frame(?: land)?(?: cb)?)"', s))
+tag = re.compile(r'<div\b|</div>')
+frames = []
+for m in opens:
+    depth = 0
+    for t in tag.finditer(s, m.start()):
+        if t.group() == '</div>':
+            depth -= 1
+            if depth == 0:
+                frames.append(s[m.start():t.end()]); break
+        else:
+            depth += 1
+card = [b for b in frames if 'c2card' in b]
+you = [b for b in card if any(k in b for k in ('DIAGNOSTICS','BASELINES','Sign out'))]
+print(len(frames), len(card), len(you), len(card)-len(you))
+EOF
+```
 
-- **The e2e height pin does not move.** `app/e2e/design.spec.ts:10505` pins
-  `["c2-card-armed.html", ".c2-card-danger", 52]`, and that fixture
-  (`app/e2e/fixtures/c2-card-armed.html:13`) carries `c2-card-danger
-  c2-card-danger-armed` — the **armed** state, which this design leaves at 52.
-  The existing row stays green *without being retuned*, which is the point:
-  the change is invisible to it. **A gate that cannot go red on your change is
-  not evidence about your change** — so PR A owes a *new* rest-state pin
-  (§6.1), or it ships a redraw with no gate at all.
-- **A census comment goes stale and must be corrected, not appended to.**
-  `app/e2e/design.spec.ts:10480-10484` transcribes the amendment page's own
-  inline styles: _"all seven LIVE in-card outline buttons carry `min-height:
-  52px`, `.btn-primary` is 48px and `.btn-danger` is 52px."_ After the redraw
-  the page's rest-state `.btn-danger` is no longer 52px. Measured on the page
-  today: `grep -c 'class="btn-danger">'` → **12** rest instances,
-  `grep -c 'class="btn-danger armed">'` → **2** armed. The original board
-  (`Concept2 connect.dc.html`) contains **0** `btn-danger` and is unaffected.
-- **`.c2-card-danger`'s own comment** (index.css:10415-10419) claims accent's
-  "third canonical job, a destructive control". Still true of the armed state;
-  no longer true of the rest state. Correct it in the same commit.
-- **Captures:** `docs/screenshots/you-concept2-linked.png`,
-  `you-concept2-armed.png` and `you-concept2-landscape.png` all render this
-  control and all three are re-captured.
+Output on `2148f978`, 2026-09-04: `54 24 12 12`.
+
+**The brief said twenty frames, most of them in a You column.** It is 24, and
+exactly half. §9 records it.
+
+---
 
 ### 5.2 PR B — the link-outs leave the app
 
@@ -501,28 +886,44 @@ is still in the log, still un-sent, and Send works from its detail screen.
 
 ## 6 · What can and cannot be gated
 
-### 6.1 PR A — provable, and it must be made provable
+### 6.1 PR A — what can go red, and the two things that cannot
 
-- **Capture.** `docs/screenshots/you-concept2-linked.png`,
-  `you-concept2-armed.png`, `you-concept2-landscape.png` re-captured and
-  **opened and looked at**, with the rest and armed frames described in the PR
-  body as a pair.
-- **A NEW e2e pin, because the existing one cannot go red.** §5.1 established
-  that `design.spec.ts:10505` measures the *armed* fixture, which this change
-  leaves at 52px. PR A therefore adds a rest-state fixture
-  (`app/e2e/fixtures/c2-card-linked.html` — none exists today; the fixture
-  directory carries `c2-card-armed`, `c2-card-read-failed`,
-  `c2-card-unlinked`, `c2-card-update-required` and no linked-at-rest frame)
-  and a row in the same control-height table.
-- **Independent literals, never the production symbol.** The expected heights
-  are written as `44` and `52` in the test, transcribed from the redrawn
-  amendment page — not read back off `index.css`, so retuning the CSS cannot
-  retune the test with it.
-- **The mutation that must bite:** revert the rest-state rule to
-  `min-height: 52px` with the accent border. Expected: the new rest row goes
-  red, the armed row stays green. Record what the failure said. If the mutation
-  does not redden the new row, the row is measuring the wrong element — the
-  known trap on this exact table.
+- **A new e2e suite for the row and the screen**, because nothing today
+  measures either. The four row values, the absent row, the navigation into the
+  screen and the BackLink out of it are all reachable in the existing
+  `e2e/concept2.spec.ts` harness — it already drives a fake `/api/concept2/*`
+  and signs in through the backdoor.
+- **`openYou`'s sentinel is repaired first, in the same PR.** It asserts
+  `page.locator(".diag-row")` is visible (`e2e/concept2.spec.ts:310`;
+  `e2e/screenshots.spec.ts:6180` carries the twin). Under R7 a second row with
+  that class turns both into strict-mode violations. **This is the seam gate
+  RF24 asks for**: the change that creates the ambiguity fixes it, rather than
+  filing it.
+- **The mutations that must bite**, each with its failure recorded verbatim:
+  - **R3.** Force `needsReauth` to `false` in the row's derivation. Expected:
+    the `RECONNECT NEEDED` row case goes red and the other three stay green. If
+    it does not bite, the row is not reading the field it claims to.
+  - **R4.** Remove the retained-link condition so a failed read always draws
+    the row. Expected: the "no row on a deployment with no Concept2, offline"
+    case goes red. **Anchor the mutation on a unique string** (RF22's second
+    half) — grep first and confirm one hit.
+  - **R5.** Delete the `available:false` redirect on the screen. Expected: the
+    "typed URL with the surface off returns to /you" case goes red.
+  - **R2.** Wire `busy` into the row's state line. Expected: nothing goes red,
+    **and that is the finding, not a pass** — it means the test suite cannot
+    tell R2 is holding, so R2 is gated by the state table and the code review
+    rather than by a test, and the PR says so instead of claiming a gate it
+    does not have.
+- **Captures.** The five You captures re-shot for the row and new screen
+  captures added, **opened and looked at**, each described in the PR body from
+  having opened it (RF7).
+- **What cannot go red, said plainly:** the two-column landscape behaviour and
+  the control heights are unchanged under R6, so `design.spec.ts`'s existing
+  Concept2 cases stay green through this PR and prove nothing about it. They
+  are kept because they protect the card; they are not counted as a gate on
+  this change.
+
+---
 
 ### 6.2 PR B — **not gateable by anything this repo owns. Say it plainly.**
 
@@ -613,29 +1014,44 @@ nothing about commit 2's binary.
 
 ---
 
-## 7 · Gates that are being skipped, and why
+## 7 · Gates, and the order — spoken rather than left silent
 
-Spoken rather than left silent, per the standing rule.
+**The order. REV 2 recommends the flip: PR B (the link-outs) ships first.**
+REV 1's order came from a premise that ruling 3 removed — that the You change
+was a small button-weight edit provable by one capture and one pin. It is now a
+new route, a new screen, a redrawn discovery surface, ~14 stale design frames
+and a Gate 0 that must be drawn and approved before a line is written. PR B is
+a one-branch deletion that fixes a link which today shows a privacy page
+instead of the rower's own row, and its gate is a walk James is doing anyway.
+**Blocking a broken-link fix behind a design gate is backwards.** The ruling is
+his; the spec states the reason so he can rule against it knowingly.
 
-- **Antagonist, PR A: SKIP.** Inherits Wave E's vetted ground; it invents no
-  mechanism, touches no wire semantics, changes no number's meaning, and moves
-  one control's height and colour. Pure UI.
-- **Antagonist, PR B: DELTA pass, and it is not optional.** The wave's anchor
-  pass never saw this ground: PR B removes a platform branch and rests on a
-  WebKit/Capacitor navigation behaviour that is tagged INFERENCE in §3.4, and
-  it withdraws an approved behavioural claim (§4). The delta attacks §3.4's
-  inference, §5.3's return analysis, and the walk's ability to produce a NO —
-  nothing else.
-- **PM gate: SKIP for both.** Neither changes what the app does as a
-  capability, what a tester receives, or the shape of planned work. PR A is
-  styling; PR B changes which browser a link opens. Wave E's own open/close PM
-  bookends are unaffected.
-- **Fast path: NO, for both**, checked mechanically rather than by feel. PR A
-  is one product file plus CSS plus a fixture and would qualify on the file
-  count — but it changes what a rower sees on an approved screen, so it takes
-  the design gate, and a change taking Gate 0 is not saving a cycle by skipping
-  review. PR B touches a platform adapter and removes a shipped dependency,
-  whose failure mode is a dead button on a device — not cosmetic, not test-only.
+**They stay two PRs, and the row work is not bundled into PR B.** The grouping
+rule's own test: a reviewer holding a platform-adapter deletion and a new
+screen in one pass would be holding two unrelated risk models. The row and its
+screen ship together as one PR, because a row pointing at nothing is not
+shippable.
+
+- **Antagonist, PR A: DELTA pass, and REV 2 un-skips it.** REV 1 skipped it as
+  pure UI. That is no longer honest: PR A now invents a **state partition**
+  (§5.1's table and R1/R2), a **new availability predicate** (R4) that changes
+  what a rower sees on a failure path, and a **screen-versus-row asymmetry**
+  (R5). RF27's own lesson is that a chunk inventing a new mechanism does not
+  inherit a phase's vetted ground. The delta attacks R2's "unreachable" claims
+  (the table's nine rows), R3's evidence that nothing else warns the rower, R4's
+  trade, and the frame census — nothing else.
+- **Antagonist, PR B: DELTA pass, unchanged from REV 1.** It rests on a WebKit
+  navigation behaviour tagged INFERENCE in §3.4 and withdraws an approved
+  behavioural claim (§4).
+- **PM gate: RUN, once, on the spec slate — and REV 2 un-skips this too.** REV
+  1 skipped both on the grounds that neither changed what a tester receives.
+  PR A now changes **the shape and sequence of planned work** (the order flip)
+  and **what a tester receives as a capability's front door**. One PM verdict on
+  the slate — the order and PR A's scope — not a per-PR gate on either.
+- **Fast path: NO, for both**, checked mechanically. PR A is four product files
+  plus CSS plus a route plus a screen, and changes what a rower sees on an
+  approved screen. PR B touches a platform adapter and removes a shipped
+  dependency.
 
 ---
 
@@ -643,28 +1059,40 @@ Spoken rather than left silent, per the standing rule.
 
 Each one falsifiable, each one checkable by someone who did not write it.
 
-### PR A — the Unlink weight
+### PR A — the row and the screen
 
-- **A1.** Gate 0 approved on the rendered pair (rest and armed, both
-  orientations, against today's captures) before implementation starts.
-- **A2.** `docs/screenshots/you-concept2-linked.png`, `you-concept2-armed.png`
-  and `you-concept2-landscape.png` re-captured; the PR body describes what is
-  in each frame, from having opened them.
-- **A3.** A rest-state fixture exists and `app/e2e/design.spec.ts`'s
-  control-height table carries a row for it with an independent literal; the
-  existing armed row is unchanged and green.
-- **A4.** The mutation in §6.1 reddens the new row and only the new row, and
-  the PR records the failure message verbatim.
-- **A5.** `grep -n 'c2-card-danger' app/src/index.css app/src/you/Concept2Card.tsx`
-  and a grep for the chosen rest-state tier both return a count the PR body
-  states, and no class exists in `index.css` that did not exist before except
-  at most one positional rule.
-- **A6.** The stale census at `app/e2e/design.spec.ts:10480-10484` and the stale
-  claim at `app/src/index.css:10415-10419` are **corrected in place**, not
-  appended to. `docs/design/DEVIATIONS.md` gains no row and its existing
-  Concept2 row is unchanged.
-- **A7.** Every state's contrast ratio and hit-target size appear in the PR body
-  as numbers.
+- **A1.** Gate 0 approved on the rendered artifact of §4.3 — the four row
+  values, the absent row, the two-row foot in both content cases, the screen in
+  every state, both orientations — before implementation starts. **Including
+  the two rulings §5.1 hands the gate: the copy question (R6) and R4's trade.**
+- **A2.** The state table of §5.1 is reproduced in the PR body, and every row
+  marked "unreachable" is justified there by the same two mechanisms (flat
+  routes; component-local attempt state) rather than by assertion.
+- **A3.** `openYou`'s `.diag-row` sentinel is repaired in this PR
+  (`e2e/concept2.spec.ts:310`, `e2e/screenshots.spec.ts:6180`), and the PR body
+  states which form it took. Not filed as follow-on work.
+- **A4.** The four mutations of §6.1 were run; each one's failure message is
+  quoted verbatim, **including R2's, which is expected NOT to bite** — the PR
+  says so rather than claiming a gate it does not have.
+- **A5.** The five You captures re-shot and new screen captures added, each
+  described in the PR body from having been opened.
+- **A6.** `grep -n 'Concept2Card' app/src/You.tsx` returns nothing (R10 — it
+  returns 2 on `2148f978`), and
+  `grep -rn 'diag-row' app/src --include="*.tsx" | grep -v '\.test\.'` returns
+  the count the PR body states (it returns 1 on `2148f978`).
+- **A7.** Every stale claim corrected **in place**, never appended to:
+  `You.tsx`'s mount comment (which carries James's position ruling),
+  `Concept2Card.tsx:102-104` (I2 names You), `index.css`'s M-3 "single JSX
+  site" comment, `design.spec.ts`'s Concept2 block header and its in-situ test.
+  `docs/design/DEVIATIONS.md` gains no row and its line-241 row is unchanged.
+- **A8.** The amendment page reconciled: the 12 in-situ frames the census
+  script names are struck **on** the page, and the PR body re-runs the script
+  and states its output.
+- **A9.** Every contrast ratio and hit-target size on the row and the screen
+  appears in the PR body as a number.
+- **A10.** `pnpm lint` · `typecheck` · `format:check` · `test --project unit
+  --project client` · `pnpm e2e` · `pnpm screenshots` all green — the layout of
+  two screens changes, so captures are not optional here.
 
 ### PR B — the link-outs leave the app
 
@@ -699,32 +1127,48 @@ Each one falsifiable, each one checkable by someone who did not write it.
 
 ## 9 · Contradictions with the brief, recorded
 
-The brief is not automatically right, and two of its claims did not survive
+The brief is not automatically right, and five of its claims did not survive
 reading the code.
 
-1. **`.button-l4` is not a quieter tier than `.c2-card-danger`.** The brief
-   names it, and the log detail's delete trigger, as "the house quiet
-   destructive treatment". Measured (§5.1): `.button-l4` is 52px, full width,
-   `--accent` border, `--accent` label, 16px/600 — the same on every axis that
-   carries loudness as the control it would replace, differing only in corner
-   radius. And the log detail's delete trigger **is** `.button-l4`
-   (`FromTheLog.tsx:582`), with `.log-delete-trigger` supplying margin and
-   nothing else, so the two named references are one tier, not two. Adopting it
-   would satisfy the letter of "reuse a tier" and none of the intent. §5.1
-   proposes `.button-outline` instead, with the numbers.
-2. **"All three link-outs" is three rendered states across two call sites**, not
-   three call sites. `openReadOnlyUrl` is called at
-   `Concept2SendBlock.tsx:189` (the result link, drawn for both `sent` and
-   `duplicate`) and `:245` (the no-weight profile link). Nothing else in
-   `app/src` calls it. The ruling is unaffected — all three states change
-   together because they share a function — but a plan that goes looking for a
-   third call site will not find one.
-3. **The brief names one falsified design sentence; there are four.** §4.2 adds
-   three behavioural claims in shipped code, one of which
-   (`concept2Send.ts:96-101`) has its premise **inverted** by this change while
-   its conclusion survives. That is the one worth a reviewer's attention: it is
-   the justification for a URL constant, and "the reason changed but the answer
-   didn't" is exactly the shape that gets quietly left alone.
+1. **The card draws eleven states, not ten — and can render three more.** The
+   brief lists ten. `app/e2e/design.spec.ts`'s Concept2 block and
+   `you/Concept2Card.tsx:286-315` both say **eleven drawn frames** (1a, 1b, 1c,
+   1d, 1e, 1f, 1f-b, 1f-c, 1g, 1i, 1j), plus 1h which draws nothing. The brief's
+   list also merges 1f-b and 1f-c into "the two-panel reauth variants" and omits
+   1g (update required while unlinked) entirely. Three further combinations the
+   page never drew are reachable in the component: **armed while needing
+   re-auth**, **a refused unlink on a reauth card** (both because
+   `link.linked && …` gates the Unlink control unconditionally at
+   `Concept2Card.tsx:500-523` and `:411`), and **a RECONNECT in flight**, which
+   draws no panel at all because `!link.linked && opening` gates the OPENING
+   panel (`:429`). §5.1's table works from fifteen rows.
+2. **The Gate 0 page has 54 frames, 24 of which draw the card, and exactly half
+   of those are in a You column — not "twenty frames, most of which".** Measured
+   with the script in §5.1 against `2148f978`: `54 24 12 12`. Two more frames
+   draw You without the card. The correction matters because it halves the
+   reconciliation the brief implies and doubles the number of card-only frames
+   that survive unchanged.
+3. **"Both surfaces render nothing when the server says unavailable" is true of
+   `available: false` and false of a failed read.**
+   `Concept2Card.tsx:220` branches on `failed` **before** the availability check
+   at `:259`, so an offline You visit draws a CONCEPT2 error panel on every
+   deployment and for every account, including the ones with no Concept2. It is
+   a live defect, `docs/screenshots/you-concept2-read-failed.png` is a picture
+   of it, and R4 is the smallest fix that closes it. It needed naming because
+   the brief's question ("say whether the ROW disappears entirely") has a
+   different answer for the two cases.
+4. **The brief calls the Unlink work "PR B"; the spec it is revising calls it
+   PR A.** REV 1 §2 ruling 4 and §5.1 both name the Unlink change PR A and the
+   link-outs PR B, and the ruling was "the Unlink weight first". REV 2 keeps
+   the letters attached to the work rather than the order, so PR A is still the
+   You surface — and §7 recommends it ships **second**.
+5. **`.button-l4` and the log detail's delete trigger are one tier, not two,
+   and neither is quieter.** Carried forward from REV 1 unchanged, because it
+   is still true: `FromTheLog.tsx:582` renders `button-l4 log-delete-trigger`,
+   `.log-delete-trigger` supplies margin only, and `.button-l4` matches
+   `.c2-card-danger` on every axis that carries loudness. What is superseded is
+   what REV 1 concluded from it (swap to `.button-outline`); REV 2 changes no
+   tier at all.
 
 ---
 
@@ -743,3 +1187,10 @@ reading the code.
 - **A ROADMAP row.** This spec's dispatch was spec-only, so no ROADMAP edit was
   made. The two PRs take their rows in the Wave E block when the first one
   opens; that is owed and is recorded here so it is not lost.
+- **Widening the row into a menu.** `/you/concept2` is a leaf. If a second
+  Concept2 tool ever exists, the row becomes a menu the way DIAGNOSTICS did;
+  nothing here is designed for that and nothing here forecloses it.
+- **Lifting attempt state above the route.** §5.1's partition depends on
+  `outcome`/`busy`/`armed`/`unlinkFailed` staying inside `Concept2Card`. A
+  future context or store that hoisted them would make the row able to show
+  attempt state, and would need R2 re-argued rather than silently broken.
