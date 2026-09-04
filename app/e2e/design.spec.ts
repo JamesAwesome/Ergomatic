@@ -1781,24 +1781,19 @@ test.describe("today screen (unlogged session row)", () => {
     expect(styles.borderColor).toBe("rgb(181, 52, 31)"); // --accent
   });
 
-  // Arming swaps the ROW's CONTENTS, not its layout (DESIGN.md's own words):
-  // border -> accent, text -> "Discard {title} without saving?", ✕ ->
-  // solid accent "Tap again" — and the row's own box stays the same size and
-  // position throughout.
-  test("arming swaps the row contents for the selected discard question without moving its top", async ({
+  // Arming replaces the ROW's CONTENTS with the selected discard question
+  // and solid accent "Tap again" action. The confirmation follows its
+  // content-sized layout; the approved ruling does not promise a fixed row
+  // height, accent border, or unchanged page position.
+  test("arming swaps the row contents for the selected discard question", async ({
     page,
   }) => {
     const row = page.locator(".unsaved-row");
-    const boxBefore = (await row.boundingBox())!;
 
     await page.getByRole("button", { name: /Discard Timer workout/ }).click();
     await page.mouse.move(0, 0);
 
     await expect(row).toHaveClass(/unsaved-row/);
-    const rowBorderColor = await row.evaluate(
-      (el) => getComputedStyle(el).borderColor,
-    );
-    expect(rowBorderColor).toBe("rgb(216, 211, 196)"); // --rule
     await expect(
       page.getByText(`Discard ${title} without saving?`),
     ).toBeVisible();
@@ -1813,9 +1808,6 @@ test.describe("today screen (unlogged session row)", () => {
     await expect(page.getByRole("link", { name: /Review & save/ })).toHaveCount(
       0,
     );
-
-    const boxAfter = (await row.boundingBox())!;
-    expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
   });
 
   // Fix round 1 (reviewer M1): the original version of this test asserted

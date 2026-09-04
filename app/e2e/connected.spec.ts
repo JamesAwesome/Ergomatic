@@ -422,7 +422,7 @@ function buildNaturalFinishEvents(): (
       cumulativeDistanceMeters,
       ...(index === actuals.length - 1
         ? {
-            // The final split arrives while the PM still reports work;
+            // The final split arrives while the PM still reports REST;
             // terminal status follows it, then the usual 0x0039/0x003F
             // handoff. The offsets preserve that real ordering.
             burst: {

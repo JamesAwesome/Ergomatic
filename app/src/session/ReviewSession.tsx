@@ -11,7 +11,10 @@ import { JustRowSummary, type DoorEntry } from "../justrow/JustRowLog";
 import { loadRun } from "./run";
 import { clearSelectedTimer } from "./clearSelectedTimer";
 import { freeRowTotals } from "../justrow/totals";
-import { requireFiniteRecording } from "./recoveryValidation";
+import {
+  requireFiniteRecording,
+  requireProgrammedMeasurements,
+} from "./recoveryValidation";
 import { isComplete } from "./engine";
 
 hydrate();
@@ -92,6 +95,7 @@ function SelectedReview({ search }: { search: string }) {
     return <TimerSummary run={selected.run} context="review" />;
   if (entry !== null && entry.run.completedAt !== null) {
     try {
+      requireProgrammedMeasurements(entry.run);
       requireFiniteRecording(entry.run);
       const steps = buildMonitorLogSteps(entry.run);
       if (steps.some((step) => typeof step.label !== "string"))

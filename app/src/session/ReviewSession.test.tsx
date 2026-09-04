@@ -274,6 +274,51 @@ describe("selected recording recovery", () => {
       ).toBeNull();
     },
   );
+  it.each(["timer", "monitor"] as const)(
+    "selected %s rejects a global linked row whose title disagrees with the retained test title",
+    async (source) => {
+      const { testWorkout, run } = designatedTest(source);
+      library = {
+        state: "ready",
+        workouts: [
+          { ...testWorkout, title: "Stationary Front", isGlobal: true },
+        ],
+      };
+      await open(reviewLocation(source, run.startedAt));
+      await screen.findByRole("heading", { name: "2K Test" });
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      await screen.findByRole("heading", { name: "Today" });
+      expect(
+        screen.queryByRole("heading", { name: "Set your 2k baseline?" }),
+      ).not.toBeInTheDocument();
+      const log = api.mock.calls.find(([path]) => path === "/api/logs")!;
+      expect(JSON.parse(log[1].body).workoutTitle).toBe("2K Test");
+      expect(
+        api.mock.calls.filter(([path]) => path === "/api/test-history"),
+      ).toHaveLength(0);
+    },
+  );
+  it.each(["timer", "monitor"] as const)(
+    "selected %s rejects a designated linked row when the retained title disagrees",
+    async (source) => {
+      const { testWorkout, run } = designatedTest(source);
+      const retained = { ...run, title: "Stationary Front" };
+      localStorage.setItem(
+        source === "timer" ? RUN_KEY : MONITOR_RUN_KEY,
+        JSON.stringify(retained),
+      );
+      library = { state: "ready", workouts: [testWorkout] };
+      await open(reviewLocation(source, retained.startedAt));
+      await screen.findByRole("heading", { name: "Stationary Front" });
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      await screen.findByRole("heading", { name: "Today" });
+      const log = api.mock.calls.find(([path]) => path === "/api/logs")!;
+      expect(JSON.parse(log[1].body).workoutTitle).toBe("Stationary Front");
+      expect(
+        api.mock.calls.filter(([path]) => path === "/api/test-history"),
+      ).toHaveLength(0);
+    },
+  );
   it.each([
     ["timer", "loading"],
     ["timer", "error"],
@@ -350,6 +395,39 @@ describe("selected recording recovery", () => {
       expect(api).not.toHaveBeenCalled();
     },
   );
+  it.each([
+    ["empty totals", {}],
+    ["missing seconds", { workDistanceMeters: 450 }],
+    ["missing meters", { workElapsedSeconds: 120 }],
+    ["null seconds", { workElapsedSeconds: null, workDistanceMeters: 450 }],
+    ["string meters", { workElapsedSeconds: 120, workDistanceMeters: "450" }],
+    ["boolean seconds", { workElapsedSeconds: true, workDistanceMeters: 450 }],
+  ])(
+    "malformed programmed %s preserves full read-only recording without save",
+    async (_label, totals) => {
+      const run = monitor({ summaryTotals: totals as never });
+      localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+      await open();
+      expect(
+        screen.getByRole("textbox", { name: "Recording data" }),
+      ).toHaveValue(JSON.stringify(run, null, 2));
+      expect(
+        screen.queryByRole("button", { name: "Save" }),
+      ).not.toBeInTheDocument();
+      expect(api).not.toHaveBeenCalled();
+    },
+  );
+  it("a programmed recording without optional machine totals remains saveable", async () => {
+    const run = monitor();
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("heading", { name: "Today" });
+    const body = JSON.parse(api.mock.calls[0]![1].body);
+    expect(body).not.toHaveProperty("machineWorkSeconds");
+    expect(body).not.toHaveProperty("machineWorkMeters");
+    expect(body).not.toHaveProperty("machineSummary");
+  });
   it("programmed monitor discard retires the selected key only and returns to Today", async () => {
     const run = monitor();
     const timer = timerFreeRow();

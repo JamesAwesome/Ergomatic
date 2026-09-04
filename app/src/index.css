@@ -1886,14 +1886,13 @@ button.back-link:disabled,
    real, small "Log it" action (Phase 6C Task 2; F2's original placeholder
    copy, "6C will log it here," is what that action replaces), and — Task 3
    (ui-fix round) — a 44×44 accent-outlined ✕ that arms a staged Discard.
-   Bordered and height-fixed (min-height, not padding-derived) so arming
-   (`.today-unlogged-line-armed`) only recolors the border and swaps the
-   row's own children (Today.tsx's `UnloggedRow`) — never its size or its
-   position in the page, per DESIGN.md's own "row height and position don't
-   move." Fix round 1 (reviewer, row chrome vs mockup.html:164-178):
-   `--surface-sunken` fill (the mockup's own `#efeade`, an exact match) and
-   a 52px min-height — this task's own first pass used 64px and the page
-   background, neither of which the mockup actually specifies. */
+   Arming replaces the row's content with the confirmation question and
+   second tap; its layout follows that content rather than promising a fixed
+   height, border recolor, or page position. Fix round 1 (reviewer, row
+   chrome vs mockup.html:164-178): `--surface-sunken` fill (the mockup's own
+   `#efeade`, an exact match) and a 52px minimum action height — this task's
+   own first pass used 64px and the page background, neither of which the
+   mockup actually specifies. */
 .unsaved-group {
   margin: 0 0 20px;
 }
@@ -2010,12 +2009,6 @@ button.back-link:disabled,
   background: var(--surface-sunken);
   border-color: var(--ink-3);
 }
-@media (max-width: 360px) {
-  .screen {
-    padding-inline: 16px;
-  }
-}
-
 /* Fix round 1 (reviewer, row chrome vs mockup.html:164-178): "Log it"
    is the row's OWN L2-geometry control — ink-bordered, surface-filled,
    44px (the mockup's own literal cell, not this app's full-width 52px

@@ -1483,6 +1483,7 @@ export function TimerSummary({
   const offer = postTestOffer({
     workoutTitle: activeRun.title,
     workoutIsGlobal: libraryWorkout?.isGlobal ?? false,
+    linkedWorkoutTitle: libraryWorkout?.title ?? null,
     avgSplitSeconds: model.heroes.avgSplitSeconds,
     completedFullDistance: isComplete(activeRun),
   });
@@ -2210,6 +2211,7 @@ export function ProgrammedMonitorSummary({
   const monitorOffer = postTestOffer({
     workoutTitle: title,
     workoutIsGlobal: workout?.isGlobal ?? false,
+    linkedWorkoutTitle: workout?.title ?? null,
     avgSplitSeconds: model.heroes.avgSplitSeconds,
     completedFullDistance: monitorRun.endedBy === "finished",
   });

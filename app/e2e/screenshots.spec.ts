@@ -783,8 +783,8 @@ test("today-unlogged", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "today-unlogged.png"),
   });
 
-  // ARMED: the same row's contents swapped in place — border to accent,
-  // the discard question, and a solid "Tap again" replacing Log it/✕.
+  // ARMED: the row's content becomes the discard question and solid
+  // "Tap again" action, replacing Log it/✕ in the approved recovery layout.
   await page.getByRole("button", { name: /Discard Timer workout/ }).click();
   await expect(
     page.getByRole("button", { name: "Tap again to discard" }),
