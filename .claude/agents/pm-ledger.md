@@ -4507,3 +4507,35 @@ does not match these numbers._
   at the tag, no walk owed. The ~1/10 `unit`-project flake is a register
   row, not a merge risk, and is filed with the discriminator that settles
   it (same rate with and without the branch's only `unit` file).
+
+## 2026-09-03 — Correct Resume: need before mechanism
+
+- **James accepted DEFER, not a cheaper reconnect.** After asking whether
+  PR #287's spec was YAGNI, he accepted the PM/controller recommendation by
+  saying "Log the decision". The design and rendered Gate 0 remain research;
+  their earlier approval does not authorize implementation or make reconnect
+  a Wave F exit gate. At James's follow-up request, ROADMAP's explicit Icebox
+  owns the item and its reopen trigger. Wave F has no scheduled implementation
+  left; final closeout review is distinct from building another feature.
+- **Evidence of need is different from evidence that a design is safe.**
+  `docs/monitor/sessions/walk-2026-08-28-codebase-audit/README.md` records
+  a deliberate Bluetooth-off test that kept one completed interval for save;
+  its camera gap recovered without disconnect. The 2026-08-27 lock walk and
+  `walk-2026-09-03-resume-edge/README.md` also record resumed streams. These
+  examples do not establish the incidence of natural unexpected BLE drops,
+  nor prove that those drops never happen. Finishing a roadmap checkbox and
+  sunk design/review effort are not evidence of current product value.
+- **Accepted cost:** after a genuine drop, today's received actuals and
+  eligible held partial remain available through End/save, but subsequent
+  work is not collected into that same record. This is incomplete capture,
+  not whole-workout recovery. Source: `useMonitorSession`'s `disconnected`
+  handler, `endSession` and `closeRecord`; no new recovery capability ships.
+- **Reopen with a real incident, then re-scope.** A diagnostic-backed natural
+  authoritative mid-row drop must demonstrate material inadequacy of that
+  fallback. Mere silence, lock/resume gaps and deliberate radio-off probes
+  do not meet the demand trigger. If reconnect becomes worthwhile, its
+  lifecycle/identity/continuity/no-write safeguards remain essential; stored
+  `MISSED`, explicit trace-break representation, pre-pull and Just Row
+  coverage require their own scope justification. Existing trace time is not
+  wall time, so the three-second split heuristic alone does not prove an
+  explicit discontinuity redundant. No safeguards are waived by deferral.
