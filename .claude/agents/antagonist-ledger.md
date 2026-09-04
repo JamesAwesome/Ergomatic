@@ -7027,3 +7027,16 @@ plan's own tools and never with the REPO's.
   A selected scenario plus a generic ending is also only operator intent, not
   proof its native producer ran; inject that same ending through the wrong
   producer before allowing the criterion to pass.
+
+### 2026-09-04 — Phase NF diagnostic activation repair
+
+- **Held:** positive activity can gate the post-NFC handoff without treating
+  foreground-inactive as background. Believed from the observed abort; settled
+  by tracing UIKit notification call sites, the native state comparison, and
+  asynchronous bridge delivery. Separate OS-reported readiness from an atomic
+  state lease; label contradictory synthetic snapshot/event orders as
+  conditional hardening unless their producer reachability is established.
+- **Held:** cancellation remains drainable when the attempt-owned JS waiter
+  is cancelled synchronously and excluded from native pending operations.
+  Technique: walk terminal transition through the drain's awaited set and
+  distinguish each continuation by its exact attempt identity.
