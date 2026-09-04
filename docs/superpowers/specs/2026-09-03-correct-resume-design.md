@@ -1,4 +1,26 @@
-# Correct Resume — Wave F design
+# Correct Resume — deferred design research
+
+## Status: deferred, not an implementation contract
+
+James accepted the PM's build-now recommendation on 2026-09-03 and asked to
+"Log the decision". Correct Resume is removed from Wave F's implementation and
+exit requirements. Its single backlog owner and reopen trigger are in
+`ROADMAP.md` under "After the strangers"; the rationale and accepted cost are
+in `.claude/agents/pm-ledger.md`, "Correct Resume: need before mechanism".
+
+The proposal below is retained research, not shipped behavior, a binding
+spec, or authorization for the server/client rollout it describes. Its
+imperatives and merge gates apply only to that former proposal. Reopening
+requires a fresh scope decision and design review. The earlier rendered
+Gate 0 approval remains a historical fact, not a build-now decision.
+
+Known unresolved questions from [PR #287's review](https://github.com/JamesAwesome/Ergomatic/pull/287#issuecomment-5534180070)
+include the continuity count-axis handoff, complete ref-lifetime census,
+cleanup deadline headroom, and the production justification for stored gap
+markers. Deferral does not resolve them. If same-row reconnect is later
+chosen, preserve its correctness safeguards and independently justify the
+marker, pre-pull and Just Row scope; do not treat this draft as implementation
+ready because an earlier hardening pass passed.
 
 ## What and why
 
@@ -8,20 +30,17 @@ the in-flight partial reading, and its trace, but it never pretends that the
 PM5 resumed or replayed anything. A background/resume gap or liveness silence
 alone remains a warning, not a reconnect offer.
 
-Gate 0 is cleared: James approved the rendered artifact
+For the original proposal, James approved the rendered artifact
 `docs/superpowers/specs/2026-09-03-correct-resume-gate.html` on 2026-09-03.
 The approval covers the existing red lost banner with RECONNECT / CONNECTING…
 / TRY AGAIN, the pre-pull interstitial with Cancel, Just Row's elapsed-only
 surface, the live Grid's `MISSED` pace cell, and the saved summary's
-`— · MISSED` row. This implementation must not redesign those surfaces.
+`— · MISSED` row. These are proposed surfaces, not shipped capabilities.
 
-This is Wave F's remaining Correct Resume item. It is TRIAD work: it adds two
-optional stored markers and changes the meaning of an interval's displayed
-absence. After this spec PR, an additive server-acceptance PR lands and deploys
-without a client writer; then one cohesive client/driver implementation PR
-lands against that live compatibility boundary. The client PR's candidate build
-passes the hardware gate before merge; a separate closeout record PR then
-commits the walk evidence and closes Wave F.
+The original scope was TRIAD work: two optional stored markers and a change
+to the meaning of an interval's displayed absence. Its server-first rollout,
+client/driver work and hardware gate remain below for future evaluation; none
+is scheduled by this document, and none blocks Wave F's closeout.
 
 ## Evidence and the real-system boundary
 

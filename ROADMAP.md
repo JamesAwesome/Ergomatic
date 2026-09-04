@@ -386,9 +386,9 @@ written up in the spec's own CLOSED section):
 
 - **The PM5 does not advertise while a Just Row is open**, so a generic scan
   cannot discover it mid-row. The spec's "already mid-Just-Row at connect"
-  path remains struck. Correct Resume never scans: it may try the retained
-  same-device route after a proven drop, but if GATT cannot reconnect the honest
-  result is TRY AGAIN and the rower can only log what the app already has.
+  path remains struck. Deferred Correct Resume research considers a retained
+  same-device route after a proven drop, not a scan. That capability is not
+  shipped or scheduled; today the rower can End and log what the app has.
 - **Nothing was observed closing a free row the rower walked away from** — the workout stayed
   active for 896.8 s after the rower stopped, with frames still arriving and
   no auto-terminate — a BOUNDED observation, since the operator ended the
@@ -444,20 +444,20 @@ fixed.
 
 ## Wave F — Lifecycle: the app stops losing rows
 
-**Status:** OPEN — every prerequisite and lifecycle/door slice has shipped;
-Correct Resume is the sole remaining implementation and hardware exit walk.
-Its binding design is
-`docs/superpowers/specs/2026-09-03-correct-resume-design.md`; Gate 0 was
-approved by James on 2026-09-03. **TRIAD** (the persisted MISSED and explicit
-trace-break markers).
+**Status:** OPEN — Correct Resume is deferred by James's 2026-09-03
+build-now ruling; see its single deferred owner under "After the strangers".
+It is no longer a Wave F implementation or exit requirement. This ruling
+does not itself close the phase: the remaining phase-close evidence and
+review must be reconciled against the narrowed exit below.
 **L.** Absorbs the rest of Phase LM, whose PR 1 shipped as #198 / v0.24.0.
 
-**Goal:** a phone in a pocket, a phone that locks, and a link that drops all
-stop costing the rower the row they actually did.
+**Goal:** preserve received work across pocketing, locking and link loss,
+with an honest End/save fallback after a true drop. Continuing collection in
+the same row after that drop is deferred.
 
-**Why it is first:** the pocketed-phone row loss is reproduced on hardware, in
-production, this week. It is the only defect in this file that destroys a
-rower's work silently.
+**Why it was first:** the pocketed-phone row loss was reproduced on production
+hardware in August. The shipped fixes below address that evidence; they do not
+establish demand for same-row Bluetooth reattachment.
 
 - [ ] **The pocketed-phone row: a whole piece rowed and nothing kept.
       RE-DIAGNOSED at the phase-open anchor pass, 2026-08-28.** The outcome is
@@ -576,50 +576,6 @@ rower's work silently.
       place for the next one. The same PR also ships §3 (the resume-edge frame
       instrument) and §6 (the RC-29 latch counter, see that register row).
 
-- [ ] **Correct Resume — SPECCED 2026-09-03.** Binding design:
-      `docs/superpowers/specs/2026-09-03-correct-resume-design.md`; rendered
-      Gate 0 approved by James on 2026-09-03. James's ruling remains
-      **"CORRECT RESUME, not a background mode."** It is one explicit tap
-      only after the base adapter proves Ergomatic's connection down; frame
-      silence, backgrounding, a resume gap and a control-subscription failure
-      alone never offer it, and there is no automatic reconnect. The tap uses
-      the retained base-adapter/device handle to reconnect the same PM5,
-      replaces the connection-bound wrappers and driver, and adopts the open
-      logical session and its run-behavior ledger without scanning, choosing,
-      programming, re-arming or claiming backfill. The old driver is disposed
-      completely; the new generation is quarantined until a fresh complete
-      status set is compatible with the preserved device, structure and run.
-      One mixed status assembly can never close a row; a destructive mismatch
-      must satisfy the spec's measured stability gate. A stable mismatch closes
-      the old row `link-lost` rather than splicing two pieces. **Both persisted
-      markers below are TRIAD. M**
-
-      The logical session, original workout/Just Row descriptor, open
-      `MonitorRun`, confirmed actuals, door PR B's held in-flight reading,
-      continuity baseline and series recorder survive the connection swap.
-      Raw merge caches, liveness-wrapper state, boundary halves, subscriptions,
-      timers and pending waits do not. The first stored sample after a real gap
-      may carry `breakBefore?: true`, forcing the existing chart to start a new
-      segment; no missing frame or interval value is interpolated. A proven
-      interior interval gap may store
-      `missedIntervalIndexes?: number[]` and project `missed?: true`, rendering
-      `— · MISSED` only after an authorized same-run reattach accepts a later
-      normalized actual. A blank row alone proves nothing, a later actual wins,
-      a partial wins next, and historical holes remain bare dashes.
-
-      This also owns the pre-first-pull case: the arm descriptor exists before
-      a `MonitorRun` opens, so a genuine disconnect can reattach without
-      sending the workout or beginning another free row. WebContent reload is
-      outside the lifetime of this mechanism. Implementation first lands and
-      deploys an additive server-acceptance PR with no writer, then one cohesive
-      client/driver PR against that live boundary; client rollback deliberately
-      leaves the tolerant server deployed. The client PR's merge gate is the
-      spec's hardware walk proving healthy lock, true-drop/reconnect and Cancel
-      before first pull, background-without-disconnect, real mid-piece and
-      across-boundary drops, and a retained Just Row attempt. A base-layer,
-      per-generation counter—not driver logs—must prove zero programming,
-      Prepare, Terminate, Just Row, sample-rate, or other writes on reattach. A
-      closeout record PR follows and closes Wave F.
 - [x] **The `door` item — RE-SCOPED 2026-09-02, spec
       `docs/superpowers/specs/2026-09-02-door-partial-design.md`.** The
       column itself SHIPPED as `session_logs.source` (`pm5 | timer |
@@ -705,13 +661,12 @@ rower's work silently.
       **PR #279.**
       On a single-interval workout — the tester's own 2000 m "Beam Sea" — any
       mid-row loss gives `kept = 0`, which was the MAJORITY outcome of walk
-      leg B, not an oddity. **Correct Resume preserves this held reading across
-      its connection swap; it does not recover anything the app did not
-      receive.** The current `connect()` and `teardown()` clears are therefore
-      forbidden on the reattach path. A later confirmed actual supersedes the
-      partial; otherwise the latest held pair remains the honest lower bound.
-      Discharged 2026-09-03 rather than struck: the sentence bound
-      independently of the tick. **S**
+      leg B, not an oddity. **The held reading survives today's End/save path;
+      same-row reconnect is deferred, not shipped by this item.** If that work
+      reopens, it must preserve this reading without recovering anything the
+      app never received; generic `connect()`/`teardown()` clears cannot be
+      reused blindly. A later confirmed actual supersedes the partial;
+      otherwise the latest held pair remains the honest lower bound. **S**
       **SPECCED as `2026-08-31-lifecycle-design.md` §5, and SEQUENCED BEHIND
       THE `door` COLUMN above.** The live-drop arm (§1) inherits this
       directly: banking "what was rowed" banks nothing when no boundary was
@@ -975,14 +930,17 @@ saves three round trips.
       (`docs/history/phase-rc.md:2054-2056`). Wording softened at door
       PR A's PM gate.
 
-**Exit:** a phone locked before the first pull, a phone backgrounded mid-piece,
-and a true link drop mid-piece each preserve one logical row. A confirmed drop
-offers one same-PM5 tap; mere silence/background does not. The stored row keeps
-every machine reading the app received, identifies the `pm5` door, and marks a
-proven unseen interval `MISSED` without inventing a number; the hardware walk
-also proves the reconnect path sent no programming/re-arm command. The door
-clause is delivered by `session_logs.source` (`pm5 | timer | manual`, NOT NULL,
-backfilled), including the no-reading word shipped by door PR A.
+**Exit (narrowed by James, 2026-09-03):** a phone locked before the first pull
+and a phone backgrounded mid-piece preserve the logical row under the shipped
+lifecycle rules. A true link drop mid-piece preserves received actuals and the
+eligible held partial for End/save, identifies the `pm5` door, and reports the
+incomplete result without inventing measurements. No same-row reconnect or
+`MISSED`/trace-break writer is required. After a true drop the app does not
+collect subsequent work into that row; this is the accepted cost of deferral,
+not a claim of whole-workout recovery. The door clause is delivered by
+`session_logs.source` (`pm5 | timer | manual`, NOT NULL, backfilled), including
+the no-reading word shipped by door PR A. The phase-close gate still verifies
+these outcomes; deferral is not a passing walk or permission to close the wave.
 
 The storage clause is deliberately narrower: while this process remains alive,
 a rejected durable hand-off write never silently downgrades a measured session;
@@ -1906,8 +1864,8 @@ to lose the row has no move except to walk away.
 | **The landscape gutter**                   | The phone timer's landscape gutter absorbs no left inset                                                                                                                                                                                                                                                                                                                                                                                                       | `phase-cr2.md`               |
 | **iOS 26 `100dvh`**                        | Under `viewport-fit=cover`. Wave D's native fake flag is what makes this answerable at a desk                                                                                                                                                                                                                                                                                                                                                                  | `phase-cr2.md`               |
 | **`PULL TO RESUME`**                       | James, 2026-08-17: _"we never got rid of the pull to resume screen."_ CR2 2a task 5 only re-worded it; **the screen was supposed to go, not get politer.** §2b's suspected mechanism was FALSIFIED (zero PAUSED firings across six captures) and the flash's real mechanism is unexplained. Pairs with the stale-while-armed observation                                                                                                                       | `phase-cr2.md`               |
-| **Reconnect's three preconditions**        | Plus the prerequisite from #183's gate: any reconnect design must reset or quarantine `lastContinuityRef`'s count axis across a re-subscribe, or the first post-resubscribe 0x0033 convicts a healthy row on a stale register                                                                                                                                                                                                                                  | `phase-ll.md`                |
-| **Two declined CR questions**              | Projected finish split; distance intervals with a rate cap. Each waits on a hardware fact. Reconnect backfill is settled by the Correct Resume design: never backfill; mark only a proven unseen interval `MISSED`.                                                                                                                                                                                                                                                | `phase-cr.md`                |
+| **Reconnect's three preconditions**        | Constraints on the deferred Correct Resume entry, not separate scheduled work. #183's gate requires a reconnect design to reset or quarantine `lastContinuityRef`'s count axis across a re-subscribe; preserving the old baseline without that policy is unresolved. | Correct Resume research, "Status: deferred, not an implementation contract" |
+| **Two declined CR questions**              | Projected finish split; distance intervals with a rate cap. Each waits on a hardware fact. Reconnect belongs to the deferred Correct Resume entry, not this row; its research does not authorize backfill or a MISSED writer. | `phase-cr.md`                |
 | **LL-F4**                                  | The `disconnected` handler records no liveness snapshot where `fail()` does, so a retry's ring has one fewer data point                                                                                                                                                                                                                                                                                                                                        | `phase-ll.md`                |
 | **Connection-log text is unselectable**    | `user-select: none` inherits into the sheet (`index.css:85`, `:5799`); COPY LOG is the only route out                                                                                                                                                                                                                                                                                                                                                          | `phase-cs.md`                |
 | **The bar's two axes**                     | The connected bar's fill and its notches are two axes on DISTANCE work; EST LEFT holds still 6.6 s and 20.8 s at handovers. **The obvious repair was replayed and does not work.** Accepted and documented. **TRIAD** when it is taken                                                                                                                                                                                                                         | `phase-cr2.md`               |
@@ -2335,6 +2293,15 @@ Each needs erg time or a deliberate recording session.
 Deferred, not killed. One line and one trigger each. No exits and no sizes — a
 trigger is the whole entry.
 
+- **Correct Resume — deferred by James, 2026-09-03.** **Trigger:** a
+  diagnostic-backed, naturally occurring authoritative mid-row link drop
+  demonstrates that today's End/save fallback materially fails the rower.
+  Lock/resume gaps and deliberate radio-off probes do not establish demand.
+  Rationale and accepted incomplete-capture cost: `.claude/agents/pm-ledger.md`,
+  "Correct Resume: need before mechanism". The former spec
+  `docs/superpowers/specs/2026-09-03-correct-resume-design.md` and Gate 0 are
+  retained research, not implementation authority; re-scope and approve afresh
+  at the trigger. Not gated on Wave A finishing if the incident arrives sooner.
 - **Phase PS — personal stats.** The app's stated purpose, and it matters most
   at day 30 and least at day 1: a stranger has no history to trend. **Trigger:**
   a tester has enough history for a trend to be honest. Carries a live hazard
