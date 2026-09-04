@@ -593,7 +593,10 @@ backfill (house pattern):
   captured at save. Exists because C2's `date` is LOCAL wall-clock with
   `timezone` as a first-class POST parameter, and nothing in this repo
   stores any zone today — without it a 7pm Pacific row files on the
-  wrong calendar day.
+  wrong calendar day. **The two routes that validate it answer a bad zone
+  DIFFERENTLY, on purpose** (PR2 Task 6): `POST /api/logs` DEGRADES —
+  stores null, saves the row — while the upload route keeps its strict
+  `400 field:"tz"`. See the product rule stated under the mapping table.
 
 Tokens are plain columns in our Postgres, the same trust boundary every
 credential this app holds already lives behind; at-rest encryption with
@@ -618,16 +621,32 @@ shape for the follow-on.
 | C2 field | source | notes |
 | --- | --- | --- |
 | `type` | literal `"rower"` | |
-| `date` | `completed_at` rendered as local wall-clock in `tz`, `yyyy-mm-dd hh:mm:ss` | fallback for legacy rows (null `completed_at`/`tz`): `logged_at` rendered in the zone the UPLOAD request supplies, which the route PERSISTS onto the row's `tz` column on first use so every later retry reads the same stored zone and renders one stable date (plan deviation 2) — C2's dedup key is second-granular (PR0 probe C), so an unstable zone would file a SECOND C2 row instead of hitting the 409 recovery |
+| `date` | `completed_at` rendered as local wall-clock in `tz`, `yyyy-mm-dd hh:mm:ss` | **The paired branch went LIVE with PR2's client producer** (`src/session/completionStamp.ts`, spread into the save body at both monitor doors), which is when this row stopped describing an intention: before it, the "fallback" below was the ONLY path any row could take. "Legacy" therefore means a row saved by a build predating PR2, and the two are distinguishable in the database by `completed_at IS NULL` — permanently, because the close instant was never recorded and no backfill can invent one. Fallback for those rows: `logged_at` rendered in the zone the UPLOAD request supplies, which the route PERSISTS onto the row's `tz` column on first use so every later retry reads the same stored zone and renders one stable date (plan deviation 2) — C2's dedup key is second-granular (PR0 probe C), so an unstable zone would file a SECOND C2 row instead of hitting the 409 recovery |
 | `timezone` | `tz` | first-class C2 POST parameter |
 | `distance` | `work_meters` | work-only (V12) |
 | `time` | `round(work_seconds * 10)` | tenths; safe at the doublePrecision boundary (V8: sums of tenths carry ~1e-12 vs a 0.05 margin; a true half-tenth cannot arise from summing tenths) |
-| `weight_class` | READ FROM CONCEPT2 at send time (2026-09-03 ruling), never stored by us: the rower's own most recent DECLARATION first (`GET /api/users/me/results`, newest entry reading H or L), our derivation from `GET /api/users/me`'s `weight` + `gender` second | derivation thresholds are inclusive, men ≤ 75 kg, women ≤ 61.5 kg, behind a plausibility band; when neither producer answers the send refuses `422 {error:"no_weight_class", reason}` with four reason tokens (`no_weight`, `unreadable_weight`, `implausible_weight`, `no_gender`) and the rower is sent to their Concept2 account. A fresh send's 200 carries `weightClass` and `weightClassSource`, which the SENT state renders |
+| `weight_class` | READ FROM CONCEPT2 at send time (2026-09-03 ruling), never stored by us: the rower's own most recent DECLARATION first (`GET /api/users/me/results`, newest entry reading H or L), our derivation from `GET /api/users/me`'s `weight` + `gender` second | derivation thresholds are inclusive, men ≤ 75 kg, women ≤ 61.5 kg, behind a plausibility band; when neither producer answers the send refuses `422 {error:"no_weight_class", reason}` with four reason tokens (`no_weight`, `unreadable_weight`, `implausible_weight`, `no_gender`) and the rower is sent to their Concept2 account. A fresh send's 200 carries `weightClass` and `weightClassSource`, and the send's log line records which producer answered; **no rower-facing surface renders either** (2026-09-04 ruling, §Rulings above — this sentence replaces one that said the SENT state does) |
 | `workout_type` | `machineSummary.workoutType` (flat — see below), the PM5's OWN decoded value, mapped ordinal → C2 enum string; OMITTED when absent or unmapped | anchor F6: rev 1 derived a constant from our programming call (`commands.ts:158` sets `WORKOUTTYPE_VARIABLE_INTERVAL` unconditionally — that describes US, not the workout), and its JustRow branch modeled a state the app cannot yet produce. The machine's field is also the only one that can ever satisfy `verification_code`'s match rule. Field is optional; omission is honest |
 | `rest_time` | `round(rest_seconds * 10)` when > 0 | "Depends: for interval workouts only" |
 | `rest_distance` | `rest_meters` when > 0 | |
 | `stroke_rate` | `machineSummary.avgStrokeRate` — **flat, depth one** | anchor K2: rev 1 wrote `machineSummary.summaryDetail.avgStrokeRate`, a path NO stored row has — the writer (`LogSession.tsx:1863-1878`) SPREADS `summaryDetail` flat, corroborated by the schema comment, the integration fixture, and `logs.ts`'s depth-one SQL projection. Band-checked by the upload route (the blob is unvalidated at save — anchor F7); omitted when absent/out-of-band. RC-16's 2× anomaly is terminate-only and terminated rows are ineligible |
 | `comments`, `heart_rate`, `stroke_data`, `workout`, `verification_code` | OMITTED | stroke_data blocked on RC-11's clock mismatch; intervals blocked on per-interval rest; verification moot until the date mapping is proven (K3) and probed at PR0 |
+
+**A Concept2 field can never cost a rower their row.** The product rule
+behind the `date`/`timezone` mapping, stated here rather than only in a code
+comment, because the next person to tighten a validator has to meet it. Zone
+validation is membership of the SERVER IMAGE's own
+`Intl.supportedValuesOf("timeZone")`, and a phone's tzdata legitimately
+disagrees with a server image's across a release
+(`Europe/Kyiv`/`Europe/Kiev`). So the two routes answer a bad zone
+differently and neither is an oversight: `POST /api/logs` DEGRADES the zone
+to null and saves the workout, because refusing there destroys the rower's
+own record over a field that exists only to date a THIRD PARTY's copy of it;
+the upload route keeps its strict `400 field:"tz"`, because a refusal there
+costs one Concept2 send and nothing else. The degrade costs nothing about
+the date itself — the upload route resolves `effectiveTz` (stored zone, else
+the upload request's own, persisted on first use) and never reads the raw
+column.
 
 **Eligibility** (server-enforced, one predicate, one place): row belongs
 to caller AND monitor provenance AND `ended_by = 'finished'` AND

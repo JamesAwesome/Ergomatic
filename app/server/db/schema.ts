@@ -562,9 +562,11 @@ export const concept2Links = pgTable("concept2_links", {
   // would destroy links on a server bug or a rotated C2_CLIENT_SECRET.
   // With this flag a misclassified status costs a re-consent prompt,
   // never the link itself. (Wave E PR2, ruling i: it used to cost the
-  // stored weight class as well. There is no stored class any more — it
-  // is read from Concept2's profile at send time — so re-consent is the
-  // whole cost now.)
+  // stored weight class as well. There is no stored class any more — it is
+  // read FROM CONCEPT2 at send time, the rower's own most recent
+  // declaration first and the profile's weight+gender only as a fallback
+  // (this comment used to name the profile alone, which is the wrong
+  // producer) — so re-consent is the whole cost now.)
   // Cleared by the callback's upsert on successful relink. Measured
   // grounds: docs/monitor/c2-crossconnect-2026-09/refresh-probe-2026-08-31.md.
   needsReauthAt: timestamp("needs_reauth_at", { withTimezone: true }),

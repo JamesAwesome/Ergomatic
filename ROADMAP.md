@@ -1264,7 +1264,8 @@ closed with zero Concept2 contact.
       gated on Concept2's write approval; live-portal registration of the
       native redirect under the application name "Ergomatic" (log-dev is
       registered under James's own name — D3 pre-check observation,
-      `94b83c84`); PR2's surface + its Gate 0 identity-copy amendment; the
+      `94b83c84`); the weight-unit desk reading that bounds the fallback
+      producer (PR2's row below); the
       `describeStoreContracts` gap named at 1.75a
       (`2026-09-02-concept2-pr175a-server.md:44`); and a decision for
       James, not made here: whether to promote the app-wide bearer/cookie
@@ -1272,7 +1273,7 @@ closed with zero Concept2 contact.
       that this walk measured 42/42 native requests cookie-free. Until
       decided, the app-wide path only logs `auth_disagreement` and
       `/api/concept2/*` alone refuses.
-- [ ] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
+- [x] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
       (Connect + Unlink; it asks nothing) and the log row's Send action with
       sent/duplicate/failed states and a View-on-Concept2 link-out. **M**
       Also carries the 2026-09-03 weight-class ruling: migration 0023 drops
@@ -1281,9 +1282,38 @@ closed with zero Concept2 contact.
       DECLARATION first (Concept2's help: "you must designate L or H for
       every piece that you enter"), our derivation from the profile's
       `weight`+`gender` as a fallback, a 422 the rower can act on when
-      neither answers. Never stored, never cached; the SENT state names the
-      class and which producer supplied it. **TRIAD** (stored shape + what a
-      number means on a third party's record).
+      neither answers. Never stored, never cached, and **since the
+      2026-09-04 ruling ("Stop talking about the weight class") no
+      rower-facing surface names the class or its producer** — this line
+      used to say the SENT state did; the class and `weightClassSource` stay
+      on the route's 200 and in the send's log line, for an operator.
+      **TRIAD** (stored shape + what a number means on a third party's
+      record).
+      **Follow-ons this PR names, recorded here rather than in its body
+      (RF14):**
+      - **A real fake-Concept2 service for e2e** — declined by ruling (v).
+        The e2e stack is C2-dark by construction and a committed CI test
+        enforces it (`scripts/compose-env.test.sh`), so PR2's browser flows
+        fake the server's answers with Playwright `page.route`: they prove
+        the CLIENT's states, never the web OAuth hop. A compose service, its
+        image and an OAuth-shaped fake are a PR of their own.
+      - **The weight-unit DESK leg, and the logged-in glance with it.** The
+        FALLBACK producer derives from a `weight` field whose UNIT is an
+        inference; the plausibility band refuses four of the six wrong
+        readings but cannot catch hundredths-of-a-pound. Two readings settle
+        it (the profile's unit preference on kg, then on lb), and the same
+        session answers which Concept2 page actually carries the weight and
+        weight-class fields — 2i's link-out target is provisional until it
+        does. **No erg, no phone: a desk step, and it gates the FLAG FLIP,
+        not this merge.** Stated as an exit criterion below as well.
+      - **Delete versus sent, unstated to the rower** (Task 7's RF23
+        enumeration). Deleting a row that is already on Concept2 leaves the
+        Concept2 row standing. That matches the unlink copy's position, and
+        nothing says so at the delete confirm.
+      - **Rows saved before PR2 carry `completed_at IS NULL`, permanently.**
+        They will always upload with their SAVE clock as Concept2's date.
+        There is no backfill and there cannot be one — the close instant was
+        never recorded. A known property of pre-PR2 rows, not a bug.
 - [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open and
       RE-RULED 2026-09-03: the `weight_class` gate is answered by Concept2,
       not by the link flow. James: "I don't want that set in our app. I want
