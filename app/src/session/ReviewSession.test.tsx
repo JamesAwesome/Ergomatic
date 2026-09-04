@@ -61,6 +61,19 @@ function monitor(over: Partial<MonitorRun> = {}): MonitorRun {
     ...over,
   };
 }
+function summaryDetail(): NonNullable<MonitorRun["summaryDetail"]> {
+  return {
+    avgStrokeRate: 24,
+    endingHeartRateBpm: null,
+    avgHeartRateBpm: 144,
+    minHeartRateBpm: 128,
+    maxHeartRateBpm: 163,
+    dragFactorAverage: 118,
+    workoutType: 1,
+    recoveryHeartRateBpm: null,
+    avgPaceSecondsPer500m: 133.3,
+  };
+}
 function timerFreeRow() {
   return advance(
     {
@@ -183,6 +196,24 @@ async function open(
   );
   const result = render(view());
   return { ...result, refresh: () => result.rerender(view()) };
+}
+
+async function expectProgrammedReadOnly(run: MonitorRun) {
+  localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+  await open();
+  expect(screen.getByRole("textbox", { name: "Recording data" })).toHaveValue(
+    JSON.stringify(run, null, 2),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Save" }),
+  ).not.toBeInTheDocument();
+  expect(api).not.toHaveBeenCalled();
+}
+
+function corruptActual(run: MonitorRun, field: string, value: unknown): void {
+  const actual = run.actuals[0] as unknown as Record<string, unknown>;
+  if (value === undefined) delete actual[field];
+  else actual[field] = value;
 }
 
 describe("selected recording recovery", () => {
@@ -427,6 +458,128 @@ describe("selected recording recovery", () => {
     expect(body).not.toHaveProperty("machineWorkSeconds");
     expect(body).not.toHaveProperty("machineWorkMeters");
     expect(body).not.toHaveProperty("machineSummary");
+  });
+  it.each([
+    [
+      "a missing actual index",
+      (run: MonitorRun) => corruptActual(run, "index", undefined),
+    ],
+    [
+      "a string actual elapsed time",
+      (run: MonitorRun) => {
+        corruptActual(run, "elapsedSeconds", "120");
+      },
+    ],
+    [
+      "a string actual distance",
+      (run: MonitorRun) => {
+        corruptActual(run, "distanceMeters", "450");
+      },
+    ],
+    [
+      "a boolean actual split",
+      (run: MonitorRun) => {
+        corruptActual(run, "avgSplit", true);
+      },
+    ],
+    [
+      "a string actual stroke rate",
+      (run: MonitorRun) => {
+        corruptActual(run, "avgSpm", "24");
+      },
+    ],
+    [
+      "a boolean actual heart rate",
+      (run: MonitorRun) => {
+        corruptActual(run, "avgHeartRateBpm", false);
+      },
+    ],
+    [
+      "a null present rest distance",
+      (run: MonitorRun) => {
+        corruptActual(run, "restDistanceMeters", null);
+      },
+    ],
+    [
+      "a string present rest duration",
+      (run: MonitorRun) => {
+        corruptActual(run, "restSeconds", "6");
+      },
+    ],
+    [
+      "a boolean present interval type",
+      (run: MonitorRun) => {
+        corruptActual(run, "type", true);
+      },
+    ],
+  ])(
+    "programmed recording with %s stays read-only",
+    async (_label, corrupt) => {
+      const run = monitor();
+      corrupt(run);
+      await expectProgrammedReadOnly(run);
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(JSON.stringify(run));
+    },
+  );
+  it.each([
+    ["average stroke rate", "avgStrokeRate", "24"],
+    ["ending heart rate", "endingHeartRateBpm", false],
+    ["average heart rate", "avgHeartRateBpm", "144"],
+    ["minimum heart rate", "minHeartRateBpm", true],
+    ["maximum heart rate", "maxHeartRateBpm", "163"],
+    ["drag factor", "dragFactorAverage", false],
+    ["workout type", "workoutType", "1"],
+    ["recovery heart rate", "recoveryHeartRateBpm", true],
+    ["average pace", "avgPaceSecondsPer500m", "133.3"],
+  ])(
+    "programmed recording with a malformed summary %s stays read-only",
+    async (_label, field, value) => {
+      const run = monitor({ summaryDetail: summaryDetail() });
+      (run.summaryDetail as unknown as Record<string, unknown>)[field] = value;
+      await expectProgrammedReadOnly(run);
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(JSON.stringify(run));
+    },
+  );
+  it.each([
+    ["a fractional verification byte", [1, 2.5]],
+    ["a string verification byte", [1, "2"]],
+  ])(
+    "programmed recording with %s stays read-only",
+    async (_label, verificationBytes) => {
+      const run = monitor({ verificationBytes: verificationBytes as never });
+      await expectProgrammedReadOnly(run);
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(JSON.stringify(run));
+    },
+  );
+  it("programmed optional observations retain their supported null and absent forms", async () => {
+    const actual = monitor().actuals[0]!;
+    const detail = summaryDetail();
+    const run = monitor({
+      actuals: [
+        {
+          ...actual,
+          index: null,
+          avgSplit: null,
+          avgSpm: null,
+          avgHeartRateBpm: null,
+          restDistanceMeters: undefined,
+          restSeconds: undefined,
+          type: undefined,
+        },
+      ],
+      summaryTotals: { workElapsedSeconds: 120, workDistanceMeters: 450 },
+      summaryDetail: detail,
+      verificationBytes: [0, 31, 255],
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("heading", { name: "Today" });
+    expect(JSON.parse(api.mock.calls[0]![1].body)).toMatchObject({
+      machineWorkSeconds: 120,
+      machineWorkMeters: 450,
+      machineSummary: { ...detail, verificationBytes: [0, 31, 255] },
+    });
   });
   it("programmed monitor discard retires the selected key only and returns to Today", async () => {
     const run = monitor();
