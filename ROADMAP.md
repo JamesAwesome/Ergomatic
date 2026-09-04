@@ -1821,32 +1821,47 @@ in both orientations.**
   Evidence: the 2026-08-31 Log-detail photograph; `traceModel.ts`'s own
   header ("NEITHER `t` NOR `d` IS A WORK-ONLY QUANTITY").
 
-## The unlogged-session door (post-Wave F, unopened)
+## The unlogged-session door
 
-**Status:** filed by James on 2026-09-01, on the phone; NOT in Wave F, which
-is in motion. Opens after Wave F, with a design gate (user-visible copy and
-layout). **S–M.** Not triad unless (b) below changes when a record retires.
+**Status:** OPEN at James's request, 2026-09-03; design approval pending.
+The September 1 item is pulled forward, not another Wave F mechanism.
+One coherent PR after rendered Gate 0 approval; no implementation yet.
+[Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)
+and [comparison](docs/superpowers/specs/2026-09-03-unlogged-session-gate.html).
+**S–M.** Full cycle; non-TRIAD only while retirement, stored shapes and
+recorded-number semantics remain unchanged.
 
 **What and why:** Connect showed "You have an unlogged session. Connecting
 discards it." and the dialog offered Cancel and Connect anyway — nothing to
 VIEW what the session holds, and no way to log it. A rower who does not want
 to lose the row has no move except to walk away.
 
-- [ ] **A rower with an unlogged session can only discard it.** What the
-      code offers today: the guard dialog (`ConnectAction.tsx:159`) never
-      says WHERE the session lives; Today renders a recovery row for a
-      finished `SessionRun` (`UnloggedRow`) and for an OPEN or Just Row
-      `MonitorRun` (`UnloggedMonitorRow`), but a COMPLETED, PROGRAMMED
-      `MonitorRun` is ruled out of that row on the theory that "7C's own log
-      path already owns" it (`Today.tsx:647-651`) — a path that exists only
-      on the arrival WorkoutDetail navigates to at finish, so after a reload
-      or a navigation away that record has no door at all (INFERENCE from
-      those comments; not reproduced on hardware). Owed: (a) establish which
-      record James's dialog was staged on — `connectGuardStage`
-      (`monitorRun.ts:1544`) stages the same sentence for three shapes;
-      (b) a way to see the unlogged session's contents and log it, from the
-      dialog or from Today, for every shape the guard can stage; (c) the
-      dialog names the way there instead of a bare Cancel.
+- [ ] **Approve the rendered recovery path.** Today exposes retained work
+      above suggestions; Start/Connect/Just Row warnings offer View unsaved
+      without discarding. Both orientations, long titles and both phone and
+      monitor records. No new queue or automatic save.
+- [ ] **Close the completed-programmed PM5 hole.** At c5015c2e,
+      `Today.tsx:1529` hides these records while guards protect them;
+      `Today.test.tsx:2701` explicitly pins the omission. Re-enter the PM5
+      summary, never the manual form. James's precise retained record remains
+      uncaptured; the source/test-confirmed gap is sufficient to open repair,
+      not proof of that incident's exact record shape.
+- [ ] **Resolve every other guarded shape honestly.** Deleted library
+      workouts, null-id non-Just-Row records and legacy/invalid frozen seeds
+      cannot use the existing save route. Their review/recovery treatment is
+      a pre-implementation decision, not a claimed or accepted fix.
+- [ ] **Keep the recovery destination usable.** Local records must remain
+      visible when Today's unrelated requests stall/fail (`Today.tsx:437`).
+      Two retained Just Row sources must each open the selected recording,
+      not the current newer-timestamp choice (`JustRowLog.tsx:108`). The
+      second is a defensive coexistence case, not an observed normal flow.
+      These expand the opening to routing design; render and approve the
+      error/loading treatment and resolve selection lifetime before building.
+- [ ] **Prove preservation across the path.** Production writer to warning
+      to Today to PM5 summary to saved history; failed-save retry, cold-start
+      hydration, both records, and View canceling Connect's staged replacement.
+      Preserve existing save/discard/replacement retirement. Native walk and
+      phase-close review before exit.
 
 ---
 

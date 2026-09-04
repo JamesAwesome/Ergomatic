@@ -7015,3 +7015,30 @@ plan's own tools and never with the REPO's.
   provenance, confirmed local-disconnect authority, explicit series breaks,
   retained same-device routes, and the MISSED producer/server/reader seam
   survived the attack.
+
+## 2026-09-03 — Unlogged-session door, phase-open anchor
+
+- **“Putting retained records on Today makes them reachable” missed the
+  destination’s prerequisite requests.** Local snapshots exist before Today
+  returns loading/error screens for unrelated plan, preference, baseline and
+  history fetches. **Technique:** trace every early return between the local
+  reader and its rendered recovery control; a working destination route is
+  not proof that its local content can render.
+- **“Each displayed row can reuse the existing Just Row save route” failed
+  selected-record identity.** Both sources navigate to one route whose
+  consumer chooses the newer completion timestamp, regardless of the row
+  selected. Coexistence is a defensive, violated-invariant state, not a proven
+  normal producer. **Technique:** give sibling records different identities
+  and trace each affordance through the destination’s actual selection rule;
+  deterministic recency is not deterministic user intent.
+- **The dual-record design’s discard confirmation named the first record
+  even when the second was selected.** A shared title variable survived the
+  per-row render. **Technique:** exercise every destructive sibling against
+  distinct titles and sources; a correctly labelled trigger does not prove
+  its confirmation names the same subject.
+- **VETTED GROUND:** the completed-programmed Today exclusion is real;
+  explicit monitor-route intent and frozen-seed validation preserve existing
+  programmed provenance; missing-library/legacy recovery remains a
+  pre-implementation decision; View can cancel existing staged authorization
+  without inventing device state, reconnect behavior, or another session
+  lifetime.

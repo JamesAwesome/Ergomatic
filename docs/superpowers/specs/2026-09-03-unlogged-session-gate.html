@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Unsaved workouts — design approval</title>
+    <link
+      rel="stylesheet"
+      href="../../../app/node_modules/@fontsource/newsreader/500.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../../app/node_modules/@fontsource/archivo/400.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../../app/node_modules/@fontsource/archivo/600.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../../app/node_modules/@fontsource/ibm-plex-mono/400.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../../app/node_modules/@fontsource/ibm-plex-mono/600.css"
+    />
+    <link rel="stylesheet" href="../../../app/src/theme/tokens.css" />
+    <link rel="stylesheet" href="../../../app/src/index.css" />
+    <style>
+      /* Design-only document. No application code or storage access. */
+      .gate {
+        max-width: 1000px;
+        margin: auto;
+        padding: 28px 24px 64px;
+      }
+      .gate h1 {
+        font: 500 38px/1.1 var(--font-serif);
+        margin: 0 0 12px;
+      }
+      .gate p {
+        max-width: 72ch;
+        line-height: 1.5;
+        color: var(--ink-2);
+      }
+      .gate .eyebrow {
+        font: 12px var(--font-mono);
+        color: var(--ink-3);
+      }
+      .gate-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 22px 0;
+      }
+      .gate-controls label {
+        display: grid;
+        gap: 6px;
+        font-size: 13px;
+      }
+      .gate-controls select {
+        min-height: 44px;
+        padding: 8px;
+        font: 16px var(--font-sans);
+        background: var(--surface);
+        color: var(--ink);
+        border: 1px solid var(--ink-3);
+        border-radius: var(--radius);
+      }
+      .gate-pair {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        align-items: flex-start;
+      }
+      .gate-frame {
+        margin: 0;
+        max-width: 100%;
+        overflow-x: auto;
+      }
+      .gate-frame figcaption {
+        padding: 10px 0;
+        font: 13px var(--font-mono);
+        color: var(--ink-3);
+      }
+      .gate-frame iframe {
+        display: block;
+        border: 1px solid var(--rule-3);
+        width: 392px;
+        height: 846px;
+        background: var(--page);
+      }
+      .gate-pair.landscape iframe {
+        width: 846px;
+        height: 392px;
+      }
+      .gate-status {
+        min-height: 44px;
+        border-left: 3px solid var(--ink-3);
+        padding: 10px 14px;
+        background: var(--surface-sunken);
+      }
+      .gate table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+      }
+      .gate th,
+      .gate td {
+        text-align: left;
+        padding: 9px;
+        border-bottom: 1px solid var(--rule);
+      }
+      .gate details {
+        margin-top: 24px;
+      }
+      .gate summary {
+        cursor: pointer;
+        padding: 12px 0;
+        min-height: 44px;
+      }
+      .gate a {
+        color: var(--accent);
+      }
+      /* Proposed additions only. All other screen styles are the actual app CSS. */
+      .unsaved-group {
+        margin: 0 0 20px;
+      }
+      .unsaved-heading {
+        margin: 0 0 8px;
+        font: 12px var(--font-mono);
+        color: var(--ink-3);
+        letter-spacing: 0.08em;
+      }
+      .unsaved-row {
+        padding: 12px;
+        border: 1px solid var(--rule);
+        border-radius: var(--radius);
+        background: var(--surface-sunken);
+        margin: 0 0 8px;
+      }
+      .unsaved-title {
+        font-size: 16px;
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .unsaved-meta {
+        font-size: 13px;
+        margin: 6px 0 12px;
+        color: var(--ink-3);
+      }
+      .unsaved-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .unsaved-actions .today-unlogged-link {
+        flex: 1;
+      }
+      .unsaved-warning-title {
+        font-size: 17px;
+        margin: 0 0 8px;
+      }
+      .unsaved-warning-copy {
+        font-size: 14px;
+        line-height: 1.45;
+        margin: 0 0 12px;
+        color: var(--ink-2);
+      }
+      .unsaved-review {
+        display: flex;
+        width: 100%;
+        min-height: 48px;
+        align-items: center;
+        justify-content: center;
+        background: var(--surface);
+        color: var(--ink);
+        font: 600 16px var(--font-sans);
+        border: 1px solid var(--ink);
+        border-radius: var(--radius);
+        cursor: pointer;
+      }
+      .unsaved-secondary {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .unsaved-secondary button {
+        flex: 1;
+      }
+      .unsaved-secondary .unsaved-replace {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .gate-detail-context {
+        margin: 16px 0 0;
+        padding: 14px 0;
+        border-block: 1px solid var(--rule);
+      }
+      .gate-detail-context p {
+        margin: 4px 0;
+      }
+      .gate-frame-note {
+        font: 12px var(--font-mono);
+        color: var(--ink-3);
+        margin-top: 20px;
+      }
+      @media (max-width: 360px) {
+        .screen {
+          padding-inline: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="gate-root"></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const root = document.getElementById("gate-root");
+      const isFrame = params.get("frame") === "1";
+      const screenName = params.get("screen") || "today";
+      const proposed = params.get("version") !== "before";
+      const safeTitle =
+        params.get("long") === "1"
+          ? "Hoarfrost — long steady intervals before the next head race"
+          : "Hoarfrost";
+      const nav = `<nav class="tabbar" aria-label="Main">${["TODAY", "NEWS", "LIBRARY", "PLAN", "YOU"].map((label, i) => `<a href="#" class="tab ${i === 0 ? "tab-active" : ""}" data-prototype="Navigation is unchanged."><span class="tab-mark" data-active="${i === 0}" aria-hidden="true"></span>${label}</a>`).join("")}</nav>`;
+      const suggestion = `<div class="today-suggestion-header"><span class="mono-status">SUGGESTED</span><div class="today-suggestion-actions"><button class="button-outline filter-trigger" data-prototype="Filtering is unchanged.">FILTER ⌄</button><button class="button-outline filter-trigger" data-prototype="Shuffling is unchanged.">SHUFFLE ↻</button></div></div><a class="today-card" href="#" data-prototype="Opens the suggested workout, unchanged."><div class="today-card-top"><span class="type-badge" style="background:var(--type-o2)">O2</span><span class="today-card-duration">10′</span></div><h2 class="today-card-title">Sea Fret</h2><p class="today-card-meta">EASY · PAIN 1/5</p><div class="today-pieces"><div class="today-piece-row"><div class="today-piece-row-main"><span class="today-piece-numeral">01</span><span class="today-piece-text"><strong>2 × 4:00</strong> at 6k +12, 1′ r</span><span class="today-piece-split">2:14.0</span></div><span class="today-piece-spm">22 SPM</span></div></div><p class="today-card-reason" style="margin-top:12px">Least recently done (never done).</p></a>`;
+      function retainedRow(title, source) {
+        return `<section class="unsaved-row" aria-label="Unsaved ${source} workout ${title}"><h2 class="unsaved-title">${title}</h2><p class="unsaved-meta">${source} · Sep 3 · Not saved</p><div class="unsaved-actions"><button class="today-unlogged-link" aria-label="Review &amp; save ${source} workout ${title}" data-prototype="Opens this retained ${source} recording in the existing save screen. It does not save, discard, or start anything.">Review &amp; save</button><button class="today-unlogged-discard" aria-label="Discard ${source} workout ${title}" data-arm="${title}">✕</button></div></section>`;
+      }
+      function today() {
+        const dual = screenName === "both";
+        const retained = proposed
+          ? `<section class="unsaved-group" aria-label="Unsaved workouts"><h2 class="unsaved-heading">UNSAVED ${dual ? "WORKOUTS" : "WORKOUT"}</h2>${retainedRow(safeTitle, "PM5")}${dual ? retainedRow("Sea Fret", "Timer") : ""}</section>`
+          : dual
+            ? `<div class="today-unlogged-line"><p class="today-unlogged-text"><strong>Sea Fret</strong>: unlogged session.</p><div class="today-unlogged-actions"><button class="today-unlogged-link" data-prototype="Existing timer save route.">Log it</button><button class="today-unlogged-discard" aria-label="Discard timer session without logging" data-prototype="Existing staged discard.">✕</button></div></div>`
+            : "";
+        return `<div class="today-title-row"><h1 class="screen-title">Today</h1><a href="#" class="today-justrow" data-prototype="Just Row is unchanged.">JUST ROW</a></div><div class="today-plan-line today-plan-line-freestyle"><span class="mono-status">FREESTYLE</span><a href="#" class="today-plan-link" data-prototype="Plan selection is unchanged.">choose a plan →</a></div>${retained}${suggestion}<p class="mono-status" style="margin-top:36px;color:var(--accent)">ALL SESSIONS</p><p class="mono-status" style="margin-top:20px">No sessions logged yet.</p>`;
+      }
+      function warning() {
+        const connect = screenName.includes("connect");
+        const dual = screenName.endsWith("-both");
+        const oldLine = connect
+          ? "You have an unlogged session. Connecting discards it."
+          : "You have an unlogged session. Starting a new one discards it.";
+        const replace = connect ? "Connect anyway" : "Replace session";
+        const panel = proposed
+          ? `<div class="baseline-confirm"><h2 class="unsaved-warning-title">${dual ? "You have unsaved workouts." : "You have an unsaved workout."}</h2><p class="unsaved-warning-copy">Review and save ${dual ? "them" : "it"} from Today.<br>${connect ? "Connecting" : "Starting a new one"} discards ${dual ? "them" : "it"}.</p><button class="unsaved-review" data-view>View unsaved</button><div class="unsaved-secondary"><button class="button-outline" data-prototype="Cancel preserves the recording and dismisses the warning.">Cancel</button><button class="button-outline unsaved-replace" data-prototype="Existing confirmed replacement behavior is unchanged. This prototype never discards real data.">${replace}</button></div></div>`
+          : `<div class="baseline-confirm"><p class="baseline-confirm-line">${oldLine}</p><div class="baseline-actions"><button class="button-outline" data-prototype="Cancel preserves the recording but provides no route to it.">Cancel</button><button class="button-primary" data-prototype="Current replacement action. This prototype never discards real data.">${replace}</button></div></div>`;
+        const context = screenName.startsWith("justrow")
+          ? '<h1 class="screen-title">Just Row</h1><p class="mono-status">Action area</p>'
+          : '<p class="mono-status">O2 · EASY</p><h1 class="screen-title">Sea Fret</h1><p class="mono-status">10 MIN · PAIN 1/5</p><div class="gate-detail-context"><p><strong>2 × 4:00</strong> at 6k +12</p><p class="mono-status">22 SPM · 1′ REST</p></div>';
+        return `<a class="back-link" href="#" data-prototype="Back navigation is unchanged.">← BACK</a>${context}${panel}<p class="gate-frame-note">Warning action area · surrounding controls omitted</p>`;
+      }
+      if (isFrame) {
+        root.innerHTML = `<div class="app-shell"><main class="screen">${screenName === "today" || screenName === "both" ? today() : warning()}</main>${nav}</div>`;
+        root.addEventListener("click", (event) => {
+          const target = event.target.closest("a,button");
+          if (!target) return;
+          event.preventDefault();
+          if (target.hasAttribute("data-view")) {
+            params.set(
+              "screen",
+              screenName.endsWith("-both") ? "both" : "today",
+            );
+            location.search = params.toString();
+          } else if (target.hasAttribute("data-arm")) {
+            const row = target.closest(".unsaved-row");
+            row.innerHTML = `<p class="unsaved-warning-copy">Discard <strong>${target.dataset.arm}</strong> without saving?</p><button class="button-outline unsaved-replace" data-prototype="Second explicit discard: same existing record-specific action. No real data is changed by this prototype.">Tap again to discard</button>`;
+          } else if (target.dataset.prototype) {
+            parent.postMessage(
+              { kind: "unlogged-gate", text: target.dataset.prototype },
+              location.origin,
+            );
+          }
+        });
+      } else {
+        root.innerHTML = `<main class="gate"><p class="eyebrow">ERGOMATIC · DESIGN APPROVAL PENDING</p><h1>Keep a way back to your workout.</h1><p>Review retained workouts from Today, with a safe route from the warning. These screens propose the normal flow; the recovery edge cases still need design decisions.</p><div class="gate-controls"><label>Screen<select id="screen"><option value="today">Today — completed PM5</option><option value="connect">Connect warning</option><option value="start">Start Timer warning</option><option value="both">Today — PM5 and timer retained</option></select></label><label>Orientation<select id="orientation"><option value="portrait">Portrait · 390 × 844</option><option value="landscape">Landscape · 844 × 390</option></select></label><label>Workout title<select id="title"><option value="0">Normal</option><option value="1">Long</option></select></label></div><div class="gate-pair" id="pair"><figure class="gate-frame"><figcaption>Current · v0.36.1</figcaption><iframe title="Current screen" id="before"></iframe></figure><figure class="gate-frame"><figcaption>Proposed · not implemented</figcaption><iframe title="Proposed screen" id="after"></iframe></figure></div><p class="gate-status" id="status" aria-live="polite">Try “View unsaved” in the proposed warning. Review and discard controls explain their intended action; this is a design, not the live app.</p><details><summary>Scope and checks</summary><p>Same fonts, colors, tab bar and suggestion card. Recovery sits above suggestions. No new background recording, automatic saving, queue, or changes to recorded numbers. The workout-detail frame shows the action-area context, not every target-editing control.</p><p>Portrait and landscape are real iframe viewports, not scaled pictures. Scroll inside landscape screens to reach content below the fold, as in the existing app.</p><table><thead><tr><th>Pairing</th><th>Contrast</th></tr></thead><tbody id="contrast"></tbody></table><p>Every proposed control is at least 44 × 44 CSS px. <a href="https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced.html">Target size</a> · <a href="https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html">Text contrast</a>. Recovery during loading/errors, exact source selection, and library-independent or legacy-record recovery remain design gates in the opening brief; they are not represented as already solved here.</p></details></main>`;
+        const screenSelect = document.getElementById("screen");
+        for (const [value, text] of [
+          ["connect-both", "Connect warning — both retained"],
+          ["start-both", "Start warning — both retained"],
+          ["justrow-connect", "Just Row — Connect warning"],
+          ["justrow-start", "Just Row — Start Timer warning"],
+        ]) {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = text;
+          screenSelect.append(option);
+        }
+        const orientation = document.getElementById("orientation");
+        const title = document.getElementById("title");
+        function update() {
+          document
+            .getElementById("pair")
+            .classList.toggle("landscape", orientation.value === "landscape");
+          for (const version of ["before", "after"]) {
+            document.getElementById(version).src =
+              `${location.pathname}?frame=1&screen=${screenSelect.value}&version=${version}&long=${title.value}`;
+          }
+        }
+        for (const select of [screenSelect, orientation, title])
+          select.addEventListener("change", update);
+        update();
+        window.addEventListener("message", (event) => {
+          if (
+            event.origin === location.origin &&
+            event.data?.kind === "unlogged-gate"
+          )
+            document.getElementById("status").textContent = event.data.text;
+        });
+        const css = getComputedStyle(document.documentElement);
+        function luminance(hex) {
+          const channels = hex
+            .trim()
+            .slice(1)
+            .match(/../g)
+            .map((v) => parseInt(v, 16) / 255)
+            .map((v) =>
+              v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4,
+            );
+          return (
+            0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+          );
+        }
+        const pairs = [
+          ["ink", "page"],
+          ["ink", "surface"],
+          ["ink", "surface-sunken"],
+          ["ink", "step-region"],
+          ["ink-2", "page"],
+          ["ink-2", "surface-sunken"],
+          ["ink-3", "page"],
+          ["ink-3", "surface"],
+          ["ink-3", "surface-sunken"],
+          ["ink-3", "step-region"],
+          ["accent", "page"],
+          ["accent", "surface"],
+          ["accent", "surface-sunken"],
+          ["accent", "step-region"],
+          ["on-color", "accent"],
+          ["on-color", "type-o2"],
+        ];
+        document.getElementById("contrast").innerHTML = pairs
+          .map(([fg, bg]) => {
+            const a = luminance(css.getPropertyValue(`--${fg}`)),
+              b = luminance(css.getPropertyValue(`--${bg}`));
+            return `<tr><td>${fg} on ${bg}</td><td>${((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(2)}:1</td></tr>`;
+          })
+          .join("");
+      }
+    </script>
+  </body>
+</html>
