@@ -10047,12 +10047,14 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
 //
 // Boxes are read off `<button>`s, which are not inline (RF21's own
 // measurement error: an inline element reports 0 for every box metric).
-test.describe("Concept2 send block: the control heights §2 draws", () => {
-  async function loadBlock(page: Page, fixture: string): Promise<void> {
-    const markup = readFileSync(
-      path.join(process.cwd(), "e2e/fixtures", fixture),
-      { encoding: "utf-8" },
-    ).replace(/>\s+</g, "><");
+test.describe("Concept2 send block: the boxes §2 draws", () => {
+  function fixtureMarkup(fixture: string): string {
+    return readFileSync(path.join(process.cwd(), "e2e/fixtures", fixture), {
+      encoding: "utf-8",
+    }).replace(/>\s+</g, "><");
+  }
+
+  async function paint(page: Page, html: string): Promise<void> {
     await page.goto("/", { waitUntil: "load" });
     await page.waitForFunction(
       () =>
@@ -10060,10 +10062,14 @@ test.describe("Concept2 send block: the control heights §2 draws", () => {
           .getPropertyValue("--page")
           .trim() !== "",
     );
-    await page.evaluate((html) => {
-      document.body.innerHTML = `<div class="app-shell">${html}</div>`;
-    }, markup);
+    await page.evaluate((inner) => {
+      document.body.innerHTML = `<div class="app-shell">${inner}</div>`;
+    }, html);
     await expect(page.locator(".c2-send")).toBeVisible();
+  }
+
+  async function loadBlock(page: Page, fixture: string): Promise<void> {
+    await paint(page, fixtureMarkup(fixture));
   }
 
   test("every control clears the height its own frame draws, in both orientations", async ({
@@ -10093,6 +10099,54 @@ test.describe("Concept2 send block: the control heights §2 draws", () => {
         // And the house floor, which is the reason any of this matters.
         expect(box.height).toBeGreaterThanOrEqual(44);
       }
+    }
+  });
+
+  test("the card stands off the line above it, in both orientations", async ({
+    page,
+  }) => {
+    // THE GAP THE CONTROL CASE ABOVE CANNOT SEE, and it is D1's own shape one
+    // level out: that case measures the two CONTROL boxes, so nothing
+    // measured the BLOCK's own box and a bordered card butting flush against
+    // the "Logged to <plan>" line could not redden anything. It did butt
+    // flush — measured `footer->card = 0` in this engine before this rule
+    // existed, because `.log-plan-footer`'s margin is `20px 0 0` (no bottom)
+    // and `.c2-send` declared none at all.
+    //
+    // 12 is the amendment's own frame gap (`.frame { gap: 12px }`, which
+    // separates every §2 sendcard from the `plan-foot` line above it),
+    // transcribed as an INDEPENDENT literal — retuning `index.css` cannot
+    // retune this (RF21).
+    //
+    // THE COMPOSITION is the log-detail screen's own sibling chain, and only
+    // the two NEIGHBOURS are hand-written: `log-plan-footer` and
+    // `button-l4 log-delete-trigger` are `FromTheLog.tsx`'s own class names
+    // at the slot this block was mounted into, and the block itself is the
+    // committed fixture that `Concept2SendBlock.test.tsx` pins as the
+    // component's literal output. So this test can go stale only if the
+    // SCREEN's two class names change, never if the block's markup does.
+    const inSitu = [
+      `<p class="log-plan-footer">Logged to Foundation · session 4</p>`,
+      fixtureMarkup("c2-send-idle.html"),
+      `<button type="button" class="button-l4 log-delete-trigger">Delete session</button>`,
+    ].join("");
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await paint(page, inSitu);
+      const [footer, card, del] = await Promise.all([
+        page.locator(".log-plan-footer").boundingBox(),
+        page.locator(".c2-send").boundingBox(),
+        page.locator(".log-delete-trigger").boundingBox(),
+      ]);
+      if (footer === null || card === null || del === null) {
+        throw new Error("the in-situ composition did not render");
+      }
+      expect(card.y - (footer.y + footer.height)).toBe(12);
+      // The neighbour below is NOT this block's to set and is asserted only
+      // so a future margin here cannot silently eat it: `.log-delete-trigger`
+      // owns its own `24px 0 0`, and adjacent-sibling collapsing takes the
+      // larger of the two.
+      expect(del.y - (card.y + card.height)).toBe(24);
     }
   });
 });

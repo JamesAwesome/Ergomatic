@@ -10502,12 +10502,38 @@ section:not(.news-pinned) .news-row:last-of-type {
    "selected" or a fifth workout type, and one link-out row on one screen
    is a different exception. The row is owed by this PR's Task 13 and does
    NOT exist yet — `docs/design/DEVIATIONS.md` mentions Concept2 nowhere
-   (grepped, zero hits). Do not read this paragraph as the record. */
+   (grepped, zero hits). Do not read this paragraph as the record.
+
+   `margin: 12px 0 0` — FIX ROUND 2, and the number is the page's, not a
+   guess. Every §2 frame separates the sendcard from the `Logged to <plan>`
+   line above it by `.frame { gap: 12px }`, and the frames are the
+   authority.
+
+   The rule exists because it was MISSING and nothing could say so. This
+   block declared no margin; its preceding sibling on a plan row,
+   `.log-plan-footer`, is `margin: 20px 0 0` with no bottom; both are block
+   children of the same `<main>`. Measured in the real engine before the
+   fix: `footer -> card = 0`. A bordered card touched the plan line. That
+   is D1's own shape one level out — the height gate measures the two
+   CONTROL boxes, so nothing measured the CONTAINER's, and `e2e/design.
+   spec.ts`'s "the card stands off the line above it" is the assertion that
+   closes it.
+
+   NOT the screen's own 20/24px section rhythm (`.summary-intervals` and
+   `.trace-figure` are both `margin: 0 0 24px`). 24 would be defensible and
+   is a Gate 0 decision rather than an implementer's, so it goes to James
+   as a question in the PR rather than being chosen here.
+
+   Bottom stays 0 on purpose: `.log-delete-trigger` below owns `24px 0 0`,
+   and adjacent-sibling margins collapse to the larger, so a bottom margin
+   here would be either dead or a silent override of a neighbour's spacing.
+   The e2e assertion pins that 24 too, for exactly that reason. */
 .c2-send {
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   padding: 14px 16px;
+  margin: 12px 0 0;
   display: flex;
   flex-direction: column;
   gap: 10px;

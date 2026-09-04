@@ -2089,15 +2089,34 @@ Each needs erg time or a deliberate recording session.
   file alone, on a DIFFERENT test each time — `deleting the terminal
   plan-linked log un-counts`, `two sequential advancing saves stamp
   consecutive indexes`, `returns the full row, steps included, for the owner` —
-  and always with the same signature, a response-body field reading
-  `undefined` (`expected undefined to match object {planKey: 'head',
-  planIndex: 0}` at the `list.body.find(...)` on line 2585 is the fullest
-  capture so far). **Reproduced at 1/25 against `3a294bd7`'s own copies of
-  `data.ts` and `data.test.ts`**, so it predates that task and is not Wave E's.
-  The shared shape is a LIST or GET read coming back WITHOUT the row a POST
-  just created, which points at the fake store's insertion ordering rather
-  than at any one test — narrowing, but not choosing, between the two theories
-  below. Three named instances, where the entry below has two.
+  and — in every instance observed AT THE TIME, an absolute the amendment
+  immediately below FALSIFIES — with the same signature, a response-body
+  field reading `undefined` (`expected undefined to match object
+  {planKey: 'head', planIndex: 0}` at the `list.body.find(...)` on line 2585
+  is the fullest capture of that signature). **Reproduced at 1/25 against
+  `3a294bd7`'s own copies of `data.ts` and `data.test.ts`**, so it predates
+  that task and is not Wave E's. The shared shape of THESE THREE is a LIST or
+  GET read coming back WITHOUT the row a POST just created, which points at
+  the fake store's insertion ordering rather than at any one test —
+  narrowing, but not choosing, between the two theories below. Three named
+  instances, where the entry below has two.
+- **AMENDED AGAIN 2026-09-03 (Wave E PR2 Task 7, fix round 2): the "always"
+  in the entry above is FALSIFIED — a SECOND signature exists, and it is a
+  STATUS CODE rather than a body field.** Found when a full
+  `--project unit --project client` run came back `1 failed | 6684 passed`
+  and the immediate re-run was clean. Characterised the same way the entry
+  above was, by running `server/routes/data.test.ts` alone:
+  **3 failures in 26 runs (~1 in 9)**, a DIFFERENT test each time —
+  `rejects a bad pain value with 400, POST's exact message`, `rejects a
+  splitSeconds outside the baseline band (60..240), naming the field`,
+  `400s machineSummary.verificationBytes as a negative byte` — and every one
+  a validation test that got `expected 401 to be 400` (once) or
+  `expected 403 to be 400` (twice). Not one read `undefined`. 401 and 403
+  are MIDDLEWARE refusals that land before the handler validates anything,
+  so this half looks like per-test auth/availability state rather than the
+  fake store's insertion ordering — NAMED, not chosen, per this entry's own
+  standard. What both signatures share is a request seeing state that some
+  other test owns.
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
   clears thumbs previously set to a real value`, then `GET/PUT /api/prefs` >
