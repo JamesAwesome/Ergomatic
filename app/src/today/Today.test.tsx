@@ -446,6 +446,44 @@ describe("Today (freestyle mode)", () => {
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
   });
 
+  it("a freestyle chip tap narrows the pool to that type, persists with planKey null, and a second tap clears it", async () => {
+    mockReady({ plan: FREESTYLE_PLAN });
+    await renderToday();
+    expect(screen.getByText(/FREESTYLE/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+
+    // AT pool: Occluded (10d) / Stationary (20d) / Pressure Ridge (15d) —
+    // least recently done is Stationary Front, not the O2 Sea Fret (30d).
+    await userEvent.click(screen.getByRole("button", { name: "AT" }));
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    // The plan line never grows a swap arrow — there is no plan call to
+    // swap away from.
+    expect(screen.getByText("FREESTYLE")).toBeVisible();
+    expect(screen.queryByText(/→ AT/)).not.toBeInTheDocument();
+    const stored = JSON.parse(
+      localStorage.getItem(TODAY_OVERRIDES_KEY)!,
+    ) as TodayOverrides;
+    expect(stored.swapType).toBe("AT");
+    expect(stored.planKey).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "AT" }));
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .swapType,
+    ).toBeNull();
+  });
+
   it("treats a plan with no sequence entry at doneN the same as freestyle, rather than crashing", async () => {
     // A completed plan (doneN reached the end of the 84-session sequence,
     // each advancing log having incremented it) — this pins the fallback
@@ -1377,14 +1415,21 @@ describe("Today (overrides: persistence and invalidation)", () => {
 });
 
 describe("Today (type-swap chips)", () => {
-  it("hides the type-swap chips in freestyle mode but keeps the FILTER sheet available", async () => {
+  // Freestyle chips (James, 2026-09-04: "i want it to look similar to how
+  // it does right now when you DO have a plan selected"). With no plan
+  // there is nothing to swap FROM, so the row starts with NO chip lit and
+  // the word row reads ANY TYPE; a tap narrows the suggestion to that type,
+  // and tapping the lit chip again clears it.
+  it("renders the four type chips in freestyle mode with none pressed, and keeps the FILTER sheet available", async () => {
     mockReady({ plan: FREESTYLE_PLAN });
     await renderToday();
     for (const type of ["O2", "AT", "TR", "AN"] as const) {
-      expect(
-        screen.queryByRole("button", { name: type }),
-      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: type })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
     }
+    expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
     await openFilterSheet();
     expect(screen.getByRole("button", { name: "EASY" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "45–60′" })).toBeInTheDocument();
@@ -1712,7 +1757,7 @@ describe("Today (type descriptor word)", () => {
     expect(screen.getByText("SPEED WORK")).toBeInTheDocument();
   });
 
-  it("does not render in freestyle mode — there are no type-swap chips to reinforce", async () => {
+  it("reads ANY TYPE in freestyle mode with no chip lit, and the tapped chip's word once one is", async () => {
     mockReady({ plan: FREESTYLE_PLAN });
     await renderToday();
     for (const word of [
@@ -1723,6 +1768,11 @@ describe("Today (type descriptor word)", () => {
     ]) {
       expect(screen.queryByText(word)).not.toBeInTheDocument();
     }
+    expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "TR" }));
+    expect(screen.getByText("HARD INTERVALS")).toBeInTheDocument();
+    expect(screen.queryByText("ANY TYPE")).not.toBeInTheDocument();
   });
 
   // The chips already convey the selected type to assistive tech via each

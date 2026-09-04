@@ -807,8 +807,8 @@ function TodayView({
   // treat as selected: a swap if one is set, else the plan's own call for
   // today. Since Phase 8A a checkpoint day carries its REAL type here (the
   // "TEST" code and its TR stand-in are retired), so no mapping sits
-  // between the wire's code and the chips. Null only in freestyle (no
-  // plan, no chips, no word to show).
+  // between the wire's code and the chips. Null only in freestyle with no
+  // chip lit (no chip pressed; the word row reads ANY TYPE).
   const effectiveType: WorkoutType | null =
     overrides.swapType ?? prescribedCode;
 
@@ -822,10 +822,16 @@ function TodayView({
 
   function handleTypeChip(type: WorkoutType) {
     // Tapping the chip that matches the plan's own call for today clears
-    // the swap rather than swapping to itself.
+    // the swap rather than swapping to itself. In freestyle there is no
+    // plan call, so the same rule reads: tapping the lit chip clears it
+    // (back to the whole library), tapping any other lights that one.
+    const clears =
+      prescribedCode !== null
+        ? type === prescribedCode
+        : type === overrides.swapType;
     updateOverrides({
       ...overrides,
-      swapType: type === prescribedCode ? null : type,
+      swapType: clears ? null : type,
     });
   }
 
@@ -939,10 +945,13 @@ function TodayView({
     .filter((w) => !(isOnboardingTitle(w.title) && w.isGlobal))
     .map((w) => toLibraryEntry(w, baselines));
 
-  // The swapped-in type if one is set, else the plan's own call — what
-  // `suggest`'s `todayCode` actually receives below.
-  const todayCode: WorkoutType | null =
-    prescribedCode !== null ? (overrides.swapType ?? prescribedCode) : null;
+  // The chosen type if one is set, else the plan's own call — what
+  // `suggest`'s `todayCode` actually receives below. Null only in freestyle
+  // with no chip lit, which is the whole-library `suggestFreestyle` pool.
+  // (Freestyle chips, 2026-09-04: this used to be null whenever no plan
+  // was active; a freestyle chip tap now narrows the pool exactly the way
+  // a plan swap does — `suggest()` with `prescribed: null`.)
+  const todayCode: WorkoutType | null = overrides.swapType ?? prescribedCode;
 
   // Phase 8A: the plan day's own authored prescription (a checkpoint's
   // designated test), computed CLIENT-SIDE from PLANS — it never crosses
@@ -1072,9 +1081,9 @@ function TodayView({
           "plan apparatus" (spec's own words) — hidden entirely while the
           doors card shows: "there is no suggestion to filter or swap"
           applies whether or not a plan happens to be active underneath. */}
-      {!needsDoors &&
-        (usesPlan ? (
-          <>
+      {!needsDoors && (
+        <>
+          {usesPlan ? (
             <p className="today-plan-line mono-status">
               SESSION {plan.doneN + 1} OF {plan.sequence.length} ·{" "}
               {prescribedCode}
@@ -1088,72 +1097,69 @@ function TodayView({
                   (James's ruling, 2026-08-12). */}
               {prescriptionOverridden && " · CHECKPOINT OVERRIDDEN"}
             </p>
-            {/* Type-swap chips: only meaningful with a plan active (there is
-                no "prescribed type" to swap away from in freestyle). Active
-                state reads `swapType ?? prescribedCode` — the un-swapped
-                chip lights up whichever type the plan actually calls for
-                today, and tapping THAT chip
-                again clears the swap rather than swapping to itself
-                (handleTypeChip). Amendment (2026-08-04 PR #50 round), Task 2:
-                `.type-chip-grid` (index.css — renamed from `.today-type-
-                chips`, library-filter-unification round, Task 2: Library's
-                own multi-select chip row needed the identical grid override)
-                lays these out as a 4-column 1fr grid spanning the full
-                content width, rather than `.chip-wrap`'s own inline
-                flex-wrap — 44px chip height unchanged, same `.chip`/
-                TodayChip classes. */}
-            <div className="chip-wrap type-chip-grid">
-              {TYPE_CHIPS.map((type) => (
-                <TodayChip
-                  key={type}
-                  label={type}
-                  active={effectiveType === type}
-                  onClick={() => handleTypeChip(type)}
-                  typeColorVar={TYPE_COLOR_VAR[type]}
-                />
-              ))}
+          ) : (
+            <div className="today-plan-line today-plan-line-freestyle">
+              <span className="mono-status">FREESTYLE</span>
+              <Link to="/plan" className="today-plan-link">
+                choose a plan →
+              </Link>
             </div>
-            {/* The effective type's descriptor word (James's request,
-                2026-08-08 round), reusing the classification card's own word
-                idiom (ClassificationCard.tsx/.classification-type-word —
-                mono, --ink-2, 11px) and its reserved-line-box fix
-                (.classification-type-label-row's min-height pattern) so a
-                rerender can never nudge anything below it — moot here in
-                practice since `effectiveType` is never null whenever this
-                branch renders (a plan is active), but kept for the same
-                belt-and-suspenders reason ClassificationCard.tsx's own
-                comment gives. `aria-hidden`: purely presentational
-                reinforcement of what each chip's own `aria-pressed` already
-                conveys to assistive tech, not a second announcement of it.
-                `.type-word` (index.css — renamed from `.today-type-word` in
-                the library-filter-unification round, Task 2's M-7 review
-                fix: Library's own descriptor reuses the identical text
-                style) is the fourth of this round's class extractions.
-
-                Fix round (whole-branch review comment): `.type-chip-grid`'s
-                own 4px margin-bottom (index.css) assumes THIS wrapper
-                always follows it — true today only because `effectiveType`
-                is never null whenever this branch renders, per the
-                paragraph above. If a future change ever makes that false
-                while the chip row still renders, the chip row will inherit
-                the exact ~34px jump Library's own I-1 fix corrected (that
-                fix's answer was mounting the wrapper unconditionally,
-                `aria-hidden` regardless — do the same here rather than
-                patching the CSS rule). */}
-            {effectiveType !== null && (
-              <div className="type-word-row" aria-hidden="true">
-                <p className="type-word">{TYPE_WORDS[effectiveType]}</p>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="today-plan-line today-plan-line-freestyle">
-            <span className="mono-status">FREESTYLE</span>
-            <Link to="/plan" className="today-plan-link">
-              choose a plan →
-            </Link>
+          )}
+          {/* Type chips, in BOTH modes (freestyle chips, James 2026-09-04:
+              "look similar to how it does right now when you DO have a plan
+              selected"). With a plan, active state reads
+              `swapType ?? prescribedCode` — the un-swapped chip lights up
+              whichever type the plan actually calls for today, and tapping
+              THAT chip again clears the swap rather than swapping to itself
+              (handleTypeChip). In freestyle there is no plan call, so no
+              chip is lit until the rower taps one, and tapping the lit chip
+              clears it back to the whole library.
+              Amendment (2026-08-04 PR #50 round), Task 2:
+              `.type-chip-grid` (index.css — renamed from `.today-type-
+              chips`, library-filter-unification round, Task 2: Library's
+              own multi-select chip row needed the identical grid override)
+              lays these out as a 4-column 1fr grid spanning the full
+              content width, rather than `.chip-wrap`'s own inline
+              flex-wrap — 44px chip height unchanged, same `.chip`/
+              TodayChip classes. */}
+          <div className="chip-wrap type-chip-grid">
+            {TYPE_CHIPS.map((type) => (
+              <TodayChip
+                key={type}
+                label={type}
+                active={effectiveType === type}
+                onClick={() => handleTypeChip(type)}
+                typeColorVar={TYPE_COLOR_VAR[type]}
+              />
+            ))}
           </div>
-        ))}
+          {/* The effective type's descriptor word (James's request,
+              2026-08-08 round), reusing the classification card's own word
+              idiom (ClassificationCard.tsx/.classification-type-word —
+              mono, --ink-2, 11px) and its reserved-line-box fix
+              (.classification-type-label-row's min-height pattern) so a
+              rerender can never nudge anything below it. `aria-hidden`:
+              purely presentational reinforcement of what each chip's own
+              `aria-pressed` already conveys to assistive tech, not a second
+              announcement of it. `.type-word` (index.css — renamed from
+              `.today-type-word` in the library-filter-unification round,
+              Task 2's M-7 review fix: Library's own descriptor reuses the
+              identical text style) is the fourth of this round's class
+              extractions.
+
+              Mounted UNCONDITIONALLY, the same answer Library's I-1 fix
+              gave: `.type-chip-grid`'s own 4px margin-bottom (index.css)
+              assumes this wrapper always follows it, and since the
+              freestyle chips `effectiveType` CAN be null while the row
+              renders — the row then reads ANY TYPE rather than leaving a
+              blank reserved line under four unlit chips. */}
+          <div className="type-word-row" aria-hidden="true">
+            <p className="type-word">
+              {effectiveType !== null ? TYPE_WORDS[effectiveType] : "ANY TYPE"}
+            </p>
+          </div>
+        </>
+      )}
 
       {/* Phase BL PR C: the three-door onboarding card (canvas Main)
           replaces the entire suggestion apparatus — header
