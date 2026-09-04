@@ -283,6 +283,27 @@ async function activate() {
 }
 
 describe("GateMinusOneProbe", () => {
+  it("retains the radio lease until a cancelled activity query settles", async () => {
+    const user = await renderReadyProbe();
+    await user.click(runButton());
+    native.foreground = false;
+    const releaseQuery = hold("app-state");
+    await act(async () => native.nfcEvent!(nfcEvent()));
+    await waitFor(() =>
+      expect(
+        native.calls.filter((call) => call === "app-state:active-query"),
+      ).toHaveLength(2),
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel sample" }));
+    expect(runButton()).toBeDisabled();
+    await activate();
+    expect(native.calls).not.toContain("ble-initialize");
+    await releaseQuery();
+    await waitFor(() => expect(runButton()).toBeEnabled());
+    expect(native.removed).toContain("appStateChange");
+    expect(native.calls).not.toContain("ble-initialize");
+    expect((await exported(user)).attempts[0]!.connected).toBe(false);
+  });
   it("reobserves activity lost during listener removal before starting BLE", async () => {
     const user = await renderReadyProbe();
     await beginInactiveHandoff(user);
