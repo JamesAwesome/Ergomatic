@@ -340,6 +340,7 @@ export async function runNormalTraceController(
   const executable = `${String(prepared.url)}App`;
   const consoleLog = join(captureDir, "normal-console.log");
   let consoleHandle: ConsoleHandle | undefined;
+  let consoleLaunchAttempted = false;
   let runError: unknown = null;
   let cleanupVerified = false;
   let finish: (() => void) | undefined;
@@ -356,6 +357,14 @@ export async function runNormalTraceController(
     if (deps.signal?.aborted)
       throw new Error("capture stopped before console launch");
     {
+      const launchTimeout = boundedTimeoutSeconds(
+        deps.now(),
+        hardDeadlineMs,
+        8 * 60,
+      );
+      // A rejected preflight must not launch any app, even for cleanup.
+      // Once launch is attempted, an ambiguous failure still needs cleanup.
+      consoleLaunchAttempted = true;
       consoleHandle = await deps.launchConsole(
         [
           "devicectl",
@@ -367,7 +376,7 @@ export async function runNormalTraceController(
           "--terminate-existing",
           "--console",
           "--timeout",
-          String(boundedTimeoutSeconds(deps.now(), hardDeadlineMs, 8 * 60)),
+          String(launchTimeout),
           "--json-output",
           join(captureDir, "normal-launch.json"),
           BUNDLE,
@@ -397,17 +406,19 @@ export async function runNormalTraceController(
     runError = error;
   } finally {
     if (finish) deps.signal?.removeEventListener("abort", finish);
-    try {
-      await replaceAndTerminateBundle(
-        "normal-cleanup",
-        captureDir,
-        hardDeadlineMs,
-        deps,
-        executable,
-      );
-      cleanupVerified = true;
-    } catch {
-      // Device state is unknown; the host must not invent a phone instruction.
+    if (consoleLaunchAttempted) {
+      try {
+        await replaceAndTerminateBundle(
+          "normal-cleanup",
+          captureDir,
+          hardDeadlineMs,
+          deps,
+          executable,
+        );
+        cleanupVerified = true;
+      } catch {
+        // Device state is unknown; the host must not invent a phone instruction.
+      }
     }
     consoleHandle?.stopHost();
     try {
@@ -424,7 +435,9 @@ export async function runNormalTraceController(
             ? runError.message
             : "controller run aborted",
         ]),
-    ...(cleanupVerified ? [] : ["bundle-scoped cleanup could not be verified"]),
+    ...(consoleLaunchAttempted && !cleanupVerified
+      ? ["bundle-scoped cleanup could not be verified"]
+      : []),
   ];
   const decision: GateConsoleDecision =
     reasons.length > 0

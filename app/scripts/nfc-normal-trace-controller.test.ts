@@ -110,67 +110,102 @@ describe("NFC normal-trace controller", () => {
     ).toThrow("runningProcesses");
   });
 
-  it("records inconclusive when finishing before this capture launches", async () => {
-    const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
-    const installed = {
-      bundleIdentifier: "haus.waffle.ergomatic",
-      bundleVersion: "789",
-      version: "0.23.0",
-      url: "file:///pinned/App.app/",
-    };
-    const install = {
-      result: {
-        installedApplications: [
-          { bundleID: "haus.waffle.ergomatic", installationURL: installed.url },
-        ],
-      },
-    };
-    writeFileSync(join(captureDir, "install.json"), JSON.stringify(install));
-    writeFileSync(
-      join(captureDir, "installed-apps.json"),
-      JSON.stringify({ result: { apps: [installed] } }),
-    );
-    const abort = new AbortController();
-    const result = await runNormalTraceController(captureDir, 1480000, {
-      now: () => 1000000,
-      signal: abort.signal,
-      notify: () => undefined,
-      sleepUntil: async () => undefined,
-      launchConsole: async () => {
-        throw new Error("Should not launch");
-      },
-      run: async (args) => {
-        const path = args[args.indexOf("--json-output") + 1]!;
-        if (args.includes("apps")) abort.abort();
-        writeFileSync(
-          path,
-          JSON.stringify(
-            args.includes("apps")
-              ? { result: { apps: [installed] } }
-              : args.includes("--start-stopped")
-                ? { result: { process: { processIdentifier: 321 } } }
-                : {
+  it.each([
+    ["stopped", "capture stopped before console launch"],
+    ["mismatched", "Installed app did not match the pinned installation"],
+    ["unreadable", "Installed app listing failed"],
+  ] as const)(
+    "issues no app commands when preflight is %s",
+    async (failure, reason) => {
+      const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
+      const installed = {
+        bundleIdentifier: "haus.waffle.ergomatic",
+        bundleVersion: "789",
+        version: "0.23.0",
+        url: "file:///pinned/App.app/",
+      };
+      const install = {
+        result: {
+          installedApplications: [
+            {
+              bundleID: "haus.waffle.ergomatic",
+              installationURL: installed.url,
+            },
+          ],
+        },
+      };
+      writeFileSync(join(captureDir, "install.json"), JSON.stringify(install));
+      writeFileSync(
+        join(captureDir, "installed-apps.json"),
+        JSON.stringify({ result: { apps: [installed] } }),
+      );
+      const abort = new AbortController();
+      const commands: string[][] = [];
+      let consoleLaunches = 0;
+      const result = await runNormalTraceController(captureDir, 1480000, {
+        now: () => 1000000,
+        signal: abort.signal,
+        notify: () => undefined,
+        sleepUntil: async () => undefined,
+        launchConsole: async () => {
+          consoleLaunches += 1;
+          throw new Error("Should not launch");
+        },
+        run: async (args) => {
+          commands.push(args);
+          const path = args[args.indexOf("--json-output") + 1]!;
+          if (args.includes("apps") && failure === "stopped") abort.abort();
+          if (args.includes("apps") && failure === "unreadable")
+            throw new Error("Installed app listing failed");
+          writeFileSync(
+            path,
+            JSON.stringify(
+              args.includes("apps")
+                ? {
                     result: {
-                      runningProcesses: [
-                        {
-                          processIdentifier: 999,
-                          executable: "file:///other/App",
-                        },
+                      apps: [
+                        failure === "mismatched"
+                          ? {
+                              ...installed,
+                              version: "0.37.0",
+                              bundleVersion: "848",
+                            }
+                          : installed,
                       ],
                     },
-                  },
-          ),
-        );
-      },
-    });
-    expect(result).toMatchObject({
-      cleanupVerified: true,
-      decision: {
-        outcome: "inconclusive",
-        reasons: ["capture stopped before console launch"],
-      },
-    });
-  });
+                  }
+                : args.includes("--start-stopped")
+                  ? { result: { process: { processIdentifier: 321 } } }
+                  : {
+                      result: {
+                        runningProcesses: [
+                          {
+                            processIdentifier: 999,
+                            executable: "file:///other/App",
+                          },
+                        ],
+                      },
+                    },
+            ),
+          );
+        },
+      });
+      expect(commands.map((args) => args.slice(0, 4))).toStrictEqual([
+        ["devicectl", "device", "info", "apps"],
+      ]);
+      expect(consoleLaunches).toBe(0);
+      expect(result).toMatchObject({
+        cleanupVerified: false,
+        decision: {
+          outcome: "inconclusive",
+          reasons: [reason],
+        },
+      });
+      expect(
+        JSON.parse(readFileSync(join(captureDir, "evidence.json"), "utf-8")),
+      ).toStrictEqual(result);
+    },
+  );
 
   it("preserves earlier capture files before any device command", async () => {
     for (const name of ["normal-console.log", "evidence.json"]) {
@@ -192,6 +227,79 @@ describe("NFC normal-trace controller", () => {
         "earlier evidence",
       );
     }
+  });
+
+  it("verifies bundle cleanup after an ambiguous console launch rejection", async () => {
+    const captureDir = mkdtempSync(join(tmpdir(), "nfc-controller-test."));
+    const installed = {
+      bundleIdentifier: "haus.waffle.ergomatic",
+      bundleVersion: "789",
+      version: "0.23.0",
+      url: "file:///pinned/App.app/",
+    };
+    writeFileSync(
+      join(captureDir, "install.json"),
+      JSON.stringify({
+        result: {
+          installedApplications: [
+            {
+              bundleID: "haus.waffle.ergomatic",
+              installationURL: installed.url,
+            },
+          ],
+        },
+      }),
+    );
+    writeFileSync(
+      join(captureDir, "installed-apps.json"),
+      JSON.stringify({ result: { apps: [installed] } }),
+    );
+    const commands: string[][] = [];
+    const result = await runNormalTraceController(captureDir, 1480000, {
+      now: () => 1000000,
+      notify: () => undefined,
+      sleepUntil: async () => undefined,
+      launchConsole: async (args) => {
+        commands.push(args);
+        throw new Error("Launch response lost");
+      },
+      run: async (args) => {
+        commands.push(args);
+        const path = args[args.indexOf("--json-output") + 1]!;
+        writeFileSync(
+          path,
+          JSON.stringify(
+            args.includes("apps")
+              ? { result: { apps: [installed] } }
+              : args.includes("--start-stopped")
+                ? { result: { process: { processIdentifier: 321 } } }
+                : {
+                    result: {
+                      runningProcesses: [
+                        {
+                          processIdentifier: 999,
+                          executable: "file:///other/App",
+                        },
+                      ],
+                    },
+                  },
+          ),
+        );
+      },
+    });
+    expect(commands.map((args) => args.slice(0, 4))).toStrictEqual([
+      ["devicectl", "device", "info", "apps"],
+      ["devicectl", "device", "process", "launch"],
+      ["devicectl", "device", "process", "launch"],
+      ["devicectl", "device", "process", "terminate"],
+      ["devicectl", "device", "info", "processes"],
+    ]);
+    expect(commands[2]).toContain("--start-stopped");
+    expect(commands[3]).toContain("321");
+    expect(result).toMatchObject({
+      cleanupVerified: true,
+      decision: { outcome: "inconclusive", reasons: ["Launch response lost"] },
+    });
   });
 
   it("prepares without asking for acknowledgement or starting capture", async () => {
