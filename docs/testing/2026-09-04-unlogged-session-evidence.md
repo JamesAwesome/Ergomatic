@@ -4,9 +4,11 @@ The connected browser journey drives the real fake transport through five
 `w 100m max r0.1` intervals: six-second positive rests, five resting-state
 boundaries, `WORKOUTEND`, then the summary burst. It retains
 `endedBy: "finished"`, work totals 110 s/500 m, literal actuals
-20/21/22/23/24 s at 100 m, and each boundary's 6 s/12 m rest payload. It
-opens Review in-process after leaving, then cold-reloads before the warning
-and Save leg. Warning → View leaves the retained-storage bytes unchanged.
+20/21/22/23/24 s at 100 m, and each boundary's 6 s/12 m rest payload. The
+same shared journey completes warning → View → Today → Review → failed Save
+retry → history → quiet later warning twice: once in-process after leaving,
+and once after cold hydration. Warning → View leaves the retained-storage
+bytes unchanged in each leg.
 
 No POST occurs on Review entry. The first Save traces POST with series → 500,
 POST without series → 500; no history row or retirement follows. Explicit
@@ -65,16 +67,22 @@ initially visible and require ordinary vertical page scroll. This is recorded
 for phase-close usability review, not silently treated as no-overflow proof.
 Ink `rgb(27,26,23)` on page `rgb(244,241,232)` measures 15.41:1.
 
-Sensitivity after the real test commit: changing **View unsaved** to call
-Cancel made the connected recovery journey fail its `/today` route assertion;
-the source was restored with `apply_patch` and its original SHA-256 matched.
-Removing the legacy recording textarea's `readOnly` attribute made the new
-fallback registration fail exactly at its `readonly` oracle (three of the four
-registration cases still passed); `apply_patch` restored SHA-256
+Sensitivity ran after real test commits and restored every source hash with
+`apply_patch`. Changing **View unsaved** to Cancel made both current warm and
+cold complete journeys fail the `/today` assertion; warning source restored to
+SHA-256 `b0e93a0b5b18c88ae67c0996664e1311731e5848e7578de4421e55f22e2695fb`.
+Inverting `UnsavedWorkouts`' nonempty return made the long-title/failing-fetch,
+pending/failed, and both-source Today registrations fail (the fallback case
+alone still passed); its SHA-256 restored to
+`a123d65d4cfd215e7068c2b35eca02eae953551a0a956cbdd1abe65d0fba4cef`.
+Inverting the singular/plural warning words made the both-source/count
+registration fail its singular warning oracle. Removing the legacy recording
+textarea's `readOnly` attribute made the fallback registration fail exactly at
+its `readonly` oracle (three of the four registration cases still passed);
+`ReadOnlyRecording.tsx` restored to SHA-256
 `c038239e3588a3e5f6e6f8c29c6d8a7884e5a5396fee5eaa6a98e6b53002ea09` and all
-four passed again. The new warning, retention, fallback, and pending/failed
-assertions are independently literal browser oracles; no production source
-remains changed for this test task.
+four passed again. This maps every new connected/design behavior to a red
+deciding-source probe; no production source remains changed.
 
 The full E2E run recorded 459 passes and one unrelated-to-scenario but not
 yet unrelated-to-code symptom: `retest.spec.ts` "Phase BL RACE THE 2K reaches"
@@ -85,6 +93,15 @@ including possible shared `LogSession`/save involvement—not a recovery-proof
 failure or a basis for a Task 2 production change. The final full E2E rerun on
 the restored committed tree passed 460/460; it does not erase the earlier
 failure or establish a cause.
+
+Gate record: `pnpm lint`, `pnpm typecheck`, and `pnpm format:check` passed;
+`pnpm test` and `pnpm test:coverage` passed 257 files / 7063 tests (one
+skipped), with coverage 98.75% statements and 97.16% branches; `pnpm build`
+passed with its existing 637.71 kB Vite chunk advisory; and sequential
+`pnpm screenshots` passed 118/118. Coverage HTML was read for recovery
+surfaces: `ReviewSession.tsx` 97.72% statements / 97.82% branches,
+`Today.tsx` 99.18% / 97.91%, `UnsavedWorkouts.tsx` 97.77% / 95.65%, and
+`LogSession.tsx` 98.26% / 95.56%.
 
 Native acceptance is an approved criterion but still pending James. Its
 operator protocol is a **proposed** phone acceptance walk at
