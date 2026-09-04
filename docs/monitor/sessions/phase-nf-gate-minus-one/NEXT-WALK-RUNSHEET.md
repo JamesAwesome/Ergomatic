@@ -1,4 +1,4 @@
-# NF-NORMAL-TRACE-v1 — one-attempt NFC diagnostic runsheet
+# NF-NORMAL-TRACE-v2 — one-attempt NFC diagnostic runsheet
 
 **Status: DRAFT FOR PM REVIEW. This is not authorization to operate the phone
 or PM5. A PM PASS on this exact version and James's separate agreement are both
@@ -29,15 +29,21 @@ Does one fresh normal attempt on the photographed iPhone 17 Pro / PM5
 432331249 reach `ndef.rf.active` and produce a complete automatically framed
 receipt for the NFC-name-to-picker-free-BLE handoff?
 
-- Wall-clock budget: 8 minutes total, beginning when James says the phone is
-  connected and unlocked. The controller stops at 8:00 even if the attempt has
-  not settled.
+- Wall-clock budget: 8 minutes total. The controller starts the clock before
+  asking James to connect or unlock the phone, wake the PM5, or perform any
+  other setup, and stops at 8:00 even if the attempt has not settled.
 - Attempt budget: exactly 1 normal sample. There is no retry, recovery case,
   background case, held stage, WebView reload, timeout case, Flipper case,
   multi-tag case, workout programming or rowing.
-- Operator typing budget: two one-word state acknowledgements (`READY` and
-  `VISIBLE`). There are no console commands, pasted scripts, metadata fields,
-  receipt copies or manual transcriptions for James.
+- Operator typing budget: three one-word state acknowledgements (`READY`,
+  `PM5`, and `VISIBLE`). There are no console commands, pasted scripts,
+  metadata fields, receipt copies or manual transcriptions for James.
+- Operator interaction budget: at most 11 physical actions — connect USB (1),
+  unlock iPhone (1), wake PM5 (1), choose PM5 More Options (1), choose Connect
+  Device (1), tap YOU (1), scroll toward the probe (at most 3 gestures), tap
+  Run normal sample (1), and present/hold the iPhone at the PM5 tag (1). A trust
+  prompt, login flow, extra scrolling or any other required action is an abort,
+  not an expansion of the budget.
 - Operator capture budget: zero photos, screenshots or downloads.
 - A blocked prerequisite, unexpected screen, missing console evidence or the
   hard stop ends the walk. It does not authorize live repair.
@@ -114,23 +120,27 @@ part of the evidence path.
 
 ### N1 · fresh normal reader and targeted BLE handoff
 
-Starting state supplied with James's separate agreement: iPhone connected by
-USB and unlocked; PM5 awake at Main Menu; Flipper put away. The controller
-starts the 8-minute clock.
+Starting state after James's separate agreement: no setup is credited in
+advance. The iPhone may be disconnected or locked and the PM5 may be asleep.
+The Flipper is not used. The controller starts the 8-minute clock before the
+first setup instruction.
 
-1. **Controller only, target 0:00–1:30.** Confirm CoreDevice sees `Kaito`,
+1. **One operator instruction, target by 0:45:** “Connect the iPhone by USB and
+   unlock it, then reply `READY`.” Stop and wait. A trust prompt is an abort.
+2. **Controller only, target 0:45–2:15.** Confirm CoreDevice sees `Kaito`,
    install the pinned artifact, and launch it with the console command above.
-   Abort on discovery, trust, install, launch or console-attachment failure.
-2. **One operator instruction, target by 2:30:** “On the PM5, open More Options
-   → Connect Device. Leave it on `Ready for App Connection`, then reply
-   `READY`.” Stop and wait.
-3. **One operator instruction, target by 3:30:** “On the iPhone, tap YOU and
+   Abort on discovery, install, launch or console-attachment failure.
+3. **One operator instruction, target by 3:00:** “Wake the PM5, open More
+   Options → Connect Device, and leave it on `Ready for App Connection`, then
+   reply `PM5`.” Stop and wait.
+4. **One operator instruction, target by 3:30:** “On the iPhone, tap YOU and
    scroll to `NFC GATE -1 PROBE`, then reply `VISIBLE`.” Stop and wait. If the
-   signed-in You screen or probe is absent, abort; do not troubleshoot live.
-4. **One operator instruction, target by 4:00:** “Tap `Run normal sample`, then
+   signed-in You screen or probe is absent, or reaching the probe needs more
+   than three scroll gestures, abort; do not troubleshoot live.
+5. **One operator instruction, target by 4:00:** “Tap `Run normal sample`, then
    hold the phone at the same PM5 NFC spot that worked earlier. Do nothing else;
    I am collecting the result.” Stop. James sends no completion message.
-5. **Controller only, through at most 8:00.** Watch for the native diagnostic
+6. **Controller only, through at most 8:00.** Watch for the native diagnostic
    sequence and one complete receipt export. As soon as a terminal result is
    durably captured, end console attachment and tell James the walk is over.
    If it has not settled, stop at 8:00. Do not ask for a retry or another case.
@@ -178,3 +188,11 @@ terminal result or hard stop, terminates the console attachment, validates and
 redacts the captured frames, records artifact/case/outcome provenance in this
 directory, and commits the evidence on this branch. There is no web lab or
 Docker stack to tear down.
+
+## PM review history
+
+- `NF-NORMAL-TRACE-v1`: NOT READY. The card began its clock after USB/unlock
+  setup and did not count every physical interaction.
+- `NF-NORMAL-TRACE-v2`: pending review. The same 8-minute cap now begins before
+  all setup, and the 11-action / three-word operator budgets are explicit and
+  binding.
