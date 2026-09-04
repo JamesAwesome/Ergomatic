@@ -540,9 +540,13 @@ describe("GateMinusOneProbe", () => {
       render(<Probe />);
       expect(sessionStorage.getItem("ergomatic:nfc-gate-minus-one")).toBeNull();
       expect(native.calls).not.toContain(`release:attempt-a:${stage}`);
+      const acknowledgeB = hold("nfc-start");
       await act(async () =>
         document.getElementById("nfc-gate-start-b")!.click(),
       );
+      expect(native.calls).toContain("nfc-start:attempt-b");
+      expect(native.calls).not.toContain(`release:attempt-a:${stage}`);
+      await acknowledgeB();
       await waitFor(() =>
         expect(native.calls).toContain(`release:attempt-a:${stage}`),
       );
