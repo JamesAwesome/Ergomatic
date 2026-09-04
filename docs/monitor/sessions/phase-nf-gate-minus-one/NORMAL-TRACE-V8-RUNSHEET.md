@@ -5,6 +5,16 @@ The reviewer independently verified the restored installation and wireless
 rehearsal, and approved this exact one-attempt protocol with no remaining
 readiness findings. Consent must still arrive before the eight-minute clock
 or a new scan starts.
+
+**Later installation instruction:** James explicitly required permission for
+every phone install; prior preparation/PM approval is not continuing install
+authorization. His “Install again” authorized one reinstall at
+21:36:25–21:36:34 UTC on 2026-09-04. The pinned 0.23.0 / 789 artifact was
+reinstalled wirelessly and independently listed with the matching new
+installation URL, in 8.914 seconds. No launch or scan was requested or issued.
+The private `explicit-reinstall-xo02xh54/` directory retains that result and
+previous provenance; the capture directory's install/listing inputs now refer
+to this latest verified installation. The test clock has not started.
 No scan is authorized by “keep going.” Approved product design is unchanged;
 product implementation remains gated. V7 is preserved in
 `NORMAL-TRACE-V7-RUNSHEET.md` and `NORMAL-TRACE-V7-RESULT.md`.

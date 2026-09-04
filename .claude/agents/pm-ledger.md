@@ -4577,3 +4577,11 @@ without NFC. Its invitation is untimed and requests no setup; explicit
 scan consent starts the total eight-minute clock. One grouped physical
 block follows capture readiness. Conditional Cancel tests its previously
 unobserved reachability within that attempt, with no retry.
+
+## James's install-permission instruction, 2026-09-04
+
+“Install again. Also don't ever push an install without permission.”
+This authorizes that one reinstall and requires explicit permission for each
+future phone installation. It supersedes treating earlier preparation or
+install authorization as permission to reinstall later. PM readiness approval
+does not grant device-install permission; the binding rule is in `CLAUDE.md`.

@@ -225,6 +225,12 @@ requirements).
     final gates. Pure-UI, infra, and docs PRs no longer get per-PR PM
     verdicts. Present PM verdicts with the artifact they judge; never
     merge on green CI alone where a PM gate applies.
+  - **Every installation to James's phone requires explicit permission for
+    that installation (James, 2026-09-04).** Readiness for setup, permission to
+    continue desk work, PM approval, or a previous install authorization does
+    not authorize another install/reinstall. Prepare and verify the artifact
+    first, then obtain permission before the device install command. A direct
+    request such as “Install again” authorizes that one installation.
   - **Every hardware walk requires a separate PM readiness PASS (James,
     2026-09-04).** This includes mid-phase, diagnostic, resumed, phone-only,
     and zero-rowing walks. The PM judges the operator session, even when
