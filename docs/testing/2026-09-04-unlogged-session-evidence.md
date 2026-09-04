@@ -108,14 +108,19 @@ cause. After the warm/cold split, the pre-review full E2E run passed 461/461
 (2.1m). The review-round restored-tree full E2E run passed 462/462; it likewise
 does not establish a cause for the original timeout.
 
-Gate record: `pnpm lint`, `pnpm typecheck`, and `pnpm format:check` passed;
-`pnpm test` and `pnpm test:coverage` passed 257 files / 7063 tests (one
-skipped), with coverage 98.75% statements and 97.16% branches; `pnpm build`
-passed with its existing 637.71 kB Vite chunk advisory; and sequential
-`pnpm screenshots` passed 118/118. Coverage HTML was read for recovery
-surfaces: `ReviewSession.tsx` 97.72% statements / 97.82% branches,
+Current fix-tree gate record: `pnpm lint`, `pnpm typecheck`, and
+`pnpm format:check` passed; `pnpm test:coverage` passed 257 files / 7063 tests
+(one skipped), with 98.73% statements and 97.14% branches; and `pnpm build`
+passed with its existing 637.87 kB Vite chunk advisory. Its HTML was read for
+recovery surfaces: `ReviewSession.tsx` 97.72% statements / 97.82% branches,
 `Today.tsx` 99.18% / 97.91%, `UnsavedWorkouts.tsx` 97.77% / 95.65%, and
-`LogSession.tsx` 98.26% / 95.56%.
+`LogSession.tsx` 98.26% / 95.56%. The changed `UnsavedWorkoutWarning.tsx` is
+80% statements / 80% branches / 100% functions / 88.88% lines: the only
+uncovered paths are its defensive null ref and jsdom's unavailable
+`scrollIntoView` true branch. The current browser witness exercises the latter
+against Chromium. Sequential `pnpm screenshots` passed 118/118 and final
+`pnpm e2e` passed 462/462. The earlier standalone `pnpm test` result is
+superseded for source coverage by the current coverage gate.
 
 Native acceptance is an approved criterion but still pending James. Its
 operator protocol is a **proposed** phone acceptance walk at
