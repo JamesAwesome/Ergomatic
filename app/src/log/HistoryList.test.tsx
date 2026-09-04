@@ -98,6 +98,8 @@ function baseStoredRow(overrides: Partial<StoredLog> = {}): StoredLog {
     thumbs: null,
     deviceName: "PM5 432331249",
     source: "pm5",
+    c2ResultId: null,
+    c2UserId: null,
     steps: [],
     avgSplitSeconds: null,
     timeSeconds: null,

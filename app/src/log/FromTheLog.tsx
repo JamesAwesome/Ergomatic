@@ -10,6 +10,7 @@ import {
   SummaryReflectionCard,
 } from "../session/PostWorkoutSummary";
 import { resolveBackTarget } from "../shell/BackLink";
+import Concept2SendBlock from "./Concept2SendBlock";
 import { buildStoredSummary, type StoredLog } from "./storedSummary";
 import TraceChart from "./TraceChart";
 
@@ -560,6 +561,14 @@ export default function FromTheLog() {
           {view.planFooter !== undefined && (
             <p className="log-plan-footer">{view.planFooter}</p>
           )}
+
+          {/* Wave E PR2, Surface 2. Board: "end of the log-detail scroll,
+              after the 'Logged to <plan>' line"; the delete affordance's
+              own rule immediately below is "bottom of the view, below the
+              plan footer" — both hold only in this order, so the send
+              block sits between them. Reads `row` directly, never the view
+              model, the same constraint `MachineConfirmedBlock` carries. */}
+          <Concept2SendBlock row={row} />
 
           {/* §1 Placement: "Bottom of the view, below the plan footer —
               last, quiet, away from Edit." Copy is a pure function of

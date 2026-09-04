@@ -58,14 +58,13 @@ describe("concept2 store against real Postgres", () => {
       accessToken: string;
       refreshToken: string;
       expiresAt: Date;
-      weightClass: "H" | "L";
+      c2Username: string | null;
     }> = {},
   ) => ({
     c2UserId: 555,
     accessToken: "at-1",
     refreshToken: "rt-1",
     expiresAt: new Date("2026-09-01T00:00:00Z"),
-    weightClass: "H" as const,
     ...overrides,
   });
 
@@ -79,10 +78,38 @@ describe("concept2 store against real Postgres", () => {
         c2UserId: 555,
         accessToken: "at-1",
         refreshToken: "rt-1",
-        weightClass: "H",
         needsReauthAt: null,
       });
       expect(row?.expiresAt.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+    });
+
+    it("round-trips c2Username, and stores null when the caller gives none", async () => {
+      // Wave E PR2. Two users, two c2UserIds, because D1's UNIQUE on
+      // `c2_user_id` is GLOBAL and every test in this describe block shares
+      // one Postgres schema — `link()`'s own default (555) is already held
+      // by `userA` from the first test in the file, so reusing it here
+      // would 409 rather than assert anything.
+      const store = createConcept2Store(db);
+      const named = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-named",
+        email: "named@c2-store.test",
+        name: "N",
+      });
+      const anon = await createUserStore(db).createUser({
+        googleSub: "c2-store-user-anon",
+        email: "anon@c2-store.test",
+        name: "A",
+      });
+      await store.upsertLink(
+        named.id,
+        link({ c2UserId: 608, c2Username: "jamesawesome" }),
+      );
+      // No `c2Username` key at all: the input field is OPTIONAL and the
+      // COLUMN is required-and-nullable, which is the asymmetry the store's
+      // own comment records.
+      await store.upsertLink(anon.id, link({ c2UserId: 609 }));
+      expect((await store.getLink(named.id))?.c2Username).toBe("jamesawesome");
+      expect((await store.getLink(anon.id))?.c2Username).toBeNull();
     });
 
     it("getLink returns null when no row exists", async () => {
@@ -361,20 +388,17 @@ describe("concept2 store against real Postgres", () => {
       await store.createAttempt({
         nonce: "replace-1",
         userId: fresh.id,
-        weightClass: "H",
         surface: "web",
       });
       await store.createAttempt({
         nonce: "replace-2",
         userId: fresh.id,
-        weightClass: "L",
         surface: "native",
       });
       expect(await attemptCount(fresh.id)).toBe(1);
       expect(await store.peekAttempt("replace-1")).toBeNull();
       expect(await store.peekAttempt("replace-2")).toStrictEqual({
         userId: fresh.id,
-        weightClass: "L",
         surface: "native",
       });
     });
@@ -394,13 +418,11 @@ describe("concept2 store against real Postgres", () => {
         store.createAttempt({
           nonce: "concurrent-a",
           userId: fresh.id,
-          weightClass: "H",
           surface: "web",
         }),
         store.createAttempt({
           nonce: "concurrent-b",
           userId: fresh.id,
-          weightClass: "H",
           surface: "web",
         }),
       ]);
@@ -446,7 +468,6 @@ describe("concept2 store against real Postgres", () => {
         await tx.insert(concept2AuthAttempts).values({
           nonce: "held-by-tx",
           userId: fresh.id,
-          weightClass: "H",
           surface: "web",
         });
         signalHolderInserted();
@@ -462,7 +483,6 @@ describe("concept2 store against real Postgres", () => {
       const mintPromise = store.createAttempt({
         nonce: "second-mint",
         userId: fresh.id,
-        weightClass: "L",
         surface: "native",
       });
       void mintPromise.then(
@@ -486,7 +506,6 @@ describe("concept2 store against real Postgres", () => {
       expect(await attemptCount(fresh.id)).toBe(1);
       expect(await store.peekAttempt("second-mint")).toStrictEqual({
         userId: fresh.id,
-        weightClass: "L",
         surface: "native",
       });
     });
@@ -506,36 +525,31 @@ describe("concept2 store against real Postgres", () => {
       await store.createAttempt({
         nonce: "shared-nonce",
         userId: owner.id,
-        weightClass: "H",
         surface: "web",
       });
       await expect(
         store.createAttempt({
           nonce: "shared-nonce",
           userId: other.id,
-          weightClass: "L",
           surface: "native",
         }),
       ).rejects.toBeInstanceOf(AttemptNonceCollisionError);
       expect(await store.peekAttempt("shared-nonce")).toStrictEqual({
         userId: owner.id,
-        weightClass: "H",
         surface: "web",
       });
       expect(await attemptCount(other.id)).toBe(0);
     });
 
-    it("peekAttempt is advisory: it returns {userId, weightClass, surface} and does NOT delete", async () => {
+    it("peekAttempt is advisory: it returns {userId, surface} and does NOT delete", async () => {
       const store = createConcept2Store(db);
       await store.createAttempt({
         nonce: "peek-me",
         userId: userA,
-        weightClass: "L",
         surface: "native",
       });
       expect(await store.peekAttempt("peek-me")).toStrictEqual({
         userId: userA,
-        weightClass: "L",
         surface: "native",
       });
       expect(await store.peekAttempt("peek-me")).not.toBeNull();
@@ -547,7 +561,6 @@ describe("concept2 store against real Postgres", () => {
       await store.createAttempt({
         nonce: "wrong-user",
         userId: userA,
-        weightClass: "H",
         surface: "web",
       });
       expect(
@@ -561,7 +574,6 @@ describe("concept2 store against real Postgres", () => {
       await store.createAttempt({
         nonce: "wrong-surface",
         userId: userA,
-        weightClass: "H",
         surface: "native",
       });
       expect(
@@ -575,17 +587,16 @@ describe("concept2 store against real Postgres", () => {
       expect(await store.peekAttempt("wrong-surface")).not.toBeNull();
     });
 
-    it("consumeAttemptFor with the right (user, surface) returns {weightClass, fresh:true} once and null the second time", async () => {
+    it("consumeAttemptFor with the right (user, surface) returns {fresh:true} once and null the second time", async () => {
       const store = createConcept2Store(db);
       await store.createAttempt({
         nonce: "right-once",
         userId: userA,
-        weightClass: "L",
         surface: "web",
       });
       expect(
         await store.consumeAttemptFor("right-once", userA, "web", 15 * 60_000),
-      ).toStrictEqual({ weightClass: "L", fresh: true });
+      ).toStrictEqual({ fresh: true });
       expect(
         await store.consumeAttemptFor("right-once", userA, "web", 15 * 60_000),
       ).toBeNull();
@@ -597,13 +608,12 @@ describe("concept2 store against real Postgres", () => {
       await store.createAttempt({
         nonce: "stale-right",
         userId: userA,
-        weightClass: "H",
         surface: "web",
       });
       // maxAgeMs 0: any row created even microseconds ago is past it.
       expect(
         await store.consumeAttemptFor("stale-right", userA, "web", 0),
-      ).toStrictEqual({ weightClass: "H", fresh: false });
+      ).toStrictEqual({ fresh: false });
       expect(await store.peekAttempt("stale-right")).toBeNull();
     });
 
@@ -617,13 +627,11 @@ describe("concept2 store against real Postgres", () => {
       await store.createAttempt({
         nonce: "nonce-stale",
         userId: stale.id,
-        weightClass: "H",
         surface: "web",
       });
       await store.createAttempt({
         nonce: "nonce-fresh",
         userId: userA,
-        weightClass: "H",
         surface: "web",
       });
       await db.execute(
@@ -685,7 +693,6 @@ describe("concept2 store against real Postgres", () => {
       await store.createAttempt({
         nonce: "nonce-cascade",
         userId: fresh.id,
-        weightClass: "H",
         surface: "web",
       });
 

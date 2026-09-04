@@ -1,4 +1,14 @@
 {
   "extends": "./tsconfig.server.json",
+  // PINNED BACK, deliberately redundant-looking. `tsconfig.server.json`
+  // carries `"DOM"` so that the TYPE-CHECK pass can reach
+  // `server/routes/concept2Send.integration.test.ts`'s cross-tree imports
+  // (the client hook it pulls in touches `window`/`document`). That config
+  // includes tests; THIS one compiles the shipped server, which must never
+  // reach a browser global. Removing this line makes
+  // `pnpm exec tsc -p tsconfig.server.build.json --noEmit` accept a stray
+  // `document.title` in `server/index.ts` — the probe recorded in that
+  // test file's task report.
+  "compilerOptions": { "lib": ["ES2023"] },
   "exclude": ["server/**/*.test.ts", "domain/**/*.test.ts"]
 }

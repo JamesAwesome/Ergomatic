@@ -241,13 +241,39 @@ function notesError(value: unknown): string | null {
   return null;
 }
 
-// Wave E PR1: completedAt is the run's own close stamp (C2's `date` is the
-// END of the workout — spec anchor K3). Malformed input is a client BUG and
-// 400s; a PARSEABLE stamp outside the plausible band is a wrong device
-// clock, and the save must survive it — the caller coerces to null (the
-// column is nullable and the upload mapping already has a loggedAt
-// fallback). This band is a save-time sanity bound only; C2's own
-// future-date bound applies at UPLOAD time to a different instant.
+// Wave E PR1: completedAt is the run's own close stamp. Concept2's own
+// documentation of the `date` parameter, quoted verbatim
+// (`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`,
+// §Research record, the "POST results" bullet): "this should be the date as
+// stored in the monitor, which is the end of the workout, NOT the
+// beginning".
+//
+// Malformed input is a client BUG and 400s; a PARSEABLE stamp outside the
+// plausible band is a wrong device clock, and the save must survive it —
+// the caller coerces to null (the column is nullable and the upload mapping
+// already has a loggedAt fallback). This band is a save-time sanity bound
+// only; C2's own future-date bound applies at UPLOAD time to a different
+// instant.
+//
+// WHY THIS FIELD STILL REFUSES WHILE `tz` BELOW DEGRADES (Wave E PR2 Task 6
+// — the asymmetry is deliberate, and it is not the same risk). `tzError`
+// consults an ENVIRONMENT-DEPENDENT list, so a phone and a server image can
+// legitimately disagree about a real zone; ISO 8601 parsing is not a list
+// and cannot skew that way. Both of this app's producers write
+// `completedAt` with `toISOString()` (`src/monitor/monitorRun.ts`'s two
+// close writers), so a malformed value means something upstream is wrong
+// and should be loud.
+//
+// THE RESIDUAL, stated so a future writer sees it before it costs a save:
+// `isMonitorRun` accepts ANY string for `completedAt`
+// (`src/monitor/monitorRun.ts`: `value.completedAt === null || typeof
+// value.completedAt === "string"`), and NEITHER client retry strips this
+// key — `useLogForm`'s 400-retry re-posts with `workoutId: null` and only
+// when the server named `workoutId`, and the series sacrifice drops
+// `series`. So a record from a tampered store, or from a future writer
+// that stamps some other format, loses the WHOLE save here rather than
+// just the stamp. If either becomes reachable, this branch degrades to a
+// stored null the way `tz` does, instead of refusing.
 // Capturing groups on the wall-clock fields (year/month/day/hour/min/sec):
 // the regex alone only shapes the string; a value like
 // "2026-02-31T12:00:00.000Z" matches it and parses (`Date.parse`
@@ -326,6 +352,15 @@ function checkCompletedAt(
 // offsets ("+05:00") and legacy aliases, and C2's `timezone` feeds their
 // date_utc derivation, so only canonical zone names (plus "UTC", which the
 // client's resolvedOptions().timeZone can legitimately produce) pass.
+//
+// This is a CHECK, not a policy: the two callers answer a non-null return
+// differently on purpose (Wave E PR2 Task 6). `POST /api/logs` degrades —
+// it stores null and saves the row, because a Concept2 field must never
+// cost a rower their own record. The upload route
+// (`routes/concept2.ts`) refuses with its own 400 `field:"tz"`, because
+// there a refusal costs one Concept2 send and nothing else. The message
+// below is the reason, carried for the caller that wants to state one;
+// only `concept2.ts` renders a sentence today, and it writes its own.
 const IANA_ZONES = new Set<string>([
   ...Intl.supportedValuesOf("timeZone"),
   "UTC",
@@ -1751,11 +1786,47 @@ export function createDataRouter({
       badRequest(res, completedAtCheck.message, "completedAt");
       return;
     }
-    const tzErr = tzError(body.tz);
-    if (tzErr) {
-      badRequest(res, tzErr, "tz");
-      return;
-    }
+    // Wave E PR2 Task 6 (TRIAD). THE INVARIANT: a Concept2 field can never
+    // cost a rower their row. This route DEGRADES an unrecognised zone to
+    // null and saves; it does NOT refuse. Do not "restore" the 400.
+    //
+    // Before PR2 no client sent `tz` at all, so the refusal branch that used
+    // to sit here had never fired in production. Both monitor doors now send
+    // the field on every save, which puts that branch on the path of every
+    // rowed session — and `tzError` checks membership of THIS SERVER
+    // IMAGE's `Intl.supportedValuesOf("timeZone")`. A phone's tzdata and a
+    // server image's legitimately disagree across a release
+    // (`Europe/Kyiv`/`Europe/Kiev`, `America/Nuuk`/`America/Godthab` are the
+    // ordinary skew), and the disagreeing list is OURS. Refusing would turn
+    // a completed workout into a failed save over a field that exists only
+    // to date a THIRD PARTY's copy of it.
+    //
+    // WHAT A DROPPED ZONE ACTUALLY COSTS, read at the upload path rather
+    // than assumed: nothing about the DATE. `routes/concept2.ts` resolves
+    // `effectiveTz` (the stored zone, else the upload request's own zone,
+    // persisted on first use) and builds its payload row as
+    // `{...eligibilityRow, tz: effectiveTz}` — never the raw, possibly-null
+    // `row.tz`. So `buildC2Payload`'s paired branch still fires on a row
+    // whose `completedAt` is set, and Concept2 is still told the moment the
+    // rower stopped. The only casualty is WHICH zone labels that instant:
+    // the phone's zone at send time rather than at save time, the same zone
+    // for the same rower on the same day. A degraded save is therefore
+    // strictly better than a refused one, not merely less bad.
+    //
+    // `checkCompletedAt` above already models this posture for the sibling
+    // field (an implausible stamp is `{ok: true, value: null}`, not a
+    // refusal). The STRICT check stays where a refusal costs nothing — the
+    // upload route (`routes/concept2.ts`), whose 400 `field:"tz"` refuses
+    // one Concept2 send and leaves the rower's own record untouched.
+    //
+    // `?? null` alone is the whole normalisation the accepted arm needs:
+    // `tzError` has already rejected every non-string AND the empty string
+    // (`IANA_ZONES.has("")` is false), so the only values reaching it are
+    // undefined, null, and a canonical zone name.
+    const tz =
+      tzError(body.tz) === null
+        ? ((body.tz as string | null | undefined) ?? null)
+        : null;
 
     const baselines = await stores.baselines.get(req.user!.id);
     const { id } = await stores.logs.create(req.user!.id, {
@@ -1794,7 +1865,7 @@ export function createDataRouter({
         (body.machineWorkMeters as number | null | undefined) ?? null,
       machineSummary: machineSummaryResult.summary,
       completedAt: completedAtCheck.value,
-      tz: (body.tz as string | null | undefined) ?? null,
+      tz,
     });
     res.status(201).json({ id });
   });

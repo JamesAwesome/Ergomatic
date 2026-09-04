@@ -548,8 +548,8 @@ at the Gate 0 artifact, 2026-09-02. The copy, verbatim:
 | 409 | Already linked | That Concept2 account is already connected to a different Ergomatic account. (D1 APPROVED) | Return to the app. |
 | 400 | Expired | This link has expired or was already used. | Return to the app and start again. |
 | 400 | Incomplete | This link is missing required parameters. | Return to the app and start again. |
-| 401 | Not signed in | No Ergomatic session in this browser. | Sign in to Ergomatic here, then start the link again from the app. |
-| 403 | Wrong account | This link was started by a different Ergomatic account. | Sign in as that account here, or start a new link from the account you're using. |
+| 401 | Not signed in | No Ergomatic session in this browser. | Open Ergomatic in this browser and sign in, then start the link again from the app. **(AMENDED 2026-09-04, PR2 Task 12; was "Sign in to Ergomatic here, …")** |
+| 403 | Wrong account | This link was started by a different Ergomatic account. | Sign in as that account in this browser, or start a new link from the account you're using. **(AMENDED 2026-09-04, PR2 Task 12; was "Sign in as that account here, …")** |
 | 403 | Unavailable | Concept2 linking is not available right now. | Return to the app. |
 | 502 | Failed | Concept2 could not complete the connection. | Return to the app and try again. |
 
@@ -717,9 +717,15 @@ is not answerable on a build that registers the scheme — the walk says so); (5
   often that is.
 - `consumeAttempt` retires with `deleteAttemptsFor` — zero callers after the two
   ladders, and it was an unauthenticated consume primitive.
-- 401/403 copy "Sign in to Ergomatic here" renders as PLAIN TEXT, matching the
-  approved render — no anchor, even same-origin (a link is a PR2 amendment if
-  wanted).
+- 401/403 copy renders as PLAIN TEXT, matching the approved render — no
+  anchor, even same-origin. **SUPERSEDED IN PART, 2026-09-04 (PR2 Task 12,
+  Gate 0 amendment §3 ruling (iii)):** this bullet used to quote "Sign in to
+  Ergomatic here" and offer a link as a possible PR2 amendment. No link was
+  added and none can be — the template emits no anchors and no subresources
+  because the callback URL carries `code` and the first outbound link would
+  leak it in `Referer` (RFC 9700 §4.2). The WORD "here" was removed instead,
+  on both pages, because it named a destination the page could not reach. The
+  copy table above carries the current sentences.
 - Every nonce-shaped web 400 (unknown, wrong surface, lost race, expired) renders
   the Expired page; Incomplete is for missing parameters only.
 - The concept2 store has no `describeStoreContracts` suite (PR1's shape: real-

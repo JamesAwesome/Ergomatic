@@ -39,14 +39,14 @@ describe("renderCallbackPage", () => {
       401,
       "CONCEPT2 LINK · NOT SIGNED IN · HTTP 401",
       "No Ergomatic session in this browser.",
-      "Sign in to Ergomatic here, then start the link again from the app.",
+      "Open Ergomatic in this browser and sign in, then start the link again from the app.",
     ],
     [
       "wrongAccount",
       403,
       "CONCEPT2 LINK · WRONG ACCOUNT · HTTP 403",
       "This link was started by a different Ergomatic account.",
-      "Sign in as that account here, or start a new link from the account you're using.",
+      "Sign in as that account in this browser, or start a new link from the account you&#39;re using.",
     ],
     [
       "unavailable",
@@ -76,6 +76,33 @@ describe("renderCallbackPage", () => {
       expect(page.html.replace(/<[^>]+>/g, "")).toContain(action);
     },
   );
+
+  // Gate 0 amendment §3, ruling (iii) = A (approved 2026-09-03). The two
+  // sign-in lines said "Sign in to Ergomatic here" / "Sign in as that account
+  // here". `here` was PLAIN TEXT and always had to be: this template emits no
+  // anchors and no subresources at all, because the callback URL carries
+  // `code` and the first outbound link would leak it in Referer (RFC 9700
+  // §4.2, and the `carries no subresource` cases below pin it). A bare "here"
+  // therefore named a destination the page could not take the rower to. The
+  // reword removes the false affordance; no link is added.
+  it("names no destination the page cannot take you to", () => {
+    const notSignedIn = renderCallbackPage("notSignedIn");
+    expect(notSignedIn.html).toContain(
+      "Open Ergomatic in this browser and sign in, then start the link again from the app.",
+    );
+    const wrongAccount = renderCallbackPage("wrongAccount");
+    expect(wrongAccount.html).toContain(
+      "Sign in as that account in this browser, or start a new link from the account you&#39;re using.",
+    );
+    // Mapped, not an `expect` inside a loop: a conditional expect asserts
+    // NOTHING when its condition is false, which is exactly the failure mode
+    // a "no `here` anywhere" claim has to rule out.
+    expect(
+      (["notSignedIn", "wrongAccount"] as const).map((kind) =>
+        /\bhere\b/.test(renderCallbackPage(kind).html),
+      ),
+    ).toStrictEqual([false, false]);
+  });
 
   it("linked (200) names BOTH identities (D2) in the approved sentence", () => {
     const page = renderCallbackPage("linked", {
@@ -112,8 +139,9 @@ describe("renderCallbackPage", () => {
 
   // Design §5: callback HTML carries NO subresource and NO outbound link,
   // ever — the first external stylesheet or anchor would leak `code`/`state`
-  // in Referer. There are no anchors on any page, including "here": it is
-  // plain text, not a link.
+  // in Referer. This is the constraint the ruling (iii) reword must not
+  // quietly relax, and these cases are what pin it: no page may grow an
+  // anchor to back up a word like the "here" that was removed.
   it.each([
     "alreadyLinked",
     "expired",

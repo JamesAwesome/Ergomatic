@@ -43,6 +43,10 @@ export interface AppDeps {
     // routes/concept2.ts). Was `C2ClientConfig.redirectUri` — both client
     // calls now take the surface's redirect as an argument.
     webRedirectUri: string;
+    // Wave E PR2: the Concept2 ORIGIN this deployment talks to
+    // (`index.ts`'s `c2BaseUrl`), threaded through to `GET /link` exactly
+    // as `webRedirectUri` is.
+    logbookBaseUrl: string;
   } | null;
 }
 
@@ -117,6 +121,7 @@ export function createApp(deps: AppDeps) {
         requireUser: requireUser(deps.sessions),
         sessions: deps.sessions,
         webRedirectUri: concept2Deps.webRedirectUri,
+        logbookBaseUrl: concept2Deps.logbookBaseUrl,
       }),
     );
   }

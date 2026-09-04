@@ -1926,9 +1926,11 @@ describe("GET/POST /api/logs", () => {
   // Wave E PR1 Task 2 (2026-08-31-concept2-logbook-design.md §Stored
   // shapes, TRIAD): `completedAt`/`tz`, optional/nullable, same
   // additive-only-between-tags posture as every other field on this
-  // route. `completedAt` is the run's own close stamp (C2's `date` is the
-  // END of the workout — spec anchor K3); `tz` is checked for IANA
-  // membership, not merely "Intl accepts it" (see `tzError`'s own
+  // route. `completedAt` is the run's own close stamp — Concept2's own
+  // words on the `date` parameter (same spec, §Research record, the "POST
+  // results" bullet): "this should be the date as stored in the monitor,
+  // which is the end of the workout, NOT the beginning". `tz` is checked
+  // for IANA membership, not merely "Intl accepts it" (see `tzError`'s own
   // comment in data.ts).
   it("accepts a valid completedAt + tz and round-trips both through GET", async () => {
     const app = appFor(makeStores());
@@ -2080,6 +2082,15 @@ describe("GET/POST /api/logs", () => {
     expect(res.status).toBe(201);
   });
 
+  // Wave E PR2 Task 6 (TRIAD). THE INVARIANT: a Concept2 field can never
+  // cost a rower their row. This block used to assert the opposite — a 400
+  // naming `tz` — and was REPLACED, not deleted, when both monitor doors
+  // started sending the field on every save. `tzError` reads THIS SERVER
+  // IMAGE's zone list, a phone's tzdata and a server image's legitimately
+  // disagree across a release, and the disagreeing list is ours. Do not
+  // restore the refusal: the strict check lives on the UPLOAD route
+  // (`routes/concept2.ts`), where a 400 costs one Concept2 send and leaves
+  // the rower's own record intact.
   it.each([
     ["an unknown zone name", "Not/AZone"],
     ["a raw UTC offset, not a zone name", "+05:00"],
@@ -2089,18 +2100,23 @@ describe("GET/POST /api/logs", () => {
     // unrecognized string. This case pins that ordinary rejection, not a
     // looser-than-IANA acceptance the validator has to narrow.
     ["a string Intl itself rejects outright, same as an unknown zone", "GMT+5"],
+    // The empty string is a STRING, so a bare `?? null` would store it and
+    // the column would hold a value that is not a zone. `tzError` is what
+    // rejects it (`IANA_ZONES.has("")` is false) and the degrade turns that
+    // rejection into a stored null.
+    ["the empty string, which survives a bare ?? null", ""],
   ])(
-    "rejects an invalid tz (%s) with 400, field named",
+    "degrades an invalid tz (%s) to null and SAVES the row",
     async (_label, value) => {
-      const res = await asA(
-        request(appFor(makeStores())).post("/api/logs"),
-      ).send({
+      const app = appFor(makeStores());
+      const res = await asA(request(app).post("/api/logs")).send({
         ...validLogBody(),
         tz: value,
       });
-      expect(res.status).toBe(400);
-      expect(res.body.field).toBe("tz");
-      expect(res.body.error).toBe("tz must be an IANA timezone name or null");
+      expect(res.status).toBe(201);
+
+      const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+      expect(got.body.tz).toBeNull();
     },
   );
 

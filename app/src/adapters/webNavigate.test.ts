@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { navigateWeb } from "./webNavigate";
+import { navigateWeb, openWebInNewTab } from "./webNavigate";
 
 // jsdom throws "Not implemented: navigation (except hash changes)" if the
 // REAL `window.location.assign` actually runs, and a direct `vi.spyOn(
@@ -32,5 +32,37 @@ describe("navigateWeb", () => {
     expect(assign).toHaveBeenCalledExactlyOnceWith(
       "https://log.concept2.com/oauth/authorize",
     );
+  });
+});
+
+describe("openWebInNewTab", () => {
+  it("opens a NEW context and never navigates this document", () => {
+    // The distinction is the whole point (plan observation 10):
+    // `navigateWeb` unloads the SPA, which is right for the OAuth hop and
+    // would lose the rower's log row for a read-only look.
+    const open = vi.fn();
+    const assign = vi.fn();
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { assign },
+    });
+    const originalOpen = window.open;
+    window.open = open as unknown as typeof window.open;
+    try {
+      openWebInNewTab("https://log-dev.concept2.com/profile/2211/log/339");
+      expect(open).toHaveBeenCalledWith(
+        "https://log-dev.concept2.com/profile/2211/log/339",
+        "_blank",
+        "noopener,noreferrer",
+      );
+      expect(assign).not.toHaveBeenCalled();
+    } finally {
+      window.open = originalOpen;
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: original,
+      });
+    }
   });
 });

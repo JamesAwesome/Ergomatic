@@ -246,6 +246,28 @@ describe("JustRowLog (the workout-less log door)", () => {
     // Landed elsewhere, not a broken form over nothing.
     expect(await screen.findByText("ELSEWHERE")).toBeInTheDocument();
   });
+
+  it("the Just Row MONITOR door posts the close stamp too, not just the session door's", async () => {
+    // The class, not the instance: this is the app's other `source: "pm5"`
+    // producer, over the same `MonitorRun` record, behind the same
+    // eligibility fence. Fixing only `LogSession.tsx` would leave a free
+    // row that ends `finished` uploading with its save clock as C2's date.
+    const fn = mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    commitHandoff(closedFreeRow().startedAt, null, closedFreeRow());
+    await renderDoor();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      const body = savedBody(fn);
+      // `closedFreeRow`'s own literal — the MONITOR fixture's close
+      // stamp, not `completedTimerRun`'s, which is a different clock on a
+      // door that posts neither field. Written out, never read back
+      // through the production path.
+      expect(body.completedAt).toBe("2026-09-01T09:10:20.000Z");
+      expect(body.tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    });
+  });
 });
 
 // Substitution spec (2026-09-02) §Mechanism 2, exit criterion 2: the door
@@ -508,6 +530,17 @@ describe("JustRowLog: the timer entry", () => {
       expect("machineWorkSeconds" in body).toBe(false);
       expect("machineSummary" in body).toBe(false);
       expect("series" in body).toBe(false);
+      // Wave E PR2 Task 6, fix round 1 (F1). The close-stamp pair is the
+      // app's SECOND `source: "timer"` door, and the negative invariant has
+      // to be asserted at both or it is an instance fix wearing a class
+      // fix's reasoning. `eligibilityFailure`'s first gate refuses a
+      // `timer` row before a Concept2 payload is ever built, so a zone
+      // stored here has no reader — one more attribute about the rower's
+      // device for nothing, against the standing "ask as little as we can"
+      // ruling. Until this round, adding `...completionStamp(door.run)` to
+      // this door's own submit left all 4,822 client tests green.
+      expect("completedAt" in body).toBe(false);
+      expect("tz" in body).toBe(false);
     });
     // Lifetime table: a successful save is a clear site for the run.
     await waitFor(() => expect(loadRun()).toBeNull());

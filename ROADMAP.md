@@ -881,7 +881,8 @@ closed with zero Concept2 contact.
       gated on Concept2's write approval; live-portal registration of the
       native redirect under the application name "Ergomatic" (log-dev is
       registered under James's own name — D3 pre-check observation,
-      `94b83c84`); PR2's surface + its Gate 0 identity-copy amendment; the
+      `94b83c84`); the weight-unit desk reading that bounds the fallback
+      producer (PR2's row below); the
       `describeStoreContracts` gap named at 1.75a
       (`2026-09-02-concept2-pr175a-server.md:44`); and a decision for
       James, not made here: whether to promote the app-wide bearer/cookie
@@ -889,12 +890,71 @@ closed with zero Concept2 contact.
       that this walk measured 42/42 native requests cookie-free. Until
       decided, the app-wide path only logs `auth_disagreement` and
       `/api/concept2/*` alone refuses.
-- [ ] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
-      (Connect + H/L ask + Unlink) and the log row's Send action with
+- [x] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
+      (Connect + Unlink; it asks nothing) and the log row's Send action with
       sent/duplicate/failed states and a View-on-Concept2 link-out. **M**
-- [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open: the
-      `weight_class` gate is answered by the link flow (RULED — a binary H/L
-      asked only at C2 link time, never at onboarding, and it is PII); the
+      Also carries the 2026-09-03 weight-class ruling: migration 0023 drops
+      `weight_class` from both Concept2 tables and the send path READS the
+      class from Concept2 on every send — the rower's own most recent
+      DECLARATION first (Concept2's help: "you must designate L or H for
+      every piece that you enter"), our derivation from the profile's
+      `weight`+`gender` as a fallback, a 422 the rower can act on when
+      neither answers. Never stored, never cached, and **since the
+      2026-09-04 ruling ("Stop talking about the weight class") no
+      rower-facing surface names the class or its producer** — this line
+      used to say the SENT state did; the class and `weightClassSource` stay
+      on the route's 200 and in the send's log line, for an operator.
+      **TRIAD** (stored shape + what a number means on a third party's
+      record).
+      **Follow-ons this PR names, recorded here rather than in its body
+      (RF14):**
+      - **A real fake-Concept2 service for e2e** — declined by ruling (v).
+        The e2e stack is C2-dark by construction and a committed CI test
+        enforces it (`scripts/compose-env.test.sh`), so PR2's browser flows
+        fake the server's answers with Playwright `page.route`: they prove
+        the CLIENT's states, never the web OAuth hop. A compose service, its
+        image and an OAuth-shaped fake are a PR of their own.
+      - **The weight-unit DESK leg, and the logged-in glance with it.** The
+        FALLBACK producer derives from a `weight` field whose UNIT is an
+        inference; the plausibility band refuses four of the six wrong
+        readings but cannot catch hundredths-of-a-pound. Two readings settle
+        it (the profile's unit preference on kg, then on lb), and the same
+        session answers which Concept2 page actually carries the weight and
+        weight-class fields — 2i's link-out target is provisional until it
+        does. **No erg, no phone: a desk step, and it gates the FLAG FLIP,
+        not this merge.** Stated as an exit criterion below as well.
+      - **Delete versus sent, unstated to the rower** (Task 7's RF23
+        enumeration). Deleting a row that is already on Concept2 leaves the
+        Concept2 row standing. That matches the unlink copy's position, and
+        nothing says so at the delete confirm.
+      - **Rows saved before PR2 carry `completed_at IS NULL`, permanently.**
+        They will always upload with their SAVE clock as Concept2's date.
+        There is no backfill and there cannot be one — the close instant was
+        never recorded. A known property of pre-PR2 rows, not a bug.
+- [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open and
+      RE-RULED 2026-09-03: the `weight_class` gate is answered by Concept2,
+      not by the link flow. James: "I don't want that set in our app. I want
+      it to be set on Concept2's side." This SUPERSEDES the 2026-08-22 ruling
+      ("a binary H/L asked only at C2 link time"). The app asks nothing and
+      stores nothing. **Corrected the same day, after an antagonist pass:**
+      the send path does not merely derive from the profile — Concept2's own
+      help says the class is the rower's per-piece DECLARATION, so the send
+      reads their most recent one first and derives only as a fallback.
+      Measured 2026-09-03 on log-dev: a result POSTed without `weight_class`
+      is refused 422; `GET /api/users/me` carries `weight` and `gender` but
+      no `weight_class`; and `GET /api/users/me/results` returns every result
+      carrying `weight_class`, date-descending, in ~220 ms for a small page.
+      **Corrected once more by the code-reading lens, and it is the standing
+      warning printed immediately below:** that list contains the rows
+      Ergomatic itself posted, Concept2's 201 echoes back the class we sent,
+      and no field marks a row as ours — so reading it unfiltered is a
+      MIRROR, and a derived guess would have come back as the rower's own
+      declaration on the very next send. The read now excludes every result
+      id this app wrote (`session_logs.c2_result_id`), and a page whose only
+      rows are ours counts as no declaration at all. The class is never
+      cached, and a FAILED read is retryable rather than a silent
+      fall-through to the guess.
+      The
       per-interval `rest_time` gate is NOT answered this wave — RC-1 stored the
       session-level split only, `LogStep` carries no per-interval rest, so the
       `intervals` array is out of scope and rides the auto-upload follow-on.
@@ -914,8 +974,24 @@ rejects or does not return, never for a field we chose not to send. Plus,
 from the widened scope: a linked user sends an eligible row from the app ON
 THE PHONE and C2's result id is stored on it, with the duplicate (409) and
 failure states each observed for real at least once; the link flow's
-request bodies carry exactly ONE new user attribute, `weight_class` (the
-countable form of minimal-PII); and the dedup-granularity, `state`-echo and
+request bodies carry NO new user attribute (the countable form of
+minimal-PII, STRENGTHENED by the 2026-09-03 ruling — it used to read
+"exactly ONE new user attribute, `weight_class`"); **the UNIT of Concept2's
+`weight` field is measured on James's log-dev profile before the flag
+flips — a DESK step, not a walk step, and it takes TWO readings** (the
+profile's unit preference on kg, then on lb, because the profile carries no
+unit field and one reading cannot detect a per-user display unit). The same
+desk session answers two more questions no status code can: which Concept2
+page carries the weight and weight-class fields (2i's link-out target is
+provisional until then), and whether a non-rower result carries a class.
+**It gates less than it used to:** with the declaration as the primary
+producer the unit only matters for a rower who has declared nothing, and
+the derivation's plausibility band already refuses four of the SIX wrong
+unit readings — the two it admits are hundredths-of-a-kilogram, which is
+the assumed-correct reading, and hundredths-of-a-pound, a 2.2x error no
+band can exclude, which is exactly what the second reading settles. Plus
+the
+dedup-granularity, `state`-echo and
 zero-rest-post questions each carry a measured answer in PR0's report —
 "unknown" leaves the wave open. (RC-9(b)'s live ring verdict moved OUT to
 the open-item register at the PM open gate: no shared mechanism, PR, or
@@ -1193,8 +1269,8 @@ connected-surface table below with a fix-13-instrument-14 ruling; "Run it
 again" was declined; RC-38 was pulled forward and the rest of Phase PROTO
 held; the axis-quantity question opened the "say which number this is" design
 pass below; AUD-006 got its fix shape. **This table now holds two rows, both
-closed as records rather than live questions — plus, since 2026-09-02, ONE
-LIVE row (the app-wide `ambiguous_auth` promotion, below): RC-30 (declined at the RC close)
+closed as records rather than live questions (the app-wide `ambiguous_auth`
+promotion row was LIVE from 2026-09-02 and was RULED KEEP on 2026-09-03): RC-30 (declined at the RC close)
 and the C2 account injection row — RULED by James at PR1.5's design gate
 (2026-09-01): ACCEPT the bounded residual for the dark plumbing; fully
 authenticated option (g) — attempt-surface binding AND identity-checked
@@ -1215,7 +1291,7 @@ question, not a re-raised one.
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
 | **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by two FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
-| **App-wide `ambiguous_auth` promotion** | LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
+| **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
@@ -1493,6 +1569,76 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **FILED (PR2 PM gate, 2026-09-04): three PR2 items whose only home was a plan
+  or a PR body.** A plan is a record of intent, not a live register (RF14).
+  (1) **The Concept2 card's container gap is gated on a hand-composed screen,
+  not on `/you`** — the e2e case paints the sibling chain itself, so it stays
+  green if `You.tsx`'s order or `ResetBaselineSetup`'s markup changes. Closes
+  when the surface can render in a browser artifact. (2) **The client/server
+  eligibility parity test proves PREDICATE PARITY, not route enforcement** —
+  deleting the route's `422 not_eligible` branch leaves
+  `concept2Send.integration.test.ts` green; `concept2.test.ts` catches it one
+  file over. Nobody should read the parity file as the enforcement gate.
+  (3) **Bare `.c2-card-status` (5.29:1, passing) is on no screen either axe
+  sweep covers** — the linked card always overrides it with `-status-on`, so
+  the passing pairing is unswept. **XS**
+
+- **FILED (PR2 Task 4 review, 2026-09-03): `e2e/retest.spec.ts` fails under
+  full-suite load, and the first recorded diagnosis was wrong.** Seen four
+  times across three PR2 tasks, always green when the spec runs in isolation
+  (`pnpm e2e e2e/retest.spec.ts` -> 3 passed), so it is load- or
+  order-dependent, not a broken test. **Corrected signature:** every captured
+  failure is downstream, and every snapshot shows Today ALREADY carrying the
+  saved log row **and** `SET UP YOUR BASELINE` — i.e. the save landed and the
+  post-save baseline offer never rendered. It is NOT the test-auth backdoor
+  returning non-ok under load: that stack came from a bare
+  `pnpm exec playwright test`, which bypasses the worktree's stack, and was an
+  artifact of the wrong command rather than the flake.
+  **Three occurrences, two different assertions, one mechanism.** Two failed
+  at `getByText('SESSION SAVED')` (`retest.spec.ts:51`); the third, captured
+  2026-09-03 during Task 4 fix round 2, failed at
+  `getByRole('heading', {name: 'Set your 2k baseline?'})`
+  (`retest.spec.ts:121`). Both locators belong to the same prompt, so the
+  signature is the PROMPT not rendering, not either assertion.
+  **MEASURED mechanism:** in `LogSession.tsx`'s `useLogForm` callback, a null
+  `pendingOfferRef.current` takes the `navigate("/today")` branch instead of
+  rendering `PostTestPrompt` — exactly "saved row on Today, no prompt". That
+  ref comes from `postTestOffer(...)`, which returns null on any of four
+  conditions (no measured `avgSplitSeconds`; the workout not the global
+  designated test; `completedFullDistance` false; the split outside the
+  60..240 s band). **INFERENCE, not confirmed:** both tests reach Save via
+  `page.clock.install()` + `fastForward("08:00")`, and the two conditions a
+  timing race can flip are `completedFullDistance` and the band — a
+  fast-forward that has not taken effect yields an implausibly fast split the
+  band rejects. Instrument the offer's four inputs to settle which fires.
+  **"State pollution between the file's two tests" is NOT supported** and was
+  this entry's own first guess: each test signs in with its own address
+  (`retest-6k-`/`retest-2k-`/`retest-decline-` + `RUN_ID`), so the accounts
+  are always distinct, and `SET UP YOUR BASELINE` is simply what a fresh
+  account renders. Traces:
+  `app/test-results/retest-Phase-BL-the-You-re-5b0d3-*/error-context.md` and
+  `.../retest-Phase-BL-the-You-re-cbcae-*/error-context.md` (local, not
+  committed — capture again before re-running, since `pnpm e2e` overwrites
+  `test-results/`). **Unrelated to Wave E PR2:** the Concept2 card has no
+  importer on this branch until Task 8, and every added selector is `.c2-card*`.
+  Owed: root-cause before treating any future red `retest.spec.ts` as noise.
+  **S**
+
+- **FILED (PR2 copy pass, 2026-09-03): the four device-open link failures
+  now reach no diagnosis on a plain build.** James's copy ruling made every
+  rendered string mechanical, which removed the wire token from
+  `describeFailure`'s reason line — so `noWindow`, `noContext`,
+  `contextInvalid` and `pluginError` all read "THIS DEVICE COULDN'T OPEN
+  CONCEPT2" with no code. On dev and walk builds `Concept2LinkProbe`'s
+  `outcomeDetail` still prints the kind, the plugin `code` and its
+  `message`; on a TestFlight build the probe is not compiled in and, per
+  that component's own header, those values "reach no server log". Accepted
+  for PR2: these are plumbing failures a rower cannot act on differently,
+  and the copy ruling is explicit. Owed: the last link failure surfaced in
+  the Diagnostics door (`app/src/you/Diagnostics.tsx`, whose header already
+  calls itself "the extensible home for every diagnostic tool that
+  follows"), or the same detail attached to a send/link server log. Rides
+  the next PR touching the Concept2 surface or Diagnostics. **XS**
 - **FILED (door PR A's PM gate, 2026-09-02): the server tsconfig now
   includes a client file, and no lint fence stops `server/` importing
   `src/`.** `app/tsconfig.server.json`'s `include` reads
@@ -1631,6 +1777,39 @@ Each needs erg time or a deliberate recording session.
   negotiation for two reserved strings was considered and declined as
   disproportionate.
 
+- **AMENDED 2026-09-03 (Wave E PR2 Task 6): the two flakes are ONE flake, and
+  it lives in `server/routes/data.test.ts`.** Measured at ~1 in 12 runs of that
+  file alone, on a DIFFERENT test each time — `deleting the terminal
+  plan-linked log un-counts`, `two sequential advancing saves stamp
+  consecutive indexes`, `returns the full row, steps included, for the owner` —
+  and — in every instance observed AT THE TIME, an absolute the amendment
+  immediately below FALSIFIES — with the same signature, a response-body
+  field reading `undefined` (`expected undefined to match object
+  {planKey: 'head', planIndex: 0}` at the `list.body.find(...)` on line 2585
+  is the fullest capture of that signature). **Reproduced at 1/25 against
+  `3a294bd7`'s own copies of `data.ts` and `data.test.ts`**, so it predates
+  that task and is not Wave E's. The shared shape of THESE THREE is a LIST or
+  GET read coming back WITHOUT the row a POST just created, which points at
+  the fake store's insertion ordering rather than at any one test —
+  narrowing, but not choosing, between the two theories below. Three named
+  instances, where the entry below has two.
+- **AMENDED AGAIN 2026-09-03 (Wave E PR2 Task 7, fix round 2): the "always"
+  in the entry above is FALSIFIED — a SECOND signature exists, and it is a
+  STATUS CODE rather than a body field.** Found when a full
+  `--project unit --project client` run came back `1 failed | 6684 passed`
+  and the immediate re-run was clean. Characterised the same way the entry
+  above was, by running `server/routes/data.test.ts` alone:
+  **3 failures in 26 runs (~1 in 9)**, a DIFFERENT test each time —
+  `rejects a bad pain value with 400, POST's exact message`, `rejects a
+  splitSeconds outside the baseline band (60..240), naming the field`,
+  `400s machineSummary.verificationBytes as a negative byte` — and every one
+  a validation test that got `expected 401 to be 400` (once) or
+  `expected 403 to be 400` (twice). Not one read `undefined`. 401 and 403
+  are MIDDLEWARE refusals that land before the handler validates anything,
+  so this half looks like per-test auth/availability state rather than the
+  fake store's insertion ordering — NAMED, not chosen, per this entry's own
+  standard. What both signatures share is a request seeing state that some
+  other test owns.
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
   clears thumbs previously set to a real value`, then `GET/PUT /api/prefs` >

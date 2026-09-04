@@ -2690,6 +2690,12 @@ async function postLog(
     // a fixture omitting it is not a smaller row — it is an impossible one.
     restSeconds?: number | null;
     restMeters?: number | null;
+    // Wave E PR2 Task 11: the RC-1 work pair, which is what
+    // `src/log/concept2Send.ts`'s `isSendable` reads for its third and
+    // fourth clauses. A Concept2 capture whose row omits these renders no
+    // send block at all, so this is not an optional nicety for them.
+    workSeconds?: number | null;
+    workMeters?: number | null;
     // Door PR A (2026-09-02) §1.1: the honest close reason, so a capture can
     // seed a genuinely PARTIAL row. Mirrors `schema.ts`'s `endedByEnum` at
     // the same hand-copied-literal-union fidelity `source` above uses.
@@ -5711,5 +5717,356 @@ test("justrow-history-chip", async ({ page }) => {
   await expect(page.locator(".free-row-chip")).toHaveCount(2);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "justrow-history-chip.png"),
+  });
+});
+
+// ── Wave E PR2: the Concept2 surfaces, captured for the first time ─────────
+//
+// WHY THESE ARE ROUTED AND NOT SEEDED. This stack is Concept2-DARK by
+// construction — `compose.yml` passes `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`
+// and `screenshots.sh` exports nothing — and a committed CI test enforces
+// that darkness (`scripts/compose-env.test.sh`). So `GET /api/concept2/link`
+// answers `{available:false}` and both surfaces render NOTHING in every
+// artifact this repo has produced to date. The link is faked at the client
+// boundary with `page.route`, exactly as `e2e/concept2.spec.ts` does and for
+// the reasons its header states at length.
+//
+// TWO OF THESE STATES CANNOT BE SEEDED AT ALL, and the reason is worth
+// stating rather than working around. The only writer of `c2_result_id`
+// anywhere in the system is `POST /api/concept2/results/:logId`, and in this
+// stack that route 403s `unavailable` before it does anything. A capture
+// step that says "seed state X" must be able to name a WRITER of X reachable
+// in the environment the capture runs in; here there is none. So the SENT
+// and NO-WEIGHT captures DRIVE the tap against a routed answer instead.
+// (An earlier revision of this note gave a second reason — that a driven
+// send was the only way to show the SENT state's provenance sub-line. That
+// line is withdrawn, James 2026-09-04, so the reason above is now the whole
+// of it: the no-weight state has no stored representation at all, and
+// nothing in this stack can write a `c2_result_id`.)
+//
+// A DUPLICATE (2d) capture is deliberately NOT taken. Same shape as the two
+// above and one step worse: the route records the colliding id before
+// answering, so a seeded-and-reloaded duplicate renders as 2c SENT. Driving
+// it would produce a frame that differs from `log-concept2-sent.png` by one
+// status word and one sentence, which is what `Concept2SendBlock.test.tsx`
+// already pins. Decided: no capture.
+//
+// FULL-PAGE ON THE YOU CAPTURES, unlike the rest of this file. You is
+// taller than a phone viewport once BASELINES, the retest shortcut, Reset
+// baseline setup and the card are all on it, and the card is the LAST thing
+// above DIAGNOSTICS — a viewport capture cuts it off. The Gate 0 question
+// these images exist to answer is specifically about the card's position
+// relative to RESET BASELINE SETUP, so both must be in one frame.
+const C2_SHOT_LINKED = {
+  available: true,
+  linked: true,
+  c2UserId: 2211,
+  c2Username: "jamesawesome",
+  needsReauth: false,
+  logbookBaseUrl: "https://log-dev.concept2.com",
+};
+
+const C2_SHOT_UNLINKED = {
+  available: true,
+  linked: false,
+  c2UserId: null,
+  c2Username: null,
+  needsReauth: false,
+  logbookBaseUrl: "https://log-dev.concept2.com",
+};
+
+/** One route over every `/api/concept2/*` call. `send` is mutable so the two
+ *  driven captures can answer differently without stacking handlers. */
+interface C2ShotFake {
+  link: { status: number; body: unknown };
+  send: { status: number; body: unknown };
+}
+
+async function routeC2(page: Page, fake: C2ShotFake): Promise<void> {
+  await page.route(/\/api\/concept2\//, async (route) => {
+    const answer = route.request().url().includes("/results/")
+      ? fake.send
+      : fake.link;
+    await route.fulfill({
+      status: answer.status,
+      contentType: "application/json",
+      body: JSON.stringify(answer.body),
+    });
+  });
+}
+
+/** A real finished monitor row through the real route — RF3, and the only
+ *  shape `isSendable` accepts. Same walk-2026-08-24 exit-7 numbers the
+ *  `log-detail` capture above seeds, so a reader comparing the two images
+ *  is looking at the same session. */
+async function seedC2Row(page: Page, title: string): Promise<void> {
+  await postLog(page, {
+    workoutTitle: title,
+    workoutType: "O2",
+    source: "pm5",
+    endedBy: "finished",
+    deviceName: "PM5 432331249",
+    workSeconds: 124,
+    workMeters: 500,
+    avgSplitSeconds: 124,
+    timeSeconds: 124,
+    distanceMeters: 500,
+    held: "under",
+    pain: 3,
+    thumbs: "up",
+    notes: "Legs felt fresher on the second one.",
+    steps: [
+      {
+        label: "250m @ 2:07.0",
+        targetSplit: 127,
+        actualSplit: 135.8,
+        actualSeconds: 67.9,
+        actualSource: "pm5",
+        meters: 250,
+        actualMeters: 250,
+        actualSpm: 25,
+      },
+      {
+        label: "250m @ 2:07.0",
+        targetSplit: 127,
+        actualSplit: 112.2,
+        actualSeconds: 56.1,
+        actualSource: "pm5",
+        meters: 250,
+        actualMeters: 250,
+        actualSpm: 28,
+      },
+    ],
+  });
+}
+
+async function openC2LogDetail(page: Page, title: string): Promise<void> {
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: title });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.locator(".c2-send")).toBeVisible();
+  // The send block is the LAST thing above Delete session, so scroll it into
+  // view before shooting — recurring failure #7, whose whole family is
+  // "the capture shows a screen the feature is not on".
+  await page.locator(".c2-send").scrollIntoViewIfNeeded();
+}
+
+/** Baselines set, so the You captures show a real screen rather than the
+ *  no-baselines fallback — and so RESET BASELINE SETUP has real numbers
+ *  above it, which is the comparison the Gate 0 question needs. */
+async function openC2You(page: Page, email: string): Promise<void> {
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await setBaselines(page);
+  await page.goto("/you");
+  await expect(page.locator(".diag-row")).toBeVisible();
+}
+
+test("you-concept2-unlinked", async ({ page }) => {
+  // GATE 0's OWN ARTIFACT, and the reason this capture is full-page: the
+  // card's position relative to RESET BASELINE SETUP has never been rendered
+  // for anyone. Every in-situ frame on the amendment page draws the card in
+  // the slot the reset ghost occupies in its own frame, and no frame draws
+  // both — so the page cannot settle the order and the shipped order lives
+  // only in a `You.tsx` comment. This image is what that decision looks like.
+  //
+  // It is ALSO the visual record of what the two weight-class rulings
+  // changed: the board's 1a drew a WEIGHT CLASS section and a two-option
+  // control between the explanation and the button, and the first amendment
+  // replaced them with a helper line saying where the class comes from.
+  // James, 2026-09-04: "Stop talking about the weight class." Nothing stands
+  // in their place — the explanation, the rule and the button, and that is
+  // what this image now shows.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-unlinked@e2e.test");
+  await expect(
+    page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+  ).toBeEnabled();
+  await expect(page.locator(".c2-card").getByRole("radiogroup")).toHaveCount(0);
+  // Shot only once the card demonstrably says nothing about the class —
+  // otherwise the capture is the record of a screen nobody checked.
+  await expect(page.locator(".c2-card").getByText(/weight class/i)).toHaveCount(
+    0,
+  );
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-unlinked.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-landscape", async ({ page }) => {
+  // THE SECOND ORIENTATION, which the Gate 0 rule asks for by name. The
+  // landscape rule is what turns the card's tell/act pair into two columns
+  // (`index.css`'s `.c2-card-body-split` media block), and until now that
+  // rule has only ever been measured, never looked at.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await openC2You(page, "screenshots-c2-landscape@e2e.test");
+  await expect(
+    page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+  ).toBeEnabled();
+  // VIEWPORT, not full page, and the portrait capture's own comment does not
+  // apply here. In portrait the whole screen fits the 390x844 viewport, so
+  // `fullPage` and a viewport shot are the same image. In landscape the
+  // screen is taller than the 390px viewport, and a `fullPage` capture
+  // paints the FIXED tab bar at its viewport position — measured, it landed
+  // across the middle of the page over the two door buttons, which is a
+  // picture of a layout that does not exist. Scrolling the card into a real
+  // viewport shows what a rower actually sees.
+  await page.locator(".c2-card").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-landscape.png"),
+  });
+});
+
+test("you-concept2-linked", async ({ page }) => {
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-linked@e2e.test");
+  // The identity line names BOTH accounts — the Concept2 username and the
+  // Ergomatic address it is bound to. That pairing is the whole point of
+  // the state, so the capture proves it before shooting.
+  await expect(page.locator(".c2-card-identity")).toContainText(
+    "Concept2 jamesawesome · Ergomatic screenshots-c2-linked-",
+  );
+  await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-linked.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-armed", async ({ page }) => {
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-armed@e2e.test");
+  await page.getByRole("button", { name: "Unlink Concept2" }).click();
+  await expect(
+    page.getByRole("button", { name: "Tap again to unlink" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("DISARMS ON ITS OWN AFTER 4 SECONDS"),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-armed.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-read-failed", async ({ page }) => {
+  // Amendment 1i, and the state the invisibility case must never be
+  // confused with: a read that FAILED is a different answer from a
+  // deployment that has no Concept2, and drawing them the same way tells a
+  // rower whose server does have it that it does not.
+  const fake: C2ShotFake = {
+    link: { status: 502, body: { error: "upstream" } },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-read-failed@e2e.test");
+  await expect(page.locator(".c2-card-status")).toHaveText("COULDN'T READ");
+  await expect(page.getByText("REASON: THE SERVER ANSWERED 502")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-read-failed.png"),
+    fullPage: true,
+  });
+});
+
+test("log-concept2-idle", async ({ page }) => {
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await signInViaBackdoor(page, {
+    email: "screenshots-c2-log-idle@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedC2Row(page, "Sea Fret");
+  await openC2LogDetail(page, "Sea Fret");
+  await expect(page.locator(".c2-send-status")).toHaveText("NOT SENT");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-concept2-idle.png"),
+  });
+});
+
+test("log-concept2-sent", async ({ page }) => {
+  // DRIVEN, NEVER SEEDED, for the reason this block's header gives: no
+  // writer of `c2_result_id` is reachable in this stack, so the state has
+  // to be produced by a real tap against a routed answer. The routed 200
+  // still carries the class and its producer — that is the route's real
+  // shape — and the frame below must show neither.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: {
+      status: 200,
+      body: { resultId: 339, weightClass: "H", weightClassSource: "profile" },
+    },
+  };
+  await routeC2(page, fake);
+  await signInViaBackdoor(page, {
+    email: "screenshots-c2-log-sent@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedC2Row(page, "Sea Fret");
+  await openC2LogDetail(page, "Sea Fret");
+  await page.getByRole("button", { name: "Send to Concept2" }).click();
+  await expect(page.locator(".c2-send-status")).toHaveText("SENT");
+  await expect(page.getByText("RESULT 339")).toBeVisible();
+  await expect(page.locator(".c2-send-foot")).toHaveText(["RESULT 339"]);
+  await page.locator(".c2-send").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-concept2-sent.png"),
+  });
+});
+
+test("log-concept2-no-weight", async ({ page }) => {
+  // Amendment 2i, with BOTH its buttons in frame — the link-out that goes
+  // to Concept2 and the `Send again` that lets the rower come back. Driven
+  // for the same reason as the SENT capture, one step stronger: this state
+  // has no stored representation at all, so a seeded reload renders the
+  // idle offer instead.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: {
+      status: 422,
+      body: { error: "no_weight_class", reason: "no_weight" },
+    },
+  };
+  await routeC2(page, fake);
+  await signInViaBackdoor(page, {
+    email: "screenshots-c2-log-noweight@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedC2Row(page, "Sea Fret");
+  await openC2LogDetail(page, "Sea Fret");
+  await page.getByRole("button", { name: "Send to Concept2" }).click();
+  await expect(page.locator(".c2-send-status")).toHaveText("NO WEIGHT CLASS");
+  await expect(
+    page.getByText("REASON: SET YOUR WEIGHT ON CONCEPT2"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send again" })).toBeVisible();
+  await page.locator(".c2-send").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-concept2-no-weight.png"),
   });
 });
