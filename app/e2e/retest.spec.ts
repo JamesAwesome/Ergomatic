@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
 
 // Phase BL PR B's You-screen re-test shortcut, reshaped by James's tester
@@ -14,6 +14,33 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // of not reaching into `domain/` from a Playwright spec.
 const K6_TITLE = "6K Test";
 const K2_TITLE = "2K Test";
+
+async function delaySessionLogLibrary(page: Page): Promise<void> {
+  // The summary intentionally renders without waiting for this fetch. Make
+  // that production ordering deterministic so the test must establish its
+  // own offer-identity prerequisite before pressing Save.
+  await page.route("**/api/workouts", async (route) => {
+    const referer = await route.request().headerValue("referer");
+    if (referer?.endsWith("/session/log")) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    await route.continue();
+  });
+}
+
+async function finishAndWaitForLogLibrary(page: Page): Promise<void> {
+  const libraryReady = page.waitForResponse(
+    async (response) =>
+      new URL(response.url()).pathname === "/api/workouts" &&
+      response.status() === 200 &&
+      (await response.request().headerValue("referer"))?.endsWith(
+        "/session/log",
+      ) === true,
+  );
+  await page.getByRole("button", { name: "Finish session" }).click();
+  await expect(page).toHaveURL(/\/session\/log$/);
+  await libraryReady;
+}
 
 test.describe("Phase BL: the You re-test shortcut", () => {
   test("ROW THE 6K lands on the 6k test's detail — Connect / Start Timer / Log it after — and BACK returns to You", async ({
@@ -51,6 +78,7 @@ test.describe("Phase BL: the You re-test shortcut", () => {
   test("RACE THE 2K reaches the 2k test's detail, and completing it from there lands in the post-test prompt", async ({
     page,
   }) => {
+    await delaySessionLogLibrary(page);
     await signInViaBackdoor(page, {
       email: `retest-2k-${RUN_ID}@e2e.test`,
       name: "Retest Racer",
@@ -76,8 +104,7 @@ test.describe("Phase BL: the You re-test shortcut", () => {
     await page.clock.fastForward("08:00");
     await page.getByRole("button", { name: "NEXT →" }).click();
     await expect(page.getByText("Finish this session?")).toBeVisible();
-    await page.getByRole("button", { name: "Finish session" }).click();
-    await expect(page).toHaveURL(/\/session\/log$/);
+    await finishAndWaitForLogLibrary(page);
 
     // Fresh account, no plan chosen: the lone `Save` leads alone.
     await page.getByRole("button", { name: "Save" }).click();
@@ -121,6 +148,7 @@ test.describe("Phase BL: the You re-test shortcut", () => {
   test("declining the offer keeps the baselines untouched", async ({
     page,
   }) => {
+    await delaySessionLogLibrary(page);
     await signInViaBackdoor(page, {
       email: `retest-decline-${RUN_ID}@e2e.test`,
       name: "Retest Decliner",
@@ -133,7 +161,7 @@ test.describe("Phase BL: the You re-test shortcut", () => {
     await page.clock.install();
     await page.clock.fastForward("08:00");
     await page.getByRole("button", { name: "NEXT →" }).click();
-    await page.getByRole("button", { name: "Finish session" }).click();
+    await finishAndWaitForLogLibrary(page);
     await page.getByRole("button", { name: "Save" }).click();
     await expect(
       page.getByRole("heading", { name: "Set your 2k baseline?" }),
