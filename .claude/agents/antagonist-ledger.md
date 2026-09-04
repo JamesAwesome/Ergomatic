@@ -6999,3 +6999,28 @@ plan's own tools and never with the REPO's.
   dependency symlink, inspect SwiftPM target/source membership, and mutate the
   manifest path to prove the binding is load-bearing. An `ios/` source child is
   not the package root merely because it contains the tests.
+- A mocked callback shape is not the native contract. The probe's BLE mock put
+  `deviceId` at the result root while the installed `ScanResult` declaration
+  nests it under `device`, so its green ordering test could never connect on
+  iOS. Trace the installed adapter's callback through its declaration and
+  implementation, then make the fixture enter that exact boundary.
+- Trace diagnostic export through the native logger before trusting it as
+  evidence. In the installed Capacitor package, `native-bridge.js` forwards a
+  console call as one message, `Plugins/Console.swift` passes one argument to
+  `CAPLog.print`, and `CAPLog.swift` truncates each argument to 4068 characters.
+  A cumulative receipt has no such bound. Test reconstruction through that
+  truncation boundary and require every frame before accepting an export.
+  Frame counts alone did not suffice: removing four base64 characters kept
+  every index/end present, and fragments from different exports could mix.
+  Probe both corruptions; bind frames to one export and its declared length.
+- Trace operator controls against the native sheet lifecycle: ending labels
+  selectable only after NFC starts cannot arm a phone-run observation. The
+  live-reload control and successor start also need an accessible path while
+  that sheet covers the WebView.
+- Order instrumentation, signed installation, producer event, export
+  verification, reload, successor start, and stale release by dependency; the
+  first walk draft requested its DEBUG event before installing the overlay.
+- Demand positive evidence that the hostile state occurred: two nearby objects
+  do not prove two NDEF tags were detected, and a zero-only initialized counter
+  does not measure stale settlement. Name the independent observations instead
+  of turning an uninstrumented default into a hardware measurement.
