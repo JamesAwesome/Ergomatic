@@ -4552,3 +4552,19 @@ review surface, not pretend its boolean guard identifies one recording.
 Evidence: `LogSession.tsx`'s `monitorModeEntry` and pre-monitor library gate;
 `Today.tsx`'s completed-programmed exclusion; phase-open PM source review
 at c5015c2e. James opened this existing item, not Correct Resume.
+
+## 2026-09-04 — Wave F closed on the narrowed contract
+
+- **GO: archive after the docs-only closeout; no new release needed.** The
+  [native exit walk](../../docs/monitor/sessions/walk-2026-09-04-wave-f/README.md)
+  on reported v0.36.1 preserved a complete, machine-confirmed interval after
+  a pre-pull lock. A typed Bluetooth-disabled event then preserved an
+  accepted actual and eligible partial through End/save, visibly incomplete.
+  The prior mid-piece resume record and composed failed-write gates supply
+  the other exit evidence; no redundant rowing was required.
+- **Deliberate radio-off proves the fallback, not reconnect demand.** It
+  does not measure natural-drop incidence. Continuous hidden sampling and
+  trace-head recovery are not claimed; same-row reattachment remains in the
+  Icebox. Reload after denied writes and later eviction retain James's
+  explicit accepted boundary. Closing the phase does not silently ship or
+  authorize any of these capabilities.

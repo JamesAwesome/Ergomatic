@@ -201,7 +201,9 @@ Per the antagonist's phase discipline, skips are spoken, never silent.
 
 - **Correct resume.** Build-from-zero, its own M, and the pocketed-phone chain
   does not need it: the late open cost the series trace's head, not the
-  interval actuals. Stays a separate Wave F item.
+  interval actuals. **Deferred to ROADMAP's Icebox by James on 2026-09-03,
+  not a Wave F exit gate.** After a real drop, End/save preserves received
+  actuals and eligible partials; later work is not collected into that row.
 - **The `door` column.** Its own TRIAD change. §5 depends on it and is
   sequenced behind it; nothing else here does.
 - **AUD-011/AUD-015.** Separate chunk, three loaders, own Gate 0.
@@ -628,14 +630,17 @@ PR 1 ships alone: it carries TRIAD weight and bundling it would make its own
 gate harder to run. PRs 2's three parts group deliberately — one reviewer, one
 risk model, per the standing "group the work" rule.
 
-**This slate is a Wave F SUB-slate, not the wave's exit (James's review
-P2-6).** Mapped against the four exit clauses: *a link dropped mid-piece* —
-partially discharged by PR 1 (the program-drop trigger family) and fully only
-with §5; *phone locked before the first pull* and *backgrounded mid-piece* —
-NOT discharged here; they need correct resume (§0.6, deliberately separate)
-and what §3's measurements teach; *the row says which door it came in by* —
-the `door` column's own item, outside this spec. The wave closes when those
-land, not when these four PRs do.
+**This slate is a Wave F SUB-slate, not the whole wave (James's review
+P2-6); the wave CLOSED 2026-09-04 on its narrowed exit.** Program-drop
+handling, §5's partial preservation and the separate `door` work shipped.
+James deferred Correct Resume on 2026-09-03: preserving received work through
+End/save is the link-loss boundary, not continuing capture into the same row.
+The [native exit walk](../../monitor/sessions/walk-2026-09-04-wave-f/README.md)
+proves a pre-pull lock's complete interval reached saved detail and a typed
+Bluetooth-off event preserved an actual plus an eligible partial. It reuses
+the 2026-09-03 mid-piece resume evidence and automated failed-write gates.
+Neither missing trace samples nor post-drop collection are claimed recovered;
+see the [phase record](../../history/wave-f.md) for the full closeout.
 
 **The three stale Wave F riders** (the `warmup` `DROP COLUMN`, the legacy
 `LogSeed.kind` guards, RC-12's unreconciled comment) ride the **`door`
@@ -655,5 +660,5 @@ Landed in the same commit as this spec, per recurring failure 17.
 4. RC-29 → out of Wave F, back to the register as unmeasured on the current
    build, with the stale 9-banner citation removed.
 5. The in-flight-metres item → pointer to §5 and its `door` column dependency.
-6. Correct resume → unchanged, with §0.6's note that this spec deliberately
-   excludes it.
+6. Correct resume → excluded here; the later 2026-09-03 ruling moved it to
+   the Icebox, including its reopen trigger, and removed it from the wave's exit.

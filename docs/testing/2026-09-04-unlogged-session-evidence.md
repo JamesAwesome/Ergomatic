@@ -1,5 +1,16 @@
 # Unlogged session recovery evidence — 2026-09-04
 
+**Current review: blocked on one admission gap.** The single scoped final
+re-review of `239bcd4a..303856a4` cleared designated-test identity, narrow CSS
+scope and stale comments, but found that empty/out-of-range integer
+`verificationBytes` still pass the new guard. With machine totals present,
+Save forwards those bytes; the existing server requires 1–32 integers in
+0–255 and rejects them (`app/server/routes/data.ts:818-852`). The exact-recording
+read-only fallback should be used instead. No source fix or further review
+wave has been performed. The controller retained this as a blocker at the
+workflow's one-final-wave limit; James's direction is required for a focused
+follow-up. The passing tests below are not technical merge clearance.
+
 The connected browser journey drives the real fake transport through five
 `w 100m max r0.1` intervals: six-second positive rests, five resting-state
 boundaries, `WORKOUTEND`, then the summary burst. It retains
@@ -131,8 +142,9 @@ save-capable summary instead of the exact read-only recording. Restoring the
 guard returned the targeted run to 21/21 passed and restored
 `recoveryValidation.ts` to object hash
 `cc2fa1d0a4c6e18127a3d68ef16cfe9748455534`. Its final coverage is 100%
-statements/branches/functions/lines, so no admission branch is left without a
-behavioral disposition.
+statements/branches/functions/lines. That establishes execution of existing
+branches, not completeness of the predicate: the missing byte-length/range
+checks remained invisible to this coverage number and were found in review.
 
 The same combined fix requires the linked global library row's designated
 title to agree with the retained title before a test offer. Mounted timer and

@@ -43,3 +43,10 @@ in this order. They do not authorize merge, release or native acceptance.
    unchanged. Cost: a genuine designated session whose library title later
    changes still saves, but receives no automatic baseline offer. This avoids
    writing a false test result from mixed records.
+8. **Keep the residual verification-byte finding blocking at the review limit.**
+   Scoped re-review found the new guard lacks the existing server's array-length
+   and byte-range checks. The controller confirmed that selected Save forwards
+   these values and the server rejects them. Do not waive it or start a second
+   automatic fix wave; ask James to direct a focused follow-up that preserves
+   the exact recording in read-only fallback. Cost: delivery waits for that
+   direction; accepting the gap would leave another misleading Save action.

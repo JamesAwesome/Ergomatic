@@ -25,10 +25,12 @@ Correct Resume remains deferred. This is not fast path: a mistake could lose
 a record. A non-TRIAD full cycle is possible only while claim/retire identity,
 timing and reasons, successful-save behavior and recorded values stay
 unchanged. Re-scope before implementation if that boundary cannot hold.
-The phase remains OPEN. Task 1 and Task 2 reviews are complete. The combined
-whole-branch fixes cover malformed programmed measurements, conflicting
-designated-test identity and deferred CSS/comment scope; automated gates pass,
-with scoped re-review pending. The two-orientation recovery matrix and initial
+The phase remains OPEN. Task 1 and Task 2 reviews are complete. Scoped final
+re-review cleared conflicting designated-test identity and CSS/comment scope,
+but left a blocking verification-byte admission gap: empty or out-of-range
+integer arrays still reach Save and are rejected by the server. Automated
+gates pass; that does not clear this finding. The final-wave limit requires
+James's direction before another implementation pass. The recovery matrix and
 landscape safe-exit evidence are recorded. The antagonist cleared the
 proposed one-minute phone protocol's structural coverage, not native
 acceptance. The actual walk, PM phase-close judgment and any merge decision
@@ -80,6 +82,10 @@ Missing, null or coercible string/boolean values are not measurements merely
 because a builder renders them without throwing. Preserve legitimate optional
 absence and existing arithmetic; reject malformed inputs rather than repair
 them.
+Present verification bytes must meet the existing server contract: an array
+of 1–32 integers in 0–255 (`app/server/routes/data.ts:818-852`). The current
+guard checks finite integers but not array length or byte bounds; closing
+that remaining gap needs mounted read-only and valid-boundary Save witnesses.
 
 Two more anchor findings are in this same work, not follow-up deferrals:
 
