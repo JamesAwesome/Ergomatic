@@ -6991,3 +6991,11 @@ plan's own tools and never with the REPO's.
   traverse the actual routed producer-to-consumer composition, and constrain
   time/identity with independent literals rather than production-derived
   expectations.
+- For a native serialization claim, trace every read and write of the shared
+  state to its dispatch context, then verify the framework's documented callback
+  affinity; a private queue does not prove confinement if delegates arrive on a
+  different one.
+- Run the exact proof from the resolved installed package root: follow the
+  dependency symlink, inspect SwiftPM target/source membership, and mutate the
+  manifest path to prove the binding is load-bearing. An `ios/` source child is
+  not the package root merely because it contains the tests.
