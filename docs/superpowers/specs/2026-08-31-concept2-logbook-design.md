@@ -70,10 +70,14 @@ exercises them.
   is retryable, never a silent fall-through to the guess. The class is
   **never cached** — a declaration can
   change on Concept2 at any time with no signal to us, and a stale one
-  writes a wrong competition category into a record we cannot edit. The
-  SENT state names the class that was sent and which producer supplied it,
-  because a DERIVED class is a guess about a fact Concept2 lets its owner
-  set, and Concept2 permits per-result editing. Migration 0023 drops
+  writes a wrong competition category into a record we cannot edit. **The
+  SENT state names NEITHER the class nor its producer** (2026-09-04 ruling,
+  above): the rower sees the result id and nothing else. The class and the
+  producer that supplied it stay on the route's 200 and in the send's log
+  line, so an operator can still answer which one answered. The cost the
+  ruling accepts, stated: a DERIVED class is a guess about a fact Concept2
+  lets its owner set, Concept2 permits per-result editing, and nobody now
+  sees the guess as it is written. Migration 0023 drops
   `concept2_links.weight_class` and `concept2_auth_attempts.weight_class`.
   Implementation: `docs/superpowers/plans/2026-09-03-concept2-pr2-client.md`
   Task 3.
