@@ -50,3 +50,7 @@ in this order. They do not authorize merge, release or native acceptance.
    automatic fix wave; ask James to direct a focused follow-up that preserves
    the exact recording in read-only fallback. Cost: delivery waits for that
    direction; accepting the gap would leave another misleading Save action.
+
+James supplied that direction on September 4 ("appproved"), authorizing one
+focused implementation and scoped review of the remaining verification-byte
+gap. This does not approve merge, release or native acceptance.

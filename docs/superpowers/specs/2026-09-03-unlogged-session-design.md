@@ -27,11 +27,12 @@ timing and reasons, successful-save behavior and recorded values stay
 unchanged. Re-scope before implementation if that boundary cannot hold.
 The phase remains OPEN. Task 1 and Task 2 reviews are complete. Scoped final
 re-review cleared conflicting designated-test identity and CSS/comment scope,
-but left a blocking verification-byte admission gap: empty or out-of-range
-integer arrays still reach Save and are rejected by the server. Automated
-gates pass; that does not clear this finding. The final-wave limit requires
-James's direction before another implementation pass. The recovery matrix and
-landscape safe-exit evidence are recorded. The antagonist cleared the
+but left a verification-byte admission gap: empty or out-of-range integer
+arrays reached Save and were rejected by the server. James approved one focused
+follow-up on September 4 ("appproved"); the fix and automated verification are
+complete, with scoped review pending before clearance. This is not merge or
+native-walk approval. The recovery matrix and landscape safe-exit evidence are
+recorded. The antagonist cleared the
 proposed one-minute phone protocol's structural coverage, not native
 acceptance. The actual walk, PM phase-close judgment and any merge decision
 remain pending James. Browser proof does not replace native acceptance.
@@ -84,8 +85,9 @@ absence and existing arithmetic; reject malformed inputs rather than repair
 them.
 Present verification bytes must meet the existing server contract: an array
 of 1–32 integers in 0–255 (`app/server/routes/data.ts:818-852`). The current
-guard checks finite integers but not array length or byte bounds; closing
-that remaining gap needs mounted read-only and valid-boundary Save witnesses.
+follow-up adds explicit array, length and byte bounds to the finite-integer
+guard. Mounted read-only and valid-boundary Save witnesses pass;
+the finding remains open until scoped review completes.
 
 Two more anchor findings are in this same work, not follow-up deferrals:
 

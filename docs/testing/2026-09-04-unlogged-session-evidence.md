@@ -1,15 +1,15 @@
 # Unlogged session recovery evidence — 2026-09-04
 
-**Current review: blocked on one admission gap.** The single scoped final
+**Current review: admission fix verified, scoped rereview pending.** The prior
 re-review of `239bcd4a..303856a4` cleared designated-test identity, narrow CSS
 scope and stale comments, but found that empty/out-of-range integer
-`verificationBytes` still pass the new guard. With machine totals present,
+`verificationBytes` passed the new guard. With machine totals present,
 Save forwards those bytes; the existing server requires 1–32 integers in
 0–255 and rejects them (`app/server/routes/data.ts:818-852`). The exact-recording
-read-only fallback should be used instead. No source fix or further review
-wave has been performed. The controller retained this as a blocker at the
-workflow's one-final-wave limit; James's direction is required for a focused
-follow-up. The passing tests below are not technical merge clearance.
+read-only fallback is now used instead. James approved one focused follow-up;
+commit `c1e2c4c7` adds the missing admission checks and mounted witnesses, with
+fresh gates and sensitivity probes recorded below. The one authorized scoped
+rereview is pending. Passing tests alone are not technical merge clearance.
 
 The connected browser journey drives the real fake transport through five
 `w 100m max r0.1` intervals: six-second positive rests, five resting-state
@@ -119,7 +119,7 @@ cause. After the warm/cold split, the pre-review full E2E run passed 461/461
 (2.1m). The review-round restored-tree full E2E run passed 462/462; it likewise
 does not establish a cause for the original timeout.
 
-Current combined-fix gate record: `pnpm lint`, `pnpm typecheck` (E2E
+Prior combined-fix gate record: `pnpm lint`, `pnpm typecheck` (E2E
 TypeScript membership 19/19), `pnpm format:check`, and `pnpm build` plus
 `pnpm dist:grep` passed; build retains its existing Vite chunk advisory.
 The final full `pnpm test:coverage` (unit, client, **and integration**)
@@ -180,8 +180,8 @@ functions / 88.88% lines: the only uncovered paths are its defensive null ref
 and jsdom's unavailable `scrollIntoView` true branch; the current browser
 witness exercises the latter against Chromium. The prior full browser gate
 passed 463/463 and its sequential screenshot gate 118/118 after the product
-fixes. They remain current because this final addition changes only client
-tests and evidence, not browser/product code.
+fixes, before the verification-byte follow-up below. The screenshot result
+remains applicable to the unchanged visual design, not a fresh run.
 
 The authorized verification-byte follow-up closes the final rereview's only
 residual, but is **fixed and awaiting its one scoped rereview**, not review
@@ -227,7 +227,7 @@ The real-stack isolated decline rerun passed 1/1 and the fresh restored-tree
 full rerun passed 463/463 in 2.2 minutes. The symptom remains intermittent
 and unclassified. Screenshots were deliberately not rerun: this follow-up
 changes only validation logic and mounted unit tests, with no CSS, layout,
-copy, browser fixture, or browser product behavior change; the prior 118/118
+copy, or browser fixture change; the prior 118/118
 visual run is historical evidence only.
 
 Native acceptance is an approved criterion but still pending James. Its

@@ -1310,10 +1310,11 @@ in both orientations.**
 approved 2026-09-03; additional recovery-case designs approved 2026-09-04.
 Gate 0 and both task reviews are complete; browser recovery proof and generated
 captures include the initial landscape safe exit. Automated gates pass, but
-scoped re-review leaves one blocking malformed-verification-byte admission gap;
-another implementation pass requires James's direction after the final-wave
-limit. The antagonist cleared the proposed one-minute protocol's structural
-coverage, not native acceptance; the actual walk, PM phase-close judgment and
+scoped re-review left one blocking malformed-verification-byte admission gap.
+James approved one focused follow-up on September 4; the fix and automated
+verification are complete, with scoped review pending. The antagonist cleared
+the proposed one-minute protocol's structural coverage, not native acceptance;
+the actual walk, PM phase-close judgment and
 merge decision remain pending James.
 This is separate from Wave F, whose dependency cleared on 2026-09-04; that
 closeout does not substitute for this feature's own approvals or acceptance.
@@ -1362,10 +1363,10 @@ to lose the row has no move except to walk away.
 - [ ] **Close final review's verification-byte admission gap.** The selected
       programmed route must refuse arrays outside the existing server contract
       (1–32 integers, each 0–255) before mounting Save. Empty/out-of-range
-      integer arrays currently pass and produce a rejected Save. Keep the
+      integer arrays previously passed and produced a rejected Save. Keep the
       recording in the approved read-only treatment; no repair or byte dropping.
-      The single final fix/re-review wave is exhausted, so this remains blocking
-      pending James's direction for a focused follow-up, not accepted debt.
+      James approved one focused follow-up after the final-wave limit on
+      September 4; the tested fix awaits scoped review before clearance.
 
 ---
 
