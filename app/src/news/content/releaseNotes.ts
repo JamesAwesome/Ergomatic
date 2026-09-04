@@ -5,6 +5,16 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.36.1: git log v0.36.0..origin/main --oneline at 9baa4fa7.
+    // #288 is the item below; #287 defers Correct Resume in docs only,
+    // with nothing tester-visible. This notes/capture PR adds no behavior.
+    version: "v0.36.1",
+    date: "2026-09-03",
+    items: [
+      "Ending a phone-timed Just Row now lets you finish and save, instead of only abandoning the session.",
+    ],
+  },
+  {
     // v0.36.0 (2026-09-03): range v0.35.0..main RE-ACCOUNTED at AUD-011/015's
     // own PR-open head per RF15 (`git log v0.35.0..origin/main --oneline`,
     // NO `--merges` — main is squash-merged and that form returns empty).
