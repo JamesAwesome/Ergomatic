@@ -158,6 +158,25 @@ are not re-opened by this spec.
 
 ---
 
+### Ruling 7 (James, 2026-09-04, on the rendered Gate 0 frames) — the two open choices
+
+Approved the Gate 0 drawing at `3fe5f2c2` and, with it, both decisions it drew
+side by side. The controller took the lower-cost side of each and James's
+"approved" covers them; neither is an implementer's call and neither reopens.
+
+- **Row order: CONCEPT2 ABOVE DIAGNOSTICS** (§8.4 option A). It keeps
+  `You.tsx`'s "stays the LAST child" comment and `e2e/concept2.spec.ts`'s
+  You-is-rendered sentinel TRUE, where the other order falsifies both and puts
+  two more comments on the reconciliation list. The order is now ruled, so the
+  plan does not re-derive it — and the sentinel is still replaced rather than
+  repaired (F8), because a third door breaks it again.
+- **The send block's sentence STAYS `"Reconnect on the You tab."`** (§8.6
+  option A). It remains true after PR A: the row is on that tab. What changes
+  is that Connect sits one tap deeper, which the sentence never promised. No
+  copy change means no new string to gate, and the approved page keeps drawing
+  what the app renders.
+
+
 ## 3 · Research record
 
 Tagged PRIMARY / SECONDARY / INFERENCE. "Nothing found" is a result and is
