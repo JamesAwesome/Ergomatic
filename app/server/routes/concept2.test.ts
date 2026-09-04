@@ -2829,29 +2829,102 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     // declaration; we could not read it. Deriving here would put OUR guess
     // on a permanent third-party record because of a 500, and the rower
     // would never know a read had failed at all.
-    const store = makeFakeConcept2Store();
-    await store.upsertLink(userA.id, freshLink());
-    const client = makeStubClient();
-    vi.mocked(client.fetchResults).mockResolvedValue({
-      ok: false,
-      kind: "c2_error",
-      status: 500,
-    });
-    const { app, logs } = buildApp({ store, client });
-    const id = await seedEligibleLog(logs, userA.id);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      vi.mocked(client.fetchResults).mockResolvedValue({
+        ok: false,
+        kind: "c2_error",
+        status: 500,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
 
-    const res = await asA(
-      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
-    );
-    expect(res.status).toBe(502);
-    expect(res.body).toStrictEqual({ error: "c2_error" });
-    expect(client.fetchMe).not.toHaveBeenCalled();
-    expect(client.postResult).not.toHaveBeenCalled();
+      const res = await asA(
+        request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+      );
+      expect(res.status).toBe(502);
+      expect(res.body).toStrictEqual({ error: "c2_error" });
+      expect(client.fetchMe).not.toHaveBeenCalled();
+      expect(client.postResult).not.toHaveBeenCalled();
+      // The warn line's own half, added with F5's profile twin below: the
+      // two 502s are byte-identical on the wire, so `layer` is the only
+      // thing that separates them, and it is pinned on BOTH sides or on
+      // neither.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(warn.mock.calls[0][0]))).toStrictEqual({
+        event: "c2_weight_class",
+        logId: id,
+        failure: "c2_error",
+        layer: "declaration",
+        status: 500,
+      });
+    } finally {
+      warn.mockRestore();
+    }
   });
 
-  it("refuses with no_weight_class and reaches Concept2's results endpoint NOT AT ALL when neither producer answers", async () => {
+  it("a FAILED profile read is a 502 whose warn line names the PROFILE layer, not the declaration", async () => {
+    // Whole-branch review F5. The 502 above and the 502 here are the same
+    // response, so the ONLY thing that tells an operator which Concept2
+    // call died is `layer` on the `c2_weight_class` warn line — and until
+    // this test, mutating `layer: "profile"` to `"declaration"` left the
+    // whole unit project green. A diagnostic nothing can falsify is not a
+    // diagnostic.
+    //
+    // The route is reached the way a rower reaches it: they have declared
+    // nothing readable (an EMPTY results page, not a failed one — a failed
+    // one exits at the declaration layer above and never asks for the
+    // profile), and the profile read then fails.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      vi.mocked(client.fetchResults).mockResolvedValue({ ok: true, rows: [] });
+      vi.mocked(client.fetchMe).mockResolvedValue({
+        ok: false,
+        kind: "c2_error",
+        status: 500,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+
+      const res = await asA(
+        request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+      );
+      expect(res.status).toBe(502);
+      expect(res.body).toStrictEqual({ error: "c2_error" });
+      // Both reads ran — otherwise "the PROFILE layer failed" would be true
+      // for the wrong reason.
+      expect(client.fetchResults).toHaveBeenCalledTimes(1);
+      expect(client.fetchMe).toHaveBeenCalledTimes(1);
+      // Nothing was written to Concept2 on a class we could not resolve.
+      expect(client.postResult).not.toHaveBeenCalled();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(warn.mock.calls[0][0]))).toStrictEqual({
+        event: "c2_weight_class",
+        logId: id,
+        failure: "c2_error",
+        layer: "profile",
+        status: 500,
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("refuses with no_weight_class and POSTs nothing to Concept2 when neither producer answers", async () => {
     // The assertion that matters is the last one: a 422 that still POSTed
     // would have written a class we invented onto a permanent record.
+    //
+    // Same title correction as its integration twin (whole-branch review
+    // nit): the results endpoint IS reached here — `fetchResults` answers
+    // the empty page below — so "NOT AT ALL", which this title used to say,
+    // claimed more than the test can show.
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
     const client = makeStubClient();

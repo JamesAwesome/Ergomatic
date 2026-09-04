@@ -68,7 +68,7 @@
 -- `count | 0 | (1 row)` block per query). So this drop touches NO rows: there
 -- is no stored `weight_class` anywhere in production to lose, and no rower
 -- holds a live grant whose class the migration discards. The `printenv` half
--- half came back on the same day: an EMPTY LINE with no "UNSET" arm, i.e. the
+-- came back on the same day: an EMPTY LINE with no "UNSET" arm, i.e. the
 -- variable is set-but-empty, which `computeAvailable` reads as OFF. ALL THREE
 -- CHECKS PASS: the flag is off in production, and the drop touches no rows.
 -- A `1` is a live writer whose INSERT this drop breaks; a non-zero link

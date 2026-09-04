@@ -572,11 +572,16 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
     ]);
   });
 
-  it("a profile with no weight stops the send BEFORE Concept2's results endpoint is touched", async () => {
+  it("a profile with no weight refuses the send with nothing POSTed to Concept2", async () => {
     // The negative half at the same layer. The assertion that matters is
     // the empty `posted` array: a 422 that had already POSTed would have
     // written a row to a permanent third-party record carrying a class we
     // invented, and the status alone would not have said so.
+    //
+    // The title says POSTed, not "touched" (whole-branch review nit): this
+    // test DOES reach `/api/users/me/results` — the declaration read is the
+    // first thing the route does — and the claim it can actually carry is
+    // that nothing was written there.
     const { bearer, userId } = await signIn("send-noweight");
     await linkAccount({
       userId,
