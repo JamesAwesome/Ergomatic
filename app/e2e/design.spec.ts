@@ -10218,3 +10218,245 @@ test.describe("Concept2 send block: the boxes §2 draws", () => {
     }
   });
 });
+
+// ── Wave E PR2: both Concept2 surfaces, ON THE REAL SCREENS ────────────────
+//
+// WHAT THIS PROVES, exactly (RF26): that the card and the send block obey
+// this project's structural design rules WHERE THEY ACTUALLY LIVE — inside
+// You's flex column and the log-detail scroll, at the real widths, with the
+// real neighbours — rather than inside a hand-composed `document.body`.
+//
+// WHY IT IS NOT THE SAME TEST AS THE TWO FIXTURE DESCRIBES ABOVE. Those
+// paint the component's committed markup into a bare shell and measure
+// boxes; they are the only way to reach a state the server cannot produce
+// (an update-required card, a read that failed), and they were written when
+// nothing could render either surface in a browser at all. What they cannot
+// do is measure a control whose width comes from a column it is not in, or
+// run an accessibility sweep over a page — a `document.body.innerHTML`
+// replacement leaves no `<main>`, no landmark structure and no heading
+// order, so an axe run over it would be scoring the harness. Task 11's
+// `page.route` fake is what made the real screens reachable, and this is
+// what that buys.
+//
+// The link is faked at the client boundary for the reason
+// `e2e/concept2.spec.ts`'s header states at length: this stack is
+// Concept2-dark by construction and a committed CI test enforces it.
+test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
+  const C2_LINKED = {
+    available: true,
+    linked: true,
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+  };
+
+  async function fakeLink(page: Page, body: unknown): Promise<void> {
+    await page.route(/\/api\/concept2\//, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+    });
+  }
+
+  /** A real finished monitor row through the real route — the ONE shape
+   *  `isSendable` accepts. `deviceName` is required of `source: "pm5"` by
+   *  the route's own `logSourceContradiction`, not decoration. */
+  async function seedSendableRow(page: Page, title: string): Promise<void> {
+    const result = await page.evaluate(async (t) => {
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutId: null,
+          workoutTitle: t,
+          workoutType: "O2",
+          source: "pm5",
+          endedBy: "finished",
+          deviceName: "PM5 432331249",
+          workSeconds: 124,
+          workMeters: 500,
+          avgSplitSeconds: 124,
+          timeSeconds: 124,
+          distanceMeters: 500,
+          held: null,
+          pain: null,
+          notes: null,
+          advancesPlan: false,
+          steps: [
+            {
+              label: "250m @ 2:07.0",
+              targetSplit: 127,
+              actualSplit: 135.8,
+              actualSeconds: 67.9,
+              actualSource: "pm5",
+            },
+          ],
+        }),
+      });
+      return { ok: res.ok, status: res.status, body: await res.text() };
+    }, title);
+    if (!result.ok) {
+      throw new Error(`log seed failed: ${result.status} ${result.body}`);
+    }
+  }
+
+  /** The resolved value of a CSS custom property, read off the document
+   *  root and then resolved to the same `rgb()` form `getComputedStyle`
+   *  returns for a paint property — so the comparison is token-to-token and
+   *  a raw hex that happens to equal the token today still reads as a
+   *  match, while a WRONG token does not. That is the claim: the rules name
+   *  the tokens this design specifies, not that nobody could ever inline a
+   *  colour. */
+  async function tokenColor(page: Page, name: string): Promise<string> {
+    return page.evaluate((token) => {
+      const raw = getComputedStyle(document.documentElement)
+        .getPropertyValue(token)
+        .trim();
+      const probe = document.createElement("span");
+      probe.style.color = raw;
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color;
+      probe.remove();
+      return resolved;
+    }, name);
+  }
+
+  async function openYouLinked(page: Page, slug: string): Promise<void> {
+    await signInViaBackdoor(page, {
+      email: `design-c2-${slug}@e2e.test`,
+      name: "Design C2 Tester",
+    });
+    await fakeLink(page, C2_LINKED);
+    await page.goto("/you");
+    await expect(page.locator(".c2-card")).toBeVisible();
+  }
+
+  test("every tappable on a You carrying the card clears 44x44, in both orientations", async ({
+    page,
+  }) => {
+    // The card's own three controls have their HEIGHTS pinned by the
+    // fixture describe above. This is the other half and it could not be
+    // written before Task 11: WIDTH is decided by the column the button
+    // sits in, and on this screen that column is You's flex child, not a
+    // hand-written shell. A landscape run is included because that is where
+    // the act column becomes a grid track and a control's width stops being
+    // the card's width.
+    await openYouLinked(page, "taps");
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await expect(
+        page.getByRole("button", { name: "Unlink Concept2" }),
+      ).toBeVisible();
+      await assertTapTargets(page);
+    }
+    // And the ARMED state, whose control is a different element with
+    // different text — a sweep of the resting card alone would never
+    // measure it.
+    await page.getByRole("button", { name: "Unlink Concept2" }).click();
+    await expect(
+      page.getByRole("button", { name: "Tap again to unlink" }),
+    ).toBeVisible();
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations on a You carrying the card", async ({
+    page,
+  }) => {
+    // NOT reachable from a fixture: axe scores a PAGE — landmarks, heading
+    // order, contrast against what is actually painted behind the element.
+    // The card contributes an `<h2>` and an `aria-labelledby` section to a
+    // screen it has never been swept inside.
+    await openYouLinked(page, "a11y");
+    await assertNoA11yViolations(page);
+  });
+
+  test("the card paints its own tokens, not raw values", async ({ page }) => {
+    // `index.css`'s `.c2-card` block names `--surface`, `--rule` and — for
+    // the panel's REASON line — `--ink-3` rather than the `--ink-4` its
+    // typographic family would otherwise inherit, because `--ink-4` on
+    // `--surface-sunken` measures 4.48:1 and FAILS the 4.5:1 floor while
+    // `--ink-3` measures 6.30:1 (that block's own header). A rule that
+    // quietly reverted to the dimmer token would still LOOK like a card and
+    // would fail WCAG, so the token identity is the assertion.
+    await openYouLinked(page, "tokens");
+    const [surface, rule, ink3] = await Promise.all([
+      tokenColor(page, "--surface"),
+      tokenColor(page, "--rule"),
+      tokenColor(page, "--ink-3"),
+    ]);
+    const card = page.locator(".c2-card");
+    expect(
+      await card.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe(surface);
+    expect(
+      await card.evaluate((el) => getComputedStyle(el).borderTopColor),
+    ).toBe(rule);
+
+    // The panel is only on screen in a failure state, and 1j's refused
+    // unlink is the one this screen can drive with the link fake alone.
+    await page.unroute(/\/api\/concept2\//);
+    await page.route(/\/api\/concept2\//, async (route) => {
+      if (route.request().method() === "DELETE") {
+        await route.fulfill({ status: 500, body: "{}" });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(C2_LINKED),
+      });
+    });
+    await page.getByRole("button", { name: "Unlink Concept2" }).click();
+    await page.getByRole("button", { name: "Tap again to unlink" }).click();
+    const reason = page.locator(".c2-card-panel-reason");
+    await expect(reason).toBeVisible();
+    expect(await reason.evaluate((el) => getComputedStyle(el).color)).toBe(
+      ink3,
+    );
+  });
+
+  test("every tappable on a log detail carrying the send block clears 44x44, in both orientations", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-c2-send-taps@e2e.test",
+      name: "Design C2 Tester",
+    });
+    await fakeLink(page, C2_LINKED);
+    await seedSendableRow(page, "Design Sea Fret");
+    await page.goto("/today/log");
+    await page
+      .locator(".today-log-row")
+      .filter({ hasText: "Design Sea Fret" })
+      .click();
+    await expect(page.locator(".c2-send")).toBeVisible();
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await expect(
+        page.getByRole("button", { name: "Send to Concept2" }),
+      ).toBeVisible();
+      await assertTapTargets(page);
+    }
+  });
+
+  test("zero WCAG 2A/2AA violations on a log detail carrying the send block", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-c2-send-a11y@e2e.test",
+      name: "Design C2 Tester",
+    });
+    await fakeLink(page, C2_LINKED);
+    await seedSendableRow(page, "Design Sea Fret A11y");
+    await page.goto("/today/log");
+    await page
+      .locator(".today-log-row")
+      .filter({ hasText: "Design Sea Fret A11y" })
+      .click();
+    await expect(page.locator(".c2-send")).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+});

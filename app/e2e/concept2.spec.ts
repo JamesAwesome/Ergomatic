@@ -28,8 +28,10 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
  * before the write and reads after it against a real database.
  *
  * A real fake-Concept2 SERVICE — a stack that could light the flag and
- * answer as Concept2 — is a follow-on named in the ROADMAP, not something
- * smuggled in here.
+ * answer as Concept2 — is a follow-on, not something smuggled in here. It
+ * is OWED a ROADMAP row rather than already carrying one: `grep -in
+ * "fake.*concept2" ROADMAP.md` returns nothing on this branch as of this
+ * commit, and Task 13 is what writes it.
  *
  * THE ROWS ARE REAL. Every log this file sends is posted through the real
  * `POST /api/logs` route with the shape a finished monitor session actually
