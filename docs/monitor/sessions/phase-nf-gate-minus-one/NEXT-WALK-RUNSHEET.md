@@ -1,7 +1,7 @@
-# NF-NORMAL-TRACE-v3 — one-attempt NFC diagnostic runsheet
+# NF-NORMAL-TRACE-v4 — hardened one-attempt NFC diagnostic runsheet
 
 **Authorization gate: this exact version may run only after a PM explicitly
-returns PASS for `NF-NORMAL-TRACE-v3` and James separately agrees. Neither this
+returns PASS for `NF-NORMAL-TRACE-v4` and James separately agrees. Neither this
 file nor its commit authorizes operation of the phone or PM5.**
 
 WALK PLAN · Observe one fresh PM5 reader activation and automatic evidence capture
@@ -64,12 +64,15 @@ receipt for the NFC-name-to-picker-free-BLE handoff?
 | Usage text | `Scan a PM5 to connect and program your workout.` |
 | Prefill | iPhone 17 Pro / iOS 26.6.1 / PM5 D/E / 459.069 / `PM5 432331249 Row` |
 
-The artifact was built after the full 455/455 E2E pass. Strict/deep code-sign
+The artifact was built after the full 455/455 E2E pass. That count came from
+`E2E_KEEP=0 pnpm e2e` in this worktree's `app/` at app-source commit
+`7e10d289`. Strict/deep code-sign
 verification passed, the entitlement and usage text above were read from the
 signed artifact, the prefill strings were found in both the built probe asset
 and the copied app asset, and `cap sync ios` left the tracked tree unchanged.
-The normal flag-off production bundle passed `dist:grep` and contained neither
-prefill value nor the prefill variable name.
+The normal flag-off production bundle passed `pnpm build` followed by
+`pnpm dist:grep` in the same tree and contained neither prefill value nor the
+prefill variable name.
 
 If the artifact is absent or any executable/probe/signature/entitlement/usage
 check differs, this runsheet is invalid. Rebuilding is not a live-walk repair;
@@ -85,7 +88,7 @@ the new artifact must be pinned and resubmitted to PM.
 | Use populated metadata | Focused tests prove all five exact values prefill and arm `Run normal sample`; malformed or partial prefill fails closed. The signed probe contains the frozen values. | Supported. James types nothing and does not edit the fields. |
 | Put PM5 in connection mode | Photographic device evidence shows `More Options` and the `Ready for App Connection` screen for PM5 432331249. Two earlier targeted connections succeeded there. | Supported. James uses the same PM5 controls; no invented app control is involved. |
 | Start one normal scan | Source shows the exact `Run normal sample` control. Earlier normal scans read this PM5 twice. The native modal covers the WebView after the tap. | Supported. All WebView navigation happens before the tap; James does not swipe, background, reload or reach through the modal. |
-| Capture the result without operator copying | The diagnostic build emits allowlisted `NFC_GATE_DIAGNOSTIC` lines and automatically framed `NFC_GATE_RECEIPT` exports before/after terminal cleanup. Native tests prove callback emission when delivered; 108 focused NFC tests prove framing and probe behavior. | Supported as an evidence transport, not as proof that the phone will deliver RF-active. The controller owns and validates the log. |
+| Capture the result without operator copying | The diagnostic build emits allowlisted `NFC_GATE_DIAGNOSTIC` lines and automatically framed `NFC_GATE_RECEIPT` exports before/after terminal cleanup. Native tests prove callback emission when delivered. `pnpm test --project client --run src/monitor/nfc` in this worktree's `app/` at app-source commit `7e10d289` produced the 108/108 focused result for framing and probe behavior. | Supported as an evidence transport, not as proof that the phone will deliver RF-active. The controller owns and validates the log. |
 
 This ledger distinguishes tool/source feasibility from the one physical fact
 the walk is meant to observe. Simulator and native-unit results cannot prove
@@ -97,27 +100,50 @@ bounded device attempt remains necessary.
 No device command runs until PM PASS and James separately agrees. Immediately
 before the walk, the controller:
 
-1. Rechecks the artifact path, both SHA-256 values, strict/deep code signature,
-   CDHash, usage text and exact TAG entitlement against the pinned table.
-2. Rechecks the worktree is clean and
-   `git diff --exit-code 7e10d2897a3d9c00685374695410a59213beb679 -- app`
-   is empty. Later documentation-only commits may advance HEAD; any app diff
-   invalidates this artifact and runsheet.
-3. Creates one temporary capture directory and prepares, but does not yet run,
-   these installed-tool commands:
+1. Runs this already desk-rehearsed block from the Phase NF worktree. Any
+   nonzero result invalidates the runsheet:
+
+       artifact=/tmp/ergomatic-phase-nf-ready.WQJqQu/Build/Products/Debug-iphoneos/App.app
+       probe="$artifact/public/assets/GateMinusOneProbe-O_TBUSFS.js"
+       test -z "$(git status --porcelain)"
+       git diff --exit-code 7e10d2897a3d9c00685374695410a59213beb679 -- app
+       test "$(shasum -a 256 "$artifact/App" | awk '{print $1}')" = \
+         bb4e30e5387664b6f8914855ef1aa45280916394d597637871ac80abc2ff8dbf
+       test "$(shasum -a 256 "$probe" | awk '{print $1}')" = \
+         b333816b7ccf4960c2c7035298f844104af33bff351ac3fb1a18f4c02ffb07a0
+       codesign --verify --deep --strict "$artifact"
+       test "$(plutil -extract NFCReaderUsageDescription raw "$artifact/Info.plist")" = \
+         'Scan a PM5 to connect and program your workout.'
+       entitlements=$(codesign -d --entitlements :- "$artifact" 2>/dev/null)
+       test "$(printf '%s' "$entitlements" | plutil -convert json -o - - | \
+         jq -c '."com.apple.developer.nfc.readersession.formats"')" = '["TAG"]'
+       test "$(codesign -d --verbose=4 "$artifact" 2>&1 | \
+         awk -F= '/^CDHash=/{print $2}')" = \
+         96d980eec0b53de9446b72589d8e41324224f58a
+       capture_dir=$(mktemp -d /tmp/ergomatic-nf-normal-trace.XXXXXX)
+
+   Later documentation-only commits may advance HEAD; any `app/` diff against
+   the pinned app-source commit invalidates this artifact and runsheet.
+2. In that same controller shell, prepares but does not yet run these
+   installed-tool commands:
 
        xcrun devicectl device install app --device Kaito --timeout 60 \
          --json-output "$capture_dir/install.json" \
          --log-output "$capture_dir/install.log" "$artifact"
 
        xcrun devicectl device process launch --device Kaito \
-         --terminate-existing --console --timeout 480 \
+         --terminate-existing --console --timeout 345 \
          --json-output "$capture_dir/launch.json" \
          --log-output "$capture_dir/console.log" haus.waffle.ergomatic
 
-The interactive controller terminal is retained alongside the explicit log
-file. No Safari Inspector, browser console, clipboard or user-pasted command is
-part of the evidence path.
+The 345-second process timeout reaches 8:00 only if launch begins by its 2:15
+deadline; a later launch is an abort. The interactive controller terminal is
+retained alongside the explicit log file. No Safari Inspector, browser console,
+clipboard or user-pasted command is part of the evidence path. Installed
+`devicectl` help accepts these flags, and this phone has already demonstrated
+both signed installation and `--console` capture. The device commands are not
+re-run during desk review because doing so would operate the phone before
+James's separate agreement.
 
 ## Timed execution — exactly one case
 
@@ -191,15 +217,3 @@ terminal result or hard stop, terminates the console attachment, validates and
 redacts the captured frames, records artifact/case/outcome provenance in this
 directory, and commits the evidence on this branch. There is no web lab or
 Docker stack to tear down.
-
-## PM review history
-
-- `NF-NORMAL-TRACE-v1`: NOT READY. The card began its clock after USB/unlock
-  setup and did not count every physical interaction.
-- `NF-NORMAL-TRACE-v2`: NOT READY. Its preflight incorrectly required branch
-  HEAD to equal the older app-source commit even though the runsheet itself was
-  committed later.
-- `NF-NORMAL-TRACE-v3`: the same 8-minute cap begins before all setup, the
-  11-action / three-word operator budgets are binding, and provenance is pinned
-  by a clean worktree plus an empty `app/` diff against the artifact's source
-  commit rather than contradictory HEAD equality.
