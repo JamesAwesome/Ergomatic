@@ -30,8 +30,8 @@ re-review cleared conflicting designated-test identity and CSS/comment scope,
 but left a verification-byte admission gap: empty or out-of-range integer
 arrays reached Save and were rejected by the server. James approved one focused
 follow-up on September 4 ("appproved"); the fix and automated verification are
-complete, with scoped review pending before clearance. This is not merge or
-native-walk approval. The recovery matrix and landscape safe-exit evidence are
+complete, and scoped review cleared the fix with no new findings. This is not
+merge or native-walk approval. The recovery matrix and landscape safe-exit evidence are
 recorded. The antagonist cleared the
 proposed one-minute phone protocol's structural coverage, not native
 acceptance. The actual walk, PM phase-close judgment and any merge decision
@@ -87,7 +87,7 @@ Present verification bytes must meet the existing server contract: an array
 of 1–32 integers in 0–255 (`app/server/routes/data.ts:818-852`). The current
 follow-up adds explicit array, length and byte bounds to the finite-integer
 guard. Mounted read-only and valid-boundary Save witnesses pass;
-the finding remains open until scoped review completes.
+the authorized scoped review cleared the finding.
 
 Two more anchor findings are in this same work, not follow-up deferrals:
 

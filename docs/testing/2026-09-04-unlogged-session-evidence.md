@@ -1,6 +1,6 @@
 # Unlogged session recovery evidence — 2026-09-04
 
-**Current review: admission fix verified, scoped rereview pending.** The prior
+**Current review: admission fix verified and scoped rereview clean.** The prior
 re-review of `239bcd4a..303856a4` cleared designated-test identity, narrow CSS
 scope and stale comments, but found that empty/out-of-range integer
 `verificationBytes` passed the new guard. With machine totals present,
@@ -9,7 +9,10 @@ Save forwards those bytes; the existing server requires 1–32 integers in
 read-only fallback is now used instead. James approved one focused follow-up;
 commit `c1e2c4c7` adds the missing admission checks and mounted witnesses, with
 fresh gates and sensitivity probes recorded below. The one authorized scoped
-rereview is pending. Passing tests alone are not technical merge clearance.
+rereview of `1829dea2..11d9a122` returned **ADDRESSED**, with no new findings:
+the guard matches the server contract and failed admission preserves the exact
+recording in read-only fallback. Native acceptance, PM phase-close judgment
+and merge approval remain pending.
 
 The connected browser journey drives the real fake transport through five
 `w 100m max r0.1` intervals: six-second positive rests, five resting-state
@@ -184,8 +187,8 @@ fixes, before the verification-byte follow-up below. The screenshot result
 remains applicable to the unchanged visual design, not a fresh run.
 
 The authorized verification-byte follow-up closes the final rereview's only
-residual, but is **fixed and awaiting its one scoped rereview**, not review
-clearance. `recoveryValidation.ts` now admits an optional `verificationBytes`
+residual; its one scoped rereview returned **ADDRESSED**, with no new findings.
+`recoveryValidation.ts` now admits an optional `verificationBytes`
 field only when it is a JSON array of 1–32 integer bytes in 0–255; it leaves
 the original array untouched and sends all other persisted shapes to the
 existing read-only recovery path. Before that production edit, mounted empty,
