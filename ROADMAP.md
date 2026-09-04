@@ -1825,9 +1825,12 @@ in both orientations.**
 
 **Status:** OPEN at James's request, 2026-09-03. Normal Today/warning design
 approved 2026-09-03; additional recovery-case designs approved 2026-09-04.
-Gate 0, implementation, browser recovery proof and generated desktop captures
-(including the initial landscape safe exit) are complete; the proposed native
-acceptance walk, phase-close review and merge decision remain pending James.
+Gate 0 and both task reviews are complete; browser recovery proof and generated
+captures include the initial landscape safe exit. Combined whole-branch fixes
+and automated gates are complete; scoped re-review is pending. The antagonist
+cleared the proposed one-minute protocol's structural
+coverage, not native acceptance; the actual walk, PM phase-close judgment and
+merge decision remain pending James.
 [Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)
 and [comparison](docs/superpowers/specs/2026-09-03-unlogged-session-gate.html).
 **S–M.** Full cycle; non-TRIAD only while retirement, stored shapes and

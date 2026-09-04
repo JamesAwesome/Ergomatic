@@ -134,6 +134,29 @@ guard returned the targeted run to 21/21 passed and restored
 statements/branches/functions/lines, so no admission branch is left without a
 behavioral disposition.
 
+The same combined fix requires the linked global library row's designated
+title to agree with the retained title before a test offer. Mounted timer and
+monitor witnesses cover both disagreement directions, successful ordinary
+saving, unchanged retained POST title and no test-history write. After the real
+commit, disabling title agreement caused three pure/mounted witnesses to
+offer a baseline incorrectly; restoration returned the targeted disagreement
+run to six passes and `postTestOffer.ts` to object hash
+`95a147e0686e98f15f5e304049e6cbfed4741343`. Agreeing known tests retain their
+existing offer and calculations. The conservative renamed-title cost is
+recorded in [implementation decisions](2026-09-04-unlogged-session-decisions.md).
+
+The out-of-scope global ≤360px screen-padding override was removed. A live
+360px recovery witness measures the original safe-area-aware 20px inset;
+restoring the old override after commit made it fail at 16px. Surgical
+restoration returned the witness to one pass and `index.css` to object hash
+`bb090b3760ec5b48026e5ac11142732f6967403d`. This witness began after removal,
+so its sensitivity probe is not claimed as historical pre-removal TDD.
+Existing 390px/landscape captures are outside that changed breakpoint; the
+full screenshot run passed and no generated PNG churn was retained. Stale
+fixed-height/accent-border arming descriptions now match the approved
+content-replacement layout; the connected fixture's boundary comment now
+names REST. Combined focused recovery/offer tests pass 106/106.
+
 Coverage HTML was read for the changed recovery surfaces:
 `ReviewSession.tsx` 97.77% statements / 97.82% branches,
 `recoveryValidation.ts` 100% / 100% / 100% / 100%,

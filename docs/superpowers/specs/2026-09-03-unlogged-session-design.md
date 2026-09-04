@@ -25,13 +25,14 @@ Correct Resume remains deferred. This is not fast path: a mistake could lose
 a record. A non-TRIAD full cycle is possible only while claim/retire identity,
 timing and reasons, successful-save behavior and recorded values stay
 unchanged. Re-scope before implementation if that boundary cannot hold.
-The phase remains OPEN. Task 1 and Task 2 reviews are complete; whole-branch
-review requires a combined fix for malformed programmed measurements,
-conflicting designated-test identity and deferred CSS/comment scope. The
-two-orientation recovery matrix and initial landscape safe-exit evidence are
-recorded. The proposed phone acceptance walk, phase-close judgment and any
-merge decision remain pending James. Browser proof does not replace native
-acceptance.
+The phase remains OPEN. Task 1 and Task 2 reviews are complete. The combined
+whole-branch fixes cover malformed programmed measurements, conflicting
+designated-test identity and deferred CSS/comment scope; automated gates pass,
+with scoped re-review pending. The two-orientation recovery matrix and initial
+landscape safe-exit evidence are recorded. The antagonist cleared the
+proposed one-minute phone protocol's structural coverage, not native
+acceptance. The actual walk, PM phase-close judgment and any merge decision
+remain pending James. Browser proof does not replace native acceptance.
 
 The warning's new **View unsaved** action navigates through the same cancel
 cleanup as Cancel. It must not authorize a replacement. Today is the common
