@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { emitGateReceipt } from "../src/monitor/nfc/gateMinusOneReceipt.js";
 import type { NfcGateReceiptV1 } from "../src/monitor/nfc/gateMinusOneReceipt.js";
 import {
+  assertProcessIdentifierAbsent,
   findUniqueProcessIdentifier,
   runNormalTraceController,
 } from "./nfc-normal-trace-controller.js";
@@ -43,6 +44,15 @@ describe("NFC normal-trace controller", () => {
         two: { processIdentifier: 654 },
       }),
     ).toThrow("exactly one process identifier");
+    expect(() => assertProcessIdentifierAbsent({ result: [] }, 321)).toThrow(
+      "did not expose process identifiers",
+    );
+    expect(() =>
+      assertProcessIdentifierAbsent(
+        { result: [{ processIdentifier: 999 }] },
+        321,
+      ),
+    ).not.toThrow();
   });
 
   it("runs one shell-independent command path, freezes after cleanup, and classifies atomically", async () => {
@@ -76,7 +86,10 @@ describe("NFC normal-trace controller", () => {
             }),
           );
         } else if (args.includes("processes")) {
-          writeFileSync(jsonPath!, JSON.stringify({ result: { devices: [] } }));
+          writeFileSync(
+            jsonPath!,
+            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
+          );
         } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
       },
       launchConsole: async (args, logPath) => {
@@ -143,7 +156,10 @@ describe("NFC normal-trace controller", () => {
             JSON.stringify({ result: { processIdentifier: 101 } }),
           );
         } else if (args.includes("processes")) {
-          writeFileSync(jsonPath!, JSON.stringify({ result: [] }));
+          writeFileSync(
+            jsonPath!,
+            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
+          );
         } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
       },
       launchConsole: async (_args, logPath) => {
@@ -185,7 +201,10 @@ describe("NFC normal-trace controller", () => {
             }),
           );
         } else if (args.includes("processes")) {
-          writeFileSync(jsonPath!, JSON.stringify({ result: [] }));
+          writeFileSync(
+            jsonPath!,
+            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
+          );
         } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
       },
       launchConsole: async (_args, logPath) => {
@@ -223,7 +242,10 @@ describe("NFC normal-trace controller", () => {
             }),
           );
         } else if (args.includes("processes")) {
-          writeFileSync(jsonPath!, JSON.stringify({ result: [] }));
+          writeFileSync(
+            jsonPath!,
+            JSON.stringify({ result: [{ processIdentifier: 999 }] }),
+          );
         } else if (jsonPath) writeFileSync(jsonPath, JSON.stringify({}));
       },
       launchConsole: async () => {

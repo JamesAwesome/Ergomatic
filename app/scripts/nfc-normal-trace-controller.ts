@@ -88,10 +88,16 @@ function json(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf-8")) as unknown;
 }
 
-function containsProcessIdentifier(value: unknown, pid: number): boolean {
+export function assertProcessIdentifierAbsent(
+  value: unknown,
+  pid: number,
+): void {
   const found = new Set<number>();
   collectProcessIdentifiers(value, found);
-  return found.has(pid);
+  if (found.size === 0)
+    throw new Error("Process listing did not expose process identifiers");
+  if (found.has(pid))
+    throw new Error("Replacement app process remained after termination");
 }
 
 async function replaceAndTerminateBundle(
@@ -160,8 +166,7 @@ async function replaceAndTerminateBundle(
     "--log-output",
     processesLog,
   ]);
-  if (containsProcessIdentifier(json(processesJson), replacementPid))
-    throw new Error("Replacement app process remained after termination");
+  assertProcessIdentifierAbsent(json(processesJson), replacementPid);
 }
 
 function atomicDecision(path: string, decision: GateConsoleDecision): void {
