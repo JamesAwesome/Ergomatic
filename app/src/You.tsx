@@ -104,7 +104,13 @@ export default function You({
           that ghost (1h, the no-card comparison) omit the card — so the
           page never puts the two in one frame and cannot settle their
           order. Keeping Reset directly under the BASELINES group it
-          destroys is what decides it. */}
+          destroys is what decided it.
+
+          RULED by James, 2026-09-04, on the rendered captures
+          (`docs/screenshots/you-concept2-unlinked.png` and
+          `you-concept2-landscape.png`, the first frames anywhere showing
+          the card and the RESET ghost together): AS SHIPPED. This is no
+          longer an open question or an implementer's call. */}
       <Concept2Card email={user.email} />
       {/* No SETTINGS section: the mock's settings rows (PRE-WORKOUT
           COUNTDOWN, PACE TOLERANCE, ACCENT COLOR) are filler
