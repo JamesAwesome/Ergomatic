@@ -551,6 +551,59 @@ describe("selected recording recovery", () => {
       expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(JSON.stringify(run));
     },
   );
+  it.each([
+    ["an empty array", []],
+    ["a 33-byte array", Array.from({ length: 33 }, () => 0)],
+    ["a negative byte", [-1]],
+    ["a byte above 255", [256]],
+  ])(
+    "programmed recording with %s stays read-only before server admission",
+    async (_label, verificationBytes) => {
+      const run = monitor({
+        summaryTotals: { workElapsedSeconds: 120, workDistanceMeters: 450 },
+        verificationBytes,
+      });
+      await expectProgrammedReadOnly(run);
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(JSON.stringify(run));
+    },
+  );
+  it.each([
+    ["a non-array object", { byte: 0 }],
+    ["a non-array string", "00"],
+    ["a null non-array value", null],
+  ])(
+    "programmed recording with %s stays read-only",
+    async (_label, verificationBytes) => {
+      const run = monitor({
+        summaryTotals: { workElapsedSeconds: 120, workDistanceMeters: 450 },
+        verificationBytes: verificationBytes as never,
+      });
+      await expectProgrammedReadOnly(run);
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(JSON.stringify(run));
+    },
+  );
+  it.each([
+    ["the one-byte lower boundary", [0]],
+    [
+      "the 32-byte upper boundary",
+      Array.from({ length: 32 }, (_, index) => (index === 31 ? 255 : 0)),
+    ],
+  ])(
+    "programmed recording with %s saves its verification bytes unchanged",
+    async (_label, verificationBytes) => {
+      const run = monitor({
+        summaryTotals: { workElapsedSeconds: 120, workDistanceMeters: 450 },
+        verificationBytes,
+      });
+      localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+      await open();
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      await screen.findByRole("heading", { name: "Today" });
+      expect(
+        JSON.parse(api.mock.calls[0]![1].body).machineSummary.verificationBytes,
+      ).toStrictEqual(verificationBytes);
+    },
+  );
   it("programmed optional observations retain their supported null and absent forms", async () => {
     const actual = monitor().actuals[0]!;
     const detail = summaryDetail();

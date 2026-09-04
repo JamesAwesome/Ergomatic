@@ -60,9 +60,13 @@ export function requireProgrammedMeasurements(run: MonitorRun): void {
     requireFiniteNumber(run.summaryDetail.avgPaceSecondsPer500m);
   }
   if (run.verificationBytes !== undefined) {
-    for (const byte of run.verificationBytes) {
+    const bytes: unknown = run.verificationBytes;
+    if (!Array.isArray(bytes) || bytes.length < 1 || bytes.length > 32)
+      throw new Error("Malformed recording bytes");
+    for (const byte of bytes) {
       requireFiniteNumber(byte);
-      if (!Number.isInteger(byte)) throw new Error("Malformed recording byte");
+      if (!Number.isInteger(byte) || byte < 0 || byte > 255)
+        throw new Error("Malformed recording byte");
     }
   }
 }
