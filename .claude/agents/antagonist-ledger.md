@@ -7024,3 +7024,6 @@ plan's own tools and never with the REPO's.
   do not prove two NDEF tags were detected, and a zero-only initialized counter
   does not measure stale settlement. Name the independent observations instead
   of turning an uninstrumented default into a hardware measurement.
+  A selected scenario plus a generic ending is also only operator intent, not
+  proof its native producer ran; inject that same ending through the wrong
+  producer before allowing the criterion to pass.
