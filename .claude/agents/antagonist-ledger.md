@@ -7042,3 +7042,17 @@ plan's own tools and never with the REPO's.
   pre-implementation decision; View can cancel existing staged authorization
   without inventing device state, reconnect behavior, or another session
   lifetime.
+
+### 2026-09-04 — Unlogged-session recovery delta: extracted bodies do not inherit caller gates
+
+**Claim:** selecting the exact retained monitor record and successfully building its existing summary is sufficient admission for the new recovery route.
+
+**Why it looked sound:** Today already closes interrupted records on Review, and both legacy summary doors reject open monitor records.
+
+**Finding:** the legacy closure checks belong to their adapters (`LogSession.tsx:333`, `JustRowLog.tsx:72`), not the reused builders. `buildMonitorLogSteps` checks frozen-seed alignment (`logDraft.ts:857`); `buildMonitorModel` accepts absent completion time (`summaryModel.ts:1194`). Direct/reloaded review URLs bypass Today's close action. Require a closed selected monitor snapshot before summary/claim/save; an open selection is unavailable. Route mounting never closes it.
+
+**Technique:** follow admission from every entry point, then remove the old caller mentally and inspect what the extracted callee actually guarantees. Exact record identity and readable data do not establish eligibility. Pin direct-open deep links and refused-close behavior, not only the happy Today click.
+
+**Related seam:** do not label the existing rower-End fake story natural completion. Its actual terminal producer must supply WORKOUTEND, reach the hook's `"finished"` writer, and survive leave/recovery before that producer-consumer claim is earned.
+
+**Prescribed-code lens:** absent/empty/duplicate selector inputs, independent encoded output, missing-type submit guard, visible copy failure and the producer-to-history seam held. No further code finding; hardening ends here. The selector blocks passed the author's isolated typecheck, lint and behavioral paste-test before review. This is plan evidence, not implementation or hardware acceptance.

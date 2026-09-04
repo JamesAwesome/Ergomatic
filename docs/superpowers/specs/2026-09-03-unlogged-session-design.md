@@ -107,6 +107,11 @@ Today entries bypass Just Row's legacy newer-completion fallback
 Open monitor records use the existing explicit interrupted-close action on
 Review, not on Today render or View unsaved. Closed records are not restamped.
 Live phone timers keep Resume; no recovery screen finishes one by mounting.
+Direct review also requires a closed monitor snapshot before summary, claim
+or save. An open monitor selection is unavailable with Back to Today; only
+Today's explicit Review action may close it. Test direct-open links and a
+refused close, since the reused builders do not enforce the legacy adapters'
+closure condition.
 
 | Value | Established | Lifetime and clear rule |
 | --- | --- | --- |
