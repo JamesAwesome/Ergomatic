@@ -9990,6 +9990,47 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
 // Boxes are read off `.c2-card-tell` and `.c2-card-act`, which are `div`s and
 // therefore block-level; an inline element reports 0 for every box metric,
 // which is the measurement error RF21's own example shipped.
+/** Every box in ONE round trip, for the two Concept2 describes below.
+ *
+ *  WHY IT EXISTS (whole-branch review F1). Two `boundingBox()` calls are two
+ *  protocol round trips, and this app loads three real webfonts, so a face
+ *  landing BETWEEN them relayouts the text under the second read. Measured,
+ *  not reasoned: with the mono faces stalled 1200 ms and
+ *  `document.fonts.ready` awaited between the two reads, the 1g case read
+ *  `body 63` against `tell 62` and went red — the same
+ *  `Expected: 62 / Received: 63` a full-suite run produced under load while
+ *  the same test passed 5/5 alone. One `page.evaluate` makes that window
+ *  structurally unreachable rather than unlikely. `Promise.all` does NOT:
+ *  Playwright serialises the calls on the wire either way, which is why the
+ *  two in-situ cases below were exposed despite using it.
+ *
+ *  Null for a selector that matches nothing OR an element with a zero box,
+ *  which is `boundingBox()`'s own contract ("null if the element is not
+ *  visible") — the callers' "did the fixture render" throws still bite. */
+interface DesignBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+async function boxesOf(
+  page: Page,
+  selectors: readonly string[],
+): Promise<(DesignBox | null)[]> {
+  return page.evaluate(
+    (sels) =>
+      sels.map((sel) => {
+        const el = document.querySelector(sel);
+        if (el === null) return null;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) return null;
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }),
+    selectors,
+  );
+}
+
 test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)", () => {
   function fixtureMarkup(fixture: string): string {
     return readFileSync(path.join(process.cwd(), "e2e/fixtures", fixture), {
@@ -10009,17 +10050,34 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
       document.body.innerHTML = `<div class="app-shell">${html}</div>`;
     }, inner);
     await expect(page.locator(".c2-card")).toBeVisible();
+    // A SETTLED layout, not merely a consistent one (whole-branch review
+    // F1). Awaited AFTER the markup is in the document, because the faces
+    // this markup needs are not requested until it lays out — the two
+    // existing `document.fonts.ready` awaits in this file sit at the same
+    // point, after their figure has rendered.
+    //
+    // NOT THE DECIDING FIX, and saying so keeps it from being read as a
+    // gate that could go red (RF21). The deciding fix is `boxesOf`'s single
+    // round trip; deleting THIS await, with the mono faces stalled 1200 ms,
+    // leaves all six cases in this describe green, because one round trip
+    // reads one layout whether or not the swap has happened. What it buys
+    // is the absolute-literal assertions: `.toBe(48)`/`.toBe(52)`/
+    // `.toBe(44)` are numbers off the amendment, and a box measured against
+    // a fallback face is only accidentally the same box. It is
+    // defence-in-depth on a measured mechanism, not a check.
+    await page.evaluate(() => document.fonts.ready);
   }
 
   async function loadCard(page: Page, fixture: string): Promise<void> {
     await paint(page, fixtureMarkup(fixture));
   }
 
-  /** Both columns' boxes in one round trip. */
+  /** Both columns' boxes in one round trip — genuinely one now (F1): this
+   *  used to be two `boundingBox()` calls under a comment claiming
+   *  otherwise. */
   async function columns(page: Page) {
-    const tell = await page.locator(".c2-card-tell").boundingBox();
-    const act = await page.locator(".c2-card-act").boundingBox();
-    if (tell === null || act === null)
+    const [tell, act] = await boxesOf(page, [".c2-card-tell", ".c2-card-act"]);
+    if (tell == null || act == null)
       throw new Error("a column had no box — the fixture did not render");
     return { tell, act };
   }
@@ -10135,9 +10193,11 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
     for (const vp of [PHONE_LANDSCAPE, PHONE_PORTRAIT]) {
       await page.setViewportSize(vp);
       await loadCard(page, "c2-card-update-required.html");
-      const tell = await page.locator(".c2-card-tell").boundingBox();
-      const body = await page.locator(".c2-card-body").boundingBox();
-      if (tell === null || body === null) throw new Error("no box");
+      const [tell, body] = await boxesOf(page, [
+        ".c2-card-tell",
+        ".c2-card-body",
+      ]);
+      if (tell == null || body == null) throw new Error("no box");
       expect(tell.width).toBeCloseTo(body.width, 0);
       // No trailing gap: the body is exactly as tall as its one column.
       expect(body.height).toBeCloseTo(tell.height, 0);
@@ -10196,11 +10256,11 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
     for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
       await page.setViewportSize(vp);
       await paint(page, inSitu);
-      const [reset, card] = await Promise.all([
-        page.locator(".reset-baselines").boundingBox(),
-        page.locator(".c2-card").boundingBox(),
+      const [reset, card] = await boxesOf(page, [
+        ".reset-baselines",
+        ".c2-card",
       ]);
-      if (reset === null || card === null) {
+      if (reset == null || card == null) {
         throw new Error("the in-situ composition did not render");
       }
       expect(card.y - (reset.y + reset.height)).toBe(12);
@@ -10261,6 +10321,10 @@ test.describe("Concept2 send block: the boxes §2 draws", () => {
       document.body.innerHTML = `<div class="app-shell">${inner}</div>`;
     }, html);
     await expect(page.locator(".c2-send")).toBeVisible();
+    // Same await, same reason and same limit as the card describe's `paint`
+    // above: `boxesOf`'s single round trip is what fixed F1; this settles
+    // the face the two absolute control heights are measured against.
+    await page.evaluate(() => document.fonts.ready);
   }
 
   async function loadBlock(page: Page, fixture: string): Promise<void> {
@@ -10328,12 +10392,12 @@ test.describe("Concept2 send block: the boxes §2 draws", () => {
     for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
       await page.setViewportSize(vp);
       await paint(page, inSitu);
-      const [footer, card, del] = await Promise.all([
-        page.locator(".log-plan-footer").boundingBox(),
-        page.locator(".c2-send").boundingBox(),
-        page.locator(".log-delete-trigger").boundingBox(),
+      const [footer, card, del] = await boxesOf(page, [
+        ".log-plan-footer",
+        ".c2-send",
+        ".log-delete-trigger",
       ]);
-      if (footer === null || card === null || del === null) {
+      if (footer == null || card == null || del == null) {
         throw new Error("the in-situ composition did not render");
       }
       expect(card.y - (footer.y + footer.height)).toBe(12);
