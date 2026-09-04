@@ -5,8 +5,8 @@ manual receipt copying and records native facts needed to distinguish a reader
 request from actual RF activation. It does not implement the product Scan NFC
 button or authorize another hardware session.
 
-Runtime and tests under review: `0e034b48..200d9f1c`. Native build gates pass,
-but the browser regression gate is red. No walk is ready.
+Runtime and tests under review: `0e034b48..bb3c3dbc`. Native and browser gates
+pass. No walk is ready.
 
 ## What changed
 
@@ -57,18 +57,28 @@ Commands used for the JavaScript gates: `pnpm lint`, `pnpm format:check`,
 package-root CapgoCapacitorNfc XCTest scheme with the NfcDiagnosticTraceTests
 selection on the iOS simulator, not a physical destination.
 
-## Browser regression blocker
+## Browser regression resolution
 
-`E2E_KEEP=0 pnpm e2e` returned 452 passed / 3 failed. The news unread count remained
-seven after BACK; two retest scenarios saved a session but showed Today rather
-than the post-test baseline offer. An unchanged focused run of `news.spec.ts`
-and `retest.spec.ts` with one worker returned 11 passed / 2 failed: news passed,
-the same two retest failures reproduced. These paths and their assertions
-were not changed. The NFC probe is absent from the normal browser artifact.
-The failures' root cause is not established here; the E2E gate is not waived.
-No unrelated product fix or assertion weakening was performed.
+The first `E2E_KEEP=0 pnpm e2e` run returned 452 passed / 3 failed. The news
+unread count remained seven after BACK; two retest scenarios saved a session
+but showed Today rather than the post-test baseline offer. An unchanged focused
+run of `news.spec.ts` and `retest.spec.ts` with one worker returned 11 passed /
+2 failed: news passed, while the same two retest failures reproduced.
 
-Both test runs removed their ergomatic-39232 containers/network; the existing
+The retest failures were a test-ordering race: the save could run before the
+asynchronous workout-library response established that the test workout was
+global, so the supported nonblocking product path correctly skipped the
+optional offer. The E2E fixture now delays that response deliberately and both
+affected tests await it before finishing. The forced-delay pair passed 2/2.
+This changes no product behavior and does not weaken the offer assertions.
+
+A subsequent full run returned 453 passed / 2 failed on two builder geometry
+assertions. Both passed in 40/40 parallel focused repetitions, then passed in
+the final full run. The final `E2E_KEEP=0 pnpm e2e` result is 455/455 passed.
+The NFC probe is absent from the normal browser artifact; the E2E gate is not
+waived.
+
+All E2E runs removed their ergomatic-39232 containers/network; the existing
 test volume remains. No phone process was polled or signalled.
 
 ## Hardware and evidence limits
