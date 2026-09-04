@@ -217,8 +217,9 @@ break first if the pool were a page".
 ### 2.5 Performance and network
 
 Per tap: one `Uint32` draw, one `Set` of at most pool-size ids, one
-`localStorage.setItem` of a record bounded by the pool size (300 ids ≈
-7 KB, well inside any quota). No request. Per mount: `GET /api/workouts`
+`localStorage.setItem` of a record bounded by the pool size (300 UUIDs
+serialise to 11,810 bytes — measured with `node -e` over
+`crypto.randomUUID()` ids, 2026-09-04 — well inside any quota). No request. Per mount: `GET /api/workouts`
 once, as now; the daily roll's per-type pool check runs `suggest()` at most
 four times over the in-memory array (each a single filter pass) and only on
 the day's first freestyle mount.
