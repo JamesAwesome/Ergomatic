@@ -42,7 +42,7 @@ describe("computeAvailable: C2_LINK_ENABLED flag AND both credentials", () => {
   });
 });
 
-// Wave E per-user gate (.superpowers/c2-user-gate-brief.md): the surface is
+// Wave E per-user gate (docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md): the surface is
 // live for one account before it is live for the sign-in allowlist. The
 // composition is `available()` AND the email is on `C2_ALLOWED_EMAILS`,
 // parsed with the SAME `parseAllowlist`/`isAllowed` pair `ALLOWED_EMAILS`

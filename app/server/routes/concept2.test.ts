@@ -595,7 +595,7 @@ describe("availability matrix (spec §Architecture 8)", () => {
   });
 });
 
-// Wave E per-user gate (.superpowers/c2-user-gate-brief.md). The matrix
+// Wave E per-user gate (docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md). The matrix
 // above moves ONE boolean and watches every route follow it; this describe
 // holds that boolean TRUE and moves the identity instead, because the
 // failure that matters here is a gate that opens for the wrong person, and

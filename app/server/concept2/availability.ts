@@ -19,7 +19,7 @@ export function computeAvailable(
   return linkEnabledFlag === "1" && clientId !== "" && clientSecret !== "";
 }
 
-// Wave E per-user gate (.superpowers/c2-user-gate-brief.md): the Concept2
+// Wave E per-user gate (docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md): the Concept2
 // surface goes live for ONE account before it goes live for the sign-in
 // allowlist — James links a real account, sends a real row and reads it back
 // in the logbook, while the rest of `ALLOWED_EMAILS` never meets an

@@ -52,7 +52,7 @@ export interface Concept2RouterDeps {
   // revocation is deliberately NOT per-user gated (F4 ruling). Every other
   // authed route uses `availableFor` below.
   available: () => boolean;
-  // Wave E per-user gate (.superpowers/c2-user-gate-brief.md):
+  // Wave E per-user gate (docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md):
   // `available()` AND the email is on `C2_ALLOWED_EMAILS`
   // (`concept2/availability.ts`'s `computeAvailableFor`, wired in
   // `index.ts`). Unset or empty means NOBODY — the surface goes live for
