@@ -171,7 +171,9 @@ export function JustRowSummary({
         </Link>
         <button
           type="button"
-          className="summary-discard"
+          className={
+            discard.armed ? "summary-discard-armed" : "summary-discard"
+          }
           onBlur={discard.disarm}
           onClick={() => {
             if (!discard.armed) {

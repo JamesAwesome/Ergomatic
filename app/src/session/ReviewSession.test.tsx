@@ -408,6 +408,7 @@ describe("selected recording recovery", () => {
       const armed = screen.getByRole("button", {
         name: "Tap again to discard",
       });
+      expect(armed).toHaveClass("summary-discard-armed");
       act(() => armed.blur());
       await userEvent.click(
         screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
