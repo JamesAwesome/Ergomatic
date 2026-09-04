@@ -701,6 +701,28 @@ describe("GateMinusOneProbe", () => {
       disconnected: true,
     });
   });
+  it("automatically frames a strict receipt before a stalled drain and again after cleanup settles", async () => {
+    const user = await renderReadyProbe();
+    const logger = vi.spyOn(console, "info").mockImplementation(() => {});
+    const releaseStop = hold("nfc-stop");
+    await user.click(runButton());
+    await user.click(screen.getByRole("button", { name: "Cancel sample" }));
+    await waitFor(() => expect(native.calls).toContain("nfc-stop:attempt-a"));
+    const entryFrames = logger.mock.calls.map(([message]) => message as string);
+    expect(
+      JSON.parse(reassembleGateReceiptFrames(entryFrames)) as NfcGateReceiptV1,
+    ).toMatchObject({ schema: "ergomatic/nfc-gate-minus-one/v1" });
+    await releaseStop();
+    await waitFor(() => expect(runButton()).toBeEnabled());
+    const frames = logger.mock.calls.map(([message]) => message as string);
+    expect(frames.length).toBeGreaterThan(entryFrames.length);
+    expect(
+      JSON.parse(
+        reassembleGateReceiptFrames(frames.slice(entryFrames.length)),
+      ) as NfcGateReceiptV1,
+    ).toMatchObject({ attempts: [{ scenario: "normal" }] });
+    logger.mockRestore();
+  });
   it("retains a failed sample without arming when secure UUID generation is unavailable", async () => {
     const user = await renderReadyProbe();
     vi.stubGlobal("crypto", {
@@ -1042,6 +1064,36 @@ describe("GateMinusOneProbe", () => {
     );
     expect(reload).not.toHaveBeenCalled();
     expect(sessionStorage.getItem("ergomatic:nfc-gate-minus-one")).toBeNull();
+  });
+
+  it("blocks a live reload when its final automatic receipt capture fails and still drains A", async () => {
+    const user = await renderReadyProbe();
+    const reload = vi.fn();
+    vi.stubGlobal("location", { reload });
+    await user.click(
+      screen.getByRole("button", { name: "Run webview-reload sample" }),
+    );
+    await act(async () =>
+      native.progress!({ attemptId: "attempt-a", stage: "connect" }),
+    );
+    const logger = vi.spyOn(console, "info").mockImplementation(() => {});
+    await user.click(
+      screen.getByRole("button", { name: "Export partial receipt" }),
+    );
+    logger.mockImplementation(() => {
+      throw new Error("console unavailable");
+    });
+    await user.click(screen.getByRole("button", { name: "Reload WebView" }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Receipt validation failed; raw or malformed evidence was not exported.",
+        ),
+      ).toBeInTheDocument(),
+    );
+    expect(reload).not.toHaveBeenCalled();
+    expect(native.calls).toContain("nfc-stop:attempt-a");
+    logger.mockRestore();
   });
 
   it.each(["background", "unmount"] as const)(

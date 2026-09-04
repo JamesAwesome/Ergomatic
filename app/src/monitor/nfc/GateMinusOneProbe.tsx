@@ -45,6 +45,7 @@ interface Active {
   terminal: boolean;
   drainPromise: Promise<void> | null;
   cleanupFailed: boolean;
+  automaticExportFailed: boolean;
   reading: boolean;
   finalizing: boolean;
   holdStage: GateNfcStage | undefined;
@@ -62,6 +63,8 @@ const now = () => performance.now();
 const USAGE = "Scan a PM5 to connect and program your workout.";
 const RESTART =
   "Cleanup failed; restart the diagnostic build before another sample.";
+const EXPORT_FAILED =
+  "Receipt validation failed; raw or malformed evidence was not exported.";
 const SCENARIOS: GateScenario[] = [
   "normal",
   "stop-during-connect",
@@ -204,6 +207,16 @@ export default function GateMinusOneProbe() {
     restartRef.current = true;
     if (mounted.current) setRestart(true);
   }
+  function automaticExport(active: Active): boolean {
+    if (!receiptRef.current) return true;
+    try {
+      emitGateReceipt(receiptRef.current);
+      return true;
+    } catch {
+      active.automaticExportFailed = true;
+      return false;
+    }
+  }
   // Track native primitives, not continuations which can themselves request
   // drain. Cancellation retains the radio lease until all primitives settle.
   async function pending<T>(
@@ -256,6 +269,7 @@ export default function GateMinusOneProbe() {
   ): Promise<void> {
     if (active.drainPromise) return active.drainPromise;
     active.terminal = true;
+    automaticExport(active);
     active.cancelActivityWait?.();
     if (mounted.current) {
       setReloadReady(null);
@@ -288,10 +302,17 @@ export default function GateMinusOneProbe() {
       await remove(active, active.nfcRemovers);
       await remove(active, active.activityRemovers);
       await remove(active, active.otherRemovers);
+      automaticExport(active);
       if (activeRef.current === active) activeRef.current = null;
       if (mounted.current) {
         setBusy(false);
-        setStatus(active.cleanupFailed ? RESTART : message);
+        setStatus(
+          active.cleanupFailed
+            ? RESTART
+            : active.automaticExportFailed
+              ? EXPORT_FAILED
+              : message,
+        );
         publish();
       }
     });
@@ -588,6 +609,7 @@ export default function GateMinusOneProbe() {
       terminal: false,
       drainPromise: null,
       cleanupFailed: false,
+      automaticExportFailed: false,
       reading: false,
       finalizing: false,
       holdStage: previous ? undefined : stageFor(scenario),
@@ -755,9 +777,7 @@ export default function GateMinusOneProbe() {
           );
       }
     } catch {
-      setStatus(
-        "Receipt validation failed; raw or malformed evidence was not exported.",
-      );
+      setStatus(EXPORT_FAILED);
     }
   }
   async function reloadWebView() {
@@ -770,6 +790,10 @@ export default function GateMinusOneProbe() {
       restartRef.current
     )
       return;
+    if (active && !automaticExport(active)) {
+      await drain(active);
+      return;
+    }
     if (active) {
       // This leg transfers a LIVE native session across documents. Retire only
       // old-document callbacks; the native coordinator drains A when B starts.
@@ -785,6 +809,11 @@ export default function GateMinusOneProbe() {
     }
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(reloadReady));
+      if (active && !automaticExport(active)) {
+        sessionStorage.removeItem(STORAGE_KEY);
+        await drain(active);
+        return;
+      }
       if (active) activeRef.current = null;
       location.reload();
     } catch {

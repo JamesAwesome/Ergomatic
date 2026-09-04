@@ -231,11 +231,91 @@ index 0000000000000000000000000000000000000000..4f81938b3d1454cb4528b8351c1d4e6b
 +        return next
 +    }
 +}
+diff --git a/ios/Sources/NfcPlugin/NfcDiagnosticTrace.swift b/ios/Sources/NfcPlugin/NfcDiagnosticTrace.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..5f96c9d255492df33a798a188abc970f4a793649
+--- /dev/null
++++ b/ios/Sources/NfcPlugin/NfcDiagnosticTrace.swift
+@@ -0,0 +1,74 @@
++import CoreNFC
++import Foundation
++
++#if DEBUG
++final class NfcDiagnosticTrace {
++    private let now: () -> TimeInterval
++    private let sink: (String) -> Void
++    private let origin: TimeInterval
++    private var order = 0
++
++    init(
++        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
++        sink: @escaping (String) -> Void = { print($0) }
++    ) {
++        self.now = now
++        self.sink = sink
++        self.origin = now()
++    }
++
++    func event(_ name: String, generation: UInt64, operation: String? = nil) {
++        emit(name: name, generation: generation, operation: operation, error: nil)
++    }
++
++    func ending(generation: UInt64, error: Error) {
++        emit(
++            name: "ndef.ending",
++            generation: generation,
++            operation: "session-end",
++            error: error
++        )
++    }
++
++    func error(operation: String, generation: UInt64, error: Error) {
++        emit(
++            name: "ndef.error",
++            generation: generation,
++            operation: operation,
++            error: error
++        )
++    }
++
++    private func emit(
++        name: String,
++        generation: UInt64,
++        operation: String?,
++        error: Error?
++    ) {
++        order += 1
++        var value: [String: Any] = [
++            "event": name,
++            "generation": generation,
++            "order": order,
++            "elapsedMs": Int((now() - origin) * 1_000)
++        ]
++        if let operation {
++            value["operation"] = operation
++        }
++        if let error {
++            let nsError = error as NSError
++            value["domainCategory"] = nsError.domain == "NFCReaderErrorDomain"
++                ? "core-nfc"
++                : "unknown"
++            value["code"] = nsError.code
++        }
++        guard let data = try? JSONSerialization.data(
++            withJSONObject: value,
++            options: [.sortedKeys]
++        ), let payload = String(data: data, encoding: .utf8) else {
++            return
++        }
++        sink("NFC_GATE_DIAGNOSTIC \(payload)")
++    }
++}
++#endif
 diff --git a/ios/Sources/NfcPlugin/NfcPlugin.swift b/ios/Sources/NfcPlugin/NfcPlugin.swift
-index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d98b4e2103 100644
+index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..c08a08806d8af7354c465934fbe8433aaa0f6506 100644
 --- a/ios/Sources/NfcPlugin/NfcPlugin.swift
 +++ b/ios/Sources/NfcPlugin/NfcPlugin.swift
-@@ -36,18 +36,24 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -36,18 +36,27 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
          CAPPluginMethod(name: "isSupported", returnType: CAPPluginReturnPromise)
      ]
  
@@ -260,10 +340,13 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
      private var tagSessionTriedFallback = false
      private var tagSessionPollingOptions: NFCTagReaderSession.PollingOption = []
 +    private var tagAttemptId: String?
++    #if DEBUG
++    private let diagnosticTrace = NfcDiagnosticTrace()
++    #endif
  
      private func isSessionAvailable(for type: String) -> Bool {
          if type == "tag" {
-@@ -60,13 +66,106 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -60,13 +69,112 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
          NFCTagReaderSession.readingAvailable || NFCNDEFReaderSession.readingAvailable
      }
  
@@ -318,7 +401,13 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
 +            if let alertMessage, !alertMessage.isEmpty {
 +                session.alertMessage = alertMessage
 +            }
++            #if DEBUG
++            diagnosticTrace.event("ndef.begin.initiated", generation: key.generation)
++            #endif
 +            session.begin()
++            #if DEBUG
++            diagnosticTrace.event("ndef.begin.returned", generation: key.generation)
++            #endif
 +            call.resolve()
 +        } catch {
 +            call.reject("NFC scan did not have a pending start.", "CANCELLED", error)
@@ -372,7 +461,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
          }
      }
  
-@@ -112,108 +211,194 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -112,108 +220,194 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
          }
  
          tagReaderSession = session
@@ -635,7 +724,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
          guard let rawRecords = call.getArray("records") as? [[String: Any]] else {
              call.reject("records is required and must be an array.")
              return
-@@ -221,30 +406,30 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -221,30 +415,30 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
  
          do {
              let message = try buildMessage(from: rawRecords)
@@ -674,7 +763,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
              // For NDEF session, we need to connect to the tag first
              performWrite(message: message, on: tag, session: ndefSession, call: call)
          } else if tagReaderSession != nil {
-@@ -314,7 +499,7 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -314,7 +508,7 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
              }
  
              if let error {
@@ -683,7 +772,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
                      call.reject("Failed to connect to tag.", nil, error)
                  }
                  return
-@@ -327,7 +512,7 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -327,7 +521,7 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
      private func performWriteToTag(message: NFCNDEFMessage, on tag: NFCNDEFTag, call: CAPPluginCall) {
          tag.queryNDEFStatus { status, capacity, statusError in
              if let statusError {
@@ -692,7 +781,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
                      call.reject("Failed to query tag status.", nil, statusError)
                  }
                  return
-@@ -351,7 +536,7 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -351,7 +545,7 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
                      }
                  }
              case .readOnly:
@@ -701,7 +790,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
                      call.reject("Tag is read only.")
                  }
              case .notSupported:
-@@ -410,17 +595,19 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -410,17 +604,19 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
          return data.map { NSNumber(value: $0) }
      }
  
@@ -726,14 +815,27 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
              }
          }
      }
-@@ -515,8 +702,26 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+@@ -514,9 +710,39 @@ public class NfcPlugin: CAPPlugin, CAPBridgedPlugin {
+ }
  
  extension NfcPlugin: NFCNDEFReaderSessionDelegate {
++    public func readerSessionDidBecomeActive(_ session: NFCNDEFReaderSession) {
++        guard let key = ndefKey, owns(session, key: key) else {
++            return
++        }
++        #if DEBUG
++        diagnosticTrace.event("ndef.rf.active", generation: key.generation)
++        #endif
++    }
++
      public func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
 +        guard let key = ndefKey,
 +              key.sessionIdentifier == ObjectIdentifier(session) else {
 +            return
 +        }
++        #if DEBUG
++        diagnosticTrace.ending(generation: key.generation, error: error)
++        #endif
 +
 +        if ndefState.draining != key {
 +            guard case .invalidate(let draining) = ndefState.requestStop(attemptId: key.attemptId),
@@ -754,7 +856,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
          if (error as NSError).code != NFCReaderError.readerSessionInvalidationErrorFirstNDEFTagRead.rawValue {
              DispatchQueue.main.async {
                  let payload: [String: Any] = [
-@@ -526,75 +731,111 @@ extension NfcPlugin: NFCNDEFReaderSessionDelegate {
+@@ -526,75 +752,132 @@ extension NfcPlugin: NFCNDEFReaderSessionDelegate {
                  self.notifyListeners("nfcStateChange", data: payload, retainUntilConsumed: true)
              }
          }
@@ -784,6 +886,13 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
  
              if let error {
 -                session.invalidate(errorMessage: "Failed to connect to the tag: \(error.localizedDescription)")
++                #if DEBUG
++                self.diagnosticTrace.error(
++                    operation: "connect",
++                    generation: key.generation,
++                    error: error
++                )
++                #endif
 +                self.invalidateOwnedNdefSession(
 +                    session,
 +                    key: key,
@@ -798,6 +907,13 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
 +                }
                  if let statusError {
 -                    session.invalidate(errorMessage: "Failed to read tag status: \(statusError.localizedDescription)")
++                    #if DEBUG
++                    self.diagnosticTrace.error(
++                        operation: "query",
++                        generation: key.generation,
++                        error: statusError
++                    )
++                    #endif
 +                    self.invalidateOwnedNdefSession(
 +                        session,
 +                        key: key,
@@ -811,6 +927,13 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
 +                        return
 +                    }
                      if let readError {
++                        #if DEBUG
++                        self.diagnosticTrace.error(
++                            operation: "read",
++                            generation: key.generation,
++                            error: readError
++                        )
++                        #endif
                          if !self.invalidateAfterFirstRead && status == .readWrite {
                              self.currentTag = tag
                              let event = self.buildEvent(tag: tag, status: status, capacity: capacity, message: nil)
@@ -879,7 +1002,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
              return
          }
  
-@@ -612,6 +853,10 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -612,6 +895,10 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
  
      public func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
          let nfcError = error as NSError
@@ -890,7 +1013,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
  
          if let pendingCall = pendingStartCall {
              guard session === pendingStartSession else {
-@@ -626,13 +871,13 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -626,13 +913,13 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
                  (nfcError.code == NFCReaderError.readerErrorUnsupportedFeature.rawValue ||
                      nfcError.code == NFCReaderError.readerErrorSecurityViolation.rawValue)
  
@@ -906,7 +1029,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
                      guard self.pendingStartCall === pendingCall, self.pendingStartSession == nil else {
                          return
                      }
-@@ -641,9 +886,8 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -641,9 +928,8 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
                          pollingOptions: [.iso14443, .iso15693],
                          alertMessage: fallbackAlertMessage
                      )
@@ -918,7 +1041,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
                          self.pendingStartCall = nil
                          self.pendingStartSession = nil
                          self.pendingAlertMessage = nil
-@@ -652,12 +896,15 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -652,12 +938,15 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
                              "NO_NFC",
                              error
                          )
@@ -935,7 +1058,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
              pendingStartCall = nil
              pendingStartSession = nil
              pendingAlertMessage = nil
-@@ -668,16 +915,24 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -668,16 +957,24 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
                      error
                  )
              }
@@ -964,7 +1087,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
  
          // Don't emit state change for normal session completion (user canceled)
          // Also check for successful read completion
-@@ -690,10 +945,16 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -690,10 +987,16 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
                  self.notifyListeners("nfcStateChange", data: payload, retainUntilConsumed: true)
              }
          }
@@ -982,7 +1105,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
          // Handle multiple tags case - CoreNFC recommends invalidating with a message
          if tags.count > 1 {
              session.invalidate(errorMessage: "More than one tag detected. Please present only one tag.")
-@@ -705,7 +966,7 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -705,7 +1008,7 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
          }
  
          session.connect(to: firstTag) { [weak self] error in
@@ -991,7 +1114,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
                  return
              }
  
-@@ -717,30 +978,30 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -717,30 +1020,30 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
              // Handle different tag types
              switch firstTag {
              case .miFare(let mifareTag):
@@ -1029,7 +1152,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
                          return
                      }
  
-@@ -749,14 +1010,14 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -749,14 +1052,14 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
                      // We should emit the tag with its UID and writability info.
                      if message == nil {
                          // Blank tag or NDEF read failed - emit tag with UID and status info
@@ -1046,7 +1169,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
                          if self.invalidateAfterFirstRead {
                              session.invalidate()
                          }
-@@ -764,12 +1025,15 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -764,12 +1067,15 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
                  }
              } else {
                  // Tag doesn't support NDEF or query failed - just emit UID
@@ -1064,7 +1187,7 @@ index 2b8611f9976757f9ccbc5c7b249fac43b5a1420c..0fcedb9b03dcb229bbb6be274f7695d9
          // Save the current tag for writing
          currentTag = tag
  
-@@ -805,7 +1069,7 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
+@@ -805,7 +1111,7 @@ extension NfcPlugin: NFCTagReaderSessionDelegate {
              "tag": tagInfo
          ]
  
@@ -1353,5 +1476,57 @@ index 0000000000000000000000000000000000000000..be52faa1612f4b288e114f3964dd8560
 +        XCTAssertEqual(state.requestStop(attemptId: "attempt-a"), .awaitInvalidation(a))
 +        XCTAssertNil(state.finishInvalidation(a))
 +        XCTAssertEqual(state.requestStop(attemptId: "attempt-a"), .alreadyDrained)
++    }
++}
+diff --git a/ios/Tests/NfcPluginTests/NfcDiagnosticTraceTests.swift b/ios/Tests/NfcPluginTests/NfcDiagnosticTraceTests.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..93ae4d32d67fb08b5cd83822be3122d51d93aa4f
+--- /dev/null
++++ b/ios/Tests/NfcPluginTests/NfcDiagnosticTraceTests.swift
+@@ -0,0 +1,46 @@
++import Foundation
++import XCTest
++
++@testable import NfcPlugin
++
++final class NfcDiagnosticTraceTests: XCTestCase {
++    func testRecordsOrderedNdefActivationWithoutAttemptIdentity() {
++        var messages: [String] = []
++        let trace = NfcDiagnosticTrace(
++            now: { 42.5 },
++            sink: { messages.append($0) }
++        )
++
++        trace.event("ndef.begin.initiated", generation: 7)
++        trace.event("ndef.rf.active", generation: 7)
++
++        XCTAssertEqual(messages.count, 2)
++        XCTAssertTrue(messages[0].contains("NFC_GATE_DIAGNOSTIC"))
++        XCTAssertTrue(messages[0].contains("\"event\":\"ndef.begin.initiated\""))
++        XCTAssertTrue(messages[0].contains("\"order\":1"))
++        XCTAssertTrue(messages[1].contains("\"event\":\"ndef.rf.active\""))
++        XCTAssertTrue(messages[1].contains("\"order\":2"))
++        XCTAssertTrue(messages[1].contains("\"generation\":7"))
++        XCTAssertFalse(messages.joined().contains("attempt"))
++    }
++
++    func testRedactsUnknownErrorDomainAndDescriptionWhileKeepingNumericCodeAndOperation() {
++        var message = ""
++        let trace = NfcDiagnosticTrace(now: { 3 }, sink: { message = $0 })
++        let error = NSError(
++            domain: "com.private.reader.secret",
++            code: 735,
++            userInfo: [NSLocalizedDescriptionKey: "tag uid 11:22:33"]
++        )
++
++        trace.error(operation: "read", generation: 4, error: error)
++
++        XCTAssertTrue(message.contains("\"event\":\"ndef.error\""))
++        XCTAssertTrue(message.contains("\"operation\":\"read\""))
++        XCTAssertTrue(message.contains("\"domainCategory\":\"unknown\""))
++        XCTAssertTrue(message.contains("\"code\":735"))
++        XCTAssertFalse(message.contains("com.private.reader.secret"))
++        XCTAssertFalse(message.contains("tag uid"))
++        XCTAssertFalse(message.contains("userInfo"))
 +    }
 +}
