@@ -533,6 +533,13 @@ export default function Timer() {
   const hasEstimate = hasRemainingEstimate(currentRun.phases, currentRun.index);
 
   function handleEndTap() {
+    // A phone-timed Just Row has no programmed workout to abandon. Route its
+    // END press through the existing final-phase finish state machine so the
+    // same freeze, Keep going, and Finish session behavior is shared with ▶.
+    if (isFreeRow) {
+      handleNext();
+      return;
+    }
     // Pausing before staging the confirm means the phase clock can't
     // silently auto-advance (or complete the run) while the rower is still
     // deciding — `tick()` still fires every second in the background

@@ -256,9 +256,9 @@ test.describe("Just Row: the whole flow", () => {
 // The wait after Start Timer is REAL time, not a fake clock: the Timer's
 // count-up is wall-clock based (criterion 5's invariant), so the recorded
 // TIME must be at least the seconds this test genuinely stood on the
-// screen — `0:00` there would mean ▶ recorded nothing.
+// screen — `0:00` there would mean END recorded nothing.
 test.describe("Just Row: without the monitor", () => {
-  test("Today → Start Timer → count-up → ▶ → Finish session → time-only log door → history chip → TIMER detail", async ({
+  test("Today → Start Timer → count-up → END → Finish session → time-only log door → history chip → TIMER detail", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -292,9 +292,9 @@ test.describe("Just Row: without the monitor", () => {
       timeout: 10_000,
     });
 
-    // ▶ stages the finish (handoff `ClockFinish.dc.html`, verbatim from the
-    // shipped Timer) rather than advancing: a free row has no next phase.
-    await page.getByRole("button", { name: "Next phase" }).click();
+    // END stages the existing finish flow: a free row has no next phase, so
+    // this is the phone-timed row's direct route to the same confirmation.
+    await page.getByRole("button", { name: "END →" }).click();
     await expect(page.getByText("Finish this session?")).toBeVisible();
     await page.getByRole("button", { name: "Finish session" }).click();
 

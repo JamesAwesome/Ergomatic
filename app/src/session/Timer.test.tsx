@@ -2316,17 +2316,30 @@ describe("Timer — Just Row without the monitor (mode justrow, no draft)", () =
     expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
   });
 
-  it("END → Abandon session clears the run and lands on Today (no log, no actual)", async () => {
+  it("END → stages Finish, freezes the clock, and saves the elapsed time on /justrow/log", async () => {
     mockKeepAwake();
     saveRun(buildFreeRowRun(FIXED_NOW));
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 12_000));
     await renderTimer();
 
     await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    expect(screen.getByText("Finish this session?")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Abandon this session\?/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+
+    await repaintAt(42_000);
+    expect(heroText()).toBe("0:12");
+
     await userEvent.click(
-      screen.getByRole("button", { name: "Abandon session" }),
+      screen.getByRole("button", { name: "Finish session" }),
     );
 
-    expect(screen.getByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(loadRun()).toBeNull();
+    expect(screen.getByText("JUST ROW LOG SCREEN")).toBeInTheDocument();
+    expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
+    expect(loadRun()?.actuals).toStrictEqual({
+      0: { actualSource: "stopwatch-elapsed", elapsedSeconds: 12 },
+    });
   });
 });
