@@ -44,7 +44,8 @@ The complete `Timer.test.tsx` client file also passed: 93/93 tests.
   flow.
 - `git diff --check`: passed.
 
-No coverage run was collected; per-file coverage is therefore not applicable.
+The worker did not collect coverage in the initial pass. The controller's
+current-head coverage evidence below supersedes that initial omission.
 
 ## Mutation evidence
 
@@ -121,3 +122,47 @@ Prettier, `format:check`, and `git diff --check` passed. Commit
 passed lint, typecheck, and E2E TypeScript membership 19/19. The worktree was
 clean after commit. Full client and e2e gates are delegated to the controller
 for this fix round.
+
+## Controller verification — current implementation head `b92bf633`
+
+After the fix-round commits, the controller ran the required gates against the
+current implementation head without further product-code changes:
+
+```text
+pnpm lint
+passed
+
+pnpm typecheck
+passed; E2E TypeScript membership 19/19
+
+pnpm format:check
+passed; all matched files use Prettier code style
+
+pnpm test --project unit --project client
+231 files passed; 6,616 passed, 1 skipped
+
+pnpm test
+255 files passed; 6,982 passed, 1 skipped
+
+pnpm test:coverage --project unit --project client
+231 files passed; 6,616 passed, 1 skipped
+aggregate: 96.44% statements, 95.23% branches, 95.04% functions,
+96.88% lines
+Timer.tsx: 97.26% statements, 93.04% branches, 100% functions,
+100% lines
+
+pnpm build
+passed (existing large-chunk warning only)
+
+pnpm dist:grep
+passed; none of the 8 dev-only markers found
+
+pnpm e2e
+455 passed (4.1m), including the exact log-door-to-history time comparison
+```
+
+An earlier attempt ran coverage, all-project tests, and e2e concurrently; the
+two Vitest processes timed out in unrelated `Releases` and `library-moves`
+tests under resource contention. The isolated `pnpm test` and coverage reruns
+above passed completely. The e2e process from that attempt also passed all 455
+tests.
