@@ -243,6 +243,10 @@ describe("selected recording recovery", () => {
       expect(JSON.parse(logs[0]![1].body).distanceMeters).toBe(
         source === "monitor" ? 2000 : undefined,
       );
+      expect(JSON.parse(logs[0]![1].body).completedAt).toBe(
+        source === "monitor" ? run.completedAt : undefined,
+      );
+      expect("tz" in JSON.parse(logs[0]![1].body)).toBe(source === "monitor");
       const history = api.mock.calls.filter(
         ([path]) => path === "/api/test-history",
       );
