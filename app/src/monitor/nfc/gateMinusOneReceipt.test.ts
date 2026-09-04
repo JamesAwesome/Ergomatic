@@ -14,6 +14,16 @@ const PM5_TYPE = Array.from(
 );
 
 describe("Gate -1 receipt", () => {
+  it("preserves an unmeasured stale-settlement count as null, never a measured zero", () => {
+    const receipt = makeCompleteReceipt();
+    Object.assign(receipt.attempts[0]!, { staleAttemptSettlementCount: null });
+    expect(
+      JSON.parse(serializeGateReceipt(receipt)).attempts[0]
+        .staleAttemptSettlementCount,
+    ).toBeNull();
+    Object.assign(receipt.attempts[0]!, { staleAttemptSettlementCount: -1 });
+    expect(() => serializeGateReceipt(receipt)).toThrow();
+  });
   it.each([
     [
       "blank metadata",

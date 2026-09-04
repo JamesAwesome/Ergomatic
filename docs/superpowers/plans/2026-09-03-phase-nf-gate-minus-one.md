@@ -99,7 +99,7 @@ interface GateAttemptReceipt {
   connected: boolean;
   disconnected: boolean;
   staleIdDroppedCount: number;
-  staleAttemptSettlementCount: number;
+  staleAttemptSettlementCount: number | null;
 }
 
 interface ReaderEndingReceipt {
@@ -151,7 +151,11 @@ Unobserved measurements on stopped/failed attempts stay `null`; unverified
 signed entitlements stay empty. All metadata, enum, byte, boolean and numeric
 fields are validated before explicit-field serialization. Unknown keys cannot
 change the verdict. Padding and signed-reader claims require Task 3 observations,
-not a payload-length check or the entitlement source file.
+not a payload-length check or the entitlement source file. `staleAttemptSettlementCount`
+is null in the disposable probe: no instrumentation measures that count. Never
+coerce null to zero or cite it as an observed pass. B completion, rejected stale
+IDs, and the native held-continuation ownership-guard observation are separate
+evidence; the nine-criterion GO still requires every prescribed physical leg.
 
 ### Disposable probe lifetime contract
 
@@ -159,18 +163,23 @@ One attempt owns the radio until its cancellation/drain and all pending native
 operations settle. Terminal is claimed synchronously; a late start is stopped,
 a late connection disconnected, and a late listener handle removed before re-arm.
 Any uncertain release requires an app restart, never a WebView-only reset.
+The explicit `webview-reload` handoff is the sole exception to local radio drain:
+retire the old document's listeners without stopping native A, transfer only
+opaque reload metadata, and let the native coordinator replace/drain A when B
+starts in the next document. Failed listener retirement or foreground loss
+before transfer cancels reload and drains A.
 The implementation/test owners are Task 2's `Active`, `pending`, `listen`,
 `drain`, `runScenario`, and the arranged-promise component regressions.
 
 | State | Mint | Clear | Teardown / reload / re-arm |
 |---|---|---|---|
-| `activeRef`, `Active.attemptId`, `entry`, `metadata` | `runScenario` | completed drain | radio lease survives teardown until drain; entry retained in document receipt; fresh attempt on re-arm |
+| `activeRef`, `Active.attemptId`, `entry`, `metadata` | `runScenario` | completed drain, or successful explicit live-native document transfer after listener retirement | ordinary teardown drains; live reload preserves native A for B's coordinator replacement; entry retained in exported document receipt; fresh attempt on re-arm |
 | `pending`, listener remover arrays, `nfcActive`, `bleActive`, `connectedDevice` | same `Active` construction; updated at each native primitive | settled native calls and resource release | teardown waits; no B while nonempty/uncertain; never persisted |
 | `terminal`, `drainPromise`, `cleanupFailed` | same `Active` construction | never reset on an old attempt | first terminal wins; failed cleanup sets document restart latch |
 | `reading`, `finalizing`, `nfcReady`, `earlyNfcEvent`, `scanReady`, `holdStage`, `priorReleased` | same `Active` construction | discarded after drain; early event consumed after start acknowledgment | stop duplicate continuations and premature success; B gets no hold stage |
 | `payload`, matching IDs/counts/times, first ID, scan start, selected ending | same `Active` construction | discarded after drain | receipt keeps only allowed measurements/records; raw IDs remain memory-only |
 | `receiptRef`, rendered receipt | first scenario | document end | every failed/repeated entry retained; no persistence; partial export before reload |
-| `reloadReady`, `exportedPartial`, `prior` | exact matching held-stage event after drain / validated reload metadata | consumed by reload or B start/release | only scenario, reloadPending, opaque prior ID/stage and operator metadata cross reload; no records or receipt |
+| `reloadReady`, `exportedPartial`, `prior` | exact matching held-stage event (after drain for stop-stage legs, native-live for reload) / validated reload metadata | any later drain withdraws readiness; consumed by reload or B start/release | only scenario, reloadPending, opaque prior ID/stage and operator metadata cross reload; no records or receipt |
 | mounted/restart refs and UI state | document mount | unmount / process restart | old handlers cannot mutate receipts; uncertain cleanup blocks re-arm |
 | console export ID | each export via `crypto.getRandomValues` | end of export | fragment/end envelopes carry independent random framing ID and declared length; no NFC identity or module-level mutable state |
 
@@ -985,7 +994,7 @@ No other event name or plugin method is accepted.
 9. Stop after the same matching device produces a second callback. Await `stopLEScan`; if more than one distinct matching device was observed, do not connect. Otherwise connect to the retained ID, then disconnect it, recording both outcomes.
 10. Expose **Cancel sample** for a scan that never reaches a second match; it awaits `stopLEScan` and records a failed criterion rather than inventing a timeout.
 11. Render raw bytes only on the device screen. **Copy redacted receipt** strictly serializes, writes the redacted JSON to the clipboard, and emits bounded `NFC_GATE_RECEIPT` fragment/end messages. Each export has its own sequence identity and declared base64 length; incomplete, truncated, mixed, duplicate or post-end fragments cannot complete an export. Every native console message remains below Capacitor's installed 4068-character argument cap.
-12. For `webview-reload` and each `stop-during-*` scenario, wait for A's exact held stage, stop/drain A, then expose **Export partial receipt**. Only after that export does **Reload WebView** become available; the controller verifies the complete attached-console export before asking the operator to reload. Store only `{ scenario, reloadPending: true, priorAttemptId, priorStage, iphone, pm5 }` under `ergomatic:nfc-gate-minus-one`. The next mount validates that metadata and immediately clears storage. **Start B** starts an unheld reader with fresh identity and installs the overlay progress listener, then releases only A's held stage. No mount-time release. All old-record, ending, and progress IDs are rejected; B's complete connect/disconnect is required before its conditional stale-A criterion can become true. The controller combines every captured document, retaining failed attempts, and establishes the whole-matrix criterion externally.
+12. Install/rebuild the DEBUG overlay before any held-stage scenario. Each `stop-during-*` scenario waits for A's exact held stage, stops/drains A, then exposes **Export partial receipt**. In contrast, `webview-reload` holds connect and keeps native A live through export and reload; only the old document's listeners are retired. Use the attached Safari Web Inspector's stable-ID controls below while the system reader sheet covers the WebView. Only after export does **Reload WebView** become available; the controller verifies the complete attached-console export before invoking it. Store only `{ scenario, reloadPending: true, priorAttemptId, priorStage, iphone, pm5 }` under `ergomatic:nfc-gate-minus-one`. The next mount validates that metadata and immediately clears storage. **Start B** starts an unheld reader with fresh identity and installs the overlay progress listener; its acknowledged native start replaces/drains any live A before the probe releases only A's held stage. No mount-time release. All old-record, ending, and progress IDs are rejected; B's complete connect/disconnect is required before its conditional stale-A criterion can become true. The controller combines every captured document, retaining failed attempts, and establishes the whole-matrix criterion externally; the unmeasured settlement count remains null.
 13. Abort and drain the current NFC or BLE operation on unmount and on the port's foreground-loss callback; call `gateNativePort.currentAppState()` immediately before NFC start and again before BLE initialization so an already-backgrounded app cannot arm either radio operation.
 
 The probe records capability-call start/finish with `performance.now()`. It records each matching-advertisement timestamp relative to `requestLEScan` invocation, so the receipt carries first-match latency and repeat intervals without choosing a product deadline or collision window.
@@ -1085,7 +1094,7 @@ Expected: the commit message makes its required later deletion unambiguous.
 
 **Interfaces:**
 
-- Consumes: the Task 2 diagnostic build, one NFC-capable iPhone, one PM5 with current firmware, and one second NFC tag/card for the multiple-tag invalidation leg.
+- Consumes: the Task 2 diagnostic build, one NFC-capable iPhone, one PM5 with current firmware, and one independently readable second NDEF tag for the multiple-tag invalidation leg.
 - Produces: one redacted `NfcGateReceiptV1`, one canonical `RedactedNfcRecord[]` fixture, and one criterion-by-criterion GO/NO-GO report.
 
 - [ ] **Step 1: Invoke the repository hardware-walk operator contract**
@@ -1121,7 +1130,7 @@ With no DEBUG overlay installed:
 3. Require at least one record with TNF `4`, type bytes decoding exactly to `concept2.com:bleconnectinfo`, and raw payload bytes visible.
 4. Let unfiltered duplicate BLE scanning stop itself on the same matching device's second exact `localName` callback.
 5. Require one matching device ID in memory, successful connect, successful disconnect, and no picker/device sheet.
-6. Copy the redacted receipt into the worktree immediately.
+6. Export the redacted receipt immediately. Before any next attempt or reload replaces the latest raw display, compare this attempt's on-screen raw records with its reconstructed export: only PM5 payload indices 0 through 5 may change to zero; index 6, name, padding, type, ID, TNF, and all non-PM5 records must be unchanged. The controller retains that comparison with the captured export.
 
 Failure of any numbered observation sets its matching criterion false; do not retry it into a pass without retaining the failed attempt in `attempts`.
 
@@ -1141,13 +1150,13 @@ underlying WebView after the system reader sheet opens. The probe never calls
 
 1. `sheet-cancel`: tap Cancel on the system NFC sheet; expect `userCancelled`.
 2. `no-tag-timeout`: present no tag and let Core NFC end the sheet; expect `sessionTimeout`.
-3. `forced-invalidation`: present the PM5 and a second NFC tag/card together so the singleton guard invalidates; record the actual mapped reason.
+3. `forced-invalidation`: first establish that the second tag is independently readable by this NDEF reader; an arbitrary payment card is not evidence of an NDEF tag. Then present the PM5 and that known-readable second NDEF tag together. Require the native singleton-guard message **Present exactly one NFC tag.** as positive evidence that this path ran, and retain its actual mapped ending reason. If the message is not observed, this leg is unproven even if a generic ending arrives.
 
 Set `readerEndingSemanticsObserved` true only when all three actions ran and their actual reasons were retained. Distinct reasons are not required for that criterion: if two actions collapse to the same reason, record the exact collapse and mark the current user-visible copy as requiring a new design approval before a product plan can execute. Do not label guessed causes.
 
-- [ ] **Step 7: Exercise background and process-live WebView reload**
+- [ ] **Step 7: Exercise background on the exact package**
 
-Run `background`: start A, background the app while its NFC sheet is live, resume, and require A to settle/drain before a fresh B starts and completes. Run `webview-reload`: start A and wait for its held-stage observation. Before reload, the probe emits a bounded, redacted `NFC_GATE_RECEIPT` partial; the controller reconstructs and verifies every fragment in the attached fresh `xcrun devicectl device process launch --device <resolved-device> --console haus.waffle.ergomatic` stream before asking the operator to reload (no guessed delivery sleep). After reload, start B, then release A's one held stage; collect the final bounded export and assemble partials plus final through the strict serializer without discarding failed attempts/endings. Require every retained A event to carry A's ID and be ignored by the new document, and require B to complete. Neither scenario may leave an NFC sheet or BLE callback alive after completion.
+With no DEBUG overlay, run `background`: start A, background the app while its NFC sheet is live, resume, and require A to settle/drain before a fresh attempt starts and completes. Neither attempt may leave an NFC sheet or BLE callback alive after completion. The distinct native-live WebView reload leg runs only after Step 8 installs and rebuilds the overlay.
 
 - [ ] **Step 8: Run deterministic stop-during-connect/query/read device legs with a DEBUG-only overlay**
 
@@ -1263,15 +1272,35 @@ Use `query` and `read` at the corresponding closures. Every `continuation` start
 
 The DEBUG bridge already lives inside the disposable `src/native/nfcGateMinusOneProbe.ts`; the normal scenario never calls either of its two DEBUG-only methods.
 
+After applying the overlay, repeat Step 2's flagged Vite build, Capacitor sync,
+Debug Xcode build, entitlement inspection, and installation of that exact app.
+Do not reinstall the npm package yet: that would discard the local overlay.
+Fresh-launch with `xcrun devicectl device process launch --device <resolved-device> --console haus.waffle.ergomatic`
+and verify actual receipt capture in that attached stream. Attach Safari Web
+Inspector to this installed app BEFORE starting A and verify the probe document
+is selectable; do not infer attachment merely from a Debug build. Installed
+Capacitor enables inspection for DEBUG (`CAPInstanceDescriptor.swift`) and sets
+`WKWebView.isInspectable` on iOS 16.4+ (`CapacitorBridge.swift`); follow WebKit's
+[attached-app inspection instructions](https://webkit.org/web-inspector/enabling-web-inspector/).
+If attachment/capture cannot be established, stop the reload leg as unproven.
+
 For each of `connect`, `query`, and `read`:
 
 1. Start A with that stage selected.
 2. On `nfcGateProgress(A, stage)`, call and await `gateNativePort.stopNfc(A)`.
 3. Export and controller-verify the complete bounded partial receipt, reload the WebView, start B, then call and await `gateNativePort.releaseGateProgress(A, stage)`.
 4. Require no A record/end event to settle or clear B, and require B to read normally.
-5. Record each exact-ID mismatch rejected by the new document as `staleIdDroppedCount`; require `staleAttemptSettlementCount` to remain zero.
+5. Record each exact-ID mismatch rejected by the new document as `staleIdDroppedCount`. `staleAttemptSettlementCount` remains null because it is not measured. Separately capture release acknowledgment and B's complete read/connect/disconnect, paired with Task 1's deterministic native ownership-guard tests; do not sell these observations as a measured zero counter.
 
-After all three legs, remove the overlay with `apply_patch`, run `pnpm --dir app install --force`, confirm `git diff -- app/patches/@capgo__capacitor-nfc@8.2.5.patch` is empty, and require this command to return no matches:
+Then run the distinct **webview-reload** leg with the overlay still installed:
+
+1. Verify the attached Inspector can evaluate `document.querySelector('[data-nfc-gate-minus-one]') !== null` as `true` before A starts. Choose **Run webview-reload sample** while idle and present the PM5. A holds its connect continuation and its system reader sheet remains live; this leg does NOT call stop/drain A before reload.
+2. While that sheet covers the WebView, invoke the existing export control from the attached Inspector console: `document.getElementById('nfc-gate-export').click()`. If agent tools cannot drive Inspector, James may paste this one short command; the controller collects data from the attached console, never asks James to hand-copy receipts. Export emits the complete framed redacted receipt independently of clipboard permission or user activation.
+3. Reconstruct and strictly verify every fragment/end envelope from the attached native console. Compare the latest raw display/export before losing the document. Do not advance after a missing/truncated export, sheet timeout, backgrounding, or any observed ending; retain that failed attempt and rerun only as a new retained attempt. No guessed delivery sleep.
+4. With native A's sheet still present, invoke `document.getElementById('nfc-gate-reload').click()`. This retires only the old document's listeners and reloads the WebView without restarting the app process. Any listener cleanup failure cancels transfer, stops A, and requires process restart instead of claiming this leg passed.
+5. Re-select the new document in Inspector if needed. Native A's sheet may still cover its **Start B** control, so invoke `document.getElementById('nfc-gate-start-b').click()`. B starts unheld with fresh identity; native replacement drains A before B's start acknowledgment, then the probe releases A's held connect continuation. Confirm B reads/connects/disconnects normally and no A event corrupts it. Collect the final export and combine all document partials without discarding failed attempts/endings. This is process-live/native-live WebView replacement evidence, distinct from the already-stopped A legs.
+
+After the three stopped-stage legs and the live-native reload leg, remove the overlay with `apply_patch`, run `pnpm --dir app install --force`, confirm `git diff -- app/patches/@capgo__capacitor-nfc@8.2.5.patch` is empty, and require this command to return no matches:
 
 ```bash
 rg -n 'nfcGateProgress|releaseNfcGateProgress|gateMinusOneHoldStage' app/node_modules/@capgo/capacitor-nfc/ios/Sources/NfcPlugin/NfcPlugin.swift
@@ -1288,7 +1317,7 @@ pnpm --dir app exec prettier --check ../docs/monitor/sessions/phase-nf-gate-minu
 rg -n 'attempt-a|device-id|5FC7DE6B4AEC07' docs/monitor/sessions/phase-nf-gate-minus-one/receipt.json
 ```
 
-Expected: Prettier passes and `rg` returns no matches. Manually compare each receipt payload with the on-screen raw capture: indices 0 through 5 are zero only in the saved file; index 6, name bytes, padding, type, ID, and TNF are unchanged.
+Expected: Prettier passes and `rg` returns no matches. Retain the per-attempt raw/export comparisons made immediately before each next attempt or reload; the probe shows only the latest raw capture, so this final materialization step cannot recover earlier raw displays. Only the identified PM5 address bytes may differ, and non-PM5 records remain byte-for-byte unchanged.
 
 - [ ] **Step 10: Create the canonical native-shaped fixture and correct the NFC README**
 

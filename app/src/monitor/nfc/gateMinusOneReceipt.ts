@@ -49,7 +49,7 @@ export interface NfcGateReceiptV1 {
     connected: boolean;
     disconnected: boolean;
     staleIdDroppedCount: number;
-    staleAttemptSettlementCount: number;
+    staleAttemptSettlementCount: number | null;
   }>;
   readerEndings: Array<{
     action: ReaderEndingAction;
@@ -302,12 +302,10 @@ function requireReceiptShape(receipt: Omit<NfcGateReceiptV1, "verdict">): void {
       if (value !== null) number(value);
     for (const value of [entry.decodedName, entry.liveLocalName])
       if (value !== null) text(value);
-    for (const value of [
-      entry.matchingDeviceCount,
-      entry.staleIdDroppedCount,
-      entry.staleAttemptSettlementCount,
-    ])
+    for (const value of [entry.matchingDeviceCount, entry.staleIdDroppedCount])
       number(value, true);
+    if (entry.staleAttemptSettlementCount !== null)
+      number(entry.staleAttemptSettlementCount, true);
     boolean(entry.connected);
     boolean(entry.disconnected);
     bytes(entry.trailingPayloadBytes, "trailing payload");

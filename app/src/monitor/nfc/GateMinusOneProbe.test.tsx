@@ -484,7 +484,7 @@ describe("GateMinusOneProbe", () => {
     { scenario: "stop-during-read", stage: "read" },
     { scenario: "webview-reload", stage: "connect" },
   ] as const)(
-    "exports stopped %s A before operator reload, starts B before releasing A, and rejects stale callbacks",
+    "exports %s A with the prescribed native lifetime, starts B before releasing A, and rejects stale callbacks",
     async ({ scenario, stage }) => {
       const user = await renderReadyProbe();
       const reload = vi.fn();
@@ -495,11 +495,18 @@ describe("GateMinusOneProbe", () => {
       await act(async () => {
         native.progress!({ attemptId: "attempt-a", stage });
       });
-      await waitFor(() => expect(native.calls).toContain("nfc-stop:attempt-a"));
-      const logger = vi.spyOn(console, "info").mockImplementation(() => {});
-      await user.click(
-        screen.getByRole("button", { name: "Export partial receipt" }),
+      await screen.findByRole("button", { name: "Export partial receipt" });
+      expect(native.calls.includes("nfc-stop:attempt-a")).toBe(
+        scenario !== "webview-reload",
       );
+      const logger = vi.spyOn(console, "info").mockImplementation(() => {});
+      const clipboard = vi
+        .spyOn(navigator.clipboard, "writeText")
+        .mockRejectedValue(new Error("No user activation"));
+      await act(async () =>
+        document.getElementById("nfc-gate-export")!.click(),
+      );
+      expect(clipboard).not.toHaveBeenCalled();
       const partial = JSON.parse(
         reassembleGateReceiptFrames(
           logger.mock.calls.map(([message]) => message as string),
@@ -510,16 +517,32 @@ describe("GateMinusOneProbe", () => {
       expect(partial.verdict).toBe("NO-GO");
       logger.mockRestore();
       expect(reload).not.toHaveBeenCalled();
-      await user.click(screen.getByRole("button", { name: "Reload WebView" }));
-      expect(reload).toHaveBeenCalledOnce();
+      await act(async () =>
+        document.getElementById("nfc-gate-reload")!.click(),
+      );
+      await waitFor(() => expect(reload).toHaveBeenCalledOnce());
+      expect(native.removed).toStrictEqual(
+        expect.arrayContaining([
+          "nfcEvent",
+          "nfcSessionEnd",
+          "progress",
+          "pause",
+          "resume",
+        ]),
+      );
       const stored = sessionStorage.getItem("ergomatic:nfc-gate-minus-one")!;
       expect(stored).not.toMatch(/records|deviceId|receipt/);
       cleanup();
+      expect(native.calls.includes("nfc-stop:attempt-a")).toBe(
+        scenario !== "webview-reload",
+      );
       const { default: Probe } = await import("./GateMinusOneProbe");
       render(<Probe />);
       expect(sessionStorage.getItem("ergomatic:nfc-gate-minus-one")).toBeNull();
       expect(native.calls).not.toContain(`release:attempt-a:${stage}`);
-      await user.click(screen.getByRole("button", { name: "Start B" }));
+      await act(async () =>
+        document.getElementById("nfc-gate-start-b")!.click(),
+      );
       await waitFor(() =>
         expect(native.calls).toContain(`release:attempt-a:${stage}`),
       );
@@ -562,12 +585,85 @@ describe("GateMinusOneProbe", () => {
       expect(complete.attempts[0]).toMatchObject({
         connected: true,
         disconnected: true,
-        staleAttemptSettlementCount: 0,
+        staleAttemptSettlementCount: null,
         staleIdDroppedCount: 3,
       });
       expect(complete.criteria.staleACannotAffectB).toBe(true);
     },
   );
+
+  it("waits for live-reload listener removal and cancels transfer on an uncertain release", async () => {
+    const user = await renderReadyProbe();
+    const reload = vi.fn();
+    vi.stubGlobal("location", { reload });
+    await user.click(
+      screen.getByRole("button", { name: "Run webview-reload sample" }),
+    );
+    await act(async () =>
+      native.progress!({ attemptId: "attempt-a", stage: "connect" }),
+    );
+    const release = deferred();
+    native.waits.set("remove:nfcEvent", release.promise);
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    await user.click(
+      screen.getByRole("button", { name: "Export partial receipt" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Reload WebView" }));
+    expect(reload).not.toHaveBeenCalled();
+    expect(runButton()).toBeDisabled();
+    expect(native.calls).not.toContain("nfc-stop:attempt-a");
+    await act(async () => release.reject(new Error("private-listener")));
+    await screen.findByText(/Cleanup failed; restart/);
+    expect(native.calls).toContain("nfc-stop:attempt-a");
+    expect(native.removed).toStrictEqual(
+      expect.arrayContaining(["nfcSessionEnd", "progress", "pause", "resume"]),
+    );
+    expect(reload).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem("ergomatic:nfc-gate-minus-one")).toBeNull();
+  });
+
+  it.each(["background", "unmount"] as const)(
+    "cancels live transfer on %s while listener removal is pending",
+    async (ending) => {
+      const user = await renderReadyProbe();
+      const reload = vi.fn();
+      vi.stubGlobal("location", { reload });
+      await user.click(
+        screen.getByRole("button", { name: "Run webview-reload sample" }),
+      );
+      await act(async () =>
+        native.progress!({ attemptId: "attempt-a", stage: "connect" }),
+      );
+      const release = hold("remove:nfcEvent");
+      vi.spyOn(console, "info").mockImplementation(() => {});
+      await user.click(
+        screen.getByRole("button", { name: "Export partial receipt" }),
+      );
+      await user.click(screen.getByRole("button", { name: "Reload WebView" }));
+      if (ending === "background") await pause();
+      else cleanup();
+      await release();
+      expect(native.calls).toContain("nfc-stop:attempt-a");
+      expect(reload).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem("ergomatic:nfc-gate-minus-one")).toBeNull();
+    },
+  );
+
+  it("withdraws live-reload readiness when A ends before transfer", async () => {
+    const user = await renderReadyProbe();
+    await user.click(
+      screen.getByRole("button", { name: "Run webview-reload sample" }),
+    );
+    await act(async () =>
+      native.progress!({ attemptId: "attempt-a", stage: "connect" }),
+    );
+    await screen.findByRole("button", { name: "Export partial receipt" });
+    await pause();
+    await waitFor(() => expect(runButton()).toBeEnabled());
+    expect(
+      screen.queryByRole("button", { name: "Reload WebView" }),
+    ).not.toBeInTheDocument();
+  });
 
   it("retains failures and repeated attempts and records only the selected genuine ending", async () => {
     const user = await renderReadyProbe();

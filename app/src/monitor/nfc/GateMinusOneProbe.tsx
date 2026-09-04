@@ -259,6 +259,10 @@ export default function GateMinusOneProbe() {
   ): Promise<void> {
     if (active.drainPromise) return active.drainPromise;
     active.terminal = true;
+    if (mounted.current) {
+      setReloadReady(null);
+      setExportedPartial(false);
+    }
     active.drainPromise = Promise.resolve().then(async () => {
       const safe = async (operation: () => Promise<void>) => {
         try {
@@ -444,10 +448,17 @@ export default function GateMinusOneProbe() {
     }
   }
   async function heldStage(active: Active, stage: GateNfcStage) {
-    await drain(
-      active,
-      "A was stopped and drained. Export the partial receipt before reload.",
-    );
+    if (active.entry.scenario === "webview-reload") {
+      if (!owns(active)) return;
+      setStatus(
+        "A remains native-live. Use the attached inspector to export, verify, then reload.",
+      );
+    } else {
+      await drain(
+        active,
+        "A was stopped and drained. Export the partial receipt before reload.",
+      );
+    }
     if (!mounted.current || active.cleanupFailed) return;
     setReloadReady({
       scenario: active.entry.scenario,
@@ -501,7 +512,7 @@ export default function GateMinusOneProbe() {
       connected: false,
       disconnected: false,
       staleIdDroppedCount: 0,
-      staleAttemptSettlementCount: 0,
+      staleAttemptSettlementCount: null,
     };
     current.attempts.push(entry);
     if (typeof crypto.randomUUID !== "function") {
@@ -558,7 +569,7 @@ export default function GateMinusOneProbe() {
         active,
         () =>
           gateNativePort.onAppState((state) => {
-            if (state === "background" && owns(active))
+            if (state === "background" && activeRef.current === active)
               void drain(active, "App backgrounded; radio operations drained.");
           }),
         active.otherRemovers,
@@ -701,19 +712,39 @@ export default function GateMinusOneProbe() {
       );
     }
   }
-  function reloadWebView() {
+  async function reloadWebView() {
+    const active = activeRef.current;
     if (
       !reloadReady ||
       !exportedPartial ||
-      activeRef.current ||
+      (active &&
+        (active.terminal || active.entry.scenario !== "webview-reload")) ||
       restartRef.current
     )
       return;
+    if (active) {
+      // This leg transfers a LIVE native session across documents. Retire only
+      // old-document callbacks; the native coordinator drains A when B starts.
+      active.terminal = true;
+      while (active.pending.size > 0)
+        await Promise.allSettled([...active.pending]);
+      await remove(active, active.nfcRemovers);
+      await remove(active, active.otherRemovers);
+      if (!mounted.current || active.cleanupFailed || active.drainPromise) {
+        await drain(active);
+        return;
+      }
+    }
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(reloadReady));
+      if (active) activeRef.current = null;
       location.reload();
     } catch {
-      setStatus("Reload metadata could not be saved; do not reload.");
+      sessionStorage.removeItem(STORAGE_KEY);
+      if (active) {
+        activeRef.current = active;
+        await drain(active, "Reload failed; A was stopped and drained.");
+      } else setStatus("Reload metadata could not be saved; do not reload.");
     }
   }
   useEffect(() => {
@@ -798,6 +829,7 @@ export default function GateMinusOneProbe() {
       </div>
       {prior && (
         <button
+          id="nfc-gate-start-b"
           type="button"
           disabled={busy || restart}
           onClick={() => void runScenario(prior.scenario, prior)}
@@ -843,13 +875,18 @@ export default function GateMinusOneProbe() {
       </button>
       {reloadReady && (
         <>
-          <button type="button" onClick={() => exportReceipt(true)}>
+          <button
+            id="nfc-gate-export"
+            type="button"
+            onClick={() => exportReceipt(true)}
+          >
             Export partial receipt
           </button>
           <button
+            id="nfc-gate-reload"
             type="button"
             disabled={!exportedPartial || restart}
-            onClick={reloadWebView}
+            onClick={() => void reloadWebView()}
           >
             Reload WebView
           </button>
