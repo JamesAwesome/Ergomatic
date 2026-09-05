@@ -1128,6 +1128,27 @@ closed with zero Concept2 contact.
       server ships. Not required to settle which number is authoritative (the
       5706/5707 API test did); required only to confirm production behaves as
       log-dev did.
+- [ ] **Auto-send — OFF · MANUAL · AUTOMATIC.** A per-rower sending mode:
+      OFF is the unlinked state, MANUAL is today's per-row Send, AUTOMATIC
+      sends an eligible finished monitor row the moment it saves, silently —
+      the Send button pressed for you, outcome on the row's block. One
+      boolean on the link row (`auto_send`, default false: a fresh link lands
+      in MANUAL), one `PATCH /api/concept2/link`, the control replaces the
+      card's Unlink button (OFF arms the two-tap unlink). Client-side after
+      the save (`useLogForm`'s 201 path), same route as the button. **TRIAD**
+      (stored shape + a number leaving on a trigger nobody tapped): full
+      antagonist on the spec, PM gate on the PR, and a **Gate 0** for the
+      redrawn card. Rulings (James, 2026-09-05): off = unlinked; silent;
+      default manual; no backlog send. Spec:
+      `docs/superpowers/specs/2026-09-05-concept2-auto-send-design.md`.
+- [ ] **Verification code: hide it, say "verified".** James, 2026-09-05: like
+      Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
+      16-digit code by default; once Concept2 has accepted the code for that
+      row, show "verified"; a debug reveal shows the raw code when needed.
+      **PARKED until the confirming send proves PR C's codes verify on new
+      rows** (the row above). Needs a way to learn `verified` from Concept2
+      (re-read the result, or our own send carrying the code once the
+      byte→code transform is known — PR C spec §8).
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
