@@ -88,6 +88,16 @@ export interface SuggestInput {
   library: LibraryEntry[];
   prefs: SuggestPrefs;
   todayPickId?: string;
+  /** Phase SF PR1 (spec §2.2): the day's DRAWN first card — drawn by the
+   *  client from `tieIds` once at mount and passed back on every render.
+   *  Honoured for the recommendation when it is in the pool, reported
+   *  with the standard "Least recently done" reason (it is a tie member,
+   *  honestly least recently done — "YOUR PICK" is reserved for the
+   *  rower's own SHUFFLE, `todayPickId`), and it NEVER beats a checkpoint
+   *  pin: the draw is not the rower's act, so on a prescribed day the pin
+   *  shows and SHUFFLE remains the escape. Ignored when not in the pool
+   *  (the rower changed a filter or the type since). */
+  drawnId?: string;
   /** Phase 8A: a plan checkpoint's own designated workout, resolved by the
    *  caller (domain/prescription.ts) and pinned here with its authored
    *  reason. Every preference filter is bypassed for it — a checkpoint is
@@ -128,7 +138,10 @@ export const RNG_RANGE = 2 ** 32;
 /** Uniform draw of one id. Null for an empty list; a singleton returns
  *  its member without consulting `rng` (so a scripted test rng is not
  *  consumed by a draw that has no choice to make). */
-export function drawOne(ids: readonly string[], rng: Rng): string | null {
+export function drawOne<T extends string>(
+  ids: readonly T[],
+  rng: Rng,
+): T | null {
   const n = ids.length;
   if (n === 0) return null;
   if (n === 1) return ids[0];
@@ -269,7 +282,7 @@ function passesSourceFilter(e: LibraryEntry, prefs: SuggestPrefs): boolean {
 }
 
 export function suggest(input: SuggestInput): Suggestion {
-  const { todayCode, library, prefs, todayPickId, prescribed } = input;
+  const { todayCode, library, prefs, todayPickId, drawnId, prescribed } = input;
 
   const typeMatched = library.filter((e) => e.type === todayCode);
   const filtered = typeMatched.filter(
@@ -320,7 +333,8 @@ export function suggest(input: SuggestInput): Suggestion {
     };
   }
 
-  const picked = pickOverride ?? sorted[0];
+  const drawn = drawnId ? sorted.find((e) => e.id === drawnId) : undefined;
+  const picked = pickOverride ?? drawn ?? sorted[0];
   const reason = buildReason(picked, pickOverride, fellBack, prefs);
 
   return { recommendationId: picked.id, reason, poolIds, fellBack, tieIds };
@@ -334,6 +348,7 @@ export function suggestFreestyle(
   library: LibraryEntry[],
   prefs: SuggestPrefs,
   todayPickId?: string,
+  drawnId?: string,
 ): Suggestion {
   const filtered = library.filter(
     (e) =>
@@ -362,14 +377,10 @@ export function suggestFreestyle(
   const pickOverride = todayPickId
     ? sorted.find((e) => e.id === todayPickId)
     : undefined;
-  const picked = pickOverride ?? sorted[0];
+  const drawn = drawnId ? sorted.find((e) => e.id === drawnId) : undefined;
+  const picked = pickOverride ?? drawn ?? sorted[0];
+  const tieIds = tieClass(sorted);
   const reason = buildReason(picked, pickOverride, fellBack, prefs);
 
-  return {
-    recommendationId: picked.id,
-    reason,
-    poolIds,
-    fellBack,
-    tieIds: tieClass(sorted),
-  };
+  return { recommendationId: picked.id, reason, poolIds, fellBack, tieIds };
 }

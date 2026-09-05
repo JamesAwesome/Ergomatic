@@ -22,11 +22,52 @@ describe("saveTodayPick / loadTodayPick", () => {
     planKey: "sprint",
     doneN: 11,
     workoutId: "w-42",
+    shownIds: ["w-1", "w-42"],
+    shuffled: true,
   };
 
-  it("round-trips and returns the id when date, planKey, and doneN all match", () => {
+  it("round-trips and returns the id, the shown list AND the shuffled flag when date, planKey, and doneN all match", () => {
     expect(saveTodayPick(base)).toBe(true);
-    expect(loadTodayPick("2026-08-01", "sprint", 11)).toBe("w-42");
+    expect(loadTodayPick("2026-08-01", "sprint", 11)).toStrictEqual({
+      workoutId: "w-42",
+      shownIds: ["w-1", "w-42"],
+      shuffled: true,
+    });
+  });
+
+  it("rejects a record whose shuffled flag is missing or not a boolean", () => {
+    localStorage.setItem(
+      TODAY_PICK_KEY,
+      JSON.stringify({ ...base, shuffled: undefined }),
+    );
+    expect(loadTodayPick("2026-08-01", "sprint", 11)).toBeNull();
+    localStorage.setItem(
+      TODAY_PICK_KEY,
+      JSON.stringify({ ...base, shuffled: "yes" }),
+    );
+    expect(loadTodayPick("2026-08-01", "sprint", 11)).toBeNull();
+  });
+
+  // Phase SF PR1: the shown list is new and REQUIRED — a same-day record
+  // from before the deploy has none and fails whole (a daily convenience,
+  // per the spec's stated cost), never a half-object with `shownIds`
+  // undefined that `nextShuffle` would have to guard.
+  it("rejects a pre-PR1 record with no shownIds, and one whose shownIds holds a non-string", () => {
+    localStorage.setItem(
+      TODAY_PICK_KEY,
+      JSON.stringify({
+        date: "2026-08-01",
+        planKey: "sprint",
+        doneN: 11,
+        workoutId: "w-42",
+      }),
+    );
+    expect(loadTodayPick("2026-08-01", "sprint", 11)).toBeNull();
+    localStorage.setItem(
+      TODAY_PICK_KEY,
+      JSON.stringify({ ...base, shownIds: ["w-1", 7] }),
+    );
+    expect(loadTodayPick("2026-08-01", "sprint", 11)).toBeNull();
   });
 
   it("round-trips a freestyle pick (planKey and doneN both null)", () => {
@@ -35,9 +76,15 @@ describe("saveTodayPick / loadTodayPick", () => {
       planKey: null,
       doneN: null,
       workoutId: "w-9",
+      shownIds: ["w-9"],
+      shuffled: false,
     };
     saveTodayPick(freestyle);
-    expect(loadTodayPick("2026-08-01", null, null)).toBe("w-9");
+    expect(loadTodayPick("2026-08-01", null, null)).toStrictEqual({
+      workoutId: "w-9",
+      shownIds: ["w-9"],
+      shuffled: false,
+    });
   });
 
   it("discards the pick on a date change", () => {
@@ -84,7 +131,7 @@ describe("saveTodayPick / loadTodayPick", () => {
     } finally {
       spy.mockRestore();
     }
-    expect(loadTodayPick("2026-08-01", "sprint", 11)).toBe("w-42");
+    expect(loadTodayPick("2026-08-01", "sprint", 11)?.workoutId).toBe("w-42");
   });
 
   it("returns null for garbage JSON", () => {

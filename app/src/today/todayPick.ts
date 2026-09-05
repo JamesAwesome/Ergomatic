@@ -14,7 +14,24 @@ export interface TodayPick {
   planKey: string | null;
   doneN: number | null;
   workoutId: string;
+  /** Phase SF PR1 (spec I-3): every id SHUFFLE has shown today, in order,
+   *  so the next draw can avoid repeats until the pool is exhausted. The
+   *  day's first card is the first entry. Bounded by the pool size (300
+   *  UUIDs serialise to 11,810 bytes, measured 2026-09-04). A pre-PR1
+   *  same-day record has no such field and fails whole — it is a daily
+   *  convenience, and losing one day's pick on deploy day is the stated
+   *  cost. */
+  shownIds: string[];
+  /** false for the day's drawn first card (reported "Least recently
+   *  done", never beats a checkpoint pin), true once the rower has tapped
+   *  SHUFFLE ("YOUR PICK", beats the pin). `nextShuffle`'s reset restarts
+   *  `shownIds` at one id, so length alone cannot tell the two apart. */
+  shuffled: boolean;
 }
+
+/** What `loadTodayPick` hands back: the id on screen, the shown list, and
+ *  whether the rower shuffled to it. */
+export type StoredPick = Pick<TodayPick, "workoutId" | "shownIds" | "shuffled">;
 
 /** Today's local calendar date as "YYYY-MM-DD". Deliberately local time,
  *  not `toISOString().slice(0, 10)` (UTC) — a rower near midnight in a
@@ -34,11 +51,14 @@ function isTodayPick(value: unknown): value is TodayPick {
     typeof v.date === "string" &&
     (typeof v.planKey === "string" || v.planKey === null) &&
     (typeof v.doneN === "number" || v.doneN === null) &&
-    typeof v.workoutId === "string"
+    typeof v.workoutId === "string" &&
+    Array.isArray(v.shownIds) &&
+    v.shownIds.every((id) => typeof id === "string") &&
+    typeof v.shuffled === "boolean"
   );
 }
 
-/** Returns the picked workout id only when every field of the stored pick
+/** Returns the stored pick (id + shown list) only when every field of it
  *  matches today's context exactly — date, plan identity, and plan
  *  position all have to agree; garbage JSON or a shape that doesn't match
  *  `TodayPick` is treated the same as "nothing stored". Any mismatch (a
@@ -49,7 +69,7 @@ export function loadTodayPick(
   today: string,
   planKey: string | null,
   doneN: number | null,
-): string | null {
+): StoredPick | null {
   let raw: string | null;
   try {
     raw = localStorage.getItem(TODAY_PICK_KEY);
@@ -75,7 +95,11 @@ export function loadTodayPick(
   ) {
     return null;
   }
-  return parsed.workoutId;
+  return {
+    workoutId: parsed.workoutId,
+    shownIds: parsed.shownIds,
+    shuffled: parsed.shuffled,
+  };
 }
 
 /** Persists a pick. Mirrors `session/draft.ts`'s `saveDraft`: localStorage

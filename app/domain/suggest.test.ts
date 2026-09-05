@@ -1194,6 +1194,85 @@ describe("tieIds", () => {
   });
 });
 
+describe("drawnId (the day's drawn first card)", () => {
+  const library = [
+    w("a", { lastDoneDaysAgo: null }),
+    w("b", { lastDoneDaysAgo: null }),
+    w("c", { lastDoneDaysAgo: 3 }),
+  ];
+  const p = { ...prefs, difficulties: [...prefs.difficulties], durations: [] };
+
+  it("is honoured for the card and reported as least recently done, never YOUR PICK, in both modes", () => {
+    const r = suggest({ todayCode: "AT", prefs: p, library, drawnId: "b" });
+    expect(r.recommendationId).toBe("b");
+    expect(r.reason).toBe("Least recently done (never done).");
+    const f = suggestFreestyle(library, p, undefined, "b");
+    expect(f.recommendationId).toBe("b");
+    expect(f.reason).toBe("Least recently done (never done).");
+  });
+
+  it("loses to the rower's own todayPickId, which alone says YOUR PICK", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "b",
+      todayPickId: "c",
+    });
+    expect(r.recommendationId).toBe("c");
+    expect(r.reason).toBe("YOUR PICK: last done 3 days ago.");
+    expect(suggestFreestyle(library, p, "c", "b").recommendationId).toBe("c");
+  });
+
+  it("is ignored when it is no longer in the pool (a filter or type changed since the draw)", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "gone",
+    });
+    expect(r.recommendationId).toBe("a");
+    expect(r.reason).toBe("Least recently done (never done).");
+  });
+
+  it("keeps the fell-back reason when the filters matched nothing", () => {
+    const hard = [
+      w("a", { lastDoneDaysAgo: null, difficulty: "hard" }),
+      w("b", { lastDoneDaysAgo: null, difficulty: "hard" }),
+    ];
+    const r = suggest({
+      todayCode: "AT",
+      prefs: { difficulties: ["easy"], durations: [] },
+      library: hard,
+      drawnId: "b",
+    });
+    expect(r.recommendationId).toBe("b");
+    expect(r.reason).toMatch(/^Nothing fit your difficulty filters/);
+  });
+
+  it("NEVER beats a checkpoint pin — the draw is not the rower's act; SHUFFLE (todayPickId) is the escape", () => {
+    const pin = { entry: w("k2", { lastDoneDaysAgo: null }), reason: "2k day" };
+    const r = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "b",
+      prescribed: pin,
+    });
+    expect(r.recommendationId).toBe("k2");
+    expect(r.reason).toBe("2k day");
+    const escaped = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "b",
+      todayPickId: "a",
+      prescribed: pin,
+    });
+    expect(escaped.recommendationId).toBe("a");
+  });
+});
+
 describe("drawOne", () => {
   it("returns null for an empty list and the only member for a singleton without consulting rng", () => {
     expect(drawOne([], scripted([]))).toBeNull();

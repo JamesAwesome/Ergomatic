@@ -4,7 +4,7 @@ import { RECENCY_BOUNDARY_DAYS } from "../../domain/recency.js";
 import { collapseDifficulties } from "../components/difficultyTokenLabel";
 import { collapseDurations } from "../components/durationTokenLabel";
 import type { Token } from "../components/TokenRow";
-import type { TodayOverrides } from "./todayOverrides";
+import type { FilterSet } from "./todayFilters";
 
 /**
  * The day's "no filter" baseline for deviation purposes — per the
@@ -87,10 +87,7 @@ function collapsePain(levels: number[]): string {
  * null", identical to PAIN's own `length > 0` check just below.
  */
 export function todayFilterTokens(
-  overrides: Pick<
-    TodayOverrides,
-    "difficulties" | "durations" | "painLevels" | "lastDone" | "source"
-  >,
+  overrides: FilterSet,
   defaults: TodayFilterDefaults,
   onReset: (
     group: "difficulties" | "durations" | "pain" | "lastDone" | "source",
