@@ -27,6 +27,15 @@ const ACTIVE_PLAN: PlanData = {
     status: i < 3 ? "done" : i === 3 ? "today" : "upcoming",
   })),
 };
+// Every session logged: `doneN` equals the sequence length, so no session
+// is left at `sequence[doneN]` — the state Today already renders as
+// FREESTYLE (Today.tsx, `prescribedCode`). Same 84-long sequence as
+// `ACTIVE_PLAN`, statuses all `done`.
+const FINISHED_PLAN: PlanData = {
+  planKey: "sprint",
+  doneN: 84,
+  sequence: ACTIVE_PLAN.sequence.map((s) => ({ ...s, status: "done" })),
+};
 
 // The same `vi.doMock` + dynamic-import idiom LogSession.test.tsx uses — a
 // real `Response`, so `.ok`/`.status`/`.json()` behave like the fetch this
@@ -386,6 +395,37 @@ describe("JustRowLog: the plan pair (a Just Row stands in for a session)", () =>
           .getAllByRole("button")
           .filter((b) => /Save|Log/.test(b.textContent ?? "")),
       ).toHaveLength(1);
+    });
+
+    // A chosen plan with nothing left to log against is not an active
+    // plan: Today already calls it FREESTYLE, and the door reads the same
+    // rule (`api/activePlan.ts`). Before this, the pair rendered here with
+    // `Log against plan · SESSION 85 OF 84` leading and `Save without
+    // logging` under it — the qualifier naming a choice the rower no
+    // longer has. The lone `Save` still posts `advancesPlan: false`, so a
+    // finished plan's `doneN` never runs past its end.
+    it("with a finished plan (doneN 84 of 84): Save leads alone and posts advancesPlan: false", async () => {
+      const fn = mockApi(
+        () => new Response(JSON.stringify({ id: "log-1" })),
+        FINISHED_PLAN,
+      );
+      seed();
+      await renderDoor();
+
+      const only = await screen.findByRole("button", { name: "Save" });
+      expect(only).toHaveClass("summary-save-lead");
+      expect(screen.queryByText(/Log against plan/)).toBeNull();
+      expect(screen.queryByText("Save without logging")).toBeNull();
+      expect(
+        screen
+          .getAllByRole("button")
+          .filter((b) => /Save|Log/.test(b.textContent ?? "")),
+      ).toHaveLength(1);
+
+      await userEvent.click(only);
+      await waitFor(() => {
+        expect(savedBody(fn).advancesPlan).toBe(false);
+      });
     });
   });
 });

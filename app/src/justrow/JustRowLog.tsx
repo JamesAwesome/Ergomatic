@@ -9,6 +9,7 @@ import {
   type HandoffEntry,
 } from "../monitor/handoffStore";
 import { usePlan, type PlanData } from "../api/usePlan";
+import { activePlan } from "../api/activePlan";
 import { completionStamp } from "../session/completionStamp";
 import { useLogForm } from "../session/LogSession";
 import { recordLogDoorEntry } from "../session/logDoorDiagnostics";
@@ -42,7 +43,9 @@ import { freeRowTotals } from "./totals";
  * store requires of a free row (`logs.ts` resolves `advancesPlan ??
  * !isFreeRow(...)`, so an omitted key means "does not count" here, the
  * opposite of a workout row's default) — and `Save without logging` sits
- * under it posting `false`. With no plan the lone button reads `Save`
+ * under it posting `false`. With no plan — none chosen, or one whose 84
+ * sessions are all logged (`api/activePlan.ts`, Today's own FREESTYLE
+ * rule) — the lone button reads `Save`
  * (timer-mode spec 2026-09-02, ruling 5 — the qualifier survives only
  * beneath `Log against plan`) and still posts `false`: the same no-plan
  * rule `PostWorkoutSummary` applies, hidden outright rather than
@@ -200,17 +203,15 @@ export function JustRowSummary({
         </button>
       </div>
     ) : null;
-  // The pair's one input beyond the record: `LogSession`'s own rule for
-  // which plan the stack may name — a RESOLVED fetch with an active key.
-  // Loading and errored both read as "no plan" here, exactly as they do
-  // on the programmed doors; a rower whose plan fetch failed can still
-  // save the row, without the option to count it against a plan this
-  // screen could not confirm.
+  // The pair's one input beyond the record: the SAME rule the programmed
+  // doors read (`api/activePlan.ts`) — a RESOLVED fetch, a chosen key, and
+  // a session left to log against. Loading, errored, unchosen and
+  // finished all read as "no plan" here, exactly as they do on those
+  // doors; a rower whose plan fetch failed can still save the row,
+  // without the option to count it against a plan this screen could not
+  // confirm.
   const planState = usePlan();
-  const plan: PlanData | null =
-    planState.state === "ready" && planState.plan.planKey !== null
-      ? planState.plan
-      : null;
+  const plan: PlanData | null = activePlan(planState);
   const { held, pain, setPain, notes, setNotes, saving, saveError, submit } =
     useLogForm(() => {
       // Each kind clears ITS OWN record and only that one (the lifetime

@@ -11,6 +11,7 @@ import { useWorkouts, type LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { usePlan } from "../api/usePlan";
 import type { PlanData } from "../api/usePlan";
+import { activePlan } from "../api/activePlan";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
 import { isEffortRef } from "../../domain/pace.js";
@@ -1380,15 +1381,13 @@ export function TimerSummary({
 
   // Task 3 (fix round 2, M1/M2): null means "render the form with no
   // toggle at all" — no active plan (`planKey === null`, the ordinary
-  // freestyle case), the plan hook errored, OR the plan fetch simply
-  // hasn't resolved yet. All three are deliberate: a rower whose plan
-  // fetch failed, or hasn't returned yet, can still log their session
-  // normally, just without the option to opt it out of a plan whose own
-  // state this screen couldn't yet confirm.
-  const plan: PlanData | null =
-    planState.state === "ready" && planState.plan.planKey !== null
-      ? planState.plan
-      : null;
+  // freestyle case, OR a chosen plan with every session already logged —
+  // `activePlan.ts`, the rule Today's FREESTYLE line already reads), the
+  // plan hook errored, OR the plan fetch simply hasn't resolved yet. All
+  // are deliberate: a rower whose plan fetch failed, or hasn't returned
+  // yet, can still log their session normally, just without the option to
+  // opt it out of a plan whose own state this screen couldn't yet confirm.
+  const plan: PlanData | null = activePlan(planState);
 
   // Fix round (C2): `plan` above conflates "no plan", "still loading" and
   // "hook errored" into the same `null` — correct for what button renders,
@@ -1772,14 +1771,11 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   }
 
   // Task 3 (fix round 2, M1/M2): same derivation as the session door's own
-  // `plan` — null means "no toggle" for a no-active-plan state, a
-  // plan-hook error, OR the plan fetch still being in flight, none of
-  // which gate this door's form (logging must never be hostage to the
-  // plan fetch).
-  const plan: PlanData | null =
-    planState.state === "ready" && planState.plan.planKey !== null
-      ? planState.plan
-      : null;
+  // `plan` — null means "no toggle" for a no-active-plan state (unchosen,
+  // or chosen and finished — `activePlan.ts`), a plan-hook error, OR the
+  // plan fetch still being in flight, none of which gate this door's form
+  // (logging must never be hostage to the plan fetch).
+  const plan: PlanData | null = activePlan(planState);
 
   // Fix round (C2): same reasoning as `SessionDoorLog`'s own copy of this
   // constant — `plan` above conflates "no plan"/"loading"/"errored", but
@@ -2128,10 +2124,9 @@ export function ProgrammedMonitorSummary({
       setPostSaveOffer(offer);
     } else void navigate("/today", { replace: true });
   });
-  const plan =
-    planState.state === "ready" && planState.plan.planKey !== null
-      ? planState.plan
-      : null;
+  // Same rule as the other two doors (`activePlan.ts`): unchosen and
+  // finished both read as "no plan" and render the lone `Save`.
+  const plan = activePlan(planState);
   const saveWithoutLoggingOpts: { advancesPlan?: boolean } =
     planState.state === "ready" ? { advancesPlan: false } : {};
   const accountBaselines: Baselines | null =

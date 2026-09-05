@@ -227,6 +227,18 @@ function activePlan(overrides: Partial<PlanData> = {}): PlanData {
   return { planKey, doneN, sequence, ...overrides };
 }
 
+// `activePlan()` with every session logged: `doneN` equals the sequence
+// length, so nothing is left at `sequence[doneN]` — the state Today.tsx
+// already renders as FREESTYLE (`prescribedCode` null). Statuses all `done`
+// so the fixture is the wire body a finished plan really produces.
+function finishedPlan(): PlanData {
+  const sequence = activePlan().sequence.map((s) => ({
+    ...s,
+    status: "done" as const,
+  }));
+  return { planKey: "sprint", doneN: sequence.length, sequence };
+}
+
 // A real, mixed-kind fixture for the manual door — the SAME two library
 // workouts' own work steps `buildSessionFixture` above assembles (Hoarfrost's
 // time/split step, restMinutes 5; Calm Sea's distance/split step), reused
@@ -5301,6 +5313,61 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
   });
 
   it("manual door: renders only Save when there's no active plan", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(
+      screen.queryByRole("button", { name: /Log against plan/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save without logging" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" }).className).toContain(
+      "summary-save-lead",
+    );
+  });
+
+  // A chosen plan with nothing left to log against is not an active plan.
+  // Today already renders `doneN === sequence.length` as FREESTYLE; the
+  // save stack reads the same rule (`api/activePlan.ts`), so the rower
+  // meets `Save` here too — never a `Log against plan · SESSION 85 OF 84`
+  // lead with `Save without logging` beneath it. The lone `Save` still
+  // posts `advancesPlan: false`: a finished plan's `doneN` must not run
+  // past its end on the store's own `!isFreeRow` default.
+  it("renders only Save when the plan is finished (doneN 84 of 84) — and posts advancesPlan: false", async () => {
+    mockPlan(readyPlanState(finishedPlan()));
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-finished-plan" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(
+      screen.queryByRole("button", { name: /Log against plan/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save without logging" }),
+    ).not.toBeInTheDocument();
+    const lead = screen.getByRole("button", { name: "Save" });
+    expect(lead.className).toContain("summary-save-lead");
+
+    await chooseHeldAndPain();
+    await userEvent.click(lead);
+    await screen.findByText("TODAY SCREEN");
+    expect(parsedBodies(apiFn)[0]!.advancesPlan).toBe(false);
+  });
+
+  it("manual door: renders only Save when the plan is finished (doneN 84 of 84)", async () => {
+    mockPlan(readyPlanState(finishedPlan()));
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
