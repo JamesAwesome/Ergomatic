@@ -2098,6 +2098,43 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(stored?.c2UserId).toBe(LINK_INPUT.c2UserId);
   });
 
+  // Wave E PR C, the RF24 seam: A (the store) writes machineWorkMeters, B
+  // (buildC2Payload, via toMappingRow) reads it. This test starts at the
+  // stored row — NOT at a hand-built SessionLogRow — so the mutation that
+  // drops the field in `toMappingRow` (leaving the payload to fall back to
+  // workMeters while the app still DISPLAYS the machine number) is caught
+  // here and nowhere else. The number is the walk's own: interval sum 5708,
+  // monitor total 5706; the code was minted over 5706 and verifies against
+  // it live (docs/superpowers/research/2026-09-05-c2-verification-measurement.md).
+  it("posts the monitor's OWN total (machineWorkMeters), not our interval sum, end to end", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 91001,
+    });
+    const { app, logs } = buildApp({ store, client });
+    // A divergent row: our sum 5708, the machine's own total 5706.
+    const id = await seedEligibleLog(logs, userA.id, {
+      workMeters: 5708,
+      machineWorkMeters: 5706,
+    });
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    const posted = vi.mocked(client.postResult).mock.calls[0]![1];
+    // The authoritative number, INDEPENDENT literals (RF21): 5706 posted,
+    // 5708 (our sum) NOT. Reverting buildC2Payload to `workMeters`, or
+    // dropping the field in toMappingRow, posts 5708 and reddens this.
+    expect(posted.distance).toBe(5706);
+    expect(posted.distance).not.toBe(5708);
+  });
+
   it("legacy row: persists tz on the first attempt; a failed-then-retried upload from a DIFFERENT zone posts the SAME date (dedup stability)", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());

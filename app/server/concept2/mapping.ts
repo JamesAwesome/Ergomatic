@@ -36,6 +36,15 @@ export interface SessionLogRow {
   workMeters: number | null;
   restSeconds: number | null;
   restMeters: number | null;
+  // Wave E PR C: the monitor's OWN totals (0x0039), stored per row as
+  // `machine_work_meters`/`machine_work_seconds` — what the PM5's
+  // verification code is minted over, so what Concept2 checks it against
+  // (proven live: 5706 verifies, our 5708 sum does not —
+  // docs/superpowers/research/2026-09-05-c2-verification-measurement.md).
+  // Nullable: a pm5/finished row can lack them, then the send falls back to
+  // our interval sums.
+  machineWorkMeters: number | null;
+  machineWorkSeconds: number | null;
   machineSummary: Record<string, unknown> | null;
   source: LogSource;
   endedBy: string | null;
@@ -489,8 +498,27 @@ export function buildC2Payload(
     type: "rower",
     date: formatC2Date(instant, tz),
     timezone: tz,
-    distance: workMeters,
-    time: c2Tenths(workSeconds),
+    // Wave E PR C: the monitor's own total, not our interval sum, for the
+    // two code-checked numeric fields (workout_type is already machine-
+    // sourced below; date is the row's own instant). The predicate is the
+    // hero's OWN — `!== null && > 0` (`src/log/LogRow.tsx` heroDistanceMeters
+    // / heroTimeSeconds) — NOT `??`: a `0` machine total is a value `??`
+    // would post while the hero falls back to our sum, reintroducing the
+    // send≠display split this PR closes (lens 2). Falls back to our interval
+    // sums for a row with no 0x0039 summary — today's behavior, which could
+    // not verify anyway. `time` moves with `distance`: seconds DO diverge on
+    // real captures (oracleCorpusReplay KEYSTONE, machine 138.7 vs ours
+    // 138.8), gated by a seeded unit test at this store→payload seam while
+    // oracleCorpusReplay gates the wire→machine_work_seconds step.
+    distance:
+      row.machineWorkMeters !== null && row.machineWorkMeters > 0
+        ? row.machineWorkMeters
+        : workMeters,
+    time: c2Tenths(
+      row.machineWorkSeconds !== null && row.machineWorkSeconds > 0
+        ? row.machineWorkSeconds
+        : workSeconds,
+    ),
     weight_class: weightClass,
   };
 
