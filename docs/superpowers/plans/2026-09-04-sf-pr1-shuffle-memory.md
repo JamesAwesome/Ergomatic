@@ -166,4 +166,10 @@ edit: `/api/today` destructures only the fields it uses from `suggest()`.
       malformed values), one e2e through the real log API. Probes: counter
       pinned to 0 → the re-roll test failed; counter ignoring the date →
       the two cleared-day tests failed (their seeded record says session
-      0 while the fixture's July logs would count 3).
+      0 while the fixture's July logs would count 3). Scoped re-review of
+      the two deltas: FIX-THEN-APPROVE, two LOW — a completed plan rolled
+      like freestyle but did not re-key (predicate now shared with the
+      roll; test + probe), and nothing pinned the widened fetch (the mock
+      records its `limit`; probe 10 → 3 bites). The first CI run's e2e
+      failure was the new test logging a GLOBAL row through a helper that
+      resolves personal ones; it now imports its own fixture.
