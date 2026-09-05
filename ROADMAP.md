@@ -443,6 +443,53 @@ fixed.
 ---
 
 
+## Phase DE — Difficulty out, effort in
+
+**Status: OPEN 2026-09-05 — spec written, anchor pass and PM open gate
+owed; no PR has started.** **TRIAD** (stored shape). **M.** Spec:
+`docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
+
+**Goal:** a rower sees one figure for how hard a workout is, called EFFORT,
+on every row, filter, picker, log and article. EASY / MEDIUM / HARD goes
+(across all 300 seeded workouts it was a coarse copy of the 1–5 figure:
+easy always 1–2, hard always 4–5, medium 2–4), and the 1–5 figure formerly
+called PAIN is renamed. Nothing about what the number means changes;
+nothing here reaches the PM5 or the pace math, so no hardware walk.
+
+Three PRs, in order; each is one migration and one risk model:
+
+- [ ] **PR 1 — remove difficulty.** `workouts.difficulty` goes nullable
+      (column, enum and `preferences.difficulties` stay as read-only compat
+      until PR 3); the chip, both filter groups, the preference, the
+      builder radiogroup, the seed field and the bulk-header column go.
+      Bulk header becomes `title | TYPE | effort`; the 4- and 5-field legacy
+      headers still parse with difficulty ignored. Today's suggestion filters
+      on type, time and effort only. **Gate 0 captures** (row, Today card,
+      both sheets, classification card) before implementation. Reconciles
+      DEVIATIONS row 37, the "picking a workout" article's false "easy and
+      a 4" example, `library-moves.ts`, the wod-import skill.
+- [ ] **PR 2 — rename pain → effort.** Column renames on `workouts` and
+      `session_logs` (NOT rollback-safe across the tag; the PR's rollback
+      row says so). API serves both `pain` and `effort` and accepts either
+      on write (both present and unequal → 400). localStorage keys
+      (`painLevels`, log/builder draft `pain`) read the old key as a
+      fallback for one release. `PainBar` → `EffortBar`; article slug
+      `pain-scale` → `effort-scale` with the old slug still resolving. The
+      pace-ref TS types `Effort`/`EffortRef` → `PaceWord`/`PaceWordRef`,
+      **stored key `{effort: "max"}` untouched.** Gate 0 is the word list
+      (spec §4.3), no captures.
+- [ ] **PR 3 — drop compat, after the next tag has shipped to every
+      device.** Drop `workouts.difficulty` + its enum + `preferences.
+      difficulties`; drop `pain`/`difficulty`/`difficulties` from the API;
+      delete the four localStorage fallbacks. Legacy bulk headers are kept
+      on purpose.
+
+**Exit:** the phase-close grep in spec §6 pasted into the close gate; e2e
+and screenshots green with refreshed captures; the by-hand stale-build
+check (a `v0.38.1` web build against the post-PR-2 server saves `pain: 3`
+and reads back `effort: 3`) recorded in PR 2's body; release notes in rower
+words.
+
 ## Wave A — The front door
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
