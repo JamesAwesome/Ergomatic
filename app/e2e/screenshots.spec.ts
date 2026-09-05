@@ -522,7 +522,8 @@ test("today", async ({ page }) => {
 // Freestyle chips (2026-09-04, #296) + Phase SF PR1's daily roll: the
 // no-plan Today lights one chip on the day's first mount (pinned to AT
 // here — see `pinToday`) with that type's card; the second frame is the
-// sticky clear (tap the lit chip → ANY TYPE, the whole library); the
+// clear (tap the lit chip → ANY TYPE, the whole library, for the rest of
+// the day); the
 // landscape frame is the rolled state at the 844×390 frame the other
 // landscape captures use, since the chip row is the widest element on
 // the screen.

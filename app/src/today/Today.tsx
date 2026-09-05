@@ -911,12 +911,14 @@ function TodayView({
   // double invocation reads the first call's write (react.dev; anchor
   // pass, vetted ground). Render impurity is confined to this initializer
   // and `pick`'s below, on purpose. No roll: with a plan (its call IS the
-  // type), while the sticky clear is set (`rollSuppressed` — the rower
-  // tapped the lit chip to ANY TYPE and it stays that way until a chip is
-  // tapped again), or without baselines (the doors card hides the chip
-  // row; nothing to light). Candidates are the types whose pool, under
-  // THAT type's remembered filters, is non-empty — ANY TYPE is never
-  // rolled.
+  // type), when today's record already exists (rolled earlier, or the
+  // rower cleared it to ANY TYPE — a clear holds for the rest of the day
+  // and tomorrow rolls again; James struck the sticky clear at Gate 0),
+  // or without baselines (the doors card hides the chip row; nothing to
+  // light). Candidates are the types whose pool, under THAT type's
+  // remembered filters, is non-empty without falling back — ANY TYPE is
+  // never rolled. The record is written whether or not a candidate was
+  // found, so "not yet rolled today" is exactly "no record today".
   const [overrides, setOverrides] = useState<TodayOverrides>(() => {
     const record: TodayOverrides = {
       date: today,
@@ -930,11 +932,7 @@ function TodayView({
     }
     const stored = loadTodayOverrides(today, plan.planKey, plan.doneN);
     if (stored !== null) return stored;
-    if (
-      prescribedCode === null &&
-      !filterStore.rollSuppressed &&
-      baselines !== null
-    ) {
+    if (prescribedCode === null && baselines !== null) {
       // A candidate is a type whose pool under ITS remembered filters is
       // non-empty WITHOUT falling back (review F2, spec I-5): a type whose
       // filters match nothing would open the morning on "Nothing fit your
@@ -951,11 +949,8 @@ function TodayView({
         );
         return !s.fellBack && s.poolIds.length > 0;
       });
-      const rolled = drawOne(candidates, clientRng);
-      if (rolled !== null) {
-        record.swapType = rolled;
-        persistOverrides(record);
-      }
+      record.swapType = drawOne(candidates, clientRng);
+      persistOverrides(record);
     }
     return record;
   });
@@ -1013,16 +1008,13 @@ function TodayView({
       prescribedCode !== null
         ? type === prescribedCode
         : type === overrides.swapType;
+    // In freestyle a clear writes `swapType: null` into TODAY's record,
+    // which is what keeps the roll from re-running on a remount today;
+    // tomorrow's record is a different date and rolls afresh.
     updateOverrides({
       ...overrides,
       swapType: clears ? null : type,
     });
-    // I-5's sticky clear, freestyle only: clearing to ANY TYPE suppresses
-    // the daily roll — today and every later day — until a chip is tapped
-    // again. With a plan the roll never runs, so the flag is left alone.
-    if (prescribedCode === null && filterStore.rollSuppressed !== clears) {
-      updateFilterStore({ ...filterStore, rollSuppressed: clears });
-    }
   }
 
   // Task 2 (2026-08-04 round): the day's pref-derived "no filter" baseline

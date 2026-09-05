@@ -23,7 +23,7 @@ import { advance, buildFreeRowRun, buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../monitor/monitorRun";
 import { elapsedSinceStart } from "./Today";
-import { TODAY_PICK_KEY, type TodayPick } from "./todayPick";
+import { TODAY_PICK_KEY, todayDateString, type TodayPick } from "./todayPick";
 import { TODAY_OVERRIDES_KEY, type TodayOverrides } from "./todayOverrides";
 import {
   TODAY_FILTERS_KEY,
@@ -51,12 +51,22 @@ function storedFilters(key: TodayFilterKey): FilterSet | undefined {
   return (JSON.parse(raw) as TodayFilters).byKey[key];
 }
 
-function seedFilters(
-  byKey: Partial<Record<TodayFilterKey, FilterSet>>,
-  rollSuppressed = false,
-): void {
-  const store: TodayFilters = { v: 1, rollSuppressed, byKey };
+function seedFilters(byKey: Partial<Record<TodayFilterKey, FilterSet>>): void {
+  const store: TodayFilters = { v: 1, byKey };
   localStorage.setItem(TODAY_FILTERS_KEY, JSON.stringify(store));
+}
+
+/** A freestyle day record with nothing lit — the state after the rower
+ *  cleared the rolled chip today (or nothing could be rolled). A record
+ *  present means the roll does not run again today. */
+function seedClearedFreestyleDay(): void {
+  const record: TodayOverrides = {
+    date: todayDateString(),
+    planKey: null,
+    doneN: 0,
+    swapType: null,
+  };
+  localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(record));
 }
 
 // Realistic fixtures, per repo convention: real library workouts
@@ -1446,10 +1456,10 @@ describe("Today (type-swap chips)", () => {
   // there is nothing to swap FROM, so the row starts with NO chip lit and
   // the word row reads ANY TYPE; a tap narrows the suggestion to that type,
   // and tapping the lit chip again clears it.
-  it("renders the four type chips in freestyle mode with none pressed once the roll is suppressed, and keeps the FILTER sheet available", async () => {
+  it("renders the four type chips in freestyle mode with none pressed once today's roll was cleared, and keeps the FILTER sheet available", async () => {
     // Phase SF PR1 (I-5): a fresh freestyle day ROLLS a chip; "none
-    // pressed" is the sticky-clear state, which the memory records.
-    seedFilters({}, true);
+    // pressed" is the cleared-today state, which the day record holds.
+    seedClearedFreestyleDay();
     mockReady({ plan: FREESTYLE_PLAN });
     await renderToday();
     for (const type of ["O2", "AT", "TR", "AN"] as const) {
@@ -1792,8 +1802,8 @@ describe("Today (type descriptor word)", () => {
     expect(screen.getByText("SPEED WORK")).toBeInTheDocument();
   });
 
-  it("reads ANY TYPE in freestyle mode with no chip lit (roll suppressed), and the tapped chip's word once one is", async () => {
-    seedFilters({}, true);
+  it("reads ANY TYPE in freestyle mode with no chip lit (cleared today), and the tapped chip's word once one is", async () => {
+    seedClearedFreestyleDay();
     mockReady({ plan: FREESTYLE_PLAN });
     await renderToday();
     for (const word of [
@@ -4036,12 +4046,12 @@ describe("Today (JR): the free row's recovery row", () => {
   });
 });
 
-// Phase SF PR1 (spec §2.7): the random draws, the sticky clear, the per-type
+// Phase SF PR1 (spec §2.7): the random draws, the day-scoped clear, the per-type
 // memory, and SHUFFLE without repeats. Every draw is scripted through the
 // mocked `./rng` (see `rngQueue` at the top of this file), so each branch
 // is reached deterministically; randomness itself is the domain's business
 // (domain/suggest.test.ts) and the e2e two-run check.
-describe("Today (Phase SF PR1: draws, sticky clear, per-type memory, no-repeat SHUFFLE)", () => {
+describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repeat SHUFFLE)", () => {
   // Two never-done AT entries: a genuine tie class of size two, so the
   // first draw has a choice to make. TAILWIND (15 days) is the third pool
   // member and never in the tie.
@@ -4050,9 +4060,6 @@ describe("Today (Phase SF PR1: draws, sticky clear, per-type memory, no-repeat S
 
   function storedPick(): TodayPick {
     return JSON.parse(localStorage.getItem(TODAY_PICK_KEY)!) as TodayPick;
-  }
-  function storedStore(): TodayFilters {
-    return JSON.parse(localStorage.getItem(TODAY_FILTERS_KEY)!) as TodayFilters;
   }
 
   it("draws the day's first card at random WITHIN the tie class, writes it, and a remount (the seam test: starting upstream of the producer) shows the same card with the honest reason", async () => {
@@ -4201,13 +4208,16 @@ describe("Today (Phase SF PR1: draws, sticky clear, per-type memory, no-repeat S
     expect(rngQueue).toStrictEqual([1]);
   });
 
-  it("tapping the lit freestyle chip clears to ANY TYPE and the clear is STICKY across a remount; tapping a chip lifts it", async () => {
+  it("tapping the lit freestyle chip clears to ANY TYPE for the REST OF TODAY (a remount does not re-roll); tapping a chip lights it again", async () => {
     rngQueue.push(1);
     mockReady({ plan: FREESTYLE_PLAN });
     const first = await renderToday();
     await userEvent.click(screen.getByRole("button", { name: "AT" }));
     expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
-    expect(storedStore().rollSuppressed).toBe(true);
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .swapType,
+    ).toBeNull();
     // I-1 (stable day): the card drawn under AT is still a member of the
     // whole-library pool, so clearing the type keeps it on screen rather
     // than jumping to the pool head — the type changed, the day did not.
@@ -4216,8 +4226,7 @@ describe("Today (Phase SF PR1: draws, sticky clear, per-type memory, no-repeat S
     ).toBeVisible();
 
     first.unmount();
-    localStorage.removeItem(TODAY_OVERRIDES_KEY); // "tomorrow": the day record is gone
-    rngQueue.push(1);
+    rngQueue.push(1); // a re-roll would light AT again and consume this
     await renderToday();
     for (const type of ["O2", "AT", "TR", "AN"] as const) {
       expect(screen.getByRole("button", { name: type })).toHaveAttribute(
@@ -4229,7 +4238,10 @@ describe("Today (Phase SF PR1: draws, sticky clear, per-type memory, no-repeat S
     rngQueue.length = 0;
 
     await userEvent.click(screen.getByRole("button", { name: "TR" }));
-    expect(storedStore().rollSuppressed).toBe(false);
+    expect(screen.getByRole("button", { name: "TR" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("remembers filters PER TYPE: a deviation applied under AT is absent under O2 and back again under AT, and the store holds one set per key", async () => {
@@ -4322,7 +4334,29 @@ describe("Today (Phase SF PR1: draws, sticky clear, per-type memory, no-repeat S
     expect(rngQueue).toStrictEqual([1]);
   });
 
-  it("rolls again on the next local day, and a sticky clear still holds on the next day (spec exit criterion 2)", async () => {
+  it("writes today's record even when no type can be rolled, so the roll is not recomputed on every mount", async () => {
+    // Every type's remembered filters match nothing: no candidate, no
+    // chip lit, and STILL a record for today.
+    const hardOnly: FilterSet = {
+      difficulties: ["hard"],
+      durations: ["<30", "30-45", "45-60"],
+      painLevels: [],
+      lastDone: null,
+      source: null,
+    };
+    seedFilters({ O2: hardOnly, AT: hardOnly, TR: hardOnly, AN: hardOnly });
+    rngQueue.push(1);
+    mockReady({ plan: FREESTYLE_PLAN });
+    await renderToday();
+    expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .swapType,
+    ).toBeNull();
+    expect(rngQueue).toStrictEqual([1]);
+  });
+
+  it("rolls again on the next local day, including the day after a clear (spec exit criterion 2; no sticky clear — James, Gate 0)", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       vi.setSystemTime(new Date(2026, 8, 4, 9, 0, 0));
@@ -4349,15 +4383,13 @@ describe("Today (Phase SF PR1: draws, sticky clear, per-type memory, no-repeat S
       dayTwo.unmount();
 
       vi.setSystemTime(new Date(2026, 8, 6, 9, 0, 0));
-      rngQueue.push(1);
+      rngQueue.push(1); // day three rolls afresh: [O2, AT] -> AT
       await renderToday();
-      for (const type of ["O2", "AT", "TR", "AN"] as const) {
-        expect(screen.getByRole("button", { name: type })).toHaveAttribute(
-          "aria-pressed",
-          "false",
-        );
-      }
-      expect(rngQueue).toStrictEqual([1]);
+      expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(rngQueue).toStrictEqual([]);
     } finally {
       vi.useRealTimers();
     }

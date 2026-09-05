@@ -10,7 +10,7 @@
 
 **Goal:** SHUFFLE draws at random without repeats, the day's first card is
 random within the least-recently-done tie and stable across reloads, a
-freestyle day rolls its type once (with a sticky clear), and Today's five
+freestyle day rolls its type once (a clear holds for the day), and Today's five
 filter groups are remembered per type.
 
 **Architecture:** the domain (`domain/suggest.ts`) stays deterministic and
@@ -78,7 +78,8 @@ reported as least recently done, never beats the pin.
 `app/src/today/todayOverrides.ts` + test, `app/src/today/todayPick.ts` +
 test.
 **Produces:** `TODAY_FILTERS_KEY`, `TodayFilterKey = WorkoutType | "ANY"`,
-`FilterSet`, `TodayFilters { v: 1; rollSuppressed; byKey }`,
+`FilterSet`, `TodayFilters { v: 1; byKey }` (revision 1's `rollSuppressed`
+struck by James at Gate 0),
 `loadTodayFilters(): TodayFilters` (never null), `saveTodayFilters():
 boolean`, `filterSetFor`, `withFilterSet`, `filterKeyFor`;
 `TodayOverrides = { date, planKey, doneN, swapType }`,
@@ -103,8 +104,8 @@ boolean`, `filterSetFor`, `withFilterSet`, `filterKeyFor`;
 **Consumes:** everything above. **Produces:** the two write-once-per-day
 initializers, `sessionFallback` (module scope, keyed
 `${date}|${planKey}|${doneN}`), `handleShuffle` via `nextShuffle`,
-`updateFilters` keyed on `filterKeyFor(effectiveType)`, the sticky clear in
-`handleTypeChip`.
+`updateFilters` keyed on `filterKeyFor(effectiveType)`; a clear writes
+`swapType: null` into today's record, which is what stops a re-roll today.
 
 - [x] Ten new client tests in `Today.test.tsx` ("Phase SF PR1" describe),
       including the seam test that mounts, unmounts, and remounts against
@@ -152,3 +153,7 @@ edit: `/api/today` destructures only the fields it uses from `suggest()`.
       (`rolls again on the next local day…`), plan ticked, RF26 clause in
       the Record. Two rulings owed to James at Gate 0.
 - [x] PR #297 body per the human-first shape; Gate 0 captures committed.
+- [x] Gate 0 rulings (James, 2026-09-04): sticky clear STRUCK — the day
+      record now carries the clear (roll always writes it; remount today
+      does not re-roll; tomorrow rolls), tests and e2e re-pointed; build
+      shape accepted (CLAUDE.md); one release at phase close.

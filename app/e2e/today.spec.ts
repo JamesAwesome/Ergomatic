@@ -975,8 +975,10 @@ test.describe("Today enhancements: freestyle spot-check", () => {
       page.getByRole("button", { name: rolled, exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
 
-    // Sticky clear: tap the lit chip → ANY TYPE, none lit, and a reload
-    // keeps it that way (the roll is suppressed, not re-run).
+    // Clearing: tap the lit chip → ANY TYPE, none lit, and a reload keeps
+    // it that way for the rest of today (the record exists, so no re-roll);
+    // tomorrow rolls again — the client test with a stubbed clock pins
+    // that half.
     await page.getByRole("button", { name: rolled, exact: true }).click();
     await expect(pressed).toHaveCount(0);
     await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
@@ -985,19 +987,13 @@ test.describe("Today enhancements: freestyle spot-check", () => {
     await expect(pressed).toHaveCount(0);
     await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
 
-    // A tap lights that chip, narrows the card to it, and lifts the
-    // suppression (the next day rolls again — a client test with a
-    // stubbed clock pins that half).
+    // A tap lights that chip and narrows the card to it.
     await page.getByRole("button", { name: "AT", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "AT", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
     await expect(page.locator(".today-card .type-badge")).toHaveText("AT");
-    const stored = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("ergomatic.todayFilters") ?? "{}"),
-    );
-    expect(stored.rollSuppressed).toBe(false);
   });
 });
 

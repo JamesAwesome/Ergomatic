@@ -46,10 +46,9 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     expect(loadTodayFilters()).toStrictEqual(EMPTY_TODAY_FILTERS);
   });
 
-  it("round-trips a store with two keys written and rollSuppressed set, UNDATED (no date, plan or doneN to match)", () => {
+  it("round-trips a store with two keys written, UNDATED (no date, plan or doneN to match)", () => {
     const store: TodayFilters = {
       v: 1,
-      rollSuppressed: true,
       byKey: { AT: AT_SET, ANY: DEFAULTS },
     };
     expect(saveTodayFilters(store)).toBe(true);
@@ -69,7 +68,6 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     expect(before.byKey.TR).toBeUndefined();
     expect(after.byKey.AT).toStrictEqual(AT_SET);
     expect(after.byKey.TR).toStrictEqual(DEFAULTS);
-    expect(after.rollSuppressed).toBe(false);
   });
 
   it("drops ONE corrupt key and keeps the others (permanent memory is never discarded whole)", () => {
@@ -77,7 +75,6 @@ describe("saveTodayFilters / loadTodayFilters", () => {
       TODAY_FILTERS_KEY,
       JSON.stringify({
         v: 1,
-        rollSuppressed: false,
         byKey: {
           AT: AT_SET,
           TR: { ...AT_SET, durations: ["90+"] },
@@ -93,7 +90,6 @@ describe("saveTodayFilters / loadTodayFilters", () => {
       TODAY_FILTERS_KEY,
       JSON.stringify({
         v: 1,
-        rollSuppressed: false,
         byKey: {
           O2: {
             ...AT_SET,
@@ -110,12 +106,12 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     });
   });
 
-  it("reads rollSuppressed as false unless it is literally true", () => {
+  it("ignores unknown top-level fields (the revision-1 rollSuppressed flag James struck reads as nothing)", () => {
     localStorage.setItem(
       TODAY_FILTERS_KEY,
-      JSON.stringify({ v: 1, rollSuppressed: "yes", byKey: {} }),
+      JSON.stringify({ v: 1, rollSuppressed: true, byKey: { AT: AT_SET } }),
     );
-    expect(loadTodayFilters().rollSuppressed).toBe(false);
+    expect(loadTodayFilters()).toStrictEqual({ v: 1, byKey: { AT: AT_SET } });
   });
 
   describe("reads the EMPTY store for a store-level problem", () => {
@@ -124,10 +120,7 @@ describe("saveTodayFilters / loadTodayFilters", () => {
       ["a JSON string", JSON.stringify("AT")],
       ["a JSON array", JSON.stringify([])],
       ["null", "null"],
-      [
-        "a future version",
-        JSON.stringify({ v: 2, rollSuppressed: false, byKey: {} }),
-      ],
+      ["a future version", JSON.stringify({ v: 2, byKey: {} })],
       ["no version at all", JSON.stringify({ byKey: { AT: AT_SET } })],
     ])("%s", (_name, raw) => {
       localStorage.setItem(TODAY_FILTERS_KEY, raw);
@@ -158,7 +151,7 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     ])("%s", (_name, set) => {
       localStorage.setItem(
         TODAY_FILTERS_KEY,
-        JSON.stringify({ v: 1, rollSuppressed: false, byKey: { AT: set } }),
+        JSON.stringify({ v: 1, byKey: { AT: set } }),
       );
       expect(loadTodayFilters().byKey.AT).toBeUndefined();
     });

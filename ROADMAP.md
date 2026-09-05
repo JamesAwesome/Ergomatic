@@ -1053,9 +1053,10 @@ out of `suggest()`) and the PM open gate (OPEN WITH CONDITIONS: server
 route in scope, v1→v2 mapping, rename into PR2, exit criterion 1 rewritten
 because it was green on main). Both folded. PR1 = #297 OPEN (2026-09-04): implemented in task commits
 with dispatched review (FIX-THEN-APPROVE, both findings fixed and
-probed) and PM final gate (PASS WITH CONDITIONS, folded); James's two
-rulings owed at its Gate 0 — the sticky clear, and the inline build
-shape on TRIAD work.** Ranked into the slate by James on the day: five things he found
+probed) and PM final gate (PASS WITH CONDITIONS, folded); James ruled at
+its Gate 0 (2026-09-04): NO sticky clear (a clear holds for the day;
+every day rolls), the inline build shape is fine (recorded in
+CLAUDE.md's SDLC bullet), and ONE release after the whole phase.** Ranked into the slate by James on the day: five things he found
 using the app himself, and the first is a design that reads as a bug —
 SHUFFLE steps through least-recently-done order, never-done entries tie in
 seed order, and a mostly-unrowed library therefore "shuffles" in seed order
@@ -1063,12 +1064,11 @@ with the same card on top every day. Spec:
 `docs/superpowers/specs/2026-09-04-shuffle-and-filters-design.md`.
 
 - [ ] PR1 — random first pick (stable per day), SHUFFLE without repeats,
-      freestyle rolls a type once per day with a sticky clear to ANY TYPE,
+      freestyle rolls a type once per day (a clear holds for the day),
       Today's filters remembered per effective type (O2/AT/TR/AN/ANY).
       TRIAD: stored shapes `todayPick` (+shownIds), `todayOverrides`
       (filters out), NEW `todayFilters`; `/api/today` compiles against
-      `suggest()`'s new `tieIds`. Tag `v0.38.0` after it (notes cover #296
-      too). **M**
+      `suggest()`'s new `tieIds`. No tag until phase close (James). **M**
 - [ ] PR2 — TIME becomes a minutes range (a CUSTOM two-thumb control per
       the APG pattern — the native overlay fell at the anchor pass — 5-min
       steps, 0..120+) on BOTH sheets; `DurationBucket` and its bucket
@@ -1079,8 +1079,10 @@ with the same card on top every day. Spec:
       on one pool. **M**
 - [ ] PR3 — Library SEARCH BY NAME field above FILTER ⌄ (rides the BACK
       record, cleared at the tab). James reviews; no PM gate. **S**
-- [ ] Phase close — antagonist exit pass, PM close, the second release
-      (PR2 + PR3), agent-config check.
+- [ ] Phase close — antagonist exit pass, PM close, ONE release covering
+      #296 + PR1 + PR2 + PR3 (James: "release after all of this phase";
+      notes must say a freestyle morning now narrows to one type and how
+      to clear it), agent-config check.
 
 **Dead-code row (owed by PR2, James's 2026-09-04 rule — a change that
 makes code unreachable adds the removal row in the same PR).** PR2 retires

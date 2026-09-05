@@ -46,21 +46,20 @@ export interface FilterSet {
   source: "global" | "custom" | null;
 }
 
-/** The whole store. `rollSuppressed` is I-5's sticky clear: set when the
- *  rower taps the lit freestyle chip to ANY TYPE, cleared by any chip tap;
- *  while true, no daily type roll happens (today or any later day). It
- *  lives here rather than on the dated record precisely because it must
- *  outlive the day. `byKey` holds one FilterSet per key that has ever
- *  been written; a key never written reads as the caller's defaults. */
+/** The whole store. `byKey` holds one FilterSet per key that has ever
+ *  been written; a key never written reads as the caller's defaults.
+ *  (Revision 1 of the spec carried a `rollSuppressed` "sticky clear" here;
+ *  James struck it at PR1's Gate 0 — "I don't like the sticky clear, can
+ *  it default to on?" — so a clear holds for the rest of the day only and
+ *  every new day rolls. That state lives on the DATED day record, where a
+ *  day-scoped fact belongs.) */
 export interface TodayFilters {
   v: 1;
-  rollSuppressed: boolean;
   byKey: Partial<Record<TodayFilterKey, FilterSet>>;
 }
 
 export const EMPTY_TODAY_FILTERS: TodayFilters = {
   v: 1,
-  rollSuppressed: false,
   byKey: {},
 };
 
@@ -147,11 +146,7 @@ function parseTodayFilters(raw: string): TodayFilters {
       if (set !== null) byKey[k] = set;
     }
   }
-  return {
-    v: 1,
-    rollSuppressed: o.rollSuppressed === true,
-    byKey,
-  };
+  return { v: 1, byKey };
 }
 
 /** Never null: a missing, denied, garbage, or wrong-version store reads as

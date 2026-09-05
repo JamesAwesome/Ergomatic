@@ -67,7 +67,15 @@ requirements).
   main checkout despite being told not to; the check catches it, the
   instruction alone does not. **No PR merges without James's explicit
   approval** — green CI and a clean final review are necessary but not
-  sufficient; present the review verdict and stop. Subagents never merge,
+  sufficient; present the review verdict and stop. **Inline implementation
+  is an accepted shape when the plan author paste-tests every block
+  (James, 2026-09-04, Phase SF PR1 #297: "shape is fine"):** the
+  controller may implement in task-sized commits with failing tests
+  first and dispatch only the REVIEW half — a two-stage branch review
+  plus the PM gate where the triad applies — since a fresh subagent
+  transcribing already-committed code adds nothing. The review half is
+  not optional, the PR body says which shape was used, and the fast-path
+  rule below is unchanged. Subagents never merge,
   close, or approve PRs and never remove worktrees; main is PR-only, no merge
   commits. **After creating a worktree, run `pnpm install` at the worktree
   root AND in `app/`, then verify hooks actually fire** (e.g. a deliberate

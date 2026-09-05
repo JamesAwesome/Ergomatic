@@ -161,12 +161,14 @@ the same day as #296 and is the surface §2 builds on.
   filters is non-empty WITHOUT falling back (PR1 review F2: a type whose
   remembered filters match nothing would open the morning on "Nothing fit
   your filters", which is not a suggestion, so it is not a candidate; if
-  every type falls back there is no roll and the day opens on ANY TYPE). A tap overrides for the day. **Tapping the lit
-  chip clears to ANY TYPE and the clear is STICKY:** no roll happens on any
-  later mount, today or any day, until a chip is tapped again (PM finding:
-  without this a rower who wants the whole library clears the chip every
-  morning forever). A plan being active suppresses the roll entirely.
-  James rules on the sticky clear at PR1's Gate 0; this is the default.
+  every type falls back there is no roll and the day opens on ANY TYPE).
+  A tap overrides for the day. Tapping the lit chip clears to ANY TYPE
+  FOR THE REST OF THE DAY — a remount today does not re-roll — and
+  tomorrow rolls again. **James's Gate 0 ruling (2026-09-04): "I don't
+  like the sticky clear, can it default to on?"** — revision 1's sticky
+  clear (a clear that suppressed every later day's roll until a chip was
+  tapped) is struck; the roll is always on. A plan being active suppresses
+  the roll entirely.
 - **I-6 Per-type memory.** Today's five filter groups are remembered per
   key in {O2, AT, TR, AN, ANY}, undated, across reloads and days. The key
   is the EFFECTIVE type in both modes: with a plan, `swapType ??
@@ -244,11 +246,13 @@ migration, no half-object: every reader of the five removed fields is in
 `src/today/` (vetted ground) and PR1 rewrites all of them.
 
 **`ergomatic.todayFilters`** (NEW, undated):
-`{ v: 1, rollSuppressed: boolean, byKey: Partial<Record<"O2"|"AT"|"TR"|"AN"|"ANY", FilterSet>> }`
-— `rollSuppressed` is I-5's sticky clear: set true when the lit chip is
-tapped clear, false on any chip tap; a mount rolls only when today's record
-has no `swapType` AND `rollSuppressed` is false. Without it "cleared today"
-and "not yet rolled today" are the same `swapType: null` (anchor finding).
+`{ v: 1, byKey: Partial<Record<"O2"|"AT"|"TR"|"AN"|"ANY", FilterSet>> }`.
+"Cleared today" versus "not yet rolled today" (the anchor pass's F3) is
+told apart on the DATED day record, not here: the freestyle roll always
+writes today's record (even when it lights nothing), so a missing record
+means "not yet rolled" and a record with `swapType: null` means "cleared
+today"; tomorrow's date mismatch rolls again. (Revision 1 kept an undated
+`rollSuppressed` flag here for the sticky clear; James struck it.)
 `byKey` holds one `FilterSet` per key, where
 `FilterSet = { difficulties, durations, painLevels, lastDone, source }` — the
 same five fields `todayOverrides` carries today, with the same validators
@@ -259,8 +263,7 @@ moved over. PR2 swaps `durations` for `durationRange` and bumps `v`.
 | `todayPick.workoutId` | first mount of the day (I-2) or SHUFFLE | SHUFFLE; date/plan mismatch | yes | no | no |
 | `todayPick.shownIds` | with `workoutId` | reset by `nextShuffle` on exhaustion; date/plan mismatch | yes | no | no |
 | `todayPick.shuffled` | false with the draw; true on SHUFFLE | date/plan mismatch | yes | no | no |
-| `todayOverrides.swapType` | daily roll (freestyle, I-5) or chip tap | chip tap; date/plan mismatch | yes | no | no |
-| `todayFilters.rollSuppressed` | lit-chip clear | any chip tap | yes | yes | yes |
+| `todayOverrides.swapType` | daily roll (freestyle, I-5 — the record is written even when nothing is rolled) or chip tap | chip tap; date/plan mismatch | yes | no | no |
 | `todayFilters.byKey[K]` | first sheet apply or CLEAR ALL under key K | next apply/CLEAR ALL under K | yes | yes | yes |
 | in-memory `suggestion` | every render | — | n/a | n/a | n/a |
 
@@ -512,8 +515,9 @@ rendered for the first half.
 
 1. **PR1** — §2. TRIAD. Anchor pass DONE (revision 1 folds it); PM open
    gate DONE (OPEN WITH CONDITIONS, folded); PM final gate on the PR.
-   Gate 0: the freestyle Today with a rolled chip, portrait and landscape,
-   plus the sticky-clear ruling (I-5). Touches `server/routes/data.ts`
+   Gate 0: the freestyle Today with a rolled chip, portrait and landscape.
+   James ruled at it: no sticky clear (I-5), the inline build shape is
+   fine (CLAUDE.md), and ONE release at phase close. Touches `server/routes/data.ts`
    only to keep `/api/today` compiling against `suggest()`'s new field.
 2. **PR2** — §3 plus the rename (§4.4). TRIAD. Antagonist DELTA on the
    custom control and the v1→v2 mapping; PM final gate. Gate 0 per §3.5
@@ -525,12 +529,13 @@ rendered for the first half.
 is born at v2 and no tester ever writes a v1 record; the PM recommended
 PR1 first because SHUFFLE is the item James found first and testers will
 notice most, with PR2 MAPPING v1 → v2 (§3.3) so nothing is lost. The spec
-takes the PM's order: the mapping is four lines, and the first tag
-(`v0.38.0`, after PR1, notes covering #296 and PR1) puts the fix in
-testers' hands a PR earlier. Second tag at phase close for PR2 + PR3.
+takes the PM's order: the mapping is four lines. **Release: ONE tag at
+phase close covering #296, PR1, PR2 and PR3 (James, PR1's Gate 0:
+"release after all of this phase")** — revision 1's tag-after-PR1 is
+struck.
 
 Then a phase close: antagonist exit pass on the exit evidence, PM close,
-the second release, agent-config check.
+the release, agent-config check.
 
 ## 7. Exit criteria
 

@@ -22,8 +22,11 @@ export const TODAY_OVERRIDES_KEY = "ergomatic.todayOverrides";
  *  (see that interface's own doc comment for why all three fields have to
  *  match before a stored value is trusted). `swapType: null` means "no
  *  swap" (with a plan: suggest against the plan's own call; in freestyle:
- *  no chip lit — ANY TYPE, or not yet rolled today, which
- *  `todayFilters.rollSuppressed` tells apart). */
+ *  no chip lit — ANY TYPE). "Not yet rolled today" is a MISSING record:
+ *  the freestyle roll always writes one, even when it lights nothing, so
+ *  a record with `swapType: null` means the rower cleared it (or nothing
+ *  could be rolled) and the day stays that way; tomorrow's date mismatch
+ *  is what rolls again (James, 2026-09-04: no sticky clear). */
 export interface TodayOverrides {
   date: string; // "YYYY-MM-DD" local (todayPick's format)
   planKey: string | null;
