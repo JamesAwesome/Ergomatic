@@ -212,6 +212,8 @@ function toMappingRow(row: {
   workMeters: number | null;
   restSeconds: number | null;
   restMeters: number | null;
+  machineWorkMeters: number | null;
+  machineWorkSeconds: number | null;
   machineSummary: unknown;
   source: LogSource;
   endedBy: string | null;
@@ -224,6 +226,11 @@ function toMappingRow(row: {
     workMeters: row.workMeters,
     restSeconds: row.restSeconds,
     restMeters: row.restMeters,
+    // Wave E PR C: carried so the payload posts the monitor's own total (the
+    // code-checked number), not our interval sum. `store.get` selects every
+    // column, so nothing upstream changes.
+    machineWorkMeters: row.machineWorkMeters,
+    machineWorkSeconds: row.machineWorkSeconds,
     machineSummary: row.machineSummary as Record<string, unknown> | null,
     source: row.source,
     endedBy: row.endedBy,

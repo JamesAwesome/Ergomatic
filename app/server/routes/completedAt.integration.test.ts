@@ -261,6 +261,8 @@ describe("POST/GET /api/logs: completedAt/tz round-trip through the real route a
         workMeters: 5000,
         restSeconds: null,
         restMeters: null,
+        machineWorkMeters: null,
+        machineWorkSeconds: null,
         machineSummary: null,
         source: "pm5",
         endedBy: "finished",

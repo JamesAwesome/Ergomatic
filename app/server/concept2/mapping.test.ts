@@ -39,6 +39,8 @@ const FINISHED_ROW: SessionLogRow = {
   workMeters: 935,
   restSeconds: 120,
   restMeters: 274,
+  machineWorkMeters: null,
+  machineWorkSeconds: null,
   machineSummary: { avgStrokeRate: 24, workoutType: 8 },
   source: "pm5",
   endedBy: "finished",
@@ -192,6 +194,65 @@ describe("buildC2Payload", () => {
       stroke_rate: 24,
       workout_type: "VariableInterval",
     });
+  });
+
+  // Wave E PR C: the send posts the monitor's OWN totals for the two
+  // code-checked numeric fields, so the PM5 verification code accepts the
+  // row (proven live: 5706 verifies, our 5708 sum does not —
+  // docs/superpowers/research/2026-09-05-c2-verification-measurement.md).
+  it("posts machineWorkMeters as distance and machineWorkSeconds as time when present", () => {
+    // James's walk row: interval sum 5708 (workMeters) diverges from the
+    // monitor's own 5706 total (machineWorkMeters); the code was minted over
+    // 5706. Seconds diverge on real captures too (oracleCorpusReplay
+    // KEYSTONE: machine 138.7 vs ours 138.8); here they are given an
+    // independent seeded divergence (1500 vs 1499.8) so this store→payload
+    // test pins BOTH fields at the machine value with independent literals
+    // (RF21). oracleCorpusReplay gates the wire→machine_work_seconds step;
+    // this gates the seam PR C touches.
+    const row: SessionLogRow = {
+      ...FINISHED_ROW,
+      workMeters: 5708,
+      workSeconds: 1500,
+      machineWorkMeters: 5706,
+      machineWorkSeconds: 1499.8,
+    };
+    const payload = buildC2Payload(row, LINK, "UTC");
+    expect(payload.distance).toBe(5706);
+    expect(payload.time).toBe(14998); // c2Tenths(1499.8), NOT c2Tenths(1500)=15000
+  });
+
+  it("falls back to workMeters/workSeconds when the machine totals are null (no 0x0039 summary)", () => {
+    // A pm5/finished row that never received a machine summary keeps today's
+    // behavior — it could not verify anyway; the point is no regression.
+    const row: SessionLogRow = {
+      ...FINISHED_ROW,
+      workMeters: 5708,
+      workSeconds: 1500,
+      machineWorkMeters: null,
+      machineWorkSeconds: null,
+    };
+    const payload = buildC2Payload(row, LINK, "UTC");
+    expect(payload.distance).toBe(5708);
+    expect(payload.time).toBe(15000);
+  });
+
+  it("falls back to workMeters/workSeconds when the machine totals are 0, matching the hero's own >0 guard", () => {
+    // A `0` machine total is a value `??` would post while the hero
+    // (LogRow.heroDistanceMeters, `!== null && > 0`) falls back to our sum —
+    // send≠display, the split this PR closes (lens 2). The send uses the
+    // hero's predicate, so a 0 here posts the interval sum, not 0.
+    const row: SessionLogRow = {
+      ...FINISHED_ROW,
+      workMeters: 5708,
+      workSeconds: 1500,
+      machineWorkMeters: 0,
+      machineWorkSeconds: 0,
+    };
+    const payload = buildC2Payload(row, LINK, "UTC");
+    expect(payload.distance).toBe(5708);
+    expect(payload.distance).not.toBe(0);
+    expect(payload.time).toBe(15000);
+    expect(payload.time).not.toBe(0);
   });
 
   it("uses loggedAt + effectiveTz when completedAt/tz are both null (legacy row)", () => {
