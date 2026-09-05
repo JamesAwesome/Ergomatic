@@ -1715,6 +1715,11 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **`data.test.ts`'s 401 route table is short four routes** (found by the
+  review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
+  and the three `/api/article-reads` routes have no row, so a session-guard
+  regression on any of them has no gate. Add the rows; rides the next PR
+  touching that file.
 - **FILED, and it is TRIAD (James's walk, 2026-09-04): our work distance is the
   SUM OF OUR INTERVALS, the monitor reports a different total, and Concept2
   verifies against the monitor — so a verification code cannot validate.**
