@@ -1291,8 +1291,15 @@ describe("drawOne", () => {
     // For n = 3 the largest accepted draw is the greatest multiple of 3
     // below 2^32, minus one; anything at or above it is rejected. The
     // sequence below hits the tail first, then lands on "c".
-    const limit = RNG_RANGE - (RNG_RANGE % 3);
-    expect(drawOne(["a", "b", "c"], scripted([limit, limit + 1, 2]))).toBe("c");
+    // Independent literals, not derived from RNG_RANGE (RF21): for n = 3
+    // the accept limit is 2^32 - (2^32 % 3) = 4294967295, so a draw of
+    // 4294967295 is rejected and 4294967294 (≡ 2 mod 3) is the largest
+    // accepted one.
+    expect(
+      drawOne(["a", "b", "c"], scripted([4294967295, 4294967295, 2])),
+    ).toBe("c");
+    expect(drawOne(["a", "b", "c"], scripted([4294967294]))).toBe("c");
+    expect(RNG_RANGE).toBe(4294967296);
   });
 });
 

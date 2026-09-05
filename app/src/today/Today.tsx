@@ -100,7 +100,14 @@ hydrateHandoff();
  *  app's life the draw is stable; it is lost on relaunch, which is the
  *  stated, accepted cost (the same acceptance the storage-denial spec
  *  records for `session/run.ts`). Keyed exactly like the records it stands
- *  in for, so a plan advance or a new day never reads a stale entry. */
+ *  in for, so a plan advance or a new day never reads a stale entry.
+ *  PRECEDENCE (review F1): a fallback entry exists only while the LATEST
+ *  write of that field failed — every successful write clears it — so an
+ *  entry present is always newer than whatever storage holds, and both
+ *  initializers consult it BEFORE storage. Without that rule, storage
+ *  that was healthy at mount and denied on a later SHUFFLE would hand the
+ *  next mount the OLDER stored pick, reverting the card and regressing
+ *  `shownIds` (repeats) within one session. */
 const sessionFallback = new Map<
   string,
   { pick?: StoredPick; swapType?: WorkoutType | null }
@@ -580,7 +587,7 @@ function TodayContent({
         }
       : null;
 
-  // key={} forces a fresh TodayView (and thus fresh pickOverride/overrides/
+  // key={} forces a fresh TodayView (and thus fresh pick/overrides/
   // shuffle state) whenever the plan's identity or position changes
   // underneath — same reasoning as WorkoutDetail.tsx's key={workout.id}.
   // TodayView builds its own SuggestPrefs from the sheet-edited overrides
@@ -865,6 +872,36 @@ function TodayView({
 
   const fbKey = fallbackKey(today, plan.planKey, plan.doneN);
 
+  // The two persistence owners (RF25). Each writes the record and keeps the
+  // session fallback exact: cleared on a landed write, set on a failed one
+  // — see `sessionFallback`'s comment for why the order matters.
+  function persistOverrides(record: TodayOverrides) {
+    const fallback = sessionFallback.get(fbKey);
+    if (saveTodayOverrides(record)) {
+      if (fallback?.swapType !== undefined) {
+        sessionFallback.set(fbKey, { ...fallback, swapType: undefined });
+      }
+    } else {
+      sessionFallback.set(fbKey, { ...fallback, swapType: record.swapType });
+    }
+  }
+  function persistPick(drawn: StoredPick) {
+    const fallback = sessionFallback.get(fbKey);
+    const landed = saveTodayPick({
+      date: today,
+      planKey: plan.planKey,
+      doneN: plan.doneN,
+      ...drawn,
+    });
+    if (landed) {
+      if (fallback?.pick !== undefined) {
+        sessionFallback.set(fbKey, { ...fallback, pick: undefined });
+      }
+    } else {
+      sessionFallback.set(fbKey, { ...fallback, pick: drawn });
+    }
+  }
+
   // Lazy initializer: read once at mount, exactly like WorkoutDetail.tsx's
   // nudge state — the `key` above already forces a remount (and thus a
   // fresh read) whenever plan/doneN change underneath this screen.
@@ -881,40 +918,43 @@ function TodayView({
   // THAT type's remembered filters, is non-empty — ANY TYPE is never
   // rolled.
   const [overrides, setOverrides] = useState<TodayOverrides>(() => {
-    const stored = loadTodayOverrides(today, plan.planKey, plan.doneN);
-    if (stored !== null) return stored;
-    const fallback = sessionFallback.get(fbKey);
     const record: TodayOverrides = {
       date: today,
       planKey: plan.planKey,
       doneN: plan.doneN,
       swapType: null,
     };
+    const fallback = sessionFallback.get(fbKey);
     if (fallback?.swapType !== undefined) {
       return { ...record, swapType: fallback.swapType };
     }
+    const stored = loadTodayOverrides(today, plan.planKey, plan.doneN);
+    if (stored !== null) return stored;
     if (
       prescribedCode === null &&
       !filterStore.rollSuppressed &&
       baselines !== null
     ) {
-      const candidates = TYPE_CHIPS.filter(
-        (type) =>
-          computeSuggestion(
-            filterSetFor(filterStore, type, seedSet),
-            entries,
-            baselines,
-            type,
-            null,
-            null,
-          ).poolIds.length > 0,
-      );
+      // A candidate is a type whose pool under ITS remembered filters is
+      // non-empty WITHOUT falling back (review F2, spec I-5): a type whose
+      // filters match nothing would open the morning on "Nothing fit your
+      // filters", which is not a suggestion, so it is not rolled. If every
+      // type falls back there is no roll and the day opens on ANY TYPE.
+      const candidates = TYPE_CHIPS.filter((type) => {
+        const s = computeSuggestion(
+          filterSetFor(filterStore, type, seedSet),
+          entries,
+          baselines,
+          type,
+          null,
+          null,
+        );
+        return !s.fellBack && s.poolIds.length > 0;
+      });
       const rolled = drawOne(candidates, clientRng);
       if (rolled !== null) {
         record.swapType = rolled;
-        if (!saveTodayOverrides(record)) {
-          sessionFallback.set(fbKey, { ...fallback, swapType: rolled });
-        }
+        persistOverrides(record);
       }
     }
     return record;
@@ -961,12 +1001,7 @@ function TodayView({
   // goes to the session fallback so the next mount reads the same swap.
   function updateOverrides(next: TodayOverrides) {
     setOverrides(next);
-    if (!saveTodayOverrides(next)) {
-      sessionFallback.set(fbKey, {
-        ...sessionFallback.get(fbKey),
-        swapType: next.swapType,
-      });
-    }
+    persistOverrides(next);
   }
 
   function handleTypeChip(type: WorkoutType) {
@@ -1115,10 +1150,10 @@ function TodayView({
   // ids outside the current pool (they are just not candidates, spec
   // §2.4).
   const [pick, setPick] = useState<StoredPick | null>(() => {
-    const stored = loadTodayPick(today, plan.planKey, plan.doneN);
-    if (stored !== null) return stored;
     const fallback = sessionFallback.get(fbKey);
     if (fallback?.pick !== undefined) return fallback.pick;
+    const stored = loadTodayPick(today, plan.planKey, plan.doneN);
+    if (stored !== null) return stored;
     if (prescribed !== null || baselines === null) return null;
     const first = computeSuggestion(
       filters,
@@ -1135,16 +1170,7 @@ function TodayView({
       shownIds: [id],
       shuffled: false,
     };
-    if (
-      !saveTodayPick({
-        date: today,
-        planKey: plan.planKey,
-        doneN: plan.doneN,
-        ...drawn,
-      })
-    ) {
-      sessionFallback.set(fbKey, { ...fallback, pick: drawn });
-    }
+    persistPick(drawn);
     return drawn;
   });
 
@@ -1220,19 +1246,7 @@ function TodayView({
       shuffled: true,
     };
     setPick(drawn);
-    if (
-      !saveTodayPick({
-        date: today,
-        planKey: plan.planKey,
-        doneN: plan.doneN,
-        ...drawn,
-      })
-    ) {
-      sessionFallback.set(fbKey, {
-        ...sessionFallback.get(fbKey),
-        pick: drawn,
-      });
-    }
+    persistPick(drawn);
   }
 
   return (
@@ -1350,7 +1364,7 @@ function TodayView({
                   TODAY" was redundant on the Today screen anyway, so the label
                   is just "SUGGESTED" in both modes now (freestyle already used
                   that). Never pick-state — suggestion.reason already says
-                  "YOUR PICK: …" when pickOverride is set, so this label
+                  "YOUR PICK: …" once the rower has shuffled, so this label
                   staying constant avoids saying the same thing twice in two
                   different places on the card. */}
               {suggestion.recommendationId ? "SUGGESTED" : ""}

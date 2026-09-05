@@ -116,7 +116,7 @@ export interface Suggestion {
   /** Phase SF PR1 (spec §2.2): the least-recently-done TIE CLASS of the
    *  pool — every id sharing `poolIds[0]`'s `lastDoneDaysAgo` (null ties
    *  with null), in pool order. The client draws the day's first card
-   *  from this ONCE at mount and passes it back as `todayPickId`; this
+   *  from this ONCE at mount and passes it back as `drawnId`; this
    *  function itself stays deterministic (no rng in here — it runs on
    *  every render and again against the sheet draft). Describes the POOL,
    *  so on a prescribed day it names the escape pool's class, not the pin.

@@ -1,4 +1,4 @@
-import { RNG_RANGE, type Rng } from "../../domain/suggest.js";
+import type { Rng } from "../../domain/suggest.js";
 
 /** The client's rng for the domain's `Rng` contract (spec §1.1, §2.2): one
  *  `Uint32` from the browser's CSPRNG per call. MDN: `getRandomValues()`
@@ -12,5 +12,5 @@ import { RNG_RANGE, type Rng } from "../../domain/suggest.js";
 export const clientRng: Rng = () => {
   const buf = new Uint32Array(1);
   crypto.getRandomValues(buf);
-  return buf[0] % RNG_RANGE;
+  return buf[0];
 };

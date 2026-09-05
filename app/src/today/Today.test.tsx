@@ -1745,6 +1745,12 @@ describe("Today (plan checkpoint prescription)", () => {
     // and the live pick beats the prescription (suggest.ts's own rule).
     expect(screen.getByRole("heading", { name: "Dust Whirl" })).toBeVisible();
     expect(screen.getByText(/YOUR PICK/)).toBeVisible();
+    // Phase SF PR1 (review F4): the escape is a real draw — the shown list
+    // starts at the drawn id and never contains the pin (it is never a
+    // candidate, so it is never drawn).
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_PICK_KEY)!) as TodayPick).shownIds,
+    ).toStrictEqual(["w-dustwhirl"]);
   });
 });
 
@@ -4243,6 +4249,118 @@ describe("Today (Phase SF PR1: draws, sticky clear, per-type memory, no-repeat S
     await userEvent.click(screen.getByRole("button", { name: "AT" }));
     expect(screen.getByText("MEDIUM–HARD")).toBeVisible();
     expect(storedFilters("O2")).toBeUndefined();
+  });
+
+  it("a newer draw that FAILED to persist beats an older stored one on remount (review F1: partial storage denial mid-session)", async () => {
+    mockReady();
+    const first = await renderToday();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    rngQueue.push(1); // -> Occluded Front, written fine
+    await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+    expect(
+      screen.getByRole("heading", { name: "Occluded Front" }),
+    ).toBeVisible();
+    expect(storedPick().workoutId).toBe("w-isobar");
+
+    // Storage fills up: the next SHUFFLE's write fails, the fallback holds
+    // it. A remount must show THAT card, not the stale stored one, and
+    // must carry its shown list (or the next draw could repeat).
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+    try {
+      rngQueue.push(0); // only Pressure Ridge is unshown
+      await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+      expect(
+        screen.getByRole("heading", { name: "Pressure Ridge" }),
+      ).toBeVisible();
+      expect(storedPick().workoutId).toBe("w-isobar"); // storage is stale
+      first.unmount();
+      await renderToday();
+      expect(
+        screen.getByRole("heading", { name: "Pressure Ridge" }),
+      ).toBeVisible();
+    } finally {
+      setItem.mockRestore();
+    }
+    // Storage healthy again: the next write lands AND clears the fallback,
+    // so a later remount reads storage, not a stale fallback.
+    rngQueue.push(0); // exhausted -> reset -> [Stationary, Occluded] -> Stationary
+    await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    expect(storedPick().workoutId).toBe("w-warmfront");
+  });
+
+  it("does not roll a type whose remembered filters match nothing (a fell-back pool is not a suggestion) — review F2", async () => {
+    // Under AT, remember a DIFFICULTY of hard only: all three AT fixtures
+    // are easy, so AT's pool falls back to the whole type. O2 stays a
+    // candidate. Draw 0 of [O2] -> O2; draw 1 would have been AT if AT
+    // were a candidate, so script 1 and expect O2 anyway.
+    seedFilters({
+      AT: {
+        difficulties: ["hard"],
+        durations: ["<30", "30-45", "45-60"],
+        painLevels: [],
+        lastDone: null,
+        source: null,
+      },
+    });
+    rngQueue.push(1);
+    mockReady({ plan: FREESTYLE_PLAN });
+    await renderToday();
+    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    // A singleton candidate list never consults the rng.
+    expect(rngQueue).toStrictEqual([1]);
+  });
+
+  it("rolls again on the next local day, and a sticky clear still holds on the next day (spec exit criterion 2)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date(2026, 8, 4, 9, 0, 0));
+      rngQueue.push(1); // [O2, AT] -> AT
+      mockReady({ plan: FREESTYLE_PLAN });
+      const dayOne = await renderToday();
+      expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      dayOne.unmount();
+
+      vi.setSystemTime(new Date(2026, 8, 5, 9, 0, 0));
+      rngQueue.push(0); // a fresh roll: [O2, AT] -> O2
+      const dayTwo = await renderToday();
+      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(rngQueue).toStrictEqual([]);
+
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
+      dayTwo.unmount();
+
+      vi.setSystemTime(new Date(2026, 8, 6, 9, 0, 0));
+      rngQueue.push(1);
+      await renderToday();
+      for (const type of ["O2", "AT", "TR", "AN"] as const) {
+        expect(screen.getByRole("button", { name: type })).toHaveAttribute(
+          "aria-pressed",
+          "false",
+        );
+      }
+      expect(rngQueue).toStrictEqual([1]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("CLEAR ALL resets only the current key; the other key's memory survives", async () => {
