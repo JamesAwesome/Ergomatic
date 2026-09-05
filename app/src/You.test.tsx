@@ -5,16 +5,8 @@ import { MemoryRouter } from "react-router-dom";
 import You from "./You";
 import { api } from "./api";
 
-// Fix round 2 (P1a-device): same idiom `AppRoutes.test.tsx` already uses
-// for `JustRowObserver` — `import.meta.env.DEV` is `true` under Vitest, so
-// You's own conditional `lazy()` import would otherwise really resolve
-// this dev-only card in every test here. It has its own dedicated test
-// file (`monitor/Concept2LinkProbe.test.tsx`); no test in this file cares
-// about its content.
-vi.mock("./monitor/Concept2LinkProbe", () => ({ default: () => null }));
-
-// Wave E PR2 Task 8: You now mounts the PRODUCT Concept2 card, whose hook
-// reads `GET /api/concept2/link` on every mount. That read has to be
+// Wave E PR2 Task 8 (card), PR A (row): You mounts the Concept2 ROW, whose
+// hook reads `GET /api/concept2/link` on every mount. That read has to be
 // answered for the WHOLE FILE, not only in the new cases — before this
 // mock every test here ran the read through the real `src/api.ts`, whose
 // relative-URL `fetch` rejects under jsdom, and the rejection landed after
@@ -37,13 +29,16 @@ vi.mock("./monitor/Concept2LinkProbe", () => ({ default: () => null }));
 // `vi.hoisted` because `vi.mock`'s factory is hoisted above ordinary
 // declarations: a plain `const` referenced inside it throws "Cannot access
 // before initialization".
-const c2Link = vi.hoisted(() => ({ body: { available: false } as unknown }));
+const c2Link = vi.hoisted(() => ({
+  body: { available: false } as unknown,
+  status: 200,
+}));
 
 vi.mock("./api", () => ({
   api: vi.fn(async (path: string, init?: RequestInit) =>
     path === "/api/concept2/link"
       ? new Response(JSON.stringify(c2Link.body), {
-          status: 200,
+          status: c2Link.status,
           headers: { "Content-Type": "application/json" },
         })
       : fetch(path, init),
@@ -52,6 +47,7 @@ vi.mock("./api", () => ({
 
 beforeEach(() => {
   c2Link.body = { available: false };
+  c2Link.status = 200;
   vi.mocked(api).mockClear();
 });
 
@@ -67,6 +63,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
   vi.doUnmock("./adapters/auth");
+  // Wave E PR A: the row writes `ergomatic.concept2Seen.<id>` on every
+  // successful read (`you/concept2Seen.ts`). `src/test/setup.ts` clears no
+  // storage, so without this the I-D case would inherit a `u1` key minted
+  // two tests earlier and its "MINTED by this mount" precondition would be
+  // satisfied by leakage (found at the plan's hardening).
+  localStorage.clear();
 });
 
 describe("You", () => {
@@ -180,55 +182,98 @@ describe("You", () => {
   });
 });
 
-describe("You: the Concept2 card", () => {
+describe("You: the Concept2 row (Wave E PR A, spec §5.1)", () => {
   const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
 
-  it("renders the Concept2 card between the baseline reset and the diagnostics row", async () => {
-    // DOCUMENT ORDER, not presence: the DIAGNOSTICS row's own comment
-    // requires it stay the LAST child, and presence alone would pass with
-    // the card sitting below it.
+  it("renders the CONCEPT2 row ABOVE the DIAGNOSTICS row, both inside one doors group (R7, ruling 7)", async () => {
+    // DOCUMENT ORDER, not presence: ruling 7 puts CONCEPT2 first and keeps
+    // DIAGNOSTICS You's last child; presence alone would pass either order.
     c2Link.body = { available: true, linked: false };
     renderYou(user);
-    const card = await screen.findByRole("region", { name: "CONCEPT2" });
-    const reset = screen.getByRole("button", { name: /Reset baseline setup/i });
+    const row = await screen.findByRole("link", { name: /CONCEPT2/ });
     const diagnostics = screen.getByRole("link", { name: /DIAGNOSTICS/ });
+    const reset = screen.getByRole("button", { name: /Reset baseline setup/i });
     const following = Node.DOCUMENT_POSITION_FOLLOWING;
-    expect(reset.compareDocumentPosition(card) & following).toBeTruthy();
-    expect(card.compareDocumentPosition(diagnostics) & following).toBeTruthy();
+    expect(reset.compareDocumentPosition(row) & following).toBeTruthy();
+    expect(row.compareDocumentPosition(diagnostics) & following).toBeTruthy();
+    const group = screen.getByRole("navigation", { name: "More" });
+    expect(group).toContainElement(row);
+    expect(group).toContainElement(diagnostics);
+    expect(row).toHaveAttribute("href", "/you/concept2");
+    expect(screen.getByText("NOT LINKED")).toBeInTheDocument();
   });
 
-  it("passes the signed-in rower's own email to the card, so the identity line names both principals", async () => {
-    // Gate 0 amendment 1c. The card cannot fetch this: `Me` is You's prop,
-    // and the whole point of the line is that it names BOTH principals.
-    c2Link.body = {
-      available: true,
-      linked: true,
-      c2UserId: 2211,
-      c2Username: "jamesawesome",
-      needsReauth: false,
-      logbookBaseUrl: "https://log-dev.concept2.com",
-    };
-    renderYou({ id: "u1", email: "james@jamestheaweso.me", name: "James A" });
-    expect(
-      await screen.findByText(
-        "Concept2 jamesawesome · Ergomatic james@jamestheaweso.me",
-      ),
-    ).toBeTruthy();
+  it("renders NO card on You any more — the card lives behind the row (R10)", async () => {
+    c2Link.body = { available: true, linked: false };
+    renderYou(user);
+    await screen.findByRole("link", { name: /CONCEPT2/ });
+    expect(screen.queryByRole("region", { name: "CONCEPT2" })).toBeNull();
+    expect(screen.queryByText("CONNECT TO CONCEPT2")).toBeNull();
   });
 
-  it("renders no Concept2 card at all when the server reports the surface unavailable", async () => {
-    // The whole-screen half of Concept2Card's own unit case: You itself
-    // must not reserve space, add a heading, or draw a hairline for an
-    // absent card. Awaiting POSITIVE observables first — a section of You
-    // that is always there, and the card's own mount read — so the absence
-    // is asserted against a settled screen rather than one that has not
-    // rendered yet.
+  it("renders no Concept2 row at all when the server reports the surface unavailable", async () => {
+    // Awaiting POSITIVE observables first — a section of You that is always
+    // there, and the row's own mount read — so the absence is asserted
+    // against a settled screen rather than one that has not rendered yet.
     renderYou(user);
     expect(await screen.findByText("BASELINES")).toBeTruthy();
     await waitFor(() =>
       expect(vi.mocked(api)).toHaveBeenCalledWith("/api/concept2/link"),
     );
-    expect(screen.queryByRole("region", { name: "CONCEPT2" })).toBeNull();
-    expect(screen.queryByText("CONNECT TO CONCEPT2")).toBeNull();
+    expect(screen.queryByRole("link", { name: /CONCEPT2/ })).toBeNull();
+    expect(screen.queryByText("CONCEPT2")).toBeNull();
+    // The doors group is then the lone DIAGNOSTICS row, drawn as before.
+    expect(screen.getByRole("link", { name: /DIAGNOSTICS/ })).toBeVisible();
+  });
+
+  it("I-D: signing out clears this account's persisted Concept2 'seen' fact before notifying", async () => {
+    // The row's OWN mount read must say available:true here, so the fact is
+    // MINTED by this mount (I-B) and can only be gone afterwards because
+    // sign-out cleared it. With the default `{available:false}` answer the
+    // row itself clears the key (I-C) and this test cannot tell the two
+    // clears apart — measured: with the sign-out clear deleted, that
+    // version stayed green.
+    localStorage.setItem("ergomatic.concept2Seen.u2", "1");
+    c2Link.body = { available: true, linked: false };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+    const onSignedOut = vi.fn();
+    const first = render(
+      <MemoryRouter>
+        <You user={user} onSignedOut={onSignedOut} />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("link", { name: /CONCEPT2/ });
+    await waitFor(() =>
+      expect(localStorage.getItem("ergomatic.concept2Seen.u1")).toBe("1"),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(onSignedOut).toHaveBeenCalled());
+    expect(localStorage.getItem("ergomatic.concept2Seen.u1")).toBeNull();
+    // Another account's fact on the same device is not this sign-out's to
+    // clear (I-A keeps them apart; I-D clears the one signing out).
+    expect(localStorage.getItem("ergomatic.concept2Seen.u2")).toBe("1");
+
+    // THE SEAM, not just the write (RF24): a fresh mount for the SAME
+    // account whose read now fails must draw nothing (cell 2a) rather than
+    // inheriting the door the pre-sign-out mint would have given it. The
+    // signed-out You is unmounted first — the app does the same (App.tsx
+    // swaps to SignIn) — so the row found below can only be the new mount's.
+    first.unmount();
+    c2Link.body = { error: "upstream" };
+    c2Link.status = 502;
+    vi.mocked(api).mockClear();
+    render(
+      <MemoryRouter>
+        <You user={user} onSignedOut={() => {}} />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(vi.mocked(api)).toHaveBeenCalledWith("/api/concept2/link"),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByRole("link", { name: /CONCEPT2/ })).toBeNull();
   });
 });

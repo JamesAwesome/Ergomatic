@@ -100,8 +100,11 @@ export default function Concept2Card({ email }: { email: string }) {
   }, []);
 
   // Invariant I2 (plan's lifetime table): the arm can never survive
-  // leaving You. Returning `disarm` as the effect's cleanup is what
-  // guarantees it, including for the timer.
+  // leaving the screen it was made on — `/you/concept2` since PR A (spec
+  // 2026-09-04-concept2-walk-fixes §5.1 R9; it used to say You, where the
+  // card lived). Returning `disarm` as the effect's cleanup is what
+  // guarantees it, including for the timer: a route change unmounts the
+  // card exactly as leaving You did.
   useEffect(() => disarm, [disarm]);
 
   // Invariant I5's OTHER half. `useConcept2Link` re-reads the link on a
@@ -217,6 +220,14 @@ export default function Concept2Card({ email }: { email: string }) {
   // that was fine a moment ago. The cost is one transient panel; the
   // alternative is a link state nobody observed staying on screen, and the
   // panel carries a Retry that fixes it in one tap.
+  //
+  // THE ROW ON YOU RULES THE OTHER WAY, and the departure is deliberate
+  // (spec 2026-09-04-concept2-walk-fixes §5.1, ruling 5; `you/Concept2Row.tsx`
+  // carries the table): the row has NO Retry — its only affordance is the
+  // tap into this screen — so a sticky, server-set `needsReauth` is not
+  // overwritten there by a transient read failure. The last clause above
+  // ("the panel carries a Retry") is exactly what makes THIS ordering cheap
+  // and what does not transfer to a one-line row.
   if (failed !== null) {
     return (
       <section className="c2-card" aria-labelledby="c2-card-label">

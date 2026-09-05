@@ -1126,7 +1126,9 @@ distinction it takes `--ink` at 600 against `--ink-3` for the other three.
 - **R5 — a screen the rower asked for always answers.** `/you/concept2` renders
   BackLink and title in every state, including pre-first-read and read-failed.
   With `available: false` it returns the rower to `/you`. It never renders
-  nothing.
+  nothing while its own read is the authority — the card's second hook can go
+  silent underneath it (the accepted disagreement window pinned by
+  `Concept2Screen.test.tsx`'s disagreement case; PR A's hardening).
 - **R6 — the card's markup does not change.** The screen mounts `Concept2Card`
   as it is. **What that buys, measured:** the four committed fixtures
   (`app/e2e/fixtures/c2-card-{armed,read-failed,unlinked,update-required}.html`),

@@ -1025,14 +1025,19 @@ closed with zero Concept2 contact.
       `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md` §5.2.
       **Reconciliation (comments, this row, the phrase sweep) done at
       Task 6; PR not yet opened.**
-- [ ] **PR A — Concept2 becomes a row on You, and a screen behind it.** The
+- [x] **PR A — Concept2 becomes a row on You, and a screen behind it.** The
       whole Connect/Send card leaves the You tab; one quiet mono row takes
       its place and everything the card does moves to `/you/concept2`
       behind it — the shape DIAGNOSTICS already uses. **Ordered SECOND.**
       Not TRIAD. Needs its own Gate 0 (rendered frames, both orientations,
       the row's own contrast numbers) before any implementation task
       starts. Spec: `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md`
-      §5.1.
+      §5.1. **Done, Tasks 1-7, head `b3655de0` plus this reconciliation
+      commit: lint/typecheck/format:check/unit/client/e2e/screenshots all
+      green, no hardware walk (not TRIAD).** Captures under
+      `docs/screenshots/`: `you-concept2-*` (You, doors group) and
+      `concept2-screen-*` (the screen); each set covers unlinked, linked,
+      reconnect/armed, read-failed and landscape.
 - [ ] **PR C — the verification question.** Concept2 stores a sent row as
       WORK metres only; the monitor's own accumulator and the driver's
       last pre-reset reading disagree with each other by ~2 m, and neither

@@ -5,7 +5,7 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    // v0.38.0: git log v0.37.0..main --oneline at 08568e62 — five merges,
+    // v0.38.0: git log v0.37.0..main --oneline at e1337844 — six merges,
     // every one accounted (RF15, no `--merges`; main is squash-merged):
     //   #296 freestyle type chips on Today — the chip row item 2 lights.
     //   #297 Phase SF PR1 — items 1, 2 and 3.
@@ -15,6 +15,11 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     //     skipped #290 and #293), so no tester receives it: no item.
     //   #300 Phase SF PR2 — items 4 and 5.
     //   #301 Phase SF PR3 — item 6.
+    //   #303 Wave E PR A — the Concept2 row and screen stay DARK like
+    //     #298, but the same PR fixes a bug every rower could hit: opening
+    //     You while offline showed a CONCEPT2 error panel about a feature
+    //     they had never been offered (walk-fixes spec, "production
+    //     today"). Item 7.
     // Deploy-day churn, stated here rather than warned about in an item
     // (PM close gate): Today redraws its card and re-rolls its type once
     // on the first open after this update, and the Library forgets one
@@ -29,6 +34,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "TIME is now a range you drag instead of four fixed bands, so you can ask for 25 to 35 minutes. A workout that lands exactly on your time cap now counts as within it, so you will see a few more options than before with no action from you.",
       "GLOBAL and CUSTOM are now ERGOMATIC LIBRARY and MY WORKOUTS, on the filters and on the workouts themselves.",
       "The Library has a search field above FILTER. Type a few letters of a name and the list narrows as you type. It works alongside the type chips and the filters, stays with you when you come back from a workout, and clears when you reopen the tab.",
+      "Opening You without a connection no longer shows a Concept2 error panel. Nothing about Concept2 appears unless your account has it.",
     ],
   },
   {
