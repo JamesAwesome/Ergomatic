@@ -1393,9 +1393,12 @@ test.describe("today screen (plan active, logs present)", () => {
       ).toHaveAttribute("aria-pressed", "true");
     }
     // Phase SF PR2: TIME is the two-thumb range; the 60-minute default
-    // cap reads [0, 60] (spec I-12). Both thumbs clear the 44px floor in
-    // portrait AND landscape — the thumb's hit box is the whole button,
-    // the visible knob is drawn on its ::after (index.css).
+    // cap reads [0, 60] (spec I-12). Both thumbs LAY OUT at ≥44px in
+    // portrait AND landscape — the button's border box, which HTML
+    // hit-tests whole regardless of its transparent paint; the visible
+    // knob is drawn on its ::after (index.css). This measures the layout
+    // box, not the reachable area: at a collapsed range the upper thumb
+    // occludes the lower (delta pass H2), which a rail tap resolves.
     const shortest = dialog.getByRole("slider", { name: "Shortest" });
     const longest = dialog.getByRole("slider", { name: "Longest" });
     await expect(shortest).toHaveAttribute("aria-valuenow", "0");

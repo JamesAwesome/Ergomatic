@@ -432,8 +432,13 @@ house mono numerals (`25′` … `35′`; `120′+` at the top; `0′` at the
 bottom reads `ANY`). 44 px thumbs (WCAG 2.5.5 target size, the repo's hard
 requirement), rail height 4 px, thumb colour `--ink`, rail `--rule-3`,
 selected span `--accent`. Per §1.3 the control is CUSTOM: each thumb is a
-`<button role="slider">` carrying `aria-valuemin=0`, `aria-valuemax=120`,
-`aria-valuenow`, `aria-valuetext` ("25 minutes" / "no limit" / "any"),
+`<button role="slider">` carrying `aria-valuenow`, `aria-valuetext` ("25
+minutes" / "no limit" / "any"), and DEPENDENT bounds (delta pass F2, per
+the APG multi-thumb pattern: "When the range … of another slider is
+dependent on the current value of a slider, the values of aria-valuemin or
+aria-valuemax of the dependent sliders are updated when the value
+changes") — the lower thumb's `aria-valuemax` is the upper thumb's value,
+the upper thumb's `aria-valuemin` is the lower's, 0 and 120 otherwise —
 `aria-label="Shortest"` / `"Longest"`, in the tab order. Keyboard per the
 APG list: arrows step 5, Home/End to the bounds (the lower thumb's End is
 the upper thumb; the upper thumb's Home is the lower), Page Up/Down step
@@ -460,10 +465,15 @@ on `--page`). A number changes here — the sheet's live "N options" count —
 so the gate shows the count before and after for one identical pool —
 **in both directions**, because the change is not uniformly looser or
 stricter: `bucketsForCap(90)` admitted every bucket while `[0,90]` excludes a
-95-minute workout (stricter for caps 61–119), and at the boundary
-`bucketFor(60)` = `60+` was EXCLUDED by `bucketsForCap(60)` while
-`inRange(60, [0,60])` admits it (looser at the exact cap). The capture names
-one workout that flips each way.
+95-minute workout (stricter for caps 61–119, and — measured by the delta
+pass over the whole validated 10..300 range — much stricter for caps
+10–29, where the old `<30` bucket admitted everything under 30 and the
+range admits only up to the cap), and at the boundary `bucketFor(60)` =
+`60+` was EXCLUDED by `bucketsForCap(60)` while `inRange(60, [0,60])` admits
+it (looser at the exact cap: on the seed, ten 60-minute workouts flip in,
+none out). No client path writes `timeCapMinutes`, so every real account
+sits at 60, where only the exactly-at-cap direction is reachable — the
+sweep is recorded for accuracy, not promoted.
 
 ### 3.6 Oracles
 

@@ -21,11 +21,21 @@ describe("DurationRange", () => {
     expect(shortest).toHaveAttribute("aria-valuemin", "0");
     expect(shortest).toHaveAttribute("aria-valuemax", "120");
     expect(shortest).toHaveAttribute("aria-valuenow", "0");
+    expect(longest).toHaveAttribute("aria-valuemin", "0");
+    expect(longest).toHaveAttribute("aria-valuemax", "120");
     expect(shortest).toHaveAttribute("aria-valuetext", "any");
     expect(longest).toHaveAttribute("aria-valuenow", "120");
     expect(longest).toHaveAttribute("aria-valuetext", "no limit");
     expect(screen.getByText("ANY")).toBeInTheDocument();
     expect(screen.getByText("120′+")).toBeInTheDocument();
+  });
+
+  it("advertises the dependent bounds: the lower thumb's max is the upper's value and the upper's min is the lower's (APG multi-thumb)", () => {
+    const { shortest, longest } = renderRange({ min: 25, max: 60 });
+    expect(shortest).toHaveAttribute("aria-valuemin", "0");
+    expect(shortest).toHaveAttribute("aria-valuemax", "60");
+    expect(longest).toHaveAttribute("aria-valuemin", "25");
+    expect(longest).toHaveAttribute("aria-valuemax", "120");
   });
 
   it("is in the tab sequence: both thumbs are reachable with Tab", async () => {
@@ -159,6 +169,15 @@ describe("DurationRange", () => {
     // After release, a stray move does nothing.
     fireEvent.pointerMove(shortest, { pointerId: 1, clientX: 20 });
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("a tap outside a COLLAPSED range moves the thumb on that side (no dead tap at a point)", () => {
+    const { onChange } = renderRange({ min: 30, max: 30 });
+    const rail = stubRail();
+    fireEvent.pointerDown(rail, { pointerId: 4, clientX: 100 }); // 50 min, above the point
+    expect(onChange).toHaveBeenLastCalledWith({ min: 30, max: 50 });
+    fireEvent.pointerDown(rail, { pointerId: 5, clientX: 20 }); // 10 min, below the point
+    expect(onChange).toHaveBeenLastCalledWith({ min: 10, max: 30 });
   });
 
   it("a tap on the rail moves the NEARER thumb to the tapped value", () => {

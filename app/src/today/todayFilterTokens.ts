@@ -25,10 +25,7 @@ export interface TodayFilterDefaults {
   durationRange: DurationRange;
 }
 
-/** Set equality, order-independent — todayOverrides.ts's own parser
- *  de-dupes/canonically-orders `durations` on load and the sheet's own
- *  toggle logic never introduces a duplicate, so a plain length +
- *  membership check is enough (no defensive de-dupe needed here). */
+/** Range equality — both ends, nothing else to compare. */
 function sameRange(a: DurationRange, b: DurationRange): boolean {
   return a.min === b.min && a.max === b.max;
 }

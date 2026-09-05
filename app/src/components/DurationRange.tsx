@@ -124,11 +124,18 @@ export function DurationRange({
   function handleRailPointerDown(event: PointerEvent<HTMLDivElement>) {
     // A tap on the rail itself (not on a thumb — thumbs stop propagation)
     // moves whichever thumb is nearer to the tapped value.
+    // Outside the range the choice is forced (and a collapsed range — both
+    // thumbs on one value — would otherwise send every tap to the clamped
+    // thumb and move nothing: delta pass F5); inside it, the nearer one.
     const tapped = snap(valueAt(event.clientX));
     const nearer =
-      Math.abs(tapped - value.min) <= Math.abs(tapped - value.max)
-        ? "min"
-        : "max";
+      tapped > value.max
+        ? "max"
+        : tapped < value.min
+          ? "min"
+          : Math.abs(tapped - value.min) <= Math.abs(tapped - value.max)
+            ? "min"
+            : "max";
     set(nearer, tapped);
   }
 
@@ -169,8 +176,14 @@ export function DurationRange({
                 role="slider"
                 className={`duration-range-thumb duration-range-thumb-${which}`}
                 aria-label={which === "min" ? "Shortest" : "Longest"}
-                aria-valuemin={0}
-                aria-valuemax={DURATION_RANGE_MAX}
+                // APG multi-thumb: "When the range … of another slider is
+                // dependent on the current value of a slider, the values of
+                // aria-valuemin or aria-valuemax of the dependent sliders are
+                // updated when the value changes." The clamp makes the lower
+                // thumb's real maximum the upper's value and vice versa
+                // (delta pass F2).
+                aria-valuemin={which === "max" ? value.min : 0}
+                aria-valuemax={which === "min" ? value.max : DURATION_RANGE_MAX}
                 aria-valuenow={current}
                 aria-valuetext={thumbValueText(current, which)}
                 style={{ left: pct(current) }}

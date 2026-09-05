@@ -7453,3 +7453,51 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   `sortOrder`, equal anything the sort read) and run the suite several times
   over (`--repeat-each 3`) before trusting green. A test that states the
   draw (`pinToday`) is the fix; a test that happens to pass is not.
+
+## 2026-09-05 — Phase SF PR2 delta: a rename's census, and ARIA that contradicts its own clamp
+
+- **"The source rename landed at six rendered sites."** Seven, plus an
+  accessible-name site the census had no column for. The miss was the
+  workout DETAIL badge, which shares the row badge's CLASS and whose own
+  comment says it exists *because* the row badge alone was not enough — and
+  a test pinned the stale word, so the suite defended it. **Technique: for a
+  copy rename, grep the retired STRING (`>CUSTOM<`, `"CUSTOM"`) across
+  `src/` and `e2e/` after the change and read every hit, rather than
+  trusting the site list the plan enumerated before it. A shared CSS class
+  is a census key the file list misses; a test asserting the old word is the
+  cheapest possible tell.**
+- **"The control follows the APG multi-thumb pattern."** True for role, tab
+  order and keys; false for the one attribute the clamp makes dynamic. The
+  pattern says *"When the range … of another slider is dependent on the
+  current value of a slider, the values of aria-valuemin or aria-valuemax of
+  the dependent sliders are updated when the value changes"* — and the code
+  DECLARED the dependency twice (`Math.min(n, value.max)`, and End on the
+  lower thumb going to `value.max`) while advertising a static max.
+  **Technique: when a spec cites a pattern, check the pattern's CONDITIONAL
+  clauses against the code's own clamp, not its headline attributes. The
+  code that implements a dependency is the evidence that the ARIA owes one.**
+- **"`touch-action: none` on the rail does not protect the thumbs, because
+  `touch-action` is not inherited."** Both halves of the premise are true and
+  the conclusion is false: Pointer Events L2 §9.2 says a touch behavior is
+  supported only if it conforms to the property of *each element between the
+  hit tested element and its nearest ancestor with the default touch
+  behavior*. **Technique: CSS inheritance and gesture arbitration are
+  different mechanisms — read the spec's arbitration algorithm before
+  reasoning from the property's inherited-ness.**
+- **A collapsed two-thumb range has a dead tap that no test could see.** A
+  `<=` tie-break sent every rail tap to the clamped thumb, so `onChange` was
+  never called. **Technique: for any "nearer of two" rule, evaluate it at
+  the DEGENERATE input (the two are equal) and ask which branch the tie
+  takes and whether that branch can move.**
+- **A membership change measured only at the default.** The direction table
+  was right for cap 60 and wrong for a third of the supported cap range —
+  and it did not matter, because no client path writes the cap.
+  **Technique: sweep the parameter's whole VALIDATED range in a script, then
+  ask who can actually produce each value; report the sweep, promote only
+  what a supported writer can reach.**
+- **An exit criterion corrected in the ROADMAP and left standing in the
+  spec.** `git grep <symbol> -- app/` "returns nothing" survived in two
+  places while a third was amended, and the amendment itself named two
+  comments where the same PR had reduced it to one. **Technique: run every
+  prescribed grep at REVIEW time too, not only at spec time, and grep the
+  withdrawn PHRASING ("returns nothing") across every file that repeated it.**

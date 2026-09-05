@@ -1115,7 +1115,9 @@ with the same card on top every day. Spec:
       DurationBucket -- app/` returns comments naming the retirement
       only — see the dead-code row), `/api/today` on `rangeForCap`;
       `todayFilters` v1 MAPS to v2; the source rename GLOBAL→LIBRARY (or
-      BUILT-IN, James picks at Gate 0), CUSTOM→MINE at six rendered sites.
+      BUILT-IN, James picks at Gate 0), CUSTOM→MINE at SEVEN rendered sites
+      plus the row's accessible-name suffix (the delta pass found the
+      workout DETAIL badge the six-site census missed).
       TRIAD. Gate 0 with both sheets, both orientations, before/after in
       BOTH directions on one pool. **M**
 - [ ] PR3 — Library SEARCH BY NAME field above FILTER ⌄ (rides the BACK
@@ -1140,11 +1142,12 @@ at bdc098aa, tests excluded, twelve product files: `server/routes/data.ts`
 `domain/suggest.ts`, `e2e/design.spec.ts` (the bucket-chip sweep), plus the
 retired definitions themselves. `domain/recency.ts` names it in a comment
 only; seven test files follow their subjects. Exit criterion 8:
-`git grep DurationBucket -- app/` returns nothing (path-scoped: this row
-and the spec name the symbol forever). **CLOSED by PR2 (2026-09-05):**
+`git grep DurationBucket -- app/` returns only comments recording the
+retirement (path-scoped: this row and the spec name the symbol forever). **CLOSED by PR2 (2026-09-05):**
 every consumer file migrated to `DurationRange`, `durationChips.ts` and
-`durationTokenLabel.ts` deleted; the grep now matches only two comments
-that record the retirement (`domain/duration.ts`, `domain/recency.ts`).
+`durationTokenLabel.ts` deleted; the grep now matches ONE comment that
+records the retirement (`domain/duration.ts` — this PR's own edit removed
+the `domain/recency.ts` mention).
 
 **Constraint carried for a later phase:** the library may lazy-load one
 day (James). PR1's shuffle helpers are pure over the id arrays they are

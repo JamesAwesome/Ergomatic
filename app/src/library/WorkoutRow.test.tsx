@@ -122,14 +122,14 @@ describe("WorkoutRow", () => {
       expect(screen.queryByText("MINE")).not.toBeInTheDocument();
     });
 
-    it("adds ', custom workout' to the row's accessible name only for customs", () => {
+    it("adds ', one of your own' to the row's accessible name only for the rower's own workouts", () => {
       const { rerender } = render(
         <MemoryRouter>
           <WorkoutRow workout={HOARFROST} durationMinutes={20} />
         </MemoryRouter>,
       );
       expect(screen.getByRole("link")).not.toHaveAccessibleName(
-        /, custom workout/,
+        /, one of your own/,
       );
 
       rerender(
@@ -137,7 +137,9 @@ describe("WorkoutRow", () => {
           <WorkoutRow workout={CUSTOM} durationMinutes={20} />
         </MemoryRouter>,
       );
-      expect(screen.getByRole("link")).toHaveAccessibleName(/, custom workout/);
+      expect(screen.getByRole("link")).toHaveAccessibleName(
+        /, one of your own/,
+      );
     });
   });
 

@@ -52,7 +52,7 @@ export default function WorkoutRow({
         <PainBar pain={workout.pain} type={workout.type} />
       </div>
       {!workout.isGlobal && (
-        <span className="visually-hidden">, custom workout</span>
+        <span className="visually-hidden">, one of your own</span>
       )}
     </Link>
   );
