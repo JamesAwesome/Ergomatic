@@ -445,8 +445,10 @@ fixed.
 
 ## Phase DE — Difficulty out, effort in
 
-**Status: OPEN 2026-09-05 — spec written, anchor pass and PM open gate
-owed; no PR has started.** **TRIAD** (stored shape). **M.** Spec:
+**Status: OPEN 2026-09-05 — spec rev 2 (anchor pass folded in, PM open
+gate PASS WITH CONDITIONS folded in); two confirmations owed from James
+(§header of the spec); no PR has started.** **TRIAD** (stored shape).
+**M.** Spec:
 `docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
 
 **Goal:** a rower sees one figure for how hard a workout is, called EFFORT,
@@ -456,39 +458,61 @@ easy always 1–2, hard always 4–5, medium 2–4), and the 1–5 figure former
 called PAIN is renamed. Nothing about what the number means changes;
 nothing here reaches the PM5 or the pace math, so no hardware walk.
 
-Three PRs, in order; each is one migration and one risk model:
+**Why it runs before Wave A:** a stranger reading `PAIN 4/5` on their first
+log is itself a north-star failure, and a rename only gets more expensive
+as surfaces accumulate; this is M-sized and touches no auth.
 
-- [ ] **PR 1 — remove difficulty.** `workouts.difficulty` goes nullable
-      (column, enum and `preferences.difficulties` stay as read-only compat
-      until PR 3); the chip, both filter groups, the preference, the
-      builder radiogroup, the seed field and the bulk-header column go.
-      Bulk header becomes `title | TYPE | effort`; the 4- and 5-field legacy
-      headers still parse with difficulty ignored. Today's suggestion filters
-      on type, time and effort only. **Gate 0 captures** (row, Today card,
-      both sheets, classification card) before implementation. Reconciles
-      DEVIATIONS row 37, the "picking a workout" article's false "easy and
-      a 4" example, `library-moves.ts`, the wod-import skill.
-- [ ] **PR 2 — rename pain → effort.** Column renames on `workouts` and
-      `session_logs` (NOT rollback-safe across the tag; the PR's rollback
-      row says so). API serves both `pain` and `effort` and accepts either
-      on write (both present and unequal → 400). localStorage keys
-      (`painLevels`, log/builder draft `pain`) read the old key as a
-      fallback for one release. `PainBar` → `EffortBar`; article slug
-      `pain-scale` → `effort-scale` with the old slug still resolving. The
-      pace-ref TS types `Effort`/`EffortRef` → `PaceWord`/`PaceWordRef`,
-      **stored key `{effort: "max"}` untouched.** Gate 0 is the word list
-      (spec §4.3), no captures.
-- [ ] **PR 3 — drop compat, after the next tag has shipped to every
-      device.** Drop `workouts.difficulty` + its enum + `preferences.
-      difficulties`; drop `pain`/`difficulty`/`difficulties` from the API;
-      delete the four localStorage fallbacks. Legacy bulk headers are kept
-      on purpose.
+Three PRs, in order; **PR 1 and PR 2 ride ONE tag — no release between
+them** (a tag after PR 1 alone ships a half-move and a second stale-build
+generation):
 
-**Exit:** the phase-close grep in spec §6 pasted into the close gate; e2e
-and screenshots green with refreshed captures; the by-hand stale-build
-check (a `v0.38.1` web build against the post-PR-2 server saves `pain: 3`
-and reads back `effort: 3`) recorded in PR 2's body; release notes in rower
-words.
+- [ ] **PR 1 — remove difficulty.** No migration: the column, enum and
+      `preferences.difficulties` stay as read-only compat until PR 3, and
+      the server writes a difficulty DERIVED from effort on every insert
+      (1–2 easy, 3 medium, 4–5 hard) so pre-PR-1 builds — which call
+      `difficulty.toUpperCase()` in three renderers — never see a NULL. The
+      chip, both filter groups, the preference, the builder radiogroup, the
+      seed field and the bulk-header column go. Bulk header becomes
+      `title | TYPE | effort`; the 4- and 5-field legacy headers still parse
+      with difficulty ignored. Today's suggestion filters on type, time and
+      effort only. `library.test.ts`'s within-type ordering invariant is
+      re-expressed over effort, not deleted. **Gate 0 captures** (row, Today
+      card, both sheets, classification card) before implementation.
+      Reconciles the DEVIATIONS "Difficulty" row, the "picking a workout"
+      article's false "easy and a 4" example, `library-moves.ts`, both
+      skills' pasteable headers.
+- [ ] **PR 2 — rename pain → effort.** HAND-WRITTEN migration (drizzle has
+      never generated a RENAME here; its non-TTY fallback is DROP+ADD):
+      column renames on `workouts` and `session_logs` plus an
+      `article_reads.slug` UPDATE. NOT rollback-safe and `deploy.sh`'s
+      health-gated auto-rollback crosses it unattended — PR 2 adds its tag
+      as a RELEASING.md § Rollback-constraints floor row, FORWARD-FIX ONLY.
+      API serves both `pain` and `effort` (nine response sites) and accepts
+      either on write (three inbound sites; both present and unequal → 400);
+      every `pain`-keyed write emits a `compat.pain_write` log line. Three
+      localStorage keys read the old key as a fallback for one release.
+      `PainBar` → `EffortBar`; article slug `pain-scale` → `effort-scale`
+      with the old slug still resolving. The pace-word identifier FAMILY
+      (~20 names: `Effort`, `EffortRef`, `isEffortRef`, `effortWord`, …) →
+      `PaceWord*`, **stored key `{effort: "max"}` untouched.** Gate 0 is the
+      word list (spec §4.4), no captures; the committed filter-sheet
+      screenshots are refreshed in the PR. **Does not open until AUD-016's
+      PR (worktree `Ergomatic-wt-aud016`, rewrites `LogSession.tsx`) has
+      merged or James rules it abandoned.**
+- [ ] **PR 3 — drop compat.** Trigger is a MEASUREMENT: zero
+      `compat.pain_write` lines in the prod server log for seven consecutive
+      days after the PR 1+2 tag deploys (command and output in the PR body).
+      Drop `workouts.difficulty` + its enum + `preferences.difficulties`
+      and the derived write; drop `pain`/`difficulty`/`difficulties` from
+      the API and the log line; delete the three localStorage fallbacks.
+      Legacy bulk headers are kept on purpose. Own RELEASING.md floor row.
+
+**Exit:** the two phase-close greps in spec §6 (no `pain`/`difficult`; and
+`effort` means one thing) pasted into the close gate; e2e and screenshots
+green with refreshed captures; the by-hand stale-build check (a `v0.38.1`
+web build against the post-PR-2 server saves `pain: 3`, reads back
+`effort: 3`, and a workout it creates carries a derived difficulty)
+recorded in PR 2's body; release note in rower words (spec §6.6).
 
 ## Wave A — The front door
 
