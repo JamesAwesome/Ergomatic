@@ -69,3 +69,13 @@ The NFC read path and host tooling are now desk-reproducible up to the BLE
 boundary, so the recovery FinalDisplayMismatch guard and the unsupported/multi-tag
 cases can be built without an erg. BLE connect/disconnect of each recovery B and
 any PM5-named criterion still need the machine.
+
+**Recovery guard fixed, 2026-09-05.** The FinalDisplayMismatch that stopped
+NF-RECOVERY-v2 case 1 was a false negative: the helper compared the REDACTED
+exported receipt against the UN-redacted DOM display, so any real PM5 (whose
+MAC bytes are non-zero) tripped it. Fixed in inspector-recovery.py
+(display_matches redacts the DOM side too); 15 tests pass, both mutations bite.
+See RECOVERY-GUARD-FIX.md. The captured case-1 receipt shows B connected with
+the exact PM5 name, so the recovery likely succeeded; a clean re-run
+(NF-RECOVERY-v3, same protocol, fixed helper) needs a fresh PM pass, James's
+go, and the erg for the BLE half.

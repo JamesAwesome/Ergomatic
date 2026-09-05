@@ -80,11 +80,11 @@ commands for the recovery artifact if a future install is required.
 
 Existing runnable private files:
 - `R/inspector-recovery.py`, SHA-256
-  `175eb6ffd2b03a34bfb3b270f6f13f02f90b829cda65bd313fb9ba659440b227`.
+  `b7e37faa3d16a778a03dece964a4c8c278f289fb2e3335a2a9fb989afcbb799f`.
 - `R/verify-recovery-receipt.ts`, SHA-256
   `1a88420706ca3353d9b49c3f6ca9ea627c4074a5543b1882146f8624aaeef34f`.
 - `R/test-inspector-recovery.py`, SHA-256
-  `5f6dfe99238ca1ab02daed24dbb04bcd68526721ca132e1127a1e7ed5da6c46a`.
+  `7d820db19c53460452e56226e35552c20827193ab88f52d7c59049298f147d24`.
 - `R/inspector-check.py` provides reviewed Inspector selection/detach; venv and
   device-info.json are beside it. Use the command card, not improvised commands.
 

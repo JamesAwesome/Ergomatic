@@ -32,8 +32,8 @@ deadlines, and active waits retain immediate rejection.
 
 | Private file | Current SHA-256 |
 | --- | --- |
-| inspector-recovery.py | `175eb6ffd2b03a34bfb3b270f6f13f02f90b829cda65bd313fb9ba659440b227` |
-| test-inspector-recovery.py | `5f6dfe99238ca1ab02daed24dbb04bcd68526721ca132e1127a1e7ed5da6c46a` |
+| inspector-recovery.py | `b7e37faa3d16a778a03dece964a4c8c278f289fb2e3335a2a9fb989afcbb799f` |
+| test-inspector-recovery.py | `7d820db19c53460452e56226e35552c20827193ab88f52d7c59049298f147d24` |
 | verify-recovery-receipt.ts (unchanged) | `1a88420706ca3353d9b49c3f6ca9ea627c4074a5543b1882146f8624aaeef34f` |
 
 Originals are preserved as
