@@ -841,7 +841,7 @@ test.describe("Today enhancements: freestyle spot-check", () => {
   // Today does, and opening it shows every group the sheet has (the sheet
   // has no notion of a plan at all). Round 2 (2026-08-04) adds LAST DONE/
   // SOURCE to that same unconditional set — five groups now, not three.
-  test("a no-plan user sees FILTER ⌄ and all five of its sheet's groups, plus an unlit type chip row that narrows on tap", async ({
+  test("a no-plan user sees FILTER ⌄ and all five of its sheet's groups, plus the chip row with the day's rolled type lit", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -875,36 +875,194 @@ test.describe("Today enhancements: freestyle spot-check", () => {
     await expect(
       painGroup.getByRole("button", { name: "1", exact: true }),
     ).toBeVisible();
-
-    // Freestyle chips (2026-09-04): the same four-chip row a plan-driven
-    // Today shows, but with NO chip lit (nothing to swap away from) and
-    // the word row reading ANY TYPE. Tapping one narrows the suggestion
-    // to that type; tapping the lit chip again clears it.
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    // Freestyle chips (#296) + Phase SF PR1 (spec I-5): the day's first
+    // mount ROLLS a type — exactly one chip lit, the word row reading that
+    // type's word, the card's badge matching. Which type is the dice's
+    // business; the invariant is "exactly one, and consistent".
     const chips = page.locator(".type-chip-grid .chip");
     await expect(chips).toHaveText(["O2", "AT", "TR", "AN"]);
-    for (let i = 0; i < 4; i++) {
-      await expect(chips.nth(i)).toHaveAttribute("aria-pressed", "false");
-    }
+    const pressed = page.locator(".type-chip-grid .chip[aria-pressed='true']");
+    await expect(pressed).toHaveCount(1);
+    const rolled = (await pressed.textContent())!.trim();
+    await expect(page.locator(".today-card .type-badge")).toHaveText(rolled);
+    await expect(page.locator(".type-word")).not.toHaveText("ANY TYPE");
+    // The plan line stays FREESTYLE — no swap arrow, nothing was swapped.
+    await expect(page.locator(".today-plan-line-freestyle")).toHaveText(
+      /^FREESTYLE/,
+    );
+
+    // I-1: a reload reads the record, never re-rolls.
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    await expect(
+      page.getByRole("button", { name: rolled, exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // Sticky clear: tap the lit chip → ANY TYPE, none lit, and a reload
+    // keeps it that way (the roll is suppressed, not re-run).
+    await page.getByRole("button", { name: rolled, exact: true }).click();
+    await expect(pressed).toHaveCount(0);
+    await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    await expect(pressed).toHaveCount(0);
     await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
 
+    // A tap lights that chip, narrows the card to it, and lifts the
+    // suppression (the next day rolls again — a client test with a
+    // stubbed clock pins that half).
     await page.getByRole("button", { name: "AT", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "AT", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
     await expect(page.locator(".today-card .type-badge")).toHaveText("AT");
-    // The plan line stays FREESTYLE — no swap arrow, nothing was swapped.
-    await expect(page.locator(".today-plan-line-freestyle")).toHaveText(
-      /^FREESTYLE/,
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("ergomatic.todayFilters") ?? "{}"),
     );
+    expect(stored.rollSuppressed).toBe(false);
+  });
+});
+
+// Phase SF PR1, exit criterion 1 (spec §7): SHUFFLE is a uniform draw from
+// the unshown pool, so two independent runs from a cleared store differ,
+// neither repeats inside itself, and a reload keeps the last card. The PM
+// gate ran revision 0's "twelve distinct titles" against main and found it
+// GREEN on the old strict cycle — the two-run difference is what the cycle
+// cannot produce.
+test.describe("Phase SF PR1: SHUFFLE is random, without repeats, and the pick survives a reload", () => {
+  async function shuffleRun(page: Page, taps: number): Promise<string[]> {
+    const title = page.locator(".today-card-title");
+    const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
+    const seen: string[] = [];
+    let previous = (await title.textContent())!.trim();
+    for (let i = 0; i < taps; i++) {
+      await shuffle.click();
+      await expect(title).not.toHaveText(previous);
+      previous = (await title.textContent())!.trim();
+      seen.push(previous);
+    }
+    return seen;
+  }
+
+  test("two runs of twelve taps from a cleared store give different sequences with no repeat inside either; a reload keeps the twelfth", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-shuffle-random@e2e.test",
+      name: "Today Shuffle Random",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await page.goto("/today");
+    await page.locator(".today-card").waitFor();
+    const first = (await page.locator(".today-card-title").textContent())!;
+
+    const runOne = await shuffleRun(page, 12);
+    expect(new Set([first.trim(), ...runOne]).size).toBe(13);
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    await expect(page.locator(".today-card-title")).toHaveText(runOne[11]);
+    await expect(page.getByText(/YOUR PICK/)).toBeVisible();
+
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    const second = (await page.locator(".today-card-title").textContent())!;
+    const runTwo = await shuffleRun(page, 12);
+    expect(new Set([second.trim(), ...runTwo]).size).toBe(13);
+    expect(runTwo).not.toStrictEqual(runOne);
+  });
+
+  // Exit criterion 7, made real (anchor pass F6): a request COUNT of zero
+  // is main's value too, so it cannot go red; the request LIST across the
+  // interactions must equal the mount's own fetches exactly, which an added
+  // remount or refetch breaks. The PR's record names the mutation that
+  // turned this red (a fetch inside handleShuffle).
+  test("twelve SHUFFLE taps, two chip taps and one sheet apply issue NO request beyond the mount's own fetches", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-shuffle-network@e2e.test",
+      name: "Today Shuffle Network",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    const requests: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith("/api/")) {
+        requests.push(`${request.method()} ${url.pathname}`);
+      }
+    });
+    await page.goto("/today");
+    await page.locator(".today-card").waitFor();
+    // Let the mount's own fetches finish landing before the baseline is cut.
+    await page.waitForLoadState("networkidle");
+    const mountRequests = [...requests];
+    expect(mountRequests.length).toBeGreaterThan(0);
+
+    await shuffleRun(page, 12);
+    await page.getByRole("button", { name: "AT", exact: true }).click();
+    await page.getByRole("button", { name: "O2", exact: true }).click();
+    await openFilterSheet(page);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "HARD", exact: true })
+      .click();
+    await applyFilterSheet(page);
+    await expect(page.locator(".filter-token")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    expect(requests).toStrictEqual(mountRequests);
+  });
+});
+
+// Phase SF PR1, exit criterion 3 (spec I-6): filters are remembered PER
+// TYPE, undated — a deviation applied under one chip is absent under
+// another, back again under the first, and survives a reload.
+test.describe("Phase SF PR1: filters are remembered per type", () => {
+  test("a DIFFICULTY deviation under O2 is gone under AT, back under O2, and still there after a reload", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-filter-memory@e2e.test",
+      name: "Today Filter Memory",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    // A plan makes the lit chip deterministic (sprint session 1 is O2).
+    await page.evaluate(async () => {
+      await fetch("/api/plan", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planKey: "sprint" }),
+      });
+    });
+    await page.goto("/today");
+    await page.locator(".today-card").waitFor();
+    await expect(
+      page.getByRole("button", { name: "O2", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await openFilterSheet(page);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "HARD", exact: true })
+      .click();
+    await applyFilterSheet(page);
+    const token = page.locator(".filter-token", { hasText: "EASY–MEDIUM" });
+    await expect(token).toBeVisible();
 
     await page.getByRole("button", { name: "AT", exact: true }).click();
-    await expect(
-      page.getByRole("button", { name: "AT", exact: true }),
-    ).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
+    await expect(token).toHaveCount(0);
+    await page.getByRole("button", { name: "O2", exact: true }).click();
+    await expect(token).toBeVisible();
+
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    await expect(token).toBeVisible();
+    await page.getByRole("button", { name: "AT", exact: true }).click();
+    await expect(token).toHaveCount(0);
   });
 });
 
