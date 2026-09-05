@@ -13,7 +13,13 @@ import type { RecentLog } from "../api/useRecentLogs";
 import { LogRow } from "../log/LogRow";
 import { fmtDuration } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
-import { suggest, suggestFreestyle } from "../../domain/suggest.js";
+import {
+  drawOne,
+  nextShuffle,
+  suggest,
+  suggestFreestyle,
+} from "../../domain/suggest.js";
+import { rangeForCap } from "../../domain/duration.js";
 import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
 import {
   planPrescription,
@@ -42,13 +48,27 @@ import {
   type HandoffEntry,
 } from "../monitor/handoffStore";
 import DoorsCard from "./DoorsCard";
-import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
+import {
+  loadTodayPick,
+  saveTodayPick,
+  todayDateString,
+  type StoredPick,
+} from "./todayPick";
 import {
   loadTodayOverrides,
   saveTodayOverrides,
-  bucketsForCap,
   type TodayOverrides,
 } from "./todayOverrides";
+import {
+  filterKeyFor,
+  filterSetFor,
+  loadTodayFilters,
+  saveTodayFilters,
+  withFilterSet,
+  type FilterSet,
+  type TodayFilters,
+} from "./todayFilters";
+import { clientRng } from "./rng";
 import {
   todayFilterTokens,
   type TodayFilterDefaults,
@@ -69,6 +89,60 @@ import { TYPE_WORDS } from "../components/typeWords";
 // imports this module eagerly) or, in this file's own tests, at each fresh
 // `vi.resetModules()` + dynamic `import("./Today")`.
 hydrateHandoff();
+
+/** Storage-denial owner for the day's two random draws (spec §2.3, RF25).
+ *  `saveTodayPick`/`saveTodayOverrides` return false when the write did
+ *  not land (quota, private mode, the denied-storage population researched
+ *  2026-09-03). Without this, a denied write would make the first-pick
+ *  and daily-roll initializers draw AGAIN on the next mount — a card that
+ *  changes on every tab round trip, strictly worse than today's stable
+ *  one. The initializers consult this map before drawing, so within the
+ *  app's life the draw is stable; it is lost on relaunch, which is the
+ *  stated, accepted cost (the same acceptance the storage-denial spec
+ *  records for `session/run.ts`). Keyed exactly like the records it stands
+ *  in for, so a plan advance or a new day never reads a stale entry.
+ *  PRECEDENCE (review F1): a fallback entry exists only while the LATEST
+ *  write of that field failed — every successful write clears it — so an
+ *  entry present is always newer than whatever storage holds, and both
+ *  initializers consult it BEFORE storage. Without that rule, storage
+ *  that was healthy at mount and denied on a later SHUFFLE would hand the
+ *  next mount the OLDER stored pick, reverting the card and regressing
+ *  `shownIds` (repeats) within one session. */
+const sessionFallback = new Map<
+  string,
+  { pick?: StoredPick; swapType?: WorkoutType | null }
+>();
+
+function fallbackKey(
+  today: string,
+  planKey: string | null,
+  doneN: number | null,
+  session: number,
+): string {
+  return `${today}|${planKey ?? ""}|${doneN ?? ""}|${session}`;
+}
+
+/** James (2026-09-04, "logged only"): in freestyle a LOGGED session re-keys
+ *  the day, so Today rolls a fresh type and draws a fresh card afterwards.
+ *  Counted from the recent-logs fetch, by the log's own local calendar day
+ *  (`todayDateString` on `loggedAt`, the same rule the records use).
+ *  Always 0 while a plan prescribes today's type: a plan-mode log bumps
+ *  `doneN`, which is already in the key, and I-7 keeps plan mode's
+ *  swap/pin behaviour untouched. A completed plan prescribes nothing and
+ *  counts like freestyle. A saved-but-unlogged session is not a log and
+ *  does not count. */
+function sessionsLoggedToday(
+  logs: RecentLog[],
+  prescribedCode: WorkoutType | null,
+  today: string,
+): number {
+  // The SAME predicate the roll uses (`prescribedCode === null`): a
+  // completed plan (doneN past the sequence) rolls like freestyle, so it
+  // must re-key like freestyle too (scoped re-review LOW-1).
+  if (prescribedCode !== null) return 0;
+  return logs.filter((log) => todayDateString(new Date(log.loggedAt)) === today)
+    .length;
+}
 
 // Chip order: O2, AT, TR, AN — the pyramid's base-first order, matching
 // Library's own FilterSheet.tsx and Builder's ClassificationCard.tsx TYPE
@@ -160,9 +234,9 @@ export function elapsedSinceStart(run: SessionRun, now: Date): number {
 // bucket filter needs *some* estMinutes number per entry. Building
 // estMinutes as 0 here does NOT by itself make the filter harmless the way
 // it did under the old single-value cap (0 <= any positive cap,
-// unconditionally): `bucketFor(0)` is `"<30"`, a real bucket a narrower
-// `durations` selection (e.g. `["45-60"]`) would legitimately exclude,
-// wrongly treating an UNKNOWABLE duration as a known short one. What
+// unconditionally): 0 is inside any range whose `min` is 0, and a range
+// with `min > 0` (e.g. `[45, 60]`) would legitimately exclude it, wrongly
+// treating an UNKNOWABLE duration as a known short one. What
 // actually keeps the filter harmless is passing `durationsUnknown: true`
 // in prefs below — domain/suggest.ts's own `passesDurationFilter` skips
 // the bucket check ENTIRELY when that flag is set, regardless of which
@@ -197,14 +271,15 @@ function toLibraryEntry(
  *  options` count), and a pure function both call sites can share is
  *  simpler than lifting suggestion state up out of TodayView. */
 function computeSuggestion(
-  filters: Pick<
-    TodayOverrides,
-    "difficulties" | "durations" | "painLevels" | "lastDone" | "source"
-  >,
+  filters: FilterSet,
   entries: LibraryEntry[],
   baselines: Baselines | null,
   todayCode: WorkoutType | null,
-  pickOverride: string | null,
+  // Phase SF PR1: the day's stored pick — the drawn first card
+  // (`shuffled: false`, honoured but reported "Least recently done" and
+  // never beating a checkpoint pin) or the rower's own SHUFFLE
+  // (`shuffled: true`, "YOUR PICK", beats the pin). Null: nothing stored.
+  pick: StoredPick | null,
   // Phase 8A: the plan day's resolved prescription, or null (no plan, no
   // prescription authored for this index, an unresolvable ref, or a chip
   // swap overriding it — TodayView owns all four of those decisions).
@@ -214,7 +289,7 @@ function computeSuggestion(
 ) {
   const prefs: SuggestPrefs = {
     difficulties: filters.difficulties,
-    durations: filters.durations,
+    durationRange: filters.durationRange,
     painLevels: filters.painLevels,
     // Round 2 (2026-08-04): the two new dims — see domain/suggest.ts's own
     // SuggestPrefs doc comment for why they're optional there (the server's
@@ -224,25 +299,27 @@ function computeSuggestion(
     source: filters.source,
     // See toLibraryEntry's comment: with no baselines, every entry's
     // estMinutes is a 0 placeholder. This flag does double duty in
-    // domain/suggest.ts — it skips the duration-bucket FILTER entirely
-    // (not just the reason text) so the placeholder's own bucket
-    // (`bucketFor(0)` is `"<30"`) never wrongly includes or excludes an
-    // unknown-duration entry, and it keeps the reason text from claiming a
+    // domain/suggest.ts — it skips the TIME FILTER entirely (not just the
+    // reason text) so the 0 placeholder never wrongly includes or
+    // excludes an unknown-duration entry, and it keeps the reason text from claiming a
     // duration was actually checked against a real number.
     durationsUnknown: baselines === null,
   };
   // Narrowing on todayCode (rather than a separate boolean) lets TS see
   // `suggest`'s todayCode argument is non-null in the true branch with no
   // assertion.
+  const todayPickId = pick?.shuffled ? pick.workoutId : undefined;
+  const drawnId = pick && !pick.shuffled ? pick.workoutId : undefined;
   return todayCode !== null
     ? suggest({
         todayCode,
         library: entries,
         prefs,
-        todayPickId: pickOverride ?? undefined,
+        todayPickId,
+        drawnId,
         prescribed,
       })
-    : suggestFreestyle(entries, prefs, pickOverride ?? undefined);
+    : suggestFreestyle(entries, prefs, todayPickId, drawnId);
 }
 
 /** TodayFilterSheet's own live pool count: the same call above, run
@@ -251,14 +328,11 @@ function computeSuggestion(
  *  renders (Revision, mid-round: the primary button itself is now the
  *  constant "Apply Filter", no count of its own). */
 function poolCountFor(
-  draft: Pick<
-    TodayOverrides,
-    "difficulties" | "durations" | "painLevels" | "lastDone" | "source"
-  >,
+  draft: FilterSet,
   entries: LibraryEntry[],
   baselines: Baselines | null,
   todayCode: WorkoutType | null,
-  pickOverride: string | null,
+  pick: StoredPick | null,
   prescribed: { entry: LibraryEntry; reason: string } | null,
 ): number {
   // `poolIds` keeps its pool meaning with a prescription pinned
@@ -270,7 +344,7 @@ function poolCountFor(
     entries,
     baselines,
     todayCode,
-    pickOverride,
+    pick,
     prescribed,
   ).poolIds.length;
 }
@@ -280,7 +354,11 @@ export default function Today() {
   const baselinesState = useBaselines();
   const planState = usePlan();
   const preferencesState = usePreferences();
-  const recentLogsState = useRecentLogs(3);
+  // Ten, not three: the list below still shows the last three, but the
+  // freestyle re-roll key (`sessionsLoggedToday`, TodayView) counts how many
+  // of these were logged today, and three would stop counting at the
+  // fourth session of a day.
+  const recentLogsState = useRecentLogs(10);
 
   // Lazy initializer, same read-once-at-mount idiom every session screen
   // uses (Countdown.tsx/Timer.tsx's own comment on this): F2's cold-start
@@ -535,24 +613,32 @@ function TodayContent({
         }
       : null;
 
-  // key={} forces a fresh TodayView (and thus fresh pickOverride/overrides/
+  // key={} forces a fresh TodayView (and thus fresh pick/overrides/
   // shuffle state) whenever the plan's identity or position changes
   // underneath — same reasoning as WorkoutDetail.tsx's key={workout.id}.
   // TodayView builds its own SuggestPrefs from the sheet-edited overrides
   // below (Task 2, 2026-08-04 round: FILTER ⌄ + TodayFilterSheet, replacing
   // the old inline chips); it still needs the raw server preferences to
   // seed those overrides' defaults on first mount
-  // (bucketsForCap(preferences.timeCapMinutes), preferences.difficulties) and
+  // (rangeForCap(preferences.timeCapMinutes), preferences.difficulties) and
   // `baselines` to compute durationsUnknown itself, so both are passed
   // through rather than a pre-built SuggestPrefs.
+  const session = sessionsLoggedToday(
+    recentLogsState.logs,
+    planState.plan.planKey !== null
+      ? (planState.plan.sequence[planState.plan.doneN]?.code ?? null)
+      : null,
+    todayDateString(),
+  );
   return (
     <TodayView
-      key={`${planState.plan.planKey}-${planState.plan.doneN}`}
+      key={`${planState.plan.planKey}-${planState.plan.doneN}-${session}`}
       library={workoutsState.workouts}
       baselines={baselines}
       preferences={preferencesState.preferences}
       plan={planState.plan}
       logs={recentLogsState.logs}
+      session={session}
     />
   );
 }
@@ -747,6 +833,7 @@ function TodayView({
   preferences,
   plan,
   logs,
+  session,
 }: {
   library: LibraryWorkout[];
   // Null the moment EITHER side is null (the app-wide partial-pair
@@ -758,6 +845,8 @@ function TodayView({
   preferences: PreferencesData;
   plan: PlanData;
   logs: RecentLog[];
+  /** `sessionsLoggedToday` — part of every day record's key. */
+  session: number;
 }) {
   const today = todayDateString();
   // Read once per render — this screen has no ticking display (unlike
@@ -775,49 +864,176 @@ function TodayView({
     plan.planKey !== null ? (plan.sequence[plan.doneN]?.code ?? null) : null;
   const usesPlan = prescribedCode !== null;
 
+  // ---- Phase SF PR1 (spec §2): per-type filter memory, the day's random
+  // draws, and SHUFFLE without repeats. Everything below the doors card
+  // reads off these. Hook ORDER is fixed and unconditional; the derived
+  // values between the hooks are plain computations on props/state.
+
+  // The undated per-type filter memory (I-6). Loaded once per mount; every
+  // write goes through `updateFilterStore` so the in-memory copy and the
+  // stored one move together.
+  const [filterStore, setFilterStore] = useState<TodayFilters>(() =>
+    loadTodayFilters(),
+  );
+
+  // Phase 6I: the two designated onboarding workouts are never a real
+  // suggestion once a rower has real baselines — "invisible outside
+  // onboarding" (design spec, no-baseline card's own Mechanics section). A
+  // veteran with both baselines set must never see "6K Test"/"2K Test"
+  // in SUGGESTED or SHUFFLE's pool. Final-review fix (2026-08-09): the
+  // exclusion must key off `isGlobal` too, not title alone — a rower's own
+  // CUSTOM workout that happens to collide with one of these titles is a
+  // real, ownable workout, not a stray to hide; excluding it by title
+  // alone orphaned it (invisible everywhere, no UI path back).
+  // Computed ABOVE the two draw initializers because they need the pool at
+  // mount — and it IS complete here: TodayContent holds "LOADING…" until
+  // every data hook resolves before it mounts this view (anchor pass,
+  // vetted ground).
+  const entries = library
+    .filter((w) => !(isOnboardingTitle(w.title) && w.isGlobal))
+    .map((w) => toLibraryEntry(w, baselines));
+
+  // A key the memory has never seen reads as the preference-seeded set —
+  // the same values a fresh day used to start with before PR1 (prefs'
+  // own difficulties, the cap's buckets, pain/recency/source off).
+  const seedSet: FilterSet = {
+    difficulties: preferences.difficulties,
+    // `[0, cap]` with the cap rounded down to the step (spec I-12).
+    durationRange: rangeForCap(preferences.timeCapMinutes),
+    painLevels: [],
+    lastDone: null,
+    source: null,
+  };
+
+  const fbKey = fallbackKey(today, plan.planKey, plan.doneN, session);
+
+  // The two persistence owners (RF25). Each writes the record and keeps the
+  // session fallback exact: cleared on a landed write, set on a failed one
+  // — see `sessionFallback`'s comment for why the order matters.
+  function persistOverrides(record: TodayOverrides) {
+    const fallback = sessionFallback.get(fbKey);
+    if (saveTodayOverrides(record)) {
+      if (fallback?.swapType !== undefined) {
+        sessionFallback.set(fbKey, { ...fallback, swapType: undefined });
+      }
+    } else {
+      sessionFallback.set(fbKey, { ...fallback, swapType: record.swapType });
+    }
+  }
+  function persistPick(drawn: StoredPick) {
+    const fallback = sessionFallback.get(fbKey);
+    const landed = saveTodayPick({
+      date: today,
+      planKey: plan.planKey,
+      doneN: plan.doneN,
+      session,
+      ...drawn,
+    });
+    if (landed) {
+      if (fallback?.pick !== undefined) {
+        sessionFallback.set(fbKey, { ...fallback, pick: undefined });
+      }
+    } else {
+      sessionFallback.set(fbKey, { ...fallback, pick: drawn });
+    }
+  }
+
   // Lazy initializer: read once at mount, exactly like WorkoutDetail.tsx's
   // nudge state — the `key` above already forces a remount (and thus a
-  // fresh read) whenever plan/doneN change underneath this screen. Falls
-  // back to the preference-derived default (no swap, prefs' own
-  // difficulties/cap, pain filter off) when nothing valid is stored —
-  // same "stored wins, else derive a default" shape as `pickOverride`
-  // below, just with a richer default than `null`.
-  const [overrides, setOverrides] = useState<TodayOverrides>(
-    () =>
-      loadTodayOverrides(today, plan.planKey, plan.doneN) ?? {
-        date: today,
-        planKey: plan.planKey,
-        doneN: plan.doneN,
-        swapType: null,
-        difficulties: preferences.difficulties,
-        // Approximates the rower's real preference to the buckets it
-        // implies — see bucketsForCap's own doc comment for why this is a
-        // deliberate approximation, not an exact re-derivation.
-        durations: bucketsForCap(preferences.timeCapMinutes),
-        painLevels: [],
-        // Round 2 (2026-08-04): both default to null ("off") — neither has
-        // an account-level preference to seed from, unlike
-        // difficulties/durations above.
-        lastDone: null,
-        source: null,
-      },
-  );
+  // fresh read) whenever plan/doneN change underneath this screen.
+  // Phase SF PR1 (I-5): on the day's FIRST freestyle mount this also rolls
+  // the type — write-once-per-day, and the write happens inside this same
+  // read-then-write initializer, so React StrictMode's development-only
+  // double invocation reads the first call's write (react.dev; anchor
+  // pass, vetted ground). Render impurity is confined to this initializer
+  // and `pick`'s below, on purpose. No roll: with a plan (its call IS the
+  // type), when today's record already exists (rolled earlier, or the
+  // rower cleared it to ANY TYPE — a clear holds for the rest of the day
+  // and tomorrow rolls again; James struck the sticky clear at Gate 0),
+  // or without baselines (the doors card hides the chip row; nothing to
+  // light). Candidates are the types whose pool, under THAT type's
+  // remembered filters, is non-empty without falling back — ANY TYPE is
+  // never rolled. The record is written whether or not a candidate was
+  // found, so "not yet rolled today" is exactly "no record today".
+  const [overrides, setOverrides] = useState<TodayOverrides>(() => {
+    const record: TodayOverrides = {
+      date: today,
+      planKey: plan.planKey,
+      doneN: plan.doneN,
+      swapType: null,
+      session,
+    };
+    const fallback = sessionFallback.get(fbKey);
+    if (fallback?.swapType !== undefined) {
+      return { ...record, swapType: fallback.swapType };
+    }
+    const stored = loadTodayOverrides(today, plan.planKey, plan.doneN, session);
+    if (stored !== null) return stored;
+    if (prescribedCode === null && baselines !== null) {
+      // A candidate is a type whose pool under ITS remembered filters is
+      // non-empty WITHOUT falling back (review F2, spec I-5): a type whose
+      // filters match nothing would open the morning on "Nothing fit your
+      // filters", which is not a suggestion, so it is not rolled. If every
+      // type falls back there is no roll and the day opens on ANY TYPE.
+      const candidates = TYPE_CHIPS.filter((type) => {
+        const s = computeSuggestion(
+          filterSetFor(filterStore, type, seedSet),
+          entries,
+          baselines,
+          type,
+          null,
+          null,
+        );
+        return !s.fellBack && s.poolIds.length > 0;
+      });
+      record.swapType = drawOne(candidates, clientRng);
+      persistOverrides(record);
+    }
+    return record;
+  });
 
   // The type the chips (and the descriptor word below them) actually
   // treat as selected: a swap if one is set, else the plan's own call for
   // today. Since Phase 8A a checkpoint day carries its REAL type here (the
   // "TEST" code and its TR stand-in are retired), so no mapping sits
   // between the wire's code and the chips. Null only in freestyle with no
-  // chip lit (no chip pressed; the word row reads ANY TYPE).
+  // chip lit (ANY TYPE — the rower cleared it, or nothing could be rolled).
   const effectiveType: WorkoutType | null =
     overrides.swapType ?? prescribedCode;
 
+  // The chosen type if one is set, else the plan's own call — what
+  // `suggest`'s `todayCode` actually receives below. Null only in freestyle
+  // with no chip lit, which is the whole-library `suggestFreestyle` pool.
+  const todayCode: WorkoutType | null = effectiveType;
+
+  // I-6: the memory key is the EFFECTIVE type in both modes (a checkpoint
+  // day keys on the day's own type; freestyle with nothing lit keys on
+  // ANY), and `filters` is what every consumer below reads — the sheet,
+  // the tokens, the suggestion, CLEAR ALL.
+  const currentKey = filterKeyFor(effectiveType);
+  const filters: FilterSet = filterSetFor(filterStore, currentKey, seedSet);
+
+  function updateFilterStore(next: TodayFilters) {
+    setFilterStore(next);
+    // RF25, the owner named: a false return means this choice is not
+    // REMEMBERED (the storage-denied population); the screen still shows
+    // it, because `next` is state. "Not remembered" is exactly the
+    // pre-PR1 behaviour for every rower, so it is the accepted outcome
+    // rather than one to surface.
+    saveTodayFilters(next);
+  }
+
+  function updateFilters(next: FilterSet) {
+    updateFilterStore(withFilterSet(filterStore, currentKey, next));
+  }
+
   // Every chip handler below funnels through this: update the visible
   // state AND persist in the same call, so no chip tap is ever lost to a
-  // reload/remount before its effect would otherwise flush.
+  // reload/remount before its effect would otherwise flush. A denied write
+  // goes to the session fallback so the next mount reads the same swap.
   function updateOverrides(next: TodayOverrides) {
     setOverrides(next);
-    saveTodayOverrides(next);
+    persistOverrides(next);
   }
 
   function handleTypeChip(type: WorkoutType) {
@@ -829,6 +1045,9 @@ function TodayView({
       prescribedCode !== null
         ? type === prescribedCode
         : type === overrides.swapType;
+    // In freestyle a clear writes `swapType: null` into TODAY's record,
+    // which is what keeps the roll from re-running on a remount today;
+    // tomorrow's record is a different date and rolls afresh.
     updateOverrides({
       ...overrides,
       swapType: clears ? null : type,
@@ -839,43 +1058,31 @@ function TodayView({
   // — consumed by todayFilterTokens() (deviation detection) and CLEAR ALL
   // below. `difficulties` is the hardcoded all-three set (ALL_DIFFICULTIES,
   // module scope) per the spec's own "Active" rule, deliberately NOT
-  // `preferences.difficulties` (which only seeds the INITIAL record above
+  // `preferences.difficulties` (which only seeds a never-written key above
   // and can itself be a narrower account preference) — see
   // TodayFilterDefaults' own doc comment.
   const filterDefaults: TodayFilterDefaults = {
     difficulties: ALL_DIFFICULTIES,
-    durations: bucketsForCap(preferences.timeCapMinutes),
+    durationRange: rangeForCap(preferences.timeCapMinutes),
   };
 
   // The FILTER ⌄ sheet's own state: whether it's open, its in-progress
-  // draft (seeded from `overrides` each time it opens — see
-  // `openFilterSheet`), and the button's own ref, which doubles as
+  // draft (seeded from the current key's `filters` each time it opens —
+  // see `openFilterSheet`), and the button's own ref, which doubles as
   // SheetShell's focus-restore target (Today.tsx's FILTER ⌄ button below,
   // not `document.activeElement` — see TodayFilterSheet.tsx's own doc
   // comment on why).
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [draft, setDraft] = useState<TodayFilterDraft>({
-    difficulties: overrides.difficulties,
-    durations: overrides.durations,
-    painLevels: overrides.painLevels,
-    lastDone: overrides.lastDone,
-    source: overrides.source,
-  });
+  const [draft, setDraft] = useState<TodayFilterDraft>(filters);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
 
   function openFilterSheet() {
-    setDraft({
-      difficulties: overrides.difficulties,
-      durations: overrides.durations,
-      painLevels: overrides.painLevels,
-      lastDone: overrides.lastDone,
-      source: overrides.source,
-    });
+    setDraft(filters);
     setSheetOpen(true);
   }
 
   function applyFilterSheet() {
-    updateOverrides({ ...overrides, ...draft });
+    updateFilters({ ...filters, ...draft });
     setSheetOpen(false);
   }
 
@@ -888,70 +1095,42 @@ function TodayView({
   }
 
   // Token ✕ / CLEAR ALL apply immediately (no sheet, no confirm) and save
-  // the record — same as a chip tap did before this task's rewiring.
+  // the current key's memory — same as a chip tap did before this task's
+  // rewiring.
   function resetFilterGroup(
     group: "difficulties" | "durations" | "pain" | "lastDone" | "source",
   ) {
     if (group === "difficulties") {
-      updateOverrides({
-        ...overrides,
-        difficulties: filterDefaults.difficulties,
-      });
+      updateFilters({ ...filters, difficulties: filterDefaults.difficulties });
     } else if (group === "durations") {
-      updateOverrides({ ...overrides, durations: filterDefaults.durations });
+      updateFilters({
+        ...filters,
+        durationRange: filterDefaults.durationRange,
+      });
     } else if (group === "pain") {
-      updateOverrides({ ...overrides, painLevels: [] });
+      updateFilters({ ...filters, painLevels: [] });
     } else if (group === "lastDone") {
-      updateOverrides({ ...overrides, lastDone: null });
+      updateFilters({ ...filters, lastDone: null });
     } else {
-      updateOverrides({ ...overrides, source: null });
+      updateFilters({ ...filters, source: null });
     }
   }
 
-  // CLEAR ALL resets to the day's pref-derived DEFAULTS, never to empty —
-  // the deliberate divergence from Library's own CLEAR ALL (which empties
-  // every filter), per the collapsible-filter spec's own decision table.
-  // lastDone/source (Round 2) have no pref-derived default to fall back to
-  // (unlike difficulties/durations) — both simply reset to null, the same
-  // "off" value they start the day at.
+  // CLEAR ALL resets the CURRENT KEY to the day's pref-derived DEFAULTS,
+  // never to empty — the deliberate divergence from Library's own CLEAR
+  // ALL (which empties every filter), per the collapsible-filter spec's
+  // own decision table. lastDone/source (Round 2) have no pref-derived
+  // default to fall back to (unlike difficulties/durations) — both simply
+  // reset to null, the same "off" value a fresh key starts at.
   function clearAllFilters() {
-    updateOverrides({
-      ...overrides,
+    updateFilters({
       difficulties: filterDefaults.difficulties,
-      durations: filterDefaults.durations,
+      durationRange: filterDefaults.durationRange,
       painLevels: [],
       lastDone: null,
       source: null,
     });
   }
-
-  // Lazy initializer: read once at mount, exactly like WorkoutDetail.tsx's
-  // nudge state — the `key` above already forces a remount (and thus a
-  // fresh read) whenever plan/doneN change underneath this screen.
-  const [pickOverride, setPickOverride] = useState<string | null>(() =>
-    loadTodayPick(today, plan.planKey, plan.doneN),
-  );
-
-  // Phase 6I: the two designated onboarding workouts are never a real
-  // suggestion once a rower has real baselines — "invisible outside
-  // onboarding" (design spec, no-baseline card's own Mechanics section). A
-  // veteran with both baselines set must never see "6K Test"/"2K Test"
-  // in SUGGESTED or SHUFFLE's pool. Final-review fix (2026-08-09): the
-  // exclusion must key off `isGlobal` too, not title alone — a rower's own
-  // CUSTOM workout that happens to collide with one of these titles is a
-  // real, ownable workout, not a stray to hide; excluding it by title
-  // alone orphaned it (invisible everywhere, no UI path back).
-  const entries = library
-    .filter((w) => !(isOnboardingTitle(w.title) && w.isGlobal))
-    .map((w) => toLibraryEntry(w, baselines));
-
-  // The chosen type if one is set, else the plan's own call — what
-  // `suggest`'s `todayCode` actually receives below. Null only in freestyle
-  // with no chip lit, which is the whole-library `suggestFreestyle` pool.
-  // (Freestyle chips, 2026-09-04: this used to be null whenever no plan
-  // was active; a freestyle chip tap now narrows the pool exactly the way
-  // a plan swap does — `suggest()` with `prescribed: null`.)
-  const todayCode: WorkoutType | null = overrides.swapType ?? prescribedCode;
 
   // Phase 8A: the plan day's own authored prescription (a checkpoint's
   // designated test), computed CLIENT-SIDE from PLANS — it never crosses
@@ -990,28 +1169,65 @@ function TodayView({
   const prescriptionOverridden =
     prescribedWorkout !== null && overrides.swapType !== null;
 
+  // The day's pick and SHUFFLE's shown list (I-2, I-3). Lazy initializer,
+  // read once at mount; on the day's first mount it DRAWS the first card
+  // uniformly from the least-recently-done tie class (`tieIds`) and
+  // writes it — the same write-once-per-day shape as the roll above. No
+  // draw on a checkpoint day (the pin shows; SHUFFLE is the escape) or
+  // without baselines (the doors card shows). A stored pick that the
+  // current pool no longer contains (the rower changed a filter or the
+  // type since) is simply ignored by `suggest`, which then shows the
+  // pool's least-recently-done head until the next SHUFFLE draws afresh —
+  // unchanged from pre-PR1 behaviour, and the reason `shownIds` may name
+  // ids outside the current pool (they are just not candidates, spec
+  // §2.4).
+  const [pick, setPick] = useState<StoredPick | null>(() => {
+    const fallback = sessionFallback.get(fbKey);
+    if (fallback?.pick !== undefined) return fallback.pick;
+    const stored = loadTodayPick(today, plan.planKey, plan.doneN, session);
+    if (stored !== null) return stored;
+    if (prescribed !== null || baselines === null) return null;
+    const first = computeSuggestion(
+      filters,
+      entries,
+      baselines,
+      todayCode,
+      null,
+      null,
+    );
+    const id = drawOne(first.tieIds, clientRng);
+    if (id === null) return null;
+    const drawn: StoredPick = {
+      workoutId: id,
+      shownIds: [id],
+      shuffled: false,
+    };
+    persistPick(drawn);
+    return drawn;
+  });
+
   const suggestion = computeSuggestion(
-    overrides,
+    filters,
     entries,
     baselines,
     todayCode,
-    pickOverride,
+    pick,
     prescribed,
   );
 
   // TodayFilterSheet's own live count — the SAME call above, run against
-  // the sheet's in-progress draft rather than the applied `overrides`.
+  // the sheet's in-progress draft rather than the applied `filters`.
   const draftPoolCount = poolCountFor(
     draft,
     entries,
     baselines,
     todayCode,
-    pickOverride,
+    pick,
     prescribed,
   );
 
   const filterTokens = todayFilterTokens(
-    overrides,
+    filters,
     filterDefaults,
     resetFilterGroup,
   );
@@ -1037,31 +1253,32 @@ function TodayView({
   // where it is actually needed.
   const needsDoors = baselines === null;
 
+  // I-3: a uniform draw from the pool minus everything shown today minus
+  // the card on screen; `nextShuffle` resets the shown list once the pool
+  // is exhausted. On a checkpoint day `recommendationId` is the pin, which
+  // is not a pool member, so it excludes nothing and the draw is the
+  // escape into the day's own type pool — same escape as pre-PR1, now
+  // random rather than "the least-recently-done member".
   function handleShuffle() {
     const pool = suggestion.poolIds;
     // Defensive, not reachable via the UI: SHUFFLE's own `disabled={!canShuffle}`
     // (canShuffle = poolIds.length > 1) already keeps a click from firing
     // this at all when the pool has 0 or 1 members.
     if (pool.length === 0) return;
-    // Since 8A a prescribed pin can hold `recommendationId` with the
-    // prescribed entry OUTSIDE `pool` (it is deliberately not a pool
-    // member — SHUFFLE's escape depends on that), so unlike pre-8A this
-    // fallback and the -1 arm below are both live paths, not defensive.
-    const currentId = suggestion.recommendationId ?? pool[0];
-    const currentIndex = pool.indexOf(currentId);
-    // On every checkpoint day the ROUTINE shuffle-escape path lands here
-    // with -1 (the pinned test is not in `pool`), stepping to `pool[0]`,
-    // the least-recently-done member. -1 is the escape, not an error.
-    const nextIndex =
-      currentIndex === -1 ? 0 : (currentIndex + 1) % pool.length;
-    const nextId = pool[nextIndex];
-    setPickOverride(nextId);
-    saveTodayPick({
-      date: today,
-      planKey: plan.planKey,
-      doneN: plan.doneN,
-      workoutId: nextId,
-    });
+    const next = nextShuffle(
+      pool,
+      pick?.shownIds ?? [],
+      suggestion.recommendationId,
+      clientRng,
+    );
+    if (next === null) return;
+    const drawn: StoredPick = {
+      workoutId: next.id,
+      shownIds: next.shownIds,
+      shuffled: true,
+    };
+    setPick(drawn);
+    persistPick(drawn);
   }
 
   return (
@@ -1179,7 +1396,7 @@ function TodayView({
                   TODAY" was redundant on the Today screen anyway, so the label
                   is just "SUGGESTED" in both modes now (freestyle already used
                   that). Never pick-state — suggestion.reason already says
-                  "YOUR PICK: …" when pickOverride is set, so this label
+                  "YOUR PICK: …" once the rower has shuffled, so this label
                   staying constant avoids saying the same thing twice in two
                   different places on the card. */}
               {suggestion.recommendationId ? "SUGGESTED" : ""}
@@ -1309,7 +1526,7 @@ function TodayView({
           <p className="mono-status">No sessions logged yet.</p>
         ) : (
           <ul className="today-log-list">
-            {logs.map((log) => (
+            {logs.slice(0, 3).map((log) => (
               <li key={log.id}>
                 <Link
                   to={`/today/log/${log.id}`}

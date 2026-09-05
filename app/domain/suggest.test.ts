@@ -13,10 +13,9 @@ const w = (id: string, over: object = {}) => ({
 });
 const prefs = {
   difficulties: ["easy", "medium", "hard"] as const,
-  // <30/30-45/45-60 — the bucket union equivalent of the old "cap 60"
-  // fixture value: excludes only the 60+ bucket, same as `bucketsForCap(60)`
-  // (todayOverrides.ts) would derive.
-  durations: ["<30", "30-45", "45-60"] as const,
+  // [0, 60] — the range `rangeForCap(60)` derives (Phase SF PR2): admits
+  // anything up to and including 60 minutes.
+  durationRange: { min: 0, max: 60 },
 };
 
 describe("suggest", () => {
@@ -26,7 +25,7 @@ describe("suggest", () => {
       prefs: {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
       },
       library: [
         w("a", { lastDoneDaysAgo: 3 }),
@@ -41,7 +40,7 @@ describe("suggest", () => {
   it("filters by difficulty prefs and the duration union", () => {
     const r = suggest({
       todayCode: "AT",
-      prefs: { difficulties: ["easy"], durations: ["<30", "30-45"] },
+      prefs: { difficulties: ["easy"], durationRange: { min: 0, max: 45 } },
       library: [
         w("slow", { estMinutes: 90, difficulty: "easy" }),
         w("hard", { difficulty: "hard" }),
@@ -78,7 +77,7 @@ describe("suggest", () => {
         todayCode: "AN",
         prefs: {
           difficulties: ["easy"],
-          durations: ["45-60"],
+          durationRange: { min: 45, max: 60 },
           painLevels: [1],
           lastDone: "under21",
           source: "custom",
@@ -179,7 +178,7 @@ describe("suggest", () => {
   it("falls back to the unfiltered type list when filters match nothing", () => {
     const r = suggest({
       todayCode: "AT",
-      prefs: { difficulties: ["easy"], durations: ["<30"] },
+      prefs: { difficulties: ["easy"], durationRange: { min: 0, max: 30 } },
       library: [
         w("only", { difficulty: "hard", estMinutes: 55, lastDoneDaysAgo: 33 }),
       ],
@@ -194,7 +193,7 @@ describe("suggest", () => {
       prefs: {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
       },
       library: [w("a", { lastDoneDaysAgo: null }), w("b")],
       todayPickId: "b",
@@ -208,7 +207,7 @@ describe("suggest", () => {
       prefs: {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
       },
       library: [w("a", { lastDoneDaysAgo: 33 })],
     });
@@ -220,7 +219,7 @@ describe("suggest", () => {
       prefs: {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
       },
       library: [w("at")],
     });
@@ -233,7 +232,7 @@ describe("suggest", () => {
       prefs: {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
         durationsUnknown: true,
       },
       library: [w("a", { lastDoneDaysAgo: 33 })],
@@ -246,7 +245,7 @@ describe("suggest", () => {
       todayCode: "AT",
       prefs: {
         difficulties: ["easy"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         durationsUnknown: true,
       },
       library: [
@@ -265,7 +264,7 @@ describe("suggest", () => {
       prefs: {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
         painLevels: [1, 2, 3],
       },
       library: [
@@ -283,7 +282,7 @@ describe("suggest", () => {
       prefs: {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
         painLevels: [1, 2, 3],
       },
       library: [w("hurts", { pain: 5, lastDoneDaysAgo: 12 })],
@@ -302,7 +301,7 @@ describe("suggest", () => {
         prefs: {
           ...prefs,
           difficulties: [...prefs.difficulties],
-          durations: [...prefs.durations],
+          durationRange: prefs.durationRange,
           painLevels: [3],
         },
         library: [
@@ -321,7 +320,7 @@ describe("suggest", () => {
         prefs: {
           ...prefs,
           difficulties: [...prefs.difficulties],
-          durations: [...prefs.durations],
+          durationRange: prefs.durationRange,
           painLevels: [1, 3, 5],
         },
         library: [
@@ -343,7 +342,7 @@ describe("suggest", () => {
         prefs: {
           ...prefs,
           difficulties: [...prefs.difficulties],
-          durations: [...prefs.durations],
+          durationRange: prefs.durationRange,
           painLevels: [],
         },
         library: [w("any", { pain: 5, lastDoneDaysAgo: 5 })],
@@ -353,7 +352,7 @@ describe("suggest", () => {
         prefs: {
           ...prefs,
           difficulties: [...prefs.difficulties],
-          durations: [...prefs.durations],
+          durationRange: prefs.durationRange,
         },
         library: [w("any", { pain: 5, lastDoneDaysAgo: 5 })],
       });
@@ -367,7 +366,7 @@ describe("suggest", () => {
         prefs: {
           ...prefs,
           difficulties: [...prefs.difficulties],
-          durations: [...prefs.durations],
+          durationRange: prefs.durationRange,
           painLevels: [1, 2, 3, 4, 5],
         },
         library: [
@@ -398,7 +397,7 @@ describe("suggest", () => {
       todayCode: "AT",
       prefs: {
         difficulties: [...prefs.difficulties],
-        durations: [],
+        durationRange: undefined,
       },
       library: [w("long", { estMinutes: 200, lastDoneDaysAgo: 7 })],
     });
@@ -407,48 +406,62 @@ describe("suggest", () => {
     expect(r.recommendationId).toBe("long");
   });
 
-  describe("duration bucket predicate (bucketFor(estMinutes) ∈ durations)", () => {
-    it("a bucket exactly at a boundary belongs to the UPPER bucket (bucketFor's own <45/<60 rule)", () => {
-      const r = suggest({
-        todayCode: "AT",
-        prefs: { difficulties: ["medium"], durations: ["45-60"] },
-        library: [
-          w("at45", { estMinutes: 45, lastDoneDaysAgo: 5 }),
-          w("at44", { estMinutes: 44, lastDoneDaysAgo: 5 }),
-        ],
-      });
-      // 45 minutes buckets as "45-60" (bucketFor: minutes<45 is false at
-      // exactly 45), 44 minutes buckets as "30-45" — only the 45-min entry
-      // is in the ["45-60"] union.
-      expect(r.poolIds).toStrictEqual(["at45"]);
-    });
-
-    it("a non-contiguous duration union (<30 and 60+) keeps both ends, excludes the middle", () => {
-      const r = suggest({
-        todayCode: "AT",
-        prefs: { difficulties: ["medium"], durations: ["<30", "60+"] },
-        library: [
-          w("short", { estMinutes: 20, lastDoneDaysAgo: 5 }),
-          w("mid", { estMinutes: 50, lastDoneDaysAgo: 5 }),
-          w("long", { estMinutes: 90, lastDoneDaysAgo: 5 }),
-        ],
-      });
-      expect(new Set(r.poolIds)).toStrictEqual(new Set(["short", "long"]));
-      expect(r.poolIds).not.toContain("mid");
-    });
-
-    it("an entry whose estMinutes is the 0 placeholder only survives an active union via durationsUnknown, not via the <30 bucket alone", () => {
-      // bucketFor(0) is "<30" — an unknown-duration entry (baselines unset,
-      // Today.tsx's own toLibraryEntry) would wrongly survive a durations
-      // filter that happens to include "<30" if durationsUnknown weren't
-      // ALSO set. This proves the filter is skipped via durationsUnknown,
-      // not "surviving because <30 happens to include 0" — the union here
-      // deliberately excludes "<30" to tell the two apart.
+  describe("duration range predicate (min ≤ estMinutes ≤ max, inclusive)", () => {
+    it("both ends are inclusive: 45 and 60 are in [45, 60], 44 and 61 are not", () => {
       const r = suggest({
         todayCode: "AT",
         prefs: {
           difficulties: ["medium"],
-          durations: ["45-60"],
+          durationRange: { min: 45, max: 60 },
+        },
+        library: [
+          w("at45", { estMinutes: 45, lastDoneDaysAgo: 5 }),
+          w("at44", { estMinutes: 44, lastDoneDaysAgo: 5 }),
+          w("at60", { estMinutes: 60, lastDoneDaysAgo: 5 }),
+          w("at61", { estMinutes: 61, lastDoneDaysAgo: 5 }),
+        ],
+      });
+      expect(new Set(r.poolIds)).toStrictEqual(new Set(["at45", "at60"]));
+    });
+
+    it("a max at the top (120) is no upper bound: a 200-minute entry passes [60, 120]", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          difficulties: ["medium"],
+          durationRange: { min: 60, max: 120 },
+        },
+        library: [
+          w("short", { estMinutes: 20, lastDoneDaysAgo: 5 }),
+          w("mid", { estMinutes: 50, lastDoneDaysAgo: 5 }),
+          w("long", { estMinutes: 200, lastDoneDaysAgo: 5 }),
+        ],
+      });
+      expect(r.poolIds).toStrictEqual(["long"]);
+    });
+
+    it("an unbounded range [0, 120] is off: everything passes and the reason claims no time check", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["easy"], durationRange: { min: 0, max: 120 } },
+        library: [w("long", { estMinutes: 200, lastDoneDaysAgo: 7 })],
+      });
+      expect(r.fellBack).toBe(true);
+      expect(r.reason).toMatch(/^Nothing fit your difficulty filters/);
+    });
+
+    it("an entry whose estMinutes is the 0 placeholder only survives an active TIME range via durationsUnknown, not because the range happens to start at 0", () => {
+      // 0 is inside any range whose min is 0 — an unknown-duration entry
+      // (baselines unset, Today.tsx's own toLibraryEntry) would wrongly
+      // survive a range starting at 0 if durationsUnknown weren't ALSO
+      // set. This proves the filter is skipped via durationsUnknown, not
+      // "surviving because the range happens to include 0" — the range here
+      // deliberately starts at 45 to tell the two apart.
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          difficulties: ["medium"],
+          durationRange: { min: 45, max: 60 },
           durationsUnknown: true,
         },
         library: [w("unknown", { estMinutes: 0, lastDoneDaysAgo: 5 })],
@@ -469,7 +482,7 @@ describe("suggest", () => {
         ...base,
         prefs: {
           difficulties: [...prefs.difficulties],
-          durations: ["<30", "30-45", "45-60"],
+          durationRange: { min: 0, max: 60 },
         },
       });
       expect(r.reason).toBe("Least recently done (33 days ago).");
@@ -480,7 +493,7 @@ describe("suggest", () => {
         ...base,
         prefs: {
           difficulties: [...prefs.difficulties],
-          durations: ["<30", "30-45", "45-60"],
+          durationRange: { min: 0, max: 60 },
           durationsUnknown: true,
         },
       });
@@ -500,7 +513,7 @@ describe("suggest", () => {
         ...base,
         prefs: {
           difficulties: [...prefs.difficulties],
-          durations: [],
+          durationRange: undefined,
           durationsUnknown: true,
         },
       });
@@ -512,7 +525,7 @@ describe("suggest", () => {
         ...base,
         prefs: {
           difficulties: [...prefs.difficulties],
-          durations: ["<30", "30-45", "45-60"],
+          durationRange: { min: 0, max: 60 },
           painLevels: [1, 2, 3],
         },
       });
@@ -524,7 +537,7 @@ describe("suggest", () => {
         ...base,
         prefs: {
           difficulties: [...prefs.difficulties],
-          durations: ["<30", "30-45", "45-60"],
+          durationRange: { min: 0, max: 60 },
           painLevels: [],
         },
       });
@@ -545,7 +558,7 @@ describe("suggest", () => {
     it("time checked, no pain filter -> difficulty/time", () => {
       const r = suggest({
         todayCode: "AT",
-        prefs: { difficulties: ["easy"], durations: ["<30"] },
+        prefs: { difficulties: ["easy"], durationRange: { min: 0, max: 30 } },
         library: fellbackLib,
       });
       expect(r.reason).toBe(
@@ -558,7 +571,7 @@ describe("suggest", () => {
         todayCode: "AT",
         prefs: {
           difficulties: ["easy"],
-          durations: ["<30"],
+          durationRange: { min: 0, max: 30 },
           durationsUnknown: true,
         },
         library: fellbackLib,
@@ -584,7 +597,7 @@ describe("suggest", () => {
         todayCode: "AT",
         prefs: {
           difficulties: ["easy"],
-          durations: ["<30"],
+          durationRange: { min: 0, max: 30 },
           painLevels: [1, 3],
         },
         library: fellbackLib,
@@ -613,7 +626,7 @@ describe("suggest", () => {
         todayCode: "AT",
         prefs: {
           difficulties: ["easy"],
-          durations: ["<30"],
+          durationRange: { min: 0, max: 30 },
           painLevels: [],
         },
         library: fellbackLib,
@@ -859,7 +872,7 @@ describe("suggestFreestyle", () => {
       {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
       },
     );
     expect(r.recommendationId).toBe("c");
@@ -874,7 +887,7 @@ describe("suggestFreestyle", () => {
         w("hard", { difficulty: "hard" }),
         w("fit", { difficulty: "easy", estMinutes: 30 }),
       ],
-      { difficulties: ["easy"], durations: ["<30", "30-45"] },
+      { difficulties: ["easy"], durationRange: { min: 0, max: 45 } },
     );
     expect(r.poolIds).toStrictEqual(["fit"]);
   });
@@ -882,7 +895,7 @@ describe("suggestFreestyle", () => {
   it("falls back to the unfiltered library when filters match nothing", () => {
     const r = suggestFreestyle(
       [w("only", { difficulty: "hard", estMinutes: 55, lastDoneDaysAgo: 33 })],
-      { difficulties: ["easy"], durations: ["<30"] },
+      { difficulties: ["easy"], durationRange: { min: 0, max: 30 } },
     );
     expect(r.fellBack).toBe(true);
     expect(r.recommendationId).toBe("only");
@@ -895,7 +908,7 @@ describe("suggestFreestyle", () => {
       {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
       },
       "b",
     );
@@ -909,7 +922,7 @@ describe("suggestFreestyle", () => {
       {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
       },
       "not-in-pool",
     );
@@ -921,7 +934,7 @@ describe("suggestFreestyle", () => {
     const r = suggestFreestyle([w("a", { lastDoneDaysAgo: 33 })], {
       ...prefs,
       difficulties: [...prefs.difficulties],
-      durations: [...prefs.durations],
+      durationRange: prefs.durationRange,
     });
     expect(r.reason).toBe("Least recently done (33 days ago).");
   });
@@ -930,7 +943,7 @@ describe("suggestFreestyle", () => {
     const r = suggestFreestyle([], {
       ...prefs,
       difficulties: [...prefs.difficulties],
-      durations: [...prefs.durations],
+      durationRange: prefs.durationRange,
     });
     expect(r.recommendationId).toBeNull();
     expect(r.poolIds).toStrictEqual([]);
@@ -942,7 +955,7 @@ describe("suggestFreestyle", () => {
     const r = suggestFreestyle([w("a", { lastDoneDaysAgo: 33 })], {
       ...prefs,
       difficulties: [...prefs.difficulties],
-      durations: [...prefs.durations],
+      durationRange: prefs.durationRange,
       durationsUnknown: true,
     });
     expect(r.reason).toBe("Least recently done (33 days ago).");
@@ -953,7 +966,7 @@ describe("suggestFreestyle", () => {
       [w("only", { difficulty: "hard", estMinutes: 0, lastDoneDaysAgo: 33 })],
       {
         difficulties: ["easy"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         durationsUnknown: true,
       },
     );
@@ -972,7 +985,7 @@ describe("suggestFreestyle", () => {
       {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
         painLevels: [1, 2, 3],
       },
     );
@@ -984,7 +997,7 @@ describe("suggestFreestyle", () => {
     const r = suggestFreestyle([w("hurts", { pain: 5, lastDoneDaysAgo: 12 })], {
       ...prefs,
       difficulties: [...prefs.difficulties],
-      durations: [...prefs.durations],
+      durationRange: prefs.durationRange,
       painLevels: [1, 2, 3],
     });
     expect(r.fellBack).toBe(true);
@@ -1006,7 +1019,7 @@ describe("suggestFreestyle", () => {
       {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
+        durationRange: prefs.durationRange,
         painLevels: [1, 3, 5],
       },
     );
@@ -1030,7 +1043,7 @@ describe("suggestFreestyle", () => {
       [w("long", { estMinutes: 200, lastDoneDaysAgo: 7 })],
       {
         difficulties: [...prefs.difficulties],
-        durations: [],
+        durationRange: undefined,
       },
     );
     expect(r.fellBack).toBe(false);
@@ -1044,7 +1057,7 @@ describe("suggestFreestyle", () => {
     it("durations active, known, no pain filter -> plain recency sentence", () => {
       const r = suggestFreestyle(lib, {
         difficulties: [...prefs.difficulties],
-        durations: ["<30", "30-45", "45-60"],
+        durationRange: { min: 0, max: 60 },
       });
       expect(r.reason).toBe("Least recently done (33 days ago).");
     });
@@ -1052,7 +1065,7 @@ describe("suggestFreestyle", () => {
     it("durations active, durationsUnknown true -> same plain sentence", () => {
       const r = suggestFreestyle(lib, {
         difficulties: [...prefs.difficulties],
-        durations: ["<30", "30-45", "45-60"],
+        durationRange: { min: 0, max: 60 },
         durationsUnknown: true,
       });
       expect(r.reason).toBe("Least recently done (33 days ago).");
@@ -1068,7 +1081,7 @@ describe("suggestFreestyle", () => {
     it("durations empty and durationsUnknown true -> same plain sentence", () => {
       const r = suggestFreestyle(lib, {
         difficulties: [...prefs.difficulties],
-        durations: [],
+        durationRange: undefined,
         durationsUnknown: true,
       });
       expect(r.reason).toBe("Least recently done (33 days ago).");
@@ -1088,7 +1101,7 @@ describe("suggestFreestyle", () => {
     it("time checked, pain filter set (non-contiguous union) -> difficulty/time/pain", () => {
       const r = suggestFreestyle(fellbackLib, {
         difficulties: ["easy"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         painLevels: [1, 3],
       });
       expect(r.reason).toBe(
@@ -1109,12 +1122,269 @@ describe("suggestFreestyle", () => {
     it("time checked, pain filter empty ([]) -> difficulty/time only", () => {
       const r = suggestFreestyle(fellbackLib, {
         difficulties: ["easy"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         painLevels: [],
       });
       expect(r.reason).toBe(
         "Nothing fit your difficulty/time filters. Closest match, last done 33 days ago.",
       );
     });
+  });
+});
+
+// Phase SF PR1 (spec §2.2): the tie class, and the two pure draw helpers.
+// `rng` here is the domain's contract — a function returning a uniform
+// integer in [0, 2^32) — fed from a scripted sequence so every branch is
+// reachable deterministically.
+import { RNG_RANGE, drawOne, nextShuffle } from "./suggest.js";
+
+function scripted(values: number[]): () => number {
+  let i = 0;
+  return () => {
+    if (i >= values.length) throw new Error("scripted rng exhausted");
+    return values[i++];
+  };
+}
+
+describe("tieIds", () => {
+  it("names every never-done entry when the pool's least-recently-done class is null, in pool order", () => {
+    const r = suggestFreestyle(
+      [
+        w("a", { lastDoneDaysAgo: 3 }),
+        w("b", { lastDoneDaysAgo: null }),
+        w("c", { lastDoneDaysAgo: null }),
+        w("d", { lastDoneDaysAgo: 40 }),
+      ],
+      {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        durationRange: undefined,
+      },
+    );
+    expect(r.tieIds).toStrictEqual(["b", "c"]);
+    expect(r.recommendationId).toBe("b");
+  });
+
+  it("names the single oldest entry when nothing ties, and the whole class when several share a day count", () => {
+    const single = suggest({
+      todayCode: "AT",
+      prefs: {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        durationRange: undefined,
+      },
+      library: [
+        w("a", { lastDoneDaysAgo: 3 }),
+        w("b", { lastDoneDaysAgo: 40 }),
+      ],
+    });
+    expect(single.tieIds).toStrictEqual(["b"]);
+    const tied = suggest({
+      todayCode: "AT",
+      prefs: {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        durationRange: undefined,
+      },
+      library: [
+        w("a", { lastDoneDaysAgo: 40 }),
+        w("b", { lastDoneDaysAgo: 40 }),
+        w("c", { lastDoneDaysAgo: 3 }),
+      ],
+    });
+    expect(tied.tieIds).toStrictEqual(["a", "b"]);
+  });
+
+  it("is empty for an empty pool, and describes the POOL on a prescribed day (the pin is not a member)", () => {
+    const empty = suggest({
+      todayCode: "AT",
+      prefs: {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        durationRange: undefined,
+      },
+      library: [w("x", { type: "O2" })],
+    });
+    expect(empty.tieIds).toStrictEqual([]);
+    const pinned = suggest({
+      todayCode: "AT",
+      prefs: {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        durationRange: undefined,
+      },
+      library: [
+        w("a", { lastDoneDaysAgo: null }),
+        w("b", { lastDoneDaysAgo: 5 }),
+      ],
+      prescribed: {
+        entry: w("test-2k", { lastDoneDaysAgo: null }),
+        reason: "2k day",
+      },
+    });
+    expect(pinned.recommendationId).toBe("test-2k");
+    expect(pinned.tieIds).toStrictEqual(["a"]);
+  });
+});
+
+describe("drawnId (the day's drawn first card)", () => {
+  const library = [
+    w("a", { lastDoneDaysAgo: null }),
+    w("b", { lastDoneDaysAgo: null }),
+    w("c", { lastDoneDaysAgo: 3 }),
+  ];
+  const p = {
+    ...prefs,
+    difficulties: [...prefs.difficulties],
+    durationRange: undefined,
+  };
+
+  it("is honoured for the card and reported as least recently done, never YOUR PICK, in both modes", () => {
+    const r = suggest({ todayCode: "AT", prefs: p, library, drawnId: "b" });
+    expect(r.recommendationId).toBe("b");
+    expect(r.reason).toBe("Least recently done (never done).");
+    const f = suggestFreestyle(library, p, undefined, "b");
+    expect(f.recommendationId).toBe("b");
+    expect(f.reason).toBe("Least recently done (never done).");
+  });
+
+  it("loses to the rower's own todayPickId, which alone says YOUR PICK", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "b",
+      todayPickId: "c",
+    });
+    expect(r.recommendationId).toBe("c");
+    expect(r.reason).toBe("YOUR PICK: last done 3 days ago.");
+    expect(suggestFreestyle(library, p, "c", "b").recommendationId).toBe("c");
+  });
+
+  it("is ignored when it is no longer in the pool (a filter or type changed since the draw)", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "gone",
+    });
+    expect(r.recommendationId).toBe("a");
+    expect(r.reason).toBe("Least recently done (never done).");
+  });
+
+  it("keeps the fell-back reason when the filters matched nothing", () => {
+    const hard = [
+      w("a", { lastDoneDaysAgo: null, difficulty: "hard" }),
+      w("b", { lastDoneDaysAgo: null, difficulty: "hard" }),
+    ];
+    const r = suggest({
+      todayCode: "AT",
+      prefs: { difficulties: ["easy"], durationRange: undefined },
+      library: hard,
+      drawnId: "b",
+    });
+    expect(r.recommendationId).toBe("b");
+    expect(r.reason).toMatch(/^Nothing fit your difficulty filters/);
+  });
+
+  it("NEVER beats a checkpoint pin — the draw is not the rower's act; SHUFFLE (todayPickId) is the escape", () => {
+    const pin = { entry: w("k2", { lastDoneDaysAgo: null }), reason: "2k day" };
+    const r = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "b",
+      prescribed: pin,
+    });
+    expect(r.recommendationId).toBe("k2");
+    expect(r.reason).toBe("2k day");
+    const escaped = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "b",
+      todayPickId: "a",
+      prescribed: pin,
+    });
+    expect(escaped.recommendationId).toBe("a");
+  });
+});
+
+describe("drawOne", () => {
+  it("returns null for an empty list and the only member for a singleton without consulting rng", () => {
+    expect(drawOne([], scripted([]))).toBeNull();
+    expect(drawOne(["only"], scripted([]))).toBe("only");
+  });
+
+  it("maps a 32-bit draw to a member by modulo, covering every member", () => {
+    const ids = ["a", "b", "c"];
+    expect(drawOne(ids, scripted([0]))).toBe("a");
+    expect(drawOne(ids, scripted([1]))).toBe("b");
+    expect(drawOne(ids, scripted([2]))).toBe("c");
+    expect(drawOne(ids, scripted([3]))).toBe("a");
+  });
+
+  it("rejects draws in the biased tail and redraws (rejection sampling), never returning a member out of proportion", () => {
+    // For n = 3 the largest accepted draw is the greatest multiple of 3
+    // below 2^32, minus one; anything at or above it is rejected. The
+    // sequence below hits the tail first, then lands on "c".
+    // Independent literals, not derived from RNG_RANGE (RF21): for n = 3
+    // the accept limit is 2^32 - (2^32 % 3) = 4294967295, so a draw of
+    // 4294967295 is rejected and 4294967294 (≡ 2 mod 3) is the largest
+    // accepted one.
+    expect(
+      drawOne(["a", "b", "c"], scripted([4294967295, 4294967295, 2])),
+    ).toBe("c");
+    expect(drawOne(["a", "b", "c"], scripted([4294967294]))).toBe("c");
+    expect(RNG_RANGE).toBe(4294967296);
+  });
+});
+
+describe("nextShuffle", () => {
+  it("draws only from members not yet shown and not on screen, appending the draw to shownIds", () => {
+    const r = nextShuffle(["a", "b", "c", "d"], ["a"], "b", scripted([0]));
+    // candidates = [c, d]; draw 0 -> c
+    expect(r).toStrictEqual({ id: "c", shownIds: ["a", "c"] });
+  });
+
+  it("resets the shown set once every member has been shown, excluding only the card on screen", () => {
+    const r = nextShuffle(["a", "b", "c"], ["a", "b", "c"], "c", scripted([1]));
+    // candidates after reset = [a, b]; draw 1 -> b; shownIds restarts at [b]
+    expect(r).toStrictEqual({ id: "b", shownIds: ["b"] });
+  });
+
+  it("treats a stale shown id (not in the pool) as simply not a candidate, and an off-pool current id as no exclusion", () => {
+    const r = nextShuffle(["a", "b"], ["zzz"], "pinned-test", scripted([1]));
+    expect(r).toStrictEqual({ id: "b", shownIds: ["zzz", "b"] });
+  });
+
+  it("returns the current id unchanged when the pool is only that id, and null for an empty pool", () => {
+    expect(nextShuffle(["a"], ["a"], "a", scripted([]))).toStrictEqual({
+      id: "a",
+      shownIds: ["a"],
+    });
+    expect(nextShuffle([], [], null, scripted([]))).toBeNull();
+  });
+
+  it("walks the whole pool before any repeat under a fixed rng, then resets", () => {
+    const pool = ["a", "b", "c", "d", "e"];
+    let shown: string[] = [];
+    let current: string | null = null;
+    const seen: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r: { id: string; shownIds: string[] } = nextShuffle(
+        pool,
+        shown,
+        current,
+        scripted([7]),
+      )!;
+      seen.push(r.id);
+      shown = r.shownIds;
+      current = r.id;
+    }
+    expect([...seen].sort()).toStrictEqual(pool);
+    const sixth = nextShuffle(pool, shown, current, scripted([0]))!;
+    expect(sixth.shownIds).toStrictEqual([sixth.id]);
+    expect(sixth.id).not.toBe(current);
   });
 });

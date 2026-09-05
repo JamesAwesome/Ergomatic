@@ -11,10 +11,11 @@ import { LIBRARY_SCROLL_KEY, saveLibraryScroll } from "./libraryScroll";
 const FULL: Filters = {
   types: ["AT", "O2"],
   difficulties: ["easy", "hard"],
-  durations: ["30-45", "60+"],
+  durationRange: { min: 30, max: 120 },
   painLevels: [4, 5],
   lastDone: "over21",
   source: "custom",
+  query: "fog",
 };
 
 // The pre-Task-4 (v1) shape, kept verbatim as a fixture rather than reused
@@ -129,10 +130,25 @@ describe("libraryFilters", () => {
         "difficulties contains a wrong-shaped member",
         JSON.stringify({ ...FULL, difficulties: [1] }),
       ],
-      ["durations not an array", JSON.stringify({ ...FULL, durations: "60+" })],
       [
-        "unknown duration bucket",
-        JSON.stringify({ ...FULL, durations: ["25-30"] }),
+        "durationRange missing (a bucket-era record: `durations` instead)",
+        JSON.stringify({
+          ...FULL,
+          durationRange: undefined,
+          durations: ["60+"],
+        }),
+      ],
+      [
+        "durationRange not an object",
+        JSON.stringify({ ...FULL, durationRange: "60+" }),
+      ],
+      [
+        "durationRange with a non-number member",
+        JSON.stringify({ ...FULL, durationRange: { min: "0", max: 60 } }),
+      ],
+      [
+        "durationRange missing max",
+        JSON.stringify({ ...FULL, durationRange: { min: 0 } }),
       ],
       ["painLevels not an array", JSON.stringify({ ...FULL, painLevels: 4 })],
       [
@@ -160,6 +176,21 @@ describe("libraryFilters", () => {
     });
   });
 
+  // Phase SF PR3: `query` is a NEW concept — a record from before it
+  // upgrades in place to "" (the lastDone/source precedent), while a
+  // present non-string still fails strict.
+  it("upgrades a record with no query field to query: '' rather than rejecting it, and rejects a non-string query", () => {
+    const { query: _q, ...noQuery } = FULL;
+    void _q;
+    sessionStorage.setItem(LIBRARY_FILTERS_KEY, JSON.stringify(noQuery));
+    expect(loadLibraryFilters()).toStrictEqual({ ...FULL, query: "" });
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, query: 7 }),
+    );
+    expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
+  });
+
   it("de-dupes duplicated types from a tampered value", () => {
     sessionStorage.setItem(
       LIBRARY_FILTERS_KEY,
@@ -176,12 +207,23 @@ describe("libraryFilters", () => {
     expect(loadLibraryFilters().difficulties).toStrictEqual(["easy", "hard"]);
   });
 
-  it("de-dupes duplicated duration buckets from a tampered value", () => {
+  it("clamps and orders a tampered durationRange (fractions round, out-of-bounds clamp, a crossed pair collapses)", () => {
     sessionStorage.setItem(
       LIBRARY_FILTERS_KEY,
-      JSON.stringify({ ...FULL, durations: ["60+", "60+", "30-45"] }),
+      JSON.stringify({ ...FULL, durationRange: { min: 500, max: -3.4 } }),
     );
-    expect(loadLibraryFilters().durations).toStrictEqual(["60+", "30-45"]);
+    expect(loadLibraryFilters().durationRange).toStrictEqual({
+      min: 0,
+      max: 0,
+    });
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, durationRange: { min: 24.6, max: 999 } }),
+    );
+    expect(loadLibraryFilters().durationRange).toStrictEqual({
+      min: 25,
+      max: 120,
+    });
   });
 
   it("de-dupes duplicated pain levels from a tampered value", () => {

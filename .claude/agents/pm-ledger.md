@@ -4568,3 +4568,109 @@ at c5015c2e. James opened this existing item, not Correct Resume.
   Icebox. Reload after denied writes and later eviction retain James's
   explicit accepted boundary. Closing the phase does not silently ship or
   authorize any of these capabilities.
+
+## 2026-09-04 — Phase SF open: run the exit criteria against main first
+
+Spec `docs/superpowers/specs/2026-09-04-shuffle-and-filters-design.md`.
+Verdict OPEN WITH CONDITIONS; all folded into revision 1.
+
+- **Run every exit criterion against current main before accepting it.**
+  SF's criterion 1 ("twelve SHUFFLE taps show twelve distinct titles; a
+  reload keeps the twelfth") was GREEN on the unfixed code: `handleShuffle`
+  steps `(currentIndex + 1) % pool.length` and `saveTodayPick` persists, so
+  a strict cycle satisfies it exactly. A criterion written from the FIX's
+  description tends to describe the fix's happy path, which the bug often
+  already produces. RF21 in exit-criterion form: for each criterion, name
+  the current behaviour that would fail it. If none exists, rewrite it.
+- **A fail-whole storage precedent does not transfer from a DATED record to
+  an UNDATED one.** SF justified discarding a `todayFilters` v1 record from
+  `todayOverrides`'s history — but that record is per-day and dies every
+  midnight, so fail-whole costs nothing there and costs permanent memory
+  here. When a spec cites a validation precedent, check the cited record's
+  LIFETIME, not its parser.
+- **Grep `app/server/` yourself before believing a spec's "no server
+  consumer".** SF §3.2 asserted `routes/data.ts` matched only a label;
+  it imports `bucketsForCap` and calls it in the server-side `/api/today`
+  suggestion — a retiring domain API with a live server caller, which also
+  changes the PR's file scope.
+- **Count a rename's copy sites in the rendered UI, not in the sheet.**
+  SF named four (`FilterSheet`, `filterTokens`, `TodayFilterSheet`,
+  `todayFilterTokens`) and missed `WorkoutRow.tsx`'s CUSTOM badge,
+  `Library.tsx`'s empty-state prose, and four e2e selectors. A rename
+  that reaches the filter and not the row ships two words for one thing.
+- **A daily roll needs an off switch.** "Randomize the type each day" plus
+  "ANY TYPE is never rolled" means a rower who wants the unfiltered library
+  must clear the chip every day forever. Any per-day auto-selection gets an
+  explicit-clear-is-sticky rule, or the owner rules that it does not.
+- **A quoted owner line whose resolution reads as its opposite is a scope
+  question, not a decision.** SF's list carried "Library doesn't remember"
+  beside "Library memory out of scope". The controller confirms the line
+  was James's answer to the Library-memory question (it was), and the spec
+  now says so; the technique stands: when a quote and its ruling can be
+  read two ways, write the question it answered next to it.
+- **Third exception to stranger-first ordering, counted** (30 unchecked
+  items; Wave A, the front door, still next in the slate). Defensible here:
+  two of the five items are stranger-comprehension work. Say the count,
+  then let James rule.
+
+## 2026-09-04 — Phase SF PR1 final gate: tick a criterion's CLAUSES, not the criterion
+
+- **An exit criterion is a list of clauses; tick each one.** SF's criterion 2
+  reads "reloaded three times shows one lit chip; **the next local day rolls**;
+  a clear stays ANY TYPE across a reload AND the next day". Two clauses were
+  proven, one ("the next day rolls") was asserted nowhere and inferred from a
+  dated record reading null — and the criterion's own named oracle ("a stubbed
+  clock") was not what shipped (record removal). A criterion read as one unit
+  reads as GREEN. Read the verbs. (Landed in the same round: a
+  `vi.setSystemTime` test across three local days.)
+- **A dead route stops being merely dead when the client stops agreeing with
+  it.** `/api/today` has no client caller and needed no edit, so it was filed
+  as a later dead-route decision. But PR1 made the client draw at random while
+  the route still returns the deterministic head: the route is now WRONG, not
+  idle. When a change moves a computation client-side, ask whether the server
+  copy became divergent — that is a register row, not a housekeeping note.
+- **Difference is not distribution.** A two-run "the sequences differ" e2e goes
+  red against a deterministic cycle and green against any non-deterministic
+  draw, biased or not. It is a sound gate for the bug and an unsound one for
+  "random". State both: the e2e proves not-deterministic, the domain sweep
+  proves uniform. (RF26 in exit-criterion form.)
+- **Fold: 246 words / 7 bullets / longest 43 — FAIL.** Series: #228 274 ·
+  #230 266 · #268 186 · door PR B 121 · **SF PR1 246.** The regression came
+  from a required Gate 0 paragraph (61 words) plus proof clauses inside
+  product bullets. The Gate 0 block is not exempt; move its evidence half down
+  and keep its ruling half.
+- **Open for James: the inline-implementation shape on TRIAD work.** The
+  controller implemented in task commits and dispatched only the REVIEW half,
+  arguing the paste-test rule makes the plan author the implementer. The five
+  fast-path criteria do not hold (domain files, two stored shapes, five product
+  files), so CLAUDE.md's letter required the full cycle. Honest disclosure, in
+  the Record block. Whichever way he rules, the resolution is a CLAUDE.md edit —
+  the rule as written and the practice have diverged.
+
+## 2026-09-05 — Phase SF PR2 final gate: the before/after of a MEMBERSHIP change is the DEFAULT count
+
+- **A demo pair is not a before/after.** PR2 headlined "78 OPTIONS → 32 for
+  `[25,35]`" as its number-change evidence. That compares the new control
+  against itself and cannot move if the predicate's meaning were unchanged.
+  The real pair was already committed and unnamed: main's `today-sheet.png`
+  reads **71 OPTIONS**, the branch's reads **78** — same account, same pool,
+  no user action. **For a change to what a filter ADMITS, the design gate's
+  number is the DEFAULT state's count on both sides; a narrowed demo shows
+  the control, not the meaning.** RF11's shape in Gate 0 form.
+- **A criterion naming `(e2e)` is satisfied by an assertion, not a capture.**
+  SF's criterion 4 ("`[25,35]` yields a card whose printed minutes are within
+  25–35, e2e") shipped with an e2e asserting the TOKEN and a screenshot that
+  happens to show `25′`. Second gate running on this phase's criteria (PR1:
+  tick the clauses). Read the criterion's parenthesis as a contract too.
+- **Retiring a symbol: sweep comments that DESCRIBE the retired control, not
+  only comments that NAME it.** `git grep DurationBucket` came back to one
+  retirement comment — clean — while two `design.spec.ts` comments still
+  explained TIME's default as "bucketsForCap(60), the first three buckets"
+  beside code that reads a range. A grep on the symbol cannot find prose
+  about the thing.
+- **A rename can collide with a NAVIGATION label.** GLOBAL→LIBRARY puts the
+  word on the tab bar and on a SOURCE cell meaning "not yours", on the same
+  screen. Before approving a rename, grep the candidate word against the
+  tab labels and screen titles, not only the surface being renamed.
+- **Fold: 109 words / 6 bullets / longest 20 — PASS, and the self-count was
+  right.** Series: #268 186 · door PR B 121 · SF PR1 246 · **SF PR2 109.**

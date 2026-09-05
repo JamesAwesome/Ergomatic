@@ -3,7 +3,6 @@ import {
   EMPTY_FILTERS,
   RECENCY_BOUNDARY_DAYS,
   applyFilters,
-  bucketFor,
   hasActiveFilters,
   isTypeSelected,
   clearFilters,
@@ -11,7 +10,10 @@ import {
   setLastDone,
   setSource,
   toggleDifficulty,
-  toggleDuration,
+  setDurationRange,
+  setQuery,
+  normalizeQuery,
+  clearSheetFilters,
   togglePainLevel,
   toggleType,
   type Filters,
@@ -87,10 +89,12 @@ describe("chip/cell state transitions", () => {
     expect(toggleDifficulty(f, "easy").difficulties).toStrictEqual(["hard"]);
   });
 
-  it("accumulates duration buckets (multi-select union) and removes on repeat", () => {
-    const f = toggleDuration(toggleDuration(EMPTY_FILTERS, "<30"), "60+");
-    expect(f.durations).toStrictEqual(["<30", "60+"]);
-    expect(toggleDuration(f, "<30").durations).toStrictEqual(["60+"]);
+  it("sets the TIME range as a whole (a two-thumb control has no toggle)", () => {
+    const f = setDurationRange(EMPTY_FILTERS, { min: 25, max: 35 });
+    expect(f.durationRange).toStrictEqual({ min: 25, max: 35 });
+    expect(
+      setDurationRange(f, { min: 0, max: 120 }).durationRange,
+    ).toStrictEqual({ min: 0, max: 120 });
   });
 
   it("accumulates pain levels (multi-select union) and removes on repeat", () => {
@@ -128,22 +132,14 @@ describe("chip/cell state transitions", () => {
     const busy: Filters = {
       types: ["AN"],
       difficulties: ["hard"],
-      durations: ["<30"],
+      durationRange: { min: 0, max: 30 },
       painLevels: [4, 5],
       lastDone: "under21",
       source: "custom",
+      query: "",
     };
     expect(clearFilters()).toStrictEqual(EMPTY_FILTERS);
     expect(busy).not.toStrictEqual(EMPTY_FILTERS);
-  });
-});
-
-describe("bucketFor", () => {
-  it("puts boundary durations in the handoff's buckets", () => {
-    expect(bucketFor(29)).toBe("<30");
-    expect(bucketFor(30)).toBe("30-45");
-    expect(bucketFor(45)).toBe("45-60");
-    expect(bucketFor(60)).toBe("60+");
   });
 });
 
@@ -241,17 +237,26 @@ describe("applyFilters", () => {
     expect(result.map((r) => r.id)).toStrictEqual(expected.map((r) => r.id));
   });
 
-  it("unions duration buckets", () => {
+  it("keeps only rows whose printed minutes fall inside the TIME range, both ends inclusive, 120 meaning no upper bound", () => {
     const short = w({ id: "short", steps: [timeWork(10)] });
+    const mid = w({ id: "mid", steps: [timeWork(35)] });
     const long = w({ id: "long", steps: [timeWork(70)] });
-    const f = toggleDuration(EMPTY_FILTERS, "<30");
+    const rows = [short, mid, long];
+    const upTo30 = setDurationRange(EMPTY_FILTERS, { min: 0, max: 30 });
     expect(
-      applyFilters([short, long], f, baselines).map((r) => r.id),
+      applyFilters(rows, upTo30, baselines).map((r) => r.id),
     ).toStrictEqual(["short"]);
-    const both = toggleDuration(f, "60+");
+    const twentyFiveTo35 = setDurationRange(EMPTY_FILTERS, {
+      min: 25,
+      max: 35,
+    });
     expect(
-      applyFilters([short, long], both, baselines).map((r) => r.id),
-    ).toStrictEqual(["short", "long"]);
+      applyFilters(rows, twentyFiveTo35, baselines).map((r) => r.id),
+    ).toStrictEqual(["mid"]);
+    const sixtyPlus = setDurationRange(EMPTY_FILTERS, { min: 60, max: 120 });
+    expect(
+      applyFilters(rows, sixtyPlus, baselines).map((r) => r.id),
+    ).toStrictEqual(["long"]);
   });
 
   it("unions pain levels — a non-contiguous selection still matches every level named", () => {
@@ -287,7 +292,7 @@ describe("applyFilters", () => {
 
   it("skips duration filtering when baselines are unknown rather than hiding everything", () => {
     const rows = [w({ id: "a" }), w({ id: "b" })];
-    const f = toggleDuration(EMPTY_FILTERS, "<30");
+    const f = setDurationRange(EMPTY_FILTERS, { min: 0, max: 30 });
     expect(applyFilters(rows, f, null).map((r) => r.id)).toStrictEqual([
       "a",
       "b",
@@ -348,6 +353,50 @@ describe("source", () => {
   });
 });
 
+// Phase SF PR3 (spec §4, I-14): SEARCH BY NAME.
+describe("query", () => {
+  it("matches a case-insensitive, trimmed substring of the title, AND-ed with the other filters", () => {
+    const rows = [
+      w({ id: "fog", type: "O2", title: "River Fog" }),
+      w({ id: "bow", type: "AT", title: "Fog Bow" }),
+      w({ id: "calm", type: "O2", title: "Dead Calm" }),
+    ];
+    const ids = (f: Filters) =>
+      applyFilters(rows, f, baselines).map((r) => r.id);
+    expect(ids(setQuery(EMPTY_FILTERS, "FOG"))).toStrictEqual(["fog", "bow"]);
+    expect(ids(setQuery(EMPTY_FILTERS, "  fog  "))).toStrictEqual([
+      "fog",
+      "bow",
+    ]);
+    expect(ids(setQuery(EMPTY_FILTERS, "bow"))).toStrictEqual(["bow"]);
+    expect(ids(setQuery(toggleType(EMPTY_FILTERS, "O2"), "fog"))).toStrictEqual(
+      ["fog"],
+    );
+    expect(ids(setQuery(EMPTY_FILTERS, "   "))).toStrictEqual([
+      "fog",
+      "bow",
+      "calm",
+    ]);
+    expect(ids(setQuery(EMPTY_FILTERS, "zzz"))).toStrictEqual([]);
+  });
+
+  it("normalizes by trimming and lower-casing", () => {
+    expect(normalizeQuery("  Fog Bow ")).toBe("fog bow");
+    expect(normalizeQuery("")).toBe("");
+  });
+
+  it("counts as active only when non-blank, and the sheet's CLEAR leaves it alone", () => {
+    expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "fog"))).toBe(true);
+    expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "   "))).toBe(false);
+    const both = setQuery(toggleDifficulty(EMPTY_FILTERS, "easy"), "fog");
+    expect(clearSheetFilters(both)).toStrictEqual({
+      ...EMPTY_FILTERS,
+      query: "fog",
+    });
+    expect(clearFilters().query).toBe("");
+  });
+});
+
 describe("hasActiveFilters", () => {
   // The reason this exists: `filterTokens(f).length > 0` used to be the
   // equivalent test, and it stopped being one when TYPE lost its token
@@ -365,7 +414,7 @@ describe("hasActiveFilters", () => {
   it("is true for every other group on its own", () => {
     const cases: Partial<Filters>[] = [
       { difficulties: ["easy"] },
-      { durations: ["<30"] },
+      { durationRange: { min: 0, max: 30 } },
       { painLevels: [3] },
       { lastDone: "under21" },
       { source: "custom" },

@@ -1380,9 +1380,8 @@ test.describe("today screen (plan active, logs present)", () => {
   // AT/TR type-swap chips are untouched (they stay on the plan line, never
   // moved into the sheet).
   //
-  // Amendment (2026-08-04 PR #50 round): TIME's default is the bucket SET
-  // `bucketsForCap(60)` derives (the first three buckets), not a single
-  // cap chip.
+  // Phase SF PR2: TIME's default is the range `rangeForCap(60)` derives
+  // ([0, 60] on the two-thumb control), not a set of cells.
   test("the chip row's default aria-pressed state matches the unmodified server preferences", async ({
     page,
   }) => {
@@ -1393,14 +1392,29 @@ test.describe("today screen (plan active, logs present)", () => {
         dialog.getByRole("button", { name: label, exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
     }
-    for (const label of ["<30′", "30–45′", "45–60′"]) {
-      await expect(
-        dialog.getByRole("button", { name: label, exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
+    // Phase SF PR2: TIME is the two-thumb range; the 60-minute default
+    // cap reads [0, 60] (spec I-12). Both thumbs LAY OUT at ≥44px in
+    // portrait AND landscape — the button's border box, which HTML
+    // hit-tests whole regardless of its transparent paint; the visible
+    // knob is drawn on its ::after (index.css). This measures the layout
+    // box, not the reachable area: at a collapsed range the upper thumb
+    // occludes the lower (delta pass H2), which a rail tap resolves.
+    const shortest = dialog.getByRole("slider", { name: "Shortest" });
+    const longest = dialog.getByRole("slider", { name: "Longest" });
+    await expect(shortest).toHaveAttribute("aria-valuenow", "0");
+    await expect(longest).toHaveAttribute("aria-valuenow", "60");
+    for (const thumb of [shortest, longest]) {
+      const box = (await thumb.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
     }
-    await expect(
-      dialog.getByRole("button", { name: "60′+", exact: true }),
-    ).toHaveAttribute("aria-pressed", "false");
+    await page.setViewportSize({ width: 844, height: 390 });
+    for (const thumb of [shortest, longest]) {
+      const box = (await thumb.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
     const painGroup = dialog.getByRole("group", { name: "PAIN" });
     for (const level of ["1", "2", "3", "4", "5"]) {
       await expect(
@@ -1535,14 +1549,18 @@ test.describe("today screen (plan active, logs present)", () => {
     );
     expect(easyBg).toBe("rgb(27, 26, 23)"); // --ink
 
-    const timeChip = dialog.getByRole("button", {
-      name: "45–60′",
-      exact: true,
-    });
-    const timeBg = await timeChip.evaluate(
+    // Phase SF PR2: TIME's selected span is the one ACCENT fill in the
+    // sheet (spec §3.4 — rail --rule-3, span --accent, knob --ink); the
+    // knob's ink lives on the thumb's ::after.
+    const span = dialog.locator(".duration-range-span");
+    const spanBg = await span.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
-    expect(timeBg).toBe("rgb(27, 26, 23)"); // --ink
+    expect(spanBg).toBe("rgb(181, 52, 31)"); // --accent
+    const knobBg = await dialog
+      .getByRole("slider", { name: "Longest" })
+      .evaluate((el) => getComputedStyle(el, "::after").backgroundColor);
+    expect(knobBg).toBe("rgb(27, 26, 23)"); // --ink
 
     const painCell = dialog
       .getByRole("group", { name: "PAIN" })
@@ -1610,9 +1628,8 @@ test.describe("today screen (plan active, logs present)", () => {
 
     // Task 3 (2026-08-04 round): the setup that narrows to this solo
     // fixture moves through the FILTER sheet — EASY/MEDIUM no longer
-    // render inline. Amendment (2026-08-04 PR #50 round): TIME's default
-    // (bucketsForCap(60) — the first three buckets) already covers this
-    // fixture's 20-min estimate (2026-08-09: no `wu` line any more — a
+    // render inline. Phase SF PR2: TIME's default range ([0, 60],
+    // `rangeForCap(60)`) already covers this fixture's 20-min estimate (2026-08-09: no `wu` line any more — a
     // workout's own displayed/estimated duration is work-only now, per the
     // warmup-setting spec §5), so no TIME cell needs touching at all to
     // narrow to HARD alone.

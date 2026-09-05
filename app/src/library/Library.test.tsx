@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { EMPTY_FILTERS } from "./filters";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -233,7 +234,100 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 
+/** Phase SF PR2: drives the sheet's TIME range with the keyboard — the
+ *  control is controlled by Library's own draft state, so each key press
+ *  re-renders with the new value and the next press reads it back. Home/
+ *  End then arrow steps of 5: `[min, max]` in minutes. */
+function setTime(min: number, max: number) {
+  const dialog = () => screen.getByRole("dialog");
+  const shortest = () =>
+    within(dialog()).getByRole("slider", { name: "Shortest" });
+  const longest = () =>
+    within(dialog()).getByRole("slider", { name: "Longest" });
+  fireEvent.keyDown(shortest(), { key: "Home" });
+  fireEvent.keyDown(longest(), { key: "End" });
+  for (let i = 0; i < (120 - max) / 5; i++) {
+    fireEvent.keyDown(longest(), { key: "ArrowLeft" });
+  }
+  for (let i = 0; i < min / 5; i++) {
+    fireEvent.keyDown(shortest(), { key: "ArrowRight" });
+  }
+}
+
 describe("Library", () => {
+  // Phase SF PR3 (spec §4): SEARCH BY NAME.
+  describe("search by name", () => {
+    const field = () =>
+      screen.getByRole("searchbox", { name: "Search by name" });
+
+    it("filters the list live on a case-insensitive, trimmed substring, shows the count row and CLEAR ALL, and renders no token for it", async () => {
+      mockReady();
+      await renderLibrary();
+      await userEvent.type(field(), "  LADDER ");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-an"]);
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "CLEAR ALL" }),
+      ).toBeInTheDocument();
+      expect(document.querySelector(".filter-token")).not.toBeInTheDocument();
+    });
+
+    it("composes AND with a TYPE chip, reaching the empty state when nothing matches", async () => {
+      mockReady();
+      await renderLibrary();
+      await userEvent.type(field(), "sprint");
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      expect(screen.getByText(/No workouts match/i)).toBeInTheDocument();
+    });
+
+    it("its own clear control empties the field and restores the list; CLEAR ALL clears it too", async () => {
+      mockReady();
+      await renderLibrary();
+      await userEvent.type(field(), "cruise");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Clear search" }),
+      );
+      expect(field()).toHaveValue("");
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Clear search" }),
+      ).not.toBeInTheDocument();
+
+      await userEvent.type(field(), "cruise");
+      await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
+      expect(field()).toHaveValue("");
+      expect(visibleHrefs()).toHaveLength(3);
+    });
+
+    it("the sheet's CLEAR leaves the query in place (it is not a sheet group)", async () => {
+      mockReady();
+      await renderLibrary();
+      await userEvent.type(field(), "cruise");
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "CLEAR",
+        }),
+      );
+      await applySheet();
+      expect(field()).toHaveValue("cruise");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+    });
+
+    it("is restored from the BACK record (sessionStorage) with the list already narrowed, and does not autofocus", async () => {
+      sessionStorage.setItem(
+        "ergomatic.libraryFilters",
+        JSON.stringify({ ...EMPTY_FILTERS, query: "ladder" }),
+      );
+      mockReady();
+      await renderLibrary();
+      expect(field()).toHaveValue("ladder");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-an"]);
+      expect(field()).not.toHaveFocus();
+    });
+  });
+
   it("shows an IMPORT link beside + NEW so bulk-paste no longer hides inside the builder", async () => {
     mockReady();
     await renderLibrary();
@@ -465,9 +559,7 @@ describe("Library", () => {
       await userEvent.click(
         within(dialog()).getByRole("button", { name: "1" }),
       );
-      await userEvent.click(
-        within(dialog()).getByRole("button", { name: "60′+" }),
-      );
+      setTime(60, 120);
 
       expect(
         screen.getByRole("button", { name: "Apply Filter" }),
@@ -521,9 +613,7 @@ describe("Library", () => {
       // as 30-45, pain 3) — two groups active together, still exactly one
       // result. TYPE, which used to be the first of the pair, left the
       // sheet this round.
-      await userEvent.click(
-        within(dialog()).getByRole("button", { name: "30–45′" }),
-      );
+      setTime(30, 45);
       await userEvent.click(
         within(dialog()).getByRole("button", { name: "3" }),
       );
@@ -555,11 +645,7 @@ describe("Library", () => {
       // the first group, only adds to it. TYPE, which used to be the
       // first-applied group here, left the sheet this round.
       await openSheet();
-      await userEvent.click(
-        within(screen.getByRole("dialog")).getByRole("button", {
-          name: "30–45′",
-        }),
-      );
+      setTime(30, 45);
       await applySheet();
 
       await openSheet();
@@ -896,7 +982,8 @@ describe("Library", () => {
       JSON.stringify({
         types: ["AT"],
         difficulties: [],
-        durations: ["<30"],
+        // w-at prints 30′, and the range is inclusive — 25 keeps it out.
+        durationRange: { min: 0, max: 25 },
         painLevels: [],
         lastDone: null,
         source: null,
@@ -990,7 +1077,7 @@ describe("Library", () => {
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "CUSTOM",
+          name: "MY WORKOUTS",
         }),
       );
       await applySheet();
@@ -1016,10 +1103,10 @@ describe("Library", () => {
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
       const globalCell = within(dialog()).getByRole("button", {
-        name: "GLOBAL",
+        name: "ERGOMATIC LIBRARY",
       });
       const customCell = within(dialog()).getByRole("button", {
-        name: "CUSTOM",
+        name: "MY WORKOUTS",
       });
       await userEvent.click(globalCell);
       expect(globalCell).toHaveAttribute("aria-pressed", "true");
@@ -1037,7 +1124,7 @@ describe("Library", () => {
         JSON.stringify({
           types: [],
           difficulties: [],
-          durations: [],
+          durationRange: { min: 0, max: 120 },
           painLevels: [],
           lastDone: null,
           source: "custom",
@@ -1046,7 +1133,7 @@ describe("Library", () => {
       mockReady();
       await renderLibrary();
 
-      expect(screen.getByText(/No custom workouts yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/None of my workouts yet/i)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "build one" })).toHaveAttribute(
         "href",
         "/library/new",
@@ -1091,7 +1178,7 @@ describe("Library", () => {
         JSON.stringify({
           types: [],
           difficulties: [],
-          durations: [],
+          durationRange: { min: 0, max: 120 },
           painLevels: [],
           lastDone: null,
           source: "custom",
@@ -1326,7 +1413,7 @@ describe("Library", () => {
         JSON.stringify({
           types: ["AT"],
           difficulties: [],
-          durations: [],
+          durationRange: { min: 0, max: 120 },
           painLevels: [],
           lastDone: null,
           source: null,
@@ -1360,7 +1447,7 @@ describe("Library", () => {
         JSON.stringify({
           types: ["AT"],
           difficulties: [],
-          durations: [],
+          durationRange: { min: 0, max: 120 },
           painLevels: [],
           lastDone: null,
           source: null,
@@ -1413,7 +1500,7 @@ describe("Library", () => {
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "GLOBAL",
+          name: "ERGOMATIC LIBRARY",
         }),
       );
       await applySheet();
@@ -1446,7 +1533,7 @@ describe("Library", () => {
         "ergomatic.libraryFilters",
         JSON.stringify({
           type: "AT",
-          durations: [],
+          durationRange: { min: 0, max: 120 },
           painMax3: true,
           recency: "recent",
           customOnly: false,

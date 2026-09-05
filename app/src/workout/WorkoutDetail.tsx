@@ -431,7 +431,7 @@ function WorkoutDetailView({
             read as yours here too — the list badge alone left the detail
             screen unmarked (device report, 2026-08-01). */}
         {!workout.isGlobal && (
-          <span className="workout-row-custom">CUSTOM</span>
+          <span className="workout-row-custom">MY WORKOUTS</span>
         )}
         <span className="mono-status">{workout.difficulty.toUpperCase()}</span>
       </div>

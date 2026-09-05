@@ -400,7 +400,7 @@ async function cleanupByTitle(page: Page, title: string): Promise<void> {
 }
 
 test.describe("SOURCE filter", () => {
-  test("selecting CUSTOM narrows to an authored workout, and CLEAR ALL restores the full library", async ({
+  test("selecting MY WORKOUTS narrows to an authored workout, and CLEAR ALL restores the full library", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -433,14 +433,14 @@ test.describe("SOURCE filter", () => {
     await openFilterSheet(page);
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "CUSTOM", exact: true })
+      .getByRole("button", { name: "MY WORKOUTS", exact: true })
       .click();
     await applyFilterSheet(page);
 
     await expect(rows).toHaveCount(1);
     await expect(rows.first().locator(".workout-row-title")).toHaveText(title);
     await expect(rows.first().locator(".workout-row-custom")).toHaveText(
-      "CUSTOM",
+      "MY WORKOUTS",
     );
 
     await page.getByRole("button", { name: "CLEAR ALL" }).click();
@@ -571,5 +571,61 @@ test.describe("TYPE + DIFFICULTY composition (chip row union intersected with th
     await expect(page.locator(".library-count")).toHaveText(
       `${counts.expected} OF ${counts.total} SHOWN`,
     );
+  });
+});
+
+// Phase SF PR3 (spec §4, exit criterion 6): SEARCH BY NAME on the real
+// 300-workout seed — `fog` finds the fog titles and nothing else, survives a
+// detail round trip through the BACK record, and the LIBRARY tab forgets it.
+test.describe("Phase SF PR3: search by name", () => {
+  test("`fog` narrows to the fog titles, survives BACK from a detail, and the LIBRARY tab clears it", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "library-search@e2e.test",
+      name: "Library Search Tester",
+    });
+    await page.goto("/library");
+    await waitForLibraryLoaded(page);
+    const total = await page.locator(".workout-row").count();
+    const field = page.getByRole("searchbox", { name: "Search by name" });
+    await expect(field).not.toBeFocused();
+
+    await field.fill("fog");
+    const rows = page.locator(".workout-row");
+    await expect(rows.first()).toBeVisible();
+    const narrowed = await rows.count();
+    expect(narrowed).toBeGreaterThan(0);
+    expect(narrowed).toBeLessThan(total);
+    for (const title of await rows
+      .locator(".workout-row-title")
+      .allTextContents()) {
+      expect(title.toLowerCase()).toContain("fog");
+    }
+    await expect(page.locator(".library-count")).toHaveText(
+      `${narrowed} OF ${total} SHOWN`,
+    );
+    await expect(page.locator(".filter-token")).toHaveCount(0);
+
+    // BACK round trip: the query and the narrowed list come back.
+    await rows.first().click();
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await page.goBack();
+    // Not `waitForLibraryLoaded`: that helper asserts the REST count
+    // ("N WORKOUTS"), and the restored query means the count is filtered.
+    await expect(page.locator(".workout-row").first()).toBeVisible();
+    await expect(field).toHaveValue("fog");
+    await expect(page.locator(".workout-row")).toHaveCount(narrowed);
+    await expect(page.locator(".library-count")).toHaveText(
+      `${narrowed} OF ${total} SHOWN`,
+    );
+
+    // The tab forgets it, like every other filter.
+    await page.getByRole("link", { name: "TODAY" }).click();
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+    await page.getByRole("link", { name: "LIBRARY" }).click();
+    await waitForLibraryLoaded(page);
+    await expect(field).toHaveValue("");
+    await expect(page.locator(".workout-row")).toHaveCount(total);
   });
 });
