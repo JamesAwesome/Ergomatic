@@ -1,5 +1,4 @@
 import type {
-  Difficulty,
   PaceRef,
   Step,
   WorkDuration,
@@ -8,7 +7,6 @@ import type {
 } from "./types.js";
 
 const TYPES: WorkoutType[] = ["AN", "O2", "AT", "TR"];
-const DIFFS: Difficulty[] = ["easy", "medium", "hard"];
 
 const isRec = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
@@ -140,8 +138,6 @@ export function validateWorkoutInput(
   )
     errors.push("title 1..80 chars");
   if (!TYPES.includes(value.type as WorkoutType)) errors.push("invalid type");
-  if (!DIFFS.includes(value.difficulty as Difficulty))
-    errors.push("invalid difficulty");
   if (!int(value.pain, 1, 5)) errors.push("pain must be 1..5");
   const steps = validateSteps(value.steps);
   if (!steps.ok) errors.push(...steps.errors);

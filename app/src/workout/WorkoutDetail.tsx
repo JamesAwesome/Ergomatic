@@ -433,7 +433,6 @@ function WorkoutDetailView({
         {!workout.isGlobal && (
           <span className="workout-row-custom">MY WORKOUTS</span>
         )}
-        <span className="mono-status">{workout.difficulty.toUpperCase()}</span>
       </div>
       <h1 className="workout-detail-title">{workout.title}</h1>
       <p className="mono-status">

@@ -1,15 +1,12 @@
 import { useRef } from "react";
-import type { Difficulty } from "../../domain/types.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
-import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 import { DurationRange } from "../components/DurationRange";
 import {
   RECENCY_BOUNDARY_DAYS,
   clearSheetFilters,
   setLastDone,
   setSource,
-  toggleDifficulty,
   setDurationRange,
   togglePainLevel,
   type Filters,
@@ -35,7 +32,7 @@ const COUNT_ID = "filter-sheet-count";
 /**
  * The FILTER sheet (Task 4, ui-fix round — DESIGN.md's "Library, second
  * pass"): slides up over the list (not a route — Library.tsx never pushes
- * history for it), holding five filter groups (DIFFICULTY, TIME, PAIN, LAST
+ * history for it), holding four filter groups (TIME, PAIN, LAST
  * DONE, SOURCE) plus a live-counting L1 button. Operates entirely on a DRAFT
  * copy of Filters that the caller owns (`draft`/`onChangeDraft`) — nothing
  * here writes to the list's actually-applied filters directly. `onApply`
@@ -47,15 +44,14 @@ const COUNT_ID = "filter-sheet-count";
  * the task boundary — spec §2: "The TYPE group leaves `FilterSheet`
  * entirely"). Its chip row now lives above the list (Library.tsx, Task 2's
  * own work) — this sheet has no UI path to filter by type at all, by design.
- * DIFFICULTY (Task 2) joins this sheet in TYPE's old slot: unlike Today's
- * DIFFICULTY group (whose "empty" is impossible — `suggest()` always has
- * SOME difficulty preference), Library's own convention is the same as
- * `durations`/`painLevels` here — empty means no filter, and CLEAR ALL keeps
- * emptying to nothing (spec §1).
+ * Library's own convention for every group here is the same as
+ * `durations`/`painLevels` — empty means no filter, and CLEAR ALL keeps
+ * emptying to nothing (spec §1). DIFFICULTY left this sheet in Phase DE
+ * PR 1 (the product has no difficulty any more).
  *
  * CLEAR vs. CLEAR ALL (fix round, whole-branch review finding B): this
  * sheet's own CLEAR button (`clearSheetFilters`) resets only the groups
- * rendered IN HERE — DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE — leaving
+ * rendered IN HERE — TIME/PAIN/LAST DONE/SOURCE — leaving
  * `draft.types` exactly as the rower left it. Before this fix CLEAR called
  * the whole-library `clearFilters()`, silently emptying `types` too even
  * though the sheet shows no TYPE control and gives no indication that
@@ -137,18 +133,6 @@ export default function FilterSheet({
           CLEAR
         </button>
       </div>
-
-      <CellGrid
-        label="DIFFICULTY"
-        cells={DIFFICULTY_CHIPS.map(({ value, label }) => ({
-          value,
-          label,
-          pressed: draft.difficulties.includes(value),
-        }))}
-        onToggle={(value) =>
-          onChangeDraft(toggleDifficulty(draft, value as Difficulty))
-        }
-      />
 
       {/* Phase SF PR2 (spec §3): TIME is a minutes range on one rail —
           the shared `DurationRange` control, identical on Today's sheet. */}

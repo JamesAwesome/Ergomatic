@@ -1650,13 +1650,13 @@ function main(): void {
           `same-slot twin changes no count — that choice is James's.`,
       );
       p();
-      p("| out | now | reaches | difficulty / pain | why it cannot stay |");
+      p("| out | now | reaches | pain | why it cannot stay |");
       p("|---|---|---|---|---|");
       for (const id of s.replaced) {
         const r = rows.find((x) => x.item.id === id)!;
         p(
           `| ${id} | ${fmtClock(r.reach.rawCurrent)} (${r.item.current}) | ` +
-            `${fmtBands(r.item.reach)} | ${r.workout.difficulty} / ${r.workout.pain} | ` +
+            `${fmtBands(r.item.reach)} | ${r.workout.pain} | ` +
             `every band it reaches is already full of workouts that reach ` +
             `nothing else, and it reaches none of the unfilled seats |`,
         );
@@ -1666,7 +1666,7 @@ function main(): void {
         if (r === undefined || r.item.type !== t) continue;
         p(
           `| ${id} | ${fmtClock(r.reach.rawCurrent)} (${r.item.current}) | ` +
-            `${fmtBands(r.item.reach)} | ${r.workout.difficulty} / ${r.workout.pain} | ` +
+            `${fmtBands(r.item.reach)} | ${r.workout.pain} | ` +
             `**assigned ${to}, but no legal sketch exists**: reachability runs ` +
             `on the rounded minute the library bands on, and on the real clock ` +
             `±25% of ${fmtClock(r.reach.rawCurrent)} tops out at ` +

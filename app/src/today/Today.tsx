@@ -32,12 +32,7 @@ import {
   workAndTotal,
 } from "../../domain/display/stepDetail.js";
 import type { PieceRow } from "../../domain/display/stepDetail.js";
-import type {
-  Baselines,
-  Difficulty,
-  Step,
-  WorkoutType,
-} from "../../domain/types.js";
+import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
@@ -162,17 +157,10 @@ const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   TR: "--type-tr",
 };
 
-// The day's "no filter" difficulty baseline (todayFilterTokens.ts's own
-// TodayFilterDefaults, "Active" rule per the collapsible-filter spec) —
-// always the full set, independent of the account's own (possibly
-// narrower) server preference, which only seeds the INITIAL overrides
-// record below, a separate concern.
-const ALL_DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
-
 /** Local chip button — same `.chip` class + `aria-pressed` rendering
  *  convention Library's own filter controls use, not a shared component.
  *  Today's only remaining consumer is the type-swap row (Task 2, 2026-08-04
- *  round: DIFFICULTY/TIME/PAIN's own inline chips moved into
+ *  round: TIME/PAIN's own inline chips moved into
  *  TodayFilterSheet.tsx's CellGrid instances, which render through
  *  CellGrid's own cell button, not this one) — every caller here passes
  *  `typeColorVar`, mirroring ClassificationCard.tsx's own inline-style-
@@ -252,7 +240,6 @@ function toLibraryEntry(
   return {
     id: w.id,
     type: w.type,
-    difficulty: w.difficulty,
     pain: w.pain,
     estMinutes: baselines ? estimateMinutes(w.steps, baselines).minutes : 0,
     lastDoneDaysAgo: w.lastDoneDaysAgo,
@@ -288,7 +275,6 @@ function computeSuggestion(
   prescribed: { entry: LibraryEntry; reason: string } | null,
 ) {
   const prefs: SuggestPrefs = {
-    difficulties: filters.difficulties,
     durationRange: filters.durationRange,
     painLevels: filters.painLevels,
     // Round 2 (2026-08-04): the two new dims — see domain/suggest.ts's own
@@ -620,7 +606,7 @@ function TodayContent({
   // below (Task 2, 2026-08-04 round: FILTER ⌄ + TodayFilterSheet, replacing
   // the old inline chips); it still needs the raw server preferences to
   // seed those overrides' defaults on first mount
-  // (rangeForCap(preferences.timeCapMinutes), preferences.difficulties) and
+  // (rangeForCap(preferences.timeCapMinutes)) and
   // `baselines` to compute durationsUnknown itself, so both are passed
   // through rather than a pre-built SuggestPrefs.
   const session = sessionsLoggedToday(
@@ -894,10 +880,12 @@ function TodayView({
     .map((w) => toLibraryEntry(w, baselines));
 
   // A key the memory has never seen reads as the preference-seeded set —
-  // the same values a fresh day used to start with before PR1 (prefs'
-  // own difficulties, the cap's buckets, pain/recency/source off).
+  // the same values a fresh day used to start with before PR1 (the cap's
+  // buckets, pain/recency/source off). Phase DE PR 1: `preferences.
+  // difficulties` no longer seeds anything — the server still serves it
+  // for pre-PR-1 builds (server/compat/difficulty.ts), and this build
+  // ignores it.
   const seedSet: FilterSet = {
-    difficulties: preferences.difficulties,
     // `[0, cap]` with the cap rounded down to the step (spec I-12).
     durationRange: rangeForCap(preferences.timeCapMinutes),
     painLevels: [],
@@ -1056,13 +1044,8 @@ function TodayView({
 
   // Task 2 (2026-08-04 round): the day's pref-derived "no filter" baseline
   // — consumed by todayFilterTokens() (deviation detection) and CLEAR ALL
-  // below. `difficulties` is the hardcoded all-three set (ALL_DIFFICULTIES,
-  // module scope) per the spec's own "Active" rule, deliberately NOT
-  // `preferences.difficulties` (which only seeds a never-written key above
-  // and can itself be a narrower account preference) — see
-  // TodayFilterDefaults' own doc comment.
+  // below — see TodayFilterDefaults' own doc comment.
   const filterDefaults: TodayFilterDefaults = {
-    difficulties: ALL_DIFFICULTIES,
     durationRange: rangeForCap(preferences.timeCapMinutes),
   };
 
@@ -1098,11 +1081,9 @@ function TodayView({
   // the current key's memory — same as a chip tap did before this task's
   // rewiring.
   function resetFilterGroup(
-    group: "difficulties" | "durations" | "pain" | "lastDone" | "source",
+    group: "durations" | "pain" | "lastDone" | "source",
   ) {
-    if (group === "difficulties") {
-      updateFilters({ ...filters, difficulties: filterDefaults.difficulties });
-    } else if (group === "durations") {
+    if (group === "durations") {
       updateFilters({
         ...filters,
         durationRange: filterDefaults.durationRange,
@@ -1120,11 +1101,10 @@ function TodayView({
   // never to empty — the deliberate divergence from Library's own CLEAR
   // ALL (which empties every filter), per the collapsible-filter spec's
   // own decision table. lastDone/source (Round 2) have no pref-derived
-  // default to fall back to (unlike difficulties/durations) — both simply
+  // default to fall back to (unlike durations) — both simply
   // reset to null, the same "off" value a fresh key starts at.
   function clearAllFilters() {
     updateFilters({
-      difficulties: filterDefaults.difficulties,
       durationRange: filterDefaults.durationRange,
       painLevels: [],
       lastDone: null,
@@ -1402,7 +1382,7 @@ function TodayView({
               {suggestion.recommendationId ? "SUGGESTED" : ""}
             </span>
             <div className="today-suggestion-actions">
-              {/* Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline
+              {/* Task 2 (2026-08-04 round): TIME/PAIN's inline
                   chip clusters (Phase 6F, then regrouped by fix round 2) are
                   gone — they now live inside TodayFilterSheet, opened by this
                   chip. Same geometry as SHUFFLE below (`.filter-trigger`,
@@ -1483,10 +1463,7 @@ function TodayView({
                 </span>
               </div>
               <h2 className="today-card-title">{recommended.title}</h2>
-              <p className="today-card-meta">
-                {recommended.difficulty.toUpperCase()} · PAIN {recommended.pain}
-                /5
-              </p>
+              <p className="today-card-meta">PAIN {recommended.pain}/5</p>
               {/* `baselines` is never null here — same guarantee `today-card-
                   duration` above already relies on (`needsDoors`). */}
               <PieceRegion steps={recommended.steps} baselines={baselines!} />

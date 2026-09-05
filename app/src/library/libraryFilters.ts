@@ -1,6 +1,6 @@
 import { EMPTY_FILTERS, type Filters } from "./filters";
 import { clampRange } from "../../domain/duration.js";
-import { isWorkoutType, type Difficulty } from "../../domain/types.js";
+import { isWorkoutType } from "../../domain/types.js";
 import { clearLibraryScroll } from "./libraryScroll";
 
 /** sessionStorage key for Library's active filters. Same lifecycle as
@@ -11,14 +11,7 @@ import { clearLibraryScroll } from "./libraryScroll";
  *  list, which is the filter-BACK bug this file exists to fix. */
 export const LIBRARY_FILTERS_KEY = "ergomatic.libraryFilters";
 
-const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
 const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
-
-function isDifficulty(v: unknown): v is Difficulty {
-  return (
-    typeof v === "string" && (DIFFICULTIES as readonly string[]).includes(v)
-  );
-}
 
 function isPainLevel(v: unknown): v is number {
   return typeof v === "number" && PAIN_LEVELS.includes(v);
@@ -57,9 +50,6 @@ function parseFilters(raw: string): Filters | null {
   }
   const f = parsed as Record<string, unknown>;
   if (!Array.isArray(f.types) || !f.types.every(isWorkoutType)) return null;
-  if (!Array.isArray(f.difficulties) || !f.difficulties.every(isDifficulty)) {
-    return null;
-  }
   // Phase SF PR2: `durationRange` is REQUIRED (never lenient like
   // `lastDone`): a bucket-era record has `durations` instead and is
   // rejected whole — this record lives one BACK round trip, so nothing is
@@ -83,13 +73,12 @@ function parseFilters(raw: string): Filters | null {
   // the record; a present non-string still fails strict.
   if (f.query !== undefined && typeof f.query !== "string") return null;
   return {
-    // De-duped defensively: toggleType/toggleDifficulty/toggleDuration/
+    // De-duped defensively: toggleType/toggleDuration/
     // togglePainLevel can never produce a duplicate, but a tampered/legacy
     // stored value could, and .includes-based state plus code/level
     // matching both silently tolerate dupes — better to normalise here
     // than trust storage.
     types: [...new Set(f.types)],
-    difficulties: [...new Set(f.difficulties)],
     durationRange: clampRange(f.durationRange),
     painLevels: [...new Set(f.painLevels)],
     lastDone: f.lastDone,

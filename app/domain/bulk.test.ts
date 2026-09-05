@@ -27,7 +27,6 @@ test 2k
     expect(result.workouts[0]).toStrictEqual({
       title: "Ladder Day",
       type: "AT",
-      difficulty: "medium",
       pain: 3,
       steps: [
         { k: "reps", count: 4 },
@@ -45,7 +44,6 @@ test 2k
     expect(result.workouts[1]).toStrictEqual({
       title: "Long Repeats",
       type: "O2",
-      difficulty: "easy",
       pain: 2,
       steps: [
         { k: "reps", count: 5 },
@@ -97,7 +95,8 @@ w 1' 6k @20`;
   });
 
   it("reports a bad header field (wrong field count) and skips the block", () => {
-    const text = `12 | Ladder Day | AT
+    // Two fields: no form accepts it (three is the canonical count now).
+    const text = `Ladder Day | AT
 wu 10`;
     const result = parseBulk(text);
     expect(result.workouts).toStrictEqual([]);
@@ -105,7 +104,7 @@ wu 10`;
       {
         block: 0,
         line: 1,
-        message: expect.stringContaining("title | TYPE | difficulty | pain"),
+        message: expect.stringContaining('"title | TYPE | effort"'),
       },
     ]);
   });
@@ -157,18 +156,12 @@ wu 10`;
     ]);
   });
 
-  it("reports a bad difficulty value in the header", () => {
+  it("ignores the difficulty field of a legacy numbered header, whatever it says", () => {
     const text = `12 | Ladder Day | AT | zzz | 3
-wu 10`;
+w 10' 6k+4 @20`;
     const result = parseBulk(text);
-    expect(result.workouts).toStrictEqual([]);
-    expect(result.errors).toStrictEqual([
-      {
-        block: 0,
-        line: 1,
-        message: expect.stringContaining("invalid difficulty"),
-      },
-    ]);
+    expect(result.errors).toStrictEqual([]);
+    expect(result.workouts[0]).toMatchObject({ title: "Ladder Day", pain: 3 });
   });
 
   it("reports a non-integer pain value in the header", () => {
@@ -177,7 +170,7 @@ wu 10`;
     const result = parseBulk(text);
     expect(result.workouts).toStrictEqual([]);
     expect(result.errors).toStrictEqual([
-      { block: 0, line: 1, message: expect.stringContaining("invalid pain") },
+      { block: 0, line: 1, message: expect.stringContaining("invalid effort") },
     ]);
   });
 
@@ -443,12 +436,74 @@ w 1' 6k-2`);
   });
 
   it("names both accepted header shapes when the field count is wrong", () => {
-    const result = parseBulk(`One | Two | Three
+    const result = parseBulk(`One | Two
 w 1' 6k-2`);
     expect(result.workouts).toStrictEqual([]);
+    expect(result.errors[0].message).toMatch(/title \| TYPE \| effort/);
     expect(result.errors[0].message).toMatch(
       /title \| TYPE \| difficulty \| pain/,
     );
+  });
+});
+
+describe("header (Phase DE PR 1: three-field canonical, legacy forms kept)", () => {
+  const body = "\nw 10' 6k+4 @20";
+  it("accepts the canonical three-field header title | TYPE | effort", () => {
+    const r = parseBulk(`Scud Cloud | AN | 3${body}`);
+    expect(r.errors).toStrictEqual([]);
+    expect(r.workouts[0]).toMatchObject({
+      title: "Scud Cloud",
+      type: "AN",
+      pain: 3,
+    });
+    expect(r.workouts[0]).not.toHaveProperty("difficulty");
+  });
+  it("accepts the legacy four-field header and ignores the difficulty word", () => {
+    const r = parseBulk(`Scud Cloud | AN | medium | 3${body}`);
+    expect(r.errors).toStrictEqual([]);
+    expect(r.workouts[0]).toMatchObject({
+      title: "Scud Cloud",
+      type: "AN",
+      pain: 3,
+    });
+  });
+  it("accepts the legacy five-field header and ignores the number and the difficulty word", () => {
+    const r = parseBulk(`12 | Scud Cloud | AN | garbage | 3${body}`);
+    expect(r.errors).toStrictEqual([]);
+    expect(r.workouts[0]).toMatchObject({
+      title: "Scud Cloud",
+      type: "AN",
+      pain: 3,
+    });
+  });
+  it("rejects any other field count naming only the canonical form", () => {
+    const r = parseBulk(`Scud Cloud | AN${body}`);
+    expect(r.errors[0]?.message).toBe(
+      'header must be "title | TYPE | effort" (the legacy "title | TYPE | difficulty | pain" form and a leading number are accepted and ignored)',
+    );
+  });
+  it("still reports an invalid effort figure, under the new word", () => {
+    const r = parseBulk(`Scud Cloud | AN | x${body}`);
+    expect(r.errors[0]?.message).toBe("invalid effort: x");
+  });
+  it("PINS the pre-existing pipe-in-title truncation so a later change to it is deliberate", () => {
+    // `A|B | AN | medium | 3` splits to FIVE fields: the legacy numbered
+    // form, so the leading "A" is discarded as if it were a number.
+    const r = parseBulk(`A|B | AN | medium | 3${body}`);
+    expect(r.errors).toStrictEqual([]);
+    expect(r.workouts[0]?.title).toBe("B");
+  });
+  it("the hardware-walk skill's three headers parse (RF13)", () => {
+    for (const h of [
+      "Walk Smoke | O2 | 1",
+      "Walk Keystone | AT | 2",
+      "Walk Rests | AT | 2",
+    ]) {
+      expect({ h, errors: parseBulk(`${h}${body}`).errors }).toStrictEqual({
+        h,
+        errors: [],
+      });
+    }
   });
 });
 

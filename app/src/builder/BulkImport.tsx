@@ -25,15 +25,16 @@ interface BulkResponse {
 // paste" fixture minus its leading legacy number (app/domain/bulk.ts owns
 // the grammar) — a real, currently passing example rather than field-name
 // placeholders, so a rower can copy its shape directly instead of guessing
-// what TYPE/difficulty accept. The header is "title | TYPE | difficulty |
-// pain"; a legacy five-field form with a leading number is still accepted
-// and the number discarded (see bulk.ts's parseHeader), but the four-field
-// shape is what this help teaches since the number is dead weight now.
+// what TYPE accepts. The header is "title | TYPE | effort" (Phase DE PR 1);
+// the older "title | TYPE | difficulty | pain" form, with or without a
+// leading number, is still accepted and its difficulty and number
+// discarded (see bulk.ts's parseHeader), but the three-field shape is what
+// this help teaches since both are dead weight now.
 // No `wu` line (block2-review F1): this is the worked example a rower is
 // invited to copy, and this same screen scolds a `wu` paste with the
 // dropped-warm-ups notice below — teaching the dead keyword here would
 // trip that notice on the very first import that follows the example.
-const GRAMMAR_EXAMPLE = `Ladder Day | AT | medium | 3
+const GRAMMAR_EXAMPLE = `Ladder Day | AT | 3
 x4
 w 1' 6k-2 @22 r5
 r 5`;
@@ -44,7 +45,7 @@ r 5`;
 // doesn't fit either shape has no error message to go on and this text is
 // what tells them what's optional.
 const GRAMMAR_HELP =
-  'header: "title | TYPE | difficulty | pain" (a leading number, e.g. "12 | ...", is still accepted and ignored)';
+  'header: "title | TYPE | effort" (the older "title | TYPE | difficulty | pain" form, with or without a leading number, is still accepted; difficulty and the number are ignored)';
 
 /** Bulk-paste import screen: posts raw text to the server, which owns all
  *  parsing (app/domain/bulk.ts) — this component never parses, pre-validates,

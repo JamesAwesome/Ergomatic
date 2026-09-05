@@ -28,7 +28,6 @@ const WORKOUTS: LibraryWorkout[] = [
     id: "w-at",
     title: "Anaerobic Threshold Blitz",
     type: "AT",
-    difficulty: "medium",
     pain: 3,
     steps: [timeWork(30)],
     isGlobal: true,
@@ -38,7 +37,6 @@ const WORKOUTS: LibraryWorkout[] = [
     id: "w-o2",
     title: "Steady State Cruise",
     type: "O2",
-    difficulty: "easy",
     pain: 1,
     steps: [timeWork(20)],
     isGlobal: true,
@@ -48,7 +46,6 @@ const WORKOUTS: LibraryWorkout[] = [
     id: "w-an",
     title: "Sprint Ladder",
     type: "AN",
-    difficulty: "hard",
     pain: 5,
     steps: [timeWork(60)],
     isGlobal: true,
@@ -60,7 +57,6 @@ const CUSTOM_WORKOUT: LibraryWorkout = {
   id: "w-custom",
   title: "My Interval Build",
   type: "O2",
-  difficulty: "medium",
   pain: 2,
   steps: [timeWork(25)],
   isGlobal: false,
@@ -81,7 +77,6 @@ function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
     id,
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
     pain: w.pain,
     steps: w.steps,
     isGlobal: true,
@@ -99,7 +94,6 @@ function realLibraryEntry(title: string, id: string): LibraryWorkout {
     id,
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
     pain: w.pain,
     steps: w.steps,
     isGlobal: true,
@@ -128,7 +122,6 @@ function realWorkoutsOfType(
       id: `w-real-${type}-${i}`,
       title: w.title,
       type: w.type,
-      difficulty: w.difficulty,
       pain: w.pain,
       steps: w.steps,
       isGlobal: true,
@@ -569,14 +562,14 @@ describe("Library", () => {
 
     // library-filter-unification round, Task 2: DIFFICULTY joins the sheet
     // in TYPE's old slot.
-    it("narrows via DIFFICULTY in the sheet", async () => {
+    it("narrows via PAIN in the sheet", async () => {
       mockReady();
       await renderLibrary();
 
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "HARD",
+          name: "5",
         }),
       );
       await applySheet();
@@ -981,7 +974,6 @@ describe("Library", () => {
       "ergomatic.libraryFilters",
       JSON.stringify({
         types: ["AT"],
-        difficulties: [],
         // w-at prints 30′, and the range is inclusive — 25 keeps it out.
         durationRange: { min: 0, max: 25 },
         painLevels: [],
@@ -1123,7 +1115,6 @@ describe("Library", () => {
         "ergomatic.libraryFilters",
         JSON.stringify({
           types: [],
-          difficulties: [],
           durationRange: { min: 0, max: 120 },
           painLevels: [],
           lastDone: null,
@@ -1177,7 +1168,6 @@ describe("Library", () => {
         "ergomatic.libraryFilters",
         JSON.stringify({
           types: [],
-          difficulties: [],
           durationRange: { min: 0, max: 120 },
           painLevels: [],
           lastDone: null,
@@ -1412,7 +1402,6 @@ describe("Library", () => {
         "ergomatic.libraryFilters",
         JSON.stringify({
           types: ["AT"],
-          difficulties: [],
           durationRange: { min: 0, max: 120 },
           painLevels: [],
           lastDone: null,
@@ -1446,7 +1435,6 @@ describe("Library", () => {
         "ergomatic.libraryFilters",
         JSON.stringify({
           types: ["AT"],
-          difficulties: [],
           durationRange: { min: 0, max: 120 },
           painLevels: [],
           lastDone: null,

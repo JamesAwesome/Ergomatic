@@ -169,7 +169,6 @@ describe("validateWorkoutInput", () => {
   const base = {
     title: "Ladder Day",
     type: "AT",
-    difficulty: "medium",
     pain: 3,
     steps: [work()],
   };
@@ -182,12 +181,12 @@ describe("validateWorkoutInput", () => {
     const errors = r.ok ? [] : r.errors;
     expect(errors).toStrictEqual(["not an object"]);
   });
-  it("rejects pain outside 1..5 and book-era difficulty labels", () => {
+  it("rejects pain outside 1..5", () => {
     expect(validateWorkoutInput({ ...base, pain: 7 }).ok).toBe(false);
     expect(validateWorkoutInput({ ...base, pain: 0 }).ok).toBe(false);
-    expect(
-      validateWorkoutInput({ ...base, difficulty: "introductory" }).ok,
-    ).toBe(false);
+  });
+  it("ignores a difficulty field an old client still sends (Phase DE PR 1)", () => {
+    expect(validateWorkoutInput({ ...base, difficulty: "hard" }).ok).toBe(true);
   });
   it("rejects bad title/type", () => {
     expect(validateWorkoutInput({ ...base, title: "" }).ok).toBe(false);
@@ -202,7 +201,6 @@ describe("validateWorkoutInput", () => {
     const res = validateWorkoutInput({
       title: "T",
       type: "AN",
-      difficulty: "hard",
       pain: 5,
       steps: [
         {
@@ -234,7 +232,6 @@ describe("whole-second durations", () => {
   const workout = (steps: unknown[]) => ({
     title: "T",
     type: "O2",
-    difficulty: "easy",
     pain: 3,
     steps,
   });

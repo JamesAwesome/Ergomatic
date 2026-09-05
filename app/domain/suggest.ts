@@ -1,11 +1,10 @@
-import type { Difficulty, WorkoutType } from "./types.js";
+import type { WorkoutType } from "./types.js";
 import { inRange, isUnbounded, type DurationRange } from "./duration.js";
 import { isRecent } from "./recency.js";
 
 export interface LibraryEntry {
   id: string;
   type: WorkoutType;
-  difficulty: Difficulty;
   pain: number;
   estMinutes: number;
   lastDoneDaysAgo: number | null;
@@ -18,7 +17,6 @@ export interface LibraryEntry {
 }
 
 export interface SuggestPrefs {
-  difficulties: Difficulty[];
   // Phase SF PR2 (spec §3): a minutes RANGE — mirrors the Library's own
   // `Filters.durationRange` (`domain/duration.ts`'s `DurationRange`,
   // `inRange`). When set, bounded (not `[0, 120]`) and known (see
@@ -42,7 +40,7 @@ export interface SuggestPrefs {
   // flag — not the placeholder value — is what actually keeps the filter
   // harmless now. It also still keeps the REASON text honest: without it,
   // the standard/fellback reasons below would claim a duration was
-  // actually checked ("difficulty/time filters") when every duration fed
+  // actually checked ("time filters") when every duration fed
   // in was a placeholder. Set true and both reasons drop any mention of
   // time instead of asserting something never verified. An empty/unset
   // `durations` takes the same no-claim branch for the REASON text, but —
@@ -64,7 +62,7 @@ export interface SuggestPrefs {
   // `"over21"` — the Library's pinned rule, shared boundary constant).
   // null/undefined means "off" — every entry passes, same honesty rule as
   // every other field here (the reason text below never claims this was
-  // checked when it wasn't). Optional (unlike `difficulties`) because the
+  // checked when it wasn't). Optional because the
   // server's own `/api/today` route (server/routes/data.ts) builds
   // `SuggestPrefs` with no LAST DONE/SOURCE dimension at all — server
   // suggestions have no client-side overrides to derive one from — and this
@@ -108,7 +106,7 @@ export interface Suggestion {
   recommendationId: string | null;
   reason: string;
   poolIds: string[];
-  fellBack: boolean; // difficulty/time/pain filters matched nothing; pool is the unfiltered type list
+  fellBack: boolean; // time/pain/recency/source filters matched nothing; pool is the unfiltered type list
   /** Phase SF PR1 (spec §2.2): the least-recently-done TIE CLASS of the
    *  pool — every id sharing `poolIds[0]`'s `lastDoneDaysAgo` (null ties
    *  with null), in pool order. The client draws the day's first card
@@ -235,16 +233,19 @@ function buildReason(
     return `YOUR PICK: last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   if (fellBack) {
-    const parts = ["difficulty"];
+    const parts: string[] = [];
     if (timeChecked) parts.push("time");
     if (prefs.painLevels?.length) parts.push("pain");
     // Round 2 (2026-08-04): recency/source append last, mirroring the
-    // sheet's own group order (DIFFICULTY, TIME, PAIN, LAST DONE, SOURCE) —
-    // truthy checks (not `!== undefined`) since both fields are
-    // null-when-off, same honesty rule as painLevels above.
+    // sheet's own group order (TIME, PAIN, LAST DONE, SOURCE) — truthy
+    // checks (not `!== undefined`) since both fields are null-when-off,
+    // same honesty rule as painLevels above. Phase DE PR 1 removed the
+    // DIFFICULTY group, so the list can be empty: then it is just
+    // "filters", never a named one that was not checked.
     if (prefs.lastDone) parts.push("recency");
     if (prefs.source) parts.push("source");
-    return `Nothing fit your ${parts.join("/")} filters. Closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+    const what = parts.length ? `${parts.join("/")} filters` : "filters";
+    return `Nothing fit your ${what}. Closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}).`;
 }
@@ -292,7 +293,6 @@ export function suggest(input: SuggestInput): Suggestion {
   const typeMatched = library.filter((e) => e.type === todayCode);
   const filtered = typeMatched.filter(
     (e) =>
-      prefs.difficulties.includes(e.difficulty) &&
       passesDurationFilter(e, prefs) &&
       (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)) &&
       passesLastDoneFilter(e, prefs) &&
@@ -357,7 +357,6 @@ export function suggestFreestyle(
 ): Suggestion {
   const filtered = library.filter(
     (e) =>
-      prefs.difficulties.includes(e.difficulty) &&
       passesDurationFilter(e, prefs) &&
       (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)) &&
       passesLastDoneFilter(e, prefs) &&

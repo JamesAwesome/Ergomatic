@@ -7,7 +7,6 @@ import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { estimationSplit, isEffortRef, refLabel } from "../../domain/pace.js";
 import type {
   Baselines,
-  Difficulty,
   Effort,
   PaceBase,
   PaceRef,
@@ -50,7 +49,6 @@ export interface BuilderRow {
 export interface BuilderForm {
   title: string;
   type: WorkoutType;
-  difficulty: Difficulty;
   pain: number | null;
   rows: BuilderRow[];
   reps: number;
@@ -107,7 +105,6 @@ export function newForm(): BuilderForm {
   return {
     title: "",
     type: "O2",
-    difficulty: "easy",
     pain: null,
     rows: [newRow("w")],
     reps: 1,
@@ -700,7 +697,6 @@ export function hasMidSpanReps(steps: Step[]): boolean {
 export function fromWorkout(w: {
   title: string;
   type: WorkoutType;
-  difficulty: Difficulty;
   pain: number;
   steps: Step[];
 }): BuilderForm {
@@ -717,7 +713,6 @@ export function fromWorkout(w: {
   return {
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
     pain: w.pain,
     rows: rows.length > 0 ? rows : [newRow("w")],
     reps: marker ? marker.count : 1,

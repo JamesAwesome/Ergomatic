@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { derivedDifficulty, type Difficulty } from "../compat/difficulty.js";
 import { isFreeRow } from "../../domain/types.js";
 import type { SessionStore } from "../auth/sessions.js";
 import type { UserStore } from "../auth/users.js";
@@ -49,6 +50,9 @@ import {
 // ---------------------------------------------------------------------------
 
 interface WorkoutRow extends WorkoutInput {
+  // Phase DE PR 1: the real column is NOT NULL and derived from pain at
+  // every write site (server/compat/difficulty.ts); the fake mirrors it.
+  difficulty: Difficulty;
   id: string;
   userId: string | null;
   source: "starter" | "user";
@@ -93,6 +97,9 @@ function newWorkoutRow(
   insertionSeq += 1;
   return {
     ...input,
+    // After the spread on purpose: an old client's `difficulty` in `input`
+    // must never win over the derived word (mirrors the real store).
+    difficulty: derivedDifficulty(input.pain),
     sortOrder: input.sortOrder ?? null,
     seq: insertionSeq,
     id: crypto.randomUUID(),
@@ -229,7 +236,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       if (!existing) return null;
       assertWorkoutType(input.type);
       // Mirror the real store's UPDATE exactly (app/server/stores/
-      // workouts.ts): only title/type/difficulty/pain/steps/updatedAt are
+      // workouts.ts): only title/type/pain/steps/updatedAt (plus the derived difficulty) are
       // ever set — sortOrder (and every other column) is left alone. Built
       // from an explicit field list, NOT `{ ...existing, ...input }` (M1):
       // `input` is the same object reference as the request body at
@@ -240,7 +247,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
         ...existing,
         title: input.title,
         type: input.type,
-        difficulty: input.difficulty,
+        difficulty: derivedDifficulty(input.pain),
         pain: input.pain,
         steps: input.steps,
         updatedAt: new Date(),
@@ -273,7 +280,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
         ...existing,
         title: input.title,
         type: input.type,
-        difficulty: input.difficulty,
+        difficulty: derivedDifficulty(input.pain),
         pain: input.pain,
         steps: input.steps,
         sortOrder: input.sortOrder,

@@ -134,7 +134,8 @@
 
   /* THE PAIN RAMP IS GONE (2026-08-28). `--pain-ramp-1..5` lived here after
      their last consumer left: the ui-fix round moved the selected PAIN chip
-     onto the same plain ink fill as DIFFICULTY, and nothing has read the ramp
+     onto the same plain ink fill the (since-removed) DIFFICULTY chips used, and
+     nothing has read the ramp
      since. Three comments — this file's, index.css's and
      ClassificationCard.tsx's — each said LogSession.tsx was still a consumer.
      It never was. Deleted with the palette census in tokens.test.ts, which

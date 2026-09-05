@@ -36,7 +36,6 @@ export { LEGACY_TITLE_RENAMES };
 const contentEqual = (
   row: {
     type: string;
-    difficulty: string;
     pain: number;
     sortOrder: number | null;
     steps: unknown;
@@ -44,7 +43,6 @@ const contentEqual = (
   w: LibraryEntry,
 ): boolean =>
   row.type === w.type &&
-  row.difficulty === w.difficulty &&
   row.pain === w.pain &&
   row.sortOrder === w.sortOrder &&
   isDeepStrictEqual(row.steps, w.steps);

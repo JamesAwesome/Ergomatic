@@ -214,7 +214,6 @@ const WORKOUT: LibraryWorkout = {
   id: "w-row2-late-burst",
   title: "Row 2 Late Burst",
   type: "O2",
-  difficulty: "easy",
   pain: 2,
   steps: [
     {
@@ -268,7 +267,7 @@ vi.mock("../api/useBaselines", () => ({
 vi.mock("../api/usePreferences", () => ({
   usePreferences: () => ({
     state: "ready",
-    preferences: { difficulties: [], timeCapMinutes: 60, countdownSeconds: 10 },
+    preferences: { timeCapMinutes: 60, countdownSeconds: 10 },
   }),
 }));
 vi.mock("../api/usePlan", () => ({

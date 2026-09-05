@@ -93,7 +93,6 @@ function libraryEntry(
     id,
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
     pain: w.pain,
     steps: w.steps,
     isGlobal: true,
@@ -117,7 +116,6 @@ function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
     id,
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
     pain: w.pain,
     steps: w.steps,
     isGlobal: true,
@@ -159,7 +157,6 @@ const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 // distance branch died with it).
 const ONLY_K6_BASELINE = { k2Seconds: null, k6Seconds: 122 };
 const DEFAULT_PREFS = {
-  difficulties: ["easy", "medium", "hard"],
   timeCapMinutes: 60,
 };
 
@@ -680,22 +677,10 @@ describe("Today (overrides: init from preferences)", () => {
     },
   );
 
-  it("defaults difficulties to every preference value and every pain cell to off", async () => {
+  it("defaults every pain cell to off", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
     const painGroup = screen.getByRole("group", { name: "PAIN" });
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
@@ -706,14 +691,13 @@ describe("Today (overrides: init from preferences)", () => {
 });
 
 describe("Today (overrides: stored record wins over preferences)", () => {
-  it("uses the stored difficulties/durations/pain instead of the preference-derived default", async () => {
+  it("uses the stored durations/pain instead of the preference-derived default", async () => {
     // Phase SF PR1: the memory is per type and UNDATED — the plan's own
     // call today is AT, so the AT key is what this mount reads.
     seedFilters({
       AT: {
-        difficulties: ["hard"],
         durationRange: { min: 0, max: 30 },
-        painLevels: [1, 2, 3],
+        painLevels: [4, 5],
         lastDone: null,
         source: null,
       },
@@ -722,33 +706,25 @@ describe("Today (overrides: stored record wins over preferences)", () => {
     await renderToday();
     await openFilterSheet();
 
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
     expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
       "aria-valuenow",
       "30",
     );
     const painGroup = screen.getByRole("group", { name: "PAIN" });
-    for (const level of ["1", "2", "3"]) {
+    for (const level of ["4", "5"]) {
       expect(
         within(painGroup).getByRole("button", { name: level }),
       ).toHaveAttribute("aria-pressed", "true");
     }
-    for (const level of ["4", "5"]) {
+    for (const level of ["1", "2", "3"]) {
       expect(
         within(painGroup).getByRole("button", { name: level }),
       ).toHaveAttribute("aria-pressed", "false");
     }
-    // Every fixture workout is "easy" difficulty (see the fixtures' own
-    // comment) — none match the stored "hard"-only filter, so the fellback
-    // reason proves the STORED record drove suggest(), not the 60-min/
-    // easy-medium-hard preference default DEFAULT_PREFS would have produced.
+    // Every AT fixture workout is pain 2 (see the fixtures' own comment) —
+    // none match the stored 4–5 pain filter, so the fellback reason proves
+    // the STORED record drove suggest(), not the 60-min / pain-off
+    // preference default DEFAULT_PREFS would have produced.
     expect(screen.getByText(/Nothing fit your/)).toBeVisible();
   });
 });
@@ -784,7 +760,7 @@ describe("Today (FILTER sheet)", () => {
     expect(filterButton).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("opens on FILTER ⌄ click, holding DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE seeded from the applied overrides", async () => {
+  it("opens on FILTER ⌄ click, holding TIME/PAIN/LAST DONE/SOURCE seeded from the applied overrides", async () => {
     mockReady();
     await renderToday();
     const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
@@ -792,18 +768,12 @@ describe("Today (FILTER sheet)", () => {
 
     expect(filterButton).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("dialog", { name: "Filter" })).toBeVisible();
-    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "PAIN", "LAST DONE", "SOURCE"]) {
       expect(screen.getByText(label)).toBeVisible();
     }
-    // Seeded from DEFAULT_PREFS (every difficulty, a 60-min cap's own
-    // [0, 60] range, no pain filter) — the same values the "init from
-    // preferences" describe pins.
-    for (const label of ["EASY", "MEDIUM", "HARD"]) {
-      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-    }
+    expect(screen.queryByText("DIFFICULTY")).not.toBeInTheDocument();
+    // Seeded from DEFAULT_PREFS (a 60-min cap's own [0, 60] range, no pain
+    // filter) — the same values the "init from preferences" describe pins.
     expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
       "aria-valuenow",
       "0",
@@ -894,10 +864,10 @@ describe("Today (FILTER sheet)", () => {
     expect(screen.getByText(/Least recently done/)).toBeVisible();
 
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    await userEvent.click(screen.getByRole("button", { name: "5" }));
+    expect(screen.getByRole("button", { name: "5" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
 
     // The card underneath is untouched by the mid-edit draft — still the
@@ -916,10 +886,10 @@ describe("Today (FILTER sheet)", () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    await userEvent.click(screen.getByRole("button", { name: "5" }));
+    expect(screen.getByRole("button", { name: "5" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
 
     await userEvent.keyboard("{Escape}");
@@ -927,9 +897,9 @@ describe("Today (FILTER sheet)", () => {
     expect(localStorage.getItem(TODAY_FILTERS_KEY)).toBeNull();
 
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "5" })).toHaveAttribute(
       "aria-pressed",
-      "true",
+      "false",
     );
   });
 
@@ -937,26 +907,26 @@ describe("Today (FILTER sheet)", () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    const easyChip = screen.getByRole("button", { name: "EASY" });
-    await userEvent.click(easyChip);
+    await userEvent.click(screen.getByRole("button", { name: "5" }));
 
     const primary = screen.getByRole("button", { name: "Apply Filter" });
     await userEvent.click(primary);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // Same pick (the fellback pool is still the full AT list, sorted the
-    // same way — every fixture here is "easy") — the REASON narrows to say
-    // nothing matched, and the change is now the SAVED record.
+    // same way — every fixture here is pain 2, none is a 5) — the REASON
+    // narrows to say nothing matched, and the change is now the SAVED record.
     expect(
       screen.getByRole("heading", { name: "Stationary Front" }),
     ).toBeVisible();
-    expect(screen.getByText(/Nothing fit your difficulty/)).toBeVisible();
-    expect(storedFilters("AT")).toMatchObject({
-      difficulties: ["medium", "hard"],
-    });
+    expect(screen.getByText(/Nothing fit your time\/pain/)).toBeVisible();
+    expect(storedFilters("AT")).toMatchObject({ painLevels: [5] });
 
     await openFilterSheet();
-    expect(easyChip).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "5" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   // m5 (final fix wave, 2026-08-04 round final review): both existing
@@ -974,26 +944,25 @@ describe("Today (FILTER sheet)", () => {
     mockReady();
     await renderToday();
 
-    // First apply: drop HARD, keep EASY/MEDIUM. This is now the one and
-    // only saved record until something else writes it.
+    // First apply: PAIN 2 on (the fixtures' own level, so the pool is
+    // unchanged). This is now the one and only saved record until something
+    // else writes it.
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "2" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(storedFilters("AT")).toMatchObject({
-      difficulties: ["easy", "medium"],
-    });
+    expect(storedFilters("AT")).toMatchObject({ painLevels: [2] });
 
-    // Reopen and edit the draft further — drop EASY too — but never apply
+    // Reopen and edit the draft further — add PAIN 3 too — but never apply
     // this second edit.
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
-    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    await userEvent.click(screen.getByRole("button", { name: "3" }));
+    expect(screen.getByRole("button", { name: "3" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
 
     // Dismiss (Escape) instead of Apply.
@@ -1001,24 +970,18 @@ describe("Today (FILTER sheet)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     // The saved record is still the FIRST apply's state — not the second
-    // draft (["medium"] only, EASY dropped too) and not `filterDefaults`
-    // (all three difficulties, CLEAR ALL's own reset shape).
-    expect(storedFilters("AT")).toMatchObject({
-      difficulties: ["easy", "medium"],
-    });
+    // draft ([2, 3]) and not `filterDefaults` (pain off, CLEAR ALL's own
+    // reset shape).
+    expect(storedFilters("AT")).toMatchObject({ painLevels: [2] });
 
     // Reopening confirms the sheet re-seeds from that same untouched
     // record too, not from the discarded second draft.
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "3" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -1063,7 +1026,7 @@ describe("Today (FILTER sheet)", () => {
   // Amendment (2026-08-04 PR #50 round): TIME unifies on the Library's own
   // bucket UNION — the old cap single-select is gone, so a cell toggles
   // independently and multiple can be active (or none) at once.
-  it("TIME is a range: stepping a thumb moves only that end of the draft, independent of DIFFICULTY/PAIN", async () => {
+  it("TIME is a range: stepping a thumb moves only that end of the draft, independent of PAIN", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
@@ -1074,9 +1037,9 @@ describe("Today (FILTER sheet)", () => {
     fireEvent.keyDown(longest(), { key: "ArrowRight" });
     expect(longest()).toHaveAttribute("aria-valuenow", "65");
     expect(shortest()).toHaveAttribute("aria-valuenow", "0");
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
       "aria-pressed",
-      "true",
+      "false",
     );
 
     fireEvent.keyDown(shortest(), { key: "PageUp" });
@@ -1089,11 +1052,9 @@ describe("Today (FILTER sheet)", () => {
     await renderToday();
     await openFilterSheet();
 
-    const difficultyGroup = screen.getByRole("group", { name: "DIFFICULTY" });
-    expect(screen.getByText("DIFFICULTY")).toBeVisible();
     expect(
-      within(difficultyGroup).getByRole("button", { name: "EASY" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("group", { name: "DIFFICULTY" }),
+    ).not.toBeInTheDocument();
 
     const timeGroup = screen.getByRole("group", { name: "TIME" });
     expect(screen.getByText("TIME")).toBeVisible();
@@ -1176,76 +1137,77 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     mockReady();
     await renderToday();
 
-    // Two deviations at once: DIFFICULTY narrowed AND a PAIN filter set.
+    // Two deviations at once: TIME widened AND a PAIN filter set.
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
+      key: "End",
+    });
     const painGroup = screen.getByRole("group", { name: "PAIN" });
     await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
 
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("ANY LENGTH")).toBeVisible();
     expect(screen.getByText("PAIN 2")).toBeVisible();
 
-    // Clearing PAIN's own token only resets painLevels — DIFFICULTY's own
+    // Clearing PAIN's own token only resets painLevels — TIME's own
     // deviation (and its token) survives untouched.
     await userEvent.click(
       screen.getByRole("button", { name: "Remove PAIN 2 filter" }),
     );
     expect(screen.queryByText("PAIN 2")).not.toBeInTheDocument();
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("ANY LENGTH")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({
-      difficulties: ["easy", "medium"],
       painLevels: [],
     });
   });
 
-  it("clearing a DIFFICULTY token resets only difficulties, leaving a co-existing TIME deviation untouched", async () => {
+  it("clearing a PAIN token resets only painLevels, leaving a co-existing TIME deviation untouched", async () => {
     mockReady();
     await renderToday();
 
-    // HARD off (a DIFFICULTY deviation) and 60′+ on (widens the default
-    // three-bucket set to all four — a real TIME deviation, per the
-    // Amendment's "all-four vs. a narrower default IS a deviation" rule).
+    // PAIN 2 on (a PAIN deviation) and the Longest thumb at End (widens the
+    // default [0, 60] to the unbounded range — a real TIME deviation, per
+    // the Amendment's "unbounded vs. a narrower default IS a deviation"
+    // rule).
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "2" }));
     fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
       key: "End",
     });
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("PAIN 2")).toBeVisible();
     expect(screen.getByText("ANY LENGTH")).toBeVisible();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove EASY–MEDIUM filter" }),
+      screen.getByRole("button", { name: "Remove PAIN 2 filter" }),
     );
-    expect(screen.queryByText("EASY–MEDIUM")).not.toBeInTheDocument();
+    expect(screen.queryByText("PAIN 2")).not.toBeInTheDocument();
     expect(screen.getByText("ANY LENGTH")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({
-      difficulties: ["easy", "medium", "hard"],
+      painLevels: [],
       durationRange: { min: 0, max: 120 },
     });
   });
 
-  it("clearing a TIME (durations) token resets only durations, leaving a co-existing difficulty deviation untouched", async () => {
+  it("clearing a TIME (durations) token resets only durations, leaving a co-existing pain deviation untouched", async () => {
     mockReady();
     await renderToday();
 
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "2" }));
     fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
       key: "End",
     });
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("PAIN 2")).toBeVisible();
     expect(screen.getByText("ANY LENGTH")).toBeVisible();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Remove ANY LENGTH filter" }),
     );
     expect(screen.queryByText("ANY LENGTH")).not.toBeInTheDocument();
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("PAIN 2")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({
-      difficulties: ["easy", "medium"],
       durationRange: { min: 0, max: 60 },
     });
   });
@@ -1254,27 +1216,26 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
   // `source: null` — Today.tsx's `resetFilterGroup`'s own final `else`
   // branch (the LAST DONE branch is exercised by the SOURCE=CUSTOM
   // integration test's own "Remove 21D+ filter" step above).
-  it("clearing a SOURCE token resets only source, leaving a co-existing difficulty deviation untouched", async () => {
+  it("clearing a SOURCE token resets only source, leaving a co-existing pain deviation untouched", async () => {
     mockReady();
     await renderToday();
 
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "2" }));
     const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
     await userEvent.click(
       within(sourceGroup).getByRole("button", { name: "ERGOMATIC LIBRARY" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("PAIN 2")).toBeVisible();
     expect(screen.getByText("ERGOMATIC LIBRARY")).toBeVisible();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Remove ERGOMATIC LIBRARY filter" }),
     );
     expect(screen.queryByText("ERGOMATIC LIBRARY")).not.toBeInTheDocument();
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("PAIN 2")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({
-      difficulties: ["easy", "medium"],
       source: null,
     });
   });
@@ -1284,7 +1245,6 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     await renderToday();
 
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
     fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
       key: "End",
     });
@@ -1315,10 +1275,6 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
       screen.queryByRole("button", { name: "CLEAR ALL" }),
     ).not.toBeInTheDocument();
     const saved = storedFilters("AT")!;
-    expect(saved.difficulties).toStrictEqual(
-      expect.arrayContaining(["easy", "medium", "hard"]),
-    );
-    expect(saved.difficulties).toHaveLength(3);
     // rangeForCap(DEFAULT_PREFS.timeCapMinutes) — [0, 60].
     expect(saved.durationRange).toStrictEqual({ min: 0, max: 60 });
     expect(saved.painLevels).toStrictEqual([]);
@@ -1326,10 +1282,10 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     expect(saved.source).toBeNull();
 
     await openFilterSheet();
-    for (const label of ["EASY", "MEDIUM", "HARD"]) {
-      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+    for (const level of ["1", "2", "3", "4", "5"]) {
+      expect(screen.getByRole("button", { name: level })).toHaveAttribute(
         "aria-pressed",
-        "true",
+        "false",
       );
     }
     expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
@@ -1352,11 +1308,10 @@ describe("Today (overrides: persistence and invalidation)", () => {
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
-    // Every difficulty is active by default (DEFAULT_PREFS), so this
-    // deselects HARD rather than selecting it — the change under test,
-    // applied via the sheet (Task 2 — HARD is no longer a top-level chip).
+    // PAIN 1 on — Sea Fret's own level, so the pick is unchanged and only
+    // the memory is under test — applied via the sheet.
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "1" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
@@ -1371,9 +1326,9 @@ describe("Today (overrides: persistence and invalidation)", () => {
     ).toBeVisible();
     expect(screen.getByText("SESSION 12 OF 84 · AT → O2")).toBeVisible();
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
   });
 
@@ -1430,7 +1385,6 @@ describe("Today (type-swap chips)", () => {
     }
     expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "EASY" })).toBeInTheDocument();
     expect(
       screen.getByRole("slider", { name: "Shortest" }),
     ).toBeInTheDocument();
@@ -4210,18 +4164,18 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
     mockReady({ workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND] });
     await renderToday();
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
+    await userEvent.click(screen.getByRole("button", { name: "5" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("MEDIUM–HARD")).toBeVisible();
-    expect(storedFilters("AT")?.difficulties).toStrictEqual(["medium", "hard"]);
+    expect(screen.getByText("PAIN 5")).toBeVisible();
+    expect(storedFilters("AT")?.painLevels).toStrictEqual([5]);
     expect(storedFilters("O2")).toBeUndefined();
 
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
-    expect(screen.queryByText("MEDIUM–HARD")).not.toBeInTheDocument();
+    expect(screen.queryByText("PAIN 5")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "AT" }));
-    expect(screen.getByText("MEDIUM–HARD")).toBeVisible();
+    expect(screen.getByText("PAIN 5")).toBeVisible();
     expect(storedFilters("O2")).toBeUndefined();
   });
 
@@ -4272,15 +4226,14 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
   });
 
   it("does not roll a type whose remembered filters match nothing (a fell-back pool is not a suggestion) — review F2", async () => {
-    // Under AT, remember a DIFFICULTY of hard only: all three AT fixtures
-    // are easy, so AT's pool falls back to the whole type. O2 stays a
-    // candidate. Draw 0 of [O2] -> O2; draw 1 would have been AT if AT
-    // were a candidate, so script 1 and expect O2 anyway.
+    // Under AT, remember PAIN 5 only: all three AT fixtures are pain 2, so
+    // AT's pool falls back to the whole type. O2 stays a candidate. Draw 0
+    // of [O2] -> O2; draw 1 would have been AT if AT were a candidate, so
+    // script 1 and expect O2 anyway.
     seedFilters({
       AT: {
-        difficulties: ["hard"],
         durationRange: { min: 0, max: 60 },
-        painLevels: [],
+        painLevels: [5],
         lastDone: null,
         source: null,
       },
@@ -4300,9 +4253,8 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
     // Every type's remembered filters match nothing: no candidate, no
     // chip lit, and STILL a record for today.
     const hardOnly: FilterSet = {
-      difficulties: ["hard"],
       durationRange: { min: 0, max: 60 },
-      painLevels: [],
+      painLevels: [5],
       lastDone: null,
       source: null,
     };
@@ -4435,29 +4387,23 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
   it("CLEAR ALL resets only the current key; the other key's memory survives", async () => {
     seedFilters({
       AT: {
-        difficulties: ["hard"],
         durationRange: { min: 0, max: 60 },
-        painLevels: [],
+        painLevels: [5],
         lastDone: null,
         source: null,
       },
       O2: {
-        difficulties: ["easy"],
         durationRange: { min: 0, max: 60 },
-        painLevels: [],
+        painLevels: [5],
         lastDone: null,
         source: null,
       },
     });
     mockReady();
     await renderToday();
-    expect(screen.getByText("HARD")).toBeVisible();
+    expect(screen.getByText("PAIN 5")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
-    expect(storedFilters("AT")?.difficulties).toStrictEqual([
-      "easy",
-      "medium",
-      "hard",
-    ]);
-    expect(storedFilters("O2")?.difficulties).toStrictEqual(["easy"]);
+    expect(storedFilters("AT")?.painLevels).toStrictEqual([]);
+    expect(storedFilters("O2")?.painLevels).toStrictEqual([5]);
   });
 });

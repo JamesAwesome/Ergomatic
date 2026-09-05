@@ -1,7 +1,5 @@
-import type { Difficulty } from "../../domain/types.js";
 import type { DurationRange } from "../../domain/duration.js";
 import { RECENCY_BOUNDARY_DAYS } from "../../domain/recency.js";
-import { collapseDifficulties } from "../components/difficultyTokenLabel";
 import { formatRangeLabel } from "../components/durationRangeLabel";
 import type { Token } from "../components/TokenRow";
 import type { FilterSet } from "./todayFilters";
@@ -10,17 +8,11 @@ import type { FilterSet } from "./todayFilters";
  * The day's "no filter" baseline for deviation purposes — per the
  * collapsible-filter spec's own "Active" rule
  * (docs/superpowers/specs/2026-08-04-today-filter-sheet-design.md):
- * `difficulties` is always the full EASY/MEDIUM/HARD set, not necessarily
- * the account's own server preference (which can itself be a narrower
- * subset — Today.tsx's INITIAL overrides record seeds from
- * `preferences.difficulties` for that separate concern: what a fresh
- * day's record starts as, not what counts as "unfiltered" here).
  * `durationRange` is the account's cap preference as a range
  * (`rangeForCap`, domain/duration.ts: `[0, cap]`, cap rounded down to the
  * step) — Phase SF PR2 replaces the 2026-08-04 Amendment's bucket SET.
  */
 export interface TodayFilterDefaults {
-  difficulties: Difficulty[];
   // Phase SF PR2: `rangeForCap(timeCapMinutes)`, the key's TIME default.
   durationRange: DurationRange;
 }
@@ -28,17 +20,6 @@ export interface TodayFilterDefaults {
 /** Range equality — both ends, nothing else to compare. */
 function sameRange(a: DurationRange, b: DurationRange): boolean {
   return a.min === b.min && a.max === b.max;
-}
-
-/** Set equality, order-independent — todayOverrides.ts's own parser
- *  de-dupes `difficulties` on load and the sheet's own toggle logic never
- *  introduces a duplicate, so a plain length + membership check is enough
- *  (no defensive de-dupe needed here). A stored/committed record whose
- *  difficulties happen to be in a different order than `defaults` (e.g.
- *  `["hard","easy","medium"]`) must still read as "no deviation". */
-function sameDifficultySet(a: Difficulty[], b: Difficulty[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((v) => b.includes(v));
 }
 
 /** Library's filterTokens.ts's own pain collapse, copied verbatim — this
@@ -57,7 +38,7 @@ function collapsePain(levels: number[]): string {
 
 /**
  * Today's overrides -> the active tokens row, in the sheet's own group
- * order (DIFFICULTY, TIME, PAIN, LAST DONE, SOURCE) — one token per group
+ * order (TIME, PAIN, LAST DONE, SOURCE) — one token per group
  * that DEVIATES from `defaults`, never one per selected value (mirrors
  * Library's filterTokens.ts "the header count counts tokens" rule).
  * `onReset` fires with which group to reset; this module has no
@@ -66,26 +47,16 @@ function collapsePain(levels: number[]): string {
  * `clear` into a committed `Filters` write.
  *
  * LAST DONE/SOURCE (Round 2, 2026-08-04) don't need a `defaults` comparison
- * the way DIFFICULTY/TIME do — both default to `null` unconditionally (the
+ * the way TIME does — both default to `null` unconditionally (the
  * spec's own "no token until set" rule), so "deviates" is simply "is not
  * null", identical to PAIN's own `length > 0` check just below.
  */
 export function todayFilterTokens(
   overrides: FilterSet,
   defaults: TodayFilterDefaults,
-  onReset: (
-    group: "difficulties" | "durations" | "pain" | "lastDone" | "source",
-  ) => void,
+  onReset: (group: "durations" | "pain" | "lastDone" | "source") => void,
 ): Token[] {
   const tokens: Token[] = [];
-
-  if (!sameDifficultySet(overrides.difficulties, defaults.difficulties)) {
-    tokens.push({
-      key: "difficulties",
-      label: collapseDifficulties(overrides.difficulties),
-      onClear: () => onReset("difficulties"),
-    });
-  }
 
   // Spec I-13, stated per cell: a token whenever the range differs from
   // the KEY'S DEFAULT and never otherwise — at default no token; the

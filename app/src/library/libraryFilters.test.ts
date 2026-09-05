@@ -10,7 +10,6 @@ import { LIBRARY_SCROLL_KEY, saveLibraryScroll } from "./libraryScroll";
 
 const FULL: Filters = {
   types: ["AT", "O2"],
-  difficulties: ["easy", "hard"],
   durationRange: { min: 30, max: 120 },
   painLevels: [4, 5],
   lastDone: "over21",
@@ -56,7 +55,6 @@ const V2_RECORD = {
 // from the `difficulties`-presence check, since it fails both).
 const HALF_MIGRATED_RECORD = {
   type: "O2",
-  difficulties: [],
   durations: [],
   painLevels: [],
   lastDone: null,
@@ -119,18 +117,6 @@ describe("libraryFilters", () => {
         JSON.stringify({ ...FULL, types: [2] }),
       ],
       [
-        "difficulties not an array",
-        JSON.stringify({ ...FULL, difficulties: "easy" }),
-      ],
-      [
-        "difficulties contains an unknown value",
-        JSON.stringify({ ...FULL, difficulties: ["extreme"] }),
-      ],
-      [
-        "difficulties contains a wrong-shaped member",
-        JSON.stringify({ ...FULL, difficulties: [1] }),
-      ],
-      [
         "durationRange missing (a bucket-era record: `durations` instead)",
         JSON.stringify({
           ...FULL,
@@ -162,10 +148,7 @@ describe("libraryFilters", () => {
       ["unknown lastDone", JSON.stringify({ ...FULL, lastDone: "today" })],
       ["lastDone wrong shape", JSON.stringify({ ...FULL, lastDone: 21 })],
       ["unknown source", JSON.stringify({ ...FULL, source: "book" })],
-      [
-        "missing field",
-        JSON.stringify({ types: [], difficulties: [], durations: [] }),
-      ],
+      ["missing field", JSON.stringify({ types: [], durations: [] })],
       // The pre-Task-4 (v1) shape: none of its fields overlap the current
       // validator's own field names, so it's rejected wholesale — the
       // point of the strict, per-field check rather than a partial merge.
@@ -197,14 +180,6 @@ describe("libraryFilters", () => {
       JSON.stringify({ ...FULL, types: ["AT", "AT", "O2"] }),
     );
     expect(loadLibraryFilters().types).toStrictEqual(["AT", "O2"]);
-  });
-
-  it("de-dupes duplicated difficulties from a tampered value", () => {
-    sessionStorage.setItem(
-      LIBRARY_FILTERS_KEY,
-      JSON.stringify({ ...FULL, difficulties: ["easy", "easy", "hard"] }),
-    );
-    expect(loadLibraryFilters().difficulties).toStrictEqual(["easy", "hard"]);
   });
 
   it("clamps and orders a tampered durationRange (fractions round, out-of-bounds clamp, a crossed pair collapses)", () => {

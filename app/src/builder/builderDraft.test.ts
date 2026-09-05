@@ -33,7 +33,6 @@ describe("formFingerprint", () => {
     // form-level fields
     expect(formFingerprint({ ...base, title: "x" })).not.toBe(baseFp);
     expect(formFingerprint({ ...base, type: "AT" })).not.toBe(baseFp);
-    expect(formFingerprint({ ...base, difficulty: "hard" })).not.toBe(baseFp);
     expect(formFingerprint({ ...base, pain: 3 })).not.toBe(baseFp);
     expect(formFingerprint({ ...base, reps: 4 })).not.toBe(baseFp);
     // every enumerable row field except id — future-field guard: iterate

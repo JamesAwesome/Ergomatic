@@ -23,11 +23,8 @@ export function PickingAWorkoutBody() {
         an expected{" "}
         <ArticleLink to="/news/pain-scale">pain from 1 to 5</ArticleLink>: a
         forecast of how much the piece asks of you, not how complicated it is.
-        Difficulty (easy, medium, hard) is a separate figure for a separate
-        question: how much skill and structure the workout demands. A long
-        steady row can be easy and a 2, and a short set of sprints can be easy
-        and a 4. Longer never automatically means more painful. Some of the
-        gentlest sessions in the library are the longest.
+        Longer never automatically means more painful. Some of the gentlest
+        sessions in the library are the longest.
       </p>
 
       <p>

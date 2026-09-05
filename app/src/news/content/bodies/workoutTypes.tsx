@@ -73,8 +73,8 @@ export function WorkoutTypesBody() {
       <p>
         One caveat: the types blur at the edges. A hard interval session for a
         fit rower can be a threshold piece for a newer one. This is why every
-        workout also carries a difficulty and an expected pain. The type names
-        the job; the other two say how big it is.{" "}
+        workout also carries an expected pain. The type names the job; the other
+        two say how big it is.{" "}
         <ArticleLink to="/news/picking-a-workout">
           Picking a workout
         </ArticleLink>{" "}

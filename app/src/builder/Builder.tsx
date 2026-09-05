@@ -431,7 +431,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       const body = JSON.stringify({
         title: form.title,
         type: form.type,
-        difficulty: form.difficulty,
         pain: form.pain,
         steps: result.steps,
       });
@@ -549,12 +548,8 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         >
           <ClassificationCard
             type={form.type}
-            difficulty={form.difficulty}
             pain={form.pain}
             onTypeChange={(type) => setForm((f) => ({ ...f, type }))}
-            onDifficultyChange={(difficulty) =>
-              setForm((f) => ({ ...f, difficulty }))
-            }
             onPainChange={(pain) => setForm((f) => ({ ...f, pain }))}
           />
         </div>

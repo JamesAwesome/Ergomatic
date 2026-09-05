@@ -164,7 +164,6 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
   const workoutBody = (title: string) => ({
     title,
     type: "AT",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "r", minutes: 5 },

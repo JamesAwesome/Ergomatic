@@ -1,6 +1,5 @@
-import type { Difficulty, WorkoutType } from "../../domain/types.js";
+import type { WorkoutType } from "../../domain/types.js";
 import { PAIN_WORDS, TYPE_WORDS } from "./builderState";
-import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 
 // Chip order per docs/design/README.md §Screens -> "2. Library" (amended
 // 2026-08-08: James's ordering decision — every left-to-right type row reads
@@ -28,8 +27,8 @@ const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
 const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
 
 /** The classification card (docs/design/builder-redesign/README.md §3): one
- *  card holding TYPE, DIFFICULTY and EXPECTED PAIN so the three metadata
- *  pickers read as a single unit instead of three loose strips.
+ *  card holding TYPE and EXPECTED PAIN so the two metadata pickers read as a
+ *  single unit instead of two loose strips (DIFFICULTY left in Phase DE PR 1).
  *
  *  Selected-state fills (docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md,
  *  ui-fix round Task 1 — supersedes this card's original handoff, which had
@@ -38,13 +37,13 @@ const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
  *    VAR`, set inline below) — the one selection on this screen accent is
  *    never allowed to mean, and the one place a per-instance colour is
  *    unavoidable (four different types, four different fills).
- *  - DIFFICULTY and PAIN both fill plain ink, never accent, so accent stays
- *    reserved for the in-row unit/pace toggles and Save. Enforced
- *    structurally: `.classification-chip-difficulty`/`-pain` are distinct
- *    classes from the pre-existing `.chip` (whose `[aria-pressed="true"]`
- *    rule fills accent), and neither selected chip carries an inline style
- *    at all — the ink fill lives entirely in two CSS rules that never
- *    reference --accent (see index.css). PAIN's own per-level ramp colour
+ *  - PAIN fills plain ink, never accent, so accent stays reserved for the
+ *    in-row unit/pace toggles and Save. Enforced structurally:
+ *    `.classification-chip-pain` is a distinct class from the pre-existing
+ *    `.chip` (whose `[aria-pressed="true"]` rule fills accent), and the
+ *    selected chip carries no inline style at all — the ink fill lives
+ *    entirely in one CSS rule that never references --accent (see
+ *    index.css). PAIN's own per-level ramp colour
  *    (`--pain-ramp-1..5`) is no longer used here at all — it was DESIGN.md's
  *    own "Builder's gold pain selection goes" finding, since ramp-3 IS the AT
  *    type colour and briefly made a pain level read as a type. This comment
@@ -67,17 +66,13 @@ const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
  *  exact nudge bug 5F shipped on the pain row. */
 export default function ClassificationCard({
   type,
-  difficulty,
   pain,
   onTypeChange,
-  onDifficultyChange,
   onPainChange,
 }: {
   type: WorkoutType;
-  difficulty: Difficulty;
   pain: number | null;
   onTypeChange: (type: WorkoutType) => void;
-  onDifficultyChange: (difficulty: Difficulty) => void;
   onPainChange: (pain: number) => void;
 }) {
   const painWord = pain !== null ? PAIN_WORDS[pain - 1] : undefined;
@@ -114,23 +109,6 @@ export default function ClassificationCard({
               </button>
             );
           })}
-        </div>
-      </div>
-
-      <div className="classification-group">
-        <p className="classification-group-label">DIFFICULTY</p>
-        <div className="classification-chip-row">
-          {DIFFICULTY_CHIPS.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              className="classification-chip classification-chip-difficulty"
-              aria-pressed={difficulty === value}
-              onClick={() => onDifficultyChange(value)}
-            >
-              {label}
-            </button>
-          ))}
         </div>
       </div>
 

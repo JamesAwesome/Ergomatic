@@ -23,7 +23,6 @@ const V4_RECORD = {
   doneN: 11,
   swapType: "AT",
   session: 0,
-  difficulties: ["easy", "hard"],
   durations: ["<30", "45-60"],
   painLevels: [1, 3, 5],
   lastDone: "under21",

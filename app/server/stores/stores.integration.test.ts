@@ -31,7 +31,6 @@ describe("domain stores against real Postgres", () => {
   ): NewWorkoutInput => ({
     title: "Steady state",
     type: "AT",
-    difficulty: "medium",
     pain: 2,
     steps: [{ k: "r", minutes: 10 }],
     source: "user",

@@ -9,7 +9,6 @@ import {
   isRecent,
   setLastDone,
   setSource,
-  toggleDifficulty,
   setDurationRange,
   setQuery,
   normalizeQuery,
@@ -39,7 +38,6 @@ function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
   return {
     title: "T",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     // A plain 10' work step at the 6k baseline: `estimateMinutes` prices
     // it to 10 minutes, which is all any duration-bucket fixture here
@@ -69,7 +67,6 @@ const WORKOUTS: LibraryWorkout[] = LIBRARY_WORKOUTS.map((seed, i) => ({
   id: `lib-${i}`,
   title: seed.title,
   type: seed.type,
-  difficulty: seed.difficulty,
   pain: seed.pain,
   steps: seed.steps,
   isGlobal: true,
@@ -81,12 +78,6 @@ describe("chip/cell state transitions", () => {
     const f = toggleType(toggleType(EMPTY_FILTERS, "AT"), "O2");
     expect(f.types).toStrictEqual(["AT", "O2"]);
     expect(toggleType(f, "AT").types).toStrictEqual(["O2"]);
-  });
-
-  it("accumulates difficulties (multi-select union) and removes on repeat", () => {
-    const f = toggleDifficulty(toggleDifficulty(EMPTY_FILTERS, "easy"), "hard");
-    expect(f.difficulties).toStrictEqual(["easy", "hard"]);
-    expect(toggleDifficulty(f, "easy").difficulties).toStrictEqual(["hard"]);
   });
 
   it("sets the TIME range as a whole (a two-thumb control has no toggle)", () => {
@@ -131,7 +122,6 @@ describe("chip/cell state transitions", () => {
   it("clears every filter at once", () => {
     const busy: Filters = {
       types: ["AN"],
-      difficulties: ["hard"],
       durationRange: { min: 0, max: 30 },
       painLevels: [4, 5],
       lastDone: "under21",
@@ -165,31 +155,6 @@ describe("applyFilters", () => {
     expect(kept.map((r) => r.id)).toStrictEqual(["a"]);
   });
 
-  it("difficulties: empty means no filter; a selection excludes the rest", () => {
-    // Compared against WORKOUTS.length directly, not against a second
-    // EMPTY_FILTERS-shaped call — EMPTY_FILTERS already has
-    // `difficulties: []`, so comparing two calls that are the same input
-    // would pass even if the guard this test exists to pin were dropped
-    // (whole-branch review I-3).
-    expect(
-      applyFilters(WORKOUTS, { ...EMPTY_FILTERS, difficulties: [] }, baselines),
-    ).toHaveLength(WORKOUTS.length);
-    const easy = applyFilters(
-      WORKOUTS,
-      { ...EMPTY_FILTERS, difficulties: ["easy"] },
-      baselines,
-    );
-    expect(easy.length).toBeGreaterThan(0);
-    expect(easy.every((r) => r.difficulty === "easy")).toBe(true);
-    const easyMed = applyFilters(
-      WORKOUTS,
-      { ...EMPTY_FILTERS, difficulties: ["easy", "medium"] },
-      baselines,
-    );
-    expect(easyMed.length).toBeGreaterThan(easy.length);
-    expect(easyMed.every((r) => r.difficulty !== "hard")).toBe(true);
-  });
-
   it("types: empty means all; a two-type selection is their union", () => {
     expect(
       applyFilters(WORKOUTS, { ...EMPTY_FILTERS, types: [] }, baselines),
@@ -213,7 +178,7 @@ describe("applyFilters", () => {
     expect(both.every((r) => r.type === "O2" || r.type === "AT")).toBe(true);
   });
 
-  it("composes: difficulty AND type AND pain narrow together against the real library", () => {
+  it("composes: type AND pain narrow together against the real library", () => {
     // Verified against the real 300-workout seed (not guessed): types
     // {O2,AT} ∩ difficulties {easy,medium} ∩ pain {1,2,3} = 126 rows, a
     // proper subset of both types+difficulties alone (140) and of either
@@ -221,13 +186,11 @@ describe("applyFilters", () => {
     const filters: Filters = {
       ...EMPTY_FILTERS,
       types: ["O2", "AT"],
-      difficulties: ["easy", "medium"],
       painLevels: [1, 2, 3],
     };
     const expected = WORKOUTS.filter(
       (r) =>
         (r.type === "O2" || r.type === "AT") &&
-        (r.difficulty === "easy" || r.difficulty === "medium") &&
         (r.pain === 1 || r.pain === 2 || r.pain === 3),
     );
     expect(expected.length).toBeGreaterThan(0);
@@ -388,7 +351,7 @@ describe("query", () => {
   it("counts as active only when non-blank, and the sheet's CLEAR leaves it alone", () => {
     expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "fog"))).toBe(true);
     expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "   "))).toBe(false);
-    const both = setQuery(toggleDifficulty(EMPTY_FILTERS, "easy"), "fog");
+    const both = setQuery(togglePainLevel(EMPTY_FILTERS, 2), "fog");
     expect(clearSheetFilters(both)).toStrictEqual({
       ...EMPTY_FILTERS,
       query: "fog",
@@ -413,7 +376,6 @@ describe("hasActiveFilters", () => {
 
   it("is true for every other group on its own", () => {
     const cases: Partial<Filters>[] = [
-      { difficulties: ["easy"] },
       { durationRange: { min: 0, max: 30 } },
       { painLevels: [3] },
       { lastDone: "under21" },

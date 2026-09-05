@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { estimateMinutes } from "../../../domain/expand.js";
-import type {
-  Difficulty,
-  PaceBase,
-  WorkoutType,
-} from "../../../domain/types.js";
+import type { PaceBase, WorkoutType } from "../../../domain/types.js";
 import { validateWorkoutInput } from "../../../domain/validate.js";
 import patterns from "../../../domain/generation/patterns.json";
 import { debtRegressions } from "../../../scripts/library-balance.js";
@@ -70,11 +66,6 @@ const SPM: Record<WorkoutType, [number, number]> = {
   AT: [22, 26],
   TR: [24, 28],
   AN: [26, 32],
-};
-const PAIN_BY_DIFF: Record<Difficulty, [number, number]> = {
-  easy: [1, 2],
-  medium: [2, 4],
-  hard: [4, 5],
 };
 const PAIN_BY_TYPE: Record<WorkoutType, [number, number]> = {
   O2: [1, 3],
@@ -273,14 +264,9 @@ describe("LIBRARY_WORKOUTS", () => {
     }
   });
 
-  it("pairs difficulty and pain plausibly", () => {
+  it("keeps pain inside each type's band", () => {
     for (const w of LIBRARY_WORKOUTS) {
-      const [dLo, dHi] = PAIN_BY_DIFF[w.difficulty];
       const [tLo, tHi] = PAIN_BY_TYPE[w.type];
-      expect(
-        w.pain >= dLo && w.pain <= dHi,
-        `${w.title}: ${w.difficulty}/${w.pain}`,
-      ).toBe(true);
       expect(
         w.pain >= tLo && w.pain <= tHi,
         `${w.title}: ${w.type}/${w.pain}`,
@@ -297,14 +283,18 @@ describe("LIBRARY_WORKOUTS", () => {
     expect(new Set(sigs).size).toBe(sigs.length);
   });
 
-  it("orders each type block easy→hard (difficulty never decreases)", () => {
-    const rank: Record<Difficulty, number> = { easy: 0, medium: 1, hard: 2 };
+  // Phase DE PR 1: this used to pin easy→hard on the deleted difficulty
+  // axis. It is the within-type browsing rule a rower sees scrolling a type
+  // block, so it is restated on the surviving figure rather than deleted
+  // (PM open gate, 2026-09-05). AT and TR were stably re-sorted to satisfy
+  // it — see the PR body for the rows that moved.
+  it("orders each type block by pain (never decreases within a type)", () => {
     for (const type of ["O2", "AT", "TR", "AN"] as const) {
       const block = LIBRARY_WORKOUTS.filter((w) => w.type === type);
       for (let i = 1; i < block.length; i++)
         expect(
-          rank[block[i]!.difficulty] >= rank[block[i - 1]!.difficulty],
-          `${type}: ${block[i - 1]!.title} -> ${block[i]!.title}`,
+          block[i]!.pain >= block[i - 1]!.pain,
+          `${type}: ${block[i - 1]!.title} (${block[i - 1]!.pain}) -> ${block[i]!.title} (${block[i]!.pain})`,
         ).toBe(true);
     }
   });
