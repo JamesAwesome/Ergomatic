@@ -682,7 +682,7 @@ Ergomatic's link-outs are built from the **server's own** `logbookBaseUrl`
 assuming it:** on the CURRENT installed build, open a sent row's log detail
 and note which origin `View on Concept2 →` goes to.
 
-Then, in **mobile Safari — not the app** — open **that** host, and confirm the
+Then, in **the phone's default browser — not the app** — open **that** host, and confirm the
 rower is signed in.
 
 **This is the discriminator.** If Safari has no session, "opened signed in"
@@ -726,7 +726,7 @@ Then Run to the phone from Xcode.
 - [ ] **W3.** Tap **View on Concept2 →**. **Observe which app is now in
       front, and record which of five things happened.**
 
-  - **PASS = Safari.** URL bar, tab bar, and a **`← Ergomatic`** chip at the
+  - **PASS = the default browser** (Chrome on the walked phone). URL bar, tab bar, and a **`← Ergomatic`** chip at the
     top left.
   - **NO (a):** the sheet appears anyway — a **`Done`** button at the top
     left, no tab bar, no URL bar.
@@ -1097,7 +1097,7 @@ second half lands, and it is not optional: this PR withdraws a mechanism that
     while proving nothing about it; the walk is the only evidence. **A claim
     of "gated" here is a false claim.**
   - **B7:** which of the five W3 outcomes occurred, or PASS with the evidence
-    that distinguishes Safari from the sheet.
+    that distinguishes the default browser from the sheet.
   - **B1:** the walk record's path, including W0's precondition check, the W3
     capture and the W4 page.
   - **B2 / B3:** the `grep` outputs, verbatim.

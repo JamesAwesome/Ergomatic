@@ -1330,7 +1330,7 @@ One function loses one branch:
 The brief asked for this to be read rather than assumed. It was.
 
 **On a warm return (the normal case: rower taps the back-to-Ergomatic chip, or
-the app switcher):** the WebView is not unloaded when iOS opens Safari — the
+the app switcher):** the WebView is not unloaded when iOS opens the browser — the
 Capacitor app is backgrounded, not navigated. React state, the route, and the
 DOM survive. **The rower comes back to the same log row, still on screen.**
 
