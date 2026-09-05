@@ -11,7 +11,9 @@ install, no PM5 required.
 ## Why the input changed
 
 v1 was NEGATIVE because the saved file was a 6-of-42-page read (all-zero data
-pages). `C2_pm5_rebuilt.nfc` is a full NTAG203 image synthesized from the
+pages), byte-identical to the 2026-08-31 partial read committed as
+`docs/monitor/nfc/pm5-tag-2026-08-31-partial.nfc`. `C2_pm5_rebuilt.nfc` is a
+full 42-page Type 2 image (Flipper NTAG203 container) synthesized from the
 dated fixture, round-trip validated to the three PM5 records byte-for-byte,
 and confirmed on the Flipper by serial read-back. See
 `FLIPPER-EMU-V1-RESULT.md`. This is a strictly better, verified input to the

@@ -5,7 +5,9 @@ Status: PM PASS WITH CONDITIONS (all four landed); awaiting James's explicit **g
 ## What and why
 
 James read the PM5's NFC tag into a Flipper Zero at the erg tonight; it
-reports the tag as **NTAG203** (Type 2, James's reading of the Flipper's
+labels the tag **NTAG203** (its fallback identification; the repo's
+`docs/monitor/nfc/README.md` already showed the PM5 emulates a Type 2 tag with
+a 992-byte CC — James's reading of the Flipper's
 screen). If the phone reads the Flipper's emulation as the same three NDEF
 records the real PM5 produces, then the unsupported-tag case, multi-tag
 presentation, and every host-helper defect like tonight's
@@ -64,7 +66,7 @@ After **go** (phone unlocked, Ergomatic open, plugged into the Mac, Flipper
 in hand), Claude starts capture, requires `WebView loaded`, then sends the
 PM-approved block:
 
-> 1. On the Flipper: NFC → Saved → the PM5 file you saved at the erg →
+> 1. On the Flipper: NFC → Saved → the saved PM5 file →
 >    Emulate, and leave it emulating. If there is no saved file, or the menu
 >    does not look like that, reply **blocked**.
 > 2. On the phone, open YOU and scroll to NFC GATE -1 PROBE (at most three

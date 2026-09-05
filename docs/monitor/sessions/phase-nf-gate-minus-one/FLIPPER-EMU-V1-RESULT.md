@@ -23,7 +23,9 @@ genuine; the capture was incomplete.
 Rather than re-read the physical tag, the replica was synthesized from the
 known-good iPhone fixture `docs/monitor/nfc/pm5-tag-2026-09-04-iphone.json`:
 
-- Full NTAG203 image, 42 pages: real UID and BCC from the erg read's surviving
+- Full 42-page Type 2 image in the Flipper's NTAG203 container (the Flipper's
+  fallback label; `docs/monitor/nfc/README.md` shows the PM5 emulates a Type 2
+  tag with a 992-byte CC): real UID and BCC from the partial read's surviving
   header, standard capability container `E1 10 12 00`, and an NDEF TLV encoding
   the fixture's three records (short-record form, 140-byte TLV, fits the
   144-byte user area with one page to spare).

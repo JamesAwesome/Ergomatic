@@ -1,34 +1,59 @@
-# NF-RECOVERY-v4 — cases 2-4 with a PM5-NFC-availability check
+# NF-RECOVERY-v4 — control-tag bracket, then cases 2-4
 
-Status: DRAFT for PM and antagonist (delta: new wire ground, PM5 NFC
-availability). Not yet invitable.
+Status: DRAFT rev 2 (rebuilt after the antagonist delta). Awaits PM readiness
+and James's **go**. Not yet invitable.
 
-Everything in `RECOVERY-WALK-V1.md`, `-V2.md` and `-V3.md` stands (build,
-controller, fixed helper, cap, cases, one attempt per case, stop rules,
-transport preflight, ready-state invitation). Case 1's completed v3 evidence
-stands; v4 runs cases 2, 3 and 4. Two deltas, both from
-`docs/superpowers/research/2026-09-05-pm5-nfc-availability.md`:
+## What and why
 
-1. **Flipper in hand is part of the ready state** (James, 2026-09-05), and
-   the between-case block gains one line: after re-arming the PM5, touch the
-   Flipper to the NFC spot and read it; reply **dark** if it finds nothing.
-   A **dark** reply stops the block as `PM5 NFC unavailable` (not an app
-   failure), and James power-cycles the PM5 off the clock. No phone action.
-2. **Adjudication of a no-tag reader start:** if a case's A or B ends with
-   Core NFC 201 and no tag, the case is scored INCONCLUSIVE (`PM5 NFC
-   unavailable` suspected) and the block stops; the Flipper read James does
-   next decides which layer. It is never scored as a failed recovery.
+v3 case 2 found no PM5 tag in two 60 s NDEF windows and the cause is not
+identified (`docs/superpowers/research/2026-09-05-pm5-nfc-availability.md`,
+rev 2: five live alternatives). Running cases 2-4 again without separating
+those alternatives would reproduce the same ambiguous stop. v4 therefore
+brackets each reader start with observations that name the layer, and only
+then runs the recovery cases. The bracket is the antagonist's "control-tag
+bracket"; the recovery cases are v1's, unchanged.
 
-Neither delta adds a phone install, a new app control, a retry, or a clock
-extension. The Flipper read is a James action on his own device, ~5 s,
-inside the existing between-case block. Consent unchanged: one **go**.
+Everything in `RECOVERY-WALK-V1/V2/V3.md` stands: build 0.23.0/789, capture
+controller, fixed helper, one attempt per case, stop-on-first-failure, exact-PID
+cleanup, transport preflight, ready state in the invitation (now including
+**Flipper in hand, with `C2_pm5_rebuilt.nfc` on it**). Case 1's v3 evidence
+stands; v4 runs cases 2, 3 and 4.
+
+## Bracket (before case 2, and again after any no-tag stop)
+
+James performs, in order, and reports one word each:
+
+> 1. Flipper: NFC → Saved → C2_pm5_rebuilt → Emulate. Phone: Run normal sample
+>    against the Flipper's back; reply **control** when the sheet closes.
+>    (Phone-stack liveness; touches no PM5. The controller reads the receipt.)
+> 2. Phone: Run normal sample at the PM5 NFC spot; reply **pm5** when the
+>    sheet closes or after a minute if it does not.
+> 3. Flipper: NFC → Read at the PM5 spot. Reply with the two numbers on its
+>    screen: pages read and total (e.g. **6/42** or **42/42**).
+> 4. Photo of the PM5 display, and reply **link** if the PM5 shows a
+>    Bluetooth connection, **nolink** if not.
+
+Scoring is the research note's signature table. Only a bracket that reads
+`control` ✓ and `pm5` ✓ admits the recovery cases. Any other signature stops
+the walk with the layer named (phone fault / PM5 NDEF-layer / PM5 RF-silent /
+asleep / BLE-suppressed), which is itself the result the walk is for.
+
+Cost: four reader starts and about two minutes, inside the eight-minute cap;
+the four recovery cases need at most eight reader starts. **Cap for v4 is
+therefore twelve reader starts and ten minutes**, stated here so the PM can
+accept or cut it; the alternative is a two-visit design (bracket only, then
+cases) if the PM prefers the old numbers.
+
+## Adjudication of a no-tag reader start inside a case
+
+If any case's A or B ends Core NFC 201 with no tag, the case is INCONCLUSIVE
+(never "failed recovery"), the block stops, and the bracket is run again
+immediately (steps 1-4) to name the layer. No retry of the case.
 
 ## Open before PM
 
-- Whether to power-cycle the PM5 between EVERY case pre-emptively (costs ~60 s
-  each, may not fit four cases in eight minutes) versus only on **dark**.
-  Recommendation: only on **dark**; a pre-emptive cycle would also hide the
-  very behaviour the product needs to know about.
-- Antagonist delta: PM5 NFC availability is new wire ground the anchor pass
-  never saw; attack the claim that a Flipper read is a valid independent
-  oracle for "the PM5 is emitting" (same tag, different reader, no BLE).
+- Accept the twelve-start / ten-minute cap, or split into two visits.
+- The photo in step 4 is the first camera use in these walks; if declined,
+  substitute "reply with the top line of the PM5 display".
+- Consent stays one **go**; the one-word replies are readiness/observation
+  reports, not completion signals, and nothing about evidence reads them.

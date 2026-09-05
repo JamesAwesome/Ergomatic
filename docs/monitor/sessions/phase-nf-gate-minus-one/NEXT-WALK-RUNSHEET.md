@@ -57,7 +57,8 @@ Product implementation remains gated; do not push, merge or release.
 **Flipper desk path opened, 2026-09-05.** NF-RECOVERY-v2 case 1 stopped on the
 host helper's `FinalDisplayMismatch` guard (two reader starts, both RF-active
 and Core NFC 200; not a failed recovery). To cut erg trips, James read the
-PM5 tag with a Flipper Zero (NTAG203). NF-FLIPPER-EMU-v1 was NEGATIVE because
+PM5 tag with a Flipper Zero (Flipper label NTAG203; the PM5 emulates a Type 2
+tag per docs/monitor/nfc/README.md). NF-FLIPPER-EMU-v1 was NEGATIVE because
 the saved file was a truncated 6-page read; see FLIPPER-EMU-V1-RESULT.md. A
 complete replica was synthesized from the dated fixture, round-trip validated,
 and written to the Flipper as C2_pm5_rebuilt.nfc. NF-FLIPPER-EMU-v2 (same
@@ -97,3 +98,13 @@ NFC walk as the independent tag validator.** Every NFC consent invitation's
 ready state includes "Flipper in hand", and when a reader start ends with no
 tag (Core NFC 201) the first action is a Flipper read at the spot, so a dark
 PM5 is named as such instead of being scored against the app or helper.
+
+**Antagonist delta, 2026-09-05 (late):** "the PM5 stopped emitting" is
+UNSUPPORTED AS WRITTEN — five alternatives fit the record (PM5 RF-silent, PM5
+NDEF-layer fault, phone Core NFC fault, PM5 asleep, BLE-suppressed); the
+"second phone app" was a mirror of the same NDEF stack, and the "6-of-42 read
+that evening" was the 08-31 file. A Flipper read is not an oracle for "emitting"
+unless it records pages read + TLV, brackets the window, and is paired with a
+phone read of the control tag. RECOVERY-WALK-V4 rev 2 is rebuilt on that
+control-tag bracket; research note rev 2 carries the required wordings. Awaits
+PM readiness.
