@@ -4715,3 +4715,44 @@ the `/api/today` ruling). v0.38.0 recommended.
   for the next phase is the class of the find — a review round returning a
   DESIGN error means the implementer half was skipped, not merged into the
   author, and that class of work goes back to the full cycle.
+
+## 2026-09-05 — Phase DE open gate: a deleted axis takes invariants with it
+
+- **A test asserting ORDER on the axis you are deleting is product behaviour,
+  not a fixture detail.** DE's spec scoped "library.test.ts and variety.test.ts
+  lose their difficulty assertions" as bookkeeping. `library.test.ts:300`
+  asserts "orders each type block easy→hard (difficulty never decreases)" —
+  the guarantee a rower gets scrolling a type block. It had to be RESTATED on
+  the surviving axis (effort), not deleted; only the `PAIN_BY_DIFF` pairing
+  test (`:276`) genuinely dies with the axis. **When a spec removes a field,
+  list every test that asserts a RELATION over it (ordering, monotonicity,
+  pairing, coverage) and rule on each separately from the tests that merely
+  mention it.** The two read identically in a census.
+- **"Every device is on the new build" is not confirmable, so do not make it
+  a trigger.** DE's PR 3 (drop compat) was specced to wait on James confirming
+  the cohort had updated — unknowable, since TestFlight auto-update says
+  nothing about a phone nobody opened. Replaced with a server-side count on
+  the legacy-keyed write path that PR 3 deletes anyway, and a trigger of
+  zero legacy-keyed writes for seven days after the tag. **Any compat-drop
+  PR's trigger is a measurement the compat layer itself takes, not a human's
+  belief about a fleet.** The tag cycle itself was upheld as real, not
+  ceremony: without the dual field a stale build's log save 400s, which is
+  Wave F's durability class.
+- **A phase split across a tag cycle must forbid a tag INSIDE it.** DE's
+  three PRs are correctly split (deletion, rename, drop — three rollback
+  stories; the rename alone is not rollback-safe), but nothing stopped a
+  release between PR 1 and PR 2, which would ship a half-rename and create a
+  SECOND stale-build generation for the compat layer to serve. **When a
+  phase's PRs share one compat contract, the ROADMAP section names which PRs
+  ride one tag.**
+- **Rename PRs collide worst with unmerged rewrites, and `gh pr list` does
+  not show them.** DE PR 2 renames pain→effort across `LogSession.tsx` while
+  `Ergomatic-wt-aud016` had already rewritten that file (+229) with no PR
+  open. **At any phase open, check `git worktree list` and diff each branch
+  against main — not just open PRs — before sequencing a rename or a wide
+  sweep.**
+- **A phase that jumps the slate says why, in the ROADMAP, in one line.** DE
+  was inserted ahead of Wave A, which the roadmap's own text calls "the single
+  largest gap between this app and a stranger using it". The justification
+  (a stranger reading `PAIN 4/5` is itself a north-star failure; the rename
+  only gets more expensive) existed nowhere in the file.
