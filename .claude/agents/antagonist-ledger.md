@@ -7502,6 +7502,39 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   prescribed grep at REVIEW time too, not only at spec time, and grep the
   withdrawn PHRASING ("returns nothing") across every file that repeated it.**
 
+## 2026-09-05 — Phase SF exit: a differencing gate with three random inputs
+
+- **"Two runs of twelve SHUFFLE taps differing proves the shuffle is random."**
+  The e2e clears storage between runs, which also re-rolls the freestyle TYPE
+  (4 candidates) and re-draws the first card — both random, both upstream of a
+  type-scoped pool. Against a deterministic `nextShuffle` the assertion still
+  passes ~75% of the time; it goes red on main only because main has no
+  randomness anywhere. **Technique: for any A-differs-from-B gate, enumerate
+  every random or context input the reset also re-rolls, and compute the gate's
+  power against the SINGLE regression it names — not against the base commit.
+  "Fails on main" and "catches the regression" are different claims.**
+- **"The design sweep proves the criterion, so the criterion is in CI."**
+  `playwright.config.ts` gives screenshots its own project and CI runs
+  `--project=chromium` with `testIgnore: "**/screenshots.spec.ts"`. An
+  assertion parked in the capture spec is a local-only gate. **Technique: for
+  every exit criterion whose oracle is an e2e file, read the CI workflow's
+  actual project flag and the config's testMatch/testIgnore before calling it a
+  standing gate.**
+- **A struck design decision survived in the exit criterion that names it.**
+  James struck the sticky clear at PR1's Gate 0; §1.5, the store's comment, the
+  ROADMAP and the test all record the strike, and §7's criterion 2 still
+  demanded it — the second instance of this exact shape in ONE phase.
+  **Technique: when a ruling strikes a mechanism, grep the ruling's own SUBJECT
+  ("sticky", "clear", "next day") across the spec — the exit-criteria section
+  is written first and reconciled last, so it is where a struck clause hides.**
+- **A capture unchanged across a feature PR is not automatically stale.**
+  `today-freestyle-landscape.png` last changed at #296 yet appears in PR1's
+  Gate 0 table. It is honest: the capture block re-taps the chip before the
+  landscape frame, so the pixels are identical under a manual tap and under the
+  roll. **Technique: before calling a carried-forward capture stale, read the
+  capture block's own steps — `pinToday`/a re-tap can make a new mechanism
+  produce byte-identical pixels.**
+
 ## 2026-09-04 — Wave E PR A: gates that measure the wrong distance
 
 - **A mutation that moves a declaration is not the mutation that reproduces the

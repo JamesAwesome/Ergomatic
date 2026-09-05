@@ -594,20 +594,33 @@ it is named, so none is green on main.
 1. From a cleared store, two independent runs of twelve SHUFFLE taps on the
    seed library produce different sequences, neither repeating inside
    itself; a reload keeps the twelfth (e2e, PR1). Fails on main: the cycle
-   is identical every run.
+   is identical every run. **What it proves (exit pass, 2026-09-05):** the
+   app is NOT deterministic and never repeats within a run; the clear
+   between runs also re-rolls the freestyle type and the first card, so
+   against a deterministic `nextShuffle` alone this gate's power is about
+   one in four — the draw's own randomness is guarded by
+   `domain/suggest.test.ts`'s scripted-rng tests, whose mutations bit.
 2. A freestyle account reloaded three times in one day shows one lit chip;
-   the next local day rolls; a lit-chip clear stays ANY TYPE across a
-   reload AND the next day until a chip is tapped (client tests with a
-   stubbed clock, PR1). Fails on main: nothing is lit.
+   a lit-chip clear holds ANY TYPE for the rest of that day across a
+   remount; the next local day rolls again, INCLUDING the day after a
+   clear (James struck the sticky clear at PR1's Gate 0; revision 1's
+   "stays ANY TYPE … the next day" clause survived here until the exit
+   pass caught it — the second struck clause found standing in this spec
+   in one phase). Client tests with a stubbed clock, PR1. Fails on main:
+   nothing is lit.
 3. A filter applied under AT is absent under TR and present again under
    AT after a reload and after a day change (e2e + client, PR1). Fails on
    main: filters die at midnight.
 4. `[25, 35]` on Today yields a card whose printed minutes are within
    25–35 on the seed at the screenshot baseline — a SEAM check, both sides
-   `estimateMinutes` (e2e, PR2). Fails on main: no such range exists.
+   `estimateMinutes` (the capture spec, PR2; by James's 2026-08-27 ruling
+   `screenshots.spec.ts` runs at release time, not in CI, so this is a
+   local gate). Fails on main: no such range exists.
 5. Both thumbs are keyboard-operable per §1.3's list, cannot cross, and
-   both hit boxes are ≥ 44 px in portrait and landscape (client tests +
-   design sweep, PR2).
+   both LAY OUT at ≥ 44 px in portrait and landscape (client tests + design
+   sweep, PR2; the sweep measures the layout box — at a collapsed range the
+   upper thumb occludes the lower, and a rail tap on either side resolves
+   it, which `DurationRange.test.tsx` gates).
 6. `fog` finds River Fog and survives a BACK round trip; the LIBRARY tab
    clears it (e2e, PR3).
 7. Across mount + twelve SHUFFLE taps + two chip taps + one sheet apply,
