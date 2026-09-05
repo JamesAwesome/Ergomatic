@@ -1,0 +1,428 @@
+<title>Concept2 Sending Mode</title>
+<style>
+  :root {
+    --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade;
+    --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c; --ink-4: #6f6a5f;
+    --rule: #d8d3c4; --rule-2: #ded8c9; --rule-3: #c9c3b2;
+    --accent: #b5341f; --on-color: #fffdf7; --radius: 2px;
+    --font-mono: "SF Mono", Menlo, Consolas, monospace;
+    --font-sans: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --font-serif: Georgia, "Times New Roman", serif;
+  }
+  body { margin: 0; padding: 32px 24px 96px; background: #e6e2d6; color: var(--ink); font-family: var(--font-sans); font-size: 14px; line-height: 1.5; }
+  h1 { font-family: var(--font-serif); font-weight: 500; font-size: 28px; margin: 0 0 6px; text-wrap: balance; }
+  h2 { font-size: 19px; margin: 48px 0 4px; border-top: 2px solid var(--ink); padding-top: 14px; }
+  h3 { font-size: 15px; margin: 28px 0 10px; }
+  .lede { max-width: 62rem; margin: 0 0 10px; }
+  .callout { background: var(--surface); border-left: 3px solid var(--accent); padding: 10px 14px; margin: 12px 0 18px; max-width: 62rem; }
+  .callout p { margin: 6px 0; }
+  code { font-family: var(--font-mono); font-size: 12px; background: var(--surface); padding: 0 3px; }
+  .badge { display: inline-block; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; padding: 2px 6px; border: 1px solid currentColor; border-radius: 2px; vertical-align: middle; margin-left: 6px; }
+  .b-changed { color: var(--accent); }
+  .b-ruled { color: var(--ink-3); }
+  .num { font-family: var(--font-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; margin: 10px 0 18px; max-width: 62rem; background: var(--surface); }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-top: 1px solid var(--rule); font-size: 13px; }
+  th { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink-3); font-weight: 600; }
+  .tw { overflow-x: auto; }
+
+  /* ---- frames: the amendment page's own idiom ---- */
+  .boards { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; margin: 14px 0 6px; }
+  .board { flex: 0 0 auto; }
+  .board-cap { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink-2); margin: 0 0 6px; max-width: 390px; }
+  .board-cap.wide { max-width: 844px; }
+  .frame { width: 390px; height: 844px; background: var(--page); border: 1px solid #b8b2a3; overflow: hidden; position: relative; display: flex; flex-direction: column; padding: 16px 16px 0; box-sizing: border-box; gap: 12px; }
+  .frame.land { width: 844px; height: 390px; }
+  .frame.short { height: 520px; }
+  .frame-dim { position: absolute; right: 4px; bottom: 3px; font-family: var(--font-mono); font-size: 9px; color: #a09a8c; letter-spacing: 0.08em; }
+  .tabbar { margin-top: auto; flex: 0 0 44px; margin-left: -16px; margin-right: -16px; height: 44px; display: flex; background: var(--surface); border-top: 1px solid var(--rule); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--ink-3); }
+  .tabbar span { flex: 1; display: flex; align-items: center; justify-content: center; }
+  .tabbar span.cur { color: var(--ink); border-top: 2px solid var(--accent); margin-top: -1px; }
+  .screen-back { align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink); }
+  .screen-title { font-family: var(--font-serif); font-weight: 500; font-size: 31px; margin: 0; color: var(--ink); }
+
+  /* ---- the card ---- */
+  .c2card { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .c2head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .c2label { font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--ink); }
+  .c2status { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-4); white-space: nowrap; }
+  .c2status.on { color: var(--ink); font-weight: 600; }
+  .c2identity { margin: 0; font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+  .c2explain { margin: 0; font-size: 14px; color: var(--ink); }
+  .c2helper { margin: 0; font-size: 12px; color: var(--ink-3); }
+  .c2foot { margin: 0; text-align: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-4); }
+  .hr { border-top: 1px solid var(--rule-2); }
+  .btn-primary { min-height: 48px; display: flex; align-items: center; justify-content: center; background: var(--ink); border: 1px solid var(--ink); border-radius: 0; color: var(--on-color); font-family: var(--font-mono); font-size: 13px; font-weight: 600; letter-spacing: 0.1em; }
+  .btn-danger { min-height: 52px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--accent); border-radius: 0; color: var(--accent); font-size: 15px; font-weight: 600; }
+  .btn-danger.armed { background: var(--accent); border-color: var(--accent); color: var(--on-color); }
+  .panel { background: var(--surface-sunken); border: 1px solid var(--rule); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .panel-label { margin: 0; font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; color: var(--ink); }
+  .panel-line { margin: 0; font-size: 14px; color: var(--ink); }
+  .panel-reason { margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-3); }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  /* ---- NEW: the sending-mode control. Three buttons, aria-pressed, not a radiogroup. ---- */
+  .mode { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 1px solid var(--ink); }
+  .mode > div { min-height: 44px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; color: var(--ink); background: transparent; border-left: 1px solid var(--ink); }
+  .mode > div:first-child { border-left: 0; }
+  .mode > div.pressed { background: var(--ink); color: var(--on-color); font-weight: 600; }
+  .mode > div.armed { background: var(--accent); color: var(--on-color); font-weight: 600; border-left-color: var(--accent); }
+  .mode.disabled > div { color: var(--ink-3); border-color: var(--rule-3); }
+  .mode-line { margin: 0; font-size: 12px; color: var(--ink-3); }
+  .mode-line.warn { color: var(--ink); }
+
+  /* ---- the You doors ---- */
+  .doors { margin-top: auto; margin-bottom: 14px; display: flex; flex-direction: column; }
+  .door { display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 13px 2px; border-top: 1px solid var(--rule-2); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; color: var(--ink-3); }
+  .door-right { display: flex; align-items: center; gap: 12px; }
+  .door-state.on { color: var(--ink); font-weight: 600; }
+  .ghost { height: 56px; border: 1px dashed var(--rule-3); border-radius: var(--radius); }
+  .ghost.tall { height: 200px; }
+
+  /* the unlinked card's existing act column, for the BEFORE frames */
+  .sendblock { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .sb-status { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-4); }
+  .btn-outline { min-height: 48px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--ink); border-radius: 0; color: var(--ink); font-family: var(--font-mono); font-size: 13px; font-weight: 600; letter-spacing: 0.1em; }
+  .linkrow { min-height: 44px; display: flex; align-items: center; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; color: var(--ink); }
+</style>
+
+<h1>Concept2 Sending Mode <span class="badge b-changed">GATE 0</span></h1>
+<p class="lede">Amendment 2026-09-05 to the Concept2 connect handoff. Spec: <code>docs/superpowers/specs/2026-09-05-concept2-auto-send-design.md</code> (rev 3, two antagonist passes folded). Every frame is at real proportions on the app's own tokens; every colour pairing below is a computed ratio, not a judgement. The gate is the approval, not the presentation — each <span class="badge b-changed">GATE 0 DECIDES</span> is a question James answers on sight.</p>
+
+<div class="callout">
+  <p><strong>What a rower reads differently.</strong> On <code>/you/concept2</code> the linked card's <em>Unlink Concept2</em> button becomes a three-position control — <strong>OFF · MANUAL · AUTOMATIC</strong> — with one line beneath it saying what the mode does. OFF is the two-tap unlink (arm kept). The card's status pill and the You row both gain one new word, <strong>SEND FAILED</strong>, when Concept2 has refused every send for want of a weight class. Nothing else on any screen moves.</p>
+  <p><strong>Rulings already made (James, 2026-09-05):</strong> OFF is unlinked · AUTOMATIC is silent at save time · a fresh link lands in MANUAL · no backlog send · client-side after save · failures surface on the You row · only <code>no_weight_class</code> raises the flag.</p>
+</div>
+
+<h2>1 · The control, LINKED — MANUAL and AUTOMATIC</h2>
+<p class="lede">The BEFORE is today's linked card, exactly as PR A shipped it on the screen. The AFTER replaces its Unlink button with the control and its helper line with the mode line. Identity line, head, and pill are unchanged in these two states.</p>
+
+<div class="boards">
+  <div class="board">
+    <p class="board-cap">BEFORE · today's linked card on /you/concept2</p>
+    <div class="frame short">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status on">LINKED ✓</span></div>
+        <p class="c2identity">Concept2 jamesawesome · Ergomatic james@jamestheaweso.me</p>
+        <div class="hr"></div>
+        <p class="c2helper">Finished monitor rows can be sent from the log.</p>
+        <div class="btn-danger">Unlink Concept2</div>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+  <div class="board">
+    <p class="board-cap">AFTER · MANUAL (the default after linking)</p>
+    <div class="frame short">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status on">LINKED ✓</span></div>
+        <p class="c2identity">Concept2 jamesawesome · Ergomatic james@jamestheaweso.me</p>
+        <div class="hr"></div>
+        <div class="mode"><div>OFF</div><div class="pressed">MANUAL</div><div>AUTOMATIC</div></div>
+        <p class="mode-line">Send each finished monitor row yourself, from the log.</p>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+  <div class="board">
+    <p class="board-cap">AFTER · AUTOMATIC</p>
+    <div class="frame short">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status on">LINKED ✓</span></div>
+        <p class="c2identity">Concept2 jamesawesome · Ergomatic james@jamestheaweso.me</p>
+        <div class="hr"></div>
+        <div class="mode"><div>OFF</div><div>MANUAL</div><div class="pressed">AUTOMATIC</div></div>
+        <p class="mode-line">Finished monitor rows are sent when you save them.</p>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+</div>
+
+<div class="boards">
+  <div class="board">
+    <p class="board-cap wide">AFTER · AUTOMATIC, landscape — the card's tell/act split, control in the act column</p>
+    <div class="frame land">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status on">LINKED ✓</span></div>
+        <div class="split">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <p class="c2identity">Concept2 jamesawesome · Ergomatic james@jamestheaweso.me</p>
+            <p class="mode-line">Finished monitor rows are sent when you save them.</p>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;justify-content:center">
+            <div class="mode"><div>OFF</div><div>MANUAL</div><div class="pressed">AUTOMATIC</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">844 × 390</span>
+    </div>
+  </div>
+</div>
+
+<h3>1a The mode line's copy <span class="badge b-changed">GATE 0 DECIDES</span></h3>
+<div class="callout">
+  <p>Two candidates per mode are drawn in the frames above and here in words. The spec's recommendation is the first of each.</p>
+  <p><strong>MANUAL:</strong> (a) <em>Send each finished monitor row yourself, from the log.</em> — (b) <em>Rows are sent when you tap Send on them.</em></p>
+  <p><strong>AUTOMATIC:</strong> (a) <em>Finished monitor rows are sent when you save them.</em> — (b) <em>Every finished monitor row goes to Concept2 as you save it.</em></p>
+  <p>Both are <code>--ink-3</code> on <code>--surface</code>, 12px — the identity line's own treatment (7.43:1).</p>
+</div>
+
+<h2>2 · OFF, armed — the two-tap unlink lives in the control</h2>
+<p class="lede">Ruling 1 makes OFF destructive, so it keeps the arm the Unlink button had: the first tap arms (OFF fills <code>--accent</code>), the disclosure sentence appears, the 4-second caption counts down, and the second tap unlinks. Disarming returns the pressed state to the current mode. RF23: this is the <em>only</em> unlink affordance on the screen — the button it replaces is gone.</p>
+<div class="boards">
+  <div class="board">
+    <p class="board-cap">AFTER · OFF armed (was MANUAL)</p>
+    <div class="frame short">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status on">LINKED ✓</span></div>
+        <p class="c2identity">Concept2 jamesawesome · Ergomatic james@jamestheaweso.me</p>
+        <div class="hr"></div>
+        <p class="c2explain">Unlink removes this app's access. Rows already sent stay on Concept2.</p>
+        <div class="mode"><div class="armed">TAP AGAIN TO UNLINK</div><div>MANUAL</div><div>AUTOMATIC</div></div>
+        <p class="c2foot">DISARMS ON ITS OWN AFTER 4 SECONDS</p>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+  <div class="board">
+    <p class="board-cap">BEFORE · today's armed Unlink, for comparison</p>
+    <div class="frame short">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status on">LINKED ✓</span></div>
+        <p class="c2identity">Concept2 jamesawesome · Ergomatic james@jamestheaweso.me</p>
+        <div class="hr"></div>
+        <p class="c2explain">Unlink removes this app's access. Rows already sent stay on Concept2.</p>
+        <div class="btn-danger armed">Tap again to unlink</div>
+        <p class="c2foot">DISARMS ON ITS OWN AFTER 4 SECONDS</p>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+</div>
+<h3>2a The armed OFF label <span class="badge b-changed">GATE 0 DECIDES</span></h3>
+<div class="callout">
+  <p>(a) The OFF segment's label becomes <strong>TAP AGAIN TO UNLINK</strong> while armed (drawn) — the button's own words, in the control's mono. (b) The label stays <strong>OFF</strong> and only the fill says armed. The spec recommends (a): the fill alone is a colour cue, and the walk-fixes spec's R9 keeps the disclosure sentence precisely because unlinking needs words.</p>
+</div>
+
+<h2>3 · needsReauth — the control beside RECONNECT</h2>
+<p class="lede">The delta pass found this state: a linked card whose grant Concept2 has stopped accepting. The RECONNECT button sits above the control, and the mode line must not promise sends the link cannot make. This frame was never drawn before and it is why the mode line reads from the same inputs the You row does.</p>
+<div class="boards">
+  <div class="board">
+    <p class="board-cap">AFTER · linked, needsReauth, mode AUTOMATIC</p>
+    <div class="frame">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status on">RECONNECT NEEDED</span></div>
+        <p class="c2identity">Concept2 jamesawesome · Ergomatic james@jamestheaweso.me</p>
+        <div class="panel">
+          <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+          <p class="panel-line">Reconnect to keep sending rows.</p>
+        </div>
+        <div class="btn-primary">RECONNECT CONCEPT2</div>
+        <div class="hr"></div>
+        <div class="mode"><div>OFF</div><div>MANUAL</div><div class="pressed">AUTOMATIC</div></div>
+        <p class="mode-line">Sends are paused until you reconnect.</p>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 844</span>
+    </div>
+  </div>
+</div>
+
+<h2>4 · SEND FAILED — the flag, on the card and on the You row</h2>
+<p class="lede">Ruling 6/7: when an eligible send fails for want of a weight class, the server sets one sticky flag on the link. The card's pill and the You row both read <strong>SEND FAILED</strong>, with RECONNECT NEEDED above it in precedence and LINKED ✓ below. The mode line names the reason — three variants, one per sub-reason, followed by the block's own remedy link-out. Cleared by the next send that lands (or that Concept2 turns out to already have), and by any relink.</p>
+
+<div class="boards">
+  <div class="board">
+    <p class="board-cap">AFTER · card, SEND FAILED · no_weight</p>
+    <div class="frame">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status on">SEND FAILED</span></div>
+        <p class="c2identity">Concept2 jamesawesome · Ergomatic james@jamestheaweso.me</p>
+        <div class="hr"></div>
+        <div class="mode"><div>OFF</div><div>MANUAL</div><div class="pressed">AUTOMATIC</div></div>
+        <p class="mode-line warn">Rows aren't being sent: Concept2 needs a weight class, and your Concept2 profile has no weight set.</p>
+        <div class="linkrow">OPEN CONCEPT2 PROFILE →</div>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 844</span>
+    </div>
+  </div>
+  <div class="board">
+    <p class="board-cap">AFTER · the You row, SEND FAILED beside the other four (+ RECONNECT for scale)</p>
+    <div class="frame">
+      <div class="ghost tall" title="BASELINES … Reset"></div>
+      <div class="doors">
+        <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">SEND FAILED</span><span aria-hidden="true">›</span></span></div>
+        <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">›</span></div>
+      </div>
+      <p class="board-cap" style="margin:8px 0 0">— for reference, the other values the row can show —</p>
+      <div class="doors" style="margin-top:0">
+        <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">RECONNECT NEEDED</span><span aria-hidden="true">›</span></span></div>
+        <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED ✓</span><span aria-hidden="true">›</span></span></div>
+        <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">NOT LINKED</span><span aria-hidden="true">›</span></span></div>
+        <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">COULDN'T READ</span><span aria-hidden="true">›</span></span></div>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 844</span>
+    </div>
+  </div>
+</div>
+
+<h3>4a The three reason lines <span class="badge b-changed">GATE 0 DECIDES</span></h3>
+<div class="tw"><table>
+  <tr><th>sub-reason</th><th>the block's own tap-time sentence (today)</th><th>the mode line as a persistent status (proposed)</th></tr>
+  <tr><td class="num">no_weight</td><td>Concept2 needs a weight class. Your Concept2 profile has no weight set.</td><td>Rows aren't being sent: Concept2 needs a weight class, and your Concept2 profile has no weight set.</td></tr>
+  <tr><td class="num">unreadable_weight</td><td>Concept2 needs a weight class. We couldn't read the weight on your Concept2 profile.</td><td>Rows aren't being sent: Concept2 needs a weight class, and we couldn't read the weight on your Concept2 profile.</td></tr>
+  <tr><td class="num">no_gender</td><td>Concept2 needs a weight class. We couldn't work one out from your Concept2 profile.</td><td>Rows aren't being sent: Concept2 needs a weight class, and we couldn't work one out from your Concept2 profile.</td></tr>
+</table></div>
+<div class="callout">
+  <p>The lines are the block's sentences re-hung on <em>"Rows aren't being sent:"</em> so they read as a status rather than a reply to a tap. Each is followed by the block's existing remedy, <strong>OPEN CONCEPT2 PROFILE →</strong> (a link-out; opens the default browser since PR B). Alternative: keep the block's sentences verbatim with no prefix. The spec recommends the prefix.</p>
+</div>
+
+<h3>4b SEND FAILED's weight on the row <span class="badge b-changed">GATE 0 DECIDES</span></h3>
+<div class="callout">
+  <p>Drawn above in the row's standing treatment: <code>--ink-3</code>, same as RECONNECT NEEDED (PR A's Gate 0 declined the <code>--ink</code>/600 distinction for RECONNECT; the word is the distinction). The alternative — <code>--ink</code> at 600 for both warnings (<span class="num">15.41:1</span>) — is one class. The spec recommends staying <code>--ink-3</code> so the row's four existing values and its fifth are one family.</p>
+</div>
+
+<h2>5 · UNLINKED — unchanged, plus two questions</h2>
+<p class="lede">With ruling 1 the control has nothing to set before linking, so the unlinked card is today's. Two things are drawn for a decision: its explainer's "from the log" now describes one of two modes; and the unified control (choose the mode, then link) is the rejected alternative, drawn once so the rejection is a choice.</p>
+<div class="boards">
+  <div class="board">
+    <p class="board-cap">AFTER · unlinked (unchanged)</p>
+    <div class="frame short">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status">NOT LINKED</span></div>
+        <p class="c2explain">Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.</p>
+        <div class="hr"></div>
+        <div class="btn-primary">CONNECT TO CONCEPT2</div>
+        <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER</p>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+  <div class="board">
+    <p class="board-cap">REJECTED ALTERNATIVE · the unified control before linking (not built)</p>
+    <div class="frame short">
+      <div class="screen-back">← BACK</div>
+      <p class="screen-title">Concept2</p>
+      <div class="c2card">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="c2status">NOT LINKED</span></div>
+        <p class="c2explain">Sends finished monitor rows to your Concept2 logbook.</p>
+        <div class="hr"></div>
+        <div class="mode"><div class="pressed">OFF</div><div>MANUAL</div><div>AUTOMATIC</div></div>
+        <p class="mode-line">Choose a mode to connect. Opens Concept2 in your browser.</p>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+</div>
+<h3>5a The unlinked explainer <span class="badge b-changed">GATE 0 DECIDES</span></h3>
+<div class="callout">
+  <p>(a) Keep: <em>Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.</em> — true of the default mode a fresh link lands in. (b) <em>Sends finished monitor rows to your Concept2 logbook — each one from the log, or automatically as you save.</em> The spec recommends (a): the card describes what happens after linking, and that is MANUAL until the rower says otherwise.</p>
+</div>
+
+<h2>6 · The log detail after an automatic send — same block, one difference</h2>
+<p class="lede">Ruling 2: the outcome lives on the row's block, which is unchanged. A successful automatic send draws exactly what a manual one does. An automatic <em>failure</em> discards its response, so the block reads UNSENT with Send; the reason is on the screen and the row (§4), not here. Drawn beside the manual failure so the difference is approved on sight.</p>
+<div class="boards">
+  <div class="board">
+    <p class="board-cap">AFTER · automatic send landed (identical to manual)</p>
+    <div class="frame short">
+      <div class="ghost tall" title="the row's heroes and steps"></div>
+      <div class="sendblock">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="sb-status">SENT · RESULT 85942</span></div>
+        <div class="linkrow">VIEW ON CONCEPT2 →</div>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+  <div class="board">
+    <p class="board-cap">AFTER · automatic send failed (no weight class) — UNSENT, Send offered, no reason here</p>
+    <div class="frame short">
+      <div class="ghost tall"></div>
+      <div class="sendblock">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="sb-status">UNSENT</span></div>
+        <div class="btn-outline">SEND TO CONCEPT2</div>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+  <div class="board">
+    <p class="board-cap">BEFORE/manual · the same failure after a tap — reason shown (unchanged)</p>
+    <div class="frame short">
+      <div class="ghost tall"></div>
+      <div class="sendblock">
+        <div class="c2head"><span class="c2label">CONCEPT2</span><span class="sb-status">UNSENT</span></div>
+        <div class="panel">
+          <p class="panel-label">CONCEPT2 WON'T TAKE THIS ROW</p>
+          <p class="panel-line">Concept2 needs a weight class. Your Concept2 profile has no weight set.</p>
+          <p class="panel-reason">REASON: SET YOUR WEIGHT ON CONCEPT2</p>
+        </div>
+        <div class="linkrow">OPEN CONCEPT2 PROFILE →</div>
+      </div>
+      <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
+      <span class="frame-dim">390 × 520 (cropped)</span>
+    </div>
+  </div>
+</div>
+
+<h2>7 · The numbers</h2>
+<p class="lede">WCAG 2.x relative-luminance ratios over <code>tokens.css</code>'s literal values. Floor 4.5:1 for text; hit targets ≥ 44 px.</p>
+<div class="tw"><table>
+  <tr><th>element</th><th>pairing</th><th>ratio</th><th>floor</th></tr>
+  <tr><td>control label, unpressed</td><td><code>--ink</code> on <code>--surface</code></td><td class="num">17.11:1</td><td>4.5 ✓</td></tr>
+  <tr><td>control label, pressed</td><td><code>--on-color</code> on <code>--ink</code></td><td class="num">17.11:1</td><td>4.5 ✓</td></tr>
+  <tr><td>OFF armed</td><td><code>--on-color</code> on <code>--accent</code></td><td class="num">5.94:1</td><td>4.5 ✓</td></tr>
+  <tr><td>control, disabled (PATCH in flight)</td><td><code>--ink-3</code> on <code>--surface</code></td><td class="num">7.43:1</td><td>4.5 ✓</td></tr>
+  <tr><td>mode line</td><td><code>--ink-3</code> on <code>--surface</code></td><td class="num">7.43:1</td><td>4.5 ✓</td></tr>
+  <tr><td>mode line, failure (warn)</td><td><code>--ink</code> on <code>--surface</code></td><td class="num">17.11:1</td><td>4.5 ✓</td></tr>
+  <tr><td>pill SEND FAILED / RECONNECT NEEDED</td><td><code>--ink</code> 600 on <code>--surface</code></td><td class="num">17.11:1</td><td>4.5 ✓</td></tr>
+  <tr><td>You row label and state (all five)</td><td><code>--ink-3</code> on <code>--page</code></td><td class="num">6.69:1</td><td>4.5 ✓</td></tr>
+  <tr><td>You row state, alternative weight</td><td><code>--ink</code> 600 on <code>--page</code></td><td class="num">15.41:1</td><td>4.5 ✓</td></tr>
+  <tr><td>remedy link-out</td><td><code>--ink</code> on <code>--surface</code></td><td class="num">17.11:1</td><td>4.5 ✓</td></tr>
+  <tr><td>control hit target</td><td colspan="2">each segment <span class="num">min-height 44px</span>, width ⅓ of the act column (≥ 104px portrait)</td><td>44 ✓</td></tr>
+  <tr><td>row hit target</td><td colspan="2"><span class="num">min-height var(--tap) = 44px</span></td><td>44 ✓</td></tr>
+</table></div>
+<p class="lede"><code>--accent</code> gains no new use beyond OFF-armed, which is the danger button's existing fill moved onto the segment. No new tier is invented: the segments are the primary button's fill (pressed) and outline (unpressed) at the row's 44px.</p>
+
+<h2>8 · What Gate 0 decides</h2>
+<div class="tw"><table>
+  <tr><th>#</th><th>question</th><th>the spec's recommendation</th></tr>
+  <tr><td class="num">1a</td><td>Mode line copy, MANUAL and AUTOMATIC</td><td>(a) in each</td></tr>
+  <tr><td class="num">2a</td><td>Armed OFF label</td><td>TAP AGAIN TO UNLINK</td></tr>
+  <tr><td class="num">3</td><td>needsReauth mode line</td><td><em>Sends are paused until you reconnect.</em></td></tr>
+  <tr><td class="num">4a</td><td>The three reason lines</td><td>the "Rows aren't being sent:" prefix</td></tr>
+  <tr><td class="num">4b</td><td>SEND FAILED weight on the row</td><td><code>--ink-3</code>, same as its siblings</td></tr>
+  <tr><td class="num">5a</td><td>Unlinked explainer</td><td>keep as is</td></tr>
+  <tr><td class="num">5</td><td>The unified pre-link control</td><td>not built (a lifetime across the OAuth unload for one saved tap)</td></tr>
+  <tr><td class="num">6</td><td>UNSENT-without-reason after an automatic failure</td><td>accept; the reason lives on the screen and the row</td></tr>
+</table></div>
+<p class="lede">Approving the page approves the recommendations; naming a number overrides it. Then STOP: the plan is written only after this gate.</p>
