@@ -10018,7 +10018,6 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 .diag-row {
-  margin-top: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -10033,18 +10032,38 @@ section:not(.news-pinned) .news-row:last-of-type {
   text-decoration: none;
 }
 
-/* M-3: pins the row above — `.diag-row` is used ONLY on the You screen
-   (grep confirmed, single JSX site), so this lives on the row's own rule
-   rather than a separate wrapper div; `margin-top: auto` on a flex-column
-   item pushes it to the end of the main axis, absorbing whatever space
-   `.you-screen`'s min-height leaves above it (the short-content case the
-   gate artifact shows). Overrides the plain `12px` `margin-top` above via
-   specificity, in EVERY case, not conditionally — when BASELINES content
-   already fills or exceeds that min-height, a flex `auto` margin resolves
-   to `0`, not back to `12px`; the row's own `border-top` still supplies
-   the visual separation in that case, so nothing collapses illegibly. */
-.you-screen .diag-row {
+/* THE DOORS GROUP (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1
+   R7; Gate 0 amendment §8.2/8.4). Two `.diag-row`s — CONCEPT2 above
+   DIAGNOSTICS — sit at the foot of You inside ONE wrapper, and the wrapper
+   carries the ONE `margin-top: auto` that pins the group to the bottom of
+   `.you-screen`'s flex column. This used to live on `.diag-row` itself
+   (`.you-screen .diag-row { margin-top: auto }`, "single JSX site, grep
+   confirmed"); with two rows that rule would have given EACH row an auto
+   margin, and CSS Flexbox §8.1 splits positive free space equally between
+   auto margins on the main axis — two rows floating apart, not a second row
+   under the first. `auto` resolves to 0 when BASELINES content already fills
+   the column, exactly as before; each row's own `border-top` is then the
+   only separation, on purpose (the rows carry no `margin-top` of their own
+   any more — the 12px `.diag-row` used to declare was overridden to `auto`
+   at its only site, so it never painted). The CONCEPT2 row is absent on any
+   deployment or account without Concept2, and the group is then one row,
+   drawn exactly as the lone DIAGNOSTICS row was. */
+.you-doors {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The CONCEPT2 row's right-hand side: the state line (one of the four
+   strings the card already renders — `you/Concept2Row.tsx`) and the
+   chevron. `--ink-3` on `--page` = 6.69:1 for all four values (Gate 0
+   §8.1's optional `--ink`/600 distinction for RECONNECT NEEDED was drawn
+   and NOT adopted: the word is the distinction). 12px gap matches the
+   approved frames' `.door-right`. */
+.diag-row-end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .diag-caption {
@@ -10157,37 +10176,24 @@ section:not(.news-pinned) .news-row:last-of-type {
    therefore --ink-3, not the --ink-4 every other muted line on this card
    uses. Anything added to .c2-card-panel later inherits that constraint.
 
-   `margin: 12px 0 0` — TASK 8, and both authorities name the same number,
-   which is what makes it an implementer's call rather than a Gate 0 one
-   (the sibling `.c2-send` block had to send its 12-vs-24 question to
-   James, because there the frames said 12 and the screen's own rhythm
-   said 20/24). The amendment's in-situ frames separate every child of the
-   phone frame by `.frame { gap: 12px }`, AND every block on the real You
-   screen already stands off its neighbour by 12: `.baselines-card`,
-   `.retest`, `.reset-baselines` and `.diag-row` are each
-   `margin-top: 12px`.
-
-   The rule exists because it was MISSING and nothing could say so. This
-   card declared no margin; its preceding sibling on You,
-   `.reset-baselines`, is `margin-top: 12px` with no bottom; `.you-screen`
-   is a flex column, so no neighbour's margin collapses in either.
-   Measured in the real engine before the fix: `reset -> card = 0`. A
-   bordered card touched the Reset baseline setup button. That is the
-   `.c2-send` defect one screen over — every other gate on this card
-   measures boxes INSIDE it, so nothing measured the card's own — and
-   `e2e/design.spec.ts`'s "the card stands off the row above it on You" is
-   the assertion that closes it.
-
-   Bottom stays 0 on purpose: `.you-screen .diag-row` below is
-   `margin-top: auto`, so a bottom margin here would be absorbed by that
-   `auto` rather than seen, and when the column overflows (no `auto` room
-   left) the row's own `border-top` is what separates them. */
+   NO `margin-top` OF ITS OWN any more (Wave E PR A, spec
+   2026-09-04-concept2-walk-fixes §5.1). Task 8 gave this card `margin: 12px
+   0 0` on You, where it stood under RESET BASELINE SETUP and measured
+   `reset -> card = 0` without it. PR A moved the card to `/you/concept2`,
+   where its only neighbour above is the `.screen-title` h1, whose
+   browser-default bottom margin (0.67em of 31px ≈ 21px) collapses with any
+   top margin here in block flow (`.overlay-screen` is not a flex column) —
+   so a 12px here painted NOTHING and could not be gated (a mutation deleting
+   it left every measurement identical). The stand-off on the screen is the
+   h1's own, and `e2e/design.spec.ts`'s "the card stands off the title above
+   it on the Concept2 screen" measures it there. Bottom stays 0: the next
+   sibling is the dev-only link probe or nothing, and `.overlay-screen` pads
+   for the tab bar. */
 .c2-card {
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   padding: 16px;
-  margin: 12px 0 0;
   display: flex;
   flex-direction: column;
   gap: 12px;

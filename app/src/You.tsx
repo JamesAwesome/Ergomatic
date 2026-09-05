@@ -1,27 +1,12 @@
-import { lazy, Suspense, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
 import BaselineEditor from "./you/BaselineEditor";
-import Concept2Card from "./you/Concept2Card";
+import { clearConcept2Seen } from "./you/concept2Seen";
+import Concept2Row from "./you/Concept2Row";
 import ResetBaselineSetup from "./you/ResetBaselineSetup";
 import RetestShortcut from "./you/RetestShortcut";
-
-// Wave E PR1.5 fix round 2 (P1a-device): same shape as `AppRoutes.tsx`'s
-// `monitorInstrumentEnabled`/`JustRowObserver` seam — a dynamic `import()`
-// behind a build-time-folded condition, so this card and its distinctive
-// `data-c2-link-probe` literal are absent from a production build with the
-// flag unset (dist-grep proof: `docs/superpowers/plans/2026-09-01-concept2-pr15-walk.md`).
-// Mounted on You rather than as its own route (unlike JustRowObserver):
-// JustRowObserver's own header notes it "has no in-app entry — it is
-// reached by typing its URL", which works for a laptop/web walk but not
-// for an on-device iOS check (no address bar) — this probe needs a
-// TAPPABLE entry point, and the You tab is already one.
-const c2LinkProbeEnabled =
-  import.meta.env.DEV || import.meta.env.VITE_ENABLE_C2_LINK_PROBE === "1";
-const Concept2LinkProbe = c2LinkProbeEnabled
-  ? lazy(() => import("./monitor/Concept2LinkProbe"))
-  : null;
 
 function initials(name: string): string {
   return name
@@ -67,6 +52,12 @@ export default function You({
         <button
           className="button-outline"
           onClick={async () => {
+            // I-D (spec 2026-09-04-concept2-walk-fixes §5.1): the Concept2
+            // row's persisted "this account has been told" fact must not
+            // outlive the account on this device. Cleared BEFORE the
+            // adapter's sign-out so a failed sign-out cannot leave it
+            // behind either.
+            clearConcept2Seen(user.id);
             await authSignOut();
             onSignedOut();
           }}
@@ -88,35 +79,6 @@ export default function You({
           2's Reset onboarding ruling). Sits with the BASELINES section it
           destroys, below the shortcut. */}
       <ResetBaselineSetup onReset={() => setResetGeneration((g) => g + 1)} />
-      {/* Wave E PR2, Surface 1 (board + Gate 0 amendment 2026-09-03). The
-          rower's only door to the Concept2 link. Renders NOTHING unless
-          the server reports `available: true` — a capability gate, not a
-          cosmetic hide (spec §Architecture 8), so You looks exactly as it
-          does today on any deployment with `C2_LINK_ENABLED` unset, which
-          is every deployment until the flag flip. Since the per-user gate
-          landed, the server answers `available` per REQUEST rather than per
-          deployment
-          (`availableFor(email)`, gated on `C2_ALLOWED_EMAILS` as well), so
-          after the flip this is also how You looks for a rower who is not
-          on that list — an absent card, no error to explain.
-          ABOVE the dev-only probe and the DIAGNOSTICS row, both of which
-          keep their own positions (the probe is a walk instrument, not a
-          product surface; the row's own comment requires it stay last).
-          BELOW Reset baseline setup, which is a decision this task made
-          rather than one the amendment drew: every in-situ frame that
-          shows the card (1a, 1c, 1f, 1f-b, 1f-c, 1i, 1j) omits the RESET
-          BASELINE SETUP ghost entirely, and the only frames that draw
-          that ghost (1h, the no-card comparison) omit the card — so the
-          page never puts the two in one frame and cannot settle their
-          order. Keeping Reset directly under the BASELINES group it
-          destroys is what decided it.
-
-          RULED by James, 2026-09-04, on the rendered captures
-          (`docs/screenshots/you-concept2-unlinked.png` and
-          `you-concept2-landscape.png`, the first frames anywhere showing
-          the card and the RESET ghost together): AS SHIPPED. This is no
-          longer an open question or an implementer's call. */}
-      <Concept2Card email={user.email} />
       {/* No SETTINGS section: the mock's settings rows (PRE-WORKOUT
           COUNTDOWN, PACE TOLERANCE, ACCENT COLOR) are filler
           (DEVIATIONS.md/handoff README §7) and are deliberately not
@@ -124,25 +86,47 @@ export default function You({
           WARM-UP by Phase WU (2026-08-21), and "Learning the app" by
           James's 2026-08-23 ruling (the teaching lives in News's pinned
           articles alone now). */}
-      {Concept2LinkProbe && (
-        <Suspense fallback={null}>
-          <Concept2LinkProbe />
-        </Suspense>
-      )}
-      {/* Task 3 (Gate 0 rev 2/3, 2026-09-01): one quiet mono row, at the
-          bottom of You, on purpose — the diagnostics ring is not a
-          product feature a rower reaches for, it's a tool for the rare
-          "something went wrong" moment. Opens the menu screen
+      {/* THE DOORS (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1,
+          Gate 0 amendment §8 approved 2026-09-04): the foot of You is one
+          GROUP of two quiet mono rows, pinned to the bottom by ONE
+          `margin-top: auto` on this wrapper (`.you-doors`, index.css) —
+          invariant R7; two rows each carrying their own auto margin would
+          be a flex free-space split, not a second row under the first.
+          ORDER RULED (ruling 7): CONCEPT2 ABOVE DIAGNOSTICS, which keeps
+          the DIAGNOSTICS row You's last child.
+
+          CONCEPT2: the row replaces the card that stood here (PR2's
+          Surface 1). It renders NOTHING unless a successful read has said
+          `available: true` for this account — today's capability gate,
+          plus ruling 6's persisted `seen` fact for the failed-read cell
+          (`you/Concept2Row.tsx` carries the decision table). Everything
+          the card did lives behind it at `/you/concept2`
+          (`you/Concept2Screen.tsx`), including the dev-only link probe
+          that used to sit between the card and this row. James's
+          2026-09-04 "AS SHIPPED" position ruling was made on captures of
+          the CARD beside RESET BASELINE SETUP; it does not transfer to
+          this adjacency, which Gate 0 §8.2/8.4 drew and approved instead.
+
+          DIAGNOSTICS (Task 3, Gate 0 rev 2/3, 2026-09-01): one quiet mono
+          row, at the bottom of You, on purpose — the diagnostics ring is
+          not a product feature a rower reaches for, it's a tool for the
+          rare "something went wrong" moment. Opens the menu screen
           (`you/Diagnostics.tsx`), not Monitor logs directly — the menu is
           the extensible home for whatever diagnostic tools follow.
           `state={{ from: "/you" }}`: the same origin idiom RetestShortcut
           above uses, so the menu's own BackLink returns HERE. Stays the
-          LAST child (dev-only C2LinkProbe, present or absent, sits above
-          it) per this comment's own "at the bottom of You, on purpose". */}
-      <Link to="/you/diagnostics" state={{ from: "/you" }} className="diag-row">
-        <span>DIAGNOSTICS</span>
-        <span aria-hidden="true">&rsaquo;</span>
-      </Link>
+          LAST child of You. */}
+      <nav className="you-doors" aria-label="More">
+        <Concept2Row accountId={user.id} />
+        <Link
+          to="/you/diagnostics"
+          state={{ from: "/you" }}
+          className="diag-row"
+        >
+          <span>DIAGNOSTICS</span>
+          <span aria-hidden="true">&rsaquo;</span>
+        </Link>
+      </nav>
     </main>
   );
 }
