@@ -4640,3 +4640,18 @@ was never told to be ready before its first listing — v1 put unlock after
 **Start** while the controller listed immediately. Ready state belongs in the
 invitation, superseding the 2026-09-04 "permission reply comes before one
 ordinary unlock" shape for any walk whose host talks to the phone on reply.
+
+## Flipper-emulated tag desk walk, 2026-09-05
+
+`NF-FLIPPER-EMU-v1` PASS WITH CONDITIONS. New standing point: **when a walk
+moves off the erg, re-derive which path produces the evidence.** V8's Cancel
+tap was a disclosed contingency because the PM5 completed the handoff; at the
+desk the PM5 is absent, the no-match path is expected, and Cancel becomes the
+only export — an unobserved action promoted to the critical path without
+anyone re-reading the outcome table. Also: a runsheet that inherits a v8
+protocol must re-run v8's exact-action-feasibility table against its OWN new
+physical actions (Flipper menu, phone-to-Flipper alignment were both
+SECONDARY and undemonstrated), and must permit repositioning inside one
+reader session so an antenna miss reads as INCONCLUSIVE, not NEGATIVE.
+RF26: one tag emulated identically never covers "arbitrary tag" or
+"two tags at once" — a Flipper emulates one.

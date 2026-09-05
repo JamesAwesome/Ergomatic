@@ -53,3 +53,12 @@ verbatim plus a read-only transport preflight and a wired-cable preference;
 its PM disposition is recorded there. No clock, install permission, scan
 permission or retry is active until James replies **go** to v2's invitation.
 Product implementation remains gated; do not push, merge or release.
+
+**Flipper desk path opened, 2026-09-05.** NF-RECOVERY-v2 case 1 stopped on the
+host helper's `FinalDisplayMismatch` guard (two reader starts, both RF-active
+and Core NFC 200; not a failed recovery). To cut erg trips, James read the
+PM5 tag with a Flipper Zero (NTAG203). NF-FLIPPER-EMU-v1 was NEGATIVE because
+the saved file was a truncated 6-page read; see FLIPPER-EMU-V1-RESULT.md. A
+complete replica was synthesized from the dated fixture, round-trip validated,
+and written to the Flipper as C2_pm5_rebuilt.nfc. NF-FLIPPER-EMU-v2 (same
+one-scan runsheet, new file) awaits a fresh PM pass and James's go.
