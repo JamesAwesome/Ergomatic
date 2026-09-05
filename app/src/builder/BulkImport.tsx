@@ -26,7 +26,7 @@ interface BulkResponse {
 // the grammar) — a real, currently passing example rather than field-name
 // placeholders, so a rower can copy its shape directly instead of guessing
 // what TYPE accepts. The header is "title | TYPE | effort" (Phase DE PR 1);
-// the older "title | TYPE | difficulty | pain" form, with or without a
+// the older "title | TYPE | difficulty | effort" form, with or without a
 // leading number, is still accepted and its difficulty and number
 // discarded (see bulk.ts's parseHeader), but the three-field shape is what
 // this help teaches since both are dead weight now.
@@ -45,7 +45,7 @@ r 5`;
 // doesn't fit either shape has no error message to go on and this text is
 // what tells them what's optional.
 const GRAMMAR_HELP =
-  'header: "title | TYPE | effort" (the older "title | TYPE | difficulty | pain" form, with or without a leading number, is still accepted; difficulty and the number are ignored)';
+  'header: "title | TYPE | effort" (the older "title | TYPE | difficulty | effort" form, with or without a leading number, is still accepted; difficulty and the number are ignored)';
 
 /** Bulk-paste import screen: posts raw text to the server, which owns all
  *  parsing (app/domain/bulk.ts) — this component never parses, pre-validates,

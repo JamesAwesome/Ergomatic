@@ -8,7 +8,7 @@ describe("derivedDifficulty (Phase DE PR 1 compat write, spec §3.2)", () => {
     [3, "medium"],
     [4, "hard"],
     [5, "hard"],
-  ] as const)("pain %i → %s", (pain, word) => {
-    expect(derivedDifficulty(pain)).toBe(word);
+  ] as const)("effort %i → %s", (effort, word) => {
+    expect(derivedDifficulty(effort)).toBe(word);
   });
 });

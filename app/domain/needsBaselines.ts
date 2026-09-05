@@ -1,4 +1,4 @@
-import { isEffortRef } from "./pace.js";
+import { isPaceWordRef } from "./pace.js";
 import type { Step } from "./types.js";
 
 /** True unless EVERY work ("w") step in `steps` is an effort ref
@@ -14,5 +14,5 @@ import type { Step } from "./types.js";
  *  this SAME predicate rather than each re-deriving it, so they can never
  *  disagree about which workouts are safe to run without baselines. */
 export function needsBaselines(steps: Step[]): boolean {
-  return steps.some((s) => s.k === "w" && !isEffortRef(s.ref));
+  return steps.some((s) => s.k === "w" && !isPaceWordRef(s.ref));
 }

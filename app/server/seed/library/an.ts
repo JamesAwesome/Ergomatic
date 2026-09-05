@@ -17,12 +17,12 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // (2026-08-10 library-rebalance spec, §2/the zero-five audit; rest-grid
 // pin, James 2026-08-10, extended to created work pieces the same day).
 export const AN_WORKOUTS: WorkoutInput[] = [
-  // ------------------------------------------------- pain 3 (1–11)
+  // ------------------------------------------------- effort 3 (1–11)
   {
     // AN: 5×30 s at 2k-3 with 1:3 rest — five short strikes with room to breathe between them.
     title: "Scud Cloud",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       { k: "reps", count: 5 },
       {
@@ -38,7 +38,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 4×45 s at 2k-3 with ~1:2.3 rest — longer reps, deliberately held at the bottom of the rate band.
     title: "Dust Whirl",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -54,7 +54,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 6×200 m at 2k-4 with ~1:1.7 rest — anaerobic work measured by the metre, not the clock.
     title: "Steam Devil",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       { k: "reps", count: 6 },
       {
@@ -70,7 +70,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 4×30 s at 2k-4 with 1:4 rest — few reps, canonical recovery, nothing to hide behind.
     title: "Snow Devil",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -86,7 +86,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 30/45/60/45/30 s pyramid at 2k-4, easing to 2k-3 at the apex — up to a minute and back, quickly.
     title: "Beaver Tail",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       {
         k: "w",
@@ -128,7 +128,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 5×150 m at 2k-4 with ~1:2.8 rest — short sharp distance reps for rate control.
     title: "Tail Cloud",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       { k: "reps", count: 5 },
       {
@@ -144,7 +144,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 6×45 s at 2k-3 with the rate building 28→32 in paired steps — a stroke-build, not a pace-build.
     title: "Roll Cloud",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       {
         k: "w",
@@ -194,7 +194,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 2 rounds of a 60/45/30 s descending ladder at 2k-4 — rest tapers with the reps, then resets.
     title: "Shelf Cloud",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       { k: "reps", count: 2 },
       {
@@ -224,7 +224,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 8×250 m at 2k-4 with ~1:1.7 rest — distance reps where the last two decide the session.
     title: "Wall Cloud",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       { k: "reps", count: 8 },
       {
@@ -243,7 +243,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // grid values that hold the 20-30 band, landing exactly on 20:00.)
     title: "Mammatus",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       {
         k: "w",
@@ -286,7 +286,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 10×30 s at 2k-4 with 1:3 rest — the rest holds its ratio as the count grows.
     title: "Funnel Cloud",
     type: "AN",
-    pain: 3,
+    effort: 3,
     steps: [
       { k: "reps", count: 10 },
       {
@@ -299,12 +299,12 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
 
-  // ------------------------------------------------ pain 4 (12–20)
+  // ------------------------------------------------ effort 4 (12–20)
   {
     // AN: 3 rounds of 45 s + 30 s at 2k-4 on tight rest — half the canonical recovery, twice the residue.
     title: "Collar Cloud",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 3 },
       {
@@ -327,7 +327,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 60/45/30/30 s descending, 2k-3 → 2k-4 → max as the pieces shorten.
     title: "Inflow Notch",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       {
         k: "w",
@@ -362,7 +362,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 30/45/60/90 s ascending ladder, target easing 2k-4 → 2k-3 and the rate walking back with it.
     title: "Barber Pole",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       {
         k: "w",
@@ -397,7 +397,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 6×30 s at 2k-4 with 1:2 rest — short set, short rest, thorough for its fifteen minutes.
     title: "Inflow Band",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 6 },
       {
@@ -413,7 +413,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 4 rounds of 60 s + 30 s at 2k-4 — the short rep hangs off the long one like the echo it is named for.
     title: "Hook Echo",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -436,7 +436,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 7×250 m at 2k-4 with ~1:2.2 rest — seven fast quarter-Ks on real recovery.
     title: "Bow Echo",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 7 },
       {
@@ -452,7 +452,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 90/60/45/30 s descending, 2k-3 → 2k-4 → max — a session that ends faster than it starts.
     title: "Downdraft",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       {
         k: "w",
@@ -492,7 +492,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // a replacement with no historical warm-up.)
     title: "Meso Low",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 10 },
       {
@@ -508,7 +508,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 3 rounds of 4×45 s at 2k-3 — quick rest inside the round, a real one between.
     title: "Wind Gust",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 3 },
       {
@@ -542,7 +542,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
 
-  // -------------------------------------------------- pain 4 (21–33)
+  // -------------------------------------------------- effort 4 (21–33)
   {
     // AN: 5 rounds of a 1-2-3' ladder all out — the rear flank climbs and climbs.
     // (replacement — Gust Front's slot: hard/4, 45-60. Gust Front could
@@ -550,7 +550,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // generated fresh against book cell AN|60+.)
     title: "Rear Flank",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 5 },
       {
@@ -583,7 +583,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // generated fresh against book cell AN|60+.)
     title: "Scud Run",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 12 },
       {
@@ -602,7 +602,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // generated fresh against book cell AN|60+.)
     title: "Cloud to Ground",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -641,7 +641,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // move-plan residual; generated fresh against book cell AN|60+.)
     title: "Bolt from the Blue",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 3 },
       {
@@ -684,7 +684,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 5 rounds of two 30 s max strikes 45 s apart, then a long sit — twin bolts, one recovery.
     title: "Fork Lightning",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 5 },
       {
@@ -707,7 +707,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 10×150 m all out with 1:1.8 rest — max effort scored by the metre, so the fade is visible.
     title: "Heat Lightning",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 10 },
       {
@@ -726,7 +726,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // residual; generated fresh against book cell AN|60+.)
     title: "Ground Flash",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 11 },
       {
@@ -742,7 +742,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 10×45 s at 2k-4 with 1:3 rest — the workhorse anaerobic volume session.
     title: "Anvil Crawler",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 10 },
       {
@@ -758,7 +758,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 2 volleys of 5×300 m at 2k-4 — 90 s inside the volley, 3:45 between them.
     title: "Hailstorm",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 2 },
       {
@@ -802,7 +802,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 30/45/60/90/60/45/30 s pyramid, splits easing toward the apex and a max 30 s to finish — up one side and straight back down.
     title: "Outflow Boundary",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       {
         k: "w",
@@ -858,7 +858,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 4 rounds of 60/45/30 s, 2k-4 down to max — the reps shrink, the rest resets, four times through.
     title: "Satellite Tornado",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -888,7 +888,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 12×200 m all out with ~1:2.3 rest — a dozen links, each one the same length.
     title: "Chain Lightning",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 12 },
       {
@@ -904,7 +904,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 10×300 m at 2k-4 with ~1:2.5 rest — the longest prescribed-split distance set in the block.
     title: "Plow Wind",
     type: "AN",
-    pain: 4,
+    effort: 4,
     steps: [
       { k: "reps", count: 10 },
       {
@@ -917,7 +917,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
 
-  // -------------------------------------------------- pain 5 (34–60)
+  // -------------------------------------------------- effort 5 (34–60)
   {
     // AN: 4 rounds of a 1-2-3-4' ladder all out — a full hour of climbing bolts.
     // (replacement — Lightning Strike's slot: hard/5, 60+. Lightning
@@ -925,7 +925,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // residual; generated fresh against book cell AN|60+.)
     title: "Positive Strike",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -962,7 +962,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 4×90 s all out with 1:2.3 rest — four long bolts, each one grounded completely.
     title: "Ground Strike",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -978,7 +978,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 60/90/120/90/60 s all-out pyramid — the column is widest in the middle, and so is the damage.
     title: "Downburst",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       {
         k: "w",
@@ -1023,7 +1023,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // residual; generated fresh against book cell AN|60+.)
     title: "Downburst Line",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 3 },
       {
@@ -1066,7 +1066,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 6×250 m all out with 1:3 rest — max effort with a distance to answer for.
     title: "Wet Microburst",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 6 },
       {
@@ -1082,7 +1082,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 12×30 s all out with 1:2.5 rest — the reps arrive faster than the recovery can.
     title: "Landspout",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 12 },
       {
@@ -1098,7 +1098,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 5×90 s at 2k-4 with ~1:1.7 rest — long reps at a fast split; the visibility goes first.
     title: "Whiteout",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 5 },
       {
@@ -1119,7 +1119,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // ±25% envelope.)
     title: "Ball Lightning",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 3 },
       {
@@ -1149,7 +1149,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 4 rounds of 90 s + 30 s all out — empty the long one, then answer the short one.
     title: "Giant Hail",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -1172,7 +1172,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 10×300 m all out with ~1:1.8 rest — 3000 m of maximal metres, one shaft at a time.
     title: "Hail Shaft",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 10 },
       {
@@ -1192,7 +1192,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // exactly on 30:00.)
     title: "Flash Flood",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 2 },
       {
@@ -1233,7 +1233,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // land exactly on 20:00.)
     title: "Debris Flow",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       {
         k: "w",
@@ -1275,7 +1275,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 12×45 s all out with ~1:2.7 rest — the rotating core of the block; nine minutes of maximal work.
     title: "Supercell",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 12 },
       {
@@ -1291,7 +1291,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 10×60 s at 2k-4 with 1:2 rest — ten fast minutes, each one paid for before the next.
     title: "Mesocyclone",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 10 },
       {
@@ -1307,7 +1307,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 5 rounds of 60 s + 30 s all out on 2'/2:30 rest — a full minute emptied, then a sprint on top of it.
     title: "Wedge Tornado",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 5 },
       {
@@ -1330,7 +1330,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 30/45/60/45/30 s all-out pyramid on long rests — climb to a full minute and back down, every rep maximal.
     title: "Rope Tornado",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       {
         k: "w",
@@ -1372,7 +1372,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 8×75 s all out with 1:2 rest — spun off the side of the session and just as destructive.
     title: "Gustnado",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 8 },
       {
@@ -1388,7 +1388,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 2 rounds of a 60/90/120 s ascending build, all out — the fire column assembles itself twice.
     title: "Pyrocumulonimbus",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 2 },
       {
@@ -1418,7 +1418,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 90/90/60/60/30 s all out with descending rests — the wrong phenomenon in the wrong season, all of it maximal.
     title: "Thundersnow",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       {
         k: "w",
@@ -1460,7 +1460,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 4 waves of 90/60/30 s all out — each wave shrinks as it breaks, then the longer sit.
     title: "Tornado Outbreak",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -1490,7 +1490,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 10×60 s all out with 1:2.5 rest — honest recovery, honest maximal reps, forty-five minutes of it.
     title: "Violent Storm",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 10 },
       {
@@ -1506,7 +1506,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 4 rounds of 90 s + 60 s all out — ten maximal minutes; the eye between rounds never quite arrives.
     title: "Hurricane Force",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 4 },
       {
@@ -1529,7 +1529,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 6×90 s all out with ~1:2.7 rest — the longest maximal rep the anaerobic band admits.
     title: "Macroburst",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 6 },
       {
@@ -1549,7 +1549,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // exactly on 30:00.)
     title: "Bomb Cyclone",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 2 },
       {
@@ -1586,7 +1586,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 12×90 s all out with ~1:2.3 rest — eighteen maximal minutes; a seventy-minute session that is mostly rest, as it has to be.
     title: "Typhoon",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 12 },
       {
@@ -1602,7 +1602,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 5 rounds of 60 s + 90 s all out, the long rep earning the long rest — the pressure drops in pairs.
     title: "Explosive Cyclogenesis",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 5 },
       {
@@ -1625,7 +1625,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     // AN: 12×60 s all out with 1:4.5 rest — the block's longest session and mostly rest by volume; that is what it takes to keep twelve reps maximal.
     title: "Violent Tornado",
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       { k: "reps", count: 12 },
       {

@@ -26,7 +26,7 @@ function seedWorkout(
     id: `id-${title.replace(/\s/g, "-").toLowerCase()}`,
     title: seed.title,
     type: seed.type,
-    pain: seed.pain,
+    effort: seed.effort,
     steps: seed.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,

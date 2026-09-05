@@ -17,12 +17,12 @@ import type { RecentLog } from "../api/useRecentLogs";
 
 // docs/design/README.md:185's LAST THREE row format, literally: type badge
 // + title + "JUL 25 · HELD · 2/10" — a date (not days-ago), the plain
-// word, and the pain figure. The handoff's own "2/10" is its unmodified
+// word, and the effort figure. The handoff's own "2/10" is its unmodified
 // 1-10 scale; docs/design/DEVIATIONS.md's first row establishes
-// Ergomatic's is 1-5 everywhere else (PainBar, WorkoutDetail's "PAIN
-// n/5", Library's own 1-5 PAIN filter cells) — matching the handoff's
+// Ergomatic's is 1-5 everywhere else (EffortBar, WorkoutDetail's "EFFORT
+// n/5", Library's own 1-5 EFFORT filter cells) — matching the handoff's
 // literal "/10" here would contradict that already-decided,
-// already-documented scale, so this uses "/5" like every other pain
+// already-documented scale, so this uses "/5" like every other effort
 // display in the app.
 const MONTH_ABBREV = [
   "JAN",
@@ -248,13 +248,13 @@ export function LogRow({
       <FreeRowChip workoutId={log.workoutId} workoutType={log.workoutType} />
       <span className="today-log-title">{log.workoutTitle}</span>
       <span className="today-log-meta">
-        {/* R-A: held/pain are nullable ahead of the write side that can
+        {/* R-A: held/effort are nullable ahead of the write side that can
             produce a null row - each segment renders only when present
             (the F1 no-dash rule), joined by " · ". */}
         {[
           formatLogDate(log.loggedAt),
           log.held === null ? null : log.held.toUpperCase(),
-          log.pain === null ? null : `${log.pain}/5`,
+          log.effort === null ? null : `${log.effort}/5`,
         ]
           .filter((segment) => segment !== null)
           .join(" · ")}

@@ -32,7 +32,7 @@ describe("FilterSheet", () => {
   it("renders as a labelled dialog holding all four groups", () => {
     renderSheet();
     const dialog = screen.getByRole("dialog", { name: "Filter" });
-    for (const label of ["TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
     expect(within(dialog).queryByText("DIFFICULTY")).not.toBeInTheDocument();
@@ -84,7 +84,7 @@ describe("FilterSheet", () => {
     const draft: Filters = {
       ...EMPTY_FILTERS,
       durationRange: { min: 45, max: 60 },
-      painLevels: [3, 4],
+      effortLevels: [3, 4],
       lastDone: "under21",
       source: "global",
     };
@@ -133,12 +133,12 @@ describe("FilterSheet", () => {
     });
   });
 
-  it("clicking a PAIN cell reports the toggled draft", async () => {
+  it("clicking a EFFORT cell reports the toggled draft", async () => {
     const { onChangeDraft } = renderSheet();
     await userEvent.click(screen.getByRole("button", { name: "4" }));
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
-      painLevels: [4],
+      effortLevels: [4],
     });
   });
 
@@ -181,7 +181,7 @@ describe("FilterSheet", () => {
   });
 
   // Fix round (whole-branch review, finding B): CLEAR resets exactly the
-  // sheet's OWN groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE) — `types`,
+  // sheet's OWN groups (DIFFICULTY/TIME/EFFORT/LAST DONE/SOURCE) — `types`,
   // the chip row's own group with no control inside this sheet at all, is
   // untouched. Seeding a non-empty `types` here is the point: against the
   // old `clearFilters()` behaviour this draft would have come back with

@@ -12,8 +12,8 @@
 export type Difficulty = "easy" | "medium" | "hard";
 export const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
 
-export function derivedDifficulty(pain: number): Difficulty {
-  if (pain <= 2) return "easy";
-  if (pain === 3) return "medium";
+export function derivedDifficulty(effort: number): Difficulty {
+  if (effort <= 2) return "easy";
+  if (effort === 3) return "medium";
   return "hard";
 }

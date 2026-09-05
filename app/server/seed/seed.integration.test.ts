@@ -43,7 +43,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       baselineK2: null,
       baselineK6: null,
       held: "held",
-      pain: 2,
+      effort: 2,
       notes: null,
       steps: [],
       source: "manual",
@@ -147,7 +147,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
         sortOrder: 1,
         title: "Old Ghost",
         type: "AT",
-        pain: 2,
+        effort: 2,
         source: "starter",
         steps: [],
       },
@@ -155,7 +155,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
         sortOrder: 2,
         title: "Old Relic",
         type: "O2",
-        pain: 1,
+        effort: 1,
         source: "starter",
         steps: [],
       },
@@ -163,7 +163,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
         sortOrder: 3,
         title: "Old Fossil",
         type: "TR",
-        pain: 4,
+        effort: 4,
         source: "starter",
         steps: [],
       },
@@ -172,7 +172,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
     const personal = await wk.create(user.id, {
       title: "My Own Row",
       type: "AN",
-      pain: 3,
+      effort: 3,
       source: "user",
       steps: [],
     });
@@ -184,7 +184,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       baselineK2: null,
       baselineK6: null,
       held: "held",
-      pain: 2,
+      effort: 2,
       notes: null,
       steps: [],
       source: "manual",
@@ -280,7 +280,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
 
     const edited = LIBRARY_WORKOUTS.map((w) =>
       w.title === target.title
-        ? { ...w, difficulty: "hard" as const, pain: 5 }
+        ? { ...w, difficulty: "hard" as const, effort: 5 }
         : w,
     );
     await seedGlobalLibrary(db, edited);
@@ -289,7 +289,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       (g) => g.title === target.title,
     )!;
     expect(after.id).toBe(target.id); // the headline: same row survives
-    expect(after).toMatchObject({ difficulty: "hard", pain: 5 });
+    expect(after).toMatchObject({ difficulty: "hard", effort: 5 });
     const logRow = await findLog(user.id, logId);
     expect(logRow!.workoutId).toBe(target.id); // link intact
   });
@@ -333,7 +333,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
         sortOrder: target.sortOrder,
         title: target.title,
         type: target.type,
-        pain: target.pain,
+        effort: target.effort,
         source: "starter" as const,
         steps: oldSteps as unknown as typeof target.steps,
       },
@@ -391,7 +391,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
         sortOrder: k6.sortOrder,
         title: k6.title,
         type: k6.type,
-        pain: k6.pain,
+        effort: k6.effort,
         source: "starter" as const,
         steps: oldSteps as unknown as typeof k6.steps,
       },
@@ -525,7 +525,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       sortOrder: 301,
       title: "First 6k",
       type: "O2",
-      pain: 2,
+      effort: 2,
       source: "starter" as const,
       steps: [
         {
@@ -539,7 +539,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       sortOrder: 302,
       title: "First 2k",
       type: "AN",
-      pain: 2,
+      effort: 2,
       source: "starter" as const,
       steps: [
         {
@@ -587,8 +587,16 @@ describe("seedGlobalLibrary against real Postgres", () => {
     // the row under its NEW title and the ordinary content-diff path
     // applies the reclassification (2K: AN/hard/5, 6K: AT/hard/4) — a
     // rename that left the old classification in place fails here.
-    expect(k2After).toMatchObject({ type: "AN", difficulty: "hard", pain: 5 });
-    expect(k6After).toMatchObject({ type: "AT", difficulty: "hard", pain: 4 });
+    expect(k2After).toMatchObject({
+      type: "AN",
+      difficulty: "hard",
+      effort: 5,
+    });
+    expect(k6After).toMatchObject({
+      type: "AT",
+      difficulty: "hard",
+      effort: 4,
+    });
 
     // Second boot: idempotent — no dupes, no deletes, no writes.
     const stampBefore = new Map(
@@ -655,14 +663,14 @@ describe("seedGlobalLibrary against real Postgres", () => {
     const personalNew = await wk.create(user.id, {
       title: ONBOARDING_TITLES.k2,
       type: "AN",
-      pain: 5,
+      effort: 5,
       source: "user",
       steps: [],
     });
     const personalOld = await wk.create(user.id, {
       title: "First 2k",
       type: "AN",
-      pain: 2,
+      effort: 2,
       source: "user",
       steps: [],
     });

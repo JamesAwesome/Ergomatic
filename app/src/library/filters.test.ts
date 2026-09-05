@@ -38,7 +38,7 @@ function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
   return {
     title: "T",
     type: "O2",
-    pain: 2,
+    effort: 2,
     // A plain 10' work step at the 6k baseline: `estimateMinutes` prices
     // it to 10 minutes, which is all any duration-bucket fixture here
     // needs. (Every fixture in this file was a `wu` row until 2026-08-09's
@@ -60,14 +60,14 @@ function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
 
 // Realistic fixture (recurring-failure #3): the real 300-workout global
 // library, not a hand-built minimum — the "composes" test below needs
-// real co-occurring type/difficulty/pain combinations to prove the
+// real co-occurring type/difficulty/effort combinations to prove the
 // predicates actually intersect rather than each independently matching
 // everything.
 const WORKOUTS: LibraryWorkout[] = LIBRARY_WORKOUTS.map((seed, i) => ({
   id: `lib-${i}`,
   title: seed.title,
   type: seed.type,
-  pain: seed.pain,
+  effort: seed.effort,
   steps: seed.steps,
   isGlobal: true,
   lastDoneDaysAgo: null,
@@ -88,10 +88,10 @@ describe("chip/cell state transitions", () => {
     ).toStrictEqual({ min: 0, max: 120 });
   });
 
-  it("accumulates pain levels (multi-select union) and removes on repeat", () => {
+  it("accumulates effort levels (multi-select union) and removes on repeat", () => {
     const f = togglePainLevel(togglePainLevel(EMPTY_FILTERS, 1), 4);
-    expect(f.painLevels).toStrictEqual([1, 4]);
-    expect(togglePainLevel(f, 1).painLevels).toStrictEqual([4]);
+    expect(f.effortLevels).toStrictEqual([1, 4]);
+    expect(togglePainLevel(f, 1).effortLevels).toStrictEqual([4]);
   });
 
   it("makes under21 and over21 mutually exclusive", () => {
@@ -123,7 +123,7 @@ describe("chip/cell state transitions", () => {
     const busy: Filters = {
       types: ["AN"],
       durationRange: { min: 0, max: 30 },
-      painLevels: [4, 5],
+      effortLevels: [4, 5],
       lastDone: "under21",
       source: "custom",
       query: "",
@@ -178,20 +178,20 @@ describe("applyFilters", () => {
     expect(both.every((r) => r.type === "O2" || r.type === "AT")).toBe(true);
   });
 
-  it("composes: type AND pain narrow together against the real library", () => {
+  it("composes: type AND effort narrow together against the real library", () => {
     // Verified against the real 300-workout seed (not guessed): types
-    // {O2,AT} ∩ difficulties {easy,medium} ∩ pain {1,2,3} = 126 rows, a
+    // {O2,AT} ∩ difficulties {easy,medium} ∩ effort {1,2,3} = 126 rows, a
     // proper subset of both types+difficulties alone (140) and of either
     // predicate alone — see the inspection this test's assertions encode.
     const filters: Filters = {
       ...EMPTY_FILTERS,
       types: ["O2", "AT"],
-      painLevels: [1, 2, 3],
+      effortLevels: [1, 2, 3],
     };
     const expected = WORKOUTS.filter(
       (r) =>
         (r.type === "O2" || r.type === "AT") &&
-        (r.pain === 1 || r.pain === 2 || r.pain === 3),
+        (r.effort === 1 || r.effort === 2 || r.effort === 3),
     );
     expect(expected.length).toBeGreaterThan(0);
     expect(expected.length).toBeLessThan(WORKOUTS.length);
@@ -222,11 +222,11 @@ describe("applyFilters", () => {
     ).toStrictEqual(["long"]);
   });
 
-  it("unions pain levels — a non-contiguous selection still matches every level named", () => {
+  it("unions effort levels — a non-contiguous selection still matches every level named", () => {
     const rows = [
-      w({ id: "p1", pain: 1 }),
-      w({ id: "p3", pain: 3 }),
-      w({ id: "p4", pain: 4 }),
+      w({ id: "p1", effort: 1 }),
+      w({ id: "p3", effort: 3 }),
+      w({ id: "p4", effort: 4 }),
     ];
     const f = togglePainLevel(togglePainLevel(EMPTY_FILTERS, 1), 4);
     expect(applyFilters(rows, f, baselines).map((r) => r.id)).toStrictEqual([
@@ -264,9 +264,9 @@ describe("applyFilters", () => {
 
   it("intersects different filter kinds", () => {
     const rows = [
-      w({ id: "match", type: "AT", pain: 2 }),
-      w({ id: "wrongtype", type: "O2", pain: 2 }),
-      w({ id: "toopainful", type: "AT", pain: 5 }),
+      w({ id: "match", type: "AT", effort: 2 }),
+      w({ id: "wrongtype", type: "O2", effort: 2 }),
+      w({ id: "toopainful", type: "AT", effort: 5 }),
     ];
     const f = togglePainLevel(toggleType(EMPTY_FILTERS, "AT"), 2);
     expect(applyFilters(rows, f, baselines).map((r) => r.id)).toStrictEqual([
@@ -377,7 +377,7 @@ describe("hasActiveFilters", () => {
   it("is true for every other group on its own", () => {
     const cases: Partial<Filters>[] = [
       { durationRange: { min: 0, max: 30 } },
-      { painLevels: [3] },
+      { effortLevels: [3] },
       { lastDone: "under21" },
       { source: "custom" },
     ];

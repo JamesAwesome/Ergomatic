@@ -100,13 +100,13 @@ async function renderBuilderWithProbe(
   );
 }
 
-// Fills in every field required for `toSteps` to succeed: title, pain, and
+// Fills in every field required for `toSteps` to succeed: title, effort, and
 // Row 1's duration + pace ref. A fresh create-mode builder opens Row 1's
 // editor by default (there's nothing to scan yet, only something to fill
 // in), so this never has to click EDIT first.
 async function fillValidForm() {
   await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
-  await userEvent.click(screen.getByRole("button", { name: "Pain 3" }));
+  await userEvent.click(screen.getByRole("button", { name: "Effort 3" }));
   // "500" digits into the masked clock field renders as "5:00" (5 minutes) —
   // typing the bare digit "5" would mask to "0:05" (5 seconds) instead.
   await userEvent.type(screen.getByLabelText("Row 1 duration"), "500");
@@ -424,7 +424,7 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      pain: 3,
+      effort: 3,
       rows: [distanceRow],
       reps: 1,
     };
@@ -453,7 +453,7 @@ describe("Builder", () => {
 
   // ---- Save POST body strictness (task brief test 9) ---------------------
 
-  it("POSTs a valid form to /api/workouts with the resolved steps and picked pain", async () => {
+  it("POSTs a valid form to /api/workouts with the resolved steps and picked effort", async () => {
     const api = mockApi(
       () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
     );
@@ -471,7 +471,7 @@ describe("Builder", () => {
       body: JSON.stringify({
         title: "Ladder Sets",
         type: "O2",
-        pain: 3,
+        effort: 3,
         steps: [
           {
             k: "w",
@@ -504,7 +504,7 @@ describe("Builder", () => {
       body: JSON.stringify({
         title: "Ladder Sets",
         type: "O2",
-        pain: 3,
+        effort: 3,
         steps: [
           { k: "reps", count: 3 },
           {
@@ -622,7 +622,7 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      pain: 3,
+      effort: 3,
       rows: [badRow],
       reps: 1,
     };
@@ -654,7 +654,7 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      pain: 3,
+      effort: 3,
       rows: [badRow, goodRow],
       reps: 1,
     };
@@ -702,7 +702,7 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      pain: 3,
+      effort: 3,
       rows: [badRow],
       reps: 1,
     };
@@ -731,7 +731,7 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      pain: 3,
+      effort: 3,
       rows: [badRow],
       reps: 1,
     };
@@ -775,7 +775,7 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      pain: 3,
+      effort: 3,
       rows: [badRow],
       reps: 1,
     };
@@ -812,16 +812,16 @@ describe("Builder", () => {
     ).toBeInTheDocument();
   });
 
-  // Regression: `pain` used to have no entry in Builder's `fieldRefs` map,
+  // Regression: `effort` used to have no entry in Builder's `fieldRefs` map,
   // so when it was the first invalid key `handleSave` silently no-opped on
   // focus. Now it's ClassificationCard's own wrapper that gets focused.
-  it("focuses the classification wrapper and still shows the count when pain is the first invalid field", async () => {
+  it("focuses the classification wrapper and still shows the count when effort is the first invalid field", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    // Valid title, pain deliberately left unset. Row 1's own fields are also
-    // still blank/invalid, but pain comes first in `toSteps`'s errors.
+    // Valid title, effort deliberately left unset. Row 1's own fields are also
+    // still blank/invalid, but effort comes first in `toSteps`'s errors.
     await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
 
     await userEvent.click(
@@ -936,7 +936,7 @@ describe("Builder", () => {
     const initial = fromWorkout({
       title: seaFret.title,
       type: seaFret.type,
-      pain: seaFret.pain,
+      effort: seaFret.effort,
       steps,
     });
     const maxRowIndex = initial.rows.findIndex((r) => r.refEffort === "max");
@@ -986,16 +986,18 @@ describe("Builder", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("has no ClassificationCard leftovers from PainPicker — no radiogroup named Expected pain", async () => {
+  it("has no ClassificationCard leftovers from EffortPicker — no radiogroup named Expected effort", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
     expect(
-      screen.queryByRole("radiogroup", { name: "Expected pain" }),
+      screen.queryByRole("radiogroup", { name: "Expected effort" }),
     ).not.toBeInTheDocument();
     // ClassificationCard's own numeral chips are plain buttons instead.
-    expect(screen.getByRole("button", { name: "Pain 3" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Effort 3" }),
+    ).toBeInTheDocument();
   });
 
   // Two tests used to live here: "a stored workout's wu row survives being
@@ -1139,7 +1141,7 @@ describe("Builder", () => {
       const currentInitial = fromWorkout({
         title: seaFret.title,
         type: seaFret.type,
-        pain: seaFret.pain,
+        effort: seaFret.effort,
         steps: seaFret.steps,
       });
 
@@ -1187,7 +1189,7 @@ describe("Builder", () => {
       const currentInitial = fromWorkout({
         title: seaFret.title,
         type: seaFret.type,
-        pain: seaFret.pain,
+        effort: seaFret.effort,
         steps: seaFret.steps,
       });
 

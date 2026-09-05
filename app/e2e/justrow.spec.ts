@@ -161,7 +161,7 @@ test.describe("Just Row: the whole flow", () => {
     await page.getByRole("button", { name: "Tap again to end" }).click();
     await expect(page).toHaveURL(/\/justrow\/log$/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: "Just Row" })).toBeVisible();
-    await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+    await expect(page.getByText("EFFORT", { exact: true })).toBeVisible();
     await expect(page.getByText(/DID YOU HOLD THE TARGETS/)).toHaveCount(0);
 
     // A fresh backdoor user has no plan, so the door's save stack is the

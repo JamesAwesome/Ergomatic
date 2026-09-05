@@ -21,7 +21,7 @@ function isPainLevel(v: unknown): v is number {
  *  change (or was hand-edited) must come back `null`, never a Filters with
  *  a hole in it: applyFilters trusts every field. This is also, by
  *  construction, the fix for every prior-shaped record: the pre-Task-4 (v1)
- *  shape's fields were `painMax3`/`recency`/`customOnly`, and the v2 shape
+ *  shape's fields were `effortMax3`/`recency`/`customOnly`, and the v2 shape
  *  (Task 4 through the ui-fix round) used a single `type: WorkoutType |
  *  null` where this checks a `types` array — neither name overlaps this
  *  parser's own field list, so both fail on `types` (v1 has no such field
@@ -55,7 +55,12 @@ function parseFilters(raw: string): Filters | null {
   // rejected whole — this record lives one BACK round trip, so nothing is
   // lost (spec §3.3, anchor pass HELD-7).
   if (!isRangeShape(f.durationRange)) return null;
-  if (!Array.isArray(f.painLevels) || !f.painLevels.every(isPainLevel)) {
+  // Phase DE PR 2: renamed from `painLevels` with NO fallback read — this
+  // store is sessionStorage (see LIBRARY_FILTERS_KEY), whose lifetime ends
+  // at app relaunch, so no pre-PR-2 record can reach a new native bundle;
+  // a same-session web bundle swap falls back to EMPTY_FILTERS whole, by
+  // this parser's own design.
+  if (!Array.isArray(f.effortLevels) || !f.effortLevels.every(isPainLevel)) {
     return null;
   }
   if (
@@ -80,7 +85,7 @@ function parseFilters(raw: string): Filters | null {
     // than trust storage.
     types: [...new Set(f.types)],
     durationRange: clampRange(f.durationRange),
-    painLevels: [...new Set(f.painLevels)],
+    effortLevels: [...new Set(f.effortLevels)],
     lastDone: f.lastDone,
     source: f.source,
     query: f.query === undefined ? "" : f.query,

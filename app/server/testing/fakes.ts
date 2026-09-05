@@ -50,7 +50,7 @@ import {
 // ---------------------------------------------------------------------------
 
 interface WorkoutRow extends WorkoutInput {
-  // Phase DE PR 1: the real column is NOT NULL and derived from pain at
+  // Phase DE PR 1: the real column is NOT NULL and derived from effort at
   // every write site (server/compat/difficulty.ts); the fake mirrors it.
   difficulty: Difficulty;
   id: string;
@@ -99,7 +99,7 @@ function newWorkoutRow(
     ...input,
     // After the spread on purpose: an old client's `difficulty` in `input`
     // must never win over the derived word (mirrors the real store).
-    difficulty: derivedDifficulty(input.pain),
+    difficulty: derivedDifficulty(input.effort),
     sortOrder: input.sortOrder ?? null,
     seq: insertionSeq,
     id: crypto.randomUUID(),
@@ -236,7 +236,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       if (!existing) return null;
       assertWorkoutType(input.type);
       // Mirror the real store's UPDATE exactly (app/server/stores/
-      // workouts.ts): only title/type/pain/steps/updatedAt (plus the derived difficulty) are
+      // workouts.ts): only title/type/effort/steps/updatedAt (plus the derived difficulty) are
       // ever set — sortOrder (and every other column) is left alone. Built
       // from an explicit field list, NOT `{ ...existing, ...input }` (M1):
       // `input` is the same object reference as the request body at
@@ -247,8 +247,8 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
         ...existing,
         title: input.title,
         type: input.type,
-        difficulty: derivedDifficulty(input.pain),
-        pain: input.pain,
+        difficulty: derivedDifficulty(input.effort),
+        effort: input.effort,
         steps: input.steps,
         updatedAt: new Date(),
       };
@@ -280,8 +280,8 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
         ...existing,
         title: input.title,
         type: input.type,
-        difficulty: derivedDifficulty(input.pain),
-        pain: input.pain,
+        difficulty: derivedDifficulty(input.effort),
+        effort: input.effort,
         steps: input.steps,
         sortOrder: input.sortOrder,
         updatedAt: new Date(),
@@ -574,7 +574,7 @@ function makeFakeLogsStore(
       const updated = { ...existing };
       if ("thumbs" in patch) updated.thumbs = patch.thumbs ?? null;
       if ("held" in patch) updated.held = patch.held ?? null;
-      if ("pain" in patch) updated.pain = patch.pain ?? null;
+      if ("effort" in patch) updated.effort = patch.effort ?? null;
       if ("notes" in patch) updated.notes = patch.notes ?? null;
       rows[idx] = updated;
       byUser.set(userId, rows);

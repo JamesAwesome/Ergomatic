@@ -41,7 +41,7 @@ function eligibleRow(over: Partial<StoredLog> = {}): StoredLog {
     workoutType: SEA_FRET.type,
     loggedAt: "2026-08-18T18:57:00.000Z",
     held: null,
-    pain: null,
+    effort: null,
     notes: null,
     thumbs: null,
     deviceName: "PM5 432331249",

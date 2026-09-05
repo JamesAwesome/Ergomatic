@@ -126,7 +126,7 @@ export const workouts = pgTable(
     title: text("title").notNull(),
     type: workoutTypeEnum("type").notNull(),
     difficulty: difficultyEnum("difficulty").notNull(),
-    pain: integer("pain").notNull(),
+    effort: integer("effort").notNull(), // renamed from `pain` by 0024 (Phase DE PR 2)
     source: workoutSourceEnum("source").notNull(),
     steps: jsonb("steps").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -138,7 +138,7 @@ export const workouts = pgTable(
   },
   (t) => [
     index("workouts_user_id_idx").on(t.userId),
-    check("workouts_pain_check", sql`${t.pain} between 1 and 5`),
+    check("workouts_effort_check", sql`${t.effort} between 1 and 5`),
   ],
 );
 
@@ -175,7 +175,7 @@ export const sessionLogs = pgTable(
     // `workoutTypeEnum` above (that types `workouts.type`); this column
     // holds OUR intensity axis only and carries no index, CHECK or FK.
     // R-A ordered: the null-tolerant read side ships in this same PR, the
-    // same shape migration 0009 used for `held`/`pain`.
+    // same shape migration 0009 used for `held`/`pain` (now `effort`, 0024).
     workoutType: text("workout_type"),
     loggedAt: timestamp("logged_at", { withTimezone: true })
       .notNull()
@@ -196,9 +196,9 @@ export const sessionLogs = pgTable(
     // `session_logs_pain_check` CHECK below is left untouched: Postgres
     // passes a CHECK constraint on NULL by definition (NULL is neither TRUE
     // nor FALSE, and a CHECK only ever REJECTS an explicit FALSE), so an
-    // absent pain value satisfies `pain between 1 and 5` unchanged — no
+    // absent effort value satisfies `effort between 1 and 5` unchanged — no
     // migration edit needed for the constraint itself.
-    pain: integer("pain"),
+    effort: integer("effort"), // renamed from `pain` by 0024 (Phase DE PR 2)
     notes: text("notes"),
     steps: jsonb("steps").notNull(),
     // Phase 7C Task 3 (spec §5/§6): session-scoped provenance for a
@@ -404,10 +404,10 @@ export const sessionLogs = pgTable(
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),
     // LEFT ALONE by the post-workout-summary migration (0009): NULL passes
-    // a Postgres CHECK constraint by rule (see the `pain` column's own
-    // comment above) — the constraint doesn't need to change for `pain` to
+    // a Postgres CHECK constraint by rule (see the `effort` column's own
+    // comment above) — the constraint doesn't need to change for `effort` to
     // become nullable, only the column's `NOT NULL` does.
-    check("session_logs_pain_check", sql`${t.pain} between 1 and 5`),
+    check("session_logs_effort_check", sql`${t.effort} between 1 and 5`),
   ],
 );
 

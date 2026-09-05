@@ -25,7 +25,7 @@ function withIsGlobal<T extends { userId: string | null }>(
   return { ...row, isGlobal: row.userId === null };
 }
 
-// `difficulty` is DERIVED from pain at all four write sites below, for old
+// `difficulty` is DERIVED from effort at all four write sites below, for old
 // builds only — server/compat/difficulty.ts explains; Phase DE PR 3 removes.
 export function createWorkoutsStore(db: Db) {
   return {
@@ -78,8 +78,8 @@ export function createWorkoutsStore(db: Db) {
           sortOrder: null,
           title: input.title,
           type: input.type,
-          difficulty: derivedDifficulty(input.pain),
-          pain: input.pain,
+          difficulty: derivedDifficulty(input.effort),
+          effort: input.effort,
           source: input.source,
           steps: input.steps,
         })
@@ -101,8 +101,8 @@ export function createWorkoutsStore(db: Db) {
               sortOrder: input.sortOrder ?? null,
               title: input.title,
               type: input.type,
-              difficulty: derivedDifficulty(input.pain),
-              pain: input.pain,
+              difficulty: derivedDifficulty(input.effort),
+              effort: input.effort,
               source: input.source,
               steps: input.steps,
             })),
@@ -127,8 +127,8 @@ export function createWorkoutsStore(db: Db) {
         .set({
           title: input.title,
           type: input.type,
-          difficulty: derivedDifficulty(input.pain),
-          pain: input.pain,
+          difficulty: derivedDifficulty(input.effort),
+          effort: input.effort,
           steps: input.steps,
           updatedAt: new Date(),
         })
@@ -227,8 +227,8 @@ export function createWorkoutsStore(db: Db) {
         .set({
           title: input.title,
           type: input.type,
-          difficulty: derivedDifficulty(input.pain),
-          pain: input.pain,
+          difficulty: derivedDifficulty(input.effort),
+          effort: input.effort,
           steps: input.steps,
           sortOrder: input.sortOrder,
           updatedAt: new Date(),

@@ -6,17 +6,17 @@ import ClassificationCard from "./ClassificationCard";
 
 type Handlers = {
   type: WorkoutType;
-  pain: number | null;
+  effort: number | null;
   onTypeChange: (type: WorkoutType) => void;
-  onPainChange: (pain: number) => void;
+  onPainChange: (effort: number) => void;
 };
 
 function setup(overrides: Partial<Handlers> = {}) {
   const props = {
     type: "O2" as WorkoutType,
-    pain: null as number | null,
+    effort: null as number | null,
     onTypeChange: vi.fn<(type: WorkoutType) => void>(),
-    onPainChange: vi.fn<(pain: number) => void>(),
+    onPainChange: vi.fn<(effort: number) => void>(),
     ...overrides,
   };
   const view = render(<ClassificationCard {...props} />);
@@ -29,7 +29,7 @@ describe("ClassificationCard", () => {
     const card = container.querySelector(".classification-card");
     expect(card).not.toBeNull();
     expect(card).toContainElement(screen.getByText("TYPE"));
-    expect(card).toContainElement(screen.getByText("EXPECTED PAIN"));
+    expect(card).toContainElement(screen.getByText("EXPECTED EFFORT"));
   });
 
   describe("TYPE", () => {
@@ -67,7 +67,7 @@ describe("ClassificationCard", () => {
       expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
     });
 
-    // TYPE always has a selection (unlike PAIN, which starts at null), so
+    // TYPE always has a selection (unlike EFFORT, which starts at null), so
     // the summary word is present from the very first render — there's no
     // "nothing selected yet" state to assert here, only that it tracks the
     // prop and updates when a different type is chosen (the parent owns
@@ -86,7 +86,7 @@ describe("ClassificationCard", () => {
     it("updates the word when the type prop changes", () => {
       const props = {
         type: "O2" as WorkoutType,
-        pain: null as number | null,
+        effort: null as number | null,
         onTypeChange: vi.fn(),
         onPainChange: vi.fn(),
       };
@@ -98,7 +98,7 @@ describe("ClassificationCard", () => {
       expect(screen.getByText("SPEED WORK")).toBeInTheDocument();
     });
 
-    // The word is a plain, non-interactive <p> — same convention as PAIN's
+    // The word is a plain, non-interactive <p> — same convention as EFFORT's
     // level word (ClassificationCard.tsx's doc comment) — so it must not be
     // reachable by Tab and must not get pulled into any button's accessible
     // name via containment or aria-labelledby.
@@ -115,19 +115,19 @@ describe("ClassificationCard", () => {
     });
   });
 
-  describe("EXPECTED PAIN", () => {
+  describe("EXPECTED EFFORT", () => {
     it("renders numerals only — no face graphic markup", () => {
-      const { container } = setup({ pain: 3 });
+      const { container } = setup({ effort: 3 });
       expect(container.querySelector("svg")).toBeNull();
       for (const n of [1, 2, 3, 4, 5]) {
         expect(
-          screen.getByRole("button", { name: `Pain ${n}` }),
+          screen.getByRole("button", { name: `Effort ${n}` }),
         ).toHaveTextContent(String(n));
       }
     });
 
-    it("shows the selected level's word from PAIN_WORDS on the right of the label row (pain 3 -> WORKING)", () => {
-      setup({ pain: 3 });
+    it("shows the selected level's word from PAIN_WORDS on the right of the label row (effort 3 -> WORKING)", () => {
+      setup({ effort: 3 });
       expect(screen.getByText("WORKING")).toBeInTheDocument();
     });
 
@@ -138,12 +138,12 @@ describe("ClassificationCard", () => {
       [4, "HURTS"],
       [5, "BRUTAL"],
     ])("shows %s's word as %s", (level, word) => {
-      setup({ pain: level });
+      setup({ effort: level });
       expect(screen.getByText(word)).toBeInTheDocument();
     });
 
     it("shows no level word when nothing is selected yet", () => {
-      setup({ pain: null });
+      setup({ effort: null });
       for (const word of [
         "EASY BREATH",
         "COMFORTABLE",
@@ -155,30 +155,30 @@ describe("ClassificationCard", () => {
       }
     });
 
-    // Task 1 (ui-fix round): PAIN's selected fill moved off its own
-    // per-level ramp colour onto plain ink (DESIGN.md: "Builder's gold pain
+    // Task 1 (ui-fix round): EFFORT's selected fill moved off its own
+    // per-level ramp colour onto plain ink (DESIGN.md: "Builder's gold effort
     // selection goes") — no inline style, ink only in CSS.
     it("fills the selected chip with ink, not accent or a ramp colour — no inline style", () => {
-      setup({ pain: 2 });
-      const selected = screen.getByRole("button", { name: "Pain 2" });
+      setup({ effort: 2 });
+      const selected = screen.getByRole("button", { name: "Effort 2" });
       expect(selected).toHaveAttribute("aria-pressed", "true");
       expect(selected).not.toHaveAttribute("style");
       expect(selected.className).not.toMatch(/accent/i);
       expect(
-        screen.getByRole("button", { name: "Pain 1" }),
+        screen.getByRole("button", { name: "Effort 1" }),
       ).not.toHaveAttribute("style");
     });
 
-    it("reports the chosen pain level", async () => {
+    it("reports the chosen effort level", async () => {
       const onPainChange = vi.fn();
       setup({ onPainChange });
-      await userEvent.click(screen.getByRole("button", { name: "Pain 4" }));
+      await userEvent.click(screen.getByRole("button", { name: "Effort 4" }));
       expect(onPainChange).toHaveBeenCalledWith(4);
     });
   });
 
   it("gives every chip in every group the 44px hit-target class", () => {
-    setup({ pain: 1 });
+    setup({ effort: 1 });
     const labels = ["O2", "AT", "TR", "AN"];
     for (const label of labels) {
       expect(screen.getByRole("button", { name: label })).toHaveClass(
@@ -186,7 +186,7 @@ describe("ClassificationCard", () => {
       );
     }
     for (const n of [1, 2, 3, 4, 5]) {
-      expect(screen.getByRole("button", { name: `Pain ${n}` })).toHaveClass(
+      expect(screen.getByRole("button", { name: `Effort ${n}` })).toHaveClass(
         "classification-chip",
       );
     }

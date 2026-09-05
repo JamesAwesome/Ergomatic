@@ -69,7 +69,7 @@ interface RawLine {
   lineNumber: number; // 1-based, in the original pasted text
 }
 
-type HeaderFields = Pick<WorkoutInput, "title" | "type" | "pain">;
+type HeaderFields = Pick<WorkoutInput, "title" | "type" | "effort">;
 
 const HEADER_MESSAGE =
   'header must be "title | TYPE | effort" (the legacy "title | TYPE | difficulty | pain" form and a leading number are accepted and ignored)';
@@ -108,13 +108,13 @@ function parseHeader(
   // as pre-existing behaviour.
   let title: string;
   let type: string;
-  let painStr: string;
+  let effortStr: string;
   if (parts.length === 3) {
-    [title, type, painStr] = parts as [string, string, string];
+    [title, type, effortStr] = parts as [string, string, string];
   } else if (parts.length === 4) {
-    [title, type, , painStr] = parts as [string, string, string, string];
+    [title, type, , effortStr] = parts as [string, string, string, string];
   } else if (parts.length === 5) {
-    [, title, type, , painStr] = parts as [
+    [, title, type, , effortStr] = parts as [
       string,
       string,
       string,
@@ -145,16 +145,16 @@ function parseHeader(
     });
     return null;
   }
-  const pain = Number(painStr);
-  if (!Number.isInteger(pain)) {
+  const effort = Number(effortStr);
+  if (!Number.isInteger(effort)) {
     errors.push({
       block: blockIndex,
       line: line.lineNumber,
-      message: `invalid effort: ${painStr}`,
+      message: `invalid effort: ${effortStr}`,
     });
     return null;
   }
-  return { title, type: type as WorkoutType, pain };
+  return { title, type: type as WorkoutType, effort };
 }
 
 function parseWorkStep(
@@ -304,7 +304,7 @@ function parseStepLine(
 
 /** Parses the builder's bulk-paste grammar into workout inputs. This is a
  *  syntax-level parse only — every returned workout still needs to pass
- *  `validateWorkoutInput` before being persisted (bounds like pain 1..5 or
+ *  `validateWorkoutInput` before being persisted (bounds like effort 1..5 or
  *  reps 1..12 are that layer's job, not this one's). */
 export function parseBulk(text: string): BulkResult {
   const errors: BulkError[] = [];

@@ -63,7 +63,7 @@ describe("TabBar", () => {
     const SAVED_FILTERS = JSON.stringify({
       type: "AT",
       durations: [],
-      painLevels: [],
+      effortLevels: [],
       lastDone: null,
       source: null,
     });

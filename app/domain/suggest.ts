@@ -5,7 +5,7 @@ import { isRecent } from "./recency.js";
 export interface LibraryEntry {
   id: string;
   type: WorkoutType;
-  pain: number;
+  effort: number;
   estMinutes: number;
   lastDoneDaysAgo: number | null;
   // Round 2 (2026-08-04): mirrors the Library's own `LibraryWorkout.isGlobal`
@@ -48,13 +48,13 @@ export interface SuggestPrefs {
   // union already means "off" on its own, independent of what any single
   // entry's estMinutes happens to be.
   durationsUnknown?: boolean;
-  // A union, not a threshold — mirrors Library's own `Filters.painLevels`
-  // (src/library/filters.ts): when non-empty, only entries whose `pain` is
-  // IN this set survive. Empty/undefined means "off" — every pain level
+  // A union, not a threshold — mirrors Library's own `Filters.effortLevels`
+  // (src/library/filters.ts): when non-empty, only entries whose `effort` is
+  // IN this set survive. Empty/undefined means "off" — every effort level
   // passes, and (same honesty rule as the rest of this interface) the
-  // reason text below never claims a pain filter was checked when it
+  // reason text below never claims an effort filter was checked when it
   // wasn't.
-  painLevels?: number[];
+  effortLevels?: number[];
   // A mutually-exclusive pair, not a threshold — mirrors Library's own
   // `Filters.lastDone` (src/library/filters.ts): `"under21"` keeps only
   // entries `isRecent` (domain/recency.ts) calls recent, `"over21"` keeps
@@ -106,7 +106,7 @@ export interface Suggestion {
   recommendationId: string | null;
   reason: string;
   poolIds: string[];
-  fellBack: boolean; // time/pain/recency/source filters matched nothing; pool is the unfiltered type list
+  fellBack: boolean; // time/effort/recency/source filters matched nothing; pool is the unfiltered type list
   /** Phase SF PR1 (spec §2.2): the least-recently-done TIE CLASS of the
    *  pool — every id sharing `poolIds[0]`'s `lastDoneDaysAgo` (null ties
    *  with null), in pool order. The client draws the day's first card
@@ -235,11 +235,11 @@ function buildReason(
   if (fellBack) {
     const parts: string[] = [];
     if (timeChecked) parts.push("time");
-    if (prefs.painLevels?.length) parts.push("pain");
+    if (prefs.effortLevels?.length) parts.push("effort");
     // Round 2 (2026-08-04): recency/source append last, mirroring the
-    // sheet's own group order (TIME, PAIN, LAST DONE, SOURCE) — truthy
+    // sheet's own group order (TIME, EFFORT, LAST DONE, SOURCE) — truthy
     // checks (not `!== undefined`) since both fields are null-when-off,
-    // same honesty rule as painLevels above. Phase DE PR 1 removed the
+    // same honesty rule as effortLevels above. Phase DE PR 1 removed the
     // DIFFICULTY group, which used to open this list unconditionally; the
     // list is still never empty here, because `fellBack` needs a predicate
     // that excluded something, and these four are the only predicates.
@@ -294,7 +294,7 @@ export function suggest(input: SuggestInput): Suggestion {
   const filtered = typeMatched.filter(
     (e) =>
       passesDurationFilter(e, prefs) &&
-      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)) &&
+      (!prefs.effortLevels?.length || prefs.effortLevels.includes(e.effort)) &&
       passesLastDoneFilter(e, prefs) &&
       passesSourceFilter(e, prefs),
   );
@@ -358,7 +358,7 @@ export function suggestFreestyle(
   const filtered = library.filter(
     (e) =>
       passesDurationFilter(e, prefs) &&
-      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)) &&
+      (!prefs.effortLevels?.length || prefs.effortLevels.includes(e.effort)) &&
       passesLastDoneFilter(e, prefs) &&
       passesSourceFilter(e, prefs),
   );

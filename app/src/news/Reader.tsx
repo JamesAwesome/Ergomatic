@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
+import { LEGACY_ARTICLE_SLUGS } from "./content/articles";
 import { useArticleReads } from "../api/useArticleReads";
 import { articleBySlug, nextUnreadSlug } from "./content/articles";
 import { updatedLabel } from "./newsDates";
@@ -16,6 +17,11 @@ export default function Reader() {
   // Called unconditionally, above the early return below (rules-of-hooks) —
   // same reason the pre-extraction code read `useLocation()` up here too.
   const { trail, back, origin: rawOrigin } = useReadingTrail();
+  // Phase DE PR 2: the pain-scale article became effort-scale. A shared or
+  // hand-typed `/news/pain-scale` redirects; `article` stays computed from
+  // the RAW slug (rules-of-hooks, and `articleBySlug("pain-scale")` is
+  // undefined now), so the mark-read effect can never fire for the old slug.
+  const canonicalSlug = slug ? (LEGACY_ARTICLE_SLUGS[slug] ?? slug) : undefined;
   const article = slug ? articleBySlug(slug) : undefined;
 
   // Mark read once ready — in an effect keyed on (reads.state, article.slug)
@@ -35,6 +41,9 @@ export default function Reader() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reads.state, article?.slug, article?.kind]);
 
+  if (canonicalSlug !== undefined && canonicalSlug !== slug) {
+    return <Navigate replace to={`/news/${canonicalSlug}`} />;
+  }
   if (!article || article.kind !== "first-party") {
     return <Navigate to="/news" replace />;
   }

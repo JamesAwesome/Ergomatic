@@ -4,10 +4,10 @@ import {
   parseDurationToken,
 } from "../../domain/duration.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
-import { estimationSplit, isEffortRef, refLabel } from "../../domain/pace.js";
+import { estimationSplit, isPaceWordRef, refLabel } from "../../domain/pace.js";
 import type {
   Baselines,
-  Effort,
+  PaceWord,
   PaceBase,
   PaceRef,
   Step,
@@ -37,11 +37,14 @@ export interface BuilderRow {
   durUnit: "min" | "m";
   refBase: PaceBase;
   refOff: number;
-  // null = split mode (refBase/refOff are live). Set to an Effort when the
+  // null = split mode (refBase/refOff are live). Set to an PaceWord when the
   // user taps the MAX/MIN chip — refBase/refOff are left as-is rather than
   // cleared, which is what lets a chip round trip (MAX -> 6K again) restore
   // whatever offset was showing before the effort was selected.
-  refEffort: Effort | null;
+  // Persisted in the builder draft and fingerprinted (builderDraft.ts), so the
+  // field name is frozen at `refEffort` (Phase DE PR 2) although the type
+  // is now PaceWord.
+  refEffort: PaceWord | null;
   spm: string;
   rest: string;
 }
@@ -49,7 +52,7 @@ export interface BuilderRow {
 export interface BuilderForm {
   title: string;
   type: WorkoutType;
-  pain: number | null;
+  effort: number | null;
   rows: BuilderRow[];
   reps: number;
 }
@@ -105,7 +108,7 @@ export function newForm(): BuilderForm {
   return {
     title: "",
     type: "O2",
-    pain: null,
+    effort: null,
     rows: [newRow("w")],
     reps: 1,
   };
@@ -281,8 +284,8 @@ export function stepSubSummary(row: BuilderRow): string {
   return spm === "" ? restTerm : `${spm} spm · ${restTerm}`;
 }
 
-// Indexed `pain - 1` (pain is 1..5, see toSteps' isInt(f.pain, 1, 5) check)
-// — the accordion redesign's pain control shows this word instead of (or
+// Indexed `effort - 1` (effort is 1..5, see toSteps' isInt(f.effort, 1, 5) check)
+// — the accordion redesign's effort control shows this word instead of (or
 // alongside) the bare 1..5 number.
 export const PAIN_WORDS: readonly string[] = [
   "EASY BREATH",
@@ -294,7 +297,7 @@ export const PAIN_WORDS: readonly string[] = [
 
 // One-word (well, one-phrase) summary per WorkoutType, mirroring PAIN_WORDS
 // above — the classification card's TYPE group shows this opposite its
-// label the same way EXPECTED PAIN shows its level word. James's mid-run
+// label the same way EXPECTED EFFORT shows its level word. James's mid-run
 // addition to Phase 5G; words are his suggestion, reviewable/vetoable at the
 // PR, but centralized (rather than inlined in ClassificationCard.tsx) so a
 // future wording pass has one place to edit, same rationale as PAIN_WORDS.
@@ -377,8 +380,8 @@ export function toSteps(
     errors.title = "title is reserved. Pick another name";
   }
 
-  if (f.pain === null || !isInt(f.pain, 1, 5)) {
-    errors.pain = "pain rating 1..5 is required";
+  if (f.effort === null || !isInt(f.effort, 1, 5)) {
+    errors.effort = "effort rating 1..5 is required";
   }
 
   const startIndex = spanStartIndex(f);
@@ -605,7 +608,7 @@ function stepToRow(s: Extract<Step, { k: "w" | "r" }>): BuilderRow {
     // trip" test — the inverse of this: a split's own refBase/refOff must
     // survive a round trip THROUGH an effort selection, which is a builder
     // state transition, not this load path).
-    if (isEffortRef(s.ref)) {
+    if (isPaceWordRef(s.ref)) {
       row.refEffort = s.ref.effort;
     } else {
       row.refBase = s.ref.base;
@@ -697,7 +700,7 @@ export function hasMidSpanReps(steps: Step[]): boolean {
 export function fromWorkout(w: {
   title: string;
   type: WorkoutType;
-  pain: number;
+  effort: number;
   steps: Step[];
 }): BuilderForm {
   const marker = w.steps.find(
@@ -713,7 +716,7 @@ export function fromWorkout(w: {
   return {
     title: w.title,
     type: w.type,
-    pain: w.pain,
+    effort: w.effort,
     rows: rows.length > 0 ? rows : [newRow("w")],
     reps: marker ? marker.count : 1,
   };

@@ -8,7 +8,7 @@ import {
 
 /** localStorage key for Today's per-type filter memory (Phase SF PR1, spec
  *  §2.3 / I-6). UNDATED, unlike `todayPick`/`todayOverrides`: this is the
- *  "set and forget" store — a rower's TIME/PAIN/LAST DONE/
+ *  "set and forget" store — a rower's TIME/EFFORT/LAST DONE/
  *  SOURCE choices survive reloads, days and plan changes, remembered
  *  separately for each type the chip row can light (and for ANY TYPE). */
 export const TODAY_FILTERS_KEY = "ergomatic.todayFilters";
@@ -34,12 +34,12 @@ export function filterKeyFor(
 
 /** The five filter groups Today's sheet edits — the fields that lived on
  *  `TodayOverrides` until PR1 moved them here. Semantics unchanged: an
- *  empty `durations`/`painLevels` array means that group is off; `null`
+ *  empty `durations`/`effortLevels` array means that group is off; `null`
  *  means off for the two pairs. Every field always holds a real value. */
 export interface FilterSet {
   // Phase SF PR2 (spec §3): a minutes range; `[0, 120]` means TIME is off.
   durationRange: DurationRange;
-  painLevels: number[];
+  effortLevels: number[];
   lastDone: "under21" | "over21" | null;
   source: "global" | "custom" | null;
 }
@@ -87,7 +87,7 @@ function isFilterKey(v: unknown): v is TodayFilterKey {
  *  Returns null for a bad set so the caller can drop that key alone —
  *  one corrupt key must not discard the other four (the store is
  *  permanent memory, not a per-day convenience). De-dupes and canonically
- *  orders `durations`/`painLevels`, same as before. */
+ *  orders `durations`/`effortLevels`, same as before. */
 function isRangeShape(v: unknown): v is DurationRange {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
   const r = v as Record<string, unknown>;
@@ -118,14 +118,20 @@ function parseFilterSet(value: unknown, version: 1 | 2): FilterSet | null {
     if (!isRangeShape(o.durationRange)) return null;
     durationRange = clampRange(o.durationRange);
   }
-  if (!Array.isArray(o.painLevels) || !o.painLevels.every(isPainLevel)) {
+  // Phase DE PR 2 (spec §4.2): a pre-PR-2 record carries `painLevels`. Read
+  // `effortLevels` when the key exists (a present `null` is MALFORMED, not
+  // absent — it fails this set like any other bad field), fall back to the
+  // old key only when the new one is absent, write only the new key. PR 3
+  // deletes the fallback.
+  const levels = o.effortLevels !== undefined ? o.effortLevels : o.painLevels;
+  if (!Array.isArray(levels) || !levels.every(isPainLevel)) {
     return null;
   }
   if (o.lastDone !== null && !isLastDone(o.lastDone)) return null;
   if (o.source !== null && !isSource(o.source)) return null;
   return {
     durationRange,
-    painLevels: [...new Set(o.painLevels)].sort((a, b) => a - b),
+    effortLevels: [...new Set(levels)].sort((a, b) => a - b),
     lastDone: o.lastDone,
     source: o.source,
   };

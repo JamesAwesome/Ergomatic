@@ -94,7 +94,7 @@ function formWith(over: Partial<BuilderForm> = {}): BuilderForm {
   return {
     ...EMPTY_FORM,
     title: "Test Piece",
-    pain: 3,
+    effort: 3,
     rows: [defaultValidRow()],
     ...over,
   };
@@ -458,11 +458,11 @@ describe("toSteps", () => {
     expect(out.errors.title).toBeTruthy();
   });
 
-  it("requires a pain rating", () => {
-    const out = toSteps(formWith({ pain: null }));
+  it("requires a effort rating", () => {
+    const out = toSteps(formWith({ effort: null }));
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
-    expect(out.errors.pain).toBeTruthy();
+    expect(out.errors.effort).toBeTruthy();
   });
 });
 
@@ -536,7 +536,7 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "Ladder",
       type: "AT",
-      pain: 3,
+      effort: 3,
       steps: [
         { k: "reps", count: 4 },
         {
@@ -562,7 +562,7 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "Ladder",
       type: "AT",
-      pain: 3,
+      effort: 3,
       steps: [
         {
           k: "w",
@@ -580,7 +580,7 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "Ladder",
       type: "AT",
-      pain: 3,
+      effort: 3,
       steps: [
         {
           k: "w",
@@ -596,7 +596,7 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "T",
       type: "O2",
-      pain: 2,
+      effort: 2,
       steps: [
         {
           k: "w",
@@ -612,7 +612,7 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "T",
       type: "O2",
-      pain: 2,
+      effort: 2,
       steps: [
         {
           k: "w",
@@ -631,7 +631,7 @@ describe("fromWorkout", () => {
     const workout = {
       title: "Rest Test",
       type: "AT" as const,
-      pain: 3,
+      effort: 3,
       steps: [
         {
           k: "w" as const,
@@ -665,7 +665,7 @@ describe("totals vs. estimateMinutes agreement", () => {
     const workout = {
       title: "Rest Test",
       type: "AT" as const,
-      pain: 3,
+      effort: 3,
       steps: [
         {
           k: "w" as const,
@@ -694,7 +694,7 @@ describe("totals vs. estimateMinutes agreement", () => {
     const workout = {
       title: "Distance Rest Test",
       type: "AT" as const,
-      pain: 3,
+      effort: 3,
       steps: [
         {
           k: "w" as const,
@@ -843,7 +843,7 @@ describe("clock durations in rows", () => {
     const form = fromWorkout({
       title: "Sprints",
       type: "AN",
-      pain: 4,
+      effort: 4,
       steps: [
         {
           k: "w",
@@ -883,7 +883,7 @@ describe("clock durations in rows", () => {
     const form = fromWorkout({
       title: "Distance",
       type: "O2",
-      pain: 2,
+      effort: 2,
       steps: [
         {
           k: "w",
@@ -907,7 +907,7 @@ describe("clock durations in rows", () => {
       const form = {
         ...newForm(),
         title: "T",
-        pain: 3,
+        effort: 3,
         rows: [{ ...newRow("w"), durValue, durUnit: "min" as const }],
       };
       expect(toSteps(form).ok, `${durValue}`).toBe(false);
@@ -926,7 +926,7 @@ describe("clock durations in rows", () => {
       const form = fromWorkout({
         title: "T",
         type: "O2",
-        pain: 3,
+        effort: 3,
         steps: [
           {
             k: "w",
@@ -974,7 +974,7 @@ describe("hasUnsupportedSteps (L2)", () => {
     const workout = {
       title: "Has a test piece",
       type: "AT" as const,
-      pain: 3,
+      effort: 3,
       steps: [
         {
           k: "w" as const,
@@ -1258,7 +1258,7 @@ describe("effort refs in rows", () => {
     const form = fromWorkout({
       title: "Sprints",
       type: "AN",
-      pain: 5,
+      effort: 5,
       steps: [
         {
           k: "w",
@@ -1285,7 +1285,7 @@ describe("effort refs in rows", () => {
     row = { ...row, refEffort: "max" }; // user taps MAX
     expect(row.refOff).toBe(-2); // still held
     row = { ...row, refEffort: null }; // user taps 6K again
-    const res = toSteps({ ...newForm(), title: "T", pain: 3, rows: [row] });
+    const res = toSteps({ ...newForm(), title: "T", effort: 3, rows: [row] });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.steps[0]).toMatchObject({ ref: { base: "6k", off: -2 } });
@@ -1303,7 +1303,7 @@ describe("effort refs in rows", () => {
     const form = fromWorkout({
       title: "Sprints",
       type: "AN",
-      pain: 5,
+      effort: 5,
       steps: [
         {
           k: "w",
@@ -1321,7 +1321,7 @@ describe("effort refs in rows", () => {
     const res = toSteps({
       ...newForm(),
       title: "T",
-      pain: 3,
+      effort: 3,
       rows: [tapped],
     });
     expect(res.ok).toBe(true);
@@ -1354,7 +1354,7 @@ describe("effort refs in rows", () => {
       refEffort: "min" as const,
       refOff: 7,
     };
-    const res = toSteps({ ...newForm(), title: "T", pain: 3, rows: [row] });
+    const res = toSteps({ ...newForm(), title: "T", effort: 3, rows: [row] });
     if (!res.ok) throw new Error("expected ok");
     expect(res.steps[0]).toMatchObject({ ref: { effort: "min" } });
     expect((res.steps[0] as { ref: object }).ref).not.toHaveProperty("off");
@@ -1402,7 +1402,7 @@ describe("effort refs in rows", () => {
     const form = fromWorkout({
       title: forkLightning.title,
       type: forkLightning.type,
-      pain: forkLightning.pain,
+      effort: forkLightning.effort,
       steps,
     });
     const workRowOut = form.rows.find((r) => r.kind === "w");

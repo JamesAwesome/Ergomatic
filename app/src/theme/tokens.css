@@ -130,10 +130,10 @@
      two reds competing for the rower's eye. */
   --type-tr: var(--ink);
   --on-color: #fffdf7;
-  --pain-empty: #e0dacb;
+  --effort-empty: #e0dacb;
 
-  /* THE PAIN RAMP IS GONE (2026-08-28). `--pain-ramp-1..5` lived here after
-     their last consumer left: the ui-fix round moved the selected PAIN chip
+  /* THE EFFORT RAMP IS GONE (2026-08-28). `--effort-ramp-1..5` lived here after
+     their last consumer left: the ui-fix round moved the selected EFFORT chip
      onto the same plain ink fill the (since-removed) DIFFICULTY chips used, and
      nothing has read the ramp
      since. Three comments — this file's, index.css's and
@@ -142,7 +142,7 @@
      now fails on any token nothing reads.
 
      Kept because two live documents cite them: ramp-3 was #8a5f18, BYTE-
-     IDENTICAL to --type-at, which is why a mid-level pain selection could
+     IDENTICAL to --type-at, which is why a mid-level effort selection could
      read as an AT-type mark (DEVIATIONS' own row); and ramp-5 was #b5341f,
      the same red as --accent. */
 

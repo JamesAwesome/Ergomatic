@@ -59,7 +59,7 @@ function baseRow(overrides: Partial<StoredLog> = {}): StoredLog {
     workoutType: SEA_FRET.type,
     loggedAt: "2026-08-18T18:57:00.000Z",
     held: null,
-    pain: null,
+    effort: null,
     notes: null,
     thumbs: null,
     deviceName: null,
@@ -1273,12 +1273,12 @@ describe("buildStoredSummary — §2 SPM cell, the pre-/post-split discriminant 
 });
 
 describe("buildStoredSummary — §5D read-back", () => {
-  it("the segment line renders HELD · PAIN n/5 · LIKED in that order, note text separately", () => {
+  it("the segment line renders HELD · EFFORT n/5 · LIKED in that order, note text separately", () => {
     const view = buildStoredSummary(
-      baseRow({ held: "held", pain: 3, thumbs: "up", notes: "felt great" }),
+      baseRow({ held: "held", effort: 3, thumbs: "up", notes: "felt great" }),
     );
     expect(view.readBack.empty).toBe(false);
-    expect(view.readBack.segmentLine).toBe("HELD · PAIN 3/5 · LIKED");
+    expect(view.readBack.segmentLine).toBe("HELD · EFFORT 3/5 · LIKED");
     expect(view.readBack.note).toBe("felt great");
   });
 
@@ -1294,7 +1294,7 @@ describe("buildStoredSummary — §5D read-back", () => {
     expect(view.readBack.segmentLine).toBe("LESS LIKE THIS");
   });
 
-  it("a notes-only log shows the note with no segment line above it (segment line requires >=1 of thumbs/held/pain)", () => {
+  it("a notes-only log shows the note with no segment line above it (segment line requires >=1 of thumbs/held/effort)", () => {
     const view = buildStoredSummary(baseRow({ notes: "just a note" }));
     expect(view.readBack.empty).toBe(false);
     expect(view.readBack.segmentLine).toBeUndefined();

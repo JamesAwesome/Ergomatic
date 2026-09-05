@@ -82,7 +82,7 @@ describe("POST/GET /api/logs: the machine's summary round-trips through real Pos
     workoutTitle: "Steady State",
     workoutType: "AT",
     held: null,
-    pain: null,
+    effort: null,
     notes: null,
     steps: [{ label: "2000 m" }],
     // Required since the v0.35.0 sunset; no deviceName here (this suite is
@@ -304,7 +304,7 @@ describe("POST/GET /api/logs: the machine's summary round-trips through real Pos
         workoutTitle: "Pre-Task-6 Row",
         workoutType: "AN",
         held: null,
-        pain: null,
+        effort: null,
         notes: null,
         steps: [{ label: "2000 m" }],
         // Required since the v0.35.0 sunset; orthogonal to the machine_*

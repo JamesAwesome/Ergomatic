@@ -24,8 +24,8 @@ export type { DurationRange };
 export { RECENCY_BOUNDARY_DAYS, isRecent };
 
 // v2 shape (Task 4, ui-fix round — DESIGN.md's "Library, second pass"):
-// PAIN moves from a single `painMax3` threshold toggle to a 1–5 multi-select
-// union (`painLevels`), and RECENT/NOT RECENT's own words retire in favour
+// EFFORT moves from a single `effortMax3` threshold toggle to a 1–5 multi-select
+// union (`effortLevels`), and RECENT/NOT RECENT's own words retire in favour
 // of a plain boundary pair (`lastDone`) with `customOnly` folded into the
 // symmetric `source` pair — GLOBAL is now as much a filter as CUSTOM was,
 // not an implicit default.
@@ -33,7 +33,7 @@ export { RECENCY_BOUNDARY_DAYS, isRecent };
 // v3 shape (library-filter-unification round, 2026-08-11 — Task 1): TYPE
 // moves from a single-select `type: WorkoutType | null` to a multi-select
 // union (`types`), matching the shape every other group already used
-// (`durations`/`painLevels`) — its control leaves the sheet for a chip row
+// (`durations`/`effortLevels`) — its control leaves the sheet for a chip row
 // above it (Task 2), but that's a rendering concern this file doesn't
 // know about; here it's just one more union field. (DIFFICULTY left this
 // shape in Phase DE PR 1: the product has no difficulty any more.)
@@ -47,7 +47,7 @@ export interface Filters {
   // Phase SF PR2 (spec §3): a minutes range, `[0, 120]` meaning no filter
   // (`isUnbounded`), replacing the four-bucket union.
   durationRange: DurationRange;
-  painLevels: number[];
+  effortLevels: number[];
   lastDone: "under21" | "over21" | null;
   source: "global" | "custom" | null;
   // Phase SF PR3 (spec §4, I-14): the SEARCH BY NAME field's text, matched
@@ -61,7 +61,7 @@ export interface Filters {
 export const EMPTY_FILTERS: Filters = {
   types: [],
   durationRange: UNBOUNDED_RANGE,
-  painLevels: [],
+  effortLevels: [],
   lastDone: null,
   source: null,
   query: "",
@@ -111,10 +111,10 @@ export function setDurationRange(f: Filters, range: DurationRange): Filters {
 }
 
 export function togglePainLevel(f: Filters, level: number): Filters {
-  const painLevels = f.painLevels.includes(level)
-    ? f.painLevels.filter((existing) => existing !== level)
-    : [...f.painLevels, level];
-  return { ...f, painLevels };
+  const effortLevels = f.effortLevels.includes(level)
+    ? f.effortLevels.filter((existing) => existing !== level)
+    : [...f.effortLevels, level];
+  return { ...f, effortLevels };
 }
 
 export function setLastDone(f: Filters, value: "under21" | "over21"): Filters {
@@ -149,14 +149,14 @@ export function hasActiveFilters(f: Filters): boolean {
   return (
     f.types.length > 0 ||
     !isUnbounded(f.durationRange) ||
-    f.painLevels.length > 0 ||
+    f.effortLevels.length > 0 ||
     f.lastDone !== null ||
     f.source !== null ||
     normalizeQuery(f.query) !== ""
   );
 }
 
-/** Resets exactly the FILTER SHEET's own groups — TIME, PAIN, LAST DONE,
+/** Resets exactly the FILTER SHEET's own groups — TIME, EFFORT, LAST DONE,
  *  SOURCE — to empty, leaving `types` (the chip row's own group,
  *  which the sheet holds no control for at all since Task 2) untouched.
  *
@@ -183,7 +183,7 @@ export function applyFilters(
   return workouts.filter((w) => {
     if (query !== "" && !w.title.toLowerCase().includes(query)) return false;
     if (f.types.length > 0 && !f.types.includes(w.type)) return false;
-    if (f.painLevels.length > 0 && !f.painLevels.includes(w.pain)) {
+    if (f.effortLevels.length > 0 && !f.effortLevels.includes(w.effort)) {
       return false;
     }
     if (f.source === "custom" && w.isGlobal) return false;

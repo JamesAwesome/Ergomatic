@@ -7,7 +7,7 @@ describe("CellGrid", () => {
   it("renders the group label and one button per cell, aria-pressed from the pressed field", () => {
     render(
       <CellGrid
-        label="PAIN"
+        label="EFFORT"
         cells={[
           { value: "1", label: "1", pressed: false },
           { value: "2", label: "2", pressed: true },
@@ -15,7 +15,7 @@ describe("CellGrid", () => {
         onToggle={vi.fn()}
       />,
     );
-    expect(screen.getByText("PAIN")).toBeInTheDocument();
+    expect(screen.getByText("EFFORT")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
       "aria-pressed",
       "false",
@@ -47,12 +47,12 @@ describe("CellGrid", () => {
   it("exposes an accessible group name matching its own visible label", () => {
     render(
       <CellGrid
-        label="PAIN"
+        label="EFFORT"
         cells={[{ value: "3", label: "3", pressed: false }]}
         onToggle={vi.fn()}
       />,
     );
-    const group = screen.getByRole("group", { name: "PAIN" });
+    const group = screen.getByRole("group", { name: "EFFORT" });
     expect(
       within(group).getByRole("button", { name: "3" }),
     ).toBeInTheDocument();

@@ -14,7 +14,7 @@ describe("generation patterns digest", () => {
       "spm",
       "warmupMinutes",
       "repsCount",
-      "effortShare",
+      "effortShare", // committed JSON key — frozen (Phase DE PR 2); the TS function is paceWordShare
     ]);
     for (const [key, cell] of Object.entries(patterns.cells)) {
       expect(key).toMatch(/^(O2|AT|TR|AN)\|(<20|20-30|30-45|45-60|60\+)$/);

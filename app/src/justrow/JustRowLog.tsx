@@ -31,8 +31,8 @@ import { freeRowTotals } from "./totals";
  * badge (`workout_type` is null and an unknown chip would be a fifth fake
  * peer), no intervals table (`steps` is `[]` — an absence, never an empty
  * widget), no DID YOU HOLD THE TARGETS? (a free row was never given one, so
- * the question has no honest answer), and the rating reads **PAIN**, not
- * ACTUAL PAIN — the word ACTUAL exists to contrast with the workout's own
+ * the question has no honest answer), and the rating reads **EFFORT**, not
+ * ACTUAL EFFORT — the word ACTUAL exists to contrast with the workout's own
  * EXPECTED figure beside it, which a free row does not have.
  *
  * **The save stack is the shipped door's own pair** (substitution spec,
@@ -211,7 +211,7 @@ export function JustRowSummary({
     planState.state === "ready" && planState.plan.planKey !== null
       ? planState.plan
       : null;
-  const { held, pain, setPain, notes, setNotes, saving, saveError, submit } =
+  const { held, effort, setPain, notes, setNotes, saving, saveError, submit } =
     useLogForm(() => {
       // Each kind clears ITS OWN record and only that one (the lifetime
       // table's "successful save" clear site for the timer run).
@@ -238,7 +238,7 @@ export function JustRowSummary({
         recoveryActions={recoveryActions}
         run={door.run}
         plan={plan}
-        pain={pain}
+        effort={effort}
         setPain={setPain}
         notes={notes}
         setNotes={setNotes}
@@ -378,7 +378,7 @@ export function JustRowSummary({
       )}
 
       <Reflection
-        pain={pain}
+        effort={effort}
         setPain={setPain}
         notes={notes}
         setNotes={setNotes}
@@ -404,7 +404,7 @@ function TimerDoor({
   recoveryActions,
   run,
   plan,
-  pain,
+  effort,
   setPain,
   notes,
   setNotes,
@@ -415,8 +415,8 @@ function TimerDoor({
   recoveryActions: ReactNode;
   run: SessionRun;
   plan: PlanData | null;
-  pain: number | null;
-  setPain: (pain: number | null) => void;
+  effort: number | null;
+  setPain: (effort: number | null) => void;
   notes: string;
   setNotes: (notes: string) => void;
   saving: boolean;
@@ -445,7 +445,7 @@ function TimerDoor({
       )}
 
       <Reflection
-        pain={pain}
+        effort={effort}
         setPain={setPain}
         notes={notes}
         setNotes={setNotes}
@@ -503,15 +503,15 @@ function SaveStack({
   );
 }
 
-/** PAIN + NOTES, shared by both kinds — one markup, one set of labels. */
+/** EFFORT + NOTES, shared by both kinds — one markup, one set of labels. */
 function Reflection({
-  pain,
+  effort,
   setPain,
   notes,
   setNotes,
 }: {
-  pain: number | null;
-  setPain: (pain: number | null) => void;
+  effort: number | null;
+  setPain: (effort: number | null) => void;
   notes: string;
   setNotes: (notes: string) => void;
 }) {
@@ -519,17 +519,17 @@ function Reflection({
     <>
       <div className="summary-reflection-group">
         <div className="summary-reflection-label-row">
-          <p className="summary-reflection-label">PAIN</p>
+          <p className="summary-reflection-label">EFFORT</p>
         </div>
-        <div className="summary-pain-row">
+        <div className="summary-effort-row">
           {PAIN_LEVELS.map((level) => (
             <button
               key={level}
               type="button"
-              className="summary-pain-chip"
-              aria-pressed={pain === level}
-              aria-label={`Pain ${level}`}
-              onClick={() => setPain(pain === level ? null : level)}
+              className="summary-effort-chip"
+              aria-pressed={effort === level}
+              aria-label={`Effort ${level}`}
+              onClick={() => setPain(effort === level ? null : level)}
             >
               {level}
             </button>

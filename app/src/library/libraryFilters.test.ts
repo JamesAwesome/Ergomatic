@@ -11,21 +11,21 @@ import { LIBRARY_SCROLL_KEY, saveLibraryScroll } from "./libraryScroll";
 const FULL: Filters = {
   types: ["AT", "O2"],
   durationRange: { min: 30, max: 120 },
-  painLevels: [4, 5],
+  effortLevels: [4, 5],
   lastDone: "over21",
   source: "custom",
   query: "fog",
 };
 
 // The pre-Task-4 (v1) shape, kept verbatim as a fixture rather than reused
-// from filters.ts (which has never exported `painMax3`/`recency`/
+// from filters.ts (which has never exported `effortMax3`/`recency`/
 // `customOnly` — those three names predate any shape this file's own types
 // have ever described) — this is exactly the record a rower's browser
 // could still be holding in sessionStorage from before that round shipped.
 const V1_RECORD = {
   type: "AT",
   durations: ["30-45", "60+"],
-  painMax3: true,
+  effortMax3: true,
   recency: "not-recent",
   customOnly: true,
 };
@@ -40,12 +40,12 @@ const V1_RECORD = {
 const V2_RECORD = {
   type: "O2",
   durations: [],
-  painLevels: [],
+  effortLevels: [],
   lastDone: null,
   source: null,
 };
 
-// A record that is otherwise fully v3-shaped (`durations`, `painLevels`,
+// A record that is otherwise fully v3-shaped (`durations`, `effortLevels`,
 // `lastDone`, `source` all present and valid) but still carries the
 // RENAMED field under its old name (`type`, not `types`), so it is
 // rejected by ONE check alone (`!Array.isArray(f.types)`), isolating that
@@ -56,7 +56,7 @@ const V2_RECORD = {
 const HALF_MIGRATED_RECORD = {
   type: "O2",
   durations: [],
-  painLevels: [],
+  effortLevels: [],
   lastDone: null,
   source: null,
 };
@@ -147,14 +147,25 @@ describe("libraryFilters", () => {
         "durationRange missing max",
         JSON.stringify({ ...FULL, durationRange: { min: 0 } }),
       ],
-      ["painLevels not an array", JSON.stringify({ ...FULL, painLevels: 4 })],
       [
-        "painLevels contains an out-of-range level",
-        JSON.stringify({ ...FULL, painLevels: [0] }),
+        "effortLevels not an array",
+        JSON.stringify({ ...FULL, effortLevels: 4 }),
+      ],
+      // Phase DE PR 2: NO fallback from `painLevels` — this store is
+      // sessionStorage, so a pre-PR-2 record has no native producer; the
+      // wrong shape falls back to EMPTY_FILTERS whole, by design.
+      [
+        "a pre-PR-2 record (painLevels, no effortLevels)",
+        JSON.stringify({ ...FULL, effortLevels: undefined, painLevels: [1] }),
+      ],
+      ["effortLevels null", JSON.stringify({ ...FULL, effortLevels: null })],
+      [
+        "effortLevels contains an out-of-range level",
+        JSON.stringify({ ...FULL, effortLevels: [0] }),
       ],
       [
-        "painLevels contains a non-integer",
-        JSON.stringify({ ...FULL, painLevels: [4.5] }),
+        "effortLevels contains a non-integer",
+        JSON.stringify({ ...FULL, effortLevels: [4.5] }),
       ],
       ["unknown lastDone", JSON.stringify({ ...FULL, lastDone: "today" })],
       ["lastDone wrong shape", JSON.stringify({ ...FULL, lastDone: 21 })],
@@ -212,12 +223,12 @@ describe("libraryFilters", () => {
     });
   });
 
-  it("de-dupes duplicated pain levels from a tampered value", () => {
+  it("de-dupes duplicated effort levels from a tampered value", () => {
     sessionStorage.setItem(
       LIBRARY_FILTERS_KEY,
-      JSON.stringify({ ...FULL, painLevels: [5, 5, 4] }),
+      JSON.stringify({ ...FULL, effortLevels: [5, 5, 4] }),
     );
-    expect(loadLibraryFilters().painLevels).toStrictEqual([5, 4]);
+    expect(loadLibraryFilters().effortLevels).toStrictEqual([5, 4]);
   });
 
   // L5 (whole-branch review): libraryScroll's own saved position was

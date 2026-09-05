@@ -24,7 +24,7 @@ export const ONBOARDING_LIBRARY_WORKOUTS: WorkoutInput[] = [
     // (pre-rename rows) and AT (new rows) — accepted at the phase gate,
     // do not "fix" it.
     type: "AT",
-    pain: 4,
+    effort: 4,
     steps: [
       {
         k: "w",
@@ -46,7 +46,7 @@ export const ONBOARDING_LIBRARY_WORKOUTS: WorkoutInput[] = [
     // anaerobic effort — AN/hard/pain 5, matching the sprint plan's AN
     // checkpoint day. Was AN/easy/2 until 2026-08-22.
     type: "AN",
-    pain: 5,
+    effort: 5,
     steps: [
       {
         k: "w",

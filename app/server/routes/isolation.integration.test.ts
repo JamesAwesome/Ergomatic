@@ -164,7 +164,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
   const workoutBody = (title: string) => ({
     title,
     type: "AT",
-    pain: 2,
+    effort: 2,
     steps: [
       { k: "r", minutes: 5 },
       {
@@ -245,7 +245,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
         workoutTitle: "Only A Custom",
         workoutType: "AT",
         held: "held",
-        pain: 3,
+        effort: 3,
         notes: "first log",
         steps: [
           {
@@ -371,7 +371,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
         workoutTitle: "Should not attach",
         workoutType: "AT",
         held: "held",
-        pain: 2,
+        effort: 2,
         notes: null,
         steps: [{ label: "x", targetSplit: 100, actualSource: "assumed" }],
         source: "manual",
@@ -420,7 +420,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
         workoutTitle: "Only A, delete target",
         workoutType: "AT",
         held: "held",
-        pain: 2,
+        effort: 2,
         notes: "delete me only via A",
         steps: [{ label: "Work", targetSplit: 130 }],
         source: "manual",
@@ -519,16 +519,18 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
   });
 
   it("article reads are isolated per user: A's PUT never appears in B's GET", async () => {
-    expect((await asA().put("/api/article-reads/pain-scale")).status).toBe(204);
+    expect((await asA().put("/api/article-reads/effort-scale")).status).toBe(
+      204,
+    );
     const readsB = await asB().get("/api/article-reads");
     expect(readsB.body).toStrictEqual({ slugs: [] });
 
     const readsA = await asA().get("/api/article-reads");
-    expect(readsA.body).toStrictEqual({ slugs: ["pain-scale"] });
+    expect(readsA.body).toStrictEqual({ slugs: ["effort-scale"] });
   });
 
   it("article-reads DELETE is isolated per user: A's unmark never touches B's reads, and is idempotent", async () => {
-    // A already carries "pain-scale" from the preceding test in this
+    // A already carries "effort-scale" from the preceding test in this
     // ordered chain (shared app/db, no reset between cases) — asserted
     // below alongside workout-types' removal, not reset away.
     await asA().put("/api/article-reads/workout-types");
@@ -543,7 +545,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     ).toBe(204);
 
     const readsA = await asA().get("/api/article-reads");
-    expect(readsA.body).toStrictEqual({ slugs: ["pain-scale"] });
+    expect(readsA.body).toStrictEqual({ slugs: ["effort-scale"] });
     const readsB = await asB().get("/api/article-reads");
     expect(readsB.body).toStrictEqual({ slugs: ["workout-types"] });
   });
@@ -619,7 +621,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
         workoutTitle: "Sea Fret",
         workoutType: "O2",
         held: "held",
-        pain: 1,
+        effort: 1,
         notes: null,
         // actualSplit paired with actualSource, per the Task 1.5 amendment
         // (server/routes/data.ts's validateLogStepEntry) and matching

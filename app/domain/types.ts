@@ -42,7 +42,7 @@ export function isFreeRow(
   return workoutId === null && workoutType === null;
 }
 export type PaceBase = "2k" | "6k";
-export type Effort = "max" | "min";
+export type PaceWord = "max" | "min";
 export interface SplitRef {
   base: PaceBase;
   off: number; // off: seconds per 500m, negative = faster
@@ -50,10 +50,14 @@ export interface SplitRef {
 // "30 seconds max" / "20 minutes easy" — a real effort prescription, not a
 // stand-in offset. Key-presence union: every stored {base, off} ref is
 // already a valid SplitRef, so nothing migrates (Phase 5G spec, "Decisions").
-export interface EffortRef {
-  effort: Effort;
+export interface PaceWordRef {
+  // The PROPERTY stays `effort`: it is the stored step-JSON key (every saved
+  // workout carries `{ effort: "max" | "min" }`). Phase DE PR 2 renamed the
+  // TS family to PaceWord* so `effort` the figure and the pace word stop
+  // sharing a name; the key itself never moves.
+  effort: PaceWord;
 }
-export type PaceRef = SplitRef | EffortRef;
+export type PaceRef = SplitRef | PaceWordRef;
 export type WorkDuration =
   | { kind: "time"; minutes: number } // 0.5 steps allowed, > 0
   | { kind: "distance"; meters: number }; // integer, 100..42195
@@ -81,7 +85,7 @@ export interface Baselines {
 export interface WorkoutInput {
   title: string;
   type: WorkoutType;
-  pain: number;
+  effort: number; // 1..5, the one "how hard" figure (Phase DE; PAIN until PR 2)
   steps: Step[];
 }
 /** Which DOOR a session log came through — `session_logs.source`, NOT NULL

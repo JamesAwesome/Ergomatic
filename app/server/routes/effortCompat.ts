@@ -74,3 +74,11 @@ export function withPainAlias<T extends { effort: number | null }>(
 export function notePainWrite(route: string): void {
   console.info(JSON.stringify({ event: "compat.pain_write", route }));
 }
+
+// Phase DE PR 2: the pain-scale article became effort-scale (migration 0024
+// moved the stored read rows). An installed pre-PR-2 build still asks about
+// `pain-scale`; the three /api/article-reads routes translate through this
+// map. PR 3 deletes it.
+export const LEGACY_READ_SLUGS: Readonly<Record<string, string>> = {
+  "pain-scale": "effort-scale",
+};

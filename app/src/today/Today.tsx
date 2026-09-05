@@ -148,7 +148,7 @@ const TYPE_CHIPS: WorkoutType[] = ["O2", "AT", "TR", "AN"];
 // CSS custom property per workout type — never a raw hex (tokens.css). Kept
 // local rather than shared with ClassificationCard.tsx's own identical map:
 // this repo's established per-file duplication convention (that file's own
-// comment on TYPE_COLOR_VAR explains the precedent — Builder.tsx, PainBar.tsx
+// comment on TYPE_COLOR_VAR explains the precedent — Builder.tsx, EffortBar.tsx
 // and TypeBadge.tsx each already keep their own copy).
 const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   O2: "--type-o2",
@@ -160,7 +160,7 @@ const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
 /** Local chip button — same `.chip` class + `aria-pressed` rendering
  *  convention Library's own filter controls use, not a shared component.
  *  Today's only remaining consumer is the type-swap row (Task 2, 2026-08-04
- *  round: TIME/PAIN's own inline chips moved into
+ *  round: TIME/EFFORT's own inline chips moved into
  *  TodayFilterSheet.tsx's CellGrid instances, which render through
  *  CellGrid's own cell button, not this one) — every caller here passes
  *  `typeColorVar`, mirroring ClassificationCard.tsx's own inline-style-
@@ -240,7 +240,7 @@ function toLibraryEntry(
   return {
     id: w.id,
     type: w.type,
-    pain: w.pain,
+    effort: w.effort,
     estMinutes: baselines ? estimateMinutes(w.steps, baselines).minutes : 0,
     lastDoneDaysAgo: w.lastDoneDaysAgo,
     // Round 2 (2026-08-04): passed straight through so domain/suggest.ts's
@@ -276,7 +276,7 @@ function computeSuggestion(
 ) {
   const prefs: SuggestPrefs = {
     durationRange: filters.durationRange,
-    painLevels: filters.painLevels,
+    effortLevels: filters.effortLevels,
     // Round 2 (2026-08-04): the two new dims — see domain/suggest.ts's own
     // SuggestPrefs doc comment for why they're optional there (the server's
     // /api/today route has no equivalent) even though Today always sets a
@@ -686,10 +686,10 @@ function TodayPieceRow({
   // decides the row's class and geometry below; only the ref text stopped
   // varying.
   const refText = row.refTextFull;
-  // Effort pieces carry their word ("ALL OUT"/"EASY") in the SAME slot a
+  // PaceWord pieces carry their word ("ALL OUT"/"EASY") in the SAME slot a
   // split target would occupy (Task 1's own PieceRow doc comment: "in the
   // pace slot") — test pieces have neither and the slot renders empty.
-  const rightSlot = row.effortText ?? row.split;
+  const rightSlot = row.paceWordText ?? row.split;
   const rowClass =
     (compact ? "today-piece-row-compact" : "today-piece-row") +
     (peak ? " today-piece-peak" : "");
@@ -881,14 +881,14 @@ function TodayView({
 
   // A key the memory has never seen reads as the preference-seeded set —
   // the same values a fresh day used to start with before PR1 (the cap's
-  // buckets, pain/recency/source off). Phase DE PR 1: `preferences.
+  // buckets, effort/recency/source off). Phase DE PR 1: `preferences.
   // difficulties` no longer seeds anything — the server still serves it
   // for pre-PR-1 builds (server/compat/difficulty.ts), and this build
   // ignores it.
   const seedSet: FilterSet = {
     // `[0, cap]` with the cap rounded down to the step (spec I-12).
     durationRange: rangeForCap(preferences.timeCapMinutes),
-    painLevels: [],
+    effortLevels: [],
     lastDone: null,
     source: null,
   };
@@ -1081,15 +1081,15 @@ function TodayView({
   // the current key's memory — same as a chip tap did before this task's
   // rewiring.
   function resetFilterGroup(
-    group: "durations" | "pain" | "lastDone" | "source",
+    group: "durations" | "effort" | "lastDone" | "source",
   ) {
     if (group === "durations") {
       updateFilters({
         ...filters,
         durationRange: filterDefaults.durationRange,
       });
-    } else if (group === "pain") {
-      updateFilters({ ...filters, painLevels: [] });
+    } else if (group === "effort") {
+      updateFilters({ ...filters, effortLevels: [] });
     } else if (group === "lastDone") {
       updateFilters({ ...filters, lastDone: null });
     } else {
@@ -1106,7 +1106,7 @@ function TodayView({
   function clearAllFilters() {
     updateFilters({
       durationRange: filterDefaults.durationRange,
-      painLevels: [],
+      effortLevels: [],
       lastDone: null,
       source: null,
     });
@@ -1382,7 +1382,7 @@ function TodayView({
               {suggestion.recommendationId ? "SUGGESTED" : ""}
             </span>
             <div className="today-suggestion-actions">
-              {/* Task 2 (2026-08-04 round): TIME/PAIN's inline
+              {/* Task 2 (2026-08-04 round): TIME/EFFORT's inline
                   chip clusters (Phase 6F, then regrouped by fix round 2) are
                   gone — they now live inside TodayFilterSheet, opened by this
                   chip. Same geometry as SHUFFLE below (`.filter-trigger`,
@@ -1463,7 +1463,7 @@ function TodayView({
                 </span>
               </div>
               <h2 className="today-card-title">{recommended.title}</h2>
-              <p className="today-card-meta">PAIN {recommended.pain}/5</p>
+              <p className="today-card-meta">EFFORT {recommended.effort}/5</p>
               {/* `baselines` is never null here — same guarantee `today-card-
                   duration` above already relies on (`needsDoors`). */}
               <PieceRegion steps={recommended.steps} baselines={baselines!} />

@@ -30,16 +30,16 @@ export interface RecentLog {
   // R-A): this read has to tolerate a null row before any code can write
   // one, so an already-installed client never white-screens on it.
   held: HeldResult | null;
-  pain: number | null;
+  effort: number | null;
   // Post-workout-summary spec (2026-08-17), §3: nullable from day one —
   // this column never had non-null historical data to be backward
   // compatible with (thumbs is new, not loosened), so there is no
-  // sequencing concern like `held`/`pain`'s R-A.
+  // sequencing concern like `held`/`effort`'s R-A.
   thumbs: Thumbs | null;
   // From-the-log spec (2026-08-18), §2/§3: the three stored heroes plus
   // plan linkage, carried on every list row (`stores/logs.ts`'s
   // `LOG_LIST_COLUMNS` projection) — nullable for the same R-A reason as
-  // `held`/`pain` above (pre-spec-2 rows, and any row whose summary never
+  // `held`/`effort` above (pre-spec-2 rows, and any row whose summary never
   // showed a given hero, read back null everywhere; §2's own migration
   // note: "old rows read back null everywhere"). `steps` is deliberately
   // NOT declared here: the list projection drops it (spec §3), and this

@@ -602,18 +602,18 @@ button:disabled {
   text-align: center;
 }
 
-.pain-bar {
+.effort-bar {
   display: flex;
   gap: 2px;
   align-items: flex-end;
 }
 
-.pain-bar-segment {
+.effort-bar-segment {
   display: block;
   width: 3px;
   height: 11px;
   border-radius: 1px;
-  background: var(--pain-empty);
+  background: var(--effort-empty);
 }
 
 .library-header {
@@ -736,7 +736,7 @@ button:disabled {
 
 /* One token per active GROUP (filterTokens.ts), not per band — type-colored
    for a TYPE token (inline style, per-instance — same idiom as
-   TypeBadge.tsx/PainBar.tsx/ClassificationCard.tsx's own TYPE chip), `--ink`
+   TypeBadge.tsx/EffortBar.tsx/ClassificationCard.tsx's own TYPE chip), `--ink`
    fill for every other kind via this class's own default background. */
 .filter-token {
   display: inline-flex;
@@ -1053,11 +1053,11 @@ button:disabled {
 }
 
 /* Classification card (Task 4, docs/design/builder-redesign/README.md §3):
-   one card holding TYPE and EXPECTED PAIN (DIFFICULTY left in Phase DE PR 1).
+   one card holding TYPE and EXPECTED EFFORT (DIFFICULTY left in Phase DE PR 1).
    Deliberately its own
    `.classification-chip*` class family rather than reusing `.chip` above —
    at the time this was written, `.chip[aria-pressed="true"]` filled
-   --accent unconditionally, which is exactly the treatment PAIN must
+   --accent unconditionally, which is exactly the treatment EFFORT must
    NOT get (the handoff moves it to ink so accent stays reserved for the
    in-row unit/pace toggles and Save). A shared base class would have made
    "don't inherit the accent fill" a thing every future reader has to
@@ -1072,7 +1072,7 @@ button:disabled {
    style, so the same "unreachable either way" conclusion still holds, now
    for a simpler reason. The separation this comment explains stays the
    right call regardless: nothing here depends on the deleted rule's
-   specific behaviour, only on PAIN never inheriting `.chip`'s
+   specific behaviour, only on EFFORT never inheriting `.chip`'s
    base at all.) */
 .classification-card {
   display: flex;
@@ -1102,22 +1102,22 @@ button:disabled {
   color: var(--ink-3);
 }
 
-/* EXPECTED PAIN's label row only: space-between, label left, the current
+/* EXPECTED EFFORT's label row only: space-between, label left, the current
    level's word on the right (design doc §3). */
-.classification-pain-label-row {
+.classification-effort-label-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   /* The level word renders only once a level is picked, and it sets 1px
      larger than the label — so the row used to grow on first tap and push
-     the pain chips (and everything below them) down under the user's thumb.
+     the effort chips (and everything below them) down under the user's thumb.
      Reserving more height than either state needs makes the row's height
      constant, whether or not the word is there. Locked by design.spec.ts
-     ("picking a pain level does not shift the chips below it"). */
+     ("picking a effort level does not shift the chips below it"). */
   min-height: 18px;
 }
 
-.classification-pain-word {
+.classification-effort-word {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1126,11 +1126,11 @@ button:disabled {
 }
 
 /* TYPE's label row (Task 7, mid-phase addition): same reserved-line-box fix
-   as `.classification-pain-label-row` above, and for the same reason — the
+   as `.classification-effort-label-row` above, and for the same reason — the
    summary word (TYPE_WORDS) sets 1px larger than the label, so without a
    reserved min-height the row's height would depend on whether the word is
    there. A type is always selected (there's no "nothing picked" state the
-   way pain has), so the word never actually toggles in and out here — this
+   way effort has), so the word never actually toggles in and out here — this
    is the belt-and-suspenders half of that guarantee, not the load-bearing
    half; see ClassificationCard.tsx's doc comment. */
 .classification-type-label-row {
@@ -1174,23 +1174,23 @@ button:disabled {
   letter-spacing: 0.06em;
 }
 
-.classification-chip-pain {
+.classification-chip-effort {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-4);
 }
 
-/* Task 1 (ui-fix round): PAIN's selected fill moves off its own per-level
-   ramp colour (DESIGN.md: "Builder's gold pain selection goes") onto the
+/* Task 1 (ui-fix round): EFFORT's selected fill moves off its own per-level
+   ramp colour (DESIGN.md: "Builder's gold effort selection goes") onto the
    same plain ink fill the (since-removed) DIFFICULTY chips used —
    ClassificationCard.tsx no longer sets any inline style for a selected
-   PAIN chip at all. Lives entirely in CSS (no inline style): unlike TYPE
+   EFFORT chip at all. Lives entirely in CSS (no inline style): unlike TYPE
    (which still needs a per-instance colour set inline, one of four type
-   colours), PAIN only ever fills one colour. This comment used
-   to add that --pain-ramp-1..5 stayed defined because LogSession.tsx was
+   colours), EFFORT only ever fills one colour. This comment used
+   to add that --effort-ramp-1..5 stayed defined because LogSession.tsx was
    still a consumer; it was not, the ramp had no consumer at all, and the
    tokens were deleted 2026-08-28. */
-.classification-chip-pain[aria-pressed="true"] {
+.classification-chip-effort[aria-pressed="true"] {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--on-color);
@@ -1799,7 +1799,7 @@ button.back-link:disabled,
    .today-card below it. --on-color on --accent throughout is the same
    pairing .type-badge/.button-primary already use — computed 5.94:1
    (#fffdf7 on #b5341f), clearing the 4.5:1 AA floor. This used to cite the
-   --pain-ramp-5 comment for that ratio; those tokens were deleted
+   --effort-ramp-5 comment for that ratio; those tokens were deleted
    2026-08-28, so the measurement is stated directly rather than borrowed. */
 .today-resume-card {
   display: flex;
@@ -3100,7 +3100,7 @@ button.back-link:disabled,
 
 /* §3 Classification card: `.builder-classification-wrap` (Builder.tsx) is a
    plain, unstyled wrapper around ClassificationCard.tsx — present only so a
-   failed Save can `.focus()` it when `pain` is the first invalid field.
+   failed Save can `.focus()` it when `effort` is the first invalid field.
    ClassificationCard has no single focusable root of its own (chip rows,
    no radiogroup), same "wrap it, focus the wrapper" idiom StepEditor.tsx's
    own `.step-editor-pace` wrapper uses for PaceRefInput. Deliberately no
@@ -3540,7 +3540,7 @@ button.back-link:disabled,
 }
 
 /* Toggled via aria-checked (the same radio pattern the deleted
-   PainPicker.tsx used) since these are mutually-exclusive radios, not
+   EffortPicker.tsx used) since these are mutually-exclusive radios, not
    independent pressed toggles. `flex: 1` (Task 6 — was a fixed 48px per
    the handoff's original two-chip spec) so the four segments share
    `.pace-ref-bases`'s full stretched width evenly; `min-width: 44px` keeps
@@ -9066,7 +9066,7 @@ section:not(.news-pinned) .news-row:last-of-type {
      ink on page (the title, non-lead hero values) 15.41:1
      ink-2 on surface-sunken (unselected reflection chips) 9.16:1
      on-color on ink (a selected HELD chip, ↑ MORE LIKE THIS selected) 17.11:1
-     on-color on accent (a selected PAIN chip, ↓ selected, the lead save
+     on-color on accent (a selected EFFORT chip, ↓ selected, the lead save
        button, a selected DISCARD-armed button) 5.94:1
      judge-faster on page (a faster row's pace/deviation/bar) 7.43:1
      judge-slower on page (a slower row's pace/deviation/bar) 7.15:1
@@ -9355,12 +9355,12 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--on-color);
 }
 
-.summary-pain-row {
+.summary-effort-row {
   display: flex;
   gap: 8px;
 }
 
-.summary-pain-chip {
+.summary-effort-chip {
   flex: 1;
   min-height: 46px;
   display: flex;
@@ -9375,13 +9375,13 @@ section:not(.news-pinned) .news-row:last-of-type {
   cursor: pointer;
 }
 
-.summary-pain-chip[aria-pressed="true"] {
+.summary-effort-chip[aria-pressed="true"] {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-color);
 }
 
-.summary-pain-caption {
+.summary-effort-caption {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;

@@ -2,8 +2,8 @@ import { fmtDuration } from "../../domain/duration.js";
 import { liveSteps } from "../../domain/expand.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
 import {
-  effortFromWord,
-  isEffortRef,
+  paceWordFromLabel,
+  isPaceWordRef,
   refLabel,
   resolveSplit,
 } from "../../domain/pace.js";
@@ -52,7 +52,7 @@ import type { MonitorRun } from "../monitor/monitorRun.js";
  *  LABEL IDIOM (Task 1 F1 -> F1b review): a step's LABEL is its identity and
  *  must match every other step-text surface — the chip idiom (`refLabel`'s
  *  "MAX"/"MIN"/"6k +16"), not a target-display word or a resolved split
- *  value. F1's first pass fixed only the EFFORT case (`effortFromWord`,
+ *  value. F1's first pass fixed only the EFFORT case (`paceWordFromLabel`,
  *  below) because it assumed `EnginePhase`'s missing raw `PaceRef` was
  *  unrecoverable for a split-ref phase — James's F1b correction: it IS
  *  recoverable, because the `SessionDraft` a run was built from is still on
@@ -90,10 +90,10 @@ import type { MonitorRun } from "../monitor/monitorRun.js";
  *  and run records are cleared together, only ever by a successful save —
  *  but a defensive path costs little against a half-cleared storage state
  *  and must not crash logging. Falls back to composing from the phase's own
- *  frozen fields: for an EFFORT phase, `domain/pace.ts`'s `effortFromWord`
- *  (F1's original fix, still load-bearing here) inverts `effortWord`'s
+ *  frozen fields: for an EFFORT phase, `domain/pace.ts`'s `paceWordFromLabel`
+ *  (F1's original fix, still load-bearing here) inverts `paceWordLabel`'s
  *  frozen "ALL OUT"/"EASY" back to the chip ("MAX"/"MIN") — bijective over
- *  the two-element `Effort` type, so this is a lookup, not a guess. For a
+ *  the two-element `PaceWord` type, so this is a lookup, not a guess. For a
  *  SPLIT-ref phase (ui-fix round Task 2 fix round, F1b amendment):
  *  `EnginePhase` now carries the same EFFECTIVE `ref` `targetSplit` was
  *  resolved from (`domain/expand.ts`'s own `case "w"`, added the same round
@@ -295,12 +295,12 @@ function refPaceLabel(duration: string, ref: PaceRef): string {
 // (117.3) never reconciles against the persisted 119.3. Folding the nudge
 // into the label's own off ("2k +7") keeps label, the PACES LOCKED
 // reconstruction, and the stored split mutually consistent (112.3+7=119.3).
-// Effort refs have no offset to nudge (`withNudge` already refuses to
+// PaceWord refs have no offset to nudge (`withNudge` already refuses to
 // record one against an effort step — draft.ts's own rule), so this is a
 // no-op for them; `nudge === 0` (the manual door's own case — off-app rows
 // have no draft, hence no nudges) short-circuits to the identical ref.
 function withEffectiveOff(ref: PaceRef, nudge: number): PaceRef {
-  if (isEffortRef(ref) || nudge === 0) return ref;
+  if (isPaceWordRef(ref) || nudge === 0) return ref;
   return { ...ref, off: ref.off + nudge };
 }
 
@@ -347,7 +347,7 @@ function draftWorkStep(
  *    step (module header's LABEL IDIOM paragraph — byte-identical to
  *    `buildManualLogSteps`'s label for the same step); otherwise the
  *    FALLBACK paragraph's rule (effort: `refLabel({effort:
- *    effortFromWord(phase.label)})`; split-ref: `refPaceLabel(duration,
+ *    paceWordFromLabel(phase.label)})`; split-ref: `refPaceLabel(duration,
  *    phase.ref)` when `phase.ref` is present — byte-identical to the
  *    preferred path — else, only for a legacy pre-ref `SessionRun`, the
  *    phase's own frozen `label` verbatim).
@@ -366,7 +366,7 @@ function draftWorkStep(
  *        `nextDistance` is the only place that ever writes to `actuals`,
  *        and it only runs on a phase with `meters`, effort or split-ref
  *        alike) -> passes through as `actualSplit: splitSeconds,
- *        actualSource: "stopwatch"` REGARDLESS of `isEffort`.
+ *        actualSource: "stopwatch"` REGARDLESS of `isPaceWord`.
  *      - no `actuals[i]` entry, NOT an effort phase, phase has `seconds`
  *        (a TIME phase) -> the engine NEVER records an actual for a time
  *        phase (only `nextDistance` writes one, and it's distance-only) —
@@ -399,7 +399,7 @@ export function buildLogSteps(
       return;
     }
     if (phase.type !== "work") return;
-    const isEffort = phase.targetKind === "effort";
+    const isPaceWord = phase.targetKind === "effort";
     const draftStep = draftWorkStep(draft, phase.originalIndex);
     // Preferred path (module header's LABEL IDIOM paragraph): the draft's
     // own authored step has the real ref, so this door's label is composed
@@ -409,9 +409,9 @@ export function buildLogSteps(
     // Fallback (module header's FALLBACK paragraph, only when `draftStep`
     // is undefined): an effort phase still has a ref to reconstruct — the
     // chip word ("MAX"/"MIN") recovers from the frozen display word via
-    // effortFromWord's inverse (the cast is safe: this branch only runs
+    // paceWordFromLabel's inverse (the cast is safe: this branch only runs
     // when `targetKind === "effort"`, and domain/expand.ts's "case w" sets
-    // `label` to exactly `effortWord(ref.effort)` in that case, never any
+    // `label` to exactly `paceWordLabel(ref.effort)` in that case, never any
     // other string) — so it still goes through `refPaceLabel`. A split-ref
     // phase now ALSO reconstructs through `refPaceLabel` (ui-fix round
     // Task 2 fix round, F1b): `phase.ref` carries the same effective ref
@@ -431,9 +431,9 @@ export function buildLogSteps(
         durationText(phase),
         withEffectiveOff(draftStep.ref, nudge),
       );
-    } else if (isEffort) {
+    } else if (isPaceWord) {
       label = refPaceLabel(durationText(phase), {
-        effort: effortFromWord(phase.label as "ALL OUT" | "EASY"),
+        effort: paceWordFromLabel(phase.label as "ALL OUT" | "EASY"),
       });
     } else if (phase.ref !== undefined) {
       // Ui-fix round Task 2 fix round, F1b: reconstructs the SAME chip the
@@ -453,7 +453,7 @@ export function buildLogSteps(
       label = `${durationText(phase)} @ ${phase.label}`;
     }
     const step: LogStep = { label };
-    if (!isEffort) {
+    if (!isPaceWord) {
       // Both branches of domain/expand.ts's "case w" set targetSplit for
       // every work phase; the `!` documents that guarantee.
       step.targetSplit = phase.targetSplit!;
@@ -462,7 +462,7 @@ export function buildLogSteps(
     if (phase.seconds !== undefined) step.seconds = phase.seconds;
     if (phase.meters !== undefined) step.meters = phase.meters;
     // Phase 6I amendment to the 5G drop rule (module header): a MEASURED
-    // (stopwatch) actual survives regardless of `isEffort` — `run.actuals`
+    // (stopwatch) actual survives regardless of `isPaceWord` — `run.actuals`
     // is only ever written by `nextDistance` (engine.ts), which records a
     // real elapsed/split pair off the rower's own stopwatch with no
     // reference to `targetSplit` at all, so an effort DISTANCE phase's
@@ -486,14 +486,14 @@ export function buildLogSteps(
         step.actualSplit = actual.splitSeconds;
         step.actualSource = "stopwatch";
       }
-    } else if (!isEffort && phase.seconds !== undefined) {
+    } else if (!isPaceWord && phase.seconds !== undefined) {
       step.actualSplit = phase.targetSplit!;
       step.actualSource = "assumed";
     }
     // else: a distance phase with no recorded actual is a discarded
     // suspect split (split-ref) — neither key, per the module header. An
     // effort TIME phase with no actual falls here too now, and logs
-    // nothing, which is the SAME outcome the old `if (!isEffort)` wrapper
+    // nothing, which is the SAME outcome the old `if (!isPaceWord)` wrapper
     // produced for it (this branch was always unreachable for a completed
     // effort time phase either way — `nextDistance` never runs on one).
     out.push(step);
@@ -525,7 +525,7 @@ export function buildLogSteps(
  *  discard concept for an off-app row — the spec's "ALL actuals 'assumed'"),
  *  using the SAME resolved number for both `targetSplit` and `actualSplit`
  *  (an off-app row is recorded as "held the target", identical to
- *  `buildLogSteps`'s completed-time-phase rule). Effort steps omit
+ *  `buildLogSteps`'s completed-time-phase rule). PaceWord steps omit
  *  `targetSplit`/`actualSplit`/`actualSource` entirely, same 5G rule as
  *  `buildLogSteps` (module header's SERVER CONTRACT paragraph).
  *
@@ -537,9 +537,9 @@ export function buildLogSteps(
  *  Phase 6I close-out fold (Task 2's deferred ledger item): `baselines` is
  *  now `Baselines | null` — `ManualDoorLog` gates its OWN call site on
  *  `needsBaselines(workout.steps)` rather than bare `baselines === null`,
- *  so an effort-only workout (every step `isEffortRef`) can reach here
+ *  so an effort-only workout (every step `isPaceWordRef`) can reach here
  *  with null baselines. `resolveSplit` is only ever called from the
- *  `!isEffort` branch below, which `needsBaselines` guarantees never runs
+ *  `!isPaceWord` branch below, which `needsBaselines` guarantees never runs
  *  when `baselines` is null (the two predicates are the same condition,
  *  "some work step is a split ref") — the `!` on `baselines` there
  *  documents that invariant, not a runtime check. */
@@ -554,7 +554,7 @@ export function buildManualLogSteps(
       continue;
     }
     if (step.k !== "w") continue;
-    const isEffort = isEffortRef(step.ref);
+    const isPaceWord = isPaceWordRef(step.ref);
     const durationLabel =
       step.duration.kind === "time"
         ? fmtDuration(step.duration.minutes)
@@ -562,7 +562,7 @@ export function buildManualLogSteps(
     const logStep: LogStep = {
       label: refPaceLabel(durationLabel, step.ref),
     };
-    if (!isEffort) {
+    if (!isPaceWord) {
       // `needsBaselines(workout.steps)` (ManualDoorLog's own call-site
       // gate) is true whenever any work step reaches this branch — the
       // caller has already confirmed `baselines` is non-null before
@@ -642,7 +642,7 @@ export interface LogSeed {
  *  `SessionDraft` on the connect path (unlike the phone-timer door), so
  *  this always takes the FALLBACK shape `buildLogSteps` uses when its own
  *  draft lookup misses: an effort phase's chip recovers through
- *  `effortFromWord`, a split phase's chip composes straight from
+ *  `paceWordFromLabel`, a split phase's chip composes straight from
  *  `phase.ref`. `phase.ref` is already the EFFECTIVE, nudge-folded ref
  *  (`engine.ts`'s `buildRun` resolves every phase from the draft's
  *  `effectiveSteps`, which folds a preview nudge into `ref.off` before
@@ -687,18 +687,18 @@ export function buildLogSeed(
       steps.push({ label: phase.label, kind: "work" });
       continue;
     }
-    const isEffort = phase.targetKind === "effort";
+    const isPaceWord = phase.targetKind === "effort";
     let label: string;
-    if (isEffort) {
+    if (isPaceWord) {
       label = refPaceLabel(durationText(phase), {
-        effort: effortFromWord(phase.label as "ALL OUT" | "EASY"),
+        effort: paceWordFromLabel(phase.label as "ALL OUT" | "EASY"),
       });
     } else if (phase.ref !== undefined) {
       label = refPaceLabel(durationText(phase), phase.ref);
-      // `phase.ref` is always a SplitRef here, never an EffortRef: an
+      // `phase.ref` is always a SplitRef here, never an PaceWordRef: an
       // "effort" targetKind phase never sets `ref` at all
       // (`domain/expand.ts`'s "case w" only sets it in the split branch),
-      // and the `isEffort` branch above already handled the effort case.
+      // and the `isPaceWord` branch above already handled the effort case.
       // The cast documents that construction guarantee rather than
       // re-checking it at runtime — this file's own `!` convention
       // (`durationText`'s header comment) for a fact the domain layer

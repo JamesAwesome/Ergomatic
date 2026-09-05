@@ -143,7 +143,7 @@ function baseProps(
     expectedPain: 3,
     held: null,
     onHeld: vi.fn(),
-    pain: null,
+    effort: null,
     onPain: vi.fn(),
     thumbs: null,
     onThumbs: vi.fn(),
@@ -376,34 +376,34 @@ describe("PostWorkoutSummary — reflection card (§2D)", () => {
     expect(screen.getByText("BY FEEL")).toBeInTheDocument();
   });
 
-  it("ACTUAL PAIN: selecting a level clears on a second tap, and the caption reads the three-way band", async () => {
+  it("ACTUAL EFFORT: selecting a level clears on a second tap, and the caption reads the three-way band", async () => {
     const user = userEvent.setup();
     const onPain = vi.fn();
-    const { rerender } = renderSummary({ onPain, pain: null });
+    const { rerender } = renderSummary({ onPain, effort: null });
     expect(screen.getByText("TAP TO RATE")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Pain 1" }));
+    await user.click(screen.getByRole("button", { name: "Effort 1" }));
     expect(onPain).toHaveBeenCalledWith(1);
 
     rerender(
       <MemoryRouter>
-        <PostWorkoutSummary {...baseProps({ onPain, pain: 1 })} />
+        <PostWorkoutSummary {...baseProps({ onPain, effort: 1 })} />
       </MemoryRouter>,
     );
     expect(screen.getByText("EASIER THAN PLANNED")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Pain 1" }));
+    await user.click(screen.getByRole("button", { name: "Effort 1" }));
     expect(onPain).toHaveBeenCalledWith(null);
 
     rerender(
       <MemoryRouter>
-        <PostWorkoutSummary {...baseProps({ onPain, pain: 2 })} />
+        <PostWorkoutSummary {...baseProps({ onPain, effort: 2 })} />
       </MemoryRouter>,
     );
     expect(screen.getByText("AS PLANNED")).toBeInTheDocument();
 
     rerender(
       <MemoryRouter>
-        <PostWorkoutSummary {...baseProps({ onPain, pain: 4 })} />
+        <PostWorkoutSummary {...baseProps({ onPain, effort: 4 })} />
       </MemoryRouter>,
     );
     expect(screen.getByText("HARDER THAN PLANNED")).toBeInTheDocument();

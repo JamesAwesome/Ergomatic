@@ -1,5 +1,5 @@
 import { estimateMinutes } from "../../domain/expand.js";
-import { isEffortRef } from "../../domain/pace.js";
+import { isPaceWordRef } from "../../domain/pace.js";
 import type {
   Baselines,
   PaceRef,
@@ -172,7 +172,7 @@ export function clearDraft(): void {
  *  (via domain/expand.ts's `phases()`) included. Folding it here, once, is
  *  what makes `draftMinutes` price a nudge instead of silently ignoring it
  *  (the bug this fixes: nudging a distance step's split used to leave the
- *  minute recount unchanged). Effort refs have no `off` to
+ *  minute recount unchanged). PaceWord refs have no `off` to
  *  nudge and are passed through untouched (`withNudge` already refuses to
  *  record a nudge against one). The reps marker (and every other non-work
  *  step) passes through untouched unless its own index was removed, so
@@ -187,7 +187,7 @@ export function effectiveSteps(
       const spm = d.spmOverrides[i];
       if (spm !== undefined) step = { ...step, spm };
       const nudge = d.nudges[i];
-      if (nudge !== undefined && !isEffortRef(step.ref)) {
+      if (nudge !== undefined && !isPaceWordRef(step.ref)) {
         const ref: PaceRef = { ...step.ref, off: step.ref.off + nudge };
         step = { ...step, ref };
       }
@@ -253,7 +253,7 @@ export function withNudge(
   delta: number,
 ): SessionDraft {
   const step = d.steps[i];
-  if (!step || step.k !== "w" || isEffortRef(step.ref)) return d;
+  if (!step || step.k !== "w" || isPaceWordRef(step.ref)) return d;
   return {
     ...d,
     nudges: { ...d.nudges, [i]: (d.nudges[i] ?? 0) + delta },

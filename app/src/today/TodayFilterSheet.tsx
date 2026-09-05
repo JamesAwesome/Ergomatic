@@ -11,7 +11,7 @@ import type { FilterSet } from "./todayFilters";
  *  of this sheet's business. */
 export type TodayFilterDraft = FilterSet;
 
-// PAIN's five cells, matching Library's own 1-5 union (FilterSheet.tsx's
+// EFFORT's five cells, matching Library's own 1-5 union (FilterSheet.tsx's
 // PAIN_LEVELS) — a local copy per the same duplication convention.
 const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
@@ -31,7 +31,7 @@ const COUNT_ID = "today-filter-sheet-count";
  * Today's own FILTER sheet: slides up over the screen (Today.tsx never
  * pushes history for it — same BACK-with-sheet-open decision as Library's
  * FilterSheet.tsx, documented there). Operates entirely on a DRAFT copy of
- * `{durationRange, painLevels, lastDone, source}` that the caller
+ * `{durationRange, effortLevels, lastDone, source}` that the caller
  * owns (`draft`/`onChangeDraft`); nothing here writes to Today's actually-
  * applied `TodayOverrides` record directly. `onApply` commits the draft
  * (Today.tsx's own merge-and-save); `onDismiss` (backdrop tap, Escape, or
@@ -51,7 +51,7 @@ const COUNT_ID = "today-filter-sheet-count";
  *
  * LAST DONE/SOURCE (Round 2, 2026-08-04): the Library's own half-width pair
  * (FilterSheet.tsx's `filter-sheet-row`/`filter-sheet-group-half`), same
- * mutually-exclusive toggle-off semantics, added below PAIN.
+ * mutually-exclusive toggle-off semantics, added below EFFORT.
  *
  * The dialog machinery (backdrop, `role="dialog"`, the focus trap/restore)
  * lives in SheetShell (extracted from Library's FilterSheet.tsx, Task 1 of
@@ -120,19 +120,19 @@ export default function TodayFilterSheet({
       />
 
       <CellGrid
-        label="PAIN"
+        label="EFFORT"
         cells={PAIN_LEVELS.map((level) => ({
           value: String(level),
           label: String(level),
-          pressed: draft.painLevels.includes(level),
+          pressed: draft.effortLevels.includes(level),
         }))}
         onToggle={(value) => {
           const level = Number(value);
           onChangeDraft({
             ...draft,
-            painLevels: draft.painLevels.includes(level)
-              ? draft.painLevels.filter((l) => l !== level)
-              : [...draft.painLevels, level].sort((a, b) => a - b),
+            effortLevels: draft.effortLevels.includes(level)
+              ? draft.effortLevels.filter((l) => l !== level)
+              : [...draft.effortLevels, level].sort((a, b) => a - b),
           });
         }}
       />

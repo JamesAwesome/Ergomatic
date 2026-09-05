@@ -666,7 +666,7 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     await cleanupByTitle(page, title);
   });
 
-  test("the full loop: Today → detail → countdown → tiny timer session → summary → Held + pain + notes → Log against plan → Today shows it in LAST THREE and the plan's session counter advanced", async ({
+  test("the full loop: Today → detail → countdown → tiny timer session → summary → Held + effort + notes → Log against plan → Today shows it in LAST THREE and the plan's session counter advanced", async ({
     page,
   }) => {
     title = "Tiny E2E Log Session";
@@ -709,11 +709,11 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     await expect(page.locator(".summary-row")).toHaveCount(1);
 
     await page.getByRole("button", { name: "HELD" }).click();
-    // Pain 3, not 2 (Phase 6C Task 4's own brief) — deliberately mid-scale,
-    // distinct from every other pain figure this file's design/screenshot
+    // Effort 3, not 2 (Phase 6C Task 4's own brief) — deliberately mid-scale,
+    // distinct from every other effort figure this file's design/screenshot
     // siblings already pin (2), so this assertion can't pass by coincidence
     // if the wrong picker cell were wired.
-    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByRole("button", { name: "Effort 3" }).click();
     await page.getByLabel("NOTES").fill("Felt strong.");
     // A plan is active — Log against plan leads and carries the position.
     await page
@@ -823,7 +823,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     titles = [];
   });
 
-  test("the full loop: Library → detail → Log it after → Held + pain + notes → Save → Today shows it in LAST THREE, with no draft/run record ever created", async ({
+  test("the full loop: Library → detail → Log it after → Held + effort + notes → Save → Today shows it in LAST THREE, with no draft/run record ever created", async ({
     page,
   }) => {
     const title = "Tiny E2E Manual Log";
@@ -861,7 +861,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     await expect(page.locator(".summary-row")).toHaveCount(1);
 
     await page.getByRole("button", { name: "HELD" }).click();
-    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
     await page
       .getByLabel("NOTES")
       .fill("Rowed at the gym, logging it after the fact.");
@@ -945,7 +945,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
 
     await page.getByRole("button", { name: "HELD" }).click();
-    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByRole("button", { name: "Effort 3" }).click();
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page).toHaveURL(/\/today$/);
 
@@ -1022,7 +1022,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     ).toBeVisible();
 
     await page.getByRole("button", { name: "HELD" }).click();
-    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
     await page.getByRole("button", { name: "Save without logging" }).click();
 
     await expect(page).toHaveURL(/\/today$/);

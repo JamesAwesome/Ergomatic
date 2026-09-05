@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import TypeBadge from "../components/TypeBadge";
-import PainBar from "../components/PainBar";
+import EffortBar from "../components/EffortBar";
 import { structureLine } from "../../domain/display/stepDetail.js";
 
 export default function WorkoutRow({
@@ -49,7 +49,7 @@ export default function WorkoutRow({
           <span className="workout-row-custom">MY WORKOUTS</span>
         )}
         <span className="workout-row-meta">{daysLabel}</span>
-        <PainBar pain={workout.pain} type={workout.type} />
+        <EffortBar effort={workout.effort} type={workout.type} />
       </div>
       {!workout.isGlobal && (
         <span className="visually-hidden">, one of my workouts</span>

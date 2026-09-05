@@ -34,16 +34,16 @@ const HELD_OPTIONS: { value: HeldResult; label: string }[] = [
 
 const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
 
-/** §2D's ACTUAL PAIN caption: `TAP TO RATE` unselected, else the row's own
+/** §2D's ACTUAL EFFORT caption: `TAP TO RATE` unselected, else the row's own
  *  three-way read of the chosen level (1 -> easier, 2 -> as planned, 3-5 ->
  *  harder) — the design's own literal words, not a re-derivation of
- *  ClassificationCard.tsx's PAIN_WORDS (that card's own EXPECTED-pain
+ *  ClassificationCard.tsx's PAIN_WORDS (that card's own EXPECTED-effort
  *  vocabulary answers a different question, "how hard did you expect this
  *  to be", not "how did the actual compare to the plan"). */
-function painCaption(pain: number | null): string {
-  if (pain === null) return "TAP TO RATE";
-  if (pain === 1) return "EASIER THAN PLANNED";
-  if (pain === 2) return "AS PLANNED";
+function effortCaption(effort: number | null): string {
+  if (effort === null) return "TAP TO RATE";
+  if (effort === 1) return "EASIER THAN PLANNED";
+  if (effort === 2) return "AS PLANNED";
   return "HARDER THAN PLANNED";
 }
 
@@ -396,7 +396,7 @@ export function SummaryIntervalsBlock({
  *  `FromTheLog.tsx`'s Edit affordance can swap in the exact SAME four
  *  clearable controls the live door uses (this spec's own binding
  *  preamble: "Edit swaps in spec 1's reflection card"), rather than a
- *  second hand-rolled copy of the HELD/pain roving-button groups
+ *  second hand-rolled copy of the HELD/effort roving-button groups
  *  (CLAUDE.md's own recurring-failure #8). No behavior change to the live
  *  door below, which now renders this component in place of the
  *  identical inline JSX it used to carry directly. */
@@ -405,7 +405,7 @@ export function SummaryReflectionCard({
   expectedPain,
   held,
   onHeld,
-  pain,
+  effort,
   onPain,
   thumbs,
   onThumbs,
@@ -416,14 +416,14 @@ export function SummaryReflectionCard({
   expectedPain: number | null;
   held: HeldResult | null;
   onHeld: (value: HeldResult | null) => void;
-  pain: number | null;
+  effort: number | null;
   onPain: (value: number | null) => void;
   thumbs: Thumbs | null;
   onThumbs: (value: Thumbs | null) => void;
   notes: string;
   onNotes: (value: string) => void;
 }) {
-  const painWord = painCaption(pain);
+  const effortWord = effortCaption(effort);
   return (
     <div className="summary-reflection-card">
       <div className="summary-reflection-group">
@@ -471,26 +471,26 @@ export function SummaryReflectionCard({
 
       <div className="summary-reflection-group">
         <div className="summary-reflection-label-row">
-          <p className="summary-reflection-label">ACTUAL PAIN</p>
+          <p className="summary-reflection-label">ACTUAL EFFORT</p>
           {expectedPain !== null && (
             <p className="summary-hint">EXPECTED {expectedPain}/5</p>
           )}
         </div>
-        <div className="summary-pain-row">
+        <div className="summary-effort-row">
           {PAIN_LEVELS.map((level) => (
             <button
               key={level}
               type="button"
-              className="summary-pain-chip"
-              aria-pressed={pain === level}
-              aria-label={`Pain ${level}`}
-              onClick={() => onPain(pain === level ? null : level)}
+              className="summary-effort-chip"
+              aria-pressed={effort === level}
+              aria-label={`Effort ${level}`}
+              onClick={() => onPain(effort === level ? null : level)}
             >
               {level}
             </button>
           ))}
         </div>
-        <p className="summary-pain-caption">{painWord}</p>
+        <p className="summary-effort-caption">{effortWord}</p>
       </div>
 
       <div className="summary-reflection-group">
@@ -527,7 +527,7 @@ export interface PostWorkoutSummaryProps {
   expectedPain: number | null;
   held: HeldResult | null;
   onHeld: (value: HeldResult | null) => void;
-  pain: number | null;
+  effort: number | null;
   onPain: (value: number | null) => void;
   thumbs: Thumbs | null;
   onThumbs: (value: Thumbs | null) => void;
@@ -606,7 +606,7 @@ export default function PostWorkoutSummary({
   expectedPain,
   held,
   onHeld,
-  pain,
+  effort,
   onPain,
   thumbs,
   onThumbs,
@@ -720,7 +720,7 @@ export default function PostWorkoutSummary({
         expectedPain={expectedPain}
         held={held}
         onHeld={onHeld}
-        pain={pain}
+        effort={effort}
         onPain={onPain}
         thumbs={thumbs}
         onThumbs={onThumbs}
