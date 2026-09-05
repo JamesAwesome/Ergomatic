@@ -1,0 +1,22 @@
+{
+  "checkedAtUtc": "2026-09-05T01:22:56Z",
+  "phoneReachable": true,
+  "transportType": "localNetwork",
+  "tunnelState": "connected",
+  "identityMatchesSetupV3Install": true,
+  "version": "0.23.0",
+  "build": "789",
+  "macWifiSteadyDuringDrop": true,
+  "macSleptDuringDrop": false,
+  "dropTimeline": {
+    "lastGoodTunnelLocal": "21:08:47",
+    "controlChannelTimeoutLocal": "21:09:33",
+    "deviceAbsentFromListLocal": "21:11",
+    "rediscoveredLocal": "21:12:07",
+    "secondFlapLocal": "21:16:17",
+    "reachableAgainLocal": "21:22:56"
+  },
+  "phoneSideCause": "not observed",
+  "phoneActionsPerformed": "read-only listings only; zero installs, zero launches, zero scans",
+  "supersedes": "recovery-v1-abort-summary.json currentPhoneReachability/currentInstalledIdentity"
+}

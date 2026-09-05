@@ -1,7 +1,7 @@
 # NFC recovery — Codex command card
 
 Setup v3 passed; recovery v1 later aborted before launch on a connection
-failure. Both runs are consumed. This card is reference for a future explicitly
+failure (diagnosed in `RECOVERY-CONNECTION-FINDINGS.md`). Both runs are consumed. This card is reference for a future explicitly
 agreed resumed session, not permission to execute the old run. First read
 `HANDOFF-TO-CLAUDE.md` and restore verified phone reachability. These are Codex-owned
 commands, never instructions for James to paste. Do not restart design,
@@ -58,6 +58,24 @@ SIGINT; await terminal output and require `cleanupVerified:true` in evidence.
 The helper never owns installation/launch/termination. No old PID is reusable.
 Preserve raw console and JSON privately; report only the helper's allowlisted
 result, zero NFC start counts and independently verified cleanup.
+
+## Read-only transport preflight (v2, immediately before the invitation)
+
+Create a fresh private preflight directory P (mode 0700), distinct from any
+walk run directory D. Both commands are read-only and make no phone
+mutation; a failure means the invitation is not sent.
+
+```text
+xcrun devicectl device info details --device Kaito --timeout 20 --json-output P/details.json --log-output P/details.log
+xcrun devicectl device info apps --device Kaito --timeout 20 --json-output P/installed-apps.json --log-output P/installed-apps.log
+```
+
+Require `result.connectionProperties.tunnelState == "connected"`, then the
+existing `assertInstalledAppMatches` against
+R/authorized-setup-v3-hrsovf1a/install.json. Record
+`result.connectionProperties.transportType` in P/result.json as the
+pre-cable transport; the walk's first in-clock listing records the walk's
+own transport in D. See `RECOVERY-CONNECTION-FINDINGS.md` for why.
 
 ## At the erg after setup PASS, PM PASS and explicit go
 

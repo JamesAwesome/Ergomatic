@@ -42,10 +42,14 @@ Phone cleanup was not required because this run made no phone mutation.
 A later read-only connection check also failed. Do not treat the earlier
 installed identity or setup PASS as current connectivity proof.
 
-**Stopped for handoff at James's request.** No clock, install permission,
-scan permission or retry is active. Start with
-[HANDOFF-TO-CLAUDE.md](HANDOFF-TO-CLAUDE.md). The next technical task is to
-establish why the Mac cannot currently reach the phone, using retained errors
-and read-only checks. No new design, rebuild, helper framework or unchanged
-suite is justified by this connection failure. Product implementation remains
-gated; preserve the existing work and do not push, merge or release.
+**Handed to Claude and resumed at the desk, 2026-09-05.**
+[RECOVERY-CONNECTION-FINDINGS.md](RECOVERY-CONNECTION-FINDINGS.md) reads
+the Mac's own logs: the wireless CoreDevice tunnel dropped 28 s after a good
+listing while the Mac's Wi-Fi stayed up; the phone flapped in and out of the
+device list for seven minutes; cause on the phone side not observed. A later
+read-only check found the phone reachable and 0.23.0/789 still at the
+setup-v3 installation URL. [RECOVERY-WALK-V2.md](RECOVERY-WALK-V2.md) is v1
+verbatim plus a read-only transport preflight and a wired-cable preference;
+its PM disposition is recorded there. No clock, install permission, scan
+permission or retry is active until James replies **go** to v2's invitation.
+Product implementation remains gated; do not push, merge or release.

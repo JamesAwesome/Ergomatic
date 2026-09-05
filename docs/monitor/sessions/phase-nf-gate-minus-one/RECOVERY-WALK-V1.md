@@ -2,8 +2,9 @@
 
 Status: COMPLETED — aborted before app launch. See
 [the stop record](RECOVERY-WALK-V1-ABORT.md). Zero NFC attempts; all four cases
-unrun. The original Start permission and run are consumed. The following
-PM-approved procedure is retained history, not an executable retry.
+unrun. The original Start permission and run are consumed. NF-RECOVERY-v2
+incorporates this procedure by reference; the text below is executable
+under v2's consent, never under v1's.
 
 Primary target: determine whether a held old NFC attempt can interfere with
 its immediate successor on this iPhone/PM5. Four cases share the prepared

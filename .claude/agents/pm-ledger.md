@@ -4620,3 +4620,23 @@ PM approved its four-pair, eight-minute protocol. Fresh capture still runs
 the reviewed idle check before A within that same clock; prior route
 readiness does not survive relaunch by assumption. Scan consent remains
 separate.
+
+## Recovery v2 transport readiness, 2026-09-05
+
+`NF-RECOVERY-v2` received PM PASS WITH CONDITIONS: v1's protocol resumed
+verbatim under fresh consent, plus a read-only pre-invitation transport
+preflight, a preferred-not-required USB-C cable, and the operator's ready
+state moved into the invitation itself. Wired is not required: `transportType`
+was `localNetwork` in every record ever taken, so requiring it would gate a
+one-shot walk on an untested branch. The preflight proves the minute it runs
+in, not the walk; it exists to avoid sending James to the erg for nothing.
+Setup v3 is NOT repeated — the once-before-A idle command re-proves route,
+canary and document inside the clock, and a repeat setup guarantees the extra
+trip it is meant to avoid. New standing rule for these walks: **consent is
+consumed by reader starts, not by the clock.** A stop before the first reader
+start with zero NFC attempts earns one explicit re-invitation, never a silent
+retry; a second such stop releases him. James (SECONDARY) reports v1's phone
+was never told to be ready before its first listing — v1 put unlock after
+**Start** while the controller listed immediately. Ready state belongs in the
+invitation, superseding the 2026-09-04 "permission reply comes before one
+ordinary unlock" shape for any walk whose host talks to the phone on reply.
