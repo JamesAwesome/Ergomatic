@@ -44,7 +44,10 @@ needed: <reason>" — based on the PR contents.
   own once that surface lands (Phase 9).
 - API changes must be **additive-only between tags**: old TestFlight builds
   talk to the newest server. A breaking change forces a coordinated tag.
-  **Breaks so far, one per line, newest first:** v0.35.0 — `POST /api/logs`
+  **Breaks so far, one per line, newest first:** next tag after v0.38.0 —
+  `GET /api/today` REMOVED; harmless by construction, since no client ever
+  called it (`git log -S'api/today' -- app/src` finds only comments), so no
+  shipped build can notice. v0.35.0 — `POST /api/logs`
   requires `source` (pm5 | timer | manual); builds before 0.34.0 (≤811)
   post none and get a 400 naming the field. The derive-when-absent path
   that carried them from 0.34.0 was a dated sunset (ROADMAP), and the
