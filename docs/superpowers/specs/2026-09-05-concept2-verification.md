@@ -243,4 +243,10 @@ checkable by grep.**
   total; it does not explain or fix the 2 m.
 - **Legacy rows with no machine summary.** They keep sending `work_meters` and
   remain unverifiable, exactly as today. No migration, no backfill.
+- **Rows already sent.** This corrects NEW sends only: the send guard
+  short-circuits any row already carrying `c2ResultId` and returns the stored
+  id without re-sending, so a row a rower already pushed with the interval sum
+  keeps that (refused) number in Concept2 and cannot be re-sent through the app.
+  Low impact — the surface is dark behind the cohort flag and TestFlight is
+  held — but named because it means the fix is not retroactive.
 - **Changing `rest_distance`/`rest_time`.** Proven not in the check; untouched.
