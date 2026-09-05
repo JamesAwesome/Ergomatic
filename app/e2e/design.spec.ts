@@ -10307,10 +10307,11 @@ test.describe("unlogged recovery render registrations", () => {
 // component's exact markup regardless of how the file is formatted on disk;
 // the empty act column in the 1g fixture must stay `:empty` to collapse.
 //
-// WHAT IT DOES NOT PROVE: that the card is reachable on You. Task 8 HAS now
-// mounted it (`You.tsx`, between Reset baseline setup and the DIAGNOSTICS
-// row), so the mount itself is real and `You.test.tsx` pins it; what is
-// still missing is a browser walk of it, because this stack runs with
+// WHAT IT DOES NOT PROVE: that the card is reachable from You. Since Wave E
+// PR A the card is NOT on You at all — it is mounted on `/you/concept2`
+// (`you/Concept2Screen.tsx`), behind the CONCEPT2 row You now carries, and
+// `Concept2Screen.test.tsx` pins that mount; the browser walk of it is the
+// "Concept2 surfaces on the real screens" describe below. This stack runs with
 // `C2_LINK_ENABLED` unset (`compose.yml`'s `C2_LINK_ENABLED:
 // ${C2_LINK_ENABLED:-}`, exported by neither `e2e.sh` nor
 // `screenshots.sh`), so the route answers `{available:false}` and the card
@@ -10551,61 +10552,47 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
     }
   });
 
-  test("the card stands off the row above it on You, in both orientations", async ({
+  test("the card stands off the title above it on the Concept2 screen, in both orientations", async ({
     page,
   }) => {
-    // THE GAP NOTHING ELSE HERE CAN SEE, and it is the sibling block's own
-    // defect one screen over: every other case in this file measures boxes
-    // INSIDE the card, so nothing measured the card's OWN box and a
-    // bordered card butted flush against the Reset baseline setup button
-    // could not redden anything. It did butt flush — measured
-    // `reset -> card = 0` in this engine before `.c2-card` declared a
-    // margin, because `.reset-baselines` is `margin-top: 12px` with no
-    // bottom, `.c2-card` declared none at all, and `.you-screen` is a flex
-    // column (so nothing collapses in from a neighbour either).
+    // Wave E PR A (spec 2026-09-04-concept2-walk-fixes §5.1): the card lives
+    // on `/you/concept2` now, under the screen's `.screen-title` h1, and the
+    // Reset-baseline neighbour this test used to compose against is a
+    // screen away. Every other case in this file measures boxes INSIDE the
+    // card; this is the one that measures the card's OWN box against what
+    // sits above it, and it is kept for the reason it was written — a
+    // bordered card butting flush against its neighbour is the defect
+    // nothing else here can see.
     //
-    // 12 is BOTH authorities agreeing, unlike the send block's case, where
-    // the frames said 12 and the screen's own rhythm said 20/24 and the
-    // difference went to James: the amendment's in-situ frames separate
-    // every child of `.frame` by `gap: 12px`, AND every block on the real
-    // You screen already stands off its neighbour by 12
-    // (`.baselines-card`, `.retest`, `.reset-baselines`, `.diag-row` are
-    // each `margin-top: 12px`). Transcribed as an INDEPENDENT literal, so
-    // retuning `index.css` cannot retune this test with it (RF21).
+    // WHAT SUPPLIES THE GAP, measured rather than assumed: the h1's
+    // browser-default bottom margin (0.67em × 31px ≈ 21px), collapsing in
+    // block flow with whatever the card declares — which is nothing, since
+    // PR A removed `.c2-card`'s `margin-top` after a mutation deleting it
+    // changed no measurement on this screen. So the assertion is the
+    // stand-off itself, at the floor every other You block uses (12), as an
+    // INDEPENDENT literal (RF21); the mutation that bites is zeroing the
+    // title's margin (`h1 { margin: 0 }` on `.screen-title`), which drops
+    // the gap to 0.
     //
-    // THE COMPOSITION is You's own sibling chain, and only the two
-    // NEIGHBOURS are hand-written: `<main class="screen you-screen">` and
-    // the `.reset-baselines` wrapper around a `.button-outline` are
-    // `You.tsx` and `you/ResetBaselineSetup.tsx`'s own literal output at
-    // the slot the card was mounted into, and the card itself is the
-    // committed fixture that `Concept2Card.test.tsx` pins as the
-    // component's output. So this test can go stale only if the SCREEN's
-    // markup changes, never if the card's does.
-    //
-    // NOTHING is asserted about the gap BELOW: `.you-screen .diag-row` is
-    // `margin-top: auto`, so that distance is whatever the flex column has
-    // left over and is viewport- and content-dependent by design (the
-    // row's own `border-top` is what separates it when the space runs
-    // out). A bottom margin on `.c2-card` would be absorbed by that `auto`
-    // rather than seen, which is why the card declares none.
+    // THE COMPOSITION is the screen's own sibling chain — `<main
+    // class="screen overlay-screen">`, `BackLink`'s `<a class="back-link">`,
+    // the `<h1 class="screen-title">` — around the committed fixture that
+    // `Concept2Card.test.tsx` pins as the component's output.
     const inSitu = [
-      `<main class="screen you-screen">`,
-      `<div class="reset-baselines"><button type="button" class="button-outline">Reset baseline setup</button></div>`,
+      `<main class="screen overlay-screen" tabindex="0">`,
+      `<a class="back-link" href="/you">← BACK</a>`,
+      `<h1 class="screen-title">Concept2</h1>`,
       fixtureMarkup("c2-card-unlinked.html"),
-      `<a class="diag-row" href="/you/diagnostics"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></a>`,
       `</main>`,
     ].join("");
     for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
       await page.setViewportSize(vp);
       await paint(page, inSitu);
-      const [reset, card] = await boxesOf(page, [
-        ".reset-baselines",
-        ".c2-card",
-      ]);
-      if (reset == null || card == null) {
+      const [title, card] = await boxesOf(page, [".screen-title", ".c2-card"]);
+      if (title == null || card == null) {
         throw new Error("the in-situ composition did not render");
       }
-      expect(card.y - (reset.y + reset.height)).toBe(12);
+      expect(card.y - (title.y + title.height)).toBeGreaterThanOrEqual(12);
     }
   });
 });
@@ -10857,6 +10844,8 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
     }, name);
   }
 
+  /** The card lives on `/you/concept2` since Wave E PR A; reached the way a
+   *  rower reaches it — through the CONCEPT2 row on You. */
   async function openYouLinked(page: Page, slug: string): Promise<void> {
     await signInViaBackdoor(page, {
       email: `design-c2-${slug}@e2e.test`,
@@ -10864,10 +10853,11 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
     });
     await fakeLink(page, C2_LINKED);
     await page.goto("/you");
+    await page.getByRole("link", { name: /CONCEPT2/ }).click();
     await expect(page.locator(".c2-card")).toBeVisible();
   }
 
-  test("every tappable on a You carrying the card clears 44x44, in both orientations", async ({
+  test("every tappable on the Concept2 screen carrying the card clears 44x44, in both orientations", async ({
     page,
   }) => {
     // The card's own three controls have their HEIGHTS pinned by the
@@ -10895,7 +10885,7 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
     await assertTapTargets(page);
   });
 
-  test("zero WCAG 2A/2AA violations on a You carrying the card", async ({
+  test("zero WCAG 2A/2AA violations on the Concept2 screen carrying the card", async ({
     page,
   }) => {
     // NOT reachable from a fixture: axe scores a PAGE — landmarks, heading
@@ -10991,5 +10981,174 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
       .click();
     await expect(page.locator(".c2-send")).toBeVisible();
     await assertNoA11yViolations(page);
+  });
+});
+
+// ── Wave E PR A: /you/concept2 registers here, and You carrying the ROW ────
+//
+// TESTING.md §"structural design assertions": a new screen with no entry
+// here is a screen the a11y/tap-target/token rules are not actually
+// checking — and `design.spec.ts`'s own diagnostics entry above records the
+// last time a new door shipped without one. Exit criterion A11.
+test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
+  const C2_LINKED = {
+    available: true,
+    linked: true,
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-c2-screen@e2e.test",
+      name: "Design C2 Screen Tester",
+    });
+    await page.route(/\/api\/concept2\//, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(C2_LINKED),
+      });
+    });
+    // The ROUTE, typed — this describe registers the screen, not the row.
+    await page.goto("/you/concept2");
+    await expect(
+      page.getByRole("heading", { name: "Concept2", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".c2-card")).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target, in both orientations", async ({
+    page,
+  }) => {
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await expect(page.getByRole("link", { name: /BACK/ })).toBeVisible();
+      await assertTapTargets(page);
+    }
+  });
+
+  test("zero WCAG 2A/2AA violations, in both orientations", async ({
+    page,
+  }) => {
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await assertNoA11yViolations(page);
+    }
+  });
+
+  test("the title is the screen-title token and the body is --page", async ({
+    page,
+  }) => {
+    const bodyBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+    const title = page.getByRole("heading", { name: "Concept2", exact: true });
+    expect(await title.evaluate((el) => getComputedStyle(el).fontSize)).toBe(
+      "31px",
+    );
+  });
+});
+
+test.describe("You carrying the CONCEPT2 row (Wave E PR A)", () => {
+  const C2_UNLINKED = {
+    available: true,
+    linked: false,
+    c2UserId: null,
+    c2Username: null,
+    needsReauth: false,
+    logbookBaseUrl: null,
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-c2-row@e2e.test",
+      name: "Design C2 Row Tester",
+    });
+    await page.route(/\/api\/concept2\//, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(C2_UNLINKED),
+      });
+    });
+    await page.goto("/you");
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+  });
+
+  test("every tappable on a You carrying the row clears 44x44, in both orientations", async ({
+    page,
+  }) => {
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await assertTapTargets(page);
+    }
+  });
+
+  test("zero WCAG 2A/2AA violations on a You carrying the row", async ({
+    page,
+  }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the two doors read as ONE group: DIAGNOSTICS starts where CONCEPT2 ends, in both orientations (R7)", async ({
+    page,
+  }) => {
+    // Invariant R7 (spec §5.1): exactly one auto top margin separates the
+    // group from the content above it. Two rows each carrying their own
+    // `margin-top: auto` as DIRECT flex children of `.you-screen` would
+    // SPLIT the column's free space between them (CSS Flexbox §8.1) — the
+    // mutation that bites the adjacency line: delete the `.you-doors`
+    // wrapper and put `margin-top: auto` back on `.you-screen .diag-row`;
+    // measured 174.5px apart in portrait. Tolerance 1px for the shared
+    // hairline.
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      const c2 = await stableBoundingBox(
+        page.getByRole("link", { name: /CONCEPT2/ }),
+      );
+      const diag = await stableBoundingBox(
+        page.getByRole("link", { name: /DIAGNOSTICS/ }),
+      );
+      if (c2 == null || diag == null) throw new Error("a door did not render");
+      expect(Math.abs(diag.y - (c2.y + c2.height))).toBeLessThanOrEqual(1);
+      expect(c2.height).toBeGreaterThanOrEqual(44);
+      expect(diag.height).toBeGreaterThanOrEqual(44);
+      // R7's OTHER half: the ONE auto margin pins the group to the FOOT.
+      // Measured against `.you-screen`'s own box, because a mutant that moves
+      // the auto margin onto the rows INSIDE `.you-doors` has no free space
+      // to split (the adjacency assertion above stays green) and instead
+      // lets the whole group float up the screen — measured at the plan's
+      // hardening: group bottom → main bottom went from 20 to 369 with every
+      // other gate green. `.screen`'s 20px bottom padding is the only gap
+      // that may remain (INDEPENDENT literal, RF21).
+      const main = await stableBoundingBox(page.locator("main.you-screen"));
+      if (main == null) throw new Error("the You screen did not render");
+      expect(main.y + main.height - (diag.y + diag.height)).toBeLessThanOrEqual(
+        21,
+      );
+    }
+  });
+
+  test("the row's label and state line paint --ink-3 on --page (6.69:1)", async ({
+    page,
+  }) => {
+    const row = page.getByRole("link", { name: /CONCEPT2/ });
+    expect(await row.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(87, 84, 76)", // --ink-3
+    );
+    expect(
+      await row
+        .locator(".diag-row-state")
+        .evaluate((el) => getComputedStyle(el).color),
+    ).toBe("rgb(87, 84, 76)");
+    expect(
+      await page.evaluate(
+        () => getComputedStyle(document.body).backgroundColor,
+      ),
+    ).toBe("rgb(244, 241, 232)"); // --page
   });
 });
