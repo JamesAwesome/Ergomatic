@@ -10,9 +10,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md` — §5.1 (the design), §6.1 (gates), §8 "PR A" (exit criteria A1–A12), §2 rulings 1–7. Gate 0: `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-03.html` §8, APPROVED by James 2026-09-04 ("approved") on `3fe5f2c2`.
 
-**Worktree:** `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`, branch `wave-e-c2-row-screen`, base `abad12a4` (= main after PR B #298). Every command in this plan runs from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra/app` unless it says otherwise.
+**Worktree:** `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`, branch `wave-e-c2-row-screen`, base `610e6cc4` (= main after PR B #298). Every command in this plan runs from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra/app` unless it says otherwise.
 
-**Paste-test record (agent-briefing "Plan authoring", harden Phase 0 item 4):** every code block in Tasks 1–6 was written into this worktree at base `abad12a4` on 2026-09-04, run through `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, the prescribed unit tests (`242 files / 7016 passed / 1 skipped` for `pnpm test --project unit --project client`) and `pnpm e2e` (see Task 5/6 for the count), and then reset. The mutation failure texts quoted in Tasks 2–4 are the actual output of those runs, not predictions. The e2e-level mutations in Tasks 5–6 were NOT run by the author and are marked EXPECTED; the implementer records their real output.
+**Paste-test record (agent-briefing "Plan authoring", harden Phase 0 item 4):** every code block in Tasks 1–6 was written into this worktree at base `610e6cc4` on 2026-09-04, run through `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, the prescribed unit tests (`242 files / 7016 passed / 1 skipped` for `pnpm test --project unit --project client`) and `pnpm e2e` (see Task 5/6 for the count), and then reset. The mutation failure texts quoted in Tasks 2–4 are the actual output of those runs, not predictions. The e2e-level mutations in Tasks 5–6 were NOT run by the author and are marked EXPECTED; the implementer records their real output.
 
 ## Global Constraints
 
@@ -754,6 +754,42 @@ describe("Concept2Screen — /you/concept2 (spec §5.1 R5, R6)", () => {
     expect(screen.queryByRole("heading", { name: "Concept2" })).toBeNull();
   });
 
+  it("the screen's own read and the card's can disagree: a card gone unavailable while the screen's read failed leaves chrome over an empty body — the known window", async () => {
+    // TWO reads per mount, one per hook instance, and React runs the CHILD's
+    // effect first — so the card's read is call 1 and the screen's is call
+    // 2. Answering call 1 `available:false` and call 2 with a 502 is the
+    // disagreement directly: the card goes silent (its own `!link.available`
+    // return), the screen's `link` stays null with `failed` set, and its
+    // redirect predicate (`link !== null && !link.available`) cannot fire.
+    // The same shape arises in production when the card's Retry succeeds
+    // with available:false after both reads failed. Pinned so a change to
+    // either predicate — or to the effect order — is a red test, not a
+    // silently blank screen.
+    let call = 0;
+    vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path !== "/api/concept2/link")
+        return new Response(null, { status: 204 });
+      call += 1;
+      return call === 1
+        ? new Response(JSON.stringify({ available: false }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        : new Response(JSON.stringify({ error: "upstream" }), { status: 502 });
+    });
+    renderScreen();
+    await waitFor(() => expect(call).toBeGreaterThanOrEqual(2));
+    // Chrome stays; BACK works; no redirect; and the card is silent.
+    expect(screen.getByRole("heading", { name: "Concept2" })).toBeVisible();
+    expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+      "href",
+      "/you",
+    );
+    expect(screen.queryByText("YOU SCREEN at /you")).toBeNull();
+    await waitFor(() => expect(document.querySelector(".c2-card")).toBeNull());
+    expect(screen.queryByText("COULDN'T READ CONCEPT2")).toBeNull();
+  });
+
   it("BACK honours the row's from=/you origin and falls back to /you on a cold load", async () => {
     c2Link.body = { available: true, linked: false };
     renderScreen([{ pathname: "/you/concept2", state: { from: "/you" } }]);
@@ -807,9 +843,18 @@ const Concept2LinkProbe = c2LinkProbeEnabled
  * `email` is what You passed it).
  *
  * A SCREEN THE ROWER ASKED FOR ALWAYS ANSWERS (R5): chrome renders in EVERY
- * state — before the first read resolves, and on a read that failed (the
- * card draws 1i's own panel and Retry then, retained link or not). It never
- * renders nothing.
+ * state of THIS hook — before the first read resolves, and on a read that
+ * failed (the card draws 1i's own panel and Retry then, retained link or
+ * not). It never renders nothing WHILE ITS OWN READ IS THE AUTHORITY. The
+ * card runs a second `useConcept2Link` (below) and can go silent
+ * (`Concept2Card.tsx`, its `!link.available` return) while this one still
+ * holds `null` from a read that failed — the card's Retry re-reads only the
+ * card's instance. That window leaves chrome over an empty body with a
+ * working BACK; it is pinned by `Concept2Screen.test.tsx`'s disagreement
+ * case and ACCEPTED rather than fixed (found at the plan's hardening),
+ * because closing it means giving the card a callback (R6 forbids) or
+ * lifting its hook out (the 1,000-line card test), for a case that needs the
+ * account to lose Concept2 between two reads on one visit.
  *
  * `available: false` — reachable only by a typed URL or a stale history
  * entry, since the row is absent then — returns the rower to `/you` rather
@@ -849,7 +894,7 @@ export default function Concept2Screen({ email }: { email: string }) {
 
 - [ ] **Step 4: Register the route and its test**
 
-Apply this patch to `app/src/shell/AppRoutes.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `abad12a4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/shell/AppRoutes.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/shell/AppRoutes.tsx b/app/src/shell/AppRoutes.tsx
@@ -882,7 +927,7 @@ index 5634152a..3d624a54 100644
                element={<MonitorLogs />}
 ```
 
-Apply this patch to `app/src/shell/AppRoutes.test.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `abad12a4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/shell/AppRoutes.test.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/shell/AppRoutes.test.tsx b/app/src/shell/AppRoutes.test.tsx
@@ -970,11 +1015,11 @@ git commit -m "PR A Task 3: /you/concept2 — the screen behind the row; the pro
 
 - [ ] **Step 1: Write the failing tests** (the You.test patch — apply it first; the new cases fail against the card-bearing You)
 
-Apply this patch to `app/src/You.test.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `abad12a4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/You.test.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/You.test.tsx b/app/src/You.test.tsx
-index 274dd475..695d01a3 100644
+index 274dd475..e7ab580c 100644
 --- a/app/src/You.test.tsx
 +++ b/app/src/You.test.tsx
 @@ -5,16 +5,8 @@ import { MemoryRouter } from "react-router-dom";
@@ -996,7 +1041,20 @@ index 274dd475..695d01a3 100644
  // answered for the WHOLE FILE, not only in the new cases — before this
  // mock every test here ran the read through the real `src/api.ts`, whose
  // relative-URL `fetch` rejects under jsdom, and the rejection landed after
-@@ -180,55 +172,79 @@ describe("You", () => {
+@@ -67,6 +59,12 @@ afterEach(() => {
+   vi.unstubAllGlobals();
+   vi.resetModules();
+   vi.doUnmock("./adapters/auth");
++  // Wave E PR A: the row writes `ergomatic.concept2Seen.<id>` on every
++  // successful read (`you/concept2Seen.ts`). `src/test/setup.ts` clears no
++  // storage, so without this the I-D case would inherit a `u1` key minted
++  // two tests earlier and its "MINTED by this mount" precondition would be
++  // satisfied by leakage (found at the plan's hardening).
++  localStorage.clear();
+ });
+ 
+ describe("You", () => {
+@@ -180,55 +178,78 @@ describe("You", () => {
    });
  });
  
@@ -1108,7 +1166,6 @@ index 274dd475..695d01a3 100644
 +    // Another account's fact on the same device is not this sign-out's to
 +    // clear (I-A keeps them apart; I-D clears the one signing out).
 +    expect(localStorage.getItem("ergomatic.concept2Seen.u2")).toBe("1");
-+    localStorage.clear();
    });
  });
 ```
@@ -1260,7 +1317,7 @@ export default function You({
 
 - [ ] **Step 4: CSS and the card's two comments**
 
-Apply this patch to `app/src/index.css` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `abad12a4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/index.css` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/index.css b/app/src/index.css
@@ -1378,7 +1435,7 @@ index ea4bd86b..78e15aae 100644
    gap: 12px;
 ```
 
-Apply this patch to `app/src/you/Concept2Card.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `abad12a4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/you/Concept2Card.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/you/Concept2Card.tsx b/app/src/you/Concept2Card.tsx
@@ -1472,7 +1529,7 @@ git commit -m "PR A Task 4: You carries the CONCEPT2 row in a doors group; sign-
 
 - [ ] **Step 1: Apply both patches**
 
-Apply this patch to `app/e2e/concept2.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `abad12a4` — stop and report, do not hand-merge):
+Apply this patch to `app/e2e/concept2.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/e2e/concept2.spec.ts b/app/e2e/concept2.spec.ts
@@ -1697,14 +1754,14 @@ index 18a9c022..40f5c272 100644
 +});
 ```
 
-Apply this patch to `app/e2e/screenshots.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `abad12a4` — stop and report, do not hand-merge):
+Apply this patch to `app/e2e/screenshots.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/e2e/screenshots.spec.ts b/app/e2e/screenshots.spec.ts
-index f4bae145..5ec3d58a 100644
+index f4bae145..5555e1e1 100644
 --- a/app/e2e/screenshots.spec.ts
 +++ b/app/e2e/screenshots.spec.ts
-@@ -6210,50 +6210,111 @@ async function openC2You(page: Page, email: string): Promise<void> {
+@@ -6210,50 +6210,116 @@ async function openC2You(page: Page, email: string): Promise<void> {
    await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
    await setBaselines(page);
    await page.goto("/you");
@@ -1715,7 +1772,12 @@ index f4bae145..5ec3d58a 100644
 +  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 +}
 +
-+/** The Concept2 SCREEN behind the row, entered through the row. */
++/** The Concept2 SCREEN behind the row, entered through the row. Its captures
++ *  are VIEWPORT shots, never `fullPage`: `/you/concept2` is `.overlay-screen`
++ *  (`position: fixed; inset: 0`), and this file's own diagnostics captures
++ *  record that `fullPage: true` is useless on that route shape — the fixed
++ *  overlay is exactly one viewport tall whatever the document behind it
++ *  measures. */
 +async function openC2Screen(page: Page, email: string): Promise<void> {
 +  await openC2You(page, email);
 +  await page.getByRole("link", { name: /CONCEPT2/ }).click();
@@ -1844,7 +1906,7 @@ index f4bae145..5ec3d58a 100644
    const fake: C2ShotFake = {
      link: { status: 200, body: C2_SHOT_UNLINKED },
      send: { status: 200, body: {} },
-@@ -6261,50 +6322,59 @@ test("you-concept2-landscape", async ({ page }) => {
+@@ -6261,50 +6327,57 @@ test("you-concept2-landscape", async ({ page }) => {
    await routeC2(page, fake);
    await page.setViewportSize({ width: 844, height: 390 });
    await openC2You(page, "screenshots-c2-landscape@e2e.test");
@@ -1880,7 +1942,6 @@ index f4bae145..5ec3d58a 100644
    await page.screenshot({
 -    path: path.join(SCREENSHOTS_DIR, "you-concept2-landscape.png"),
 +    path: path.join(SCREENSHOTS_DIR, "concept2-screen-unlinked.png"),
-+    fullPage: true,
    });
  });
  
@@ -1903,8 +1964,8 @@ index f4bae145..5ec3d58a 100644
    await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
    await page.screenshot({
 -    path: path.join(SCREENSHOTS_DIR, "you-concept2-linked.png"),
+-    fullPage: true,
 +    path: path.join(SCREENSHOTS_DIR, "concept2-screen-linked.png"),
-     fullPage: true,
    });
  });
  
@@ -1923,13 +1984,13 @@ index f4bae145..5ec3d58a 100644
    await page.getByRole("button", { name: "Unlink Concept2" }).click();
    await expect(
      page.getByRole("button", { name: "Tap again to unlink" }),
-@@ -6313,31 +6383,55 @@ test("you-concept2-armed", async ({ page }) => {
+@@ -6313,28 +6386,50 @@ test("you-concept2-armed", async ({ page }) => {
      page.getByText("DISARMS ON ITS OWN AFTER 4 SECONDS"),
    ).toBeVisible();
    await page.screenshot({
 -    path: path.join(SCREENSHOTS_DIR, "you-concept2-armed.png"),
+-    fullPage: true,
 +    path: path.join(SCREENSHOTS_DIR, "concept2-screen-armed.png"),
-     fullPage: true,
    });
  });
  
@@ -1963,11 +2024,11 @@ index f4bae145..5ec3d58a 100644
    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
    await page.screenshot({
 -    path: path.join(SCREENSHOTS_DIR, "you-concept2-read-failed.png"),
+-    fullPage: true,
 +    path: path.join(SCREENSHOTS_DIR, "concept2-screen-read-failed.png"),
-     fullPage: true,
-   });
- });
- 
++  });
++});
++
 +test("concept2-screen-landscape", async ({ page }) => {
 +  const fake: C2ShotFake = {
 +    link: { status: 200, body: C2_SHOT_UNLINKED },
@@ -1982,12 +2043,8 @@ index f4bae145..5ec3d58a 100644
 +  await page.locator(".c2-card").scrollIntoViewIfNeeded();
 +  await page.screenshot({
 +    path: path.join(SCREENSHOTS_DIR, "concept2-screen-landscape.png"),
-+  });
-+});
-+
- test("log-concept2-idle", async ({ page }) => {
-   const fake: C2ShotFake = {
-     link: { status: 200, body: C2_SHOT_LINKED },
+   });
+ });
 ```
 
 - [ ] **Step 2: Typecheck the e2e project first (cheap), then the full suite**
@@ -2008,7 +2065,7 @@ git rm docs/screenshots/you-concept2-armed.png
 cd app && pnpm screenshots
 cd .. && git status --short docs/screenshots
 ```
-Expected among the Concept2 captures: 4 modified (`you-concept2-{unlinked,linked,read-failed,landscape}.png`), 1 new `you-concept2-reconnect.png`, and 5 new `concept2-screen-{unlinked,linked,armed,read-failed,landscape}.png`. **The run also rewrites ~55 UNRELATED PNGs byte-for-byte differently** (measured at the author's run — the suite is not pixel-deterministic); `git checkout -- docs/screenshots/<each unrelated file>` so the commit carries only the ten Concept2 captures. The author's three spot-checks: `you-concept2-unlinked.png` shows BASELINES, the two test buttons, Reset, then the two doors stacked at the foot (CONCEPT2 · NOT LINKED · › above DIAGNOSTICS · ›); `concept2-screen-unlinked.png` shows ← BACK, the serif Concept2 title, and the unchanged card (CONCEPT2 · NOT LINKED head, CONNECT TO CONCEPT2, OPENS CONCEPT2 IN YOUR BROWSER); `you-concept2-read-failed.png` is the same You with the row reading COULDN'T READ. **OPEN EVERY ONE** (Read tool on the PNG) and describe each in your report in one line from having looked at it (RF7): which row state or card frame it shows, and that the doors sit at the foot with CONCEPT2 above DIAGNOSTICS. A capture showing a dash, an empty You, or the OLD card on You is a failure, not a record.
+Expected among the Concept2 captures: 4 modified (`you-concept2-{unlinked,linked,read-failed,landscape}.png`), 1 new `you-concept2-reconnect.png`, and 5 new `concept2-screen-{unlinked,linked,armed,read-failed,landscape}.png`. **The run also rewrites ~55 UNRELATED PNGs byte-for-byte differently** (measured at the author's run — the suite is not pixel-deterministic); `git checkout -- docs/screenshots/<each unrelated file>` so the commit carries only the ten Concept2 captures. The author's three spot-checks: `you-concept2-unlinked.png` shows BASELINES, the two test buttons, Reset, then the two doors stacked at the foot (CONCEPT2 · NOT LINKED · › above DIAGNOSTICS · ›); `concept2-screen-unlinked.png` shows ← BACK, the serif Concept2 title, and the unchanged card (CONCEPT2 · NOT LINKED head, CONNECT TO CONCEPT2, OPENS CONCEPT2 IN YOUR BROWSER); `you-concept2-read-failed.png` is the same You with the row reading COULDN'T READ. **OPEN EVERY ONE** (Read tool on the PNG) and describe each in your report in one line from having looked at it (RF7): which row state or card frame it shows, and that the doors sit at the foot with CONCEPT2 above DIAGNOSTICS. A capture showing a dash, an empty You, or the OLD card on You is a failure, not a record. **Two stated pass conditions:** in `you-concept2-landscape.png` BOTH doors are fully visible above the fixed tab bar — if DIAGNOSTICS is clipped by it, call the file's own `neutralizeFixedTabBarForFullPageCapture` before shooting and say so; and the four portrait `concept2-screen-*` captures are VIEWPORT shots on purpose (`/you/concept2` is `position: fixed` `.overlay-screen`, where `fullPage` is meaningless — the file's diagnostics captures record the same) — if a card state is taller than 844px, scroll the overlay's own scroller, never restore `fullPage`.
 
 - [ ] **Step 4: The negative-assertion audit (A3).** In your report, list every `toHaveCount(0)` / `toBeNull`-style assertion about the row you added and the `expect.poll(() => fake.linkReads)` that precedes it. Any negative not preceded by a poll is RF21 — fix it.
 
@@ -2021,7 +2078,7 @@ git add app/e2e/concept2.spec.ts app/e2e/screenshots.spec.ts docs/screenshots
 git commit -m "PR A Task 5: e2e — the row and screen walk, sentinel replaced, captures re-shot"
 ```
 
-- [ ] **Step 6: Mutation (e2e-level, EXPECTED — author did not run it).** In `app/src/index.css` change `.you-doors { margin-top: auto; …` to `margin-top: 0;` and ADD `margin-top: auto` to `.you-doors .diag-row` (two rows each with an auto margin — R7's failure). Run `pnpm e2e -- --grep "Concept2 row on You"` — wait, `pnpm` swallows the scoped flag (CLAUDE.md footgun); run `pnpm exec playwright test --project=chromium e2e/concept2.spec.ts` against the ALREADY-UP stack instead. Expected: the row tests still pass (they assert text, not geometry) — **that is the finding**: R7's geometry is gated in Task 6's design.spec, not here. Record it, revert with `git checkout -- app/src/index.css`.
+- [ ] **Step 6: What this suite does NOT gate, stated.** The row tests assert TEXT (the four strings, the URL, the panel), never geometry. R7's geometry — adjacency AND the pin to the foot — is gated in Task 6's design.spec, by the mutations listed there. Say so in your report rather than claiming this suite covers it.
 
 ---
 
@@ -2032,11 +2089,11 @@ git commit -m "PR A Task 5: e2e — the row and screen walk, sentinel replaced, 
 
 - [ ] **Step 1: Apply the patch**
 
-Apply this patch to `app/e2e/design.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `abad12a4` — stop and report, do not hand-merge):
+Apply this patch to `app/e2e/design.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/e2e/design.spec.ts b/app/e2e/design.spec.ts
-index abf1ef72..4b8ca720 100644
+index abf1ef72..7f53214d 100644
 --- a/app/e2e/design.spec.ts
 +++ b/app/e2e/design.spec.ts
 @@ -10307,10 +10307,11 @@ test.describe("unlogged recovery render registrations", () => {
@@ -2176,7 +2233,7 @@ index abf1ef72..4b8ca720 100644
      page,
    }) => {
      // NOT reachable from a fixture: axe scores a PAGE — landmarks, heading
-@@ -10993,3 +10983,158 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
+@@ -10993,3 +10983,172 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
      await assertNoA11yViolations(page);
    });
  });
@@ -2296,11 +2353,12 @@ index abf1ef72..4b8ca720 100644
 +  }) => {
 +    // Invariant R7 (spec §5.1): exactly one auto top margin separates the
 +    // group from the content above it. Two rows each carrying their own
-+    // `margin-top: auto` would SPLIT the flex column's free space between
-+    // them (CSS Flexbox §8.1) — the mutation that bites here: move the
-+    // `auto` from `.you-doors` onto `.you-doors .diag-row` and the rows
-+    // float apart in portrait, where the column has room. Tolerance 1px for
-+    // the shared hairline.
++    // `margin-top: auto` as DIRECT flex children of `.you-screen` would
++    // SPLIT the column's free space between them (CSS Flexbox §8.1) — the
++    // mutation that bites the adjacency line: delete the `.you-doors`
++    // wrapper and put `margin-top: auto` back on `.you-screen .diag-row`;
++    // measured 174.5px apart in portrait. Tolerance 1px for the shared
++    // hairline.
 +    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
 +      await page.setViewportSize(vp);
 +      const c2 = await stableBoundingBox(
@@ -2313,6 +2371,19 @@ index abf1ef72..4b8ca720 100644
 +      expect(Math.abs(diag.y - (c2.y + c2.height))).toBeLessThanOrEqual(1);
 +      expect(c2.height).toBeGreaterThanOrEqual(44);
 +      expect(diag.height).toBeGreaterThanOrEqual(44);
++      // R7's OTHER half: the ONE auto margin pins the group to the FOOT.
++      // Measured against `.you-screen`'s own box, because a mutant that moves
++      // the auto margin onto the rows INSIDE `.you-doors` has no free space
++      // to split (the adjacency assertion above stays green) and instead
++      // lets the whole group float up the screen — measured at the plan's
++      // hardening: group bottom → main bottom went from 20 to 369 with every
++      // other gate green. `.screen`'s 20px bottom padding is the only gap
++      // that may remain (INDEPENDENT literal, RF21).
++      const main = await stableBoundingBox(page.locator("main.you-screen"));
++      if (main == null) throw new Error("the You screen did not render");
++      expect(main.y + main.height - (diag.y + diag.height)).toBeLessThanOrEqual(
++        21,
++      );
 +    }
 +  });
 +
@@ -2345,7 +2416,7 @@ pnpm exec tsc -p e2e/tsconfig.json --noEmit
 pnpm lint
 pnpm e2e
 ```
-Expected: `499 passed` (same count as Task 5 — Task 5's run already included this file's changes if you applied both patches before running; if you ran Task 5 first, the count grows by 8 here). Record the exact line.
+Expected: `499 passed` (same count as Task 5 — Task 5's run already included this file's changes if you applied both patches before running; if you ran Task 5 first, the count grows by 7 here — design.spec adds 3 + 4). Record the exact line.
 
 - [ ] **Step 3: Commit BEFORE mutating**
 
@@ -2356,15 +2427,17 @@ git add app/e2e/design.spec.ts
 git commit -m "PR A Task 6: design.spec — /you/concept2 registers; the doors group is measured"
 ```
 
-- [ ] **Step 4: Mutations (e2e-level, EXPECTED — record the real output).** Against the up stack, run `pnpm exec playwright test --project=chromium e2e/design.spec.ts -g "Wave E PR A|Concept2 card"` after each:
+- [ ] **Step 4: Mutations (e2e-level; the author ran each against the up stack and the failures below are MEASURED against the draft at base, 2026-09-04).** Run each with `bash scripts/e2e.sh e2e/design.spec.ts -g "<grep>"` from `app/` (e2e.sh passes its arguments to Playwright and rebuilds the stack, which a `src/` mutation needs), revert with `git checkout -- <file>` (clean — you committed in Step 3), and record the real output.
 
-| # | mutation | expected |
-| --- | --- | --- |
-| R7 | `index.css`: move `margin-top: auto` from `.you-doors` to a new `.you-doors .diag-row { margin-top: auto; }` | "the two doors read as ONE group…" goes red in PORTRAIT (`expected N to be less than or equal to 1`, N = the split free space); landscape may stay green (no free space) — say which |
-| in-situ | `index.css`: add `.screen-title { margin: 0; }` | "the card stands off the title above it on the Concept2 screen…" goes red (`expected 0 to be greater than or equal to 12`) |
-| A11 reachability | `AppRoutes.tsx`: delete the `/you/concept2` `<Route>` | "concept2 screen (/you/concept2…)" beforeEach fails: heading "Concept2" not visible (wildcard sent it to Today) |
+| # | mutation (anchor must `grep -c` to 1) | grep | measured failure |
+| --- | --- | --- | --- |
+| R7(i) adjacency | `You.tsx`: delete the `<nav className="you-doors" aria-label="More">` … `</nav>` wrapper (both `.diag-row`s become direct children of `.you-screen`); `index.css`: replace the whole `.you-doors { … }` rule with `.you-screen .diag-row { margin-top: auto; }` | `Wave E PR A` | "the two doors read as ONE group…" `1 failed` — `expect(received).toBeLessThanOrEqual(expected) Expected: <= 1 Received: 91.5` (the free space split between the rows; the number is viewport-dependent) |
+| R7(ii) adjacency | `index.css`: append `.you-doors .diag-row { margin-top: 12px; }` | `Wave E PR A` | same test `1 failed` — `Expected: <= 1 Received: 12` |
+| R7 foot | `index.css`: remove `margin-top: auto` from `.you-doors` and add `.you-doors .diag-row { margin-top: auto; }` | `Wave E PR A` | same test `1 failed` on its THIRD assertion — `Expected: <= 21 Received: 203` (the group floated up the screen; the adjacency assertions stayed green — this is the mutant the plan's first draft prescribed against the wrong line) |
+| in-situ | `index.css`: append `.screen-title { margin: 0; }` | `Concept2 card` | "the card stands off the title above it on the Concept2 screen…" `1 failed` — `Expected: >= 12 Received: 0` |
+| A11 reachability | `AppRoutes.tsx`: `path="/you/concept2"` → `path="/you/concept2-gone"` (deleting the `<Route>` outright leaves an unused import and the docker BUILD fails before Playwright runs — measured; rename the path instead) | `concept2 screen` | the describe's `beforeEach` fails — `Error: expect(locator).toBeVisible() failed … waiting for getByRole('heading', { name: 'Concept2', exact: true })` |
 
-Revert each with `git checkout -- <file>` (the files are clean — you committed in Step 3).
+**Why the R7 table has THREE rows and not the one the spec named:** the plan's first draft prescribed "move `margin-top: auto` from `.you-doors` onto `.you-doors .diag-row`" against the ADJACENCY assertion — and that mutant leaves the rows flush (a flex child inside `.you-doors` has no free space to split) while moving the whole group 349px up the screen, with every gate green. Found at the plan's hardening (lens 1, finding 1/2); the foot assertion and its mutation exist because of it.
 
 ---
 
@@ -2459,6 +2532,7 @@ After `pnpm screenshots`, OPEN the ten Concept2 captures again (the merge may ha
   - **A11:** the two `design.spec.ts` describes by name.
   - **A12:** "the probe MOVED behind `/you/concept2`" and R10's grep.
   - **The `seen` lifetime table** (from `concept2Seen.ts`'s header), stated as invariants: mint / clear / survives unmount, relaunch / cleared by sign-out.
+  - **The known window (Concept2Screen.test's disagreement case):** the screen's hook and the card's hook are two instances; when the card's read says `available:false` while the screen's read failed, the screen shows chrome over an empty body with a working BACK. ACCEPTED at the plan's hardening (fixing it means a card callback, forbidden by R6, or lifting the hook); stated in the Record, never as "the screen always answers" without the qualifier.
   - **Proof contract** (RF26) and the strongest conclusion the PR may state: the row and screen behave as the decision table says in jsdom and in Chromium against a fake link route; NOT walked on a phone (this PR changes no native code path; the card's own behaviour is unchanged). Recommend James taps the row once on the next TestFlight build.
   - **Risk note:** the one thing a reviewer should probe — the `seen` fact's lifetime across sign-out on NATIVE (Google sign-out through `native/signin`), where `You.tsx`'s handler is the only clear and a sign-out that throws before `onSignedOut` leaves the key; and whether any other sign-out path exists (a 401 → `useMe` → `out`) that bypasses You's handler and so never clears it. State the answer, with the grep.
 - [ ] **Step 5: `gh pr create`**, then **STOP. No merge without James's explicit approval.** Do not remove the worktree.
