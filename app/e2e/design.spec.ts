@@ -6231,12 +6231,16 @@ test.describe("iOS input zoom guard", () => {
   // 2026-08-01: the builder title field zoomed on focus). Chromium cannot
   // reproduce the zoom itself, so this asserts the mechanism: every
   // input/textarea on every screen computes to >=16px. The signed-in
-  // builder + import screens carry every typed field in the app; You is
-  // stepper-only but swept anyway in case that changes.
+  // builder + import screens carry the typed fields, the Library its search
+  // field; You is stepper-only but swept anyway in case that changes.
   for (const [name, path] of [
     ["builder", "/library/new"],
     ["import", "/library/import"],
     ["you", "/you"],
+    // Phase SF PR3 added SEARCH BY NAME to the Library at 12px and this
+    // sweep never looked there (device report, 2026-09-05: the Library
+    // zoomed on focus — the same defect the guard exists for).
+    ["library", "/library"],
   ] as const) {
     test(`every input on ${name} computes font-size >= 16px`, async ({
       page,
