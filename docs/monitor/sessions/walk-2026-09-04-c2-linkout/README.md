@@ -53,3 +53,18 @@ exists to prove. `@capacitor/browser` now has no consumer.
   distance and 6,233 m overall. Which of those the PM5's verification code
   is computed over is the question PR C has to answer before changing what
   we send.
+
+## Re-walk on the rebuilt binary (Task 5, same day)
+
+Task 4 (`8dc634e9`) removed `@capacitor/browser` from `package.json`,
+`pnpm-lock.yaml` and `CapApp-SPM/Package.swift`. A new plugin set is a new
+binary, so W1-W4 were run again on it.
+
+- Build: head `8dc634e9`, `pnpm ios:build` stamped `0.37.0 (862)`, Debug,
+  same `xcodebuild` + `xcrun devicectl` install path as above, same phone.
+  `App.app/Frameworks` contains no browser framework. Stamps restored.
+- W1 `LINKED ✓`, W2 `SENT`, W3 default browser (Chrome), W4 the actual
+  result: James reports "All the same" against the first run's four checks.
+  No new capture; the first run's screenshot stands as the shape of the
+  page. The plugin's removal changed nothing the rower can see, which is
+  the claim Task 4 makes.
