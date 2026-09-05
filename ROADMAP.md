@@ -446,8 +446,8 @@ fixed.
 ## Phase DE — Difficulty out, effort in
 
 **Status: OPEN 2026-09-05 — spec rev 2 (anchor pass folded in, PM open
-gate PASS WITH CONDITIONS folded in); two confirmations owed from James
-(§header of the spec); no PR has started.** **TRIAD** (stored shape).
+gate PASS WITH CONDITIONS folded in); James confirmed the two rev-2 asks
+2026-09-05; no PR has started.** **TRIAD** (stored shape).
 **M.** Spec:
 `docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
 

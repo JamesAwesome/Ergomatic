@@ -55,12 +55,11 @@ easy"; `domain/generation/` has no hit at all).
   the compat drop waiting for the next tag. "Yes" to the shape as
   presented.
 
-**Two things rev 2 asks James to confirm, because they touch his decisions
-(see the PR body):** (a) the server writes a derived difficulty band on
-inserts for one tag cycle — as compat plumbing no new build ever shows,
-not as the "derive a band" product option he declined; (b) PR 2 renames
-~20 pace-word identifiers rather than three, so `grep effort` means one
-thing afterwards.
+**Confirmed by James (2026-09-05, "Good", on the rev 2 presentation):**
+(a) the server writes a derived difficulty band on inserts for one tag
+cycle — compat plumbing no new build ever shows, not the "derive a band"
+product option he declined; (b) PR 2 renames the pace-word identifier
+family (~20 names), not three, so `grep effort` means one thing afterwards.
 
 ---
 
