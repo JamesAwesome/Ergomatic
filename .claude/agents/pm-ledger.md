@@ -4664,3 +4664,15 @@ NFC transport fidelity, not that the real PM5 tag's framing matches (RF11: the
 oracle now shares the target's source). Acceptable because the walk's purpose is
 host-tooling de-risk, not tag authenticity; PASS WITH CONDITIONS on that one
 relabel.
+
+## Recovery v3 delta pass, 2026-09-05
+
+`NF-RECOVERY-v3` = v2's PM-passed protocol verbatim with ONE change: the
+private Inspector helper's final/partial display guard now redacts the DOM
+side before comparing it to the redacted export (v2 case 1's
+`FinalDisplayMismatch` was a false negative — a real PM5's non-zero MAC bytes
+0-5 could never equal the export's zeroed ones). PM PASS on the delta. Re-run
+all four, do NOT accept case 1 from the v2 receipt: that verdict came from the
+broken helper, and the abort preceded post-drain adjudication. Standing watch,
+not a gate: the Python redaction is a hand-mirror of `redactNfcRecord` (TS);
+if that rule changes, the mirror must change with it or the guard mis-scores.
