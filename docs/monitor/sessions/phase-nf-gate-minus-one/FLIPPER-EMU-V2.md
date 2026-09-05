@@ -1,6 +1,6 @@
 # NF-FLIPPER-EMU-v2 — retest with the rebuilt replica
 
-Status: PREPARED, awaiting a fresh PM pass and James's **go**.
+Status: COMPLETED — POSITIVE. See [FLIPPER-EMU-V2-RESULT.md](FLIPPER-EMU-V2-RESULT.md). Run and consent consumed.
 
 Identical to `FLIPPER-EMU-V1.md` in every case, cap, control, capture, finish
 and stopping rule (read that file; not restated). The ONLY change is the

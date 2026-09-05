@@ -62,3 +62,10 @@ the saved file was a truncated 6-page read; see FLIPPER-EMU-V1-RESULT.md. A
 complete replica was synthesized from the dated fixture, round-trip validated,
 and written to the Flipper as C2_pm5_rebuilt.nfc. NF-FLIPPER-EMU-v2 (same
 one-scan runsheet, new file) awaits a fresh PM pass and James's go.
+
+**NF-FLIPPER-EMU-v2 POSITIVE, 2026-09-05.** The phone read the rebuilt replica
+as the three PM5 records byte-for-byte (transport fidelity; FLIPPER-EMU-V2-RESULT.md).
+The NFC read path and host tooling are now desk-reproducible up to the BLE
+boundary, so the recovery FinalDisplayMismatch guard and the unsupported/multi-tag
+cases can be built without an erg. BLE connect/disconnect of each recovery B and
+any PM5-named criterion still need the machine.
