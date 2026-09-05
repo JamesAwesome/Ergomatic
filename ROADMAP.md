@@ -1051,7 +1051,11 @@ risk model with this wave.)
 pass (REORDER-or-REVISE: the two-native-inputs slider fell, the rng moved
 out of `suggest()`) and the PM open gate (OPEN WITH CONDITIONS: server
 route in scope, v1→v2 mapping, rename into PR2, exit criterion 1 rewritten
-because it was green on main). Both folded; PR1 plan next.** Ranked into the slate by James on the day: five things he found
+because it was green on main). Both folded. PR1 = #297 OPEN (2026-09-04): implemented in task commits
+with dispatched review (FIX-THEN-APPROVE, both findings fixed and
+probed) and PM final gate (PASS WITH CONDITIONS, folded); James's two
+rulings owed at its Gate 0 — the sticky clear, and the inline build
+shape on TRIAD work.** Ranked into the slate by James on the day: five things he found
 using the app himself, and the first is a design that reads as a bug —
 SHUFFLE steps through least-recently-done order, never-done entries tie in
 seed order, and a mostly-unrowed library therefore "shuffles" in seed order
@@ -1364,6 +1368,16 @@ X" is a real disposition — most of these are single files.
   this file, or the next time it fires.
 
 ## Needs a decision from James
+
+- **`/api/today` is now DIVERGENT, not merely dead (PM final gate, Phase SF
+  PR1, 2026-09-04).** The route (`server/routes/data.ts`) has no client
+  caller — only comments and server tests name it — and since #297 the
+  client draws its first card at random within the least-recently-done tie
+  while the route still returns the deterministic head, so a caller that
+  appeared would disagree with the screen. Decide: delete the route (and
+  its integration tests), or make it mint and persist a draw server-side
+  so both agree. PR2 touches it either way (`rangeForCap`), so the decision
+  is cheapest taken before PR2's plan.
 
 **Cleared 2026-08-31.** James settled every open row in one sitting; each one
 left this table for an owner, and the dispositions are recorded where the work

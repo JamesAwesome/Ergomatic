@@ -4612,3 +4612,37 @@ Verdict OPEN WITH CONDITIONS; all folded into revision 1.
   items; Wave A, the front door, still next in the slate). Defensible here:
   two of the five items are stranger-comprehension work. Say the count,
   then let James rule.
+
+## 2026-09-04 — Phase SF PR1 final gate: tick a criterion's CLAUSES, not the criterion
+
+- **An exit criterion is a list of clauses; tick each one.** SF's criterion 2
+  reads "reloaded three times shows one lit chip; **the next local day rolls**;
+  a clear stays ANY TYPE across a reload AND the next day". Two clauses were
+  proven, one ("the next day rolls") was asserted nowhere and inferred from a
+  dated record reading null — and the criterion's own named oracle ("a stubbed
+  clock") was not what shipped (record removal). A criterion read as one unit
+  reads as GREEN. Read the verbs. (Landed in the same round: a
+  `vi.setSystemTime` test across three local days.)
+- **A dead route stops being merely dead when the client stops agreeing with
+  it.** `/api/today` has no client caller and needed no edit, so it was filed
+  as a later dead-route decision. But PR1 made the client draw at random while
+  the route still returns the deterministic head: the route is now WRONG, not
+  idle. When a change moves a computation client-side, ask whether the server
+  copy became divergent — that is a register row, not a housekeeping note.
+- **Difference is not distribution.** A two-run "the sequences differ" e2e goes
+  red against a deterministic cycle and green against any non-deterministic
+  draw, biased or not. It is a sound gate for the bug and an unsound one for
+  "random". State both: the e2e proves not-deterministic, the domain sweep
+  proves uniform. (RF26 in exit-criterion form.)
+- **Fold: 246 words / 7 bullets / longest 43 — FAIL.** Series: #228 274 ·
+  #230 266 · #268 186 · door PR B 121 · **SF PR1 246.** The regression came
+  from a required Gate 0 paragraph (61 words) plus proof clauses inside
+  product bullets. The Gate 0 block is not exempt; move its evidence half down
+  and keep its ruling half.
+- **Open for James: the inline-implementation shape on TRIAD work.** The
+  controller implemented in task commits and dispatched only the REVIEW half,
+  arguing the paste-test rule makes the plan author the implementer. The five
+  fast-path criteria do not hold (domain files, two stored shapes, five product
+  files), so CLAUDE.md's letter required the full cycle. Honest disclosure, in
+  the Record block. Whichever way he rules, the resolution is a CLAUDE.md edit —
+  the rule as written and the practice have diverged.

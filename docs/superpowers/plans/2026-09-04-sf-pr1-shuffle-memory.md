@@ -127,15 +127,28 @@ draw cannot make a committed capture unreviewable),
 `docs/screenshots/today-freestyle*.png`. `server/routes/data.ts` needs no
 edit: `/api/today` destructures only the fields it uses from `suggest()`.
 
-- [ ] `pnpm e2e` green (full suite; CI's gate).
-- [ ] `pnpm screenshots`; commit only the Today captures this PR changes.
-- [ ] Request-list gate proven red by a fetch inside `handleShuffle`
-      (recorded in the PR body with the failure text).
+- [x] `pnpm e2e`: 486 passed, 4 failed — all four `today.spec.ts` tests
+      that imported two never-done fixtures and assumed creation order
+      broke the tie (they had passed a four-spec run by coin flip); fixed
+      by stating the draw with `pinToday` (`df5b35b4`), then
+      `--repeat-each 2` → 28 passed. PR checks green at `d738ea4f`.
+- [x] `pnpm screenshots` 127 passed; `today-freestyle.png` +
+      `today-freestyle-cleared.png` committed, the narrowed capture
+      retired, 20 date-only diffs reverted.
+- [x] Request-list gate proven red: `void fetch("/api/prefs")` inside
+      `handleShuffle` → `+ Received + 12` lines of `"GET /api/prefs"`.
 
 ### Task 5: review and PR
 
-- [ ] Per-task review dispatch (two-stage: spec compliance, then code
-      quality) on the whole branch, since every task is already committed.
-- [ ] PM final gate (TRIAD).
-- [ ] PR body per the human-first shape; Gate 0 captures (freestyle with
-      a lit chip, portrait + landscape) and the sticky-clear ruling.
+- [x] Whole-branch review (two-stage): FIX-THEN-APPROVE. F1 a stored
+      record beat a newer failed-write fallback (fixed: fallback consulted
+      first, cleared on a landed write; regression test + probe bit);
+      F2 a fell-back pool counted as a roll candidate (fixed; test + probe
+      bit); F3 `pinToday` key literals → imported constants; F4 checkpoint
+      escape's `shownIds` pinned; F5 rejection test on independent
+      literals. Commit `f05f7ce7` + the F3 commit.
+- [x] PM final gate: PASS WITH CONDITIONS — fold trimmed, `/api/today`
+      divergence registered in ROADMAP, next-day roll test added
+      (`rolls again on the next local day…`), plan ticked, RF26 clause in
+      the Record. Two rulings owed to James at Gate 0.
+- [x] PR #297 body per the human-first shape; Gate 0 captures committed.

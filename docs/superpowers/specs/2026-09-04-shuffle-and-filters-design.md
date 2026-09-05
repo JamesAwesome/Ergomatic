@@ -157,8 +157,11 @@ the same day as #296 and is the surface §2 builds on.
   onboarding exclusion decide membership exactly as today; randomness only
   decides ORDER within it.
 - **I-5 Daily type.** In freestyle, the day's first mount lights one chip,
-  drawn uniformly among types whose pool (under that type's remembered
-  filters) is non-empty. A tap overrides for the day. **Tapping the lit
+  drawn uniformly among types whose pool under that type's remembered
+  filters is non-empty WITHOUT falling back (PR1 review F2: a type whose
+  remembered filters match nothing would open the morning on "Nothing fit
+  your filters", which is not a suggestion, so it is not a candidate; if
+  every type falls back there is no roll and the day opens on ANY TYPE). A tap overrides for the day. **Tapping the lit
   chip clears to ANY TYPE and the clear is STICKY:** no roll happens on any
   later mount, today or any day, until a chip is tapped again (PM finding:
   without this a rower who wants the whole library clears the chip every
@@ -271,9 +274,13 @@ and `saveTodayOverrides` return booleans nobody reads today. Under storage
 denial (researched 2026-09-03) a draw that cannot persist would re-roll on
 every mount — a card that changes on every tab round trip, strictly worse
 than today's stable one. Owner: the initializer keeps a module-scope
-fallback (`Map<dayKey, {pick, shownIds, swapType}>`) written whenever the
-storage write returns false and consulted before drawing; it survives
-remounts within the app's life and is lost on relaunch, which is the stated,
+fallback (`Map<dayKey, {pick, swapType}>`) written whenever the storage
+write returns false, CLEARED whenever a later write of that field lands,
+and consulted BEFORE storage (PR1 review F1: an entry present is therefore
+always newer than what storage holds — without that order, storage healthy
+at mount and denied on a later SHUFFLE would hand the next mount the older
+stored pick and regress `shownIds` into repeats). It survives remounts
+within the app's life and is lost on relaunch, which is the stated,
 accepted cost — the same population and the same acceptance the
 storage-denial spec records for `session/run.ts`.
 

@@ -1,5 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { signInViaBackdoor } from "./helpers";
+import { TODAY_PICK_KEY, type TodayPick } from "../src/today/todayPick";
+import {
+  TODAY_OVERRIDES_KEY,
+  type TodayOverrides,
+} from "../src/today/todayOverrides";
 
 // Today enhancements (post-6C, Task 4): the four flows the task's own plan
 // names — visible filters actually narrowing the suggestion, a
@@ -58,46 +63,49 @@ async function pinToday(
   page: Page,
   opts: { type?: "O2" | "AT" | "TR" | "AN"; title?: string },
 ): Promise<void> {
-  const result = await page.evaluate(async ({ type, title }) => {
-    const now = new Date();
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const planRes = await fetch("/api/plan");
-    if (!planRes.ok) return { ok: false, body: `plan ${planRes.status}` };
-    const plan = (await planRes.json()) as {
-      planKey: string | null;
-      doneN: number;
-    };
-    if (type !== undefined) {
-      localStorage.setItem(
-        "ergomatic.todayOverrides",
-        JSON.stringify({
+  const result = await page.evaluate(
+    async ({ type, title, overridesKey, pickKey }) => {
+      const now = new Date();
+      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const planRes = await fetch("/api/plan");
+      if (!planRes.ok) return { ok: false, body: `plan ${planRes.status}` };
+      const plan = (await planRes.json()) as {
+        planKey: string | null;
+        doneN: number;
+      };
+      if (type !== undefined) {
+        const record: TodayOverrides = {
           date,
           planKey: plan.planKey,
           doneN: plan.doneN,
           swapType: type,
-        }),
-      );
-    }
-    if (title !== undefined) {
-      const res = await fetch("/api/workouts");
-      if (!res.ok) return { ok: false, body: `workouts ${res.status}` };
-      const rows = (await res.json()) as { id: string; title: string }[];
-      const row = rows.find((w) => w.title === title);
-      if (!row) return { ok: false, body: `no workout titled ${title}` };
-      localStorage.setItem(
-        "ergomatic.todayPick",
-        JSON.stringify({
+        };
+        localStorage.setItem(overridesKey, JSON.stringify(record));
+      }
+      if (title !== undefined) {
+        const res = await fetch("/api/workouts");
+        if (!res.ok) return { ok: false, body: `workouts ${res.status}` };
+        const rows = (await res.json()) as { id: string; title: string }[];
+        const row = rows.find((w) => w.title === title);
+        if (!row) return { ok: false, body: `no workout titled ${title}` };
+        const record: TodayPick = {
           date,
           planKey: plan.planKey,
           doneN: plan.doneN,
           workoutId: row.id,
           shownIds: [row.id],
           shuffled: false,
-        }),
-      );
-    }
-    return { ok: true, body: "" };
-  }, opts);
+        };
+        localStorage.setItem(pickKey, JSON.stringify(record));
+      }
+      return { ok: true, body: "" };
+    },
+    {
+      ...opts,
+      overridesKey: TODAY_OVERRIDES_KEY,
+      pickKey: TODAY_PICK_KEY,
+    },
+  );
   if (!result.ok) throw new Error(`pinToday failed: ${result.body}`);
 }
 
