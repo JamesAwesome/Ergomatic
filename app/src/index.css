@@ -10909,8 +10909,13 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink);
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.06em;
+  /* 16px, never 12: the iOS zoom guard at the top of this file. The field
+     shipped at 12px in Phase SF PR3 and the phone zoomed the whole Library
+     on focus (device report, 2026-09-05); the guard's design sweep now
+     covers /library so it cannot come back. Tracking tightens so a 16px
+     placeholder does not crowd the field. */
+  font-size: 16px;
+  letter-spacing: 0.04em;
   -webkit-appearance: none;
   appearance: none;
 }
@@ -10924,7 +10929,7 @@ section:not(.news-pinned) .news-row:last-of-type {
 .library-search-input::placeholder {
   color: var(--ink-4);
   opacity: 1;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 }
 
 .library-search-input:focus-visible {
