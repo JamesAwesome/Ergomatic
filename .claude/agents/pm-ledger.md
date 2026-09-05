@@ -4655,3 +4655,12 @@ SECONDARY and undemonstrated), and must permit repositioning inside one
 reader session so an antenna miss reads as INCONCLUSIVE, not NEGATIVE.
 RF26: one tag emulated identically never covers "arbitrary tag" or
 "two tags at once" — a Flipper emulates one.
+
+### Addendum, NF-FLIPPER-EMU-v2, 2026-09-05
+v1 was NEGATIVE for a mechanical cause (Flipper held a truncated 6/42-page
+read, all-zero data pages). v2 emulates a serial-verified replica synthesized
+FROM the fixture the comparison oracle uses — so a positive proves Flipper->Core
+NFC transport fidelity, not that the real PM5 tag's framing matches (RF11: the
+oracle now shares the target's source). Acceptable because the walk's purpose is
+host-tooling de-risk, not tag authenticity; PASS WITH CONDITIONS on that one
+relabel.
