@@ -5,6 +5,36 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.38.0: git log v0.37.0..main --oneline at 08568e62 — five merges,
+    // every one accounted (RF15, no `--merges`):
+    //   #296 freestyle type chips on Today — folded into item 1 (the chip
+    //     row is what the daily roll lights).
+    //   #297 Phase SF PR1 — items 1, 2 and 3 (random shuffle and first
+    //     card; the freestyle daily type with its clear and the re-roll
+    //     after a logged session; filters remembered per type).
+    //   #298 Wave E PR B — item 6 (Concept2 link-outs open the phone's
+    //     default browser; the Concept2 surface itself stays behind the
+    //     named-account gate, so the link-out is the only visible half).
+    //   #300 Phase SF PR2 — items 4 and 5 (TIME as a range, exactly-at-cap
+    //     now counts; ERGOMATIC LIBRARY / MY WORKOUTS).
+    //   #301 Phase SF PR3 — item 7 (search by name).
+    // Deploy-day costs, stated rather than warned: Today redraws its card
+    // and re-rolls its type once on the first open after this update, and
+    // the Library forgets one BACK round trip's filters once. Neither
+    // repeats. This notes/capture PR adds no behavior.
+    version: "v0.38.0",
+    date: "2026-09-05",
+    items: [
+      "SHUFFLE is random now. It never repeats a workout until you have seen the whole pool, and the first card each day is drawn from the ones you have gone longest without. Before, it walked the library in a fixed order and the same card sat on top every day.",
+      "Without a plan, Today picks a type for you each morning and lights the chip. Tap another chip to change it, or tap the lit chip for ANY TYPE for the rest of the day. Logging a session rolls a fresh type for the next one.",
+      "Today's filters are remembered per type. Set DIFFICULTY, TIME or the rest under AT once and they are there every AT day, separate from O2, TR, AN and ANY TYPE.",
+      "TIME is a slider on both filter sheets: two thumbs, five-minute steps, so 25 to 35 minutes is one drag. A workout at exactly your time cap now counts as within it.",
+      "The source filter reads ERGOMATIC LIBRARY and MY WORKOUTS instead of GLOBAL and CUSTOM, on both sheets, the badges and the Library.",
+      "View on Concept2 opens your phone's default browser, signed in, instead of an in-app sheet that showed a private-result page.",
+      "The Library has a search-by-name field above FILTER. Type a few letters and the list narrows as you go; it stays with you when you come back from a workout and clears when you reopen the tab.",
+    ],
+  },
+  {
     // v0.37.0: git log v0.36.1..main --oneline at 52901126.
     // #292 is the item below. #290's Concept2 link/send surfaces stay dark
     // behind C2_LINK_ENABLED (set-but-empty in production at release), and
