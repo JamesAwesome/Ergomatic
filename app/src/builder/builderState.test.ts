@@ -536,7 +536,6 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "Ladder",
       type: "AT",
-      difficulty: "medium",
       pain: 3,
       steps: [
         { k: "reps", count: 4 },
@@ -563,7 +562,6 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "Ladder",
       type: "AT",
-      difficulty: "medium",
       pain: 3,
       steps: [
         {
@@ -582,7 +580,6 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "Ladder",
       type: "AT",
-      difficulty: "medium",
       pain: 3,
       steps: [
         {
@@ -599,7 +596,6 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "T",
       type: "O2",
-      difficulty: "easy",
       pain: 2,
       steps: [
         {
@@ -616,7 +612,6 @@ describe("fromWorkout", () => {
     const f = fromWorkout({
       title: "T",
       type: "O2",
-      difficulty: "easy",
       pain: 2,
       steps: [
         {
@@ -636,7 +631,6 @@ describe("fromWorkout", () => {
     const workout = {
       title: "Rest Test",
       type: "AT" as const,
-      difficulty: "medium" as const,
       pain: 3,
       steps: [
         {
@@ -671,7 +665,6 @@ describe("totals vs. estimateMinutes agreement", () => {
     const workout = {
       title: "Rest Test",
       type: "AT" as const,
-      difficulty: "medium" as const,
       pain: 3,
       steps: [
         {
@@ -701,7 +694,6 @@ describe("totals vs. estimateMinutes agreement", () => {
     const workout = {
       title: "Distance Rest Test",
       type: "AT" as const,
-      difficulty: "medium" as const,
       pain: 3,
       steps: [
         {
@@ -851,7 +843,6 @@ describe("clock durations in rows", () => {
     const form = fromWorkout({
       title: "Sprints",
       type: "AN",
-      difficulty: "hard",
       pain: 4,
       steps: [
         {
@@ -892,7 +883,6 @@ describe("clock durations in rows", () => {
     const form = fromWorkout({
       title: "Distance",
       type: "O2",
-      difficulty: "easy",
       pain: 2,
       steps: [
         {
@@ -936,7 +926,6 @@ describe("clock durations in rows", () => {
       const form = fromWorkout({
         title: "T",
         type: "O2",
-        difficulty: "easy",
         pain: 3,
         steps: [
           {
@@ -985,7 +974,6 @@ describe("hasUnsupportedSteps (L2)", () => {
     const workout = {
       title: "Has a test piece",
       type: "AT" as const,
-      difficulty: "medium" as const,
       pain: 3,
       steps: [
         {
@@ -1270,7 +1258,6 @@ describe("effort refs in rows", () => {
     const form = fromWorkout({
       title: "Sprints",
       type: "AN",
-      difficulty: "hard",
       pain: 5,
       steps: [
         {
@@ -1316,7 +1303,6 @@ describe("effort refs in rows", () => {
     const form = fromWorkout({
       title: "Sprints",
       type: "AN",
-      difficulty: "hard",
       pain: 5,
       steps: [
         {
@@ -1416,7 +1402,6 @@ describe("effort refs in rows", () => {
     const form = fromWorkout({
       title: forkLightning.title,
       type: forkLightning.type,
-      difficulty: forkLightning.difficulty,
       pain: forkLightning.pain,
       steps,
     });

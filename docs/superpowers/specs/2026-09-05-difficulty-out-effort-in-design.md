@@ -175,11 +175,18 @@ for the whole cycle. The mapping: 1–2 → easy, 3 → medium, 4–5 → hard. 
 new build reads, shows or accepts the value; PR 3 deletes the derivation
 with the column. It is not the "derive a band" product option James
 declined — that option would have kept a chip and a filter. The band
-disagrees with the stored word on ~70 seeded medium workouts, but seeded
-rows are never rewritten (`seed.ts:47`'s `contentEqual` leaves matching
-global rows alone), so the only rows that carry a derived word are ones
-created or edited through new builds during the cycle, and only old
-builds can see it.
+disagrees with the stored word on ~70 seeded medium workouts. The seeder
+rewrites a global row only when `contentEqual` (`seed.ts`: type, pain,
+sortOrder, steps) fails, so an untouched seed row keeps its stored word —
+BUT §3.4's AT/TR re-sort changes `sortOrder` on 38 rows, and the first
+boot after deploy sends each through `updateGlobal`, which writes the
+derived word: 27 of them (every moved pain-4 row authored "medium") flip
+to "hard" in Postgres at MERGE, not at the tag. A pre-PR-1 build shows
+those 27 as HARD and a rower who had narrowed to MEDIUM loses them from
+the pool for the cycle. Cosmetic, on an axis this phase deletes, and
+stated here because the one-tag rule (§5) contains the client half only:
+server effects land at merge. Every other seeded row keeps its stored
+word; new-build writes carry the derived one.
 
 Rollback: nothing to roll back; the old image's insert path writes its own
 difficulty and reads a NOT NULL column that is still NOT NULL. Cosmetic
@@ -560,7 +567,9 @@ compat layer to serve). PR 3 rides whatever tag follows its trigger.
   `pace.ts` or `monitor/program.ts`; every remaining consumer is a
   pass-through or a 1..5 bound; the default-set pool and morning roll are
   byte-identical.
-- Seeded rows are never rewritten by the seeder (`seed.ts:47`
-  `contentEqual`), so the derived compat word reaches only rows new
-  builds create or edit.
+- The seeder rewrites a global row only when its `contentEqual` tuple
+  (type, pain, sortOrder, steps) changes — so the derived compat word
+  reaches new-build writes plus exactly the rows a seed edit moves or
+  changes (PR 1: the 38 re-sorted AT/TR rows; the PM final gate caught
+  that the spec's earlier "never rewritten" reading missed sortOrder).
 - Header disambiguation by field count is sound (no 3-field form exists).

@@ -241,7 +241,6 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
         // Today.test.tsx's own DEFAULT_PREFS shape — the filter tokens
         // read `difficulties.length` unconditionally.
         preferences: {
-          difficulties: ["easy", "medium", "hard"],
           timeCapMinutes: 60,
         },
       }),

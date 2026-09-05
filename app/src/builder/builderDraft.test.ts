@@ -33,7 +33,6 @@ describe("formFingerprint", () => {
     // form-level fields
     expect(formFingerprint({ ...base, title: "x" })).not.toBe(baseFp);
     expect(formFingerprint({ ...base, type: "AT" })).not.toBe(baseFp);
-    expect(formFingerprint({ ...base, difficulty: "hard" })).not.toBe(baseFp);
     expect(formFingerprint({ ...base, pain: 3 })).not.toBe(baseFp);
     expect(formFingerprint({ ...base, reps: 4 })).not.toBe(baseFp);
     // every enumerable row field except id — future-field guard: iterate
@@ -60,6 +59,21 @@ describe("formFingerprint", () => {
 
 describe("save/load/clear round trip", () => {
   beforeEach(() => localStorage.clear());
+
+  // Phase DE PR 1: a draft saved by a pre-PR-1 build carries a
+  // `difficulty` the form no longer has. It must still load; the stray
+  // field is simply ignored (Builder never reads it).
+  it("loads a pre-PR-1 draft that still carries a difficulty field", () => {
+    const d = draftOf({ ...newForm(), title: "Old draft" });
+    const raw = JSON.parse(JSON.stringify(d)) as {
+      form: Record<string, unknown>;
+    };
+    raw.form.difficulty = "medium";
+    localStorage.setItem(BUILDER_DRAFT_KEY, JSON.stringify(raw));
+    const back = loadBuilderDraft();
+    expect(back?.form.title).toBe("Old draft");
+    expect(back?.mode).toStrictEqual({ kind: "new" });
+  });
 
   it("round-trips a draft and load returns the stored forms", () => {
     const d = draftOf({ ...newForm(), title: "Half done" });

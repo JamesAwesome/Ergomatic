@@ -164,7 +164,8 @@ describe("migration 0008: the workouts wu-strip", () => {
         userId: u.id,
         title: "Legacy warm-up workout",
         type: "AT",
-        difficulty: "medium",
+        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
+        difficulty: "easy",
         pain: 2,
         source: "user",
         steps: legacySteps,
@@ -233,6 +234,7 @@ describe("migration 0008: the workouts wu-strip", () => {
         userId: u.id,
         title: "No warm-up here",
         type: "O2",
+        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
         difficulty: "easy",
         pain: 1,
         source: "user",
@@ -283,6 +285,7 @@ describe("migration 0008: the workouts wu-strip", () => {
         userId: u.id,
         title: "Legacy wu-only workout",
         type: "O2",
+        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
         difficulty: "easy",
         pain: 1,
         source: "user",

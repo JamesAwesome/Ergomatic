@@ -61,18 +61,18 @@ describe("ONBOARDING_LIBRARY_WORKOUTS", () => {
   });
 
   // Phase 8A PR B: the two tests are classified HONESTLY — instruments,
-  // not sessions. A 2K test is an all-out anaerobic effort (AN/hard/5);
-  // a 6K test rides the anaerobic threshold (AT/hard/4). The old
+  // not sessions. A 2K test is an all-out anaerobic effort (AN/5);
+  // a 6K test rides the anaerobic threshold (AT/4). The old
   // O2/easy/2 and AN/easy/2 rows undersold both.
-  it("the 2K Test is AN/hard/pain 5; the 6K Test is AT/hard/pain 4", () => {
+  it("the 2K Test is AN/pain 5; the 6K Test is AT/pain 4", () => {
     const k6 = ONBOARDING_LIBRARY_WORKOUTS.find(
       (w) => w.title === ONBOARDING_TITLES.k6,
     )!;
     const k2 = ONBOARDING_LIBRARY_WORKOUTS.find(
       (w) => w.title === ONBOARDING_TITLES.k2,
     )!;
-    expect(k2).toMatchObject({ type: "AN", difficulty: "hard", pain: 5 });
-    expect(k6).toMatchObject({ type: "AT", difficulty: "hard", pain: 4 });
+    expect(k2).toMatchObject({ type: "AN", pain: 5 });
+    expect(k6).toMatchObject({ type: "AT", pain: 4 });
   });
 
   it("needs no baselines to run (the whole point of the onboarding card)", () => {

@@ -13,7 +13,6 @@ import {
 } from "./todayFilters";
 
 const AT_SET: FilterSet = {
-  difficulties: ["easy", "hard"],
   durationRange: { min: 25, max: 60 },
   painLevels: [1, 3, 5],
   lastDone: "under21",
@@ -21,7 +20,6 @@ const AT_SET: FilterSet = {
 };
 
 const DEFAULTS: FilterSet = {
-  difficulties: ["easy", "medium", "hard"],
   durationRange: { min: 0, max: 60 },
   painLevels: [],
   lastDone: null,
@@ -136,7 +134,20 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     expect(store.byKey.O2?.durationRange).toStrictEqual({ min: 0, max: 120 });
     expect(store.byKey.TR?.durationRange).toStrictEqual({ min: 45, max: 120 });
     expect(store.byKey.AN).toBeUndefined();
-    expect(store.byKey.AT?.difficulties).toStrictEqual(["easy", "hard"]);
+  });
+
+  // Phase DE PR 1: every installed rower's record still carries the
+  // deleted group's key. It must parse exactly as the keyless record does,
+  // whatever it holds — the key is unknown now, not validated.
+  it.each([
+    ["a legacy difficulties array", ["easy"]],
+    ["a malformed difficulties value", "garbage"],
+  ])("parses a stored set that still carries %s, dropping the key", (_n, v) => {
+    localStorage.setItem(
+      TODAY_FILTERS_KEY,
+      JSON.stringify({ v: 2, byKey: { AT: { ...AT_SET, difficulties: v } } }),
+    );
+    expect(loadTodayFilters().byKey).toStrictEqual({ AT: AT_SET });
   });
 
   it("ignores unknown top-level fields (the revision-1 rollSuppressed flag James struck reads as nothing)", () => {
@@ -163,8 +174,6 @@ describe("saveTodayFilters / loadTodayFilters", () => {
 
   describe("rejects a malformed set (that key only)", () => {
     it.each([
-      ["difficulties not an array", { ...AT_SET, difficulties: "easy" }],
-      ["unknown difficulty", { ...AT_SET, difficulties: ["extreme"] }],
       ["durationRange not an object", { ...AT_SET, durationRange: "<30" }],
       [
         "durationRange with a non-number member",

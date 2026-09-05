@@ -6,7 +6,7 @@ import { ONBOARDING_TITLES } from "../../../domain/onboarding.js";
 // resolves — and runs — with no baselines at all (`needsBaselines`
 // reads them as false). Deliberately NOT part of LIBRARY_WORKOUTS:
 // library.test.ts hard-pins exactly 300 workouts, the per-type/band
-// quota grid, spm-present-and-even on every work step, and difficulty
+// quota grid, spm-present-and-even on every work step, and pain
 // ordering — a single-step, no-spm effort workout violates the spm rule
 // and would corrupt the grid. Concatenated into the converge input by
 // library/index.ts's GLOBAL_LIBRARY_SEED export instead (sortOrder
@@ -24,7 +24,6 @@ export const ONBOARDING_LIBRARY_WORKOUTS: WorkoutInput[] = [
     // (pre-rename rows) and AT (new rows) — accepted at the phase gate,
     // do not "fix" it.
     type: "AT",
-    difficulty: "hard",
     pain: 4,
     steps: [
       {
@@ -47,7 +46,6 @@ export const ONBOARDING_LIBRARY_WORKOUTS: WorkoutInput[] = [
     // anaerobic effort — AN/hard/pain 5, matching the sprint plan's AN
     // checkpoint day. Was AN/easy/2 until 2026-08-22.
     type: "AN",
-    difficulty: "hard",
     pain: 5,
     steps: [
       {

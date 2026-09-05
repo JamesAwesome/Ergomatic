@@ -673,7 +673,6 @@ describe("the real clock (block review M2)", () => {
     const headSea: WorkoutInput = {
       title: "Head Sea",
       type: "TR",
-      difficulty: "medium",
       pain: 3,
       steps: [
         {

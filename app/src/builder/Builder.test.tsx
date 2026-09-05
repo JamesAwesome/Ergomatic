@@ -424,7 +424,6 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      difficulty: "easy",
       pain: 3,
       rows: [distanceRow],
       reps: 1,
@@ -472,7 +471,6 @@ describe("Builder", () => {
       body: JSON.stringify({
         title: "Ladder Sets",
         type: "O2",
-        difficulty: "easy",
         pain: 3,
         steps: [
           {
@@ -506,7 +504,6 @@ describe("Builder", () => {
       body: JSON.stringify({
         title: "Ladder Sets",
         type: "O2",
-        difficulty: "easy",
         pain: 3,
         steps: [
           { k: "reps", count: 3 },
@@ -540,7 +537,7 @@ describe("Builder", () => {
     expect(body).not.toHaveProperty("num");
   });
 
-  it("saves a non-default TYPE and DIFFICULTY chosen from the classification card", async () => {
+  it("saves a non-default TYPE chosen from the classification card, and no difficulty at all (Phase DE PR 1)", async () => {
     const api = mockApi(
       () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
     );
@@ -548,7 +545,6 @@ describe("Builder", () => {
     await renderBuilder();
 
     await userEvent.click(screen.getByRole("button", { name: "AN" }));
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
 
     const anChip = screen.getByRole("button", { name: "AN" });
     expect(anChip).toHaveAttribute(
@@ -564,7 +560,7 @@ describe("Builder", () => {
     const [, options] = api.mock.calls[0]!;
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.type).toBe("AN");
-    expect(body.difficulty).toBe("hard");
+    expect(body).not.toHaveProperty("difficulty");
   });
 
   it("steps SPM and REST and both reach the saved step", async () => {
@@ -626,7 +622,6 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      difficulty: "easy",
       pain: 3,
       rows: [badRow],
       reps: 1,
@@ -659,7 +654,6 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      difficulty: "easy",
       pain: 3,
       rows: [badRow, goodRow],
       reps: 1,
@@ -708,7 +702,6 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      difficulty: "easy",
       pain: 3,
       rows: [badRow],
       reps: 1,
@@ -738,7 +731,6 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      difficulty: "easy",
       pain: 3,
       rows: [badRow],
       reps: 1,
@@ -783,7 +775,6 @@ describe("Builder", () => {
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
-      difficulty: "easy",
       pain: 3,
       rows: [badRow],
       reps: 1,
@@ -945,7 +936,6 @@ describe("Builder", () => {
     const initial = fromWorkout({
       title: seaFret.title,
       type: seaFret.type,
-      difficulty: seaFret.difficulty,
       pain: seaFret.pain,
       steps,
     });
@@ -1149,7 +1139,6 @@ describe("Builder", () => {
       const currentInitial = fromWorkout({
         title: seaFret.title,
         type: seaFret.type,
-        difficulty: seaFret.difficulty,
         pain: seaFret.pain,
         steps: seaFret.steps,
       });
@@ -1198,7 +1187,6 @@ describe("Builder", () => {
       const currentInitial = fromWorkout({
         title: seaFret.title,
         type: seaFret.type,
-        difficulty: seaFret.difficulty,
         pain: seaFret.pain,
         steps: seaFret.steps,
       });

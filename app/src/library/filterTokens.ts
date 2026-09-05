@@ -1,5 +1,4 @@
 import { RECENCY_BOUNDARY_DAYS, type Filters } from "./filters";
-import { collapseDifficulties } from "../components/difficultyTokenLabel";
 import { formatRangeLabel } from "../components/durationRangeLabel";
 import { UNBOUNDED_RANGE, isUnbounded } from "../../domain/duration.js";
 
@@ -16,8 +15,7 @@ import { UNBOUNDED_RANGE, isUnbounded } from "../../domain/duration.js";
 // retired the whole colour seam: the type token was the only token that
 // ever carried a `fill`, so `Token.fill` and `TokenRow`'s `fill` prop went
 // with it rather than lingering unused.
-export type TokenKind =
-  "difficulty" | "duration" | "pain" | "lastDone" | "source";
+export type TokenKind = "duration" | "pain" | "lastDone" | "source";
 
 export interface Token {
   kind: TokenKind;
@@ -34,10 +32,9 @@ function collapsePain(levels: number[]): string {
   return min === max ? `PAIN ${min}` : `PAIN ${min}–${max}`;
 }
 
-/** Filters -> the active tokens row, in TYPE, DIFFICULTY, TIME, PAIN, LAST
- *  DONE, SOURCE order. This is NOT "the sheet's own group order" — after
- *  Task 1, the sheet holds neither TYPE nor DIFFICULTY (TYPE is the chip
- *  row above it; DIFFICULTY is Task 2's own addition to the sheet). The
+/** Filters -> the active tokens row, in TYPE, TIME, PAIN, LAST DONE, SOURCE
+ *  order. This is NOT "the sheet's own group order" — the sheet holds no
+ *  TYPE control (TYPE is the chip row above it). The
  *  actual rule (library-filter-unification spec, "Token row order"): the
  *  row reads top-to-bottom in the order the CONTROLS appear on screen —
  *  the chip row first, then each of the sheet's own groups in the order
@@ -49,14 +46,6 @@ function collapsePain(levels: number[]): string {
  *  clears the right field. */
 export function filterTokens(f: Filters): Token[] {
   const tokens: Token[] = [];
-
-  if (f.difficulties.length > 0) {
-    tokens.push({
-      kind: "difficulty",
-      label: collapseDifficulties(f.difficulties),
-      clear: (current) => ({ ...current, difficulties: [] }),
-    });
-  }
 
   if (!isUnbounded(f.durationRange)) {
     tokens.push({

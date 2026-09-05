@@ -127,10 +127,11 @@ James never hand-gathers what you can reach:
 
 Import via `/library/import` (the bulk paste door) — give him the block
 to paste, or paste it yourself if you're driving the browser. The canned
-set, each named for what it proves (grammar: `N | title | TYPE |
-difficulty | pain` header, then step lines):
+set, each named for what it proves (grammar: `title | TYPE | effort`
+header — the older numbered `N | title | TYPE | difficulty | pain` form
+still parses — then step lines):
 
-    90 | Walk Smoke | O2 | easy | 1
+    Walk Smoke | O2 | 1
     w 1' 6k @20
 
 Proves connect → program → frames with seconds of paddling. The grammar
@@ -138,7 +139,7 @@ has no seconds unit (minutes/meters only — verified against `parseBulk`),
 so the piece is nominally 1', but it is ABANDON-SAFE by declaration: the
 first 10 seconds already prove the frames; stop whenever.
 
-    91 | Walk Keystone | AT | medium | 2
+    Walk Keystone | AT | 2
     x2
     w 250m 6k @24
 
@@ -155,7 +156,7 @@ is expressed by OMITTING the token, which compiles to `restSeconds: 0`
 asserts). Every canned block here should be pasted at least once before
 it is trusted; these had never been.
 
-    92 | Walk Rests | AT | medium | 2
+    Walk Rests | AT | 2
     w 1' 6k @22 r1
     w 500m 6k @24 r1
     w 1' 6k @22

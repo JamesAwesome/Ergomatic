@@ -37,7 +37,6 @@ const WORKOUT: LibraryWorkout = {
   id: "w1",
   title: "Ladder Sets",
   type: "AT",
-  difficulty: "medium",
   pain: 3,
   steps: [
     {
@@ -71,7 +70,6 @@ const WORKOUT_WITH_REPS: LibraryWorkout = {
   id: "w2",
   title: "Rep City",
   type: "AN",
-  difficulty: "hard",
   pain: 4,
   steps: [
     { k: "reps", count: 4 },
@@ -93,7 +91,6 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
   id: "w3",
   title: "My Own Session",
   type: "O2",
-  difficulty: "easy",
   pain: 2,
   steps: [
     {
@@ -118,7 +115,6 @@ const EFFORT_ONLY_WORKOUT: LibraryWorkout = {
   id: "w-effort",
   title: "Effort Only Row",
   type: "O2",
-  difficulty: "easy",
   pain: 2,
   steps: [
     {
@@ -193,7 +189,6 @@ function mockHooks(
     usePreferences: () => ({
       state: "ready",
       preferences: {
-        difficulties: [],
         timeCapMinutes: 60,
         countdownSeconds: 10,
       },
@@ -404,11 +399,11 @@ describe("WorkoutDetail", () => {
     expect(screen.getByText(/22 spm/)).toBeInTheDocument();
   });
 
-  it("shows the difficulty in the meta line with no catalogue number", async () => {
+  it("shows no difficulty word and no catalogue number in the meta line (Phase DE PR 1)", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
-    expect(screen.getByText("MEDIUM")).toBeInTheDocument();
+    expect(screen.queryByText("MEDIUM")).not.toBeInTheDocument();
     expect(screen.queryByText(/NO\.\s*\d+/i)).not.toBeInTheDocument();
   });
 

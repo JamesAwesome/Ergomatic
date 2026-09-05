@@ -3,6 +3,7 @@ import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "../db/index.js";
 import { workouts } from "../db/schema.js";
 import type { WorkoutInput } from "../../domain/types.js";
+import { derivedDifficulty } from "../compat/difficulty.js";
 
 export type WorkoutSource = "starter" | "user";
 // `sortOrder` is the authored ordering key that replaced the retired `num`
@@ -24,6 +25,8 @@ function withIsGlobal<T extends { userId: string | null }>(
   return { ...row, isGlobal: row.userId === null };
 }
 
+// `difficulty` is DERIVED from pain at all four write sites below, for old
+// builds only — server/compat/difficulty.ts explains; Phase DE PR 3 removes.
 export function createWorkoutsStore(db: Db) {
   return {
     // Spans globals ∪ this user's personal rows.
@@ -75,7 +78,7 @@ export function createWorkoutsStore(db: Db) {
           sortOrder: null,
           title: input.title,
           type: input.type,
-          difficulty: input.difficulty,
+          difficulty: derivedDifficulty(input.pain),
           pain: input.pain,
           source: input.source,
           steps: input.steps,
@@ -98,7 +101,7 @@ export function createWorkoutsStore(db: Db) {
               sortOrder: input.sortOrder ?? null,
               title: input.title,
               type: input.type,
-              difficulty: input.difficulty,
+              difficulty: derivedDifficulty(input.pain),
               pain: input.pain,
               source: input.source,
               steps: input.steps,
@@ -124,7 +127,7 @@ export function createWorkoutsStore(db: Db) {
         .set({
           title: input.title,
           type: input.type,
-          difficulty: input.difficulty,
+          difficulty: derivedDifficulty(input.pain),
           pain: input.pain,
           steps: input.steps,
           updatedAt: new Date(),
@@ -224,7 +227,7 @@ export function createWorkoutsStore(db: Db) {
         .set({
           title: input.title,
           type: input.type,
-          difficulty: input.difficulty,
+          difficulty: derivedDifficulty(input.pain),
           pain: input.pain,
           steps: input.steps,
           sortOrder: input.sortOrder,

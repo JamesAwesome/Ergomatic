@@ -535,7 +535,6 @@ const workout = (
 ): WorkoutInput => ({
   title,
   type,
-  difficulty: "easy",
   pain: 1,
   steps,
 });

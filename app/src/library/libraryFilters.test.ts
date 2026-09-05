@@ -10,7 +10,6 @@ import { LIBRARY_SCROLL_KEY, saveLibraryScroll } from "./libraryScroll";
 
 const FULL: Filters = {
   types: ["AT", "O2"],
-  difficulties: ["easy", "hard"],
   durationRange: { min: 30, max: 120 },
   painLevels: [4, 5],
   lastDone: "over21",
@@ -46,17 +45,16 @@ const V2_RECORD = {
   source: null,
 };
 
-// A record that is otherwise fully v3-shaped (has `difficulties`,
-// `durations`, `painLevels`, `lastDone`, `source` all present and valid)
-// but still carries the RENAMED field under its old name (`type`, not
-// `types`) — unlike `V2_RECORD`, which is missing `difficulties` too, this
-// is rejected by ONE check alone (`!Array.isArray(f.types)`), isolating
-// that check from every other field's own validation (whole-branch review
-// I-5: `V2_RECORD`'s rejection can't tell the `types`-presence check apart
-// from the `difficulties`-presence check, since it fails both).
+// A record that is otherwise fully v3-shaped (`durations`, `painLevels`,
+// `lastDone`, `source` all present and valid) but still carries the
+// RENAMED field under its old name (`type`, not `types`), so it is
+// rejected by ONE check alone (`!Array.isArray(f.types)`), isolating that
+// check from every other field's own validation (whole-branch review
+// I-5). Since Phase DE PR 1 removed the `difficulties` check it is
+// shaped identically to `V2_RECORD`; it stays a separate name because the
+// two tests that use it pin different claims.
 const HALF_MIGRATED_RECORD = {
   type: "O2",
-  difficulties: [],
   durations: [],
   painLevels: [],
   lastDone: null,
@@ -66,6 +64,17 @@ const HALF_MIGRATED_RECORD = {
 describe("libraryFilters", () => {
   beforeEach(() => {
     sessionStorage.clear();
+  });
+
+  // Phase DE PR 1: a pre-PR-1 record carries `difficulties`; the key is
+  // unknown now and ignored, and the record's OTHER fields still parse
+  // strictly (the wrong-shape table below is unchanged).
+  it("parses a stored record that still carries difficulties, dropping the key", () => {
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, difficulties: ["easy", "hard"] }),
+    );
+    expect(loadLibraryFilters()).toStrictEqual(FULL);
   });
 
   it("round-trips a fully-populated Filters", () => {
@@ -119,18 +128,6 @@ describe("libraryFilters", () => {
         JSON.stringify({ ...FULL, types: [2] }),
       ],
       [
-        "difficulties not an array",
-        JSON.stringify({ ...FULL, difficulties: "easy" }),
-      ],
-      [
-        "difficulties contains an unknown value",
-        JSON.stringify({ ...FULL, difficulties: ["extreme"] }),
-      ],
-      [
-        "difficulties contains a wrong-shaped member",
-        JSON.stringify({ ...FULL, difficulties: [1] }),
-      ],
-      [
         "durationRange missing (a bucket-era record: `durations` instead)",
         JSON.stringify({
           ...FULL,
@@ -162,10 +159,7 @@ describe("libraryFilters", () => {
       ["unknown lastDone", JSON.stringify({ ...FULL, lastDone: "today" })],
       ["lastDone wrong shape", JSON.stringify({ ...FULL, lastDone: 21 })],
       ["unknown source", JSON.stringify({ ...FULL, source: "book" })],
-      [
-        "missing field",
-        JSON.stringify({ types: [], difficulties: [], durations: [] }),
-      ],
+      ["missing field", JSON.stringify({ types: [], durations: [] })],
       // The pre-Task-4 (v1) shape: none of its fields overlap the current
       // validator's own field names, so it's rejected wholesale — the
       // point of the strict, per-field check rather than a partial merge.
@@ -197,14 +191,6 @@ describe("libraryFilters", () => {
       JSON.stringify({ ...FULL, types: ["AT", "AT", "O2"] }),
     );
     expect(loadLibraryFilters().types).toStrictEqual(["AT", "O2"]);
-  });
-
-  it("de-dupes duplicated difficulties from a tampered value", () => {
-    sessionStorage.setItem(
-      LIBRARY_FILTERS_KEY,
-      JSON.stringify({ ...FULL, difficulties: ["easy", "easy", "hard"] }),
-    );
-    expect(loadLibraryFilters().difficulties).toStrictEqual(["easy", "hard"]);
   });
 
   it("clamps and orders a tampered durationRange (fractions round, out-of-bounds clamp, a crossed pair collapses)", () => {

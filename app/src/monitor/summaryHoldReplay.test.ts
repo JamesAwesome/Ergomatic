@@ -630,7 +630,6 @@ function libraryWorkoutFixture(id: string, title: string): LibraryWorkout {
     id,
     title,
     type: LIBRARY_METADATA_SOURCE.type as WorkoutType,
-    difficulty: LIBRARY_METADATA_SOURCE.difficulty,
     pain: LIBRARY_METADATA_SOURCE.pain,
     steps: LIBRARY_METADATA_SOURCE.steps,
     isGlobal: true,

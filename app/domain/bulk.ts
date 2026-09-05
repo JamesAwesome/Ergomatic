@@ -30,7 +30,7 @@
  */
 import { parsePaceRef } from "./pace.js";
 import { parseDurationToken } from "./duration.js";
-import type { Difficulty, Step, WorkoutInput, WorkoutType } from "./types.js";
+import type { Step, WorkoutInput, WorkoutType } from "./types.js";
 
 export interface BulkError {
   block: number;
@@ -63,17 +63,16 @@ export function droppedWarmupNotice(n: number): string {
 }
 
 const TYPES: WorkoutType[] = ["AN", "O2", "AT", "TR"];
-const DIFFS: Difficulty[] = ["easy", "medium", "hard"];
 
 interface RawLine {
   text: string;
   lineNumber: number; // 1-based, in the original pasted text
 }
 
-type HeaderFields = Pick<
-  WorkoutInput,
-  "title" | "type" | "difficulty" | "pain"
->;
+type HeaderFields = Pick<WorkoutInput, "title" | "type" | "pain">;
+
+const HEADER_MESSAGE =
+  'header must be "title | TYPE | effort" (the legacy "title | TYPE | difficulty | pain" form and a leading number are accepted and ignored)';
 
 /** Groups non-blank lines into blocks, splitting on one-or-more blank lines.
  *  Leading/trailing blank lines are simply ignored. */
@@ -100,19 +99,36 @@ function parseHeader(
   errors: BulkError[],
 ): HeaderFields | null {
   const parts = line.text.split("|").map((p) => p.trim());
-  if (parts.length !== 4 && parts.length !== 5) {
+  // 3 = canonical `title | TYPE | effort`. 4 = legacy `title | TYPE |
+  // difficulty | pain` (field 3 discarded). 5 = legacy with a leading
+  // workout number (fields 1 and 4 discarded). No three-field form existed
+  // before Phase DE, so the count alone disambiguates (spec §3.5). A `|`
+  // inside a title is not detected — a four-field title|rest splits into
+  // the five-field form and loses its first word, which bulk.test.ts pins
+  // as pre-existing behaviour.
+  let title: string;
+  let type: string;
+  let painStr: string;
+  if (parts.length === 3) {
+    [title, type, painStr] = parts as [string, string, string];
+  } else if (parts.length === 4) {
+    [title, type, , painStr] = parts as [string, string, string, string];
+  } else if (parts.length === 5) {
+    [, title, type, , painStr] = parts as [
+      string,
+      string,
+      string,
+      string,
+      string,
+    ];
+  } else {
     errors.push({
       block: blockIndex,
       line: line.lineNumber,
-      message:
-        'header must be "title | TYPE | difficulty | pain" (a leading number is accepted and ignored)',
+      message: HEADER_MESSAGE,
     });
     return null;
   }
-  // The legacy five-field form leads with a workout number that's no longer
-  // persisted anywhere; parse it only far enough to discard it.
-  const [title, type, difficulty, painStr] =
-    parts.length === 5 ? parts.slice(1) : parts;
   if (title.length === 0) {
     errors.push({
       block: blockIndex,
@@ -129,29 +145,16 @@ function parseHeader(
     });
     return null;
   }
-  if (!DIFFS.includes(difficulty as Difficulty)) {
-    errors.push({
-      block: blockIndex,
-      line: line.lineNumber,
-      message: `invalid difficulty: ${difficulty}`,
-    });
-    return null;
-  }
   const pain = Number(painStr);
   if (!Number.isInteger(pain)) {
     errors.push({
       block: blockIndex,
       line: line.lineNumber,
-      message: `invalid pain: ${painStr}`,
+      message: `invalid effort: ${painStr}`,
     });
     return null;
   }
-  return {
-    title,
-    type: type as WorkoutType,
-    difficulty: difficulty as Difficulty,
-    pain,
-  };
+  return { title, type: type as WorkoutType, pain };
 }
 
 function parseWorkStep(

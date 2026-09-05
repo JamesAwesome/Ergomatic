@@ -478,14 +478,14 @@ test("signin", async ({ page }) => {
 //
 // Task 3 (2026-08-04 round): three captures from one continuous flow — the
 // same "multiple screenshots per test" idiom the "library" test below (and
-// "today-unlogged" above it in history) already uses — now that DIFFICULTY/
-// TIME/PAIN live behind a FILTER ⌄ sheet instead of always-on chip rows.
+// "today-unlogged" above it in history) already uses — now that TIME/PAIN
+// live behind a FILTER ⌄ sheet instead of always-on chip rows.
 // `today.png` is the REST state (FILTER ⌄ beside SHUFFLE, no chip groups on
 // screen); `today-sheet.png` and `today-filtered.png` mirror
 // `library-sheet.png`/`library-filtered.png`'s own open/applied pair.
 //
-// Round 2 (2026-08-04): `today-sheet.png` now shows all FIVE groups
-// (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE), and the Revision (mid-round)
+// Round 2 (2026-08-04): `today-sheet.png` shows every group (TIME/PAIN/
+// LAST DONE/SOURCE — DIFFICULTY left in Phase DE PR 1), and the Revision (mid-round)
 // replaced the live-counting primary ("Show N options") with the constant
 // "Apply Filter" plus a small mono count caption above it.
 test("today", async ({ page }) => {
@@ -503,22 +503,22 @@ test("today", async ({ page }) => {
   // for the suggested-workout card itself before shooting.
   await page.locator(".today-card").waitFor();
 
-  // REST: FILTER ⌄ beside SHUFFLE, no DIFFICULTY/TIME/PAIN chip groups on
+  // REST: FILTER ⌄ beside SHUFFLE, no TIME/PAIN chip groups on
   // the screen itself.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today.png"),
   });
 
-  // SHEET: open, all five groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE),
-  // and the constant "Apply Filter" primary with its own live-count caption.
-  // Deselecting HARD is a real, visible DIFFICULTY deviation with zero risk
-  // of a zero-result pool — the 300-workout library's own O2 quota (today's
-  // sprint-plan code) has no HARD entries at all (design.spec.ts's own
-  // SHUFFLE-disabled comment).
+  // SHEET: open, all four groups (TIME/PAIN/LAST DONE/SOURCE), and the
+  // constant "Apply Filter" primary with its own live-count caption.
+  // Selecting PAIN 1 is a real, visible PAIN deviation with zero risk of a
+  // zero-result pool — the pinned Sea Fret is itself a pain-1 O2 workout,
+  // and the library's O2 block opens with eight of them.
   await page.getByRole("button", { name: "FILTER ⌄" }).click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "HARD", exact: true })
+    .getByRole("group", { name: "PAIN" })
+    .getByRole("button", { name: "1", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Apply Filter" }),
@@ -530,7 +530,7 @@ test("today", async ({ page }) => {
   // Phase SF PR2 Gate 0 (spec §3.5): the TIME range narrowed to 25–35′
   // by keyboard (the thumbs are role=slider buttons), the live count
   // moving with it; the same sheet in landscape; then applied, so the
-  // token row shows the range label beside the DIFFICULTY token.
+  // token row shows the range label beside the PAIN token.
   const dialog = page.getByRole("dialog");
   const longest = dialog.getByRole("slider", { name: "Longest" });
   const shortest = dialog.getByRole("slider", { name: "Shortest" });
@@ -549,8 +549,8 @@ test("today", async ({ page }) => {
   });
   await page.setViewportSize({ width: 390, height: 844 });
 
-  // FILTERED: applied — the DIFFICULTY token ("EASY–MEDIUM"), the TIME
-  // token ("25–35′") and CLEAR ALL.
+  // FILTERED: applied — the PAIN token ("PAIN 1"), the TIME token
+  // ("25–35′") and CLEAR ALL.
   await page.getByRole("button", { name: "Apply Filter" }).click();
   await expect(
     page.locator(".filter-token", { hasText: "25–35′" }),
@@ -709,8 +709,8 @@ test("today-capped", async ({ page }) => {
 // already uses for exactly the same reason (no recency race against the
 // 300 seeded globals, no plan/type coupling). A custom import rather than
 // filtering the real global Ostro entry itself: with 300 seeded workouts,
-// no combination of TYPE/DURATION/DIFFICULTY/PAIN filters reliably narrows
-// the pool to that one title (many share type+duration+difficulty), so
+// no combination of TYPE/DURATION/PAIN filters reliably narrows the pool
+// to that one title (many share type+duration+pain), so
 // SOURCE=CUSTOM stays the only deterministic pick in this account.
 test("today-rolled", async ({ page }) => {
   const title = "Screenshot Today Rolled Workout";
@@ -1812,7 +1812,7 @@ test("library", async ({ page }) => {
   // would ever show the badge at all — same reasoning as "workout-detail"'s
   // own builder-authored personal workout further down. Simplest valid
   // form: title + pain + one row's duration — `newForm()`'s own default
-  // TYPE (O2) and DIFFICULTY (easy) are left untouched, which matters
+  // TYPE (O2) is left untouched, which matters
   // below: the chip-row TYPE filter this flow adds has to actually match
   // this workout, or SOURCE=CUSTOM would narrow to zero instead of one.
   const customTitle = "Screenshot Custom Workout";
@@ -1887,8 +1887,8 @@ test("library", async ({ page }) => {
     .click();
 
   // SHEET: open, with SOURCE=CUSTOM selected but not yet applied — the
-  // DIFFICULTY group (Task 2's own addition, first in the sheet now that
-  // TYPE has left it for the chip row) and the "Apply Filter" primary with
+  // four groups (TIME first, now that TYPE left for the chip row and
+  // DIFFICULTY left in Phase DE PR 1) and the "Apply Filter" primary with
   // its live-counting caption (spec §3, singular-aware: "1 WORKOUT") are
   // the point of this capture.
   await page.getByRole("button", { name: "FILTER ⌄" }).click();

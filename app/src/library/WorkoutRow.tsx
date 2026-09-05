@@ -48,9 +48,7 @@ export default function WorkoutRow({
         {!workout.isGlobal && (
           <span className="workout-row-custom">MY WORKOUTS</span>
         )}
-        <span className="workout-row-meta">
-          {workout.difficulty.toUpperCase()} · {daysLabel}
-        </span>
+        <span className="workout-row-meta">{daysLabel}</span>
         <PainBar pain={workout.pain} type={workout.type} />
       </div>
       {!workout.isGlobal && (

@@ -732,7 +732,7 @@ test.describe("library screen", () => {
   // a sheet `CellGrid` that had `role="group"` + a visible label — axe's
   // own scan above doesn't catch a missing GROUP around otherwise-correctly-
   // named buttons, so this is a dedicated structural pin, mirroring the
-  // sheet's own "DIFFICULTY/TIME/PAIN each expose a role=group" sweep
+  // sheet's own "TIME/PAIN each expose a role=group" sweep
   // further down this file for `TodayFilterSheet`/`FilterSheet`.
   test("the TYPE chip row exposes a role=group named TYPE", async ({
     page,
@@ -788,10 +788,13 @@ test.describe("library screen", () => {
       .click();
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
+    await dialog
+      .getByRole("group", { name: "PAIN" })
+      .getByRole("button", { name: "3", exact: true })
+      .click();
     await dialog.getByRole("button", { name: "Apply Filter" }).click();
     await expect(
-      page.locator(".filter-token-label", { hasText: "MEDIUM" }),
+      page.locator(".filter-token-label", { hasText: "PAIN 3" }),
     ).toBeVisible();
     await assertNoA11yViolations(page);
   });
@@ -1371,11 +1374,11 @@ test.describe("today screen (plan active, logs present)", () => {
   // matches the server preferences it was derived from on first mount
   // (todayOverrides.ts's own fallback — DESIGN_BASELINES' fixture never
   // touches /api/prefs, so this is the server's own default row: every
-  // difficulty, a 60-min cap's own bucket set, no pain filter) — and the
+  // a 60-min cap's own bucket set, no pain filter) — and the
   // swap chips read the plan's own prescribed type with nothing swapped
   // yet.
   //
-  // Task 3 (2026-08-04 round): DIFFICULTY/TIME/PAIN no longer render inline
+  // Task 3 (2026-08-04 round): TIME/PAIN no longer render inline
   // — the FILTER ⌄ sheet has to be opened first to reach them; the O2/AN/
   // AT/TR type-swap chips are untouched (they stay on the plan line, never
   // moved into the sheet).
@@ -1387,10 +1390,16 @@ test.describe("today screen (plan active, logs present)", () => {
   }) => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
-    for (const label of ["EASY", "MEDIUM", "HARD"]) {
+    // Phase DE PR 1: no DIFFICULTY group; PAIN's default is every cell off.
+    await expect(dialog.getByRole("group", { name: "DIFFICULTY" })).toHaveCount(
+      0,
+    );
+    for (const level of ["1", "2", "3", "4", "5"]) {
       await expect(
-        dialog.getByRole("button", { name: label, exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
+        dialog
+          .getByRole("group", { name: "PAIN" })
+          .getByRole("button", { name: level, exact: true }),
+      ).toHaveAttribute("aria-pressed", "false");
     }
     // Phase SF PR2: TIME is the two-thumb range; the 60-minute default
     // cap reads [0, 60] (spec I-12). Both thumbs LAY OUT at ≥44px in
@@ -1537,17 +1546,9 @@ test.describe("today screen (plan active, logs present)", () => {
   // Task 3 (2026-08-04 round): re-targeted at the FILTER sheet's own cells —
   // the assertion's intent (ink, never accent, on both the cells AND the
   // tokens `--ink` resolves to) is unchanged, only the location moved.
-  test("selected DIFFICULTY/TIME/PAIN chips fill ink, never accent", async ({
-    page,
-  }) => {
+  test("selected TIME/PAIN chips fill ink, never accent", async ({ page }) => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
-
-    const easyChip = dialog.getByRole("button", { name: "EASY", exact: true });
-    const easyBg = await easyChip.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
-    );
-    expect(easyBg).toBe("rgb(27, 26, 23)"); // --ink
 
     // Phase SF PR2: TIME's selected span is the one ACCENT fill in the
     // sheet (spec §3.4 — rail --rule-3, span --accent, knob --ink); the
@@ -1607,36 +1608,38 @@ test.describe("today screen (plan active, logs present)", () => {
   // DASHED rule-3 border, no grey fill — computed, not just `toBeDisabled`.
   // This describe's fixture is sprint/doneN=0 (O2 for today, DESIGN_
   // BASELINES {k2Seconds:100, k6Seconds:120}). Rebase seed-math note
-  // (2026-08-04): the 300-workout library has ZERO O2/HARD entries at all
-  // (aerobic-base work is never authored "hard" — see library.test.ts's own
-  // PAIN_BY_TYPE/PAIN_BY_DIFF bands), so a natural pool-of-one no longer
-  // exists the way the old 35-starter library's "High Pressure"/"Jet
-  // Stream" pair once provided one. Built here instead: one personal O2/
-  // HARD workout under the 60' cap, via bulk import — with zero global O2/
-  // HARD entries to join it, narrowing to HARD-only + <=60' leaves exactly
-  // this one row.
+  // (2026-08-04): the 300-workout library has ZERO O2 entries above pain 3
+  // (aerobic-base work is never authored that hard — see library.test.ts's
+  // own PAIN_BY_TYPE band), so a natural pool-of-one no longer exists the
+  // way the old 35-starter library's "High Pressure"/"Jet Stream" pair once
+  // provided one. Built here instead: one personal O2 / pain-4 workout
+  // under the 60' cap, via bulk import — with zero global O2 entries at 4
+  // to join it, narrowing to PAIN 4 + <=60' leaves exactly this one row.
+  // (Phase DE PR 1: this used to narrow on DIFFICULTY=HARD.)
   test("SHUFFLE disabled (pool of 1): ink-5 label, dashed rule-3 border, no fill", async ({
     page,
   }) => {
     const soloTitle = "Design Sweep Solo O2 Hard";
     await importBulk(
       page,
-      [`${soloTitle} | O2 | hard | 4`, "w 20:00 6k+10 @20"].join("\n"),
+      [`${soloTitle} | O2 | 4`, "w 20:00 6k+10 @20"].join("\n"),
     );
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
 
     // Task 3 (2026-08-04 round): the setup that narrows to this solo
-    // fixture moves through the FILTER sheet — EASY/MEDIUM no longer
-    // render inline. Phase SF PR2: TIME's default range ([0, 60],
-    // `rangeForCap(60)`) already covers this fixture's 20-min estimate (2026-08-09: no `wu` line any more — a
-    // workout's own displayed/estimated duration is work-only now, per the
-    // warmup-setting spec §5), so no TIME cell needs touching at all to
-    // narrow to HARD alone.
+    // fixture moves through the FILTER sheet. Phase SF PR2: TIME's default
+    // range ([0, 60], `rangeForCap(60)`) already covers this fixture's
+    // 20-min estimate (2026-08-09: no `wu` line any more — a workout's own
+    // displayed/estimated duration is work-only now, per the warmup-setting
+    // spec §5), so no TIME cell needs touching at all to narrow to PAIN 4
+    // alone.
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "EASY", exact: true }).click();
-    await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
+    await dialog
+      .getByRole("group", { name: "PAIN" })
+      .getByRole("button", { name: "4", exact: true })
+      .click();
     await page.getByRole("button", { name: "Apply Filter" }).click();
 
     const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
@@ -1721,18 +1724,15 @@ test.describe("today screen (plan active, logs present)", () => {
   // CellGrid.tsx's own `role="group"` + `aria-labelledby` (fix round 1,
   // whole-branch review M3, present at HEAD for this round) restores the
   // accessible group name Today's pre-extraction inline chip groups had —
-  // pinned here now that DIFFICULTY/TIME/PAIN live inside the sheet
+  // pinned here now that TIME/PAIN live inside the sheet
   // (LAST DONE/SOURCE, Round 2, get the identical treatment from the same
   // CellGrid component, spot-checked in TodayFilterSheet.test.tsx instead
   // of duplicated here).
-  test("DIFFICULTY/TIME/PAIN each expose a role=group with the visible label as its accessible name", async ({
+  test("TIME/PAIN each expose a role=group with the visible label as its accessible name", async ({
     page,
   }) => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(
-      dialog.getByRole("group", { name: "DIFFICULTY" }),
-    ).toBeVisible();
     await expect(dialog.getByRole("group", { name: "TIME" })).toBeVisible();
     await expect(dialog.getByRole("group", { name: "PAIN" })).toBeVisible();
   });
@@ -3474,25 +3474,25 @@ test.describe("builder screen", () => {
   // switching between chips swaps in a differently-*wide* word ("LOW & SLOW"
   // vs "COMFORTABLY HARD"), and a width change alone must not shift
   // anything below it either. Asserts both the TYPE chip row itself and the
-  // DIFFICULTY row beneath it hold their y position across the switch.
-  test("picking a different TYPE does not shift the TYPE chips or the DIFFICULTY row below them", async ({
+  // PAIN row beneath it hold their y position across the switch.
+  test("picking a different TYPE does not shift the TYPE chips or the PAIN row below them", async ({
     page,
   }) => {
     // A fresh builder defaults to O2 ("LOW & SLOW") — switch to AT
     // ("COMFORTABLY HARD"), the widest of the four words.
     const typeChipRow = page.locator(".classification-chip-row").first();
-    const difficultyRow = page.locator(".classification-chip-row").nth(1);
+    const painRow = page.locator(".classification-chip-row").nth(1);
     const beforeType = await stableBoundingBox(typeChipRow);
-    const beforeDifficulty = await stableBoundingBox(difficultyRow);
+    const beforePain = await stableBoundingBox(painRow);
 
     await page.getByRole("button", { name: "AT", exact: true }).click();
     await expect(page.getByText("COMFORTABLY HARD")).toBeVisible();
 
     const afterType = await stableBoundingBox(typeChipRow);
-    const afterDifficulty = await stableBoundingBox(difficultyRow);
+    const afterPain = await stableBoundingBox(painRow);
 
     expect(afterType?.y).toBe(beforeType?.y);
-    expect(afterDifficulty?.y).toBe(beforeDifficulty?.y);
+    expect(afterPain?.y).toBe(beforePain?.y);
   });
 
   // Same iOS device report as the library screen's callout test: a typed
@@ -3570,11 +3570,10 @@ test.describe("builder screen", () => {
 
   // Task 1 (ui-fix round): DESIGN.md's selected-state fix, Builder's own
   // half — PAIN's old per-level ramp colour goes ("Builder's gold pain
-  // selection goes"), DIFFICULTY was already ink (ClassificationCard.tsx's
-  // own unit tests cover that structurally); both read ink here too, in a
-  // real browser, alongside PACE (2k/6k/MAX/MIN) and the MIN/M duration
-  // unit toggle — none of them accent.
-  test("selected PAIN/DIFFICULTY/PACE/MIN-M chips fill ink, never accent", async ({
+  // selection goes"); it reads ink here, in a real browser, alongside PACE
+  // (2k/6k/MAX/MIN) and the MIN/M duration unit toggle — none of them
+  // accent. (DIFFICULTY, once checked here too, left in Phase DE PR 1.)
+  test("selected PAIN/PACE/MIN-M chips fill ink, never accent", async ({
     page,
   }) => {
     const painChip = page.getByRole("button", { name: "Pain 4" });
@@ -3585,13 +3584,6 @@ test.describe("builder screen", () => {
     // --ink. The alternative this rules out was the old per-level pain ramp
     // (--pain-ramp-4, #a3491f), deleted 2026-08-28 once nothing read it.
     expect(painBg).toBe("rgb(27, 26, 23)");
-
-    const hardChip = page.getByRole("button", { name: "HARD", exact: true });
-    await hardChip.click();
-    const hardBg = await hardChip.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
-    );
-    expect(hardBg).toBe("rgb(27, 26, 23)"); // --ink
 
     const sixK = page.getByRole("radio", { name: /pace 6K/i });
     await sixK.click();

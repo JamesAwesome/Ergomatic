@@ -100,7 +100,6 @@ function validWorkoutBody(overrides: Partial<WorkoutInput> = {}): WorkoutInput {
   return {
     title: "Steady State",
     type: "AT",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "r", minutes: 10 },
@@ -519,6 +518,23 @@ describe("workouts CRUD", () => {
     expect(res.body).toStrictEqual([]);
   });
 
+  // Phase DE PR 1 (spec §3.3): old builds send `difficulty` and render the
+  // word they get back with `.toUpperCase()`. The route ignores what they
+  // send and serves the derived word — never NULL, never the client's.
+  it("ignores a client-sent difficulty on create and serves the derived word (old-build compat)", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/workouts")).send({
+      ...validWorkoutBody({ title: "Old client", pain: 2 }),
+      // The old client's own word — must never reach the row.
+      difficulty: "hard",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.difficulty).toBe("easy");
+    const list = await asA(request(app).get("/api/workouts"));
+    const row = list.body.find((w: { id: string }) => w.id === created.body.id);
+    expect(row.difficulty).toBe("easy");
+  });
+
   it("POST creates a workout and it appears in the list", async () => {
     const app = appFor(makeStores());
     const created = await asA(request(app).post("/api/workouts")).send(
@@ -796,7 +812,6 @@ describe("GET /api/workouts: lastDoneDaysAgo", () => {
     const workout = await stores.workouts.create(userA.id, {
       title: "Zephyr",
       type: "O2",
-      difficulty: "easy",
       pain: 2,
       steps: [{ k: "r", minutes: 10 }],
       source: "user",
@@ -814,7 +829,6 @@ describe("GET /api/workouts: lastDoneDaysAgo", () => {
     await stores.workouts.create(userA.id, {
       title: "Squall",
       type: "AT",
-      difficulty: "hard",
       pain: 4,
       steps: [{ k: "r", minutes: 10 }],
       source: "user",

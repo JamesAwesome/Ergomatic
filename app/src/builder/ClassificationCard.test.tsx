@@ -1,25 +1,21 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Difficulty, WorkoutType } from "../../domain/types.js";
+import type { WorkoutType } from "../../domain/types.js";
 import ClassificationCard from "./ClassificationCard";
 
 type Handlers = {
   type: WorkoutType;
-  difficulty: Difficulty;
   pain: number | null;
   onTypeChange: (type: WorkoutType) => void;
-  onDifficultyChange: (difficulty: Difficulty) => void;
   onPainChange: (pain: number) => void;
 };
 
 function setup(overrides: Partial<Handlers> = {}) {
   const props = {
     type: "O2" as WorkoutType,
-    difficulty: "easy" as Difficulty,
     pain: null as number | null,
     onTypeChange: vi.fn<(type: WorkoutType) => void>(),
-    onDifficultyChange: vi.fn<(difficulty: Difficulty) => void>(),
     onPainChange: vi.fn<(pain: number) => void>(),
     ...overrides,
   };
@@ -28,12 +24,11 @@ function setup(overrides: Partial<Handlers> = {}) {
 }
 
 describe("ClassificationCard", () => {
-  it("renders all three groups inside a single card", () => {
+  it("renders both groups inside a single card", () => {
     const { container } = setup();
     const card = container.querySelector(".classification-card");
     expect(card).not.toBeNull();
     expect(card).toContainElement(screen.getByText("TYPE"));
-    expect(card).toContainElement(screen.getByText("DIFFICULTY"));
     expect(card).toContainElement(screen.getByText("EXPECTED PAIN"));
   });
 
@@ -91,10 +86,8 @@ describe("ClassificationCard", () => {
     it("updates the word when the type prop changes", () => {
       const props = {
         type: "O2" as WorkoutType,
-        difficulty: "easy" as Difficulty,
         pain: null as number | null,
         onTypeChange: vi.fn(),
-        onDifficultyChange: vi.fn(),
         onPainChange: vi.fn(),
       };
       const { rerender } = render(<ClassificationCard {...props} />);
@@ -119,32 +112,6 @@ describe("ClassificationCard", () => {
           screen.getByRole("button", { name: label }),
         ).not.toHaveAccessibleName("COMFORTABLY HARD");
       }
-    });
-  });
-
-  describe("DIFFICULTY", () => {
-    it("fills the selected chip with ink, not accent — no inline style, no accent-named class", () => {
-      setup({ difficulty: "hard" });
-      const selected = screen.getByRole("button", { name: "HARD" });
-      expect(selected).toHaveAttribute("aria-pressed", "true");
-      expect(selected).not.toHaveAttribute("style");
-      expect(selected.className).not.toMatch(/accent/i);
-    });
-
-    it("never puts the accent-named class on any DIFFICULTY chip, selected or not", () => {
-      setup({ difficulty: "medium" });
-      for (const label of ["EASY", "MEDIUM", "HARD"]) {
-        expect(
-          screen.getByRole("button", { name: label }).className,
-        ).not.toMatch(/accent/i);
-      }
-    });
-
-    it("reports the chosen difficulty", async () => {
-      const onDifficultyChange = vi.fn();
-      setup({ onDifficultyChange });
-      await userEvent.click(screen.getByRole("button", { name: "MEDIUM" }));
-      expect(onDifficultyChange).toHaveBeenCalledWith("medium");
     });
   });
 
@@ -190,8 +157,7 @@ describe("ClassificationCard", () => {
 
     // Task 1 (ui-fix round): PAIN's selected fill moved off its own
     // per-level ramp colour onto plain ink (DESIGN.md: "Builder's gold pain
-    // selection goes") — same no-inline-style, ink-only-in-CSS treatment as
-    // DIFFICULTY's own test just above.
+    // selection goes") — no inline style, ink only in CSS.
     it("fills the selected chip with ink, not accent or a ramp colour — no inline style", () => {
       setup({ pain: 2 });
       const selected = screen.getByRole("button", { name: "Pain 2" });
@@ -213,7 +179,7 @@ describe("ClassificationCard", () => {
 
   it("gives every chip in every group the 44px hit-target class", () => {
     setup({ pain: 1 });
-    const labels = ["O2", "AT", "TR", "AN", "EASY", "MEDIUM", "HARD"];
+    const labels = ["O2", "AT", "TR", "AN"];
     for (const label of labels) {
       expect(screen.getByRole("button", { name: label })).toHaveClass(
         "classification-chip",

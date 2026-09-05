@@ -29,7 +29,6 @@ export function formFingerprint(f: BuilderForm): string {
   return JSON.stringify([
     f.title,
     f.type,
-    f.difficulty,
     f.pain,
     f.reps,
     f.rows.map((r) => [
@@ -57,7 +56,6 @@ function isBuilderForm(value: unknown): value is BuilderForm {
   return (
     typeof value.title === "string" &&
     typeof value.type === "string" &&
-    typeof value.difficulty === "string" &&
     Array.isArray(value.rows) &&
     value.rows.every(
       (r: unknown) => isPlainRecord(r) && typeof r.id === "string",

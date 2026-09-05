@@ -19,12 +19,11 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // pin, James 2026-08-10, extended to created work pieces the same day).
 // Ordering here IS the library browsing order within the type block.
 export const O2_WORKOUTS: WorkoutInput[] = [
-  // ------------------------------------------------------- easy / pain 1
+  // ------------------------------------------------------- pain 1
   {
     // O2: 2×4' at 6k+12 with 1' rest — eight easy minutes, already broken.
     title: "Sea Fret",
     type: "O2",
-    difficulty: "easy",
     pain: 1,
     steps: [
       { k: "reps", count: 2 },
@@ -41,7 +40,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 3×3' at 6k+12, spm 20→22→24, 30 s between rungs.
     title: "Petrichor",
     type: "O2",
-    difficulty: "easy",
     pain: 1,
     steps: [
       {
@@ -70,7 +68,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 3×1000 m unbroken at 6k+12, spm 20→22→24.
     title: "Laminar",
     type: "O2",
-    difficulty: "easy",
     pain: 1,
     steps: [
       {
@@ -97,7 +94,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 4×1200 m at 6k+10 with 1' rest — easy distance reps, barely broken.
     title: "Dead Calm",
     type: "O2",
-    difficulty: "easy",
     pain: 1,
     steps: [
       { k: "reps", count: 4 },
@@ -114,7 +110,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 5×3' at 6k+12 with 1' rest — short aerobic reps, plenty of resets.
     title: "Slack Tide",
     type: "O2",
-    difficulty: "easy",
     pain: 1,
     steps: [
       { k: "reps", count: 5 },
@@ -131,7 +126,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2'-3'-4'-3'-2' pyramid at 6k+12 with 1' rests — a small first pyramid.
     title: "Millpond",
     type: "O2",
-    difficulty: "easy",
     pain: 1,
     steps: [
       {
@@ -174,7 +168,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 10' at spm 20 then 10' at spm 22, same 6k+12 pace throughout.
     title: "Flat Calm",
     type: "O2",
-    difficulty: "easy",
     pain: 1,
     steps: [
       {
@@ -195,7 +188,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2×10' at 6k+12 with 1' rest — broken steady state for new aerobic legs.
     title: "Horse Latitudes",
     type: "O2",
-    difficulty: "easy",
     pain: 1,
     steps: [
       { k: "reps", count: 2 },
@@ -209,12 +201,11 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
 
-  // ------------------------------------------------------- easy / pain 2
+  // ------------------------------------------------------- pain 2 (a)
   {
     // O2: rate change — 4×5' ladder at 6k+12, spm 18→20→22→24, unbroken.
     title: "Haar",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -253,7 +244,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // band. Total is no longer a 0/5 minute — stands as its pieces sum.)
     title: "Slack Water",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -289,7 +279,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2000/1000/500 m cutdown, 6k+12 → +8, rests 2:30/2' — shorter and quicker.
     title: "Glassy Swell",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -327,7 +316,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // sum.)
     title: "Ground Swell",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 6 },
@@ -344,7 +332,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 4'-6'-8'-6'-4' pyramid squeezing 6k+12 → +10 with 1' rests — the middle is the test.
     title: "Ground Fog",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -387,7 +374,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 3×6' at 6k+10 with 4' rest — the classic C2 shape, full recovery.
     title: "Following Sea",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 3 },
@@ -404,7 +390,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 4×5' at 6k+10 with 2:30 rest — the C2 four-by-four at an aerobic pace.
     title: "Radiation Fog",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 4 },
@@ -421,7 +406,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 30' unbroken wave at 6k+12, 6' blocks at spm 22/24/22/24/22.
     title: "Advection Fog",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -460,7 +444,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 3×3000 m at 6k+10 with 3' rest — three long thirds, full reset between.
     title: "Valley Fog",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 3 },
@@ -477,7 +460,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 6'/9'/12' ascending ladder, 6k+12 → +10, 1:30 rests — longest piece last.
     title: "Tule Fog",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -506,7 +488,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 12'/9'/6'/3' descending ladder, 6k+12 → +8, rests shrinking 1:30/1:00/0:30.
     title: "Ice Fog",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -542,7 +523,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 3×8' at 6k+12 with 3' rest — steady volume cut into thirds.
     title: "Freezing Fog",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 3 },
@@ -559,7 +539,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2×12' at 6k+12 with 5' rest — long halves and a genuinely lazy break.
     title: "Hoarfrost",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 2 },
@@ -576,7 +555,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 8×3' at 6k+10 with 1' rest — many small bites of the same steady pace.
     title: "Rime Ice",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 8 },
@@ -593,7 +571,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 1000/2000/1000 m pyramid, 6k+12 → +10 → +8, 2' rests — up and back down.
     title: "Corona",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -622,7 +599,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 15' at 6k+12, 3' off, 12' at 6k+10 — two long pieces, barely stepped.
     title: "Moonbow",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -644,7 +620,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 45' continuous at 6k+12 — the first genuinely long unbroken row here.
     title: "Fine Weather",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -659,7 +634,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 3×18' at 6k+12 with 2' rest — sit-time split twice.
     title: "Fair Weather",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 3 },
@@ -676,7 +650,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 5×(5' at spm 22 + 5' at spm 24) unbroken, 6k+12 throughout.
     title: "Moon Halo",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 5 },
@@ -698,7 +671,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 3×13' at 6k+12 with 2' rest — a big aerobic block in three sittings.
     title: "Alpenglow",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       { k: "reps", count: 3 },
@@ -715,7 +687,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 10,000 m continuous at 6k+12 — the round-number distance, one sitting.
     title: "Calm Sea",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -730,7 +701,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 60' continuous at 6k+12 — the hour, kept honest by nothing but patience.
     title: "Glass Sea",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -745,7 +715,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 30' at 6k+12, 5' light paddle, 25' at 6k+10 — an hour with a soft hinge.
     title: "Fog Bow",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -772,7 +741,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 70' continuous at 6k+12 — the longest easy row in the block. Just sit.
     title: "Fair Wind",
     type: "O2",
-    difficulty: "easy",
     pain: 2,
     steps: [
       {
@@ -784,12 +752,11 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
 
-  // ----------------------------------------------------- medium / pain 2
+  // ----------------------------------------------------- pain 2 (b)
   {
     // O2: 4×(2:30 firm at 6k+6 + 2:30 float at 6k+12) unbroken — pace waves, no rest.
     title: "Light Air",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 4 },
@@ -811,7 +778,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 4×3' build at 6k+8, spm 20→22→24→26, unbroken.
     title: "Light Breeze",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -844,7 +810,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 500-1000-1500-1000-500 m pyramid at 6k+8, 30 s rests — distance up and down.
     title: "Gentle Breeze",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -887,7 +852,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 8×1:30 at 6k+4 with 1' rest — brief tempo touches, never sustained.
     title: "Moderate Breeze",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 8 },
@@ -904,7 +868,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2100 m at 6k+8, 2' off, 2100 m at 6k+6 — a negative-split pair.
     title: "Sun Dog",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -926,7 +889,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 12' at 6k+8, 2' off, 6' at 6k+6 — a firm body and a firmer tail.
     title: "Pogonip",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -948,7 +910,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 3×10' ladder at 6k+10, spm 22→24→26, unbroken.
     title: "Diamond Dust",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -975,7 +936,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2250/1700/1100/550 m cutdown, 6k+10 → +4, rests 2:30/2'/1:15 — a fast finish.
     title: "Silver Thaw",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1012,7 +972,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // the lift comes late in each third.
     title: "Green Flash",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 3 },
@@ -1034,7 +993,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 3:30-5'-6'-5'-3:30 pyramid at 6k+8 with 1:45 rests — firmer than it reads.
     title: "Afterglow",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1077,7 +1035,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 3×2000 m at 6k+8 with 2' rest — firm distance reps, short breaks.
     title: "Airglow",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 3 },
@@ -1094,7 +1051,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 18' at 6k+10, 3' off, 9' at 6k+6 — long body, tempo close.
     title: "Sun Pillar",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1116,7 +1072,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 6×(2' at spm 22 + 2' at spm 24) at 6k+9 with 1' rest per set.
     title: "Light Pillar",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 6 },
@@ -1139,7 +1094,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 10:30/8:30/6:30/4:30 at 6k+10, spm 20→22→24→26 as pieces shrink.
     title: "Indian Summer",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1172,7 +1126,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 5850 m at 6k+12, 3:45 off, 3500 m at 6k+8 — a long haul then a firm half.
     title: "Hazy Sunshine",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1194,7 +1147,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 6×4' at 6k+9 with 1' rest — a tight work:rest ratio, all business.
     title: "Etesian",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 6 },
@@ -1212,7 +1164,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // the middle is both longest and liveliest.
     title: "Meltemi",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1251,7 +1202,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 4×1500 m at 6k+6 with 1' rest — quick distance reps, minimal recovery.
     title: "Embat",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 4 },
@@ -1268,7 +1218,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 5×(1000 m firm at 6k+8 + 500 m float at 6k+14) unbroken — distance waves.
     title: "Puelche",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 5 },
@@ -1290,7 +1239,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 10' at 6k+8 first, 3' off, then 22' settled at 6k+12 — tempo before volume.
     title: "Favonius",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1312,7 +1260,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 5×8' at 6k+10 with 2' rest — a solid aerobic block in five pieces.
     title: "Cirrocumulus",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 5 },
@@ -1329,7 +1276,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 4×2000 m at 6k+10, spm 22 then 24 per 1000 m, 3' rest.
     title: "Altocumulus",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 4 },
@@ -1352,7 +1298,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2×20' at 6k+12 with 2:30 rest — forty minutes of work, one break.
     title: "Snow Grains",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 2 },
@@ -1369,7 +1314,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 5×7' at 6k+9 with 2' rest — thirty-five minutes on, cut five ways.
     title: "Cirrus",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 5 },
@@ -1386,7 +1330,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 4×3000 m at 6k+12 with 2' rest — twelve kilometres of steady reps.
     title: "Cirrostratus",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 4 },
@@ -1403,7 +1346,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 15'/12'/9'/6' descending, 6k+12 → +6, rests shrinking 2:30/1:30/1:00.
     title: "Stratus",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1439,7 +1381,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 60' continuous at 6k+11 — long, even, and a shade firmer than it looks.
     title: "Altostratus",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1454,7 +1395,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 39' at 6k+12, 4:30 off, 16:30 at 6k+9 — one big body, one firm coda.
     title: "Nimbostratus",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1476,7 +1416,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 3×(8' at spm 22 + 8' at spm 24) at 6k+11 with 2' rest per set.
     title: "Stratocumulus",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       { k: "reps", count: 3 },
@@ -1499,7 +1438,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 15,000 m continuous at 6k+12 — a serious distance sit, nothing clever.
     title: "Morning Mist",
     type: "O2",
-    difficulty: "medium",
     pain: 2,
     steps: [
       {
@@ -1511,12 +1449,11 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
 
-  // ----------------------------------------------------- medium / pain 3
+  // ----------------------------------------------------- pain 3
   {
     // O2: 9:30/7:30/5'/2:30 cutdown, 6k+12 → +4, rests 2:15/2:15/1' — every rung sharper.
     title: "Halo Ring",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -1561,7 +1498,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // grid pieces sum.)
     title: "Crepuscular Rays",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 12 },
@@ -1578,7 +1514,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 12:30/8:30/4' cutdown, 6k+12 → +6, rests 3'/2' — halving pieces, rising cost.
     title: "Zodiacal Light",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -1607,7 +1542,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 10'/10'/8' stepping 6k+12 → +9 → +6 with 1' breathers — barely broken.
     title: "Rainbow",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -1636,7 +1570,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 5×1000 m at 6k+6 with 2' rest — quick kilometres, honest recovery.
     title: "Double Rainbow",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 5 },
@@ -1653,7 +1586,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 5×6' full ladder at 6k+10, spm 18→20→22→24→26, unbroken.
     title: "Mirage",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -1692,7 +1624,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2×(2000 m at 6k+10 + 1000 m at 6k+6), 2' rests — distance couplets.
     title: "Heat Haze",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 2 },
@@ -1716,7 +1647,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 15' at 6k+11, 5' light paddle, 15' at 6k+9 — the float is effort, not a split.
     title: "Fata Morgana",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -1743,7 +1673,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 5×6' at 6k+8 with shrinking rests 4'/3'/2'/1' — recovery quietly disappears.
     title: "Shimmer",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -1786,7 +1715,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2×(2'-3'-4'-3'-2' pyramid) at 6k+8, 2' rests throughout — the second climb costs.
     title: "Golden Hour",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 2 },
@@ -1831,7 +1759,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 1000/2000/3000/2000/1000 m pyramid at 6k+10 with 1' rests — nine km, peaked.
     title: "Imbat",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -1874,7 +1801,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 40' as 10×(2' at spm 22 + 2' at spm 24), 6k+10, unbroken.
     title: "Terral",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 10 },
@@ -1896,7 +1822,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 15'/15'/9' stepping 6k+12 → +10 → +7 with 3' rests — a tempo close at the end.
     title: "Virazon",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -1925,7 +1850,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 4×2500 m at 6k+10 with 2' rest — ten kilometres in awkward-length pieces.
     title: "Cape Doctor",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 4 },
@@ -1942,7 +1866,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 3×15' at 6k+12, spm 20→22→24, unbroken — a long slow build.
     title: "Harmattan",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -1969,7 +1892,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 5'-10'-15'-10'-5' pyramid at 6k+10 with 2' rests — the quarter-hour is the summit.
     title: "Ponente",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -2012,7 +1934,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 6×2000 m at 6k+10, spm alternating 22/24 per 500 m, 2' rest.
     title: "Sea Smoke",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 6 },
@@ -2047,7 +1968,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 55' continuous at 6k+10 — the firm hour; the split never lets up.
     title: "Evening Mist",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -2062,7 +1982,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 4×12' at 6k+10 with 3' rest — nearly an hour of work, honest breaks.
     title: "Dawn Fog",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 4 },
@@ -2079,7 +1998,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 2×10,000 m at 6k+10 with 6' rest — the C2 monster; bring a plan and a bottle.
     title: "River Fog",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 2 },
@@ -2096,7 +2014,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: rate change — 60' as 10×(3' at spm 22 + 3' at spm 24), 6k+11, unbroken.
     title: "Steam Fog",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 10 },
@@ -2118,7 +2035,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 3×20' at 6k+12 with 3' rest — the classic hour of steady state, in thirds.
     title: "Frost Flower",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 3 },
@@ -2135,7 +2051,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: half marathon — 21,097 m continuous at 6k+12. Patience, not power.
     title: "Graupel",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -2150,7 +2065,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 65' continuous at 6k+12 — past the hour without a break.
     title: "Sleet",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -2165,7 +2079,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 10'-15'-20'-15'-10' pyramid, unbroken, 6k+12 → +10 → +12 — seventy minutes, one arc.
     title: "Virga",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       {
@@ -2204,7 +2117,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 3×5000 m at 6k+12 with 4' rest — fifteen kilometres in long thirds.
     title: "Soft Rain",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 3 },
@@ -2221,7 +2133,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 6×(9' firm at 6k+9 + 3' float at 6k+15) unbroken — 72' of pace waves.
     title: "Summer Shower",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 6 },
@@ -2243,7 +2154,6 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     // O2: 6×10' at 6k+10 with 2' rest — an hour of firm work in six sittings.
     title: "April Shower",
     type: "O2",
-    difficulty: "medium",
     pain: 3,
     steps: [
       { k: "reps", count: 6 },

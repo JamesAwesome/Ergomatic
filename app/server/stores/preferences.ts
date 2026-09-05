@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { preferences } from "../db/schema.js";
-import type { Difficulty } from "../../domain/types.js";
+import type { Difficulty } from "../compat/difficulty.js";
 
 export interface PreferencesRow {
   difficulties: Difficulty[];

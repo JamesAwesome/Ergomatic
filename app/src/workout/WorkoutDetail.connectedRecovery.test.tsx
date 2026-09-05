@@ -68,7 +68,6 @@ const WORKOUT: LibraryWorkout = {
   id: "w-p2a-recovery",
   title: "P2a Recovery Row",
   type: "O2",
-  difficulty: "easy",
   pain: 2,
   steps: [
     {
@@ -123,7 +122,7 @@ vi.mock("../api/useBaselines", () => ({
 vi.mock("../api/usePreferences", () => ({
   usePreferences: () => ({
     state: "ready",
-    preferences: { difficulties: [], timeCapMinutes: 60, countdownSeconds: 10 },
+    preferences: { timeCapMinutes: 60, countdownSeconds: 10 },
   }),
 }));
 // LogSession's own dependency, mocked to the same "no active plan" shape

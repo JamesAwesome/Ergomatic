@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { Difficulty, Step, WorkoutType } from "../../domain/types";
+import type { Step, WorkoutType } from "../../domain/types";
 
 export interface LibraryWorkout {
   id: string;
   title: string;
   type: WorkoutType;
-  difficulty: Difficulty;
   pain: number;
   steps: Step[];
   isGlobal: boolean;

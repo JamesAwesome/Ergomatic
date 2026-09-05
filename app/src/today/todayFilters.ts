@@ -1,8 +1,4 @@
-import {
-  isWorkoutType,
-  type Difficulty,
-  type WorkoutType,
-} from "../../domain/types.js";
+import { isWorkoutType, type WorkoutType } from "../../domain/types.js";
 import {
   UNBOUNDED_RANGE,
   clampRange,
@@ -12,7 +8,7 @@ import {
 
 /** localStorage key for Today's per-type filter memory (Phase SF PR1, spec
  *  §2.3 / I-6). UNDATED, unlike `todayPick`/`todayOverrides`: this is the
- *  "set and forget" store — a rower's DIFFICULTY/TIME/PAIN/LAST DONE/
+ *  "set and forget" store — a rower's TIME/PAIN/LAST DONE/
  *  SOURCE choices survive reloads, days and plan changes, remembered
  *  separately for each type the chip row can light (and for ANY TYPE). */
 export const TODAY_FILTERS_KEY = "ergomatic.todayFilters";
@@ -41,7 +37,6 @@ export function filterKeyFor(
  *  empty `durations`/`painLevels` array means that group is off; `null`
  *  means off for the two pairs. Every field always holds a real value. */
 export interface FilterSet {
-  difficulties: Difficulty[];
   // Phase SF PR2 (spec §3): a minutes range; `[0, 120]` means TIME is off.
   durationRange: DurationRange;
   painLevels: number[];
@@ -69,14 +64,7 @@ export const EMPTY_TODAY_FILTERS: TodayFilters = {
   byKey: {},
 };
 
-const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
 const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
-
-function isDifficulty(v: unknown): v is Difficulty {
-  return (
-    typeof v === "string" && (DIFFICULTIES as readonly string[]).includes(v)
-  );
-}
 
 function isPainLevel(v: unknown): v is number {
   return typeof v === "number" && PAIN_LEVELS.includes(v);
@@ -116,9 +104,9 @@ function parseFilterSet(value: unknown, version: 1 | 2): FilterSet | null {
     return null;
   }
   const o = value as Record<string, unknown>;
-  if (!Array.isArray(o.difficulties) || !o.difficulties.every(isDifficulty)) {
-    return null;
-  }
+  // Phase DE PR 1: a stored `difficulties` key (pre-PR-1 record) is simply
+  // ignored — the group no longer exists, and this branch used to REJECT a
+  // record missing it.
   // TIME: v2 carries `durationRange` (required, clamped); v1 carried a
   // bucket union, mapped to the range it spans — an empty v1 union meant
   // "TIME off", which is the unbounded range.
@@ -136,7 +124,6 @@ function parseFilterSet(value: unknown, version: 1 | 2): FilterSet | null {
   if (o.lastDone !== null && !isLastDone(o.lastDone)) return null;
   if (o.source !== null && !isSource(o.source)) return null;
   return {
-    difficulties: [...new Set(o.difficulties)],
     durationRange,
     painLevels: [...new Set(o.painLevels)].sort((a, b) => a - b),
     lastDone: o.lastDone,

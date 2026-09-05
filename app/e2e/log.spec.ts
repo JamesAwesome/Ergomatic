@@ -1876,7 +1876,6 @@ test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)
         body: JSON.stringify({
           title: "2K Test",
           type: "AN",
-          difficulty: "hard",
           pain: 5,
           steps: [
             {

@@ -29,17 +29,13 @@ function renderSheet(
 }
 
 describe("FilterSheet", () => {
-  it("renders as a labelled dialog holding all five groups", () => {
+  it("renders as a labelled dialog holding all four groups", () => {
     renderSheet();
     const dialog = screen.getByRole("dialog", { name: "Filter" });
-    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "PAIN", "LAST DONE", "SOURCE"]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
-    for (const difficulty of ["EASY", "MEDIUM", "HARD"]) {
-      expect(
-        within(dialog).getByRole("button", { name: difficulty }),
-      ).toBeInTheDocument();
-    }
+    expect(within(dialog).queryByText("DIFFICULTY")).not.toBeInTheDocument();
     // Phase SF PR2: TIME is the two-thumb range, not four cells.
     expect(
       within(dialog).getByRole("slider", { name: "Shortest" }),
@@ -87,7 +83,6 @@ describe("FilterSheet", () => {
   it("aria-pressed on each cell reflects the draft prop, not internal state", () => {
     const draft: Filters = {
       ...EMPTY_FILTERS,
-      difficulties: ["medium"],
       durationRange: { min: 45, max: 60 },
       painLevels: [3, 4],
       lastDone: "under21",
@@ -95,14 +90,6 @@ describe("FilterSheet", () => {
     };
     renderSheet({ draft });
 
-    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
     expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
       "aria-valuenow",
       "45",
@@ -134,14 +121,6 @@ describe("FilterSheet", () => {
 
   // Consumes filters.ts's own `toggleDifficulty` (M-10: the sheet must use
   // the named helper, not an inlined equivalent spread).
-  it("clicking a DIFFICULTY cell reports the toggled draft", async () => {
-    const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
-    expect(onChangeDraft).toHaveBeenCalledWith({
-      ...EMPTY_FILTERS,
-      difficulties: ["hard"],
-    });
-  });
 
   it("stepping a TIME thumb reports the new range in the draft", () => {
     const { onChangeDraft } = renderSheet();

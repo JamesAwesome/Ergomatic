@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { Difficulty } from "../../domain/types.js";
 
 // GET /api/prefs already returns every PreferencesRow field (server/stores/
 // preferences.ts); this type only exposed warmupMinutes until Today (Phase
-// 6A) needed difficulties/timeCapMinutes too, and now Countdown (Phase 6B
+// 6A) needed timeCapMinutes too, and now Countdown (Phase 6B
 // Task 2) needs countdownSeconds for the pre-workout count. Purely
 // additive each time — no response shape changed, just what the client
 // bothers to type.
@@ -16,8 +15,10 @@ import type { Difficulty } from "../../domain/types.js";
 // 6I's START HERE block) went the same way on 2026-08-23 — James removed
 // the teaching surfaces, and with them this hook's only write (`save`);
 // the server column stays, dormant (server/db/schema.ts's own comment).
+// Phase DE PR 1: the server still serves `difficulties` (compat for
+// pre-PR-1 builds, server/compat/difficulty.ts); this build does not type
+// or read it.
 export interface PreferencesData {
-  difficulties: Difficulty[];
   timeCapMinutes: number;
   countdownSeconds: number;
 }

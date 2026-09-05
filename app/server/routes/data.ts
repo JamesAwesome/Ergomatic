@@ -6,10 +6,10 @@ import {
   isFreeRow,
   isWorkoutType,
   LOG_SOURCES,
-  type Difficulty,
   type LogSource,
 } from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
+import { DIFFICULTIES, type Difficulty } from "../compat/difficulty.js";
 import { logSourceContradiction } from "../logSource.js";
 import type { ArticleReadsStore } from "../stores/articleReads.js";
 import {
@@ -52,7 +52,6 @@ export interface DataRouterDeps {
   requireUser: RequestHandler;
 }
 
-const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 const ACTUAL_SOURCES: ActualSource[] = ["assumed", "stopwatch", "pm5"];
 const HELD_RESULTS: HeldResult[] = ["held", "under", "over"];
 const THUMBS_VALUES: Thumbs[] = ["up", "down"];

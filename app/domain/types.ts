@@ -41,7 +41,6 @@ export function isFreeRow(
 ): boolean {
   return workoutId === null && workoutType === null;
 }
-export type Difficulty = "easy" | "medium" | "hard";
 export type PaceBase = "2k" | "6k";
 export type Effort = "max" | "min";
 export interface SplitRef {
@@ -82,7 +81,6 @@ export interface Baselines {
 export interface WorkoutInput {
   title: string;
   type: WorkoutType;
-  difficulty: Difficulty;
   pain: number;
   steps: Step[];
 }

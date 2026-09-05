@@ -445,9 +445,9 @@ fixed.
 
 ## Phase DE — Difficulty out, effort in
 
-**Status: OPEN 2026-09-05 — spec rev 2 (anchor pass folded in, PM open
-gate PASS WITH CONDITIONS folded in); James confirmed the two rev-2 asks
-2026-09-05; no PR has started.** **TRIAD** (stored shape).
+**Status: OPEN 2026-09-05 — spec merged (#308); PR 1 = #309 (Gate 0
+approved 2026-09-05, review half run, awaiting James's merge); PR 2 not
+started (waits for AUD-016's merge).** **TRIAD** (stored shape).
 **M.** Spec:
 `docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
 
@@ -466,7 +466,7 @@ Three PRs, in order; **PR 1 and PR 2 ride ONE tag — no release between
 them** (a tag after PR 1 alone ships a half-move and a second stale-build
 generation):
 
-- [ ] **PR 1 — remove difficulty.** No migration: the column, enum and
+- [x] **PR 1 — remove difficulty (#309).** No migration: the column, enum and
       `preferences.difficulties` stay as read-only compat until PR 3, and
       the server writes a difficulty DERIVED from effort on every insert
       (1–2 easy, 3 medium, 4–5 hard) so pre-PR-1 builds — which call
@@ -476,7 +476,10 @@ generation):
       `title | TYPE | effort`; the 4- and 5-field legacy headers still parse
       with difficulty ignored. Today's suggestion filters on type, time and
       effort only. `library.test.ts`'s within-type ordering invariant is
-      re-expressed over effort, not deleted. **Gate 0 captures** (row, Today
+      re-expressed over effort, not deleted — which required a stable
+      re-sort of the AT and TR seed blocks (38 rows move; the seeder's
+      converge then rewrites their stored difficulty at merge, 27 of them
+      medium→hard as pre-PR-1 builds see it). **Gate 0 captures** (row, Today
       card, both sheets, classification card) before implementation.
       Reconciles the DEVIATIONS "Difficulty" row, the "picking a workout"
       article's false "easy and a 4" example, `library-moves.ts`, both

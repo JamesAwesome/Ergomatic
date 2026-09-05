@@ -599,20 +599,21 @@ test.describe("Today enhancements: SOURCE=CUSTOM and the keep-or-move guarantee"
       shuffledPickTitle,
     );
 
-    // KEEP: a genuinely NEW filter (deselect HARD — both fixtures are
-    // `medium`, so this can't touch the pool) is applied — the shuffled
-    // pick still matches it, so it must survive Apply. Discriminating: a
-    // naive recompute that dropped/ignored the stored pickOverride would
-    // incorrectly revert to naturalWinnerTitle here, since that's what the
-    // recency sort alone would produce.
+    // KEEP: a genuinely NEW filter (TIME's Longest thumb to End — the
+    // unbounded range, which can't touch the pool) is applied — the
+    // shuffled pick still matches it, so it must survive Apply.
+    // Discriminating: a naive recompute that dropped/ignored the stored
+    // pickOverride would incorrectly revert to naturalWinnerTitle here,
+    // since that's what the recency sort alone would produce.
     await openFilterSheet(page);
-    await dialog.getByRole("button", { name: "HARD", exact: true }).click();
+    await dialog.getByRole("slider", { name: "Longest" }).focus();
+    await page.keyboard.press("End");
     await applyFilterSheet(page);
     await expect(page.locator(".today-card-title")).toHaveText(
       shuffledPickTitle,
     );
     await expect(
-      page.locator(".filter-token", { hasText: "EASY–MEDIUM" }),
+      page.locator(".filter-token", { hasText: "ANY LENGTH" }),
     ).toBeVisible();
 
     // MOVE: LAST DONE=21D+ now excludes the shuffled pick specifically (it
@@ -952,9 +953,9 @@ test.describe("Today enhancements: freestyle spot-check", () => {
     await expect(page.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
     await openFilterSheet(page);
     const dialog = page.getByRole("dialog");
-    await expect(
-      dialog.getByRole("group", { name: "DIFFICULTY" }),
-    ).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "DIFFICULTY" })).toHaveCount(
+      0,
+    );
     await expect(dialog.getByRole("group", { name: "TIME" })).toBeVisible();
     await expect(dialog.getByRole("group", { name: "PAIN" })).toBeVisible();
     await expect(
@@ -1095,8 +1096,9 @@ test.describe("Phase SF PR1: SHUFFLE is random, without repeats, and the pick su
     await openFilterSheet(page);
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "HARD", exact: true })
-      .click();
+      .getByRole("slider", { name: "Longest" })
+      .focus();
+    await page.keyboard.press("End");
     await applyFilterSheet(page);
     await expect(page.locator(".filter-token")).toBeVisible();
     await page.waitForLoadState("networkidle");
@@ -1172,7 +1174,7 @@ test.describe("Phase SF PR1: a logged session re-rolls the freestyle day", () =>
 // TYPE, undated — a deviation applied under one chip is absent under
 // another, back again under the first, and survives a reload.
 test.describe("Phase SF PR1: filters are remembered per type", () => {
-  test("a DIFFICULTY deviation under O2 is gone under AT, back under O2, and still there after a reload", async ({
+  test("a PAIN deviation under O2 is gone under AT, back under O2, and still there after a reload", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -1197,10 +1199,11 @@ test.describe("Phase SF PR1: filters are remembered per type", () => {
     await openFilterSheet(page);
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "HARD", exact: true })
+      .getByRole("group", { name: "PAIN" })
+      .getByRole("button", { name: "1", exact: true })
       .click();
     await applyFilterSheet(page);
-    const token = page.locator(".filter-token", { hasText: "EASY–MEDIUM" });
+    const token = page.locator(".filter-token", { hasText: "PAIN 1" });
     await expect(token).toBeVisible();
 
     await page.getByRole("button", { name: "AT", exact: true }).click();
@@ -1219,14 +1222,12 @@ test.describe("Phase SF PR1: filters are remembered per type", () => {
 // Task 3 (2026-08-04 round): CLEAR ALL's own deliberate divergence from the
 // Library's CLEAR ALL (which empties every filter to nothing) — Today's
 // CLEAR ALL resets to the day's pref-derived DEFAULTS instead
-// (`filterDefaults` in Today.tsx: every difficulty, the account's own cap,
-// no pain filter). The reason it CAN'T just empty everything the way the
-// Library does: `suggest()`/`suggestFreestyle()` treat an EMPTY
-// `difficulties` array as "match nothing" (domain/suggest.ts:
-// `prefs.difficulties.includes(e.difficulty)`, with no `.length` escape
-// hatch the way `painLevels` gets one) — emptying DIFFICULTY the way the
-// Library empties TYPE would zero the pool, not restore it. This test
-// proves the actual behaviour: two groups pushed off-default, then CLEAR
+// (`filterDefaults` in Today.tsx: the account's own cap, no pain filter).
+// Before Phase DE PR 1 the reason it could not just empty everything was
+// the DIFFICULTY group, whose empty set meant "match nothing"; that group
+// is gone, and the divergence stays because TIME's default is the cap, not
+// "off". This test proves the actual behaviour: two groups pushed
+// off-default, then CLEAR
 // ALL removes the tokens AND the card returns to the day's real, unfiltered
 // pick — never an empty-pool dead end.
 test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () => {
@@ -1273,14 +1274,14 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
       0,
     );
 
-    // Push two groups off-default: DIFFICULTY (deselect HARD — harmless to
-    // the pool, since these fixtures are both `medium`, but a real,
-    // provable deviation from the all-three default) and PAIN (1+2, which
-    // excludes the high-pain fixture and narrows the pool to the low-pain
-    // one alone).
+    // Push two groups off-default: TIME (Longest to End — the unbounded
+    // range, harmless to the pool but a real, provable deviation from the
+    // cap default) and PAIN (1+2, which excludes the high-pain fixture and
+    // narrows the pool to the low-pain one alone).
     await openFilterSheet(page);
     const dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "HARD", exact: true }).click();
+    await dialog.getByRole("slider", { name: "Longest" }).focus();
+    await page.keyboard.press("End");
     const painGroup = dialog.getByRole("group", { name: "PAIN" });
     await painGroup.getByRole("button", { name: "1", exact: true }).click();
     await painGroup.getByRole("button", { name: "2", exact: true }).click();
@@ -1302,14 +1303,13 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
     await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
 
     // Re-opening confirms the draft itself reset too, not just the applied
-    // record — every cell back to its default pressed state.
+    // record — every cell back to its default state (the Longest thumb
+    // back on the cap, every PAIN cell off).
     await openFilterSheet(page);
     const dialogAfterClear = page.getByRole("dialog");
-    for (const label of ["EASY", "MEDIUM", "HARD"]) {
-      await expect(
-        dialogAfterClear.getByRole("button", { name: label, exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
-    }
+    await expect(
+      dialogAfterClear.getByRole("slider", { name: "Longest" }),
+    ).toHaveAttribute("aria-valuenow", "60");
     const painGroupAfterClear = dialogAfterClear.getByRole("group", {
       name: "PAIN",
     });

@@ -898,7 +898,8 @@ button:disabled {
    `cells.length`, for CellGrid.test.tsx's own assertion) supplying
    `grid-template-columns: repeat(N, 1fr)` — but only `-2`/`-4`/`-5`
    existed (the Library's own five groups' cell counts), so Today's
-   3-cell DIFFICULTY group (Task 2, 2026-08-04 round) matched no rule at
+   3-cell DIFFICULTY group (Task 2, 2026-08-04 round; the group itself left
+   in Phase DE PR 1) matched no rule at
    all and fell back to an implicit single column: three stacked
    full-width bars instead of one row of three, caught live (jsdom has no
    opinion on layout, only a real render does). The half-width LAST DONE/
@@ -1052,10 +1053,11 @@ button:disabled {
 }
 
 /* Classification card (Task 4, docs/design/builder-redesign/README.md §3):
-   one card holding TYPE, DIFFICULTY and EXPECTED PAIN. Deliberately its own
+   one card holding TYPE and EXPECTED PAIN (DIFFICULTY left in Phase DE PR 1).
+   Deliberately its own
    `.classification-chip*` class family rather than reusing `.chip` above —
    at the time this was written, `.chip[aria-pressed="true"]` filled
-   --accent unconditionally, which is exactly the treatment DIFFICULTY must
+   --accent unconditionally, which is exactly the treatment PAIN must
    NOT get (the handoff moves it to ink so accent stays reserved for the
    in-row unit/pace toggles and Save). A shared base class would have made
    "don't inherit the accent fill" a thing every future reader has to
@@ -1070,7 +1072,7 @@ button:disabled {
    style, so the same "unreachable either way" conclusion still holds, now
    for a simpler reason. The separation this comment explains stays the
    right call regardless: nothing here depends on the deleted rule's
-   specific behaviour, only on DIFFICULTY/PAIN never inheriting `.chip`'s
+   specific behaviour, only on PAIN never inheriting `.chip`'s
    base at all.) */
 .classification-card {
   display: flex;
@@ -1172,22 +1174,6 @@ button:disabled {
   letter-spacing: 0.06em;
 }
 
-.classification-chip-difficulty {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-}
-
-/* DIFFICULTY's own selected-state fill — ink, never accent. Lives entirely
-   in CSS (no inline style): unlike TYPE (which still needs a per-instance
-   colour set inline in ClassificationCard.tsx, one of four possible type
-   colours), DIFFICULTY only ever fills one colour. */
-.classification-chip-difficulty[aria-pressed="true"] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--on-color);
-}
-
 .classification-chip-pain {
   font-family: var(--font-mono);
   font-size: 13px;
@@ -1196,9 +1182,11 @@ button:disabled {
 
 /* Task 1 (ui-fix round): PAIN's selected fill moves off its own per-level
    ramp colour (DESIGN.md: "Builder's gold pain selection goes") onto the
-   SAME plain ink fill as DIFFICULTY — ClassificationCard.tsx no longer sets
-   any inline style for a selected PAIN chip at all, so this is now the
-   pain group's own version of the rule immediately above. This comment used
+   same plain ink fill the (since-removed) DIFFICULTY chips used —
+   ClassificationCard.tsx no longer sets any inline style for a selected
+   PAIN chip at all. Lives entirely in CSS (no inline style): unlike TYPE
+   (which still needs a per-instance colour set inline, one of four type
+   colours), PAIN only ever fills one colour. This comment used
    to add that --pain-ramp-1..5 stayed defined because LogSession.tsx was
    still a consumer; it was not, the ramp had no consumer at all, and the
    tokens were deleted 2026-08-28. */

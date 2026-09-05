@@ -85,7 +85,6 @@ const WORKOUT: LibraryWorkout = {
   id: "w-t5-livedrop-composition",
   title: "T5 Live Drop Composition",
   type: "O2",
-  difficulty: "easy",
   pain: 2,
   steps: [
     {
@@ -195,7 +194,7 @@ vi.mock("../api/useBaselines", () => ({
 vi.mock("../api/usePreferences", () => ({
   usePreferences: () => ({
     state: "ready",
-    preferences: { difficulties: [], timeCapMinutes: 60, countdownSeconds: 10 },
+    preferences: { timeCapMinutes: 60, countdownSeconds: 10 },
   }),
 }));
 vi.mock("../api/usePlan", () => ({
