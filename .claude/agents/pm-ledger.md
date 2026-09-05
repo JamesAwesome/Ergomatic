@@ -4595,3 +4595,12 @@ comes before one ordinary unlock, allowing the five-minute total clock to
 include all physical setup without timing the consent reply. The observed
 lockState fields did not establish current launchability. Locked launch
 ends the attempt; it grants neither another install nor an NFC scan.
+
+## Grouped recovery preparation, September 4–5, 2026
+
+`NF-RECOVERY-SETUP-v2` received PM PASS after the actual Simulator command,
+capture and four-pair sequence were rehearsed. Phone idle/capture proof
+still gates the erg invitation. Each recovery pair preserves B before an
+idle document reset and refreshes the PM5's Connect Device state. Two
+complete exports count as B's completion only when both belong to B:
+a delayed A export plus B's first export is insufficient.

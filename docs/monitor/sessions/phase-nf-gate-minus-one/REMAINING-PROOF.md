@@ -42,12 +42,18 @@ the trace can now distinguish B's requested start, actual RF activation and
 native ending. Another standalone normal, sheet-cancel or no-tag timeout
 would not fill this gap.
 
-The current signed build has the trace but does not contain the temporary
-native hold/release overlay required by the approved proof plan. The existing
-probe's held-stage handler still depends on export/reload/Start B, and its
-live-native reload route names the attached Inspector. Source existence does
-not establish unattended execution through a live modal. These are preparation
-blockers, not instructions to James.
+The signed recovery build now includes the trace and approved temporary native
+hold/release overlay; its 231-file manifest and signature were reverified on
+2026-09-04. It was installed with explicit permission in setup v1, but the
+23:54:46Z read-only listing again reports a different installation (0.37.0/848).
+The reason is unknown. Another install requires explicit permission.
+See `RECOVERY-PREPARATION.md` and `ZERO-SCAN-SETUP-V2.md`.
+
+The existing probe's held-stage handler uses export/reload/Start B. Simulator
+has proved the corrected Inspector's actual idle component reload; unattended
+execution through a physical NFC sheet is still unobserved. A bounded
+feasibility question belongs in the reviewed recovery run, never as an assumed
+working prerequisite. `RECOVERY-WALK-V1.md` groups the four related cases.
 
 Recover the retained overlay and the existing Inspector/control mechanism;
 prove the exact hold, drain, export, document replacement and Start B actions

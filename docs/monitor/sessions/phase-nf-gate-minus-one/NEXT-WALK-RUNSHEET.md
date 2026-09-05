@@ -25,6 +25,16 @@ permission is consumed; there is no approved retry or new erg invitation.
 and fixed an Inspector target-label defect. The actual diagnostic component's
 idle reload passed in Simulator, with explicit detach/reattach and the same
 native process. Phone DOM/navigation and recovery under an NFC sheet remain
-unproved. The next prerequisite is a PM-reviewed zero-scan phone preflight
-using the existing installation if fresh identity still matches. No further
-installation or scan is authorized.
+unproved. At 23:54:46Z on September 4, a fresh read-only listing again reports
+0.37.0/848 and an installation URL different from the authorized recovery
+install, on the same device. No installation was performed and the cause is
+unknown. The next prerequisite is the explicit-install/zero-scan
+[setup v2](ZERO-SCAN-SETUP-V2.md), followed by the grouped
+[recovery protocol](RECOVERY-WALK-V1.md). Their current readiness and command
+pins are recorded in those files. No further installation or scan is authorized.
+
+**Desk preparation is complete. PM PASS for setup v2.** Use the prepared
+[command card](RECOVERY-COMMAND-CARD.md); the only next user action is the exact
+install-permission/unlock block in setup v2. Do not start a timer before that
+reply. No further builds, helper changes or unchanged suites are required.
+The actual phone setup result is the remaining gate before an erg invitation.
