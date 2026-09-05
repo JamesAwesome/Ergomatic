@@ -1605,10 +1605,12 @@ the gate.
 **Precondition that makes a NO possible** — without it, every observation below
 is decoration:
 
-- **W0.** In **mobile Safari** (not the app), open `log.concept2.com` and
-  confirm the rower is signed in. This is the discriminator: if Safari has no
-  session, "opened signed in" cannot be distinguished from "opened in a sheet".
-  Record that this was checked before the build was launched.
+- **W0.** In **the phone's default browser** (Chrome on the walked phone;
+  Safari on a phone that never changed it) — not the app — open
+  `log.concept2.com` and confirm the rower is signed in. This is the
+  discriminator: if the default browser has no session, "opened signed in"
+  cannot be distinguished from "opened in a sheet". Record that this was
+  checked before the build was launched, and record which browser it was.
 
 Then, on a build with the `isNative()` branch removed
 (`pnpm ios:build`; note that this command stamps tracked files — say who
@@ -1618,15 +1620,17 @@ restores them):
 - **W2.** Open the log detail of a row already sent to Concept2. The CONCEPT2
   block reads `SENT` with `RESULT <id>`.
 - **W3.** Tap **View on Concept2 →**. **Observe which app is now in front.**
-  Safari shows a URL bar, a tab bar, and a `← Ergomatic` chip at the top left;
-  the sheet shows a `Done` button at the top left and no tab bar.
+  A full browser shows a URL bar and a tab bar (Safari, for example, also
+  shows a `← Ergomatic` chip at the top left when it returned from another
+  app); the sheet shows a `Done` button at the top left and no tab bar.
   **NO is possible FOUR ways**, and the fourth is the one our own tree
   predicts (§3.4's counter-claim): the sheet appears anyway; nothing happens at
   all (WebKit dropped the `noopener` `window.open`); a different app opens; or
   **the Ergomatic WebView ITSELF navigates to concept2.com, with no way back**
   — the outcome `adapters/externalBrowser.ts:75-77` asserts for a plain anchor.
   Recording which of the four occurred is the observation; "it didn't open
-  Safari" is not. **PASS = Safari.**
+  the sheet" is not. **PASS = the phone's default browser** (Chrome on the
+  walked phone; Safari on a phone that never changed it).
 - **W4.** Read the page that loaded. **PASS = the actual result** — the row's
   own numbers. **FAIL = "The user has made this result private"**, which is the
   walk's original symptom and means the jar is still wrong.
@@ -1645,8 +1649,8 @@ restores them):
   function with W3 (`Concept2SendBlock.tsx:189` and `:245` both call
   `openReadOnlyUrl`) and that identity is an INFERENCE from a two-line read,
   recorded as one. If it *can* be reached, tap it and record whether the id-less
-  `/profile` lands on the rower's own account now that Safari carries the
-  session — which is the open question §4.2 leaves behind.
+  `/profile` lands on the rower's own account now that the default browser
+  carries the session — which is the open question §4.2 leaves behind.
 
 **If W3 fails:** the fallback is `@capacitor/app-launcher` (§3.4 — verify the
 version at that moment), the `isNative()` branch is restored in the adapter with
@@ -1665,7 +1669,8 @@ two walks:
    `openExternalUrl`'s dead native arm, remove the dependency from
    `package.json` and the SPM manifest, `pnpm install`, Capacitor sync.
    **Re-walk W1-W4** on the rebuilt app to prove the binary still launches,
-   still links, and still opens Safari with the plugin gone.
+   still links, and still opens the phone's default browser with the plugin
+   gone.
 
 The merge gate is the walk on the **final** build. A walk of commit 1 says
 nothing about commit 2's binary.
@@ -1812,16 +1817,25 @@ Each one falsifiable, each one checkable by someone who did not write it.
 
 - **B1.** The walk of §6.2 was run and its record committed, including **W0's
   precondition check**, a photograph or capture at **W3** showing which browser
-  is in front, and the page at **W4**. `PASS` requires Safari at W3 and the
-  actual result at W4.
-- **B2.** `grep -n 'isNative' app/src/adapters/externalBrowser.ts` returns
-  nothing — or, if the probe failed, returns exactly the fallback branch with a
-  comment naming the WebKit behaviour that forced it and citing the walk that
-  observed it.
-- **B3.** On a probe pass: `grep -rn '@capacitor/browser' app/src app/package.json
-  app/ios` returns nothing, `app/src/native/externalBrowser.ts` no longer
-  exists, and the **rebuilt** app was re-walked (W1-W4) and still links and
-  still opens Safari.
+  is in front, and the page at **W4**. `PASS` requires the phone's default
+  browser at W3 (Chrome on the walked phone; Safari on a phone that never
+  changed it) and the actual result at W4.
+- **B2.** `grep -n 'isNative' app/src/adapters/externalBrowser.ts` does not
+  return nothing — the file's own comment (`:27`) names why no gate in this
+  repo can observe the branch, and that comment is the one hit. What the
+  criterion actually checks is that there is no `isNative` **import** and no
+  conditional on it in the file — or, if the probe failed, exactly the
+  fallback branch with a comment naming the WebKit behaviour that forced it
+  and citing the walk that observed it.
+- **B3.** On a probe pass: `grep -rn '@capacitor/browser' app/src
+  app/package.json app/ios` does not return nothing — the adapter's own
+  history comment (`app/src/adapters/externalBrowser.ts:14`) names the
+  retired dependency, and that comment is the one hit. What the criterion
+  actually checks is that there is no code import, no `package.json` or
+  lockfile entry, no `Package.swift` line, and no `dist/` hit;
+  `app/src/native/externalBrowser.ts` no longer exists, and the **rebuilt**
+  app was re-walked (W1-W4) and still links and still opens the phone's
+  default browser.
 - **B4.** The amendment page's withdrawn sentence (§4.1) is struck **on the
   page**, and the three code comments in §4.2 are corrected in place. A grep for
   `SFSafariViewController` across `app/src` returns only lines that record a
@@ -1837,9 +1851,9 @@ Each one falsifiable, each one checkable by someone who did not write it.
   `pnpm screenshots` is **not** run for PR B — no screen's layout changes, and
   captures are not taken for wording-only or mechanism-only diffs.
 - **B7.** W3's record names **which of the four NO outcomes** occurred, or
-  states PASS with the evidence that distinguishes Safari from the sheet. A
-  walk that records "it worked" without naming what a NO would have looked like
-  has not run W3.
+  states PASS with the evidence that distinguishes the phone's default
+  browser from the sheet. A walk that records "it worked" without naming what
+  a NO would have looked like has not run W3.
 
 ### PR C — which number is authoritative
 

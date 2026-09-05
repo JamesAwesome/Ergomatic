@@ -950,7 +950,15 @@
           label, colour, size or position changes on any of the three frames
           (2c/2d's <em>View on Concept2 &rarr;</em>, 2i's <em>OPEN CONCEPT2
           PROFILE</em>). The return promise is WITHDRAWN and replaced in 2c's
-          own callout by what the app can actually guarantee.</td>
+          own callout by what the app can actually guarantee.
+          <strong>Walked directly at W3</strong> is the result link (2c/2d); 2i's
+          <em>OPEN CONCEPT2 PROFILE</em> was not reached on the walk (its
+          no-weight refusal cannot be provoked on an account whose weight
+          class Concept2 already knows), so its sharing this behaviour with
+          W3 is an INFERENCE from the two call sites calling the same
+          function, not a walked fact
+          (<code>docs/monitor/sessions/walk-2026-09-04-c2-linkout/README.md</code>,
+          W7).</td>
         <td><strong>James, 2026-09-04:</strong> <em>&quot;opening in safari is
           fine because it will be clear you're changing apps&quot;</em>, and
           <em>&quot;the no-weight should externally link to concept 2&quot;</em>.
@@ -2474,12 +2482,15 @@
       <p><strong>And the anchor claim this callout opened with is TESTIMONY, not
       a measurement &mdash; labelled rather than deleted.</strong> It used to
       assert flatly that on native a plain <code>&lt;a href&gt;</code> drives the
-      Capacitor WebView itself to concept2.com with no way back. Its only home in
-      the tree is a doc comment
-      (<code>adapters/externalBrowser.ts:75-77</code>) that carries no evidence,
-      and a grep of the repo finds none; the same behaviour is one of the four NO
-      outcomes PR B's walk is scoped to distinguish (&sect;7, W3). Treat it as an
-      INFERENCE the walk settles, not as a fact the drawing rests on.</p>
+      Capacitor WebView itself to concept2.com with no way back. That doc
+      comment is gone from the file it lived in; the closest surviving
+      testimony is <code>log/Concept2SendBlock.tsx</code>'s own comment on why
+      the link-out is &quot;a button, not an anchor&quot; &mdash; so as not to
+      drive the WebView itself there &mdash; which carries no evidence beyond
+      the walk it cites, and a grep of the repo finds none; the same behaviour
+      is one of the four NO outcomes PR B's walk is scoped to distinguish
+      (&sect;7, W3). Treat it as an INFERENCE the walk settles, not as a fact
+      the drawing rests on.</p>
     </div>
 
     <p class="lede">
@@ -3577,8 +3588,9 @@
       The two frames below are the difference, and they are the only place it is
       visible: not on our screen, but on what fills the phone afterwards. This is
       also the walk's own discriminator &mdash; a sheet shows
-      <strong>Done</strong> at the top left and no tab bar; Safari shows a URL
-      bar, a tab bar and a <strong>&larr; Ergomatic</strong> chip.
+      <strong>Done</strong> at the top left and no tab bar; the phone's default
+      browser shows a URL bar and a tab bar (Safari, for example, also shows a
+      <strong>&larr; Ergomatic</strong> chip when it returned from another app).
       <em>iOS chrome below is drawn schematically in neutral greys. It is another
       app's furniture, it uses none of our tokens, and it carries no contrast
       claim &mdash; only the Ergomatic surfaces on this page do.</em>
@@ -3634,21 +3646,23 @@
       </div>
     </div>
     <div class="callout">
-      <p><strong>PASS at the walk is Safari, and a NO is possible FOUR ways
-      &mdash; naming them is what makes the observation an observation.</strong>
-      The sheet appears anyway; nothing happens at all (WebKit dropped the
-      <code>noopener</code> <code>window.open</code>); a different app opens; or
-      <strong>the Ergomatic WebView ITSELF navigates to concept2.com with no way
-      back</strong> &mdash; which is the outcome our own tree predicts for a
-      plain anchor (<code>adapters/externalBrowser.ts:75-77</code>), tagged
-      INFERENCE above because it carries no evidence and a grep of the repo finds
-      none. &quot;It didn't open Safari&quot; is not a record; which of the four
-      happened is.</p>
+      <p><strong>PASS at the walk is the phone's default browser (Chrome on
+      the walked phone; Safari on a phone that never changed it), and a NO is
+      possible FOUR ways &mdash; naming them is what makes the observation an
+      observation.</strong> The sheet appears anyway; nothing happens at all
+      (WebKit dropped the <code>noopener</code> <code>window.open</code>); a
+      different app opens; or <strong>the Ergomatic WebView ITSELF navigates
+      to concept2.com with no way back</strong> &mdash; which is the outcome
+      our own tree predicts for a plain anchor
+      (<code>log/Concept2SendBlock.tsx</code>'s &quot;a button, not an
+      anchor&quot; comment), tagged INFERENCE above because it carries no
+      evidence and a grep of the repo finds none. &quot;It didn't open the
+      sheet&quot; is not a record; which of the four happened is.</p>
       <p><strong>The precondition that makes a NO possible at all:</strong> in
-      mobile Safari, NOT the app, open <code>log.concept2.com</code> and confirm
-      the rower is signed in, before the build is launched. Without it,
-      &quot;opened signed in&quot; cannot be told apart from &quot;opened in a
-      sheet&quot;.</p>
+      the phone's default browser, NOT the app, open
+      <code>log.concept2.com</code> and confirm the rower is signed in, before
+      the build is launched. Without it, &quot;opened signed in&quot; cannot
+      be told apart from &quot;opened in a sheet&quot;.</p>
     </div>
 
     <h3>7.2 What a rower loses by leaving &mdash; read from the tree, not assumed</h3>
