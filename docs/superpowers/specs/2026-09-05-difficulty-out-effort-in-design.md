@@ -23,10 +23,11 @@ auth; it runs before the front door rather than after it for that reason
 **Gate class, spoken.** Not fast path — `domain/`, `server/`, two Postgres
 migrations, three localStorage shapes and the API all change. PR 1 and
 PR 2 are TRIAD (stored shape): the antagonist anchor pass ran on this spec
-2026-09-05 (rev 1 → rev 2; its held claims are §8's vetted ground), a delta
-pass is owed on PR 2's plan (API dual-field, rollback row, migration
-provenance), PM at open (PASS WITH CONDITIONS, 2026-09-05, folded in) and
-close plus a PM final gate on each of the three PRs. PR 1 changes the
+2026-09-05 (its held claims are §8's vetted ground), `/harden` lens 2 ran on
+its prescribed content the same day, a delta pass is owed on PR 2's plan
+(API dual-field, rollback row, migration provenance), PM at open (PASS WITH
+CONDITIONS, 2026-09-05, folded in) and close plus a PM final gate on each
+of the three PRs. PR 1 changes the
 layout of every workout row, so it carries a Gate 0 capture set before its
 implementation starts. PR 2 is a rename: every user-visible word changes
 and no pixel moves, so its Gate 0 is the word list in §4.4, no captures
@@ -103,13 +104,17 @@ rollback succeeded". §4.2 leans on that table instead of re-deriving it.
 
 ## 2. Census — what carries each figure today
 
-Counted 2026-09-05 in the main checkout at `f014c944`, product files only
-(tests excluded): **difficulty** in 60 files, **pain** in 84 files, 85
-test files mention one or both. Every stored-shape row below was grepped
-individually in the anchor pass; the log draft row rev 1 listed was
-FALSE (`grep -n pain app/src/session/{draft,logDraft}.ts` exits 1;
-`LogSession.tsx:545` says "`held`/`pain`/`notes` are NOT here") and is
-gone.
+The census is a command, run in `app/` against the PR's base, not a
+transcribed number (at `f014c944`, 2026-09-05: 41 and 73 files):
+
+```sh
+grep -rliE 'difficulty' domain server src --exclude='*.test.*' | wc -l
+grep -rliE '\bpain' domain server src --exclude='*.test.*' | wc -l
+```
+
+The log draft (`src/session/draft.ts`, `logDraft.ts`) holds NO pain —
+`grep -n pain` on both exits 1 and `LogSession.tsx` states "`held`/`pain`/
+`notes` are NOT here"; it is deliberately absent from the table.
 
 | Layer | Difficulty | Pain |
 | --- | --- | --- |
@@ -122,15 +127,20 @@ gone.
 | Content | "picking a workout" paragraph | `/news/pain-scale` article, "picking a workout" link, release-note history |
 | Tooling | seed library (300 rows), `library.test.ts:74,278,300`, `scripts/library-moves.ts` report column, `.claude/skills/wod-import/SKILL.md:55`, `.claude/skills/hardware-walk/SKILL.md:130` (pasteable 5-field headers), e2e seeds | same files |
 
-The pace-word concept spells itself in ~20 identifiers, not three: `Effort`,
-`EffortRef`, `effortSpoken`, `isEffortRef` (37 hits), `effortWord` (33),
-`effortFromWord` (18), `isEffort` (15), `effortText` (13), `effortShare`,
-`effortKey`, `effortWork`, `effortPhaseOf`, `effortBucket`, across
-`domain/expand.ts`, `pace.ts`, `monitor/program.ts`,
-`generation/archetype.ts`, `display/stepDetail.ts`, `needsBaselines.ts`,
-`src/builder/PaceRefInput.tsx`, `builderState.ts`, `today/Today.tsx`,
-`workout/StepRow.tsx`, `WorkoutDetail.tsx`, `session/draft.ts`,
-`logDraft.ts`, `LogSession.tsx`.
+The pace-word concept spells itself in a FAMILY of identifiers, not three.
+The family is whatever this command returns minus English prose
+(`bestEffort`, `effortful`, `efforts`) — PR 2's plan runs it against its
+base and lists the result; a hand-kept list went stale between two passes
+on the same day:
+
+```sh
+grep -rhoE '\b[a-zA-Z]*[eE]ffort[A-Za-z]*\b' domain src --exclude='*.test.*' | sort -u
+```
+
+At `f014c944` it returns `Effort EffortRef effortBucket effortCount
+effortFromWord effortKey effortMatch effortShare effortSpoken effortText
+effortWord isEffort isEffortRef isValidEffort refEffort` plus the prose
+words and the bare `effort` key.
 
 ## 3. PR 1 — remove difficulty
 
@@ -143,9 +153,9 @@ every workout it reads still carries a non-null `difficulty`.
 
 ### 3.2 Stored shape — no migration; a derived compat write
 
-**NULL is not an option.** Rev 1 proposed dropping NOT NULL and letting
-old builds render a blank chip. The anchor pass showed the three renderers
-never use the lookup helper: `WorkoutRow.tsx:52`, `Today.tsx:1487` and
+**NULL is not an option.** Dropping NOT NULL and letting old builds render
+a blank chip was considered and is wrong: the three renderers never use the
+lookup helper (`DIFFICULTY_CHIPS.find`); `WorkoutRow.tsx:52`, `Today.tsx:1487` and
 `WorkoutDetail.tsx:436` all call `workout.difficulty.toUpperCase()`, so a
 NULL row throws inside React render and takes out the Library list, the
 Today card and the detail screen on every pre-PR-1 build; `suggest.ts:295`
@@ -304,6 +314,15 @@ ALTER TABLE "session_logs" RENAME CONSTRAINT "session_logs_pain_check" TO "sessi
 UPDATE "article_reads" SET "slug" = 'effort-scale' WHERE "slug" = 'pain-scale';
 ```
 
+**Paste-tested 2026-09-05** against a fresh `postgres:18.4` container with
+all 24 committed migrations (`drizzle/0000`–`0023`) applied in order and a
+seeded `pain-scale` read row: every statement succeeded, the read row came
+back as `effort-scale`, and `pg_constraint` showed both renamed CHECKs as
+`CHECK (((effort >= 1) AND (effort <= 5)))`. The PR 3 drops (§5) ran
+afterwards in the same session: `workouts` lost `difficulty`, `pg_type`
+lost `difficulty`, `preferences` lost `difficulties`. The constraint
+names come from `drizzle/0001_tan_thunderball.sql:44,68`.
+
 The `article_reads` line is the third stored shape: without it every
 rower's read of the pain-scale article reverts to unread and the News
 tab's next-unread walk changes.
@@ -452,11 +471,12 @@ compat layer to serve). PR 3 rides whatever tag follows its trigger.
 
 ## 6. Exit criteria
 
-1. `grep -rniE "difficult|\bpain\b" app/domain app/server app/src app/e2e`
-   returns only: release-note history and the PR 3 compat paths (until
-   PR 3). And `grep -rn "effort" app/domain app/src` returns only the 1–5
-   figure plus `PaceWordRef`'s stored key and its comment. Both run in
-   the phase-close gate and pasted.
+1. `grep -rniE "difficult|\bpain\b" domain server src e2e --exclude='*.test.*' -l`
+   (in `app/`) returns only: release-note history and the PR 3 compat paths
+   (until PR 3). It returns 69 files at `f014c944`, so the gate is known to
+   go red. And `grep -rn "effort" domain src --exclude='*.test.*'` returns
+   only the 1–5 figure plus `PaceWordRef`'s stored key and its comment.
+   Both run in the phase-close gate and pasted.
 2. Both filter sheets, `WorkoutRow`, `ClassificationCard`, `LogRow` and
    the article render with EFFORT; `pnpm e2e` and `pnpm screenshots`
    green with refreshed captures.
