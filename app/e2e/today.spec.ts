@@ -1109,6 +1109,12 @@ test.describe("Phase SF PR1: SHUFFLE is random, without repeats, and the pick su
 // through the real API, a real reload; the records' `session` field is the
 // deterministic observable (the new chip and card are random by design).
 test.describe("Phase SF PR1: a logged session re-rolls the freestyle day", () => {
+  const rerollTitle = "Today Reroll After Log E2E";
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, rerollTitle);
+  });
+
   test("logging a session bumps the day records' session key and redraws", async ({
     page,
   }) => {
@@ -1117,12 +1123,18 @@ test.describe("Phase SF PR1: a logged session re-rolls the freestyle day", () =>
       name: "Today Reroll After Log",
     });
     await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
-    await pinToday(page, { type: "AT", title: "Occluded Front" });
+    // `postLogForWorkout` resolves PERSONAL workouts only, so the session
+    // logged is this account's own tiny AT fixture; the pinned card is the
+    // same row, which the log then pushes out of the least-recently-done
+    // tie for good measure.
+    await importBulk(
+      page,
+      [`${rerollTitle} | AT | medium | 2`, "w 1:00 6k"].join("\n"),
+    );
+    await pinToday(page, { type: "AT", title: rerollTitle });
     await page.goto("/today");
     await page.locator(".today-card").waitFor();
-    await expect(page.locator(".today-card-title")).toHaveText(
-      "Occluded Front",
-    );
+    await expect(page.locator(".today-card-title")).toHaveText(rerollTitle);
     const read = () =>
       page.evaluate(
         ({ pickKey, overridesKey }) => ({
@@ -1141,7 +1153,7 @@ test.describe("Phase SF PR1: a logged session re-rolls the freestyle day", () =>
     expect(before.pick.session).toBe(0);
     expect(before.overrides.session).toBe(0);
 
-    await postLogForWorkout(page, "Occluded Front");
+    await postLogForWorkout(page, rerollTitle);
     await page.reload();
     await page.locator(".today-card").waitFor();
     const after = await read();

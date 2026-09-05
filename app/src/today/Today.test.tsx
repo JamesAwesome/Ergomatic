@@ -39,6 +39,10 @@ import {
 // keeps its expectations) and O2 for the daily type roll. Tests that
 // exercise randomness push explicit draws.
 const rngQueue: number[] = [];
+// The `limit` Today passes to useRecentLogs, recorded by mockReady's mock so
+// the widened fetch (10, so a fourth logged session still re-keys) is
+// pinned rather than a green-either-way constant (scoped re-review LOW-2).
+let recentLogsLimit = 0;
 vi.mock("./rng", () => ({
   clientRng: () => (rngQueue.length > 0 ? rngQueue.shift()! : 0),
 }));
@@ -328,7 +332,10 @@ function mockReady(overrides?: {
     usePreferences: () => ({ state: "ready", preferences }),
   }));
   vi.doMock("../api/useRecentLogs", () => ({
-    useRecentLogs: () => ({ state: "ready", logs }),
+    useRecentLogs: (limit: number) => {
+      recentLogsLimit = limit;
+      return { state: "ready", logs };
+    },
   }));
 }
 
@@ -4435,6 +4442,27 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
     expect(stored.session).toBe(1);
     expect(storedPick().session).toBe(1);
     expect(storedPick().shownIds).toHaveLength(1);
+    expect(recentLogsLimit).toBe(10);
+  });
+
+  it("a COMPLETED plan (doneN past the sequence) re-keys on a logged session like freestyle — the same predicate the roll uses", async () => {
+    const loggedToday: RecentLog = {
+      ...LOGS[0],
+      id: "log-today",
+      loggedAt: new Date().toISOString(),
+    };
+    rngQueue.push(1);
+    mockReady({
+      plan: { planKey: "sprint", doneN: 84, sequence: buildSequence(11, "AT") },
+      logs: [loggedToday],
+    });
+    await renderToday();
+    expect(screen.getByText(/FREESTYLE/)).toBeVisible();
+    expect(storedPick().session).toBe(1);
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .session,
+    ).toBe(1);
   });
 
   it("a saved-but-unlogged session and a plan-mode log do NOT re-key: no log row, or the plan's doneN already carries it", async () => {

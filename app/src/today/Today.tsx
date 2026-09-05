@@ -126,15 +126,20 @@ function fallbackKey(
  *  the day, so Today rolls a fresh type and draws a fresh card afterwards.
  *  Counted from the recent-logs fetch, by the log's own local calendar day
  *  (`todayDateString` on `loggedAt`, the same rule the records use).
- *  Always 0 with a plan: a plan-mode log bumps `doneN`, which is already
- *  in the key, and I-7 keeps plan mode's swap/pin behaviour untouched. A
- *  saved-but-unlogged session is not a log and does not count. */
+ *  Always 0 while a plan prescribes today's type: a plan-mode log bumps
+ *  `doneN`, which is already in the key, and I-7 keeps plan mode's
+ *  swap/pin behaviour untouched. A completed plan prescribes nothing and
+ *  counts like freestyle. A saved-but-unlogged session is not a log and
+ *  does not count. */
 function sessionsLoggedToday(
   logs: RecentLog[],
-  planKey: string | null,
+  prescribedCode: WorkoutType | null,
   today: string,
 ): number {
-  if (planKey !== null) return 0;
+  // The SAME predicate the roll uses (`prescribedCode === null`): a
+  // completed plan (doneN past the sequence) rolls like freestyle, so it
+  // must re-key like freestyle too (scoped re-review LOW-1).
+  if (prescribedCode !== null) return 0;
   return logs.filter((log) => todayDateString(new Date(log.loggedAt)) === today)
     .length;
 }
@@ -621,7 +626,9 @@ function TodayContent({
   // through rather than a pre-built SuggestPrefs.
   const session = sessionsLoggedToday(
     recentLogsState.logs,
-    planState.plan.planKey,
+    planState.plan.planKey !== null
+      ? (planState.plan.sequence[planState.plan.doneN]?.code ?? null)
+      : null,
     todayDateString(),
   );
   return (
