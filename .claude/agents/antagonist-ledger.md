@@ -7378,3 +7378,40 @@ the two that changed the design are first, and both are mirrors.**
   rest 0. **Technique:** prove partial eligibility from its own ordered
   evidence—accepted prior actual, then the new interval's rowing reading,
   then `partial-written`—not from the workout grammar.
+
+## 2026-09-04 — Wave E PR B: the link-out probe (no antagonist pass; controller-recorded)
+
+PR B (#298) took a plan whose only instrument was a device walk; the plan's
+`/harden` lenses ran at spec rev 3 and the PR carried no separate pass.
+Two things worth keeping from how it went:
+
+- **An in-tree comment is not a measurement, even when it predicts the
+  failure you fear.** `adapters/externalBrowser.ts` carried a comment saying
+  a plain `<a href>` would navigate the WebView to concept2.com "with no way
+  back", written when the native branch was added and never tested. Read as
+  evidence, it would have sent PR B down the add-a-plugin branch
+  (`@capacitor/app-launcher`). Read as a claim, it got a slot in the walk
+  card's outcome list ("NO (d)") and was falsified on the phone in one tap:
+  Capacitor's `WebViewDelegationHandler` hands outside-origin navigation to
+  `UIApplication.open`, and the default browser (Chrome) opened signed in.
+  **Technique: for any comment that asserts what a platform WILL do, find
+  the measurement it rests on; if there is none, list it as one outcome
+  among the others and let the walk decide. A plan whose spine is a walk
+  puts the probe in the MIDDLE (Task 3 here) so the tasks after it do not
+  exist until it answers.**
+- **Correcting the pass condition where it was USED and not where it was
+  ARGUED.** The walk card said `PASS = Safari`; James asked whether it would
+  open Chrome; the card was corrected to "the default browser" and the walk
+  observed Chrome. The spec's exit criteria (B1/B3/B7) and the approved design
+  page still said Safari, and read literally they scored the walk a FAIL. The
+  final review caught it; it cost a fix round. **Technique: when a pass
+  condition changes, grep the withdrawn word across the spec, plan, design
+  page and card in the same commit — CLAUDE.md's "partial reconciliation
+  reads as a done one" applies to walk criteria exactly as to claims.**
+- **Five compose stacks killed a green e2e run at 452/487.** Not a test
+  failure — the OS reclaimed memory. Two of the five belonged to worktrees
+  whose PRs had merged hours earlier; `stack-reap.sh` cannot see them because
+  the worktrees still existed. **Technique: an e2e run that dies with a
+  SIGTERM and no failed test is a resource kill; count `docker ps` before
+  blaming the suite, and tear merged worktrees down the day they merge.**
+

@@ -280,8 +280,12 @@ those eight passes unnecessary; the `harden` skill owns what is left.
   `dist/` one layer up. This is the rule most worth making mechanical: it is
   a command, not an intention.
 - **Anything handed to James is checked against HIS shell and HIS machine.**
-  RF13 extended: `set -a; . .env; set +a` and `export` are bash, his default
-  shell is fish, and the walk card's FIRST block would have failed. Read what
+  RF13 extended: his default shell is fish, and a walk card's FIRST block once
+  used `set -a; . .env; set +a`, which fish rejects. **Measured 2026-09-04 on
+  the installed fish 4.8.1: `export FOO=bar`, the `VAR=value cmd` prefix and
+  `$(...)` all WORK; what fails is `set -a; . file; set +a` and bare
+  `unset`.** This bullet used to say `export` was not fish; it is. Paste the
+  block into `fish -c '...'` rather than reasoning about the dialect. Read what
   a prescribed command WRITES, not only what it prints (`pnpm ios:build`
   stamps two tracked files), and name who restores it. For every walk
   observation, state the precondition that makes a NO possible — without it
