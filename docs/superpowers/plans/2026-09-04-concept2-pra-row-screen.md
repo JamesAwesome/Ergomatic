@@ -10,9 +10,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md` — §5.1 (the design), §6.1 (gates), §8 "PR A" (exit criteria A1–A12), §2 rulings 1–7. Gate 0: `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-03.html` §8, APPROVED by James 2026-09-04 ("approved") on `3fe5f2c2`.
 
-**Worktree:** `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`, branch `wave-e-c2-row-screen`, base `610e6cc4` (= main after PR B #298). Every command in this plan runs from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra/app` unless it says otherwise.
+**Worktree:** `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`, branch `wave-e-c2-row-screen`, base `e3ce0a03` (= main after PR B #298). Every command in this plan runs from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra/app` unless it says otherwise.
 
-**Paste-test record (agent-briefing "Plan authoring", harden Phase 0 item 4):** every code block in Tasks 1–6 was written into this worktree at base `610e6cc4` on 2026-09-04, run through `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, the prescribed unit tests (`242 files / 7016 passed / 1 skipped` for `pnpm test --project unit --project client`) and `pnpm e2e` (see Task 5/6 for the count), and then reset. The mutation failure texts quoted in Tasks 2–4 are the actual output of those runs, not predictions. The e2e-level mutations in Tasks 5–6 were NOT run by the author and are marked EXPECTED; the implementer records their real output.
+**Paste-test record (agent-briefing "Plan authoring", harden Phase 0 item 4):** every code block in Tasks 1–6 was written into this worktree at base `e3ce0a03` on 2026-09-04, run through `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, the prescribed unit tests (`242 files / 7016 passed / 1 skipped` for `pnpm test --project unit --project client`) and `pnpm e2e` (see Task 5/6 for the count), and then reset. The mutation failure texts quoted in Tasks 2–4 are the actual output of those runs, not predictions. The e2e-level mutations in Task 6 were run by the author against the up stack (measured values in its table). Hardened per `/harden`: lens 1 (antagonist delta, 6 falsified, folded in rev 2) and lens 2 (prescribed code, 10 findings, folded in rev 3); both reports under the worktree's `.superpowers/harden/`.
 
 ## Global Constraints
 
@@ -127,6 +127,19 @@ describe("concept2Seen (ruling 6's persisted fact, invariants I-A..I-G)", () => 
     expect(readConcept2Seen("u1")).toBe(false);
   });
 
+  it("I-G: a store that throws on the CLEAR leaves the old fact — the one direction that is not fail-closed, named", () => {
+    writeConcept2Seen("u1", true);
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("SecurityError");
+    });
+    expect(() => writeConcept2Seen("u1", false)).not.toThrow();
+    vi.restoreAllMocks();
+    // Still "1": a swallowed CLEAR cannot un-say a claim. Bounded by I-C
+    // retrying on every successful read and by I-A keeping it to this
+    // account; the module header says so.
+    expect(readConcept2Seen("u1")).toBe(true);
+  });
+
   it("I-G: a store that throws on write is swallowed, and the fact degrades to not-seen", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("QuotaExceededError");
@@ -175,17 +188,29 @@ Create `app/src/you/concept2Seen.ts` with exactly this content:
  *
  * PER ACCOUNT (I-A): the key carries the account id, so no account can read
  * another's. Sign-out ALSO clears it (I-D, `You.tsx`'s Sign out handler) —
- * belt and braces, because the next account on this device must not inherit
- * a cohort claim, and a key-only defence would leave a stale `true` in
- * storage for an account that has since been removed from
- * `C2_ALLOWED_EMAILS`.
+ * NOT because another account could read it (I-A pins that) but because
+ * THIS account may sign back in on this device after being removed from
+ * `C2_ALLOWED_EMAILS`, and a stale `true` would give it a door on the one
+ * read that fails.
  *
- * FAIL-CLOSED (I-G): a read that throws answers `false` ("not seen"), and a
- * write that throws is swallowed — the row goes quiet, it never asserts a
- * cohort from a write nobody made. This is the opposite of RF25/AUD-016's
- * `saveMonitorRun`, where a swallowed write let the caller proceed as if it
- * had succeeded; here the caller's next render simply re-reads storage, so
- * there is nothing to proceed AS IF about.
+ * FAIL-CLOSED ON THE MINT (I-G): a read that throws answers `false` ("not
+ * seen"), and a MINT that throws is swallowed — the row goes quiet, it never
+ * asserts a cohort from a write nobody made. The CLEAR is the one direction
+ * that is not fail-closed: a `removeItem` that throws leaves the old `"1"`,
+ * so a stale claim can survive until the next successful clear or sign-out.
+ * Bounded: the only cell it feeds (row 2b) draws a door whose screen re-reads
+ * the server, and I-C retries the clear on every successful read. Named
+ * rather than hidden; `concept2Seen.test.ts` pins both directions. This is
+ * the opposite of RF25/AUD-016's `saveMonitorRun`, where a swallowed write
+ * let the caller proceed as if it had succeeded; here the caller's next
+ * render simply re-reads storage.
+ *
+ * ONE COLLAPSE TO KNOW ABOUT: `normalizeLink` answers `available: false` for
+ * a 200 whose body it cannot read as well as for a real "no Concept2" — so a
+ * malformed 200 clears the fact (I-C) exactly as a revocation does. The cost
+ * is one visit's silence on the next FAILED read (cell 2a instead of 2b),
+ * never a claim; accepted, because the alternative is trusting a body the
+ * hook itself refused.
  */
 
 const KEY_PREFIX = "ergomatic.concept2Seen.";
@@ -228,7 +253,7 @@ export function clearConcept2Seen(accountId: string): void {
 }
 ```
 
-- [ ] **Step 4: Run the test — expect `8 passed`**, then the gates:
+- [ ] **Step 4: Run the test — expect `9 passed`**, then the gates:
 
 ```
 cd /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra/app
@@ -647,7 +672,7 @@ Record each mutation's actual output in your report, verbatim. If any differs fr
 Create `app/src/you/Concept2Screen.test.tsx` with exactly this content:
 
 ```tsx
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import Concept2Screen from "./Concept2Screen";
@@ -765,32 +790,46 @@ describe("Concept2Screen — /you/concept2 (spec §5.1 R5, R6)", () => {
     // with available:false after both reads failed. Pinned so a change to
     // either predicate — or to the effect order — is a red test, not a
     // silently blank screen.
-    let call = 0;
-    vi.mocked(api).mockImplementation(async (path: string) => {
+    // Deferred, so BOTH answers are APPLIED before any assertion: a call
+    // count only proves the requests STARTED, and `.c2-card` is absent at
+    // mount anyway (the card returns null while `link === null`), so neither
+    // is a readiness observable — measured: a screen mutated to redirect on
+    // a FAILED read stayed green against the count-gated version. React
+    // runs the CHILD's effect first, so resolver 0 is the card's read and
+    // resolver 1 is the screen's.
+    const answer: Array<(r: Response) => void> = [];
+    vi.mocked(api).mockImplementation((path: string) => {
       if (path !== "/api/concept2/link")
-        return new Response(null, { status: 204 });
-      call += 1;
-      return call === 1
-        ? new Response(JSON.stringify({ available: false }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
-        : new Response(JSON.stringify({ error: "upstream" }), { status: 502 });
+        return Promise.resolve(new Response(null, { status: 204 }));
+      return new Promise<Response>((resolve) => answer.push(resolve));
     });
     renderScreen();
-    await waitFor(() => expect(call).toBeGreaterThanOrEqual(2));
-    // Chrome stays; BACK works; no redirect; and the card is silent.
+    await waitFor(() => expect(answer).toHaveLength(2));
+    await act(async () => {
+      answer[0]!(
+        new Response(JSON.stringify({ available: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+    await act(async () => {
+      answer[1]!(
+        new Response(JSON.stringify({ error: "upstream" }), { status: 502 }),
+      );
+    });
+    // Both answers applied. Chrome stays, BACK works, no redirect, card silent.
     expect(screen.getByRole("heading", { name: "Concept2" })).toBeVisible();
     expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
       "href",
       "/you",
     );
     expect(screen.queryByText("YOU SCREEN at /you")).toBeNull();
-    await waitFor(() => expect(document.querySelector(".c2-card")).toBeNull());
+    expect(document.querySelector(".c2-card")).toBeNull();
     expect(screen.queryByText("COULDN'T READ CONCEPT2")).toBeNull();
   });
 
-  it("BACK honours the row's from=/you origin and falls back to /you on a cold load", async () => {
+  it("BACK targets /you — the row's from=/you and the screen's fallback are the same place, so one assertion covers a warm entry and a cold load", async () => {
     c2Link.body = { available: true, linked: false };
     renderScreen([{ pathname: "/you/concept2", state: { from: "/you" } }]);
     expect(await screen.findByRole("link", { name: /BACK/ })).toHaveAttribute(
@@ -894,7 +933,7 @@ export default function Concept2Screen({ email }: { email: string }) {
 
 - [ ] **Step 4: Register the route and its test**
 
-Apply this patch to `app/src/shell/AppRoutes.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/shell/AppRoutes.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra` as `git apply --recount <file>` — `--recount` so a fence-trimmed blank context line is not read as drift; apply each block as its OWN file, never several concatenated. If it still does not apply, the tree has drifted from base `e3ce0a03` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/shell/AppRoutes.tsx b/app/src/shell/AppRoutes.tsx
@@ -927,11 +966,11 @@ index 5634152a..3d624a54 100644
                element={<MonitorLogs />}
 ```
 
-Apply this patch to `app/src/shell/AppRoutes.test.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/shell/AppRoutes.test.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra` as `git apply --recount <file>` — `--recount` so a fence-trimmed blank context line is not read as drift; apply each block as its OWN file, never several concatenated. If it still does not apply, the tree has drifted from base `e3ce0a03` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/shell/AppRoutes.test.tsx b/app/src/shell/AppRoutes.test.tsx
-index b7ad7f1d..cc18eae3 100644
+index b7ad7f1d..89aa65ab 100644
 --- a/app/src/shell/AppRoutes.test.tsx
 +++ b/app/src/shell/AppRoutes.test.tsx
 @@ -30,6 +30,9 @@ vi.mock("../session/Timer", () => ({
@@ -951,7 +990,7 @@ index b7ad7f1d..cc18eae3 100644
 +  // Wave E PR A: the Concept2 screen behind You's CONCEPT2 row, behind the
 +  // same signed-in guard. The screen itself is stubbed — its own file tests
 +  // its states; this pins only that the route exists and is signed-in only.
-+  it("routes /you/concept2 when signed in, and wildcards it to Today when not", async () => {
++  it("routes /you/concept2 when signed in", async () => {
 +    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
 +    render(
 +      <MemoryRouter initialEntries={["/you/concept2"]}>
@@ -968,7 +1007,7 @@ index b7ad7f1d..cc18eae3 100644
    // resolves to Today rather than 404ing.
 ```
 
-- [ ] **Step 5: Run — expect `5 passed` (screen) and the AppRoutes file green**, then the gates.
+- [ ] **Step 5: Run — expect `6 passed` (screen) and the AppRoutes file green**, then the gates.
 
 ```
 cd /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra/app
@@ -998,6 +1037,7 @@ git commit -m "PR A Task 3: /you/concept2 — the screen behind the row; the pro
 | --- | --- | --- |
 | R5(i) | `Concept2Screen.tsx`: delete the three-line `if (link !== null && !link.available) { return <Navigate … /> }` block | `1 failed`: "returns the rower to /you when a SUCCESSFUL read says the surface is unavailable…" — `Unable to find an element with the text: YOU SCREEN at /you` |
 | R5(ii) | same file: `if (link !== null && !link.available) {` → `if (link === null \|\| !link.available) {` (AUD-015's shape) | `4 failed`: pending, read-failed, mounts-the-card, BACK cases — `Unable to find an accessible element with the role "heading" and name "Concept2"` — the screen bounced on every mount, which is exactly the unopenable-door defect |
+| R5(iii) | same file: destructure `failed` and widen to `if ((link !== null && !link.available) \|\| failed !== null) {` (redirect on a FAILED read) | `2 failed`: the disagreement case — `Unable to find an accessible element with the role "heading" and name "Concept2"` — and the read-failed case — `Unable to find an element with the text: COULDN'T READ CONCEPT2`. (Against the count-gated first draft of the disagreement case this mutant was GREEN, which is why the case resolves both reads deterministically before asserting.) |
 
 ---
 
@@ -1015,11 +1055,11 @@ git commit -m "PR A Task 3: /you/concept2 — the screen behind the row; the pro
 
 - [ ] **Step 1: Write the failing tests** (the You.test patch — apply it first; the new cases fail against the card-bearing You)
 
-Apply this patch to `app/src/You.test.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/You.test.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra` as `git apply --recount <file>` — `--recount` so a fence-trimmed blank context line is not read as drift; apply each block as its OWN file, never several concatenated. If it still does not apply, the tree has drifted from base `e3ce0a03` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/You.test.tsx b/app/src/You.test.tsx
-index 274dd475..e7ab580c 100644
+index 274dd475..829ce4ca 100644
 --- a/app/src/You.test.tsx
 +++ b/app/src/You.test.tsx
 @@ -5,16 +5,8 @@ import { MemoryRouter } from "react-router-dom";
@@ -1041,7 +1081,34 @@ index 274dd475..e7ab580c 100644
  // answered for the WHOLE FILE, not only in the new cases — before this
  // mock every test here ran the read through the real `src/api.ts`, whose
  // relative-URL `fetch` rejects under jsdom, and the rejection landed after
-@@ -67,6 +59,12 @@ afterEach(() => {
+@@ -37,13 +29,16 @@ vi.mock("./monitor/Concept2LinkProbe", () => ({ default: () => null }));
+ // `vi.hoisted` because `vi.mock`'s factory is hoisted above ordinary
+ // declarations: a plain `const` referenced inside it throws "Cannot access
+ // before initialization".
+-const c2Link = vi.hoisted(() => ({ body: { available: false } as unknown }));
++const c2Link = vi.hoisted(() => ({
++  body: { available: false } as unknown,
++  status: 200,
++}));
+ 
+ vi.mock("./api", () => ({
+   api: vi.fn(async (path: string, init?: RequestInit) =>
+     path === "/api/concept2/link"
+       ? new Response(JSON.stringify(c2Link.body), {
+-          status: 200,
++          status: c2Link.status,
+           headers: { "Content-Type": "application/json" },
+         })
+       : fetch(path, init),
+@@ -52,6 +47,7 @@ vi.mock("./api", () => ({
+ 
+ beforeEach(() => {
+   c2Link.body = { available: false };
++  c2Link.status = 200;
+   vi.mocked(api).mockClear();
+ });
+ 
+@@ -67,6 +63,12 @@ afterEach(() => {
    vi.unstubAllGlobals();
    vi.resetModules();
    vi.doUnmock("./adapters/auth");
@@ -1054,7 +1121,7 @@ index 274dd475..e7ab580c 100644
  });
  
  describe("You", () => {
-@@ -180,55 +178,78 @@ describe("You", () => {
+@@ -180,55 +182,98 @@ describe("You", () => {
    });
  });
  
@@ -1151,7 +1218,7 @@ index 274dd475..e7ab580c 100644
 +      vi.fn(async () => new Response(null, { status: 204 })),
 +    );
 +    const onSignedOut = vi.fn();
-+    render(
++    const first = render(
 +      <MemoryRouter>
 +        <You user={user} onSignedOut={onSignedOut} />
 +      </MemoryRouter>,
@@ -1166,6 +1233,26 @@ index 274dd475..e7ab580c 100644
 +    // Another account's fact on the same device is not this sign-out's to
 +    // clear (I-A keeps them apart; I-D clears the one signing out).
 +    expect(localStorage.getItem("ergomatic.concept2Seen.u2")).toBe("1");
++
++    // THE SEAM, not just the write (RF24): a fresh mount for the SAME
++    // account whose read now fails must draw nothing (cell 2a) rather than
++    // inheriting the door the pre-sign-out mint would have given it. The
++    // signed-out You is unmounted first — the app does the same (App.tsx
++    // swaps to SignIn) — so the row found below can only be the new mount's.
++    first.unmount();
++    c2Link.body = { error: "upstream" };
++    c2Link.status = 502;
++    vi.mocked(api).mockClear();
++    render(
++      <MemoryRouter>
++        <You user={user} onSignedOut={() => {}} />
++      </MemoryRouter>,
++    );
++    await waitFor(() =>
++      expect(vi.mocked(api)).toHaveBeenCalledWith("/api/concept2/link"),
++    );
++    await new Promise((r) => setTimeout(r, 0));
++    expect(screen.queryByRole("link", { name: /CONCEPT2/ })).toBeNull();
    });
  });
 ```
@@ -1317,7 +1404,7 @@ export default function You({
 
 - [ ] **Step 4: CSS and the card's two comments**
 
-Apply this patch to `app/src/index.css` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/index.css` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra` as `git apply --recount <file>` — `--recount` so a fence-trimmed blank context line is not read as drift; apply each block as its OWN file, never several concatenated. If it still does not apply, the tree has drifted from base `e3ce0a03` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/index.css b/app/src/index.css
@@ -1435,7 +1522,7 @@ index ea4bd86b..78e15aae 100644
    gap: 12px;
 ```
 
-Apply this patch to `app/src/you/Concept2Card.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
+Apply this patch to `app/src/you/Concept2Card.tsx` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra` as `git apply --recount <file>` — `--recount` so a fence-trimmed blank context line is not read as drift; apply each block as its OWN file, never several concatenated. If it still does not apply, the tree has drifted from base `e3ce0a03` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/src/you/Concept2Card.tsx b/app/src/you/Concept2Card.tsx
@@ -1499,7 +1586,8 @@ pnpm format:check
 ```
 cd /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra
 grep -n 'Concept2Card' app/src/You.tsx                      # expect NO output (was 2)
-grep -rn 'diag-row' app/src --include='*.tsx' | grep -v '\.test\.'   # expect 2 sites: You.tsx (DIAGNOSTICS) and you/Concept2Row.tsx
+grep -rn 'className="diag-row"' app/src --include='*.tsx' | grep -v '\.test\.'   # expect exactly 2 lines: You.tsx (DIAGNOSTICS) and you/Concept2Row.tsx (CONCEPT2) — the bare word `diag-row` also matches `diag-row-end`/`-state` and comments, 4 lines
+grep -rln 'concept2Seen' app/src | grep -v '\.test\.' | sort   # expect exactly 3 files: src/You.tsx (the sign-out clear), src/you/Concept2Row.tsx (read + write), src/you/concept2Seen.ts (the module). A fourth is a second consumer of a fact whose lifetime table assumes one — stop and re-run the table before adding it
 git diff --stat HEAD~0 -- app/src/you/Concept2Card.tsx        # comment-only; confirm no JSX line changed: git diff HEAD -- app/src/you/Concept2Card.tsx | grep '^[-+]' | grep -v '^[-+] *//' | grep -v '^[-+][-+]'  → expect NO output
 ```
 - [ ] **Step 7: Commit BEFORE mutating**
@@ -1529,7 +1617,7 @@ git commit -m "PR A Task 4: You carries the CONCEPT2 row in a doors group; sign-
 
 - [ ] **Step 1: Apply both patches**
 
-Apply this patch to `app/e2e/concept2.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
+Apply this patch to `app/e2e/concept2.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra` as `git apply --recount <file>` — `--recount` so a fence-trimmed blank context line is not read as drift; apply each block as its OWN file, never several concatenated. If it still does not apply, the tree has drifted from base `e3ce0a03` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/e2e/concept2.spec.ts b/app/e2e/concept2.spec.ts
@@ -1754,7 +1842,7 @@ index 18a9c022..40f5c272 100644
 +});
 ```
 
-Apply this patch to `app/e2e/screenshots.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
+Apply this patch to `app/e2e/screenshots.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra` as `git apply --recount <file>` — `--recount` so a fence-trimmed blank context line is not read as drift; apply each block as its OWN file, never several concatenated. If it still does not apply, the tree has drifted from base `e3ce0a03` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/e2e/screenshots.spec.ts b/app/e2e/screenshots.spec.ts
@@ -2045,6 +2133,7 @@ index f4bae145..5555e1e1 100644
 +    path: path.join(SCREENSHOTS_DIR, "concept2-screen-landscape.png"),
    });
  });
+ 
 ```
 
 - [ ] **Step 2: Typecheck the e2e project first (cheap), then the full suite**
@@ -2089,7 +2178,7 @@ git commit -m "PR A Task 5: e2e — the row and screen walk, sentinel replaced, 
 
 - [ ] **Step 1: Apply the patch**
 
-Apply this patch to `app/e2e/design.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra`; if it does not apply cleanly, the tree has drifted from base `610e6cc4` — stop and report, do not hand-merge):
+Apply this patch to `app/e2e/design.spec.ts` (save it to a file and run `git apply <file>` from `/Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra` as `git apply --recount <file>` — `--recount` so a fence-trimmed blank context line is not read as drift; apply each block as its OWN file, never several concatenated. If it still does not apply, the tree has drifted from base `e3ce0a03` — stop and report, do not hand-merge):
 
 ```diff
 diff --git a/app/e2e/design.spec.ts b/app/e2e/design.spec.ts
@@ -2478,7 +2567,9 @@ EOF
 ```
 grep -rn -i "card on You\|on the You tab\|You tab — the Concept2 card\|between Reset baseline setup\|You's LAST child\|only warning\|no Concept2 component\|single JSX site\|all four\|unreachable" app/src app/e2e docs/design/DEVIATIONS.md docs/design/handoffs/2026-08-31-concept2-connect ROADMAP.md CLAUDE.md docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md | grep -v "docs/monitor"
 grep -rn "You tab" app/src app/e2e docs/design | grep -v releaseNotes | grep -v "news/content"
+grep -rn 'You\.tsx' app/src app/scripts app/e2e | grep -v '/You.tsx:'
 ```
+The third grep is for the dev probe's MOVE: three tracked files say its build-time fold lives on `You.tsx` and none of the other patterns reach them — `app/src/monitor/Concept2LinkProbe.tsx` (~line 60, "guarded by a build-time-folded condition (`You.tsx:19-23`)" → "…(`you/Concept2Screen.tsx`'s `c2LinkProbeEnabled`)"), `app/src/you/concept2CardModel.ts` (~line 130, "`You.tsx` gates it on" → "`Concept2Screen.tsx` gates it on"), `app/scripts/dist-grep.sh` (~line 107, "`You.tsx` behind the SAME…" → "`you/Concept2Screen.tsx` behind the SAME…"). Correct all three in place in this task's commit (the script is a comment-only change; `pnpm dist:grep` must still pass — run it).
 For each hit: CHANGED (in place, never appended beneath), or STANDS with the reason (a historical record, a closed-phase doc, the approved send-block string ruling 7 kept). The spec's own §5.1 counted 13 "You tab" hits with five in scope; ruling 7 keeps the send block's string, so the two code hits (`Concept2SendBlock.tsx`, its test) STAND, and the three doc hits are yours.
 
 - [ ] **Step 3: ROADMAP row.** Wrap by hand to the surrounding width; root markdown is never Prettier-formatted.
@@ -2495,8 +2586,8 @@ pnpm lint
 ```
 cd /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra
 git rev-parse --show-toplevel   # MUST print this worktree's path
-git add docs/design/handoffs/2026-08-31-concept2-connect ROADMAP.md
-git commit -m "PR A Task 7: reconcile the design page, README and ROADMAP with the row and screen"
+git add docs/design/handoffs/2026-08-31-concept2-connect ROADMAP.md app/src/monitor/Concept2LinkProbe.tsx app/src/you/concept2CardModel.ts app/scripts/dist-grep.sh
+git commit -m "PR A Task 7: reconcile the design page, README, ROADMAP and the probe's three fold comments"
 ```
 
 ---
