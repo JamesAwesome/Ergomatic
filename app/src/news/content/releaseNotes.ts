@@ -6,32 +6,29 @@ import type { ReleaseNote } from "./types";
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     // v0.38.0: git log v0.37.0..main --oneline at 08568e62 — five merges,
-    // every one accounted (RF15, no `--merges`):
-    //   #296 freestyle type chips on Today — folded into item 1 (the chip
-    //     row is what the daily roll lights).
-    //   #297 Phase SF PR1 — items 1, 2 and 3 (random shuffle and first
-    //     card; the freestyle daily type with its clear and the re-roll
-    //     after a logged session; filters remembered per type).
-    //   #298 Wave E PR B — item 6 (Concept2 link-outs open the phone's
-    //     default browser; the Concept2 surface itself stays behind the
-    //     named-account gate, so the link-out is the only visible half).
-    //   #300 Phase SF PR2 — items 4 and 5 (TIME as a range, exactly-at-cap
-    //     now counts; ERGOMATIC LIBRARY / MY WORKOUTS).
-    //   #301 Phase SF PR3 — item 7 (search by name).
-    // Deploy-day costs, stated rather than warned: Today redraws its card
-    // and re-rolls its type once on the first open after this update, and
-    // the Library forgets one BACK round trip's filters once. Neither
-    // repeats. This notes/capture PR adds no behavior.
+    // every one accounted (RF15, no `--merges`; main is squash-merged):
+    //   #296 freestyle type chips on Today — the chip row item 2 lights.
+    //   #297 Phase SF PR1 — items 1, 2 and 3.
+    //   #298 Wave E PR B — "View on Concept2" opens the phone's default
+    //     browser; that surface stays DARK in production behind
+    //     C2_LINK_ENABLED and C2_ALLOWED_EMAILS (the same reason v0.37.0
+    //     skipped #290 and #293), so no tester receives it: no item.
+    //   #300 Phase SF PR2 — items 4 and 5.
+    //   #301 Phase SF PR3 — item 6.
+    // Deploy-day churn, stated here rather than warned about in an item
+    // (PM close gate): Today redraws its card and re-rolls its type once
+    // on the first open after this update, and the Library forgets one
+    // BACK round trip's filters once; item 2's own sentence covers the
+    // only reading that stings. This notes/capture PR adds no behavior.
     version: "v0.38.0",
     date: "2026-09-05",
     items: [
-      "SHUFFLE is random now. It never repeats a workout until you have seen the whole pool, and the first card each day is drawn from the ones you have gone longest without. Before, it walked the library in a fixed order and the same card sat on top every day.",
-      "Without a plan, Today picks a type for you each morning and lights the chip. Tap another chip to change it, or tap the lit chip for ANY TYPE for the rest of the day. Logging a session rolls a fresh type for the next one.",
-      "Today's filters are remembered per type. Set DIFFICULTY, TIME or the rest under AT once and they are there every AT day, separate from O2, TR, AN and ANY TYPE.",
-      "TIME is a slider on both filter sheets: two thumbs, five-minute steps, so 25 to 35 minutes is one drag. A workout at exactly your time cap now counts as within it.",
-      "The source filter reads ERGOMATIC LIBRARY and MY WORKOUTS instead of GLOBAL and CUSTOM, on both sheets, the badges and the Library.",
-      "View on Concept2 opens your phone's default browser, signed in, instead of an in-app sheet that showed a private-result page.",
-      "The Library has a search-by-name field above FILTER. Type a few letters and the list narrows as you go; it stays with you when you come back from a workout and clears when you reopen the tab.",
+      "SHUFFLE now draws at random and will not repeat a workout until you have seen the whole pool. The first card each morning is a random pick from the workouts you have gone longest without, and it stays put if you reload.",
+      "With no plan chosen, Today now picks a type for you each morning and lights that chip. Tap a different chip to change it, or tap the lit chip for ANY TYPE. Tomorrow picks again, and so does logging a session today.",
+      "Today's filters are remembered for each type and no longer reset at midnight. Set them once under AT and they are there the next time AT is lit, however many days later.",
+      "TIME is now a range you drag instead of four fixed bands, so you can ask for 25 to 35 minutes. A workout that lands exactly on your time cap now counts as within it, so you will see a few more options than before with no action from you.",
+      "GLOBAL and CUSTOM are now ERGOMATIC LIBRARY and MY WORKOUTS, on the filters and on the workouts themselves.",
+      "The Library has a search field above FILTER. Type a few letters of a name and the list narrows as you type. It works alongside the type chips and the filters, stays with you when you come back from a workout, and clears when you reopen the tab.",
     ],
   },
   {

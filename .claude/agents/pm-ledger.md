@@ -4674,3 +4674,44 @@ Verdict OPEN WITH CONDITIONS; all folded into revision 1.
   tab labels and screen titles, not only the surface being renamed.
 - **Fold: 109 words / 6 bullets / longest 20 — PASS, and the self-count was
   right.** Series: #268 186 · door PR B 121 · SF PR1 246 · **SF PR2 109.**
+
+## 2026-09-05 — Phase SF close: nine criteria, nine proven, and the two that needed a label
+
+Phase closed CLOSE WITH CONDITIONS (CI green on #301, notes before the tag,
+the `/api/today` ruling). v0.38.0 recommended.
+
+- **A phase's criteria are only as good as the gate that reads them, and this
+  phase proved the gate three times.** PR1's gate caught an unticked CLAUSE,
+  PR2's caught a demo pair standing in for a before/after AND an `(e2e)`
+  parenthesis satisfied by a screenshot, and the close caught nothing new —
+  which is what a working per-PR gate looks like at close. When the close gate
+  finds nothing, say so; it is evidence about the earlier gates, not slack.
+- **Label a criterion SEAM or STRUCTURAL at close, not just PROVEN.** SF's 3
+  ("after a day change") is true by construction because the store carries no
+  date, and 4 reads `estimateMinutes` on both sides. Both are sound; neither
+  is external. A close report that prints nine PROVENs hides which two would
+  survive the app being wrong about itself (RF11 in close-report form).
+- **A dead route is deletable when `git log -S` says no client EVER called
+  it.** SF's `/api/today` had no caller in the whole history, and the sibling
+  route already exposed the field its isolation tests probed — so the delete
+  costs a test re-point, not coverage. Check history, not just head, before
+  pricing a route removal: "no caller today" and "no caller ever" price
+  differently because shipped native builds carry old bundles.
+- **A stored-shape migration written between two untagged merges has no
+  users.** SF's `todayFilters` v1→v2 map only ever meets a record created
+  between #297 and #300, and no tag went out in that window — so the mapping
+  is insurance the TestFlight cohort will never exercise. Before pricing
+  migration risk, ask which TAGS bracket the old shape's lifetime; a shape
+  born and retired inside one release has exactly one holder, the web
+  prototype.
+- **Deploy-day churn gets inoculated by a feature sentence, never by a
+  warning.** SF's one-time redraw and re-roll are indistinguishable from the
+  feature working; the only bad reading (the app overrode my chip) is killed
+  by the note that says Today picks a type each morning and how to change it.
+  A "you may notice a one-time change" note manufactures the anxiety it
+  answers.
+- **Inline build + dispatched review, three PRs in: HELD.** Both fix-then-
+  approve rounds found SITES and PRECEDENCE, not design. The discriminator
+  for the next phase is the class of the find — a review round returning a
+  DESIGN error means the implementer half was skipped, not merged into the
+  author, and that class of work goes back to the full cycle.

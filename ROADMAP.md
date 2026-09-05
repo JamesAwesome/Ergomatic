@@ -1083,81 +1083,6 @@ risk model with this wave.)
 
 ---
 
-## Phase SF — Shuffle and filters
-
-**Status: OPEN 2026-09-04 — spec at revision 1 after the antagonist anchor
-pass (REORDER-or-REVISE: the two-native-inputs slider fell, the rng moved
-out of `suggest()`) and the PM open gate (OPEN WITH CONDITIONS: server
-route in scope, v1→v2 mapping, rename into PR2, exit criterion 1 rewritten
-because it was green on main). Both folded. PR1 = #297 OPEN (2026-09-04): implemented in task commits
-with dispatched review (FIX-THEN-APPROVE, both findings fixed and
-probed) and PM final gate (PASS WITH CONDITIONS, folded); James ruled at
-its Gate 0 (2026-09-04): NO sticky clear (a clear holds for the day;
-every day rolls), the inline build shape is fine (recorded in
-CLAUDE.md's SDLC bullet), and ONE release after the whole phase.** Ranked into the slate by James on the day: five things he found
-using the app himself, and the first is a design that reads as a bug —
-SHUFFLE steps through least-recently-done order, never-done entries tie in
-seed order, and a mostly-unrowed library therefore "shuffles" in seed order
-with the same card on top every day. Spec:
-`docs/superpowers/specs/2026-09-04-shuffle-and-filters-design.md`.
-
-- [ ] PR1 — random first pick (stable per day), SHUFFLE without repeats,
-      freestyle rolls a type once per day (a clear holds for the day; a
-      LOGGED session re-rolls — James: "logged only"),
-      Today's filters remembered per effective type (O2/AT/TR/AN/ANY).
-      TRIAD: stored shapes `todayPick` (+shownIds), `todayOverrides`
-      (filters out), NEW `todayFilters`; `/api/today` compiles against
-      `suggest()`'s new `tieIds`. No tag until phase close (James). **M**
-- [ ] PR2 — BUILT, Gate 0 pending (2026-09-05): TIME is a minutes range
-      (a CUSTOM two-thumb control per the APG pattern — the native overlay
-      fell at the anchor pass — 5-min steps, 0..120+) on BOTH sheets;
-      `DurationBucket` and its bucket helpers RETIRED (`git grep
-      DurationBucket -- app/` returns comments naming the retirement
-      only — see the dead-code row), `/api/today` on `rangeForCap`;
-      `todayFilters` v1 MAPS to v2; the source rename GLOBAL→ERGOMATIC LIBRARY,
-      CUSTOM→MY WORKOUTS (James's Gate 0 pick, 2026-09-05, badge matching
-      the filter tag; SOURCE moves to its own full-width row) at SEVEN
-      rendered sites plus the row's accessible-name suffix (the delta pass
-      found the workout DETAIL badge the six-site census missed).
-      TRIAD. Gate 0 with both sheets, both orientations, before/after in
-      BOTH directions on one pool. **M**
-- [ ] PR3 — BUILT, Gate 0 pending (2026-09-05): Library SEARCH BY NAME
-      field above FILTER ⌄ (rides the BACK record, cleared at the tab).
-      James reviews; no PM gate; antagonist SKIP spoken (inherits phase
-      ground; a client-side substring over an array already in memory, no
-      new invariant class). **S**
-- [ ] Phase close — antagonist exit pass, PM close, ONE release covering
-      #296 + PR1 + PR2 + PR3 (James: "release after all of this phase";
-      notes must say a freestyle morning now narrows to one type and how
-      to clear it), agent-config check.
-
-**Dead-code row (owed by PR2, James's 2026-09-04 rule — a change that
-makes code unreachable adds the removal row in the same PR).** PR2 retires
-`domain/duration.ts`'s `DurationBucket`, `DURATION_BUCKETS`,
-`DURATION_LOWER_BOUND`, `bucketFor`, `bucketsForCap` and every consumer —
-`git grep -l "DurationBucket\|bucketFor\|bucketsForCap\|DURATION_BUCKETS\|DURATION_LOWER_BOUND" -- app/`
-at bdc098aa, tests excluded, twelve product files: `server/routes/data.ts`
-(`/api/today`, missed by the spec's first grep and caught by the PM gate),
-`src/today/todayOverrides.ts`,
-`src/today/Today.tsx`, `src/today/TodayFilterSheet.tsx`,
-`src/today/todayFilterTokens.ts`, `src/library/FilterSheet.tsx`,
-`src/library/libraryFilters.ts`, `src/library/filters.ts`,
-`src/components/durationTokenLabel.ts`, `src/components/durationChips.ts`,
-`domain/suggest.ts`, `e2e/design.spec.ts` (the bucket-chip sweep), plus the
-retired definitions themselves. `domain/recency.ts` names it in a comment
-only; seven test files follow their subjects. Exit criterion 8:
-`git grep DurationBucket -- app/` returns only comments recording the
-retirement (path-scoped: this row and the spec name the symbol forever). **CLOSED by PR2 (2026-09-05):**
-every consumer file migrated to `DurationRange`, `durationChips.ts` and
-`durationTokenLabel.ts` deleted; the grep now matches ONE comment that
-records the retirement (`domain/duration.ts` — this PR's own edit removed
-the `domain/recency.ts` mention).
-
-**Constraint carried for a later phase:** the library may lazy-load one
-day (James). PR1's shuffle helpers are pure over the id arrays they are
-handed and never assume the pool is the whole library — spec §2.4 — so a
-paging phase inherits an invariant, not a rewrite.
-
 ---
 
 # The open-item register
@@ -1429,10 +1354,18 @@ X" is a real disposition — most of these are single files.
   while the route still returns the deterministic head, so a caller that
   appeared would disagree with the screen. Decide: delete the route (and
   its integration tests), or make it mint and persist a draw server-side
-  so both agree. PR2 touches it either way (`rangeForCap`), PR2 touched the route
-  (`rangeForCap`) without the decision being taken; deadline: PHASE CLOSE
-  (the release notes must not ship a route that disagrees with the screen
+  so both agree. PR2 touched the route (`rangeForCap`) without the
+  decision being taken; deadline: PHASE CLOSE (a route no client calls
+  cannot reach a tester's screen — the exit pass — so the notes need not
+  mention it; the DECISION is what is owed
   unmentioned).
+  **PM close recommendation (2026-09-05): DELETE it, in its own small
+  server-only PR after v0.38.0** — `git log -S` shows no client ever called
+  it in the repo's history, so no shipped build can break; `/api/workouts`
+  already returns `lastDoneDaysAgo`, so `isolation.integration.test.ts`'s
+  eight uses re-point there without losing isolation coverage. Making it
+  draw would persist a server-side pick for a caller that does not exist.
+  James rules.
 
 **Cleared 2026-08-31.** James settled every open row in one sitting; each one
 left this table for an owner, and the dispositions are recorded where the work
@@ -1644,6 +1577,17 @@ to lose the row has no move except to walk away.
 | **The bar's two axes**                     | The connected bar's fill and its notches are two axes on DISTANCE work; EST LEFT holds still 6.6 s and 20.8 s at handovers. **The obvious repair was replayed and does not work.** Accepted and documented. **TRIAD** when it is taken                                                                                                                                                                                                                         | `phase-cr2.md`               |
 
 ## Accepted, pinned, and not being fixed
+
+- **Suggestion helpers are pure over the id arrays they are handed (Phase SF
+  PR1, lifted at close 2026-09-05).** James: the library may lazy-load one
+  day. `domain/suggest.ts`'s `drawOne`/`nextShuffle` and Today's draw
+  initializers never assume the pool is the whole library, never cache a
+  sorted copy across renders, and never key on `library.length`; a stored
+  pick outside the current pool falls through to the pool head, and
+  `suggest()`'s reason strings ("Your library is empty", "No {type}
+  sessions in your library") assert library-wide facts a paging phase must
+  re-scope first. Spec §2.4. Pinned so a paging phase inherits an
+  invariant, not a rewrite.
 
 Known-wrong and deliberately left. They are here so nobody rediscovers them as
 new.
@@ -2344,6 +2288,7 @@ trigger is the whole entry.
 One row each. The body is in `docs/history/`, archived verbatim, and it is a
 RECORD — do not cite it for a live question.
 
+- **Phase SF** — SHUFFLE actually shuffles, Today rolls a type and keeps its filters per type, TIME is a minutes range, the sources read ERGOMATIC LIBRARY / MY WORKOUTS, the Library is searchable by name · closed 2026-09-05 · #296, #297, #300, #301 · released v0.38.0 · [detail](docs/history/phase-sf.md)
 - **Wave F** — received work survives lifecycle interruptions; true link loss has an honest End/save fallback · closed 2026-09-04 · [detail](docs/history/wave-f.md) · [native exit walk](docs/monitor/sessions/walk-2026-09-04-wave-f/README.md)
 - **Phase 0** — the repo where bad code cannot be committed: pnpm, TS strict, Vitest 3-project, husky, CI · closed 2026-07-27 · #1 · [detail](docs/history/phase-0.md)
 - **Phase 1** — every push to main lands on a real URL with health-gated auto-rollback · closed 2026-07-28 · #6, #7, #8 · [detail](docs/history/phase-1.md)
