@@ -15,8 +15,10 @@ once, replaces the buckets with a minutes range on both screens, renames the
 source labels, and adds a name search to the Library.
 
 **Gate class, spoken.** Not fast path — five product files minimum, two
-stored shapes, `domain/suggest.ts` and `domain/duration.ts` change, and PR2
-changes which workouts qualify for a filter (a number's meaning). PR1 and PR2
+stored shapes, `domain/suggest.ts` and `domain/duration.ts` change, the
+server's `/api/today` route (which calls `suggest()` and `bucketsForCap`,
+`server/routes/data.ts`) changes in PR1 and PR2, and PR2 changes which
+workouts qualify for a filter (a number's meaning). PR1 and PR2
 are TRIAD: full antagonist pass on this spec (the phase's anchor pass), PM
 final gate on each PR. PR3 is UI and copy: James reviews, no PM gate, no
 antagonist delta ("inherits phase ground; no new invariant class" — the name
@@ -36,7 +38,9 @@ matters:**
   clears to ANY TYPE, tomorrow rolls again.
 - "in the future we may want the library to lazy load so let's be careful
   with the assumption there" — §2.4 is the named constraint.
-- "Library doesn't remember" — per-type filter memory is Today only.
+- "Library doesn't remember" — his answer to the controller's question
+  "should every combination of Library types get its own memory?": per-type
+  filter memory is Today only.
   Library's existing sessionStorage record is a BACK round-trip aid
   (`libraryFilters.ts`'s own comment), not memory, and stays as it is.
 - "I'm concerned about making sure the shuffle remains performant and limits
@@ -44,6 +48,15 @@ matters:**
   requests per tap, unchanged fetch count per mount.
 - "I was thinking we change 'global' to 'library' and i could use a
   recommendation on custom" — LIBRARY / MINE (§5).
+
+**Revision 1 (2026-09-04), after the antagonist anchor pass and the PM open
+gate.** Eleven antagonist findings and seven PM verdicts folded; the two that
+changed the design outright are the range control (§1.3, §3.4 — the
+two-native-inputs overlay is not a supported pattern) and the random draw's
+home (§2.2 — `suggest()` stays deterministic and returns the tie class; the
+client draws once at mount). The ledger entries for both passes carry the
+techniques. Where the two agents disagreed on PR order, §6 says which way
+and why.
 
 ## 1. Research pass
 
@@ -89,16 +102,27 @@ base Slider Pattern (PRIMARY, same fetch) lists: Right/Up Arrow "Increase the
 value of the slider by one step", Left/Down "Decrease … by one step", Home
 "Set the slider to the first allowed value in its range", End "… last
 allowed value", Page Up/Down optional larger steps.
-MDN `<input type="range">` (PRIMARY): describes "a numeric value" (singular)
-"which must be no less than a given value, and no more than another given
-value"; `step` "specifies the granularity that the value must adhere to".
-INFERENCE from that: the native element carries ONE value, so a two-thumb
-range is either two overlaid native inputs or a custom control. **Decision:
-two native `<input type="range">` elements**, one per thumb, on one rail —
-they are keyboard-complete, screen-reader-labelled and touch-native for
-free, and the "may not pass" rule is one clamp in the change handler. The
-custom-ARIA route was rejected as RF8's exact shape (hand-rolling a pattern
-the platform ships).
+
+**The native element does not do this, and revision 0 said it did.** MDN
+`<input type="range">` (PRIMARY): "a numeric value" (singular). Revision 0
+proposed two overlaid native inputs on one rail "keyboard-complete … for
+free". The anchor pass falsified it: nothing in the HTML range state limits
+a range input's hit region to its thumb, so the upper input wins every
+pointer event on the rail, and the only way through is `pointer-events` on
+`::-webkit-slider-thumb`, which MDN (PRIMARY) labels *"Non-standard: This
+feature is not standardized. We do not recommend using non-standard features
+in production"*; the CSSWG's own replacement carries an open issue
+(PRIMARY, `css-forms-1`, public-css-archive 2025Mar/0416): *"The pseudo
+elements for the 'slider' controls do not support multiple thumbs."*
+SECONDARY: MUI's Slider renders each thumb as a styled `span` wrapping a
+visually-hidden native input that carries the ARIA; the APG pattern itself is
+custom `role="slider"` nodes; USWDS ships single-thumb only. **Decision: a
+custom two-thumb control, `components/DurationRange.tsx`, per the APG
+pattern** — each thumb a 44 px `role="slider"` button with the four ARIA
+values, arrow/Home/End/PageUp/PageDown handled by us, pointer drag via
+Pointer Events with `setPointerCapture`, and the no-cross rule as a clamp.
+RF8 applies in the direction it was written: reuse `PaceRefInput`'s keyboard
+test shape, and gate every key in §3.6.
 
 **1.4 Storage.** Already researched at the right layer:
 `docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md` and
@@ -118,7 +142,9 @@ the same day as #296 and is the surface §2 builds on.
 ### 2.1 Invariants (what is owed, not how)
 
 - **I-1 Stable day.** Within one local calendar day, with no tap, every
-  Today mount shows the same card and (in freestyle) the same lit chip.
+  Today mount shows the same card and (in freestyle) the same lit chip —
+  CONTINGENT on the pool containing the stored id (§2.4) and on the write
+  landing (§2.3, storage denial).
 - **I-2 First pick is random within the tie.** The day's first card is drawn
   uniformly from the least-recently-done tie class of the day's pool; a
   library where everything is never-done draws uniformly from the whole
@@ -132,14 +158,21 @@ the same day as #296 and is the surface §2 builds on.
   decides ORDER within it.
 - **I-5 Daily type.** In freestyle, the day's first mount lights one chip,
   drawn uniformly among types whose pool (under that type's remembered
-  filters) is non-empty; ANY TYPE is never rolled. A tap overrides for the
-  day. Tapping the lit chip clears to ANY TYPE for the day. A plan being
-  active suppresses the roll entirely.
+  filters) is non-empty. A tap overrides for the day. **Tapping the lit
+  chip clears to ANY TYPE and the clear is STICKY:** no roll happens on any
+  later mount, today or any day, until a chip is tapped again (PM finding:
+  without this a rower who wants the whole library clears the chip every
+  morning forever). A plan being active suppresses the roll entirely.
+  James rules on the sticky clear at PR1's Gate 0; this is the default.
 - **I-6 Per-type memory.** Today's five filter groups are remembered per
-  key in {O2, AT, TR, AN, ANY}, undated, across reloads and days. Switching
-  the lit chip switches the whole set. Applying the sheet writes the current
-  key only. CLEAR ALL resets the current key to its preference-derived
-  defaults. A key never written reads as those defaults.
+  key in {O2, AT, TR, AN, ANY}, undated, across reloads and days. The key
+  is the EFFECTIVE type in both modes: with a plan, `swapType ??
+  prescribedCode` (a checkpoint day keys on the day's own type); in
+  freestyle, the lit chip, or ANY when none is lit. Switching the key
+  switches the whole set. Applying the sheet writes the current key only.
+  CLEAR ALL (Today's existing control on its token row, `today-clear-all`)
+  resets the current key to its preference-derived defaults. A key never
+  written reads as those defaults.
 - **I-7 Plan mode unchanged.** With a plan, the chip row, swap arrow,
   checkpoint pin, `CHECKPOINT OVERRIDDEN` marker and un-swap rule behave
   exactly as on main today; only the ORDER of the pool and the memory of the
@@ -149,23 +182,36 @@ the same day as #296 and is the surface §2 builds on.
 
 ### 2.2 Domain (pure, `domain/suggest.ts`)
 
-`suggest()` / `suggestFreestyle()` keep their signatures and their
-membership logic and gain one input: `rng: () => number` (uniform in
-`[0, 1)`), injected so tests are deterministic. `poolIds` keeps its meaning
-(the escape pool, sorted least-recently-done first) — it is what the
-sheet's count reads. Two new pure helpers, each a few lines, each tested with
-an injected rng:
+**`suggest()` and `suggestFreestyle()` stay deterministic and take no rng.**
+Revision 0 injected an rng into them; the anchor pass showed `suggestion` is
+recomputed on every render and a second time per render against the sheet
+draft (`poolCountFor`), so a draw inside would re-roll on every keystroke.
+Instead each returns one more field: `tieIds: string[]`, the ids sharing
+`sortedPool[0]`'s `lastDoneDaysAgo` (null ties with null; `byLeastRecentlyDone`
+already sorts null first and `Array.prototype.sort` is stable). `poolIds`
+and `recommendationId` keep their meanings; with no `todayPickId`,
+`recommendationId` is still `sorted[0]` — which is what the server's
+`/api/today` (no client caller; integration-tested) keeps returning.
 
-- `firstPick(sortedPool, rng)` — the ids sharing `sortedPool[0]`'s
-  `lastDoneDaysAgo` (null ties with null), one drawn by `rng`.
+Two pure helpers in `domain/suggest.ts`, tested with an injected rng:
+
+- `drawOne(ids, rng)` — uniform over `ids` by rejection sampling on a
+  32-bit draw; the only place randomness enters the domain.
 - `nextShuffle(poolIds, shownIds, currentId, rng)` — candidates = pool minus
-  shown minus current; if empty, candidates = pool minus current; draw one.
-  Returns `{ id, shownIds }` with the new id appended (or the list restarted
-  at `[id]` when it had reset). Pure over the arrays it is handed — see §2.4.
+  shown minus current; if empty, candidates = pool minus current; returns
+  `{ id, shownIds }` with the new id appended, or restarted at `[id]` when
+  the set had reset. Pure over the arrays it is handed — §2.4.
 
-The client's `rng` is `crypto.getRandomValues` on a `Uint32Array(1)` divided
-by 2^32; the domain never touches `crypto` (no framework or platform import
-in `domain/`, per the existing lint).
+**The client draws ONCE, at mount.** `TodayView` receives the resolved
+library as a prop (the `LOADING…` gate above it holds until all five hooks
+resolve — vetted ground), so the `pickOverride` lazy initializer can compute
+the day's suggestion, read `tieIds`, call `drawOne` with the client rng
+(`crypto.getRandomValues` on a `Uint32Array(1)`), write the pick, and return
+it; every later render passes that id back as `todayPickId`. The daily type
+roll lives in the `overrides` initializer the same way. React StrictMode's
+double invocation is development-only and reads the first call's write
+(vetted ground); the render impurity is confined to these two initializers
+and named in their comments.
 
 ### 2.3 Stored shapes and the lifetime table (RF27)
 
@@ -175,14 +221,21 @@ all-or-nothing rule in `todayPick.ts`). The record is already invalidated on
 a `date`/`planKey`/`doneN` mismatch; nothing new there.
 
 **`ergomatic.todayOverrides`** (existing, per day) LOSES the five filter
-groups and keeps `{date, planKey, doneN, swapType}`. Bumping the shape means
-an old record fails validation and reads as null — the same fate a
-yesterday's record already meets every morning, so no migration and no
-half-populated object (the file's own v1→v2→v3 history documents exactly
-this rule).
+groups and keeps `{date, planKey, doneN, swapType}`. Revision 0 claimed an
+old record "fails validation"; it does not — `parseOverrides` builds its
+result from named fields and ignores extras, so a pre-PR1 record from the
+SAME day validates and its `swapType` survives, which is the right outcome.
+The safety net is the `date`/`planKey`/`doneN` key, not the parser. No
+migration, no half-object: every reader of the five removed fields is in
+`src/today/` (vetted ground) and PR1 rewrites all of them.
 
 **`ergomatic.todayFilters`** (NEW, undated):
-`{ v: 1, byKey: Partial<Record<"O2"|"AT"|"TR"|"AN"|"ANY", FilterSet>> }` where
+`{ v: 1, rollSuppressed: boolean, byKey: Partial<Record<"O2"|"AT"|"TR"|"AN"|"ANY", FilterSet>> }`
+— `rollSuppressed` is I-5's sticky clear: set true when the lit chip is
+tapped clear, false on any chip tap; a mount rolls only when today's record
+has no `swapType` AND `rollSuppressed` is false. Without it "cleared today"
+and "not yet rolled today" are the same `swapType: null` (anchor finding).
+`byKey` holds one `FilterSet` per key, where
 `FilterSet = { difficulties, durations, painLevels, lastDone, source }` — the
 same five fields `todayOverrides` carries today, with the same validators
 moved over. PR2 swaps `durations` for `durationRange` and bumps `v`.
@@ -192,15 +245,25 @@ moved over. PR2 swaps `durations` for `durationRange` and bumps `v`.
 | `todayPick.workoutId` | first mount of the day (I-2) or SHUFFLE | SHUFFLE; date/plan mismatch | yes | no | no |
 | `todayPick.shownIds` | with `workoutId` | reset by `nextShuffle` on exhaustion; date/plan mismatch | yes | no | no |
 | `todayOverrides.swapType` | daily roll (freestyle, I-5) or chip tap | chip tap; date/plan mismatch | yes | no | no |
+| `todayFilters.rollSuppressed` | lit-chip clear | any chip tap | yes | yes | yes |
 | `todayFilters.byKey[K]` | first sheet apply or CLEAR ALL under key K | next apply/CLEAR ALL under K | yes | yes | yes |
 | in-memory `suggestion` | every render | — | n/a | n/a | n/a |
 
 The daily roll and the first pick are both WRITE-ONCE-PER-DAY: the mount
 reads the record, and only a null read triggers a draw followed by a write.
-Two Today mounts in the same tick (StrictMode double-invoke, a fast
-back-and-forth) must not double-roll: the write happens inside the same
-lazy initializer that reads, so the second mount reads the first's write.
-This is a named antagonist target.
+Two Today mounts in the same tick read-then-write in one initializer, so the
+second reads the first's write (vetted ground).
+
+**The write can fail, and the failure has an owner (RF25).** `saveTodayPick`
+and `saveTodayOverrides` return booleans nobody reads today. Under storage
+denial (researched 2026-09-03) a draw that cannot persist would re-roll on
+every mount — a card that changes on every tab round trip, strictly worse
+than today's stable one. Owner: the initializer keeps a module-scope
+fallback (`Map<dayKey, {pick, shownIds, swapType}>`) written whenever the
+storage write returns false and consulted before drawing; it survives
+remounts within the app's life and is lost on relaunch, which is the stated,
+accepted cost — the same population and the same acceptance the
+storage-denial spec records for `session/run.ts`.
 
 ### 2.4 The lazy-load constraint (James)
 
@@ -211,8 +274,13 @@ candidates), and a stored `workoutId` not in the pool already falls through
 to a fresh first pick (existing `sorted.find` → undefined path). No helper
 may hold a reference to the library between calls, cache a sorted copy
 across renders, or key anything on `library.length`. This is the invariant
-a lazy-load phase inherits; the antagonist attacks it as "which line would
-break first if the pool were a page".
+a lazy-load phase inherits. **Two more it inherits, found by the anchor
+pass:** I-1 holds only while the pool contains the stored id (a page that
+omits it triggers a fresh draw — a paging phase must fetch the stored id's
+row or accept the redraw), and `suggest()`'s reason strings ("Your library
+is empty.", "No {type} sessions in your library.") and its `fellBack` flag
+assert facts about the WHOLE library; a paging phase must re-scope them to
+"in what is loaded" before it ships.
 
 ### 2.5 Performance and network
 
@@ -242,8 +310,11 @@ tokens read the current key's filters.
   mount write, unmounts, remounts, and asserts the same card and chip (I-1)
   — starting upstream of the producer. Mutation: make the initializer skip
   the write (second mount differs, given a stubbed rng that advances).
-- e2e: on the real 300-workout library, tap SHUFFLE 12 times and assert 12
-  distinct titles; reload and assert the 12th is still on screen. Freestyle:
+- e2e: on the real 300-workout library, from a cleared store, two
+  independent runs of 12 SHUFFLE taps produce DIFFERENT sequences with no
+  repeat inside either run; reload keeps the 12th. (The PM ran revision 0's
+  "12 distinct titles" against main and it is GREEN on the unfixed cycle —
+  RF21 in exit-criterion form.) Freestyle:
   reload twice and assert the lit chip is unchanged; tap the lit chip and
   assert ANY TYPE; set a filter under AT, switch to TR, assert the AT token
   is gone, switch back, assert it returned.
@@ -264,12 +335,18 @@ tokens read the current key's filters.
   `durationsUnknown` skips it today.
 - **I-11 Thumbs cannot cross.** `min ≤ max` always; dragging one into the
   other pushes neither — the moving thumb stops at the other's value.
-- **I-12 Defaults.** Today's no-filter default for every key is
-  `[0, cap]` where `cap` is the account's `timeCapMinutes` rounded UP to
-  the next 5 (a 60 cap reads `[0, 60]`); Library's is `[0, 120]`.
-- **I-13 Tokens.** The active-filter token reads `25–35′`, `≤45′`, `60′+`,
-  and nothing when `[0, 120]`; deviation detection compares against the
-  key's default.
+- **I-12 Defaults.** Today's default for every key is `[0, rangeForCap(cap)]`
+  where `rangeForCap` rounds the account's `timeCapMinutes` DOWN to the
+  step and clamps at 120 (`10..300` is the server's validated range; 47 →
+  45 so nothing longer than the cap is admitted; ≥120 → 120 = unbounded).
+  Library's default is `[0, 120]`.
+- **I-13 Tokens, stated per cell** (anchor finding: a sentinel and a
+  per-account default cannot both govern one control in prose). The token
+  renders whenever the range differs from the KEY'S DEFAULT and never
+  otherwise: at default → no token; `[0,120]` when the default is `[0,60]`
+  → `ANY LENGTH` (a real deviation, with its own ✕, which restores the
+  default); `[25,35]` → `25–35′`; `[0,45]` → `≤45′`; `[60,120]` → `60′+`.
+  On Library the default IS `[0,120]`, so `ANY LENGTH` never renders there.
 
 ### 3.2 Domain
 
@@ -284,17 +361,25 @@ reads the bucket chips. Replacements: `DurationRange =
 { min: number; max: number }`, `DURATION_RANGE_MAX = 120`,
 `DURATION_STEP = 5`, `isUnbounded(range)`, `inRange(minutes, range)`,
 `rangeForCap(cap)`. `SuggestPrefs.durations` becomes `durationRange`.
-`server/` has no consumer (grepped 2026-09-04: `routes/data.ts` matches
-only on the word `durations` in an export label; `domain/recency.ts` only
-in a comment).
+`server/routes/data.ts` IS a consumer — revision 0 said otherwise and the
+PM gate caught it: `/api/today` imports `bucketsForCap` and calls it as
+`durations: bucketsForCap(prefs.timeCapMinutes)`. PR2 moves it to
+`durationRange: rangeForCap(prefs.timeCapMinutes)`, keeping the server's
+TIME semantics identical to the client's. `domain/recency.ts` names the
+bucket only in a comment.
 
 ### 3.3 Stored shapes
 
-`todayFilters` → `v: 2`, `durationRange` replaces `durations`; a v1 record
-fails whole and reads as defaults (a rower loses at most one day's
-remembered TIME setting per key, stated in the notes). Library's
-sessionStorage record (`libraryFilters.ts`) bumps its parser the same way;
-it lives one BACK round trip, so nothing is lost. Server: no change.
+`todayFilters` → `v: 2`, `durationRange` replaces `durations`. **A v1
+record is MAPPED, not discarded** (PM finding: fail-whole is free on a
+dated record and costs permanent memory on an undated one): a bucket IS a
+range, so the union of stored buckets becomes `[lowest lower bound, highest
+upper bound]` with `60+` → 120 and an empty union → the key's default.
+Library's sessionStorage record (`libraryFilters.ts`) makes `durationRange`
+REQUIRED in its parser (never lenient like `lastDone`); it lives one BACK
+round trip, so a rejected record costs nothing. `hasActiveFilters` and
+`EMPTY_FILTERS` change from a cardinality test on `durations` to
+`isUnbounded(durationRange)`. Server: `rangeForCap` per §3.2.
 
 ### 3.4 UI
 
@@ -302,11 +387,16 @@ One rail, two thumbs, the current values printed above each thumb in the
 house mono numerals (`25′` … `35′`; `120′+` at the top; `0′` at the
 bottom reads `ANY`). 44 px thumbs (WCAG 2.5.5 target size, the repo's hard
 requirement), rail height 4 px, thumb colour `--ink`, rail `--rule-3`,
-selected span `--accent`. Each thumb is a native `<input type="range"
-min=0 max=120 step=5>` with `aria-label="Shortest"` / `"Longest"` and
-`aria-valuetext` "25 minutes" / "no limit". Keyboard: arrows step 5, Home/End
-to the bounds, Page Up/Down step 15 (the optional larger step). Both sheets
-render the identical component (`components/DurationRange.tsx`).
+selected span `--accent`. Per §1.3 the control is CUSTOM: each thumb is a
+`<button role="slider">` carrying `aria-valuemin=0`, `aria-valuemax=120`,
+`aria-valuenow`, `aria-valuetext` ("25 minutes" / "no limit" / "any"),
+`aria-label="Shortest"` / `"Longest"`, and `tabIndex=0`. Keyboard per the
+APG list: arrows step 5, Home/End to the bounds, Page Up/Down step 15.
+Pointer: `pointerdown` on a thumb captures the pointer, `pointermove` maps
+x to the nearest step, the no-cross clamp stops the moving thumb at the
+other's value; a tap on the rail moves the NEARER thumb. Both sheets render
+the identical component (`components/DurationRange.tsx`). Contrast and hit
+boxes are gated in §3.5/§3.6.
 
 ### 3.5 Gate 0
 
@@ -315,19 +405,27 @@ the same seeded pool, with the token row in three states (`25–35′`,
 `60′+`, none). Contrast for every new pairing computed and stated
 (`--ink` thumb on `--page`, `--accent` span on `--rule-3`, mono value text
 on `--page`). A number changes here — the sheet's live "N options" count —
-so the gate shows the count before and after for one identical pool.
+so the gate shows the count before and after for one identical pool —
+**in both directions**, because the change is not uniformly looser or
+stricter: `bucketsForCap(90)` admitted every bucket while `[0,90]` excludes a
+95-minute workout (stricter for caps 61–119), and at the boundary
+`bucketFor(60)` = `60+` was EXCLUDED by `bucketsForCap(60)` while
+`inRange(60, [0,60])` admits it (looser at the exact cap). The capture names
+one workout that flips each way.
 
 ### 3.6 Oracles
 
 Domain: `inRange` boundary table (24/25/35/36 against `[25,35]`, 120+ tail
-against `[60,120]`); mutation flips each comparison. Seam: apply `[25,35]`
-on Today and assert the card's own printed minutes fall inside it, on the
-real library (RF11 — the card's number is the oracle, not the filter's
-opinion of itself). Keyboard: the roving tests from `PaceRefInput` adapted
+against `[60,120]`); mutation flips each comparison. **Rounding rule, stated:** `inRange` reads `estimateMinutes(...).minutes` —
+the SAME integer the card prints — never a float, so the card and the
+filter can never disagree by rounding. Seam: apply `[25,35]` on Today and
+assert the card's own printed minutes fall inside it, on the real library —
+labelled honestly as a SEAM check (both sides derive from `estimateMinutes`;
+it catches wiring, not the estimate), not an external oracle. Keyboard: the roving tests from `PaceRefInput` adapted
 (RF8): arrow steps, Home/End, the no-cross clamp under both thumbs. e2e
 design sweep: both thumbs ≥ 44 px hit boxes in portrait and landscape.
 
-## 4. PR3 — Library name search and the source rename
+## 4. PR3 — Library name search (the rename moved to PR2, §4.4)
 
 ### 4.1 Invariants
 
@@ -344,16 +442,28 @@ design sweep: both thumbs ≥ 44 px hit boxes in portrait and landscape.
   control inside the field when non-empty (44 px), `type="search"`,
   `autocapitalize="none"`, `enterkeyhint="search"`, no autofocus (the list
   is the point of the screen, not the field).
-- **I-17 Rename.** `GLOBAL` → `LIBRARY`, `CUSTOM` → `MINE` at all four copy
-  sites (`library/FilterSheet.tsx`, `library/filterTokens.ts`,
-  `today/TodayFilterSheet.tsx`, `today/todayFilterTokens.ts`). Stored values
-  stay `"global"` / `"custom"`; no shape changes.
+- **I-17 Rename (ships in PR2, same two sheets, same Gate 0 captures — PM
+  finding).** `GLOBAL` → `LIBRARY`, `CUSTOM` → `MINE` at every RENDERED
+  site, six not four (PM count): `library/FilterSheet.tsx`,
+  `library/filterTokens.ts`, `today/TodayFilterSheet.tsx`,
+  `today/todayFilterTokens.ts`, the row badge in `library/WorkoutRow.tsx`
+  (`workout-row-custom`), and the Library empty state ("No custom workouts
+  yet"), plus the e2e selectors that read `name: "CUSTOM"`. Stored values
+  stay `"global"` / `"custom"`; no shape changes. **PR2's Gate 0 shows
+  LIBRARY / MINE beside BUILT-IN / MINE**: the PM notes a chip reading
+  LIBRARY inside the Library tab can read as "not yours", and James picks.
 
 ### 4.2 Gate 0
 
 Library at rest, with a query typed (`fog`), and with a query plus a type
-chip, portrait and landscape; the SOURCE group on both sheets with the new
-labels. Contrast for the placeholder on `--page` computed and stated.
+chip, portrait and landscape. Contrast for the placeholder on `--page`
+computed and stated.
+
+### 4.4 The rename's home
+
+The rename is PR2 work (I-17): it touches the same two sheets PR2 already
+re-renders, carries no risk model of its own, and its Gate 0 rides PR2's.
+PR3 is search alone.
 
 ### 4.3 Oracles
 
@@ -372,40 +482,67 @@ The pair has to read as two sources of one list: where a workout CAME FROM.
 tokens use; `YOURS` addresses the rower in the second person, which no other
 token does; `BUILT-IN` is two words and a hyphen at chip width. James is
 free to keep CUSTOM ("i'm okay keeping it too"); the spec ships MINE unless
-he says otherwise at PR3's Gate 0.
+he says otherwise at PR2's Gate 0, where LIBRARY and BUILT-IN are both
+rendered for the first half.
 
 ## 6. Decomposition and order
 
-1. **PR1** — §2. TRIAD. Antagonist anchor pass on this spec (whole spec,
-   with §2 as the riskiest), PM open gate on the slate, PM final gate on
-   the PR. Gate 0: the freestyle Today with a rolled chip, portrait and
-   landscape (small — it is #296's screen with a lit chip).
-2. **PR2** — §3. TRIAD. Antagonist DELTA on the range (new stored shape,
-   new domain predicate, a number changes); PM final gate. Gate 0 per §3.5.
-3. **PR3** — §4. Light cycle: antagonist SKIP spoken (the gate-class paragraph above), no PM gate,
-   James reviews. Gate 0 per §4.2.
+1. **PR1** — §2. TRIAD. Anchor pass DONE (revision 1 folds it); PM open
+   gate DONE (OPEN WITH CONDITIONS, folded); PM final gate on the PR.
+   Gate 0: the freestyle Today with a rolled chip, portrait and landscape,
+   plus the sticky-clear ruling (I-5). Touches `server/routes/data.ts`
+   only to keep `/api/today` compiling against `suggest()`'s new field.
+2. **PR2** — §3 plus the rename (§4.4). TRIAD. Antagonist DELTA on the
+   custom control and the v1→v2 mapping; PM final gate. Gate 0 per §3.5
+   with both rename pairs rendered.
+3. **PR3** — §4, search alone. Light cycle: antagonist SKIP spoken (the
+   gate-class paragraph above), no PM gate, James reviews. Gate 0 per §4.2.
+
+**Order, ruled.** The anchor pass recommended PR2 → PR1 so `todayFilters`
+is born at v2 and no tester ever writes a v1 record; the PM recommended
+PR1 first because SHUFFLE is the item James found first and testers will
+notice most, with PR2 MAPPING v1 → v2 (§3.3) so nothing is lost. The spec
+takes the PM's order: the mapping is four lines, and the first tag
+(`v0.38.0`, after PR1, notes covering #296 and PR1) puts the fix in
+testers' hands a PR earlier. Second tag at phase close for PR2 + PR3.
 
 Then a phase close: antagonist exit pass on the exit evidence, PM close,
-one release (`vX.Y.0`, notes covering all three), agent-config check.
+the second release, agent-config check.
 
 ## 7. Exit criteria
 
-1. Twelve SHUFFLE taps on the seed library show twelve distinct titles;
-   a reload keeps the twelfth (e2e, PR1).
+Each names its oracle and whether it is external, a seam, or structural
+(RF11). The PM's rule, adopted: for each, the CURRENT behaviour that fails
+it is named, so none is green on main.
+
+1. From a cleared store, two independent runs of twelve SHUFFLE taps on the
+   seed library produce different sequences, neither repeating inside
+   itself; a reload keeps the twelfth (e2e, PR1). Fails on main: the cycle
+   is identical every run.
 2. A freestyle account reloaded three times in one day shows one lit chip;
-   the next local day rolls (client test with a stubbed clock, PR1).
+   the next local day rolls; a lit-chip clear stays ANY TYPE across a
+   reload AND the next day until a chip is tapped (client tests with a
+   stubbed clock, PR1). Fails on main: nothing is lit.
 3. A filter applied under AT is absent under TR and present again under
-   AT after a reload (e2e, PR1).
+   AT after a reload and after a day change (e2e + client, PR1). Fails on
+   main: filters die at midnight.
 4. `[25, 35]` on Today yields a card whose printed minutes are within
-   25–35 on the seed at the screenshot baseline (e2e, PR2).
-5. Both thumbs are keyboard-operable per §1.3's list and cannot cross
-   (client tests, PR2).
+   25–35 on the seed at the screenshot baseline — a SEAM check, both sides
+   `estimateMinutes` (e2e, PR2). Fails on main: no such range exists.
+5. Both thumbs are keyboard-operable per §1.3's list, cannot cross, and
+   both hit boxes are ≥ 44 px in portrait and landscape (client tests +
+   design sweep, PR2).
 6. `fog` finds River Fog and survives a BACK round trip; the LIBRARY tab
    clears it (e2e, PR3).
-7. No SHUFFLE, chip, apply or roll issues a request: an e2e route counter
-   on `/api/**` reads zero across the interactions in criterion 1 and 3
-   (PR1).
-8. `git grep DurationBucket` is empty after PR2 (the removal row closed).
+7. Across mount + twelve SHUFFLE taps + two chip taps + one sheet apply,
+   the e2e request LIST equals a recorded baseline of exactly the mount's
+   own fetches (PR1). Revision 0 counted requests and read zero — but zero
+   is already main's value (anchor finding, RF21). The list form catches an
+   added remount or refetch; the PR proves it red by adding one fetch.
+8. `git grep DurationBucket -- app/` returns nothing after PR2 (path-scoped:
+   the unscoped grep matches this spec and the ROADMAP row forever).
+9. Every rendered SOURCE label reads the chosen pair, including the row
+   badge and the empty state (e2e, PR2). Fails on main: CUSTOM / GLOBAL.
 
 ## 8. Out of scope, said aloud
 

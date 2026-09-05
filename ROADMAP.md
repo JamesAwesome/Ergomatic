@@ -1047,8 +1047,11 @@ risk model with this wave.)
 
 ## Phase SF — Shuffle and filters
 
-**Status: OPEN 2026-09-04 — spec written, anchor pass and PM open gate
-next.** Ranked into the slate by James on the day: five things he found
+**Status: OPEN 2026-09-04 — spec at revision 1 after the antagonist anchor
+pass (REORDER-or-REVISE: the two-native-inputs slider fell, the rng moved
+out of `suggest()`) and the PM open gate (OPEN WITH CONDITIONS: server
+route in scope, v1→v2 mapping, rename into PR2, exit criterion 1 rewritten
+because it was green on main). Both folded; PR1 plan next.** Ranked into the slate by James on the day: five things he found
 using the app himself, and the first is a design that reads as a bug —
 SHUFFLE steps through least-recently-done order, never-done entries tie in
 seed order, and a mostly-unrowed library therefore "shuffles" in seed order
@@ -1056,32 +1059,42 @@ with the same card on top every day. Spec:
 `docs/superpowers/specs/2026-09-04-shuffle-and-filters-design.md`.
 
 - [ ] PR1 — random first pick (stable per day), SHUFFLE without repeats,
-      freestyle rolls a type once per day, Today's filters remembered per
-      type (O2/AT/TR/AN/ANY). TRIAD: stored shapes `todayPick` (+shownIds),
-      `todayOverrides` (filters out), NEW `todayFilters`. **M**
-- [ ] PR2 — TIME becomes a minutes range (two native range inputs, one
-      rail, 5-min steps, 0..120+) on BOTH sheets; `DurationBucket` and its
-      bucket helpers retire. TRIAD: a number's meaning (which workouts a
-      filter admits) and two stored shapes. Gate 0 with both sheets, both
-      orientations, before/after on one pool. **M**
+      freestyle rolls a type once per day with a sticky clear to ANY TYPE,
+      Today's filters remembered per effective type (O2/AT/TR/AN/ANY).
+      TRIAD: stored shapes `todayPick` (+shownIds), `todayOverrides`
+      (filters out), NEW `todayFilters`; `/api/today` compiles against
+      `suggest()`'s new `tieIds`. Tag `v0.38.0` after it (notes cover #296
+      too). **M**
+- [ ] PR2 — TIME becomes a minutes range (a CUSTOM two-thumb control per
+      the APG pattern — the native overlay fell at the anchor pass — 5-min
+      steps, 0..120+) on BOTH sheets; `DurationBucket` and its bucket
+      helpers retire, `/api/today` moves to `rangeForCap`; `todayFilters`
+      v1 MAPS to v2; the source rename GLOBAL→LIBRARY (or BUILT-IN, James
+      picks at Gate 0), CUSTOM→MINE at six rendered sites. TRIAD. Gate 0
+      with both sheets, both orientations, before/after in BOTH directions
+      on one pool. **M**
 - [ ] PR3 — Library SEARCH BY NAME field above FILTER ⌄ (rides the BACK
-      record, cleared at the tab) and the source rename GLOBAL→LIBRARY,
-      CUSTOM→MINE at four copy sites. James reviews; no PM gate. **S**
-- [ ] Phase close — antagonist exit pass, PM close, one release with notes
-      for all three, agent-config check.
+      record, cleared at the tab). James reviews; no PM gate. **S**
+- [ ] Phase close — antagonist exit pass, PM close, the second release
+      (PR2 + PR3), agent-config check.
 
 **Dead-code row (owed by PR2, James's 2026-09-04 rule — a change that
 makes code unreachable adds the removal row in the same PR).** PR2 retires
 `domain/duration.ts`'s `DurationBucket`, `DURATION_BUCKETS`,
-`DURATION_LOWER_BOUND`, `bucketFor`, `bucketsForCap` and every consumer,
-twelve files grepped 2026-09-04: `src/today/todayOverrides.ts`,
+`DURATION_LOWER_BOUND`, `bucketFor`, `bucketsForCap` and every consumer —
+`git grep -l "DurationBucket\|bucketFor\|bucketsForCap\|DURATION_BUCKETS\|DURATION_LOWER_BOUND" -- app/`
+at bdc098aa, tests excluded, twelve product files: `server/routes/data.ts`
+(`/api/today`, missed by the spec's first grep and caught by the PM gate),
+`src/today/todayOverrides.ts`,
 `src/today/Today.tsx`, `src/today/TodayFilterSheet.tsx`,
 `src/today/todayFilterTokens.ts`, `src/library/FilterSheet.tsx`,
 `src/library/libraryFilters.ts`, `src/library/filters.ts`,
 `src/components/durationTokenLabel.ts`, `src/components/durationChips.ts`,
 `domain/suggest.ts`, `e2e/design.spec.ts` (the bucket-chip sweep), plus the
 retired definitions themselves. `domain/recency.ts` names it in a comment
-only. Exit criterion 8: `git grep DurationBucket` returns nothing.
+only; seven test files follow their subjects. Exit criterion 8:
+`git grep DurationBucket -- app/` returns nothing (path-scoped: this row
+and the spec name the symbol forever).
 
 **Constraint carried for a later phase:** the library may lazy-load one
 day (James). PR1's shuffle helpers are pure over the id arrays they are

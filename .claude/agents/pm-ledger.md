@@ -4568,3 +4568,47 @@ at c5015c2e. James opened this existing item, not Correct Resume.
   Icebox. Reload after denied writes and later eviction retain James's
   explicit accepted boundary. Closing the phase does not silently ship or
   authorize any of these capabilities.
+
+## 2026-09-04 — Phase SF open: run the exit criteria against main first
+
+Spec `docs/superpowers/specs/2026-09-04-shuffle-and-filters-design.md`.
+Verdict OPEN WITH CONDITIONS; all folded into revision 1.
+
+- **Run every exit criterion against current main before accepting it.**
+  SF's criterion 1 ("twelve SHUFFLE taps show twelve distinct titles; a
+  reload keeps the twelfth") was GREEN on the unfixed code: `handleShuffle`
+  steps `(currentIndex + 1) % pool.length` and `saveTodayPick` persists, so
+  a strict cycle satisfies it exactly. A criterion written from the FIX's
+  description tends to describe the fix's happy path, which the bug often
+  already produces. RF21 in exit-criterion form: for each criterion, name
+  the current behaviour that would fail it. If none exists, rewrite it.
+- **A fail-whole storage precedent does not transfer from a DATED record to
+  an UNDATED one.** SF justified discarding a `todayFilters` v1 record from
+  `todayOverrides`'s history — but that record is per-day and dies every
+  midnight, so fail-whole costs nothing there and costs permanent memory
+  here. When a spec cites a validation precedent, check the cited record's
+  LIFETIME, not its parser.
+- **Grep `app/server/` yourself before believing a spec's "no server
+  consumer".** SF §3.2 asserted `routes/data.ts` matched only a label;
+  it imports `bucketsForCap` and calls it in the server-side `/api/today`
+  suggestion — a retiring domain API with a live server caller, which also
+  changes the PR's file scope.
+- **Count a rename's copy sites in the rendered UI, not in the sheet.**
+  SF named four (`FilterSheet`, `filterTokens`, `TodayFilterSheet`,
+  `todayFilterTokens`) and missed `WorkoutRow.tsx`'s CUSTOM badge,
+  `Library.tsx`'s empty-state prose, and four e2e selectors. A rename
+  that reaches the filter and not the row ships two words for one thing.
+- **A daily roll needs an off switch.** "Randomize the type each day" plus
+  "ANY TYPE is never rolled" means a rower who wants the unfiltered library
+  must clear the chip every day forever. Any per-day auto-selection gets an
+  explicit-clear-is-sticky rule, or the owner rules that it does not.
+- **A quoted owner line whose resolution reads as its opposite is a scope
+  question, not a decision.** SF's list carried "Library doesn't remember"
+  beside "Library memory out of scope". The controller confirms the line
+  was James's answer to the Library-memory question (it was), and the spec
+  now says so; the technique stands: when a quote and its ruling can be
+  read two ways, write the question it answered next to it.
+- **Third exception to stranger-first ordering, counted** (30 unchecked
+  items; Wave A, the front door, still next in the slate). Defensible here:
+  two of the five items are stranger-comprehension work. Say the count,
+  then let James rule.
