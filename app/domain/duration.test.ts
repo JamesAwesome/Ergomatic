@@ -204,6 +204,16 @@ describe("rangeFromBuckets (v1 → v2)", () => {
       min: 0,
       max: 120,
     });
+    // Order-independent: a later bucket with a LOWER upper bound (and a
+    // higher lower bound) must not narrow the span.
+    expect(rangeFromBuckets(["60+", "30-45"])).toStrictEqual({
+      min: 30,
+      max: 120,
+    });
+    expect(rangeFromBuckets(["45-60", "<30", "30-45"])).toStrictEqual({
+      min: 0,
+      max: 60,
+    });
   });
 
   it("returns null for an empty or unrecognisable union, ignoring garbage members", () => {
