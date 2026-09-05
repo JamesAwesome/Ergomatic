@@ -45,9 +45,7 @@ export default function WorkoutRow({
       </span>
       <div className="workout-row-line2">
         <TypeBadge type={workout.type} />
-        {!workout.isGlobal && (
-          <span className="workout-row-custom">CUSTOM</span>
-        )}
+        {!workout.isGlobal && <span className="workout-row-custom">MINE</span>}
         <span className="workout-row-meta">
           {workout.difficulty.toUpperCase()} · {daysLabel}
         </span>

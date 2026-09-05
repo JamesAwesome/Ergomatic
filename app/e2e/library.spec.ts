@@ -433,14 +433,14 @@ test.describe("SOURCE filter", () => {
     await openFilterSheet(page);
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "CUSTOM", exact: true })
+      .getByRole("button", { name: "MINE", exact: true })
       .click();
     await applyFilterSheet(page);
 
     await expect(rows).toHaveCount(1);
     await expect(rows.first().locator(".workout-row-title")).toHaveText(title);
     await expect(rows.first().locator(".workout-row-custom")).toHaveText(
-      "CUSTOM",
+      "MINE",
     );
 
     await page.getByRole("button", { name: "CLEAR ALL" }).click();

@@ -656,7 +656,7 @@ test("today-capped", async ({ page }) => {
   await page
     .getByRole("dialog")
     .getByRole("group", { name: "SOURCE" })
-    .getByRole("button", { name: "CUSTOM", exact: true })
+    .getByRole("button", { name: "MINE", exact: true })
     .click();
   await page.getByRole("button", { name: "Apply Filter" }).click();
   await expect(page.locator(".today-card-title")).toHaveText(title);
@@ -700,7 +700,7 @@ test("today-rolled", async ({ page }) => {
   await page
     .getByRole("dialog")
     .getByRole("group", { name: "SOURCE" })
-    .getByRole("button", { name: "CUSTOM", exact: true })
+    .getByRole("button", { name: "MINE", exact: true })
     .click();
   await page.getByRole("button", { name: "Apply Filter" }).click();
   await expect(page.locator(".today-card-title")).toHaveText(title);
@@ -1862,7 +1862,7 @@ test("library", async ({ page }) => {
   // the point of this capture.
   await page.getByRole("button", { name: "FILTER ⌄" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "CUSTOM", exact: true }).click();
+  await dialog.getByRole("button", { name: "MINE", exact: true }).click();
   await expect(
     dialog.getByRole("button", { name: "Apply Filter" }),
   ).toBeEnabled();

@@ -1,17 +1,16 @@
 import { useRef } from "react";
-import type { DurationBucket } from "../../domain/duration.js";
 import type { Difficulty } from "../../domain/types.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
-import { DURATION_CHIPS } from "../components/durationChips";
+import { DurationRange } from "../components/DurationRange";
 import {
   RECENCY_BOUNDARY_DAYS,
   clearSheetFilters,
   setLastDone,
   setSource,
   toggleDifficulty,
-  toggleDuration,
+  setDurationRange,
   togglePainLevel,
   type Filters,
 } from "./filters";
@@ -151,16 +150,12 @@ export default function FilterSheet({
         }
       />
 
-      <CellGrid
+      {/* Phase SF PR2 (spec §3): TIME is a minutes range on one rail —
+          the shared `DurationRange` control, identical on Today's sheet. */}
+      <DurationRange
         label="TIME"
-        cells={DURATION_CHIPS.map(({ bucket, label }) => ({
-          value: bucket,
-          label,
-          pressed: draft.durations.includes(bucket),
-        }))}
-        onToggle={(value) =>
-          onChangeDraft(toggleDuration(draft, value as DurationBucket))
-        }
+        value={draft.durationRange}
+        onChange={(range) => onChangeDraft(setDurationRange(draft, range))}
       />
 
       <CellGrid
@@ -201,12 +196,12 @@ export default function FilterSheet({
           cells={[
             {
               value: "global",
-              label: "GLOBAL",
+              label: "LIBRARY",
               pressed: draft.source === "global",
             },
             {
               value: "custom",
-              label: "CUSTOM",
+              label: "MINE",
               pressed: draft.source === "custom",
             },
           ]}

@@ -1393,14 +1393,26 @@ test.describe("today screen (plan active, logs present)", () => {
         dialog.getByRole("button", { name: label, exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
     }
-    for (const label of ["<30′", "30–45′", "45–60′"]) {
-      await expect(
-        dialog.getByRole("button", { name: label, exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
+    // Phase SF PR2: TIME is the two-thumb range; the 60-minute default
+    // cap reads [0, 60] (spec I-12). Both thumbs clear the 44px floor in
+    // portrait AND landscape — the thumb's hit box is the whole button,
+    // the visible knob is drawn on its ::after (index.css).
+    const shortest = dialog.getByRole("slider", { name: "Shortest" });
+    const longest = dialog.getByRole("slider", { name: "Longest" });
+    await expect(shortest).toHaveAttribute("aria-valuenow", "0");
+    await expect(longest).toHaveAttribute("aria-valuenow", "60");
+    for (const thumb of [shortest, longest]) {
+      const box = (await thumb.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
     }
-    await expect(
-      dialog.getByRole("button", { name: "60′+", exact: true }),
-    ).toHaveAttribute("aria-pressed", "false");
+    await page.setViewportSize({ width: 844, height: 390 });
+    for (const thumb of [shortest, longest]) {
+      const box = (await thumb.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
     const painGroup = dialog.getByRole("group", { name: "PAIN" });
     for (const level of ["1", "2", "3", "4", "5"]) {
       await expect(
@@ -1535,14 +1547,18 @@ test.describe("today screen (plan active, logs present)", () => {
     );
     expect(easyBg).toBe("rgb(27, 26, 23)"); // --ink
 
-    const timeChip = dialog.getByRole("button", {
-      name: "45–60′",
-      exact: true,
-    });
-    const timeBg = await timeChip.evaluate(
+    // Phase SF PR2: TIME's selected span is the one ACCENT fill in the
+    // sheet (spec §3.4 — rail --rule-3, span --accent, knob --ink); the
+    // knob's ink lives on the thumb's ::after.
+    const span = dialog.locator(".duration-range-span");
+    const spanBg = await span.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
-    expect(timeBg).toBe("rgb(27, 26, 23)"); // --ink
+    expect(spanBg).toBe("rgb(181, 52, 31)"); // --accent
+    const knobBg = await dialog
+      .getByRole("slider", { name: "Longest" })
+      .evaluate((el) => getComputedStyle(el, "::after").backgroundColor);
+    expect(knobBg).toBe("rgb(27, 26, 23)"); // --ink
 
     const painCell = dialog
       .getByRole("group", { name: "PAIN" })

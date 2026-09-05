@@ -1,6 +1,7 @@
 import { RECENCY_BOUNDARY_DAYS, type Filters } from "./filters";
 import { collapseDifficulties } from "../components/difficultyTokenLabel";
-import { collapseDurations } from "../components/durationTokenLabel";
+import { formatRangeLabel } from "../components/durationRangeLabel";
+import { UNBOUNDED_RANGE, isUnbounded } from "../../domain/duration.js";
 
 // One token per active GROUP, not per selected band — DESIGN.md's own rule
 // ("the header count counts tokens"). NOTE the count itself no longer keys
@@ -57,11 +58,11 @@ export function filterTokens(f: Filters): Token[] {
     });
   }
 
-  if (f.durations.length > 0) {
+  if (!isUnbounded(f.durationRange)) {
     tokens.push({
       kind: "duration",
-      label: collapseDurations(f.durations),
-      clear: (current) => ({ ...current, durations: [] }),
+      label: formatRangeLabel(f.durationRange),
+      clear: (current) => ({ ...current, durationRange: UNBOUNDED_RANGE }),
     });
   }
 
@@ -87,7 +88,7 @@ export function filterTokens(f: Filters): Token[] {
   if (f.source !== null) {
     tokens.push({
       kind: "source",
-      label: f.source === "custom" ? "CUSTOM" : "GLOBAL",
+      label: f.source === "custom" ? "MINE" : "LIBRARY",
       clear: (current) => ({ ...current, source: null }),
     });
   }

@@ -11,7 +11,7 @@ describe("filterTokens", () => {
     const f: Filters = {
       types: ["O2"],
       difficulties: ["easy"],
-      durations: ["45-60"],
+      durationRange: { min: 45, max: 60 },
       painLevels: [4, 5],
       lastDone: "under21",
       source: "custom",
@@ -43,7 +43,7 @@ describe("filterTokens", () => {
       const busy: Filters = {
         types: ["O2", "AT"],
         difficulties: ["easy"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         painLevels: [4],
         lastDone: "under21",
         source: "custom",
@@ -87,7 +87,7 @@ describe("filterTokens", () => {
       const busy: Filters = {
         types: ["O2"],
         difficulties: ["easy", "hard"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         painLevels: [4],
         lastDone: "under21",
         source: "custom",
@@ -101,43 +101,45 @@ describe("filterTokens", () => {
     });
   });
 
-  describe("duration collapse", () => {
-    it("a single bucket reuses its own label verbatim", () => {
-      const f: Filters = { ...EMPTY_FILTERS, durations: ["45-60"] };
+  describe("duration label (spec I-13)", () => {
+    it("a bounded range reads min–max′", () => {
+      const f: Filters = {
+        ...EMPTY_FILTERS,
+        durationRange: { min: 45, max: 60 },
+      };
       expect(filterTokens(f)[0].label).toBe("45–60′");
     });
 
-    it("collapses a contiguous run spanning the lower boundary to <X′", () => {
-      const f: Filters = { ...EMPTY_FILTERS, durations: ["<30", "30-45"] };
-      expect(filterTokens(f)[0].label).toBe("<45′");
-    });
-
-    it("collapses a contiguous run spanning the upper boundary to X′+", () => {
-      const f: Filters = { ...EMPTY_FILTERS, durations: ["45-60", "60+"] };
-      expect(filterTokens(f)[0].label).toBe("45′+");
-    });
-
-    it("collapses a contiguous MIDDLE run to a plain range", () => {
-      const f: Filters = { ...EMPTY_FILTERS, durations: ["30-45", "45-60"] };
-      expect(filterTokens(f)[0].label).toBe("30–60′");
-    });
-
-    it("collapses ALL FOUR buckets (a real, if functionally inert, active state)", () => {
+    it("an open lower end reads ≤max′", () => {
       const f: Filters = {
         ...EMPTY_FILTERS,
-        durations: ["<30", "30-45", "45-60", "60+"],
+        durationRange: { min: 0, max: 45 },
       };
-      expect(filterTokens(f)[0].label).toBe("<30′–60′+");
+      expect(filterTokens(f)[0].label).toBe("≤45′");
     });
 
-    it("lists a non-contiguous selection individually, not as a false range", () => {
-      const f: Filters = { ...EMPTY_FILTERS, durations: ["<30", "60+"] };
-      expect(filterTokens(f)[0].label).toBe("<30′, 60′+");
-    });
-
-    it("collapse is independent of insertion order", () => {
-      const f: Filters = { ...EMPTY_FILTERS, durations: ["60+", "45-60"] };
+    it("an open upper end (120) reads min′+", () => {
+      const f: Filters = {
+        ...EMPTY_FILTERS,
+        durationRange: { min: 45, max: 120 },
+      };
       expect(filterTokens(f)[0].label).toBe("45′+");
+    });
+
+    it("a point reads the single figure", () => {
+      const f: Filters = {
+        ...EMPTY_FILTERS,
+        durationRange: { min: 35, max: 35 },
+      };
+      expect(filterTokens(f)[0].label).toBe("35′");
+    });
+
+    it("the unbounded range [0, 120] is Library's no-filter state and renders NO token", () => {
+      const f: Filters = {
+        ...EMPTY_FILTERS,
+        durationRange: { min: 0, max: 120 },
+      };
+      expect(filterTokens(f)).toStrictEqual([]);
     });
   });
 
@@ -179,14 +181,14 @@ describe("filterTokens", () => {
       expect(filterTokens(f)[0].label).toBe("21D+");
     });
 
-    it("global reads GLOBAL", () => {
+    it("global reads LIBRARY (Phase SF PR2 rename: GLOBAL → LIBRARY, CUSTOM → MINE)", () => {
       const f: Filters = { ...EMPTY_FILTERS, source: "global" };
-      expect(filterTokens(f)[0].label).toBe("GLOBAL");
+      expect(filterTokens(f)[0].label).toBe("LIBRARY");
     });
 
     it("custom reads CUSTOM", () => {
       const f: Filters = { ...EMPTY_FILTERS, source: "custom" };
-      expect(filterTokens(f)[0].label).toBe("CUSTOM");
+      expect(filterTokens(f)[0].label).toBe("MINE");
     });
   });
 
@@ -195,7 +197,7 @@ describe("filterTokens", () => {
       const busy: Filters = {
         types: ["AN"],
         difficulties: ["hard"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         painLevels: [4, 5],
         lastDone: "under21",
         source: "custom",
@@ -213,7 +215,7 @@ describe("filterTokens", () => {
       const durationToken = tokens.find((t) => t.kind === "duration")!;
       expect(durationToken.clear(busy)).toStrictEqual({
         ...busy,
-        durations: [],
+        durationRange: { min: 0, max: 120 },
       });
 
       const painToken = tokens.find((t) => t.kind === "pain")!;

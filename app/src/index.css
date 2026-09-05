@@ -10800,3 +10800,92 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-weight: 600;
   text-align: left;
 }
+
+/* Phase SF PR2 (spec §3.4): the TIME range — one rail, two thumbs, the
+   values printed above each end. The thumb's hit box is the full 44px
+   `--tap` square (WCAG 2.5.5, the repo's hard requirement; the e2e design
+   sweep measures the button); the visible knob is the 24px circle drawn on
+   its ::after so the rail reads as a rail, not a row of buttons. Rail
+   `--rule-3`, selected span `--accent`, knob `--ink` (computed contrast
+   in the PR's Gate 0). Sits inside `.filter-sheet-group` like every other
+   sheet group, so the label idiom is shared. */
+.duration-range {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Half a thumb of side padding so a thumb at 0 or 120 never overhangs
+     the sheet's own edge. */
+  padding: 0 calc(var(--tap) / 2);
+}
+
+.duration-range-values {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
+.duration-range-rail {
+  position: relative;
+  height: var(--tap);
+  /* The rail line itself is drawn on ::before so the thumbs' 44px boxes
+     are centred on a 4px line without stretching the tap area. */
+  touch-action: none;
+}
+
+.duration-range-rail::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 2px);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rule-3);
+}
+
+.duration-range-span {
+  position: absolute;
+  top: calc(50% - 2px);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.duration-range-thumb {
+  position: absolute;
+  top: 0;
+  width: var(--tap);
+  height: var(--tap);
+  margin-left: calc(var(--tap) / -2);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.duration-range-thumb::after {
+  content: "";
+  position: absolute;
+  left: calc(50% - 12px);
+  top: calc(50% - 12px);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid var(--page);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+.duration-range-thumb:focus-visible {
+  outline: none;
+}
+
+.duration-range-thumb:focus-visible::after {
+  box-shadow:
+    0 0 0 1px var(--ink),
+    0 0 0 4px var(--accent);
+}

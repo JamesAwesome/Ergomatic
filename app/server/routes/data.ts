@@ -1,6 +1,6 @@
 import { Router, type RequestHandler, type Response } from "express";
 import { parseBulk } from "../../domain/bulk.js";
-import { bucketsForCap } from "../../domain/duration.js";
+import { rangeForCap } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { PLANS } from "../../domain/plans.js";
@@ -2151,12 +2151,12 @@ export function createDataRouter({
       library,
       prefs: {
         difficulties: prefs.difficulties,
-        // Amendment (2026-08-04 PR #50 round): SuggestPrefs' own TIME field
-        // is now a bucket union, not a single cap — bucketsForCap derives
-        // the same set the client's own Today screen seeds a fresh day's
-        // TIME defaults from (domain/duration.ts's own doc comment on why
-        // this lives in domain/, not client-only code).
-        durations: bucketsForCap(prefs.timeCapMinutes),
+        // Phase SF PR2: SuggestPrefs' TIME field is a minutes range —
+        // `rangeForCap` derives the same `[0, cap]` default the client's
+        // own Today screen seeds a never-written key from (domain/
+        // duration.ts). Inclusive at the cap, where the old bucket union
+        // excluded a workout estimated at exactly the cap.
+        durationRange: rangeForCap(prefs.timeCapMinutes),
         // Round 2 (2026-08-04): lastDone/source are deliberately OMITTED
         // here, not set to null — server-side suggestions have no
         // client-side overrides to derive a LAST DONE/SOURCE preference

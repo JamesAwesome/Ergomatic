@@ -1,14 +1,10 @@
 import type { RefObject } from "react";
 import type { Difficulty } from "../../domain/types.js";
-import {
-  DURATION_BUCKETS,
-  type DurationBucket,
-} from "../../domain/duration.js";
 import { RECENCY_BOUNDARY_DAYS } from "../../domain/recency.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
-import { DURATION_CHIPS } from "../components/durationChips";
+import { DurationRange } from "../components/DurationRange";
 import type { FilterSet } from "./todayFilters";
 
 /** The sheet's own scratch copy of the five fields it edits — since Phase
@@ -47,12 +43,12 @@ const COUNT_ID = "today-filter-sheet-count";
  * (Today.tsx, untouched by this task): the swap picks the pool, the sheet
  * only narrows it.
  *
- * TIME (Amendment, 2026-08-04 PR #50 round): unified onto the Library's own
- * four duration buckets (`DURATION_CHIPS`, `src/components/durationChips.ts`),
- * multi-select union — the old cap single-select (`≤30′…NO CAP`, exactly
- * one always active) is gone entirely, along with the `filter-sheet-group-
- * time` CSS special-case its "NO CAP" label alone needed (index.css): every
- * TIME cell now renders the identical bucket label the Library's own TIME
+ * TIME (Phase SF PR2, spec §3): a minutes RANGE on one rail — the shared
+ * `DurationRange` control (`src/components/DurationRange.tsx`), identical on
+ * the Library's sheet. It replaced the four-bucket union of the 2026-08-04
+ * Amendment, which itself replaced the original cap single-select
+ * (`≤30′…NO CAP`); the `filter-sheet-group-time` CSS special-case died with
+ * the latter. Every TIME group now renders the identical control the Library's own TIME
  * group already proved fits the 390px sheet width.
  *
  * LAST DONE/SOURCE (Round 2, 2026-08-04): the Library's own half-width pair
@@ -134,32 +130,13 @@ export default function TodayFilterSheet({
         }}
       />
 
-      <CellGrid
+      {/* Phase SF PR2 (spec §3): TIME is a minutes range on one rail —
+          the shared `DurationRange` control, identical on Library's
+          sheet. */}
+      <DurationRange
         label="TIME"
-        cells={DURATION_CHIPS.map(({ bucket, label }) => ({
-          value: bucket,
-          label,
-          pressed: draft.durations.includes(bucket),
-        }))}
-        onToggle={(value) => {
-          const bucket = value as DurationBucket;
-          const next = draft.durations.includes(bucket)
-            ? draft.durations.filter((d) => d !== bucket)
-            : [...draft.durations, bucket];
-          onChangeDraft({
-            ...draft,
-            // Normalised to DURATION_BUCKETS' own canonical order at
-            // toggle time (fix round, L2) — appending the newly-toggled
-            // bucket to the end (`[...draft.durations, bucket]`) let the
-            // draft, and therefore the saved record, hold a non-canonical
-            // sequence (e.g. selecting 60+ before <30 stored `["60+",
-            // "<30"]`) until the NEXT load re-sorted it via todayOverrides
-            // .ts's own parser. Filtering the canonical order down to
-            // what's present both de-dupes and sorts in one step, the same
-            // technique that parser already uses.
-            durations: DURATION_BUCKETS.filter((b) => next.includes(b)),
-          });
-        }}
+        value={draft.durationRange}
+        onChange={(range) => onChangeDraft({ ...draft, durationRange: range })}
       />
 
       <CellGrid
@@ -214,12 +191,12 @@ export default function TodayFilterSheet({
           cells={[
             {
               value: "global",
-              label: "GLOBAL",
+              label: "LIBRARY",
               pressed: draft.source === "global",
             },
             {
               value: "custom",
-              label: "CUSTOM",
+              label: "MINE",
               pressed: draft.source === "custom",
             },
           ]}

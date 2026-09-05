@@ -3,8 +3,8 @@ import { DIFFICULTY_CHIPS } from "./difficultyChips";
 
 /** Lifted from `src/today/todayFilterTokens.ts`'s own private
  *  `collapseDifficulties` (library-filter-unification round, 2026-08-11 —
- *  Task 1) to this shared home, mirroring `durationTokenLabel.ts`'s own
- *  precedent for the identical TIME idiom: Library's own DIFFICULTY token
+ *  Task 1) to this shared home, mirroring the (since-retired, Phase SF PR2)
+ *  `durationTokenLabel.ts`'s precedent for the then-identical TIME idiom: Library's own DIFFICULTY token
  *  (new this round) needs the exact same contiguous-range collapse Today
  *  already built, and a second hand-kept copy is the wrong answer for a
  *  rule this codebase already extracted once. Behavior is unchanged —

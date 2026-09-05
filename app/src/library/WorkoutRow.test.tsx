@@ -109,7 +109,7 @@ describe("WorkoutRow", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByText("CUSTOM")).toBeInTheDocument();
+      expect(screen.getByText("MINE")).toBeInTheDocument();
     });
 
     it("omits the CUSTOM badge for a real seeded library workout", () => {
@@ -119,7 +119,7 @@ describe("WorkoutRow", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.queryByText("CUSTOM")).not.toBeInTheDocument();
+      expect(screen.queryByText("MINE")).not.toBeInTheDocument();
     });
 
     it("adds ', custom workout' to the row's accessible name only for customs", () => {

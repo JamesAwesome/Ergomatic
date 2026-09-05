@@ -4,8 +4,10 @@ import {
   type WorkoutType,
 } from "../../domain/types.js";
 import {
-  DURATION_BUCKETS,
-  type DurationBucket,
+  UNBOUNDED_RANGE,
+  clampRange,
+  rangeFromBuckets,
+  type DurationRange,
 } from "../../domain/duration.js";
 
 /** localStorage key for Today's per-type filter memory (Phase SF PR1, spec
@@ -40,7 +42,8 @@ export function filterKeyFor(
  *  means off for the two pairs. Every field always holds a real value. */
 export interface FilterSet {
   difficulties: Difficulty[];
-  durations: DurationBucket[];
+  // Phase SF PR2 (spec §3): a minutes range; `[0, 120]` means TIME is off.
+  durationRange: DurationRange;
   painLevels: number[];
   lastDone: "under21" | "over21" | null;
   source: "global" | "custom" | null;
@@ -54,12 +57,15 @@ export interface FilterSet {
  *  every new day rolls. That state lives on the DATED day record, where a
  *  day-scoped fact belongs.) */
 export interface TodayFilters {
-  v: 1;
+  /** v2 (Phase SF PR2): `durationRange` replaces the v1 bucket union. A v1
+   *  store is MAPPED on load, never discarded — this is permanent memory
+   *  (spec §3.3, the PM's finding). */
+  v: 2;
   byKey: Partial<Record<TodayFilterKey, FilterSet>>;
 }
 
 export const EMPTY_TODAY_FILTERS: TodayFilters = {
-  v: 1,
+  v: 2,
   byKey: {},
 };
 
@@ -69,12 +75,6 @@ const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 function isDifficulty(v: unknown): v is Difficulty {
   return (
     typeof v === "string" && (DIFFICULTIES as readonly string[]).includes(v)
-  );
-}
-
-function isDurationBucket(v: unknown): v is DurationBucket {
-  return (
-    typeof v === "string" && (DURATION_BUCKETS as readonly string[]).includes(v)
   );
 }
 
@@ -100,7 +100,18 @@ function isFilterKey(v: unknown): v is TodayFilterKey {
  *  one corrupt key must not discard the other four (the store is
  *  permanent memory, not a per-day convenience). De-dupes and canonically
  *  orders `durations`/`painLevels`, same as before. */
-function parseFilterSet(value: unknown): FilterSet | null {
+function isRangeShape(v: unknown): v is DurationRange {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.min === "number" &&
+    Number.isFinite(r.min) &&
+    typeof r.max === "number" &&
+    Number.isFinite(r.max)
+  );
+}
+
+function parseFilterSet(value: unknown, version: 1 | 2): FilterSet | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
   }
@@ -108,18 +119,25 @@ function parseFilterSet(value: unknown): FilterSet | null {
   if (!Array.isArray(o.difficulties) || !o.difficulties.every(isDifficulty)) {
     return null;
   }
-  if (!Array.isArray(o.durations) || !o.durations.every(isDurationBucket)) {
-    return null;
+  // TIME: v2 carries `durationRange` (required, clamped); v1 carried a
+  // bucket union, mapped to the range it spans — an empty v1 union meant
+  // "TIME off", which is the unbounded range.
+  let durationRange: DurationRange;
+  if (version === 1) {
+    if (!Array.isArray(o.durations)) return null;
+    durationRange = rangeFromBuckets(o.durations) ?? UNBOUNDED_RANGE;
+  } else {
+    if (!isRangeShape(o.durationRange)) return null;
+    durationRange = clampRange(o.durationRange);
   }
   if (!Array.isArray(o.painLevels) || !o.painLevels.every(isPainLevel)) {
     return null;
   }
   if (o.lastDone !== null && !isLastDone(o.lastDone)) return null;
   if (o.source !== null && !isSource(o.source)) return null;
-  const durations = o.durations;
   return {
     difficulties: [...new Set(o.difficulties)],
-    durations: DURATION_BUCKETS.filter((b) => durations.includes(b)),
+    durationRange,
     painLevels: [...new Set(o.painLevels)].sort((a, b) => a - b),
     lastDone: o.lastDone,
     source: o.source,
@@ -137,20 +155,21 @@ function parseTodayFilters(raw: string): TodayFilters {
     return EMPTY_TODAY_FILTERS;
   }
   const o = parsed as Record<string, unknown>;
-  if (o.v !== 1) return EMPTY_TODAY_FILTERS;
+  if (o.v !== 1 && o.v !== 2) return EMPTY_TODAY_FILTERS;
+  const version = o.v;
   const byKey: Partial<Record<TodayFilterKey, FilterSet>> = {};
   if (typeof o.byKey === "object" && o.byKey !== null) {
     for (const [k, v] of Object.entries(o.byKey as Record<string, unknown>)) {
       if (!isFilterKey(k)) continue;
-      const set = parseFilterSet(v);
+      const set = parseFilterSet(v, version);
       if (set !== null) byKey[k] = set;
     }
   }
-  return { v: 1, byKey };
+  return { v: 2, byKey };
 }
 
-/** Never null: a missing, denied, garbage, or wrong-version store reads as
- *  the empty store (every key at defaults, roll not suppressed). Storage
+/** Never null: a missing, denied, garbage, or unknown-version store reads
+ *  as the empty store (every key at defaults); a v1 store is mapped to v2. Storage
  *  denial (2026-09-03 research): the getter itself can throw; that is the
  *  same "nothing remembered" outcome, never a crash. */
 export function loadTodayFilters(): TodayFilters {

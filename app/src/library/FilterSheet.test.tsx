@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EMPTY_FILTERS, type Filters } from "./filters";
 import FilterSheet from "./FilterSheet";
@@ -40,11 +40,13 @@ describe("FilterSheet", () => {
         within(dialog).getByRole("button", { name: difficulty }),
       ).toBeInTheDocument();
     }
-    for (const bucket of ["<30′", "30–45′", "45–60′", "60′+"]) {
-      expect(
-        within(dialog).getByRole("button", { name: bucket }),
-      ).toBeInTheDocument();
-    }
+    // Phase SF PR2: TIME is the two-thumb range, not four cells.
+    expect(
+      within(dialog).getByRole("slider", { name: "Shortest" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("slider", { name: "Longest" }),
+    ).toBeInTheDocument();
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
         within(dialog).getByRole("button", { name: level }),
@@ -57,10 +59,10 @@ describe("FilterSheet", () => {
       within(dialog).getByRole("button", { name: "21D+" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "GLOBAL" }),
+      within(dialog).getByRole("button", { name: "LIBRARY" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "CUSTOM" }),
+      within(dialog).getByRole("button", { name: "MINE" }),
     ).toBeInTheDocument();
   });
 
@@ -86,7 +88,7 @@ describe("FilterSheet", () => {
     const draft: Filters = {
       ...EMPTY_FILTERS,
       difficulties: ["medium"],
-      durations: ["45-60"],
+      durationRange: { min: 45, max: 60 },
       painLevels: [3, 4],
       lastDone: "under21",
       source: "global",
@@ -101,9 +103,13 @@ describe("FilterSheet", () => {
       "aria-pressed",
       "false",
     );
-    expect(screen.getByRole("button", { name: "45–60′" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
+      "aria-valuenow",
+      "45",
+    );
+    expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
+      "aria-valuenow",
+      "60",
     );
     expect(screen.getByRole("button", { name: "3" })).toHaveAttribute(
       "aria-pressed",
@@ -121,7 +127,7 @@ describe("FilterSheet", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "GLOBAL" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "LIBRARY" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -138,12 +144,14 @@ describe("FilterSheet", () => {
     });
   });
 
-  it("clicking a TIME cell reports the toggled draft", async () => {
+  it("stepping a TIME thumb reports the new range in the draft", () => {
     const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "45–60′" }));
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
+      key: "ArrowLeft",
+    });
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
-      durations: ["45-60"],
+      durationRange: { min: 0, max: 115 },
     });
   });
 
@@ -176,7 +184,7 @@ describe("FilterSheet", () => {
 
   it("clicking the CUSTOM SOURCE cell reports the set draft", async () => {
     const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+    await userEvent.click(screen.getByRole("button", { name: "MINE" }));
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
       source: "custom",
@@ -185,7 +193,7 @@ describe("FilterSheet", () => {
 
   it("clicking the GLOBAL SOURCE cell reports the set draft", async () => {
     const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "GLOBAL" }));
+    await userEvent.click(screen.getByRole("button", { name: "LIBRARY" }));
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
       source: "global",

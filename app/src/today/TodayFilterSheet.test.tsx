@@ -1,12 +1,12 @@
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TodayFilterSheet, { type TodayFilterDraft } from "./TodayFilterSheet";
 
 const EMPTY_DRAFT: TodayFilterDraft = {
   difficulties: [],
-  durations: ["<30", "30-45", "45-60"],
+  durationRange: { min: 0, max: 60 },
   painLevels: [],
   lastDone: null,
   source: null,
@@ -87,14 +87,15 @@ describe("TodayFilterSheet", () => {
     for (const label of ["EASY", "MEDIUM", "HARD"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
-    for (const label of ["<30′", "30–45′", "45–60′", "60′+"]) {
-      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-    }
+    expect(
+      screen.getByRole("slider", { name: "Shortest" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Longest" })).toBeInTheDocument();
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(screen.getByRole("button", { name: level })).toBeInTheDocument();
     }
     // Round 2 (2026-08-04): the Library's own LAST DONE/SOURCE pair.
-    for (const label of ["<21D", "21D+", "GLOBAL", "CUSTOM"]) {
+    for (const label of ["<21D", "21D+", "LIBRARY", "MINE"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
     // No TYPE group — the type-swap chips stay on the plan line, untouched
@@ -132,7 +133,7 @@ describe("TodayFilterSheet", () => {
     expect(
       within(screen.getByRole("group", { name: "SOURCE" })).getByRole(
         "button",
-        { name: "CUSTOM" },
+        { name: "MINE" },
       ),
     ).toBeInTheDocument();
   });
@@ -141,7 +142,7 @@ describe("TodayFilterSheet", () => {
     renderSheet({
       draft: {
         difficulties: ["easy", "hard"],
-        durations: ["30-45", "60+"],
+        durationRange: { min: 30, max: 120 },
         painLevels: [2, 4],
         lastDone: "under21",
         source: "global",
@@ -159,21 +160,13 @@ describe("TodayFilterSheet", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "30–45′" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
+      "aria-valuenow",
+      "30",
     );
-    expect(screen.getByRole("button", { name: "<30′" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "45–60′" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "60′+" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
+      "aria-valuenow",
+      "120",
     );
     expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
       "aria-pressed",
@@ -195,11 +188,11 @@ describe("TodayFilterSheet", () => {
       "aria-pressed",
       "false",
     );
-    expect(screen.getByRole("button", { name: "GLOBAL" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "LIBRARY" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "CUSTOM" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "MINE" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -233,57 +226,30 @@ describe("TodayFilterSheet", () => {
   // bucket UNION — the old cap single-select ("exactly one always active")
   // is gone; clicking a cell now toggles it independently, same union
   // semantics as DIFFICULTY/PAIN above.
-  describe("TIME (multi-select union)", () => {
-    it("clicking an unselected bucket adds it to the union", async () => {
+  describe("TIME (a minutes range)", () => {
+    it("stepping the upper thumb reports the new range in the draft, other groups untouched", () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, durations: ["<30"] },
+        draft: { ...EMPTY_DRAFT, durationRange: { min: 0, max: 30 } },
       });
-      await userEvent.click(screen.getByRole("button", { name: "60′+" }));
+      fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
+        key: "End",
+      });
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        durations: ["<30", "60+"],
+        durationRange: { min: 0, max: 120 },
       });
     });
 
-    it("clicking an already-selected bucket removes it (deselecting every bucket is allowed — TIME off)", async () => {
+    it("stepping the lower thumb reports the new range too, and the thumbs cannot cross", () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, durations: ["<30"] },
+        draft: { ...EMPTY_DRAFT, durationRange: { min: 25, max: 30 } },
       });
-      await userEvent.click(screen.getByRole("button", { name: "<30′" }));
+      fireEvent.keyDown(screen.getByRole("slider", { name: "Shortest" }), {
+        key: "PageUp",
+      });
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        durations: [],
-      });
-    });
-
-    it("selecting every bucket leaves all four active — a real (if functionally inert) union", async () => {
-      const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, durations: ["<30", "30-45", "45-60"] },
-      });
-      await userEvent.click(screen.getByRole("button", { name: "60′+" }));
-      expect(onChangeDraft).toHaveBeenCalledWith({
-        ...EMPTY_DRAFT,
-        durations: ["<30", "30-45", "45-60", "60+"],
-      });
-    });
-
-    // Fix round (L2): adding out of canonical order used to append the
-    // newly-toggled bucket to the end of the array
-    // (`[...draft.durations, bucket]`), so selecting 60′+ BEFORE <30′
-    // stored `["60+", "<30"]` — a non-canonical sequence that only
-    // resolved back to order on the NEXT load (todayOverrides.ts's own
-    // parser re-sorts on the way in). Toggling now normalises to
-    // DURATION_BUCKETS' own canonical order immediately, so the draft
-    // (and therefore whatever gets saved) never holds that sequence even
-    // transiently.
-    it("adding a bucket out of canonical order normalises the draft to DURATION_BUCKETS' own order", async () => {
-      const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, durations: ["60+"] },
-      });
-      await userEvent.click(screen.getByRole("button", { name: "<30′" }));
-      expect(onChangeDraft).toHaveBeenCalledWith({
-        ...EMPTY_DRAFT,
-        durations: ["<30", "60+"],
+        durationRange: { min: 30, max: 30 },
       });
     });
   });
@@ -353,7 +319,7 @@ describe("TodayFilterSheet", () => {
       const { onChangeDraft } = renderSheet({
         draft: { ...EMPTY_DRAFT, source: "global" },
       });
-      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+      await userEvent.click(screen.getByRole("button", { name: "MINE" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
         source: "custom",
@@ -364,7 +330,7 @@ describe("TodayFilterSheet", () => {
       const { onChangeDraft } = renderSheet({
         draft: { ...EMPTY_DRAFT, source: "custom" },
       });
-      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+      await userEvent.click(screen.getByRole("button", { name: "MINE" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
         source: null,
@@ -373,7 +339,7 @@ describe("TodayFilterSheet", () => {
 
     it("clicking GLOBAL sets it", async () => {
       const { onChangeDraft } = renderSheet();
-      await userEvent.click(screen.getByRole("button", { name: "GLOBAL" }));
+      await userEvent.click(screen.getByRole("button", { name: "LIBRARY" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
         source: "global",

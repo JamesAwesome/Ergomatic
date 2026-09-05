@@ -1,4 +1,5 @@
-import { EMPTY_FILTERS, type DurationBucket, type Filters } from "./filters";
+import { EMPTY_FILTERS, type Filters } from "./filters";
+import { clampRange } from "../../domain/duration.js";
 import { isWorkoutType, type Difficulty } from "../../domain/types.js";
 import { clearLibraryScroll } from "./libraryScroll";
 
@@ -11,17 +12,12 @@ import { clearLibraryScroll } from "./libraryScroll";
 export const LIBRARY_FILTERS_KEY = "ergomatic.libraryFilters";
 
 const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
-const BUCKETS: readonly DurationBucket[] = ["<30", "30-45", "45-60", "60+"];
 const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
 function isDifficulty(v: unknown): v is Difficulty {
   return (
     typeof v === "string" && (DIFFICULTIES as readonly string[]).includes(v)
   );
-}
-
-function isBucket(v: unknown): v is DurationBucket {
-  return typeof v === "string" && (BUCKETS as readonly string[]).includes(v);
 }
 
 function isPainLevel(v: unknown): v is number {
@@ -38,6 +34,17 @@ function isPainLevel(v: unknown): v is number {
  *  parser's own field list, so both fail on `types` (v1 has no such field
  *  at all; v2's `type` is a different key) and fall back to EMPTY_FILTERS
  *  whole, never a v3 Filters half-populated from older data. */
+function isRangeShape(v: unknown): v is { min: number; max: number } {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.min === "number" &&
+    Number.isFinite(r.min) &&
+    typeof r.max === "number" &&
+    Number.isFinite(r.max)
+  );
+}
+
 function parseFilters(raw: string): Filters | null {
   let parsed: unknown;
   try {
@@ -53,7 +60,11 @@ function parseFilters(raw: string): Filters | null {
   if (!Array.isArray(f.difficulties) || !f.difficulties.every(isDifficulty)) {
     return null;
   }
-  if (!Array.isArray(f.durations) || !f.durations.every(isBucket)) return null;
+  // Phase SF PR2: `durationRange` is REQUIRED (never lenient like
+  // `lastDone`): a bucket-era record has `durations` instead and is
+  // rejected whole — this record lives one BACK round trip, so nothing is
+  // lost (spec §3.3, anchor pass HELD-7).
+  if (!isRangeShape(f.durationRange)) return null;
   if (!Array.isArray(f.painLevels) || !f.painLevels.every(isPainLevel)) {
     return null;
   }
@@ -75,7 +86,7 @@ function parseFilters(raw: string): Filters | null {
     // than trust storage.
     types: [...new Set(f.types)],
     difficulties: [...new Set(f.difficulties)],
-    durations: [...new Set(f.durations)],
+    durationRange: clampRange(f.durationRange),
     painLevels: [...new Set(f.painLevels)],
     lastDone: f.lastDone,
     source: f.source,

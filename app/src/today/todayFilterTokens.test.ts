@@ -1,21 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Difficulty } from "../../domain/types.js";
-import type { DurationBucket } from "../../domain/duration.js";
+import type { DurationRange } from "../../domain/duration.js";
 import {
   todayFilterTokens,
   type TodayFilterDefaults,
 } from "./todayFilterTokens";
 
 const ALL_THREE: Difficulty[] = ["easy", "medium", "hard"];
-// The bucket set `bucketsForCap(60)` derives — todayOverrides.ts's own
-// default for the server's 60-min preference, and this file's default
-// fixture (mirrors the pre-Amendment CAPPED_DEFAULTS' `capMinutes: 60`).
-const FIRST_THREE: DurationBucket[] = ["<30", "30-45", "45-60"];
-const ALL_FOUR: DurationBucket[] = ["<30", "30-45", "45-60", "60+"];
+// Phase SF PR2: the TIME default is a range — a 60-minute cap reads
+// `[0, 60]`; `[0, 120]` is the unbounded sentinel (spec I-13's four cells).
+const CAP_60: DurationRange = { min: 0, max: 60 };
+const UNBOUNDED: DurationRange = { min: 0, max: 120 };
 
 const DEFAULTS: TodayFilterDefaults = {
   difficulties: ALL_THREE,
-  durations: FIRST_THREE,
+  durationRange: CAP_60,
 };
 
 describe("todayFilterTokens", () => {
@@ -24,7 +23,7 @@ describe("todayFilterTokens", () => {
     const tokens = todayFilterTokens(
       {
         difficulties: ALL_THREE,
-        durations: FIRST_THREE,
+        durationRange: CAP_60,
         painLevels: [],
         lastDone: null,
         source: null,
@@ -39,7 +38,7 @@ describe("todayFilterTokens", () => {
     const tokens = todayFilterTokens(
       {
         difficulties: ["hard", "easy", "medium"],
-        durations: FIRST_THREE,
+        durationRange: CAP_60,
         painLevels: [],
         lastDone: null,
         source: null,
@@ -54,7 +53,7 @@ describe("todayFilterTokens", () => {
     const tokens = todayFilterTokens(
       {
         difficulties: ALL_THREE,
-        durations: ["45-60", "<30", "30-45"],
+        durationRange: { min: 0, max: 60 },
         painLevels: [],
         lastDone: null,
         source: null,
@@ -69,7 +68,7 @@ describe("todayFilterTokens", () => {
     const tokens = todayFilterTokens(
       {
         difficulties: ["easy"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         painLevels: [2],
         lastDone: null,
         source: null,
@@ -89,7 +88,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ["easy"],
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -105,7 +104,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ["easy"],
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -120,7 +119,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ["medium", "easy"],
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -135,7 +134,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ["hard", "easy"],
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -150,7 +149,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: [],
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -165,7 +164,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ["easy", "medium"],
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -180,12 +179,12 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ["easy", "hard"],
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
         },
-        { difficulties: ["easy", "medium"], durations: FIRST_THREE },
+        { difficulties: ["easy", "medium"], durationRange: CAP_60 },
         vi.fn(),
       );
       expect(tokens.map((t) => t.key)).toContain("difficulties");
@@ -197,7 +196,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ["easy"],
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -210,12 +209,12 @@ describe("todayFilterTokens", () => {
     });
   });
 
-  describe("duration (TIME) deviation", () => {
-    it("a single narrower bucket than the default reads its own range label", () => {
+  describe("duration (TIME) deviation — spec I-13's four cells", () => {
+    it("narrower than the default reads its own label (≤30′)", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: ["<30"],
+          durationRange: { min: 0, max: 30 },
           painLevels: [],
           lastDone: null,
           source: null,
@@ -224,15 +223,15 @@ describe("todayFilterTokens", () => {
         vi.fn(),
       );
       expect(tokens).toStrictEqual([
-        { key: "durations", label: "<30′", onClear: expect.any(Function) },
+        { key: "durations", label: "≤30′", onClear: expect.any(Function) },
       ]);
     });
 
-    it("a non-contiguous duration union lists every bucket comma-separated", () => {
-      const tokens = todayFilterTokens(
+    it("a bounded window and an open upper end read min–max′ and min′+", () => {
+      const window = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: ["<30", "60+"],
+          durationRange: { min: 25, max: 35 },
           painLevels: [],
           lastDone: null,
           source: null,
@@ -240,22 +239,30 @@ describe("todayFilterTokens", () => {
         DEFAULTS,
         vi.fn(),
       );
-      expect(tokens[0].label).toBe("<30′, 60′+");
+      expect(window[0].label).toBe("25–35′");
+      const open = todayFilterTokens(
+        {
+          difficulties: ALL_THREE,
+          durationRange: { min: 60, max: 120 },
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
+        DEFAULTS,
+        vi.fn(),
+      );
+      expect(open[0].label).toBe("60′+");
     });
 
-    // Amendment's own pinned edge: all-four selected is the >60-cap
-    // DEFAULT — matching it is no deviation even though this fixture's
-    // own default (FIRST_THREE) is narrower, because this test compares
-    // against an uncapped (all-four) default explicitly.
-    it("all four buckets selected, matching an uncapped default, shows no duration token", () => {
+    it("the unbounded sentinel matching an unbounded default (cap ≥ 120) shows no duration token", () => {
       const uncapped: TodayFilterDefaults = {
         difficulties: ALL_THREE,
-        durations: ALL_FOUR,
+        durationRange: UNBOUNDED,
       };
       const tokens = todayFilterTokens(
         {
           difficulties: ["easy"],
-          durations: ALL_FOUR,
+          durationRange: UNBOUNDED,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -266,36 +273,11 @@ describe("todayFilterTokens", () => {
       expect(tokens.map((t) => t.key)).not.toContain("durations");
     });
 
-    // All four buckets vs. a NARROWER default (FIRST_THREE) IS a real
-    // deviation — a widening, not the default-for-high-caps case above —
-    // and its own label reads as the full contiguous range, not "ANY TIME".
-    it("all four buckets selected, widening past a narrower default, deviates and reads the full range", () => {
+    it("the unbounded sentinel widening past a narrower default DEVIATES and reads ANY LENGTH (a real filter state with its own ✕)", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: ALL_FOUR,
-          painLevels: [],
-          lastDone: null,
-          source: null,
-        },
-        DEFAULTS,
-        vi.fn(),
-      );
-      expect(tokens).toHaveLength(1);
-      expect(tokens[0].key).toBe("durations");
-      expect(tokens[0].label).toBe("<30′–60′+");
-    });
-
-    // Amendment's other pinned edge: an EMPTY selection (TIME off
-    // entirely) behaves identically to all-four in suggest() (both = no
-    // filtering) but must read as a DIFFERENT, distinguishable token —
-    // there is no bucket to name, so it can't reuse the range-collapse
-    // label at all.
-    it("an empty selection deviating from a non-empty default reads ANY TIME, not a range label", () => {
-      const tokens = todayFilterTokens(
-        {
-          difficulties: ALL_THREE,
-          durations: [],
+          durationRange: UNBOUNDED,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -304,34 +286,19 @@ describe("todayFilterTokens", () => {
         vi.fn(),
       );
       expect(tokens).toStrictEqual([
-        { key: "durations", label: "ANY TIME", onClear: expect.any(Function) },
+        {
+          key: "durations",
+          label: "ANY LENGTH",
+          onClear: expect.any(Function),
+        },
       ]);
     });
 
-    it("an empty selection matching an already-empty default shows no duration token", () => {
-      const empty: TodayFilterDefaults = {
-        difficulties: ALL_THREE,
-        durations: [],
-      };
+    it("at the default (both [0, 60]) shows no duration token", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ["easy"],
-          durations: [],
-          painLevels: [],
-          lastDone: null,
-          source: null,
-        },
-        empty,
-        vi.fn(),
-      );
-      expect(tokens.map((t) => t.key)).not.toContain("durations");
-    });
-
-    it("durations-at-default (both FIRST_THREE) shows no duration token", () => {
-      const tokens = todayFilterTokens(
-        {
-          difficulties: ["easy"],
-          durations: FIRST_THREE,
+          durationRange: { min: 0, max: 60 },
           painLevels: [],
           lastDone: null,
           source: null,
@@ -347,7 +314,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: ["<30"],
+          durationRange: { min: 0, max: 30 },
           painLevels: [],
           lastDone: null,
           source: null,
@@ -365,7 +332,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -380,7 +347,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [3],
           lastDone: null,
           source: null,
@@ -395,7 +362,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [5, 4],
           lastDone: null,
           source: null,
@@ -410,7 +377,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [1, 2, 3],
           lastDone: null,
           source: null,
@@ -425,7 +392,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [1, 4],
           lastDone: null,
           source: null,
@@ -441,7 +408,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [2],
           lastDone: null,
           source: null,
@@ -463,7 +430,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -478,7 +445,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: "under21",
           source: null,
@@ -495,7 +462,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: "over21",
           source: null,
@@ -511,7 +478,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: "under21",
           source: null,
@@ -529,7 +496,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: null,
@@ -544,7 +511,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: "custom",
@@ -553,7 +520,7 @@ describe("todayFilterTokens", () => {
         vi.fn(),
       );
       expect(tokens).toStrictEqual([
-        { key: "source", label: "CUSTOM", onClear: expect.any(Function) },
+        { key: "source", label: "MINE", onClear: expect.any(Function) },
       ]);
     });
 
@@ -561,7 +528,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: "global",
@@ -569,7 +536,7 @@ describe("todayFilterTokens", () => {
         DEFAULTS,
         vi.fn(),
       );
-      expect(tokens[0].label).toBe("GLOBAL");
+      expect(tokens[0].label).toBe("LIBRARY");
     });
 
     it("onClear fires onReset('source')", () => {
@@ -577,7 +544,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           difficulties: ALL_THREE,
-          durations: FIRST_THREE,
+          durationRange: CAP_60,
           painLevels: [],
           lastDone: null,
           source: "custom",
@@ -594,7 +561,7 @@ describe("todayFilterTokens", () => {
     const tokens = todayFilterTokens(
       {
         difficulties: ["easy"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         painLevels: [2],
         lastDone: "under21",
         source: "custom",
@@ -616,7 +583,7 @@ describe("todayFilterTokens", () => {
     const tokens = todayFilterTokens(
       {
         difficulties: ["hard"],
-        durations: ["<30"],
+        durationRange: { min: 0, max: 30 },
         painLevels: [1, 2],
         lastDone: "under21",
         source: "custom",
