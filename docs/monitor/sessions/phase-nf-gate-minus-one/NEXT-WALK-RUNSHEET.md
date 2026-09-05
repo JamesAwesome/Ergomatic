@@ -21,20 +21,20 @@ bundle cleanup was verified within 1m38. See
 [the result](ZERO-SCAN-SETUP-V1-RESULT.md). No NFC scan occurred. The install
 permission is consumed; there is no approved retry or new erg invitation.
 
-[Simulator preparation](SIMULATOR-CONTROL-PROOF.md) subsequently reproduced
-and fixed an Inspector target-label defect. The actual diagnostic component's
-idle reload passed in Simulator, with explicit detach/reattach and the same
-native process. Phone DOM/navigation and recovery under an NFC sheet remain
-unproved. At 23:54:46Z on September 4, a fresh read-only listing again reports
-0.37.0/848 and an installation URL different from the authorized recovery
-install, on the same device. No installation was performed and the cause is
-unknown. The next prerequisite is the explicit-install/zero-scan
-[setup v2](ZERO-SCAN-SETUP-V2.md), followed by the grouped
-[recovery protocol](RECOVERY-WALK-V1.md). Their current readiness and command
-pins are recorded in those files. No further installation or scan is authorized.
+[Simulator preparation](SIMULATOR-CONTROL-PROOF.md) fixed Inspector target
+selection and demonstrated component reload; its fixture did not exercise the
+actual authenticated You route. [Setup v2](ZERO-SCAN-SETUP-V2.md) then installed
+and independently verified 0.23.0/789, but its idle check stopped before the
+canary. Cleanup completed in **2m14.519s total**, with zero NFC attempts. See
+[the result](ZERO-SCAN-SETUP-V2-RESULT.md). That installation permission and run
+are consumed; do not repeat them.
 
-**Desk preparation is complete. PM PASS for setup v2.** Use the prepared
-[command card](RECOVERY-COMMAND-CARD.md); the only next user action is the exact
-install-permission/unlock block in setup v2. Do not start a timer before that
-reply. No further builds, helper changes or unchanged suites are required.
-The actual phone setup result is the remaining gate before an erg invitation.
+The [host loading correction](INSPECTOR-LOADING-FIX.md) addresses a reproduced
+lazy-mount guard defect; the actual phone stop's exact cause remains unknown.
+The next bounded prerequisite is [no-install setup v3](ZERO-SCAN-SETUP-V3.md).
+It has PM PASS and final code-review PASS; the sole next user action is its
+ready/unlock block. It reuses the existing installation only
+if a fresh listing still matches; a mismatch aborts without reinstalling.
+Do not invite James to the erg or start a scan before phone preparation passes
+and the separate [recovery protocol](RECOVERY-WALK-V1.md) has PM readiness PASS
+and explicit scan consent. No short timer starts before a required reply.

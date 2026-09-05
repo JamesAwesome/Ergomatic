@@ -4604,3 +4604,11 @@ still gates the erg invitation. Each recovery pair preserves B before an
 idle document reset and refreshes the PM5's Connect Device state. Two
 complete exports count as B's completion only when both belong to B:
 a delayed A export plus B's first export is insufficient.
+
+## Inspector route-proof limit, 2026-09-05
+
+The direct-component Simulator fixture bypassed You's lazy-loading boundary.
+Its success did not establish authenticated route readiness. Setup v2 also
+discarded the last DOM observation, so its phone failure cannot be assigned
+to the subsequently reproduced loading defect. V3 retains minimal safe
+observations and tests that unresolved phone path without another install.

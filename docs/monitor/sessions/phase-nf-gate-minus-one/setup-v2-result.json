@@ -1,0 +1,15 @@
+{
+  "startedAtUtc": "2026-09-05T00:41:38.177962+00:00",
+  "finishedAtUtc": "2026-09-05T00:43:52.697Z",
+  "totalElapsedMs": 134519,
+  "installationVerified": true,
+  "installedVersion": "0.23.0",
+  "installedBuild": "789",
+  "inspectorGuard": "DiagnosticDocumentMissing",
+  "cleanupVerified": true,
+  "readerBeginCount": 0,
+  "startScanningMethodLineCount": 0,
+  "receiptMarkerCount": 0,
+  "captureCanaryMarkerCount": 0,
+  "installAuthorizationConsumed": true
+}

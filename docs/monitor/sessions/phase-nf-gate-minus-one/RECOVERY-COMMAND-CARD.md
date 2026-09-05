@@ -1,6 +1,6 @@
 # NFC recovery — Codex command card
 
-Use with `ZERO-SCAN-SETUP-V2.md` and `RECOVERY-WALK-V1.md` only after their
+Use with `ZERO-SCAN-SETUP-V3.md` and `RECOVERY-WALK-V1.md` only after their
 required PM verdicts and separate user permissions. These are Codex-owned
 commands, never instructions for James to paste. Do not restart design,
 research, builds or unchanged test suites when he returns.
@@ -10,28 +10,29 @@ Workdir for Node commands:
 Private preparation root (R below):
 `/var/folders/m8/wdf8_49130z_j4m94t3rj3w80000gn/T/ergomatic-nf-recovery.elsxwlhr`.
 The command help was exercised on the Mac; final helper hashes/rehearsal are
-recorded in `RECOVERY-HOST-PREPARATION.md` before this card becomes executable.
+recorded in `RECOVERY-HOST-PREPARATION.md`; the loading delta and current pins
+are in `INSPECTOR-LOADING-FIX.md`. Setup v2 is consumed and must not be rerun.
 
-## Setup after the single explicit install reply
+## No-install setup after the agreed ready reply
 
 Record the original start immediately. Create a fresh private run directory D
 with mode 0700/umask 077 and `operator-session.json` containing the start, its
 five-minute absolute deadline as both ISO and Unix seconds, and permission
-scope `one installation; idle check; zero scans`. Never reuse v1's directory.
+scope `idle check; zero installations; zero scans`. No former run directory,
+process listing, deadline or PID is reusable.
 
-Recheck R/artifact-files.json against every file of the pinned signed app and
-its retained manifest SHA, then `codesign --verify --deep --strict` that app.
-The exact app is R/derived/Build/Products/Debug-iphoneos/App.app. Install once:
+Copy R/authorized-setup-v2-p467ln0x/install.json to D/install.json only as
+provenance. Obtain a fresh listing, then use the existing
+`assertInstalledAppMatches` for its comparison against that install receipt:
 
 ```text
-xcrun devicectl device install app --device Kaito --timeout 60 --json-output D/install.json --log-output D/install.log R/derived/Build/Products/Debug-iphoneos/App.app
 xcrun devicectl device info apps --device Kaito --timeout 20 --json-output D/installed-apps.json --log-output D/installed-apps.log
 ```
 
-These argv forms already succeeded in the authorized v1 installation. Bound
-each invocation by remaining original time; suppress raw output. Use the
-existing `assertInstalledAppMatches` for the install/listing comparison.
-Do not use controller `prepare`: its artifact constant names the old build.
+Require 0.23.0/789 and the exact recorded installation URL. A mismatch stops;
+this procedure contains no install command and grants no install permission.
+The app is the unchanged signed recovery app in
+R/derived/Build/Products/Debug-iphoneos/App.app. Do not use `prepare`.
 
 Start capture directly, retaining its exact live PID/session:
 

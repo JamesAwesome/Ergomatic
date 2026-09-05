@@ -1,6 +1,6 @@
 # Recovery host preparation — September 4–5, 2026
 
-Desk control preparation is complete. The real diagnostic component, host
+The original component rehearsal is complete. The real diagnostic component, host
 Inspector commands and strict receipt reader completed an idle check and all
 four consecutive recovery pairs in Simulator. NFC/Bluetooth callbacks were
 explicitly synthetic; physical phone capture/modal behavior remains the next
@@ -92,5 +92,9 @@ Desk preparation began at 23:52:06Z on September 4. By the final PM PASS at
 approximately 00:28Z on September 5, this turn had consumed about **36 minutes**
 of additional desk time, including rehearsal and review. It is additional to
 earlier preparation and never represented as part of the five-minute future
-phone setup estimate. PM approved setup v2; the real phone result remains the
-only readiness gate before the reviewed recovery protocol's erg invitation.
+phone setup estimate. PM approved setup v2; its later [result](ZERO-SCAN-SETUP-V2-RESULT.md) stopped
+before the idle canary. The fixture above did not exercise the actual You lazy
+route. Current helper pins and the focused correction are recorded in
+[INSPECTOR-LOADING-FIX.md](INSPECTOR-LOADING-FIX.md); the table above preserves
+the exact historical rehearsal files. Phone preparation still gates the erg
+invitation.

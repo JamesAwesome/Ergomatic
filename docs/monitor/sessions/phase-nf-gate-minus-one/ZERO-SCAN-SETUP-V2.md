@@ -1,8 +1,9 @@
 # NF-RECOVERY-SETUP-v2
 
-Status: PM PASS; desk preparation complete. Ready to request the one explicit
-installation permission below. No installation or scan is authorized yet.
-This replaces the consumed v1 setup, not its recorded outcome.
+Status: COMPLETED. Installation verified; idle check stopped before canary
+with zero NFC attempts and cleanup verified. See
+[the result](ZERO-SCAN-SETUP-V2-RESULT.md). Permission and run are consumed.
+The following is the historical approved procedure, not an executable retry.
 
 ## One preparation target
 

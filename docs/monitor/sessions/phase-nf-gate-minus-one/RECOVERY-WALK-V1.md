@@ -21,7 +21,7 @@ Each pair has a 90-second maximum observation allowance. A new case requires
 at least 135 seconds remaining, including its 45-second cleanup reserve.
 These are operator caps, not new app/reader timeouts or a promise all four fit.
 
-No install occurs during this walk. `NF-RECOVERY-SETUP-v2` must first prove the
+No install occurs during this walk. `NF-RECOVERY-SETUP-v3` must first prove the
 exact installed recovery build, authenticated diagnostic controls, capture,
 same-process idle reload and cleanup. Recheck installed identity immediately
 before the walk. A mismatch stops; it never authorizes installation.
@@ -117,7 +117,7 @@ The [host rehearsal](RECOVERY-HOST-PREPARATION.md) and
 [command card](RECOVERY-COMMAND-CARD.md) are complete and code-reviewed.
 `/root/walk_pm` reviewed this concrete four-case scope and grouped protocol;
 no revision or more desk preparation is required. The sole remaining readiness
-gate before the erg invitation is actual setup-v2 PASS: current installation,
+gate before the erg invitation is actual setup-v3 PASS: current installation,
 authenticated controls, complete capture check, document reload, zero reader
 starts and verified cleanup. Supply that result to close readiness; do not
 restart protocol review or infer scan permission from setup.

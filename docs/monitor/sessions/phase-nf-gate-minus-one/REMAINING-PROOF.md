@@ -44,10 +44,11 @@ would not fill this gap.
 
 The signed recovery build now includes the trace and approved temporary native
 hold/release overlay; its 231-file manifest and signature were reverified on
-2026-09-04. It was installed with explicit permission in setup v1, but the
-23:54:46Z read-only listing again reports a different installation (0.37.0/848).
-The reason is unknown. Another install requires explicit permission.
-See `RECOVERY-PREPARATION.md` and `ZERO-SCAN-SETUP-V2.md`.
+2026-09-04. After the recorded identity mismatch, setup v2 installed and independently
+verified it with explicit permission. A later read-only listing still matched
+0.23.0/789 and that installation URL. The idle check stopped before canary
+with zero NFC attempts; preparation remains incomplete. See
+`ZERO-SCAN-SETUP-V2-RESULT.md` and the no-install `ZERO-SCAN-SETUP-V3.md`.
 
 The existing probe's held-stage handler uses export/reload/Start B. Simulator
 has proved the corrected Inspector's actual idle component reload; unattended
