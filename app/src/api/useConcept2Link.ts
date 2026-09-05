@@ -74,11 +74,12 @@ export function normalizeLink(body: unknown): Concept2Link {
     // and for a sharper reason: `server/index.ts` reads
     // `process.env.C2_BASE_URL || "https://log-dev.concept2.com"`, and a
     // `""` that reached here anyway would build
-    // `/profile/2211/log/339` — a RELATIVE url, which the web arm opens as
-    // a new tab on ERGOMATIC's own origin and the native arm hands to
-    // `SFSafariViewController` as a bare path. A link-out that silently
-    // points at ourselves is worse than no link-out, so `""` degrades to
-    // `null` and the button does not render.
+    // `/profile/2211/log/339` — a RELATIVE url. After PR B both platforms
+    // share one arm (`adapters/externalBrowser.ts`'s `openReadOnlyUrl`), and
+    // a relative url opens as a new tab on ERGOMATIC's own origin regardless
+    // of platform. A link-out that silently points at ourselves is worse
+    // than no link-out, so `""` degrades to `null` and the button does not
+    // render.
     logbookBaseUrl:
       typeof raw.logbookBaseUrl === "string" && raw.logbookBaseUrl !== ""
         ? raw.logbookBaseUrl

@@ -93,12 +93,15 @@ export function c2ResultUrl(
  *    signature. `/profile/edit`, `/profile/2211/edit`, `/account`,
  *    `/settings` and `/preferences` all 404.
  *
- *  So the id-less path is the one that lands a rower in their own account
- *  after signing in — and signing in is the likely case, because the native
- *  arm opens `SFSafariViewController`, whose website data has been isolated
- *  from Safari since iOS 11 (SECONDARY — the same isolation that forced
- *  PR1.75b's OAuth hop onto `ASWebAuthenticationSession`). The rower arrives
- *  in a cookie jar that is not Safari's.
+ *  So the id-less path is the one that lands a rower in their own account —
+ *  and after PR B, signing in is now the UNLIKELY case, not the likely one:
+ *  the link-out opens the phone's default browser
+ *  (`adapters/externalBrowser.ts`), which for most rowers already carries
+ *  their Concept2 session (walked 2026-09-04, signed in, on the actual
+ *  result — `docs/monitor/sessions/walk-2026-09-04-c2-linkout/README.md`).
+ *  That strengthens rather than weakens the id-less choice: signed in, it is
+ *  the rower's own profile; signed out, it 302s to `/login` and lands there
+ *  after — either way the id-bearing form above never applies.
  *
  *  PROVISIONAL until one logged-in glance (exit criterion 3b's session) says
  *  which page actually carries the weight and weight-class fields. No status

@@ -3010,8 +3010,12 @@
       5.94:1; Send again's label <code>--ink</code> on <code>--surface</code>
       17.11:1. All of them are rows in &sect;4 already. The link-out row is 44px,
       the same as View on Concept2 &mdash; and it is a <strong>button</strong>
-      for the same reason that one is: inside the Capacitor WebView a plain
-      anchor drives the WebView itself to concept2.com with no way back.</p>
+      for the same reason that one is: <code>openReadOnlyUrl</code> needs a
+      click handler, not a navigation. <strong>The WebView-navigation reason
+      given here is WITHDRAWN 2026-09-04 and corrected in 2c's own callout,
+      not repeated</strong> &mdash; after PR B the tap leaves for the phone's
+      default browser rather than the WebView navigating in place; the choice
+      of button over anchor does not change.</p>
       <p><strong>Send again is the ink outline 2e draws for Retry send &mdash;
       48px, <code>--ink</code> border, <code>--ink</code> label, i.e.
       <code>.btn-outline</code>. REDRAWN 2026-09-03 (fix round 1), because the

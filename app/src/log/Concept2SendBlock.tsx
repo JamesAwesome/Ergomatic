@@ -178,10 +178,13 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
         </p>
       )}
 
-      {/* A BUTTON, not an anchor: inside the Capacitor WebView a plain
-          `<a href>` drives the WebView itself to concept2.com with no way
-          back (`adapters/externalBrowser.ts`'s own note on
-          `openReadOnlyUrl`). 44px hit row. */}
+      {/* A BUTTON, not an anchor: `openReadOnlyUrl` needs a click handler,
+          not a navigation, to open the URL in a new context rather than
+          driving the WebView itself there. Walked on the phone
+          (`docs/monitor/sessions/walk-2026-09-04-c2-linkout/README.md`):
+          the tap opens the phone's default browser, signed in, on the
+          rower's own result — Ergomatic stays mounted behind it. 44px hit
+          row. */}
       {url !== null && (
         <button
           type="button"
@@ -219,10 +222,16 @@ export default function Concept2SendBlock({ row }: { row: StoredLog }) {
           something it cannot let them do. The 1g parallel does not hold —
           nothing a rower can do fixes a stale app build, while EVERYTHING
           about this state is fixable in one visit, which is why it has a
-          link-out at all. On native the link-out is
-          `SFSafariViewController`, which RETURNS to the app onto a
-          still-mounted block, so `Send again` is the affordance the return
-          lands on.
+          link-out at all. PR B moved the link-out to the phone's default
+          browser (`adapters/externalBrowser.ts`'s own note on
+          `openReadOnlyUrl`), and the reason `Send again` is still the right
+          affordance changed with it: on a WARM return (the normal case) the
+          app is backgrounded rather than navigated, so this block is still
+          mounted and the rower lands right back on it (design page §7.2,
+          `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-03.html`).
+          On a COLD relaunch there is no mounted block to return to at all —
+          the rower lands on Today — but the row is still in the log, un-sent,
+          with `Send` reachable from its detail screen.
 
           The line is the SERVER's own reason rendered in our words: four
           tokens, three sentences, and `no_gender` deliberately does not read

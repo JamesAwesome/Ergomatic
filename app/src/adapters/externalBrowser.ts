@@ -25,7 +25,8 @@
 // **This file has NO platform conditional and must not regrow one.** The
 // only evidence that the WebView hands the URL to the system is a device
 // walk — `isNative()` is false under Vitest and Playwright, so no gate in
-// this repo can observe it. See `docs/monitor/sessions/<the PR B walk>/`.
+// this repo can observe it. See
+// `docs/monitor/sessions/walk-2026-09-04-c2-linkout/`.
 
 import { navigateWeb, openWebInNewTab } from "./webNavigate";
 
