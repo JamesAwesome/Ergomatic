@@ -157,3 +157,13 @@ edit: `/api/today` destructures only the fields it uses from `suggest()`.
       record now carries the clear (roll always writes it; remount today
       does not re-roll; tomorrow rolls), tests and e2e re-pointed; build
       shape accepted (CLAUDE.md); one release at phase close.
+- [x] Post-gate ask (James: "Can it re-roll after a workout is saved as
+      well?" → "Logged only"): both day records gain `session` (sessions
+      logged today, freestyle only, derived from the recent-logs fetch,
+      widened 3 → 10); a logged session re-keys the day, so the next mount
+      rolls and draws afresh. Client tests (re-roll after a log; plan mode
+      and unlogged saves do not re-key), store tests (session mismatch and
+      malformed values), one e2e through the real log API. Probes: counter
+      pinned to 0 → the re-roll test failed; counter ignoring the date →
+      the two cleared-day tests failed (their seeded record says session
+      0 while the fixture's July logs would count 3).

@@ -141,8 +141,9 @@ the same day as #296 and is the surface §2 builds on.
 
 ### 2.1 Invariants (what is owed, not how)
 
-- **I-1 Stable day.** Within one local calendar day, with no tap, every
-  Today mount shows the same card and (in freestyle) the same lit chip —
+- **I-1 Stable day.** Within one local calendar day, with no tap and no
+  session LOGGED since, every Today mount shows the same card and (in
+  freestyle) the same lit chip —
   CONTINGENT on the pool containing the stored id (§2.4) and on the write
   landing (§2.3, storage denial).
 - **I-2 First pick is random within the tie.** The day's first card is drawn
@@ -168,7 +169,13 @@ the same day as #296 and is the surface §2 builds on.
   like the sticky clear, can it default to on?"** — revision 1's sticky
   clear (a clear that suppressed every later day's roll until a chip was
   tapped) is struck; the roll is always on. A plan being active suppresses
-  the roll entirely.
+  the roll entirely. **A LOGGED session re-rolls (James, 2026-09-04: "Can
+  it re-roll after a workout is saved as well?" — "Logged only"):** in
+  freestyle, a session logged today re-keys the day records, so the next
+  mount rolls a fresh type and draws a fresh card as if it were a new day;
+  SHUFFLE's shown list restarts too. A saved-but-unlogged session is not a
+  log and does not re-key. With a plan, a log already bumps `doneN`, which
+  is in the key, so nothing new happens and I-7 holds.
 - **I-6 Per-type memory.** Today's five filter groups are remembered per
   key in {O2, AT, TR, AN, ANY}, undated, across reloads and days. The key
   is the EFFECTIVE type in both modes: with a plan, `swapType ??
@@ -228,16 +235,22 @@ initializers and named in their comments.
 
 ### 2.3 Stored shapes and the lifetime table (RF27)
 
-**`ergomatic.todayPick`** (existing, per day) gains `shownIds: string[]`
-and `shuffled: boolean` (false for the day's draw, true once SHUFFLE has
-been tapped — §2.2). Validation: an array of strings and a boolean, else
+**`ergomatic.todayPick`** (existing, per day) gains `shownIds: string[]`,
+`shuffled: boolean` (false for the day's draw, true once SHUFFLE has
+been tapped — §2.2), and `session: number` — the count of sessions logged
+today when the record was written (freestyle; always 0 with a plan),
+part of the load key exactly like `date`/`planKey`/`doneN`. It is DERIVED
+from the recent-logs fetch Today already makes (widened from 3 to 10 so a
+fourth session in a day still counts; the list still shows three), by
+each log's own local calendar day, never a new write. Validation: an array of strings and a boolean, else
 the record fails whole (the existing all-or-nothing rule in
 `todayPick.ts`); a same-day pre-PR1 record therefore reads as nothing
 stored, and the day redraws once — the stated deploy-day cost. The record is already invalidated on
 a `date`/`planKey`/`doneN` mismatch; nothing new there.
 
 **`ergomatic.todayOverrides`** (existing, per day) LOSES the five filter
-groups and keeps `{date, planKey, doneN, swapType}`. Revision 0 claimed an
+groups and keeps `{date, planKey, doneN, swapType, session}` (`session` as
+above, part of the key). Revision 0 claimed an
 old record "fails validation"; it does not — `parseOverrides` builds its
 result from named fields and ignores extras, so a pre-PR1 record from the
 SAME day validates and its `swapType` survives, which is the right outcome.
@@ -260,8 +273,9 @@ moved over. PR2 swaps `durations` for `durationRange` and bumps `v`.
 
 | State | Minted | Cleared / replaced | Survives reload | Survives day change | Survives plan change |
 |---|---|---|---|---|---|
-| `todayPick.workoutId` | first mount of the day (I-2) or SHUFFLE | SHUFFLE; date/plan mismatch | yes | no | no |
-| `todayPick.shownIds` | with `workoutId` | reset by `nextShuffle` on exhaustion; date/plan mismatch | yes | no | no |
+| `todayPick.workoutId` | first mount of the day (I-2) or SHUFFLE | SHUFFLE; date/plan/session mismatch | yes | no | no |
+| `todayPick.shownIds` | with `workoutId` | reset by `nextShuffle` on exhaustion; date/plan/session mismatch | yes | no | no |
+| `*.session` (both records) | with the record, from the logs fetched at mount | a logged session (freestyle) changes the key; date/plan mismatch | yes | no | no |
 | `todayPick.shuffled` | false with the draw; true on SHUFFLE | date/plan mismatch | yes | no | no |
 | `todayOverrides.swapType` | daily roll (freestyle, I-5 — the record is written even when nothing is rolled) or chip tap | chip tap; date/plan mismatch | yes | no | no |
 | `todayFilters.byKey[K]` | first sheet apply or CLEAR ALL under key K | next apply/CLEAR ALL under K | yes | yes | yes |

@@ -1064,7 +1064,8 @@ with the same card on top every day. Spec:
 `docs/superpowers/specs/2026-09-04-shuffle-and-filters-design.md`.
 
 - [ ] PR1 — random first pick (stable per day), SHUFFLE without repeats,
-      freestyle rolls a type once per day (a clear holds for the day),
+      freestyle rolls a type once per day (a clear holds for the day; a
+      LOGGED session re-rolls — James: "logged only"),
       Today's filters remembered per effective type (O2/AT/TR/AN/ANY).
       TRIAD: stored shapes `todayPick` (+shownIds), `todayOverrides`
       (filters out), NEW `todayFilters`; `/api/today` compiles against
