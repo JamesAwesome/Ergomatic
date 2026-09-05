@@ -7704,3 +7704,98 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   constraint names checked in `pg_constraint`: four minutes, and it settled
   the "does RENAME CONSTRAINT exist under that name" question the anchor
   pass could only read about.
+
+### 2026-09-05 — Concept2 auto-send spec, phase-open anchor (TRIAD: stored shape + a number leaving on an untapped trigger)
+
+- **"An automatic send that races a manual tap cannot create two rows."** The
+  already-sent short-circuit reads a row fetched before any wire call, and the
+  route holds no lock on `session_logs` — `withLinkLock` locks the LINK row,
+  for tokens, and the C2 post happens outside it. Two overlapping requests both
+  read `c2_result_id = null` and both reach the vendor; only the VENDOR's dedup
+  covers it. **Technique: for any "our guard prevents X" claim, find what the
+  guard is compared against and WHEN it is read — a check against a value
+  fetched before the mutating call covers sequential callers and never
+  concurrent ones.** And the corollary that made it matter: the race was
+  reachable by ordinary use, because the surface shows a live Send button for
+  the whole duration of the send it is racing.
+- **A four-clause predicate with two inert clauses, because the caller's shape
+  uses `undefined` where the predicate checks `null`.** `isSendable` is typed
+  `Pick<StoredLog>` (`number | null`) and the spec fed it `LogFormFields`
+  (`workSeconds?: number`). **Technique: run the predicate against BOTH shapes
+  and print both answers** — `true` for the form shape with absent totals,
+  `false` for the stored shape with null totals, one `node
+  --experimental-strip-types -e` away. The absent/empty/valued rule this ledger
+  carries for vendor STRINGS applies to our own optional keys crossing a seam.
+- **Reusing an ARIA idiom by name instead of by handler.** "Reuse the
+  `PaceRefInput` radiogroup (RF8)" — but `selectByIndex` focuses AND commits,
+  because in a radiogroup selection IS commitment. Copied onto a control whose
+  third position ARMS AN UNLINK, one arrow key arms a destructive action and
+  every arrow across the other two fires a write. **Technique: before reusing a
+  keyboard idiom, read the arrow handler and ask whether the new control's
+  members all commit on selection; if one of them is a DOOR rather than a
+  value, the radio role is wrong, not just the copy.** (Count check too: the
+  repo has four hand-rolled radiogroups, so "not a fourth" would be a fifth.)
+- **Transcribing an invariant's PRICE from a spec that measured it for a
+  different change.** Walk-fixes R6 priced "four fixtures regenerate" for
+  removing the card's head — a change touching every state. This change renders
+  only when LINKED, and exactly ONE of the four fixtures is a linked state; the
+  card's commonest state has no fixture at all, so the real price is one
+  regeneration plus two NEW fixtures and new design.spec rows. **Technique:
+  when a spec spends a named invariant, re-derive the price against the
+  PREDICATE the new markup renders on, and open the fixtures — a price is a
+  measurement of one change, never a property of the invariant.** The same pass
+  found the neighbouring invariant (R8, "no new tier, no new accent") spent
+  silently.
+- **A response key set pinned by a CONTRACT SCRIPT the spec never read.**
+  Adding one field to `GET /api/concept2/link` needs four coordinated edits, not
+  two: `scripts/webauth-contract.test.ts` holds the route's parsed key list
+  `toStrictEqual` a hardcoded six-string literal AND two hand copies — the
+  product hook and the DEV PROBE (`Concept2LinkProbe.tsx`), which the spec
+  never mentions. **Technique: for any wire-shape change, grep `scripts/` and
+  the test tree for the FIELD NAMES of its siblings, not for the new field —
+  the gate that will go red names the neighbours.**
+- **"Relink resets" was true of one relink path and false of the other.**
+  `DELETE /link` deletes the row, but `upsertLink` is `ON CONFLICT DO UPDATE`
+  and never touches the new column — so RECONNECT keeps the mode (fine) and an
+  ACCOUNT SWITCH keeps it too, pointing an automatic send at a different
+  Concept2 account with no tap. **Technique: for any "X resets on Y" claim
+  about a stored column, enumerate every WRITER of the row and read each one's
+  SET clause; an upsert's set clause is the list of things that reset, and
+  everything else survives.**
+- **A citation that says the opposite, in the same clause.** The does-it-exist
+  answer cited our own logbook spec as recording "an observed ErgData post";
+  that document says *"not an observed ErgData post … remains open"* and labels
+  itself INFERENCE. **Technique: RF16's second corollary in its cheapest form —
+  open the cited section and read the sentence containing the word the claim
+  leans on ("observed"); a section reference is not a quotation.**
+- **Counting SURFACES, not states, for a silent-by-design feature.** The spec
+  called an automatic failure "one tap away". `git grep c2ResultId -- src/`
+  minus tests returns two files, one of which is a type — so the log detail
+  block is the ONLY surface in the client that can render a row's sent state,
+  and of the send route's six outcomes exactly ONE (`needs_reauth`) has a
+  proactive surface, by accident of a server flag set for another reason.
+  **Technique: for any feature whose value is that the rower stops looking,
+  tabulate every failure outcome against the surfaces reachable WITHOUT the
+  action the feature removed; the answer is a number, and the number is what
+  the PM rules on.** The case that made it a defect was systematic, not
+  per-row: a rower with no Concept2 weight declaration fails EVERY row,
+  identically, forever, silently.
+- **Attacked and HELD** (this phase's VETTED GROUND): the one save seam (one
+  client POST producer, one server insert, four doors); fire-and-forget
+  surviving navigation (`src/api.ts` creates no AbortController and reaches
+  `fetch` with no await on web); the block re-reading the row fresh on mount;
+  `raw.autoSend === true` fail-closed; `ADD COLUMN NOT NULL DEFAULT false`
+  being rollback-safe — **measured, via drizzle's `.toSQL()` emitting an
+  explicit column list rather than `SELECT *`, so an old image is blind to the
+  new column**; exactly one unlink affordance; `upsertLink` not writing the new
+  column; the 409-duplicate rendering as `ALREADY THERE` rather than a failure;
+  and the e2e seam being buildable upstream of the producer via
+  `connected.spec.ts`'s `MonitorRun`-seeding idiom.
+- **Standing axis, applied:** every mechanism here is deterministic except
+  Concept2's dedup (the vendor's heuristic, on a key whose `date` granularity
+  our own document marks "Unknown") — and A4's silence, which is a correctly
+  fail-closed check whose FREQUENCY no instrument this repo owns can observe.
+  **Technique: when a design's correct behaviour is to do nothing, ask which
+  instrument records that it chose to do nothing; if none does, the diagnostic
+  is part of the change** (the `rowingActive` pattern), because the first field
+  report will otherwise be undiagnosable.

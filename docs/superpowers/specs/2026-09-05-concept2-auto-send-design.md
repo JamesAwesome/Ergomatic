@@ -1,292 +1,381 @@
 # Wave E follow-on — automatic Concept2 sends: OFF · MANUAL · AUTOMATIC
 
+**Rev 2 (2026-09-05).** Rev 1 took the full antagonist pass (TRIAD, phase-open
+anchor): eight claims falsified, all folded below, and one product ruling
+taken to James (§3.4, "A"). The pass's attacked-and-held claims are this
+phase's vetted ground (§7).
+
 ## 1 · What and why
 
 Today every Concept2 send is a tap: a rower opens a finished monitor row and
 presses Send. This adds a per-rower **sending mode** so a row can go to
-Concept2 the moment it is saved, with no tap. The control has three positions
-that read as a progression — **OFF → MANUAL → AUTOMATIC** — where OFF is the
-unlinked state (James, 2026-09-05: _"off is unlinked"_), MANUAL is today's
-per-row Send, and AUTOMATIC is "the Send button pressed for you" right after
-the row saves (James: _"go A"_ — silent; the outcome lives on the row's block
-exactly as a manual send's does).
+Concept2 the moment it is saved, with no tap. The control reads as a
+progression — **OFF → MANUAL → AUTOMATIC** — where OFF is the unlinked state,
+MANUAL is today's per-row Send, and AUTOMATIC is "the Send button pressed for
+you" right after the row saves. The outcome lives on the row's block exactly as
+a manual send's does — **and, because a silent failure under AUTOMATIC has
+nowhere else to show, the You row also warns when sends are failing** (§3.4).
 
-**Rulings already made (James, 2026-09-05), not re-opened here:**
+**Rulings (James, 2026-09-05), not re-opened here:**
 
-1. **OFF = unlinked.** There is no "linked but paused" state. Once linked the
-   setting is binary — manual or automatic — and OFF on the control is the door
-   to unlink.
-2. **AUTOMATIC is silent.** No save-time toast or banner. The row's Concept2
-   block shows SENT · RESULT id, or the same refusal-with-retry the manual
-   path shows, whenever the rower opens it.
-3. **A fresh link lands in MANUAL.** Nothing leaves the account without a tap
-   until the rower flips it. Automatic is opt-in.
-4. **Switching to AUTOMATIC sends rows saved from then on**, never the backlog
-   of older unsent rows (my recommendation, not objected to).
-5. **The send fires client-side, right after the row saves** (approach 1 of
-   three, James: _"1 is good"_): it is the same call the Send button makes.
+1. **OFF = unlinked.** No "linked but paused" state. Once linked the setting is
+   binary; OFF on the control is the door to unlink.
+2. **AUTOMATIC is silent at save time.** No toast or banner when the row saves.
+3. **A fresh link lands in MANUAL.** Automatic is opt-in.
+4. **Switching to AUTOMATIC sends rows saved from then on**, never a backlog.
+5. **The send fires client-side, right after the row saves**, through the same
+   route the Send button uses (approach 1 of three).
+6. **Failures under AUTOMATIC surface on the You row** ("A", after the
+   antagonist pass): one sticky server-side flag on the link, set when an
+   eligible send fails, cleared on the next success; the You row shows it, the
+   screen names the reason.
 
-**Why this is TRIAD** — it adds a stored shape (one boolean on the link row),
-and it makes a number leave for a third party on a trigger the rower did not
-tap. Full antagonist pass on this spec; PM gate on the PR. It also changes what
-a rower sees on `/you/concept2` (a new control replaces the Unlink button), so
-it carries a **Gate 0**: the rendered control in every state, both
-orientations, contrast ratios as numbers, before any implementation task.
+**TRIAD** — two stored shapes (a mode and a failure flag on the link row) and a
+number leaving for a third party on a trigger nobody tapped. Full antagonist on
+this spec (done, rev 1 → rev 2; a DELTA pass on rev 2's new mechanisms is owed,
+§7), PM gate on the PR, and a **Gate 0** for the redrawn card and the You row's
+new state.
 
 ## 2 · Research record
 
-- **Does the underlying system have the concept?** Yes. Concept2's own
-  ErgData app uploads automatically after a piece (SECONDARY — the logbook
-  design spec §"The mapping" records an observed ErgData post; not re-fetched
-  here). Concept2's API needs nothing new from us for this: the same
-  `POST /api/users/me/results` the manual send uses.
-- **Concept2's own guard against double-sends is real and already measured.**
-  PRIMARY (logbook design spec, "Dedup", quoted): _"the Logbook filters for
-  duplicate workouts, so will return a Duplicate Entry error if you post a
+- **Does the underlying system have the concept?** The question is answered by
+  Concept2's API, not by ErgData: `POST /api/users/me/results` accepts a row
+  from any client at any time; nothing in it distinguishes a tapped send from
+  an automatic one. **Rev 1 cited "an observed ErgData post" for ErgData
+  auto-uploading; the cited document says the opposite** (_"not an observed
+  ErgData post … remains open"_, INFERENCE). Withdrawn. That ErgData uploads
+  automatically is common knowledge and untagged here; it is not load-bearing.
+- **Concept2's dedup is real, measured, and is a vendor HEURISTIC, not our
+  guard.** PRIMARY (logbook design spec, "Dedup", quoted): _"the Logbook filters
+  for duplicate workouts, so will return a Duplicate Entry error if you post a
   workout which has the same date, time and distance as an existing workout"_;
-  observed live as `409 Duplicate Result` naming the colliding id (PR C's
-  measurement, 2026-09-05). Our own guard sits in front of it: the send route
-  short-circuits any row already carrying `c2_result_id`. So an automatic send
-  that races a manual tap, or a retry after an app kill, cannot create two
-  rows at Concept2.
-- **Rate limits:** PRIMARY (logbook design spec, "Rate limits: none
-  currently"). An automatic send per saved row is one request per row, the
-  same volume a diligent manual rower produces.
-- **Webhooks exist** (logbook design spec) and are **not needed**: nothing
-  here waits on Concept2 telling us anything; the send's own response is the
+  observed live as `409 Duplicate Result` (PR C's measurement). Its `date`
+  granularity is marked "Unknown" in our own notes. **So it is the backstop,
+  not the mechanism**: §3.3 gives the send route its own in-process claim so
+  two simultaneous sends for one row never both reach the wire.
+- **Rate limits:** none (PRIMARY, logbook design spec). One request per saved
+  row.
+- **Webhooks exist** and are not needed; the send's own response is the
   outcome.
-- **One save seam.** Every log row — programmed, Just Row, timer, manual —
-  is created by `useLogForm`'s `postLog` (`src/session/LogSession.tsx`), whose
-  201 path calls `onSaved(logId)`. That is the single place an automatic send
-  can hook, and it already carries the created row's id, which the send route
-  keys on. Confirmed by grep: exactly one `api("/api/logs", …)` in `app/src`.
-- **The platform gap, named (RF19).** The send is a second request after the
-  save. If iOS suspends or kills the WebView between them, the send does not
-  happen. No instrument this repo owns can observe that (the e2e stack is web;
-  `src/native/**` is coverage-exempt). **The design accepts it because the
-  fallback is exactly today's product:** the row is saved, its block shows Send,
-  and the next open of the row is one tap from sent. Nothing is lost; a row is
-  merely not yet sent. Stated in the PR body, not as a claim of reliability.
-- **Nothing found:** no Concept2 setting for "auto-verify" or server-side
-  push; the mode is purely ours.
+- **One save seam — HELD under attack.** Every log row is created by
+  `useLogForm`'s `postLog` (`src/session/LogSession.tsx`), whose 201 path calls
+  `onSaved(logId)`. Exactly one `api("/api/logs", …)` in `app/src`; no
+  server-side row creation. Fire-and-forget from that path survives the
+  navigation `onSaved` performs (HELD: `src/api.ts` attaches no abort to
+  unmount).
+- **The platform gap, named (RF19).** If iOS suspends or kills the WebView
+  between the save and the send, the send does not happen; no instrument here
+  can observe how often. The row is saved and shows Send; and since rev 2 the
+  You row does NOT warn for this case (nothing reached the server), so it is
+  the one automatic failure that stays silent. Stated in the PR body. §4 adds
+  the diagnostic that makes the first "automatic isn't working" report
+  diagnosable.
+- **Migration numbering:** the next index at head is 0024; the plan checks
+  open PRs for a competing 0024 and REGENERATES if this branch merges second
+  (agent-briefing rule) — the number is not pinned here.
 
 ## 3 · The design
 
-### 3.1 The setting — one boolean on the link row
+### 3.1 Two columns on the link row
 
-`concept2_links.auto_send boolean NOT NULL DEFAULT false`. Migration `0024`.
-Default false is ruling 3 (a fresh link lands in MANUAL); a `DEFAULT` on the
-column is also what makes every existing link row MANUAL with no backfill.
+`concept2_links` gains:
 
-- **Read:** `GET /api/concept2/link` gains `autoSend: boolean` on the linked
-  shape. `normalizeLink` (`api/useConcept2Link.ts`) carries it as a required
-  boolean — `raw.autoSend === true`, so an old server that does not send the
-  key reads as `false` (manual), never as automatic. **Fail-closed by
-  construction**: the only way to be automatic is a literal `true`.
-- **Write:** one new endpoint, `PATCH /api/concept2/link` with body
-  `{ autoSend: boolean }`, signed-in and cohort-gated like the rest of the
-  router, `204`. Refuses with `409 not_linked` when there is no link — the
-  setting has no meaning without one (ruling 1). **The router grows no other
-  write.**
-- **Unlink clears it implicitly** — `DELETE /api/concept2/link` deletes the
-  row, and the column goes with it. Relinking starts at false (ruling 3).
+- `auto_send boolean NOT NULL DEFAULT false` — the mode. Default false is
+  ruling 3, and the `DEFAULT` makes every existing link MANUAL with no
+  backfill.
+- `send_failed_at timestamptz NULL` and `send_failed_reason text NULL` — the
+  failure flag (ruling 6): the instant of the most recent eligible-send failure
+  and its route error code (`no_weight_class` | `c2_error`), both cleared to
+  `NULL` on the next successful send.
+
+**Rollback (RELEASING.md floor):** the previous server ignores unknown columns
+(Drizzle selects by name — HELD, measured with `.toSQL()`); the new server
+against a DB without them fails at first read, so the migration runs ahead of
+the deploy exactly as every additive column here has. Rollback-safe both ways;
+the plan adds the RELEASING.md row.
+
+**Read.** `GET /api/concept2/link`'s linked shape gains `autoSend: boolean`,
+`sendFailedAt: string | null`, `sendFailedReason: string | null`.
+`normalizeLink` carries `autoSend` as `raw.autoSend === true` — absent,
+unreadable, `"true"`, `1` all read `false` (A2, fail-closed by construction —
+HELD); the failure pair as nullable strings. `LINK_UNAVAILABLE` gains all
+three with `false`/`null`/`null`, and its all-fields-literal test gains them
+(F6). **Four coordinated edits, not two:** `normalizeLink` + its test,
+`LINK_UNAVAILABLE`'s test, `scripts/webauth-contract.test.ts` (pins the link
+key set against a literal), and `monitor/Concept2LinkProbe.tsx` (renders the
+key set). All named in the plan; the first commit that adds the key without
+them is red.
+
+**Write.** One new endpoint, `PATCH /api/concept2/link`, body
+`{ autoSend: boolean }`, signed-in and cohort-gated like the router, `204`;
+`409 unlinked` with no link row. The router's writes are otherwise unchanged:
+the failure flag is written by the SEND route, not by any client.
+
+**Unlink** deletes the row (HELD — `DELETE /link` deletes, not nulls), so both
+columns go with it; relink after unlink starts false. **Relink WITHOUT unlink
+(F7):** `upsertLink`'s conflict path today preserves every column, so an
+account switch (a different `c2_user_id` landing on the same user) would carry
+AUTOMATIC onto a different Concept2 account with no tap. **Rule: on the upsert
+conflict path, `auto_send` resets to `false` and the failure flag clears when
+`c2_user_id` changes; a reconnect of the same account keeps the mode.** Gated
+by a store test with both branches.
 
 **Lifetime table (RF27):**
 
 | state | mint | cleared by | survives |
 | --- | --- | --- | --- |
-| `auto_send` | link row created (false) | `PATCH` (either way); `DELETE /link` (row gone) | server-side: every device, every relaunch, until unlink |
-| `link.autoSend` (client) | each `GET /link` | the next read | per hook instance; read on mount, foreground, `pageshow` — the same lifetime as `link.linked` |
+| `auto_send` | link row created (false) | `PATCH`; `DELETE /link` (row gone); upsert with a NEW `c2_user_id` (→ false) | every device, relaunch, reconnect of the same account |
+| `send_failed_at/_reason` | the send route, on an eligible send's `no_weight_class` or `c2_error` | the send route on the next success; `DELETE /link`; upsert with a new `c2_user_id` | as above |
+| `link.autoSend` / `sendFailed*` (client) | each `GET /link` | the next read | per hook instance — mount, foreground, `pageshow` |
+| in-flight send claim (§3.3) | the send route, per `logId`, on entry | `finally` on exit | per server process only |
 
-There is no client-side cache of the mode. The form reads it from the live link
-(§3.3); a stale read costs at most one send that the rower did or did not
-expect, and the row's block shows which.
+No client-side cache of the mode; the form reads the live link (§3.3).
 
 ### 3.2 The control on `/you/concept2` — replaces Unlink
 
-**Where it lives is forced by RF23.** OFF means unlink (ruling 1). If the
-control sat beside the card's existing `Unlink Concept2` button, the screen
-would carry two affordances for one destructive action — the shape RF23 exists
-to stop. So **the control replaces the Unlink button** inside the card's
-`.c2-card-act` column, and the card's markup changes. That spends PR A's R6
-("the card's markup does not change") — knowingly: four committed fixtures
-regenerate, the `innerHTML` equality test updates, and `design.spec.ts`'s
-control-height table gains the control's rows. **Gate 0 draws the redrawn
-card.**
+**Placement is forced by RF23.** OFF means unlink (ruling 1); a control beside
+the card's `Unlink Concept2` button would be two affordances for one
+destructive action. So **the control replaces the Unlink button** in the card's
+`.c2-card-act` column. That spends PR A's R6 (the card's markup changes) and
+**R8 too — the control is a new tier**, said plainly (F5). Gate 0 draws it.
 
-**The control, when LINKED:** a three-position segmented control (the
-`PaceRefInput` / `ClassificationCard` roving-tabindex radiogroup idiom —
-CLAUDE.md RF8 says reuse it and copy its keyboard tests, not hand-roll a
-fourth):
+**The control, when LINKED — three buttons, NOT a radiogroup (F4).** Rev 1
+prescribed the `PaceRefInput` roving-tabindex radiogroup idiom; that idiom
+commits on arrow, so one arrow key would have armed the unlink and arrows across
+MANUAL/AUTOMATIC would have fired a `PATCH` each. The honest shape for a group
+whose third member is destructive-armed is **three `<button>`s with
+`aria-pressed`**, arrows moving FOCUS only, commit on click / Enter / Space.
+(And for the record: four hand-rolled radiogroups already exist, not three.)
 
-- **OFF** — selecting it **arms** the existing two-tap unlink (ruling 1 makes
-  it destructive; the 4-second disarm and the disclosure sentence _"Unlink
-  removes this app's access. Rows already sent stay on Concept2."_ both stay,
-  per the walk-fixes spec's R9). The position does not commit until the second
-  tap; disarming returns the selection to the current mode.
-- **MANUAL** — `PATCH { autoSend: false }`. The default; today's behavior.
-- **AUTOMATIC** — `PATCH { autoSend: true }`. One line beneath the control
-  states the promise in the rower's words (copy is Gate 0's; the spec's
-  candidate: _"Finished monitor rows are sent when you save them."_ vs. for
-  MANUAL _"Send each row from the log."_).
+- **OFF** — arms the existing two-tap unlink (4-second disarm, the disclosure
+  sentence, both kept per the walk-fixes spec's R9). The position does not
+  commit until the second tap; disarm returns the pressed state to the current
+  mode.
+- **MANUAL** — `PATCH { autoSend: false }`.
+- **AUTOMATIC** — `PATCH { autoSend: true }`.
 
-**When UNLINKED**, the card is unchanged from today: CONNECT TO CONCEPT2. The
-control is not shown, because there is nothing to set (ruling 1). **The
-alternative — a unified control where tapping MANUAL or AUTOMATIC while
-unlinked starts the link with that mode — is named and NOT built:** the chosen
-mode would have to survive the web arm's document unload through the OAuth hop,
-which means a new lifetime (on the server's `concept2_auth_attempts` row, or in
-storage) for a convenience that saves one tap. It is the RF27 shape for a
-YAGNI gain; Gate 0 sees the simpler screen. If James wants the unified control,
-it is a follow-on with its own lifetime table.
+**The mode line beneath the control — Gate 0's copy, and it must not promise
+what the link cannot keep.** Rev 1's candidate for AUTOMATIC, _"Finished
+monitor rows are sent when you save them."_, is wrong in two states the pass
+found: **linked-but-`needsReauth`** (every automatic send 409s while the card
+above reads `CONCEPT2 STOPPED ACCEPTING THIS LINK`) and **failure-flagged**
+(§3.4). The line therefore reads from the same inputs the You row does, and
+Gate 0 sees three variants: the promise (healthy), _"Sends are paused until you
+reconnect."_ (needsReauth), and the failure line (§3.4). The card's existing
+linked helper _"Finished monitor rows can be sent from the log."_ contradicts
+AUTOMATIC and is replaced by the mode line (F5); the UNLINKED card's explainer
+_"…one row at a time, from the log."_ now describes one of two modes and is a
+Gate 0 copy question (smaller item).
 
-**Pending / failed writes:** while a `PATCH` is in flight the control is
-`disabled`, and a non-2xx or thrown write leaves the selection on the SERVER's
-value (the hook re-reads the link after the write) and shows one line, _"Couldn't
-change this. Try again."_ — never a selection that claims a mode the server did
-not accept (RF25: the caller branches on the failure it can see).
+**When UNLINKED**, the card is today's (CONNECT). The control is not shown —
+nothing to set (ruling 1). The unified pre-link control is named and NOT built
+(a new lifetime across the web arm's OAuth unload for one saved tap); Gate 0
+draws it once beside the chosen screen so the rejection is a choice.
 
-**The You row does not change.** It keeps its four strings (walk-fixes spec R1
-— the row mints no copy). Whether `LINKED ✓` should read the mode is a Gate 0
-copy question; the spec's answer is no: the mode is a preference, not a state
-the rower needs warned about, and the row's job is warnings.
+**Pending / failed writes (A7):** the control is `disabled` while a `PATCH` is
+in flight; a non-2xx or throw leaves the pressed state on the SERVER's value
+(the hook re-reads the link) and shows _"Couldn't change this. Try again."_
 
 ### 3.3 The automatic send — the Send button pressed for you
 
 In `useLogForm`'s 201 path, after `onSaved(logId)`:
 
 ```
-if (logId !== null && link?.available && link.linked && link.autoSend
-    && isSendable(savedRowShape)) {
-  void sendToConcept2(logId, tz);   // the same POST /api/concept2/results/:logId the block makes
+if (logId !== null && link !== null && link.available && link.linked && link.autoSend) {
+  void api(`/api/concept2/results/${logId}`, { method: "POST", body: { tz, trigger: "auto" } });
 }
 ```
 
-- **The link comes from `useConcept2Link()`**, mounted by the form (one more
-  `GET /link` per log-form mount, the same read You and the log detail already
-  make). If the read has not resolved (`link === null`) or failed, **no
-  automatic send fires** — silence on uncertainty; the row's block still offers
-  Send. Fail-closed.
-- **Eligibility is checked twice, and the client check is a courtesy.** The
-  client's `isSendable` (pm5 · finished · work totals) avoids a wasted request
-  on a manual or timer row; the SERVER route re-derives eligibility and the
-  weight class exactly as for a manual send and is the authority. The client
-  never decides the row is sendable on its own.
-- **Fire-and-forget, and navigation is not held.** `onSaved` navigates to
-  Today today; the send is started, not awaited. Its outcome is written by the
-  server onto the row (`c2_result_id`, or nothing on refusal), and the row's
-  block reads the row on mount — so the block shows SENT, or the refusal, the
-  next time the rower opens the row (ruling 2). **No state is added to hold
-  the outcome client-side**; the row is the record.
-- **The same call, the same server path, the same guards.** The route's
-  already-sent short-circuit (`c2_result_id` present → return the stored id)
-  and Concept2's 409 dedup make the automatic send idempotent against a manual
-  tap that races it and against a retry after a kill.
-- **Failure copy is the block's own.** A 422 `no_weight_class`, a 409
-  `needs_reauth`, a network error — each renders in the block exactly as a
-  manual attempt's would, because it IS a manual attempt's response, stored
-  the same way. **One new thing is owed here and is named:** today the block
-  learns a failure from the tap's own response in memory. An automatic
-  failure's response is discarded (fire-and-forget), so **the block will show
-  the row as UNSENT with a Send button, not the refusal reason** — the reason
-  surfaces on the rower's next tap. That is honest and un-lossy (the row is
-  unsent; Send is right there) but it is a difference from the manual path,
-  and Gate 0 sees the frame. If the PM wants the reason preserved, that is a
-  stored `c2_last_error` on the row — a second shape, out of scope here and
-  filed in §6.
+- **No client eligibility check (F3).** Rev 1 gated on `isSendable(savedRowShape)`;
+  that predicate reads a STORED row's nullable totals, and a form body has
+  different fields, so two of its clauses were inert. The server re-derives
+  eligibility and is the authority; the client fires for every saved row when
+  AUTOMATIC, and a `422 not_eligible` on a manual or timer row is the expected
+  answer, swallowed, and does NOT set the failure flag (§3.4). Cost: one 422
+  per non-monitor save for an AUTOMATIC rower.
+- **The link is the form's own `useConcept2Link()` instance**, mounted with the
+  form. If it has not resolved (`link === null`) or failed, **no automatic send
+  fires** (A4). The pass could not measure how often a fast submit beats the
+  read — no instrument sees it — which is why the `trigger` field exists (§4).
+- **Fire-and-forget; navigation is not held** (A5, HELD). The server writes the
+  outcome onto the row (`c2_result_id`) or onto the link (the failure flag);
+  the row's block and the You row read those on their next mount. No
+  client-side outcome state.
+- **The in-process claim (F1).** The send route's existing short-circuit
+  (`c2_result_id` present → return the stored id) covers a RETRY; it does not
+  cover two sends in flight, because both read the row before either writes,
+  and there is no lock on `session_logs`. Rev 1 said Concept2's dedup made the
+  race harmless — that leans on a vendor heuristic and, when it fires, shows
+  the tapping rower `ALREADY THERE` for a row they never sent. **Rule: the
+  route holds a per-process `Map<logId, Promise<result>>`; a second caller for
+  a `logId` already in the map awaits the first's promise and returns its
+  result; the entry clears in `finally`.** One process serves the API, so
+  per-process is the whole surface. Deterministic gate (PR #269's lesson): hold
+  `client.postResult` on a deferred, issue two requests, resolve once, assert
+  Concept2 was called once and both callers got the same `resultId`.
+- **`trigger: "auto" | "manual"`** rides the send body for ONE purpose: the
+  server's log line names which arm fired (the `rowingActive` pattern the pass
+  recommended). Nothing is stored from it; the route's behavior does not branch
+  on it (A3 — a send is a send). Without it, the first "automatic isn't
+  working" report is undiagnosable, since A3 makes the two indistinguishable by
+  design.
 
-### 3.4 Invariants
+### 3.4 Failures under AUTOMATIC — the You row warns (ruling 6, "A")
 
-- **A1 — a fresh link is MANUAL.** `auto_send` defaults false; relink resets.
-- **A2 — automatic requires a literal `true` from the server.** Absent,
-  unreadable, or any other value reads as manual.
-- **A3 — an automatic send is indistinguishable from a manual one on the
-  server**, and is guarded by the same already-sent short-circuit and the same
-  eligibility. No new server send path.
-- **A4 — nothing is sent while the link read is unresolved or failed.**
-- **A5 — an automatic send never holds the save or the navigation**, and a
-  failed automatic send leaves the row saved and sendable.
-- **A6 — OFF is the two-tap unlink, arm intact.** The control never unlinks
-  in one tap.
-- **A7 — the control shows the server's value**, never an optimistic one a
-  failed write did not land.
-- **A8 — the You row is unchanged** (four strings, no mode).
-- **A9 — switching to AUTOMATIC sends nothing retroactively.** The hook is on
-  the save path only; no scan of unsent rows.
+**The finding (F2):** the log detail's block is the ONLY surface in the client
+that renders a row's sent state (`git grep c2ResultId -- src/` → one renderer).
+Of the send route's six outcomes, one had a proactive surface (`needs_reauth`,
+by way of a server flag set for another reason); the rest were silent from
+Today, You and the history. The systematic case is `no_weight_class`: a rower
+with no Concept2 declaration and no usable profile weight — the brand-new
+account most likely to switch AUTOMATIC on — fails every row, forever,
+identically, with no signal. James chose to surface it on the You row.
+
+**Mechanism:** the send route sets `send_failed_at = now()`,
+`send_failed_reason = <code>` when an **eligible** send fails with
+`no_weight_class` or `c2_error` — regardless of `trigger` (a manual failure
+means sends are failing too) — and clears both on any successful send.
+`not_eligible` never sets it (not a failure of the link); `needs_reauth` has its
+own flag and takes precedence. Client network failure and the iOS gap cannot
+set it (nothing reached the server) — the one silent case, named in §2.
+
+**The You row gains a fifth string — `SEND FAILED` — and the decision table of
+the walk-fixes spec §5.1 gains a cell class.** Precedence over the retained
+link: `needsReauth` → `RECONNECT NEEDED`; else `sendFailedAt !== null` →
+`SEND FAILED`; else `linked` → `LINKED ✓`. Both server-sticky states beat a
+transient read failure for the reason ruling 5 gave (a read that failed cannot
+have cleared them). This is new copy on the row (R1 said the row mints none)
+— Gate 0 rules the string and its weight, beside `RECONNECT NEEDED`.
+
+**The screen names the reason.** The mode line (§3.2) in the failure-flagged
+state reads from `sendFailedReason` using the block's own strings for that
+code (`concept2Send.ts`'s describe map — no new failure copy), e.g. the
+no-weight line the block already renders, followed by the block's own remedy
+(the OPEN CONCEPT2 PROFILE link-out). Gate 0 draws it.
+
+**The block after an automatic failure** shows UNSENT with Send (the response
+was discarded); the reason is on the screen and the row, not the block. Gate 0
+draws this beside the manual-failure frame so the difference is approved on
+sight.
+
+### 3.5 Invariants
+
+- **A1** — a fresh link is MANUAL; unlink→relink resets; an upsert with a
+  different `c2_user_id` resets (F7).
+- **A2** — AUTOMATIC requires a literal `true` from the server.
+- **A3** — an automatic send is the manual send route with a diagnostic
+  `trigger`; no branch on it, no second server send path.
+- **A4** — nothing is sent while the form's link read is unresolved or failed.
+- **A5** — the send never holds save or navigation; a failed send leaves the
+  row saved and sendable.
+- **A6** — OFF is the two-tap unlink, arm intact; no key or tap unlinks in one.
+- **A7** — the control shows the server's value, never an optimistic one.
+- **A8** — the You row's existing four strings are unchanged; it gains exactly
+  one, `SEND FAILED`, from a server-sticky flag, with `RECONNECT NEEDED` above
+  it and both above `COULDN'T READ`.
+- **A9** — no retroactive send.
+- **A10** — two concurrent sends for one row reach Concept2 once (§3.3's
+  claim), and both callers see the same result.
+- **A11** — the failure flag is set only by eligible-send failures the server
+  observed, and cleared by the next success; `not_eligible` never sets it.
 
 ## 4 · What can and cannot be gated
 
-- **Unit — the setting:** `normalizeLink` maps `autoSend` `true` → `true`,
-  absent/`false`/`"true"`/`1` → `false` (A2). The `PATCH` route: 204 and the
-  column flips; 409 on no link; the cohort gate applies. Mutations: drop the
-  `=== true` → the string case passes → red; drop the not-linked check → red.
-- **Unit — the control:** the radiogroup renders the server's value; OFF arms
-  (no `DELETE` on first tap, `DELETE` on second, disarm after 4 s — the card's
-  existing tests, retargeted); MANUAL/AUTOMATIC `PATCH` the right body; a
-  failed `PATCH` shows the error line and the selection returns to the
-  server's value (A7 — mutation: keep the optimistic value → red). Keyboard
-  tests copied from `PaceRefInput` (RF8).
-- **Unit — the automatic send (RF24, and it must start upstream of the
-  producer):** render the log form with a mocked `api` that answers `GET /link`
-  `{…, autoSend: true}` and the log POST `201 {id}`, submit a sendable row, and
-  assert `POST /api/concept2/results/<id>` fires; with `autoSend: false`, with
-  `link === null` (pending), with a failed link read, and with a non-sendable
-  row (source `manual`), assert it does NOT. Mutations: invert the `autoSend`
-  check → the false case sends → red; drop the `link === null` guard → the
-  pending case sends → red (A4). And the RF21 tell to avoid: the "does not
-  send" negatives must wait on the 201 having been processed (`onSaved`
-  called), not on time.
-- **e2e — the whole seam, one test:** in `e2e/concept2.spec.ts`, with the
-  fake link `linked({ autoSend: true })`, log a sendable monitor row through
-  the real form and poll `fake.sends` to 1; then open the row and see SENT ·
-  RESULT. With `autoSend: false`, log the same row, poll `fake.linkReads` past
-  the form's read, and assert `fake.sends` stays 0 — the negative gated on a
-  positive observable (the read), per the walk-fixes spec §6.1.
-- **e2e — the control:** the three positions render on the screen, OFF arms
-  and does not `DELETE` on one tap, AUTOMATIC issues the `PATCH` (the fake
-  gains a `patches` counter), and `design.spec.ts` registers the redrawn
-  card's control heights and the radiogroup's tap targets in both orientations
-  (TESTING.md — a changed screen re-registers).
-- **Captures:** the screen in MANUAL, AUTOMATIC, and OFF-armed, both
-  orientations, opened and looked at (RF7).
-- **What cannot be gated, said plainly:** the iOS suspend-between-save-and-send
-  gap (§2). No instrument reaches it; the fallback is today's product. And
-  whether a rower *wants* automatic — that is the default (ruling 3), not a
-  test.
+- **Unit — the setting:** `normalizeLink` `autoSend` `true` → true; absent /
+  `false` / `"true"` / `1` → false; `LINK_UNAVAILABLE` literal test gains the
+  three fields; `webauth-contract.test.ts` and `Concept2LinkProbe` updated (F6).
+  `PATCH`: 204 flips the column; 409 on no link; cohort gate. Mutations: drop
+  `=== true` → string case red; drop the not-linked check → red.
+- **Unit — upsert (F7):** same `c2_user_id` keeps `auto_send` true; a different
+  one resets to false and clears the flag. Mutation: remove the reset → red.
+- **Unit — the control:** three `aria-pressed` buttons show the server's value;
+  OFF arms (no `DELETE` on first tap, `DELETE` on second, disarm after 4 s);
+  MANUAL/AUTOMATIC `PATCH` the right body; arrow keys move focus and fire
+  NOTHING (F4 — mutation: make arrows commit → red); a failed `PATCH` shows the
+  error line and the pressed state returns to the server's (A7).
+- **Unit — the automatic send (RF24, upstream of the producer):** render the
+  form with a mocked `api` answering `GET /link` `{…, autoSend: true}` and the
+  log POST `201 {id}`; submit; assert `POST /api/concept2/results/<id>` with
+  `trigger: "auto"`. Negatives — `autoSend: false`, `link === null`, a failed
+  read — assert NO send, each gated on `onSaved` having fired, not on time.
+  Mutations: invert the flag → red; drop the null guard → red.
+- **Unit — the in-flight claim (A10), deterministic:** deferred
+  `client.postResult`; two requests; resolve once; one wire call; equal
+  `resultId`s. Mutation: delete the map → two wire calls → red. (Not a
+  `Promise.all` race — PR #269.)
+- **Unit — the failure flag (A11):** the route on `no_weight_class` sets
+  `send_failed_*`; on success clears; on `not_eligible` leaves them untouched;
+  on `needs_reauth` sets `needs_reauth_at` only. Mutation each way.
+- **Unit — the row's fifth string:** `rowState` gains cells for
+  `sendFailedAt` set × `failed` null/set × `needsReauth`; RECONNECT beats
+  SEND FAILED beats LINKED; SEND FAILED beats COULDN'T READ. Mutations on each
+  ordering.
+- **e2e — the seam, two tests:** fake `linked({ autoSend: true })`, log a
+  sendable row through the real form, poll `fake.sends` to 1, open the row →
+  SENT · RESULT. Then `autoSend: false`, same row, poll `fake.linkReads` past
+  the form's read, `fake.sends` stays 0. **The fake gains a PATCH BRANCH**, not
+  just a counter — its handler today sends every non-DELETE `/link` request
+  down the `linkReads` arm, so an un-branched PATCH would corrupt the very
+  poll the negatives gate on (smaller item).
+- **e2e — the control and the row:** three positions render; OFF arms without
+  DELETE on one tap; AUTOMATIC issues the PATCH (`fake.patches` → 1); with the
+  fake's link carrying `sendFailedAt`, the You row reads `SEND FAILED` and the
+  screen's mode line names the reason; `design.spec.ts` registers the redrawn
+  card's control heights and tap targets in both orientations.
+- **The diagnostic (A3/A4):** the server log line carries `trigger`; the PR
+  body shows one auto and one manual line from the e2e stack.
+- **Captures:** MANUAL, AUTOMATIC, OFF-armed, needsReauth-with-control,
+  failure-flagged (card + You row), both orientations, opened and looked at.
+- **Cannot be gated:** the iOS suspend gap and how often A4's silence fires;
+  Concept2's dedup granularity (vendor heuristic, our backstop only).
 
 ## 5 · What a rower sees (Gate 0 owes all of it)
 
-- The redrawn card, LINKED, in MANUAL and in AUTOMATIC: the control where
-  Unlink was, its one-line promise beneath, the identity line above — portrait
-  and landscape, beside today's card.
-- The card with OFF **armed**: the control's OFF position selected, the
-  disclosure sentence, the 4-second caption — both orientations.
-- The card UNLINKED: unchanged from today (CONNECT), shown so the "control
-  appears only when linked" decision is approved on sight, and the unified
-  alternative is drawn once beside it so the rejection is a choice.
-- The log detail's block after an automatic send: SENT · RESULT (identical to
-  manual — drawn to show it IS identical), and after an automatic **failure**:
-  the block reading UNSENT with Send, no reason (§3.3's named difference),
-  beside the manual-failure frame that does show the reason.
-- Every colour pairing as a ratio; the radiogroup's hit targets ≥ 44px.
-- The You row, unchanged, beside the redrawn screen — so A8 is approved, not
-  assumed.
+- The redrawn card, LINKED: MANUAL and AUTOMATIC, portrait and landscape,
+  beside today's card — the control where Unlink was, the mode line beneath,
+  the identity line above.
+- OFF **armed**: pressed OFF, the disclosure sentence, the 4-second caption.
+- **needsReauth with the control** (smaller item): `RECONNECT CONCEPT2` above,
+  the control below, the mode line reading paused — so AUTOMATIC's promise is
+  never drawn beside `STOPPED ACCEPTING THIS LINK`.
+- **Failure-flagged:** the You row reading `SEND FAILED` beside `RECONNECT
+  NEEDED` (weight and colour as numbers), and the screen's mode line naming the
+  reason with the block's own remedy.
+- UNLINKED: today's card, its explainer's "from the log" copy with the
+  alternative wording drawn; the unified pre-link control drawn once beside it.
+- The log detail block after an automatic failure (UNSENT, Send) beside the
+  manual-failure frame (the reason shown) — the difference approved on sight.
+- `ALREADY THERE` is NOT a frame this design produces any more (F1's claim
+  removes the race); Gate 0 need not draw it.
+- Every pairing as a ratio; every hit target ≥ 44 px.
 
 ## 6 · Out of scope, named
 
-- **Sending the backlog** when flipping to AUTOMATIC (ruling 4). A follow-on
-  if anyone asks; it would need a "send all unsent" affordance with its own
-  gate.
-- **Preserving an automatic failure's reason on the row** (`c2_last_error`).
-  §3.3 names the frame; the PM rules whether the UNSENT-with-Send fallback is
-  enough. If not, it is a second stored shape and its own TRIAD PR.
-- **The unified pre-link control** (choose the mode while unlinked, then
-  link). Named in §3.2 with its lifetime cost.
-- **A server-side or queued send.** Approaches 2 and 3, rejected for coupling
-  the save to a third party (RF25's shape) and for infrastructure the fallback
-  does not need.
-- **Verification-code display on the MACHINE CONFIRMED block** (hide the raw
-  code, show "verified" once Concept2 accepts it, debug reveal). James's
-  request of 2026-09-05, **parked until the confirming send proves PR C's
-  codes verify on new rows** — its own ROADMAP row.
-- **Showing the mode on the You row** (A8). Gate 0 may reopen it.
+- Sending the backlog (ruling 4).
+- Per-row failure reason (`c2_last_error`): the link-level flag (§3.4) is the
+  ruled answer; per-row storage is a follow-on if the PM wants the block to
+  name the reason without a tap.
+- The unified pre-link control (§3.2).
+- Server-side or queued sends (approaches 2, 3).
+- Verification-code display on the MACHINE CONFIRMED block — parked until the
+  confirming send proves PR C's codes (own ROADMAP row).
+- A multi-process server: the in-flight claim is per-process because one
+  process serves the API; if that changes, the claim moves to a DB-level
+  conditional update and this line is the tripwire (RF18: a comment naming its
+  own precondition).
+
+## 7 · Vetted ground and what is still owed
+
+**Held under the rev 1 pass (14):** the one save seam; fire-and-forget survives
+navigation; the row's block reads the row fresh on mount; A2's normalizer is
+fail-closed; a 409 duplicate renders correctly in the block; the migration is
+rollback-safe both ways (measured); `DELETE /link` deletes the row; the You row
+reads `needsReauth` from the server flag; the send route's already-sent
+short-circuit covers retries; the 4-second disarm and disclosure sentence stay;
+no other unlink affordance exists on the row or the send block; the cohort gate
+applies to every router write; `store.get` selects every column; the block's
+describe map covers every route error code.
+
+**Owed before the plan:** a DELTA antagonist pass on rev 2's NEW mechanisms —
+the in-process claim (§3.3), the failure flag and its precedence on the You
+row (§3.4), the `trigger` diagnostic, and the upsert reset (F7). Then Gate 0.
