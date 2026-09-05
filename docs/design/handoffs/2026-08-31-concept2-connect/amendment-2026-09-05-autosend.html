@@ -66,7 +66,9 @@
   .mode > div { min-height: 44px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; color: var(--ink); background: transparent; border-left: 1px solid var(--ink); }
   .mode > div:first-child { border-left: 0; }
   .mode > div.pressed { background: var(--ink); color: var(--on-color); font-weight: 600; }
-  .mode > div.armed { background: var(--accent); color: var(--on-color); font-weight: 600; border-left-color: var(--accent); }
+  .mode > div.armed { grid-column: 1 / -1; min-height: 52px; background: var(--accent); color: var(--on-color); font-weight: 600; font-size: 15px; letter-spacing: 0; font-family: var(--font-sans); border-left: 0; text-align: center; }
+  .mode.is-armed { border-color: var(--accent); }
+  .mode.is-armed > div:not(.armed) { display: none; }
   .mode.disabled > div { color: var(--ink-3); border-color: var(--rule-3); }
   .mode-line { margin: 0; font-size: 12px; color: var(--ink-3); }
   .mode-line.warn { color: var(--ink); }
@@ -181,7 +183,7 @@
 </div>
 
 <h2>2 · OFF, armed — the two-tap unlink lives in the control</h2>
-<p class="lede">Ruling 1 makes OFF destructive, so it keeps the arm the Unlink button had: the first tap arms (OFF fills <code>--accent</code>), the disclosure sentence appears, the 4-second caption counts down, and the second tap unlinks. Disarming returns the pressed state to the current mode. RF23: this is the <em>only</em> unlink affordance on the screen — the button it replaces is gone.</p>
+<p class="lede">Ruling 1 makes OFF destructive, so it keeps the arm the Unlink button had: the first tap arms, and <strong>while armed the OFF segment spans the whole control</strong> — it becomes today's full-width <em>Tap again to unlink</em> button exactly (52px, <code>--accent</code> fill, the button's own sentence case), centred, with MANUAL and AUTOMATIC out of reach until the arm clears. The disclosure sentence appears, the 4-second caption counts down, the second tap unlinks; disarming restores the three segments with the current mode pressed. RF23: this is the <em>only</em> unlink affordance on the screen — the button it replaces is gone. (James, on the first draw: the label sat off-centre in a third-width segment; the span fixes that and gives the destructive confirm the bigger target it had before.)</p>
 <div class="boards">
   <div class="board">
     <p class="board-cap">AFTER · OFF armed (was MANUAL)</p>
@@ -193,7 +195,7 @@
         <p class="c2identity">Concept2 jamesawesome · Ergomatic james@jamestheaweso.me</p>
         <div class="hr"></div>
         <p class="c2explain">Unlink removes this app's access. Rows already sent stay on Concept2.</p>
-        <div class="mode"><div class="armed">TAP AGAIN TO UNLINK</div><div>MANUAL</div><div>AUTOMATIC</div></div>
+        <div class="mode is-armed"><div class="armed">Tap again to unlink</div><div>MANUAL</div><div>AUTOMATIC</div></div>
         <p class="c2foot">DISARMS ON ITS OWN AFTER 4 SECONDS</p>
       </div>
       <div class="tabbar"><span>TODAY</span><span>NEWS</span><span>LIBRARY</span><span>PLAN</span><span class="cur">YOU</span></div>
@@ -218,9 +220,9 @@
     </div>
   </div>
 </div>
-<h3>2a The armed OFF label <span class="badge b-changed">GATE 0 DECIDES</span></h3>
+<h3>2a The armed OFF <span class="badge b-ruled">RULED ON SIGHT</span></h3>
 <div class="callout">
-  <p>(a) The OFF segment's label becomes <strong>TAP AGAIN TO UNLINK</strong> while armed (drawn) — the button's own words, in the control's mono. (b) The label stays <strong>OFF</strong> and only the fill says armed. The spec recommends (a): the fill alone is a colour cue, and the walk-fixes spec's R9 keeps the disclosure sentence precisely because unlinking needs words.</p>
+  <p>While armed the segment spans the control and reads <strong>Tap again to unlink</strong> in the danger button's own typography (15px sans, 600) — not the segments' mono caps, which wrapped and sat off-centre at a third of the width. On disarm the three segments return. This is today's armed button, relocated; nothing about the arm's timing or copy changes.</p>
 </div>
 
 <h2>3 · needsReauth — the control beside RECONNECT</h2>
@@ -400,7 +402,7 @@
   <tr><th>element</th><th>pairing</th><th>ratio</th><th>floor</th></tr>
   <tr><td>control label, unpressed</td><td><code>--ink</code> on <code>--surface</code></td><td class="num">17.11:1</td><td>4.5 ✓</td></tr>
   <tr><td>control label, pressed</td><td><code>--on-color</code> on <code>--ink</code></td><td class="num">17.11:1</td><td>4.5 ✓</td></tr>
-  <tr><td>OFF armed</td><td><code>--on-color</code> on <code>--accent</code></td><td class="num">5.94:1</td><td>4.5 ✓</td></tr>
+  <tr><td>OFF armed (spans the control, 52px)</td><td><code>--on-color</code> on <code>--accent</code></td><td class="num">5.94:1</td><td>4.5 ✓</td></tr>
   <tr><td>control, disabled (PATCH in flight)</td><td><code>--ink-3</code> on <code>--surface</code></td><td class="num">7.43:1</td><td>4.5 ✓</td></tr>
   <tr><td>mode line</td><td><code>--ink-3</code> on <code>--surface</code></td><td class="num">7.43:1</td><td>4.5 ✓</td></tr>
   <tr><td>mode line, failure (warn)</td><td><code>--ink</code> on <code>--surface</code></td><td class="num">17.11:1</td><td>4.5 ✓</td></tr>
@@ -417,7 +419,7 @@
 <div class="tw"><table>
   <tr><th>#</th><th>question</th><th>the spec's recommendation</th></tr>
   <tr><td class="num">1a</td><td>Mode line copy, MANUAL and AUTOMATIC</td><td>(a) in each</td></tr>
-  <tr><td class="num">2a</td><td>Armed OFF label</td><td>TAP AGAIN TO UNLINK</td></tr>
+  <tr><td class="num">2a</td><td>Armed OFF</td><td>spans the control as today's full-width <em>Tap again to unlink</em> (ruled on sight)</td></tr>
   <tr><td class="num">3</td><td>needsReauth mode line</td><td><em>Sends are paused until you reconnect.</em></td></tr>
   <tr><td class="num">4a</td><td>The three reason lines</td><td>the "Rows aren't being sent:" prefix</td></tr>
   <tr><td class="num">4b</td><td>SEND FAILED weight on the row</td><td><code>--ink-3</code>, same as its siblings</td></tr>
