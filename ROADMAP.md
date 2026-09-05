@@ -445,9 +445,9 @@ fixed.
 
 ## Phase DE — Difficulty out, effort in
 
-**Status: OPEN 2026-09-05 — spec merged (#308); PR 1 = #309 (Gate 0
-approved 2026-09-05, review half run, awaiting James's merge); PR 2 not
-started (waits for AUD-016's merge).** **TRIAD** (stored shape).
+**Status: OPEN 2026-09-05 — spec merged (#308); PR 1 MERGED as #309
+(2026-09-05); PR 2 in flight (worktree `Ergomatic-wt-de2`); release HELD
+until PR 2 merges (one tag for both).** **TRIAD** (stored shape).
 **M.** Spec:
 `docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
 
@@ -499,9 +499,9 @@ generation):
       (~20 names: `Effort`, `EffortRef`, `isEffortRef`, `effortWord`, …) →
       `PaceWord*`, **stored key `{effort: "max"}` untouched.** Gate 0 is the
       word list (spec §4.4), no captures; the committed filter-sheet
-      screenshots are refreshed in the PR. **Does not open until AUD-016's
-      PR (worktree `Ergomatic-wt-aud016`, rewrites `LogSession.tsx`) has
-      merged or James rules it abandoned.**
+      screenshots are refreshed in the PR. (An earlier "waits for AUD-016"
+      condition here was void: AUD-016 shipped as #239 and was struck in
+      #240; `Ergomatic-wt-aud016` is a stale pre-#239 spec branch.)
 - [ ] **PR 3 — drop compat.** Trigger is a MEASUREMENT: zero
       `compat.pain_write` lines in the prod server log for seven consecutive
       days after the PR 1+2 tag deploys (command and output in the PR body).

@@ -57,8 +57,8 @@ cannot verify its own state write stops and says so.
      in this order, before your first classification of the run:
      `app/src/news/content/bodies/workoutTypes.tsx` (what the types
      mean), `app/domain/generation/patterns.json` (work:rest and spm
-     bands per type x duration), and the pain-scale article
-     (`painScale.tsx`) for the 1-to-5 semantics.
+     bands per type x duration), and the effort-scale article
+     (`effortScale.tsx`) for the 1-to-5 semantics.
    - `w`/`r` lines only. Never author `wu` lines: the app dropped
      workout-owned warm-ups (the warmup setting); the import would
      drop them anyway.
