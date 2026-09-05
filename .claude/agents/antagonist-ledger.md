@@ -7578,3 +7578,38 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   state, read the file's `afterEach` and the shared setup before believing it;
   a precondition satisfied by leakage is a precondition that will stop being
   satisfied when someone reorders the file.**
+
+## 2026-09-05 — Wave E PR C: "send the machine's own distance to Concept2" (TRIAD, full pass)
+
+- **A spec that says "settled by a live test" and points at a "full record"
+  file — OPEN THE FILE and read it to the end.** PR C's §2 cited a research
+  file as the "Full record" of a live API test (5706 verified / 5708 not);
+  the file was the pre-test PROPOSAL and ended with "Walk proposal". Grepping
+  the whole tree for the result's distinctive tokens (`85921`, "test row was
+  deleted") found them ONLY in the spec's own prose — the result was
+  uncommitted. RF16's dangling-citation shape: the citation read as evidence
+  and contained none. Technique: `git log` the cited file (committed in the
+  same commit as the spec), then grep the tree for the result's own literals.
+- **A two-row "A/B" table whose two rows are different KINDS of thing is not
+  an A/B.** §2's "only the distance varied" table labelled its failing row
+  "the existing row 85921" — a pre-existing row, not a fresh controlled POST.
+  Read the table's own labels against the prose that summarises it.
+- **A replay/oracle test that imports no payload builder cannot gate a
+  payload.** §5 named `oracleCorpusReplay` (client, imports domain parse only)
+  as the gate that "asserts on the built C2 payload"; that test never builds
+  one. The real send seam (`store.get → toMappingRow → buildC2Payload`) was
+  untested for the non-null case and the field was dropped in `toMappingRow`.
+  Technique: grep the named test's imports for the module whose output the
+  gate claims to assert on; trace the production seam separately and find the
+  one line that drops the field.
+- **"Gate it structurally" is RF21 when the structural value equals the
+  fallback in every fixture.** The time change had no divergent-work-seconds
+  capture (the one distance-divergent capture had identical seconds, 60==60),
+  so a mutation reverting time to workSeconds stayed green everywhere. Only a
+  SEEDED unit test with distinct literals can bite — which the spec's own
+  "no seeding / upstream of producer" gate contract forbade. Read the actual
+  asserted numbers in the corpus before believing a divergence exists to gate.
+- **"Every surface already uses X" — enumerate the TIERS.** The display used
+  `machineWorkMeters` only in TIER A; TIER B1 showed `workMeters`. The C5
+  conclusion (no number moves) still held because the send's `?? workMeters`
+  fallback mirrors the display tiers — but the claim as worded was false.

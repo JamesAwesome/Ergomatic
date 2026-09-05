@@ -33,25 +33,38 @@ date/time/type and only the distance varied:
 
 | POST | distance | result |
 | --- | --- | --- |
-| the monitor's total | **5706** | **`verified: true`** |
-| our interval sum (the existing row 85921) | 5708 | `verified: false` |
+| the monitor's total | **5706** (fresh) | **`verified: true`** |
+| a negative control | **5707** (fresh) | **`verified: false`** |
+| our interval sum | 5708 | 409 duplicate of row 85921; not freshly tested (below) |
 
 `rest_distance: 525` rode along on the verifying POST and it still verified, so
-**rest is not part of the check** (confirms the walk-fixes spec §3.8 D). The
-test row was deleted; the real row was untouched. Full record:
-`.superpowers/research/2026-09-05-c2-verification-code.md`.
+**rest is not part of the check** (confirms the walk-fixes spec §3.8 D). All
+test rows were deleted; the real row was untouched. **The result is committed at
+`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`** — the
+requests, the responses, and what was and was not controlled. The sibling
+`docs/superpowers/research/2026-09-05-c2-verification-code.md` is the C1 documentation research and only *proposes*
+the test; do not cite it for the result (it carries none).
+
+**What was controlled, precisely** — the table is not a clean two-arm A/B. 5706
+was a fresh POST and verified; **5707 was a fresh POST and did NOT verify**, and
+that is the real control: it proves the check is pinned exactly at 5706, not that
+any decodable code passes. 5708 as a fresh POST could not be run — the duplicate
+guard (date+time+distance) 409'd it against the existing row 85921. So "5708 does
+not verify" rests on 5708 ≠ 5706 (the code is pinned there, per the 5707 control)
+plus James's own live website refusal of this code against the 5708 row on
+2026-09-04, not on a fresh matched POST.
 
 **What this establishes, each tagged:**
 
 - **PRIMARY.** The authoritative distance is the monitor's own whole-workout
   total, stored on our row as `machine_work_meters` (0x0039's
   `workDistanceMeters`, rounded). Not `work_meters` (our `Σ actuals.distance`).
-- **PRIMARY.** The code is validated against the **submitted fields**, exactly,
-  with no trusted-client relationship and no ErgData upload — log-dev accepted
-  a code minted by a physical PM5 against a plain API POST. So the check is
-  reproducible by us, and the walk-fixes spec's "no gate this repo owns can
-  tell us what Concept2 accepts" is now weaker than it was: we have a live
-  oracle for it, off the send path.
+- **PRIMARY.** The code is validated against the **submitted fields**, exactly:
+  log-dev accepted a code minted by a physical PM5 against a plain API POST with
+  no trusted-client relationship and no ErgData upload, and rejected the same
+  code one metre away (5707). So the check is reproducible by us off the send
+  path. **Two unproven edges remain, stated:** this was log-dev, not production;
+  and it was one date/time, so nothing here exercises a wrong `time`.
 - **PRIMARY**, developer docs, quoted: _"For the verification code to be
   accepted, the date, time, distance, workout_type and machine type must match
   that of the code."_ Five fields, exact, no band.
@@ -64,7 +77,7 @@ test row was deleted; the real row was untouched. Full record:
 ## 3 · Research record
 
 - **C1 (what Concept2 compares against) — ANSWERED**, above: the five submitted
-  fields, exact. `.superpowers/research/2026-09-05-c2-verification-code.md`
+  fields, exact. `docs/superpowers/research/2026-09-05-c2-verification-code.md`
   carries the quotes and the fetch log.
 - **The byte → display-code transform is a GAP, and it bounds scope.** We store
   `machineSummary.verificationBytes` (the raw 0x003F payload), but a prior
@@ -97,9 +110,11 @@ Today the app is already internally split, and the send is the outlier:
 
 - `machineWorkMeters` (typed `integer` column `machine_work_meters`) and
   `machineWorkSeconds` (`doublePrecision` column `machine_work_seconds`) are
-  already stored per row (`server/db/schema.ts`). They are **not** on
+  already stored per row (`server/db/schema.ts`), and `store.get` already
+  `select()`s every column, so the load side needs nothing. They are **not** on
   `SessionLogRow` (`server/concept2/mapping.ts`) or in `toMappingRow`
-  (`server/routes/concept2.ts`) or the loader's select — add them (nullable).
+  (`server/routes/concept2.ts`) — add them to both (nullable). That is the whole
+  thread; the loader is untouched.
 - `buildC2Payload` posts, for the code-checked fields:
   - `distance: machineWorkMeters ?? workMeters`
   - `time: c2Tenths(machineWorkSeconds ?? workSeconds)`
@@ -119,45 +134,69 @@ or waits. Case for now: same authority, same derivation, same checked-field
 list; the display already uses `machineWorkSeconds`, so moving `time` keeps
 send = display = machine, and a future row whose work-seconds sum diverges from
 0x0039 (as distance did) fails verification silently if we don't. Case for
-waiting: only distance is empirically proven divergent, and a change we cannot
-show going wrong today is a change we cannot gate on real divergence (no capture
-in the corpus has divergent seconds — the antagonist should check that claim
-against `oracleCorpusReplay`). **The spec's recommendation: move both, gate
-distance on the divergent capture and gate time structurally (the payload reads
-the machine field), and say plainly in the PR that time is by-parity.**
+waiting: only distance is empirically proven divergent, and no capture in the
+corpus has divergent seconds (confirmed against `oracleCorpusReplay` — every
+capture's `machine.elapsedSeconds` equals ours), so time cannot be gated on
+observed divergence. **The spec's recommendation, which the antagonist pass
+confirmed: move both. Distance is gated by the seam test (§5); time is gated by
+a seeded `buildC2Payload` unit test (§5's carve-out, forced because reality has
+produced no divergent-seconds capture); and the PR body states time is
+by-parity, not observed.**
 
 ## 5 · What can and cannot be gated (C4)
 
-**The gate the walk-fixes spec §5.4 specified, built:** a replay test whose
-oracle is the capture's own 0x0039 summary, comparing it against the distance
-the send path would post for the same run.
+**PR C touches ONE seam: the stored row → the C2 payload
+(`buildC2Payload`/`toMappingRow`, server-side). It does not touch how
+`machineWorkMeters` is computed from the wire** — that is a different, earlier
+seam (`monitorRun`/`driver`), already gated by `oracleCorpusReplay.test.ts`,
+whose RC-9(b) block asserts the machine's own 0x0039 total against our interval
+sum over five captures and records the `rest-boundary` divergence (198 vs 197).
+**The walk-fixes spec §5.4's phrasing — "a replay test that posts 198 vs 197" —
+was wrong about WHERE**: `oracleCorpusReplay` imports nothing from the server
+mapping and never builds a payload. Corrected here.
 
-- **Expected value from the capture's own summary frame**, never our
-  accumulator (RF11 — every gate we own compares `work_meters` with the
-  intervals that produced it and agrees with itself; `recordTwdVerdict` was
-  retired at RC-9c for exactly this).
-- **Starts upstream of the producer** (RF24): begins at the recorded wire bytes,
-  drives the real driver/hook/store, and asserts on the built C2 payload — not
-  on a seeded `machineWorkMeters`.
-- **Proven to go red on a DIVERGENT capture.** `rest-boundary` (machine 198 m,
-  ours 197 m — `oracleCorpusReplay.test.ts` RC-9(b)) is the fixture: with the
-  fix, the payload posts 198; a mutation reverting to `workMeters` posts 197 and
-  the test reddens. The three captures that agree to the metre cannot gate this
-  (RF21) and are not the fixture.
-- **The honest limit is now smaller but real:** CI proves which of our two
-  numbers we send and that it equals the machine's summary for that capture. It
-  does **not** re-run Concept2's acceptance — but §2's live test did, once, and
-  the PR body carries that as the end-to-end evidence CI cannot be.
+The gate PR C actually needs, and its two halves:
+
+- **Distance — the seam test (RF24), and it can start from a real stored row.**
+  In `server/routes/concept2.test.ts` (the existing send-route suite, e.g. the
+  block around the `store.get → toMappingRow → buildC2Payload` path): one case
+  seeds a DB row where `machineWorkMeters ≠ workMeters` (5706 vs 5708, the walk's
+  own numbers) and asserts the posted `distance` is **5706**. The oracle is the
+  row's `machineWorkMeters` — the machine's own stored number, NOT our
+  accumulator, so this is not RF11's mirror. **Two mutations must bite:**
+  reverting `buildC2Payload` to `distance: workMeters` (posts 5708), and dropping
+  the field in `toMappingRow` (the payload silently falls back to `workMeters`
+  while the display shows the machine number — the exact send≠display split this
+  PR closes, reintroduced one layer down). The second is the RF24 mutation and
+  it is why the test must start at the DB row, not at a `SessionLogRow`.
+- **Time — gated by a SEEDED unit test, and here is why that exception is
+  forced.** No capture in the corpus has divergent work-SECONDS — checked:
+  `oracleCorpusReplay`'s `rest-boundary` has `machine.elapsedSeconds` 60.0 =
+  ours, and every other capture agrees too. So there is no divergent-seconds
+  fixture to gate time the way distance is gated, and a `buildC2Payload` unit
+  test with a seeded `machineWorkSeconds ≠ workSeconds` (asserting the posted
+  `time` uses the machine value; mutation reverts to `workSeconds`) is the only
+  gate that can bite. This is a deliberate carve-out from "not seeded": the seam
+  test above cannot exercise time divergence because reality has not produced
+  one, and the PR body states that time is moved **by parity** with distance,
+  gated structurally rather than on observed divergence.
+- **The honest limit:** CI proves which stored number we post. It does not
+  re-run Concept2's acceptance — but §2's live test did, once, at one distance,
+  and the PR body carries that as the end-to-end evidence CI cannot be, with its
+  two edges (log-dev, one date/time) named.
 
 ## 6 · What a rower sees (C5)
 
-**No displayed number moves.** The hero distance/time and the MACHINE CONFIRMED
-block already render `machineWorkMeters`/`machineWorkSeconds` (§4). This PR makes
-the **wire** match what the screen and the machine already say. The standing
-design gate's "a number change is a design question too" clause is satisfied by
-that fact: the PR body states which screens were checked
-(`LogRow`, `FromTheLog`, the send block) and that each already shows the machine
-number, so there is no before/after for a rower to read. **If the antagonist or
+**No displayed distance a rower reads moves** on a row that carries the machine
+total. The hero (`LogRow.tsx` `heroDistanceMeters`/`heroTimeSeconds`) and the
+MACHINE CONFIRMED block (`FromTheLog.tsx`) already prefer
+`machineWorkMeters`/`machineWorkSeconds` (§4), so the wire simply catches up to
+the screen. **The claim is grep-checked, not asserted:** the PR body lists every
+`app/src` surface that renders a distance and shows each already prefers the
+machine total (or, in a `machineWorkMeters: null` fallback tier, shows
+`work_meters` — the same value the send falls back to, so still send = display).
+The standing design gate's "a number change is a design question too" clause is
+satisfied by that fact. **If the antagonist or
 the PM finds a surface that displays `work_meters`, that surface is the design
 question and Gate 0 opens; the spec's claim is that none does, and it is
 checkable by grep.**
@@ -166,16 +205,23 @@ checkable by grep.**
 
 - **C1.** Answered (§2): the five checked fields, exact, no band; distance
   authoritative = the monitor's total. Citation + live measurement both on file.
-- **C2.** Answered by the live API test (§2) rather than a walk — cheaper and
-  reproducible. The PR body may still recommend one confirming hardware send,
-  but it is not required for the number to be settled.
+- **C2.** The POSITIVE is answered by the live API test (§2): 5706 verifies,
+  5707 does not, so the code is pinned at the machine's total. The 5708 arm was
+  not freshly tested (409 duplicate); it does not verify by exclusion plus
+  James's live refusal. **One clean confirming send is still OWED and named in
+  the PR body** — either a fresh 5708 POST (needs the real row deleted first, a
+  destructive step James rules on) or a production hardware send after PR C
+  ships. Not required to settle WHICH number is authoritative; required to close
+  the log-dev-vs-production edge.
 - **C3.** The authoritative number is named with its reason and its
   falsifier: `machine_work_meters` (0x0039's own total), because the code
   verified against 5706 and refused 5708; it would be wrong only if a future
   monitor row's 0x0039 total itself disagreed with what its code was minted
   over, which the same live test re-checks for any new capture.
-- **C4.** The gate is specified (§5) before it is built: capture-summary oracle,
-  upstream-of-producer, proven red on `rest-boundary`, honest about CI's limit.
+- **C4.** The gate is specified (§5) before it is built: the seam test
+  (`concept2.test.ts`, a stored row with `machineWorkMeters ≠ workMeters`, two
+  mutations incl. the `toMappingRow`-drop), the seeded time carve-out, and the
+  honest CI limit. NOT `oracleCorpusReplay` (it builds no payload — corrected).
 - **C5.** No rower-visible number moves (§6); the PR body names the screens
   checked. If one does move, Gate 0 opens first.
 - **C6.** The antagonist FULL pass runs on this spec (TRIAD), and a PM gate on
