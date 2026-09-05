@@ -35,32 +35,63 @@ mechanism. James's report during attempt 1 ("the connect is up but nothing's
 happening") is consistent: the PM5 sat in Ready for App Connection while the
 phone's reader had already expired.
 
-## Diagnosis
+## Diagnosis (CORRECTED — supersedes this file's first timing theory)
 
-Not the helper, not the app hold. The reader window opened before the tag was
-presented and closed before it arrived. Between cases the operator block asks
-James to move the phone away, drive two PM5 menus, and return; the controller
-started the next scenario 20 s after sending the block (attempt 1) and
-immediately after the idle check (attempt 2), and Core NFC gives 60 s from
-`startNfc`. Whether the phone was at the spot for part of that window is
-unconfirmed (asked; answer pending). What is confirmed is that the reader
-never saw the tag, twice, with the same timing shape.
+The first version of this file guessed positioning/timing (reader opened
+before the phone reached the spot). **James confirmed the phone was held at
+the spot the whole time**, which falsifies that. The corrected finding:
 
-This is the same class as the v1 connection abort: the operator's ready state
-was not established before the host acted. v2 fixed it for the walk's first
-listing by moving the ready state into the consent invitation; the between-case
-transitions kept v1's "no per-case acknowledgement" rule and so have no ready
-signal at all.
+**The PM5 stopped emitting its NFC tag after the recovery Bluetooth activity,
+and stayed dark until a hard power cycle.** Evidence:
 
-## Proposed delta for NF-RECOVERY-v4 (needs PM and James)
+- Case 1 A and B read the tag in 5-7 s (code 200). Case 1's B completed a real
+  BLE connect and disconnect.
+- Immediately after, case 2's reader ran its full 60 s and ended Core NFC 201
+  (`sessionTimeout`) with **no tag seen**, twice (block attempt + the
+  James-authorized diagnostic retry), phone held in place both times.
+- **James's separate phone NFC app also could not find the PM5's tag** after
+  the walk — so this is not our app, our helper, or our positioning.
+- **Only a hard reboot of the PM5 (battery pull) restored NFC.** It has read
+  fine since, including while Bluetooth-connected (James retested).
 
-One-line change to the between-case rule: after sending a case's physical
-block, the controller starts that case's reader only on James's one-word
-reply **set** (phone at the spot, PM5 showing Ready for App Connection). The
-reply is a readiness signal for the reader window, not a "done" report, and
-nothing about evidence completion reads it. Clock keeps running; cap, cases,
-attempts and stop rules unchanged. Case 1's completed evidence stands; v4
-runs cases 2, 3 and 4.
+INFERENCE (tag PRIMARY for the observations above, INFERENCE for the cause):
+the PM5's NFC advertisement went into a stuck/off state after the connect
+cycle in case 1, persisted across applications and minutes, and cleared only
+on power cycle. Whether the trigger is a single connect or the full
+connect → disconnect → re-arm → reconnect sequence is unknown; a single fresh
+connect after the reboot did NOT reproduce it. This is a PM5-side state, not
+damage (a battery pull is Concept2's normal reset).
+
+## Why this matters beyond the walk
+
+The recovery matrix exists to test whether an old NFC attempt interferes with
+its immediate successor. This finding is a confounder for every case: after a
+connect, the PM5 may stop offering its tag for PM5 reasons that have nothing
+to do with the phone or app, so a "successor B finds no tag" result cannot be
+read as an app recovery failure without first proving the PM5 is still
+emitting. It is also a genuine product question for the shipped Scan-NFC
+feature: a second scan later in the same session (after one connect) may find
+nothing until the erg is power-cycled. This is exactly the "does the
+underlying system HAS the concept / who owns this state" question, and it was
+not researched before the recovery matrix was designed.
+
+## Next (needs a rethink, not a quick delta — PM + James)
+
+The earlier "start each case's reader on a **set** reply" idea is WITHDRAWN: it
+addressed the falsified timing theory and would not help a PM5 that has stopped
+emitting. Before another erg walk, two things are owed at the desk:
+
+1. **Research the PM5 NFC lifecycle** (Concept2 docs / SDK): when the PM5
+   advertises its NFC tag, whether a BLE connection suppresses or re-arms it,
+   and what returns it. Record PRIMARY citations.
+2. **Redesign the between-case protocol** around a PM5-NFC-availability check:
+   before each successor reader start, confirm the tag is actually readable
+   (our probe or a third-party read), and treat "not readable" as
+   `PM5 NFC unavailable` (power-cycle required), distinct from an app recovery
+   failure. Possibly a power cycle between cases.
+
+Case 1's completed evidence stands. Cases 2-4 remain unrun and now depend on
+the research and redesign above.
 
 Private evidence under R: `authorized-recovery-v3-*/` and
 `authorized-recovery-v3-retry2-*/` (receipts, console, evidence.json).

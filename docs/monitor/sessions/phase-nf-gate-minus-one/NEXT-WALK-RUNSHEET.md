@@ -81,10 +81,13 @@ the exact PM5 name, so the recovery likely succeeded; a clean re-run
 go, and the erg for the BLE half.
 
 **NF-RECOVERY-v3 ran 2026-09-05: case 1 COMPLETE with the fixed helper.** Case 2
-stopped, twice (one James-authorized diagnostic retry): both A reader sessions
-ran the full 60 s and ended Core NFC 201 (session timeout) with no tag read, so
-the query hold was never reached. Diagnosis: the reader window opened before
-the phone was at the spot between cases; v1's "no per-case acknowledgement"
-rule leaves the transitions with no ready signal. Proposed v4 delta: start each
-case's reader on a one-word **set** reply. See RECOVERY-WALK-V3-RESULT.md.
-Needs PM + James's go + the erg for cases 2-4.
+stopped twice (one James-authorized diagnostic retry): both A reader sessions
+ran the full 60 s and ended Core NFC 201 (session timeout) with NO tag seen,
+phone held in place. Corrected diagnosis (my first timing theory was
+falsified): the PM5 itself stopped emitting its NFC tag after case 1's BLE
+connect and stayed dark until a battery-pull reboot; James's separate phone
+NFC app also could not read it. This is a PM5-side confounder for the whole
+recovery matrix and a product question for shipped Scan-NFC. The "set reply"
+delta is WITHDRAWN. Owed at the desk before any v4: research the PM5 NFC
+lifecycle (does a BLE connect suppress the tag) and redesign the between-case
+protocol around a PM5-NFC-availability check. See RECOVERY-WALK-V3-RESULT.md.
