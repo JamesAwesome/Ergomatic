@@ -204,20 +204,31 @@ Two pure helpers in `domain/suggest.ts`, tested with an injected rng:
 
 **The client draws ONCE, at mount.** `TodayView` receives the resolved
 library as a prop (the `LOADING…` gate above it holds until all five hooks
-resolve — vetted ground), so the `pickOverride` lazy initializer can compute
-the day's suggestion, read `tieIds`, call `drawOne` with the client rng
+resolve — vetted ground), so the pick's lazy initializer can compute the
+day's suggestion, read `tieIds`, call `drawOne` with the client rng
 (`crypto.getRandomValues` on a `Uint32Array(1)`), write the pick, and return
-it; every later render passes that id back as `todayPickId`. The daily type
-roll lives in the `overrides` initializer the same way. React StrictMode's
-double invocation is development-only and reads the first call's write
-(vetted ground); the render impurity is confined to these two initializers
-and named in their comments.
+it. **Every later render passes that id back as a NEW input, `drawnId`, not
+as `todayPickId`** (implementation finding, PR1): `todayPickId` means "the
+rower shuffled" — it says YOUR PICK and beats a checkpoint pin — while the
+day's draw is not the rower's act, so `drawnId` is honoured for the card,
+reported with the standard "Least recently done" reason (a tie member IS
+least recently done), and never beats the pin. The stored pick carries a
+`shuffled` boolean to tell the two apart (`shownIds` restarts at one id
+after a reset, so length cannot). The daily type roll lives in the day
+record's initializer the same way. Neither draw runs on a checkpoint day
+(the pin shows) or without baselines (the doors card shows). React
+StrictMode's double invocation is development-only and reads the first
+call's write (vetted ground); the render impurity is confined to these two
+initializers and named in their comments.
 
 ### 2.3 Stored shapes and the lifetime table (RF27)
 
-**`ergomatic.todayPick`** (existing, per day) gains `shownIds: string[]`.
-Validation: an array of strings, else the record fails whole (the existing
-all-or-nothing rule in `todayPick.ts`). The record is already invalidated on
+**`ergomatic.todayPick`** (existing, per day) gains `shownIds: string[]`
+and `shuffled: boolean` (false for the day's draw, true once SHUFFLE has
+been tapped — §2.2). Validation: an array of strings and a boolean, else
+the record fails whole (the existing all-or-nothing rule in
+`todayPick.ts`); a same-day pre-PR1 record therefore reads as nothing
+stored, and the day redraws once — the stated deploy-day cost. The record is already invalidated on
 a `date`/`planKey`/`doneN` mismatch; nothing new there.
 
 **`ergomatic.todayOverrides`** (existing, per day) LOSES the five filter
@@ -244,6 +255,7 @@ moved over. PR2 swaps `durations` for `durationRange` and bumps `v`.
 |---|---|---|---|---|---|
 | `todayPick.workoutId` | first mount of the day (I-2) or SHUFFLE | SHUFFLE; date/plan mismatch | yes | no | no |
 | `todayPick.shownIds` | with `workoutId` | reset by `nextShuffle` on exhaustion; date/plan mismatch | yes | no | no |
+| `todayPick.shuffled` | false with the draw; true on SHUFFLE | date/plan mismatch | yes | no | no |
 | `todayOverrides.swapType` | daily roll (freestyle, I-5) or chip tap | chip tap; date/plan mismatch | yes | no | no |
 | `todayFilters.rollSuppressed` | lit-chip clear | any chip tap | yes | yes | yes |
 | `todayFilters.byKey[K]` | first sheet apply or CLEAR ALL under key K | next apply/CLEAR ALL under K | yes | yes | yes |
@@ -275,9 +287,13 @@ to a fresh first pick (existing `sorted.find` → undefined path). No helper
 may hold a reference to the library between calls, cache a sorted copy
 across renders, or key anything on `library.length`. This is the invariant
 a lazy-load phase inherits. **Two more it inherits, found by the anchor
-pass:** I-1 holds only while the pool contains the stored id (a page that
-omits it triggers a fresh draw — a paging phase must fetch the stored id's
-row or accept the redraw), and `suggest()`'s reason strings ("Your library
+pass:** I-1 holds only while the pool contains the stored id — a stored
+pick outside the current pool is IGNORED by `suggest()` and the card shows
+the pool's least-recently-done head, deterministically, until the next
+SHUFFLE draws afresh (revision 1 said "a fresh draw"; the implementation
+keeps pre-PR1's fall-through, because drawing during render would be
+impure and a filter change is the rower's act, not a new day) — a paging
+phase must fetch the stored id's row or accept that fall-through, and `suggest()`'s reason strings ("Your library
 is empty.", "No {type} sessions in your library.") and its `fellBack` flag
 assert facts about the WHOLE library; a paging phase must re-scope them to
 "in what is loaded" before it ships.
