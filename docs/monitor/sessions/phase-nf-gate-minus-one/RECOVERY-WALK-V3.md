@@ -1,6 +1,6 @@
 # NF-RECOVERY-v3 — re-run the four A → B checks with the fixed helper
 
-Status: PM PASS (delta); awaiting James's **go**.
+Status: RUN 2026-09-05 — case 1 COMPLETE, case 2 stopped before any tag read; see [RECOVERY-WALK-V3-RESULT.md](RECOVERY-WALK-V3-RESULT.md). Run and consent consumed.
 
 Identical to `RECOVERY-WALK-V2.md` in every case, cap, physical block,
 stopping rule, evidence requirement and cleanup step (read that file and

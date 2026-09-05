@@ -79,3 +79,12 @@ See RECOVERY-GUARD-FIX.md. The captured case-1 receipt shows B connected with
 the exact PM5 name, so the recovery likely succeeded; a clean re-run
 (NF-RECOVERY-v3, same protocol, fixed helper) needs a fresh PM pass, James's
 go, and the erg for the BLE half.
+
+**NF-RECOVERY-v3 ran 2026-09-05: case 1 COMPLETE with the fixed helper.** Case 2
+stopped, twice (one James-authorized diagnostic retry): both A reader sessions
+ran the full 60 s and ended Core NFC 201 (session timeout) with no tag read, so
+the query hold was never reached. Diagnosis: the reader window opened before
+the phone was at the spot between cases; v1's "no per-case acknowledgement"
+rule leaves the transitions with no ready signal. Proposed v4 delta: start each
+case's reader on a one-word **set** reply. See RECOVERY-WALK-V3-RESULT.md.
+Needs PM + James's go + the erg for cases 2-4.
