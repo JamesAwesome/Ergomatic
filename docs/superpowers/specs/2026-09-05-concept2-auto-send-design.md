@@ -35,9 +35,8 @@ nowhere else to show, the You row also warns when sends are failing** (§3.4).
 
 **TRIAD** — two stored shapes (a mode and a failure flag on the link row) and a
 number leaving for a third party on a trigger nobody tapped. Full antagonist on
-this spec (done, rev 1 → rev 2; a DELTA pass on rev 2's new mechanisms is owed,
-§7), PM gate on the PR, and a **Gate 0** for the redrawn card and the You row's
-new state.
+this spec (anchor on rev 1, delta on rev 2 — both done, §7), PM gate on the PR,
+and a **Gate 0** for the redrawn card and the You row's new state — owed next.
 
 ## 2 · Research record
 
