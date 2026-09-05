@@ -898,8 +898,13 @@ closed with zero Concept2 contact.
       admission-only behaviour (`signin.ts:30-36`) is untouched — so the
       general question stands, one capability narrower. **PR1.5's `Browser.open` +
       `browserFinished` return arm was RETIRED at 1.75b** (the callback now
-      arrives in a promise); `@capacitor/browser` stays for PR2's read-only
-      link-out. Device walk:
+      arrives in a promise). **This row used to say `@capacitor/browser`
+      stays for PR2's read-only link-out; that is false after PR B
+      (2026-09-04), which removed the package entirely** — the read-only
+      link-out now shares the OAuth hop's own `window.open` arm
+      (`adapters/externalBrowser.ts`), walked signed in on the phone's
+      default browser (`docs/monitor/sessions/walk-2026-09-04-c2-linkout/`).
+      Device walk:
       `docs/monitor/sessions/walk-2026-09-02-c2-native/`. **Still owed
       after both PRs:** the `C2_LINK_ENABLED` flag flip on a real cohort,
       gated on Concept2's write approval; live-portal registration of the
@@ -1004,6 +1009,39 @@ closed with zero Concept2 contact.
       per-interval `rest_time` gate is NOT answered this wave — RC-1 stored the
       session-level split only, `LogStep` carries no per-interval rest, so the
       `intervals` array is out of scope and rides the auto-upload follow-on.
+- [ ] **PR B — the link-outs leave the app.** The read-only Concept2
+      link-outs (`View on Concept2 →`, `OPEN CONCEPT2 PROFILE`) drop the
+      native `SFSafariViewController` sheet and its isolated cookie jar —
+      the defect a 2026-09-03 walk found (a sent row opened Concept2's
+      "the user has made this result private" page instead of the row) —
+      for the same `window.open` arm the web platform already used.
+      `@capacitor/browser` loses its last consumer and is removed.
+      **Ordered FIRST** (James, 2026-09-04): it repairs a real defect and
+      its own gate is a walk that is happening anyway. Not TRIAD: no
+      stored shape, no number's meaning, no auth. Walked twice — plugin
+      present (build 860) and plugin-free (build 862) — both signed in on
+      the actual result, both W1-W4 identical
+      (`docs/monitor/sessions/walk-2026-09-04-c2-linkout/`). Spec:
+      `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md` §5.2.
+      **Reconciliation (comments, this row, the phrase sweep) done at
+      Task 6; PR not yet opened.**
+- [ ] **PR A — Concept2 becomes a row on You, and a screen behind it.** The
+      whole Connect/Send card leaves the You tab; one quiet mono row takes
+      its place and everything the card does moves to `/you/concept2`
+      behind it — the shape DIAGNOSTICS already uses. **Ordered SECOND.**
+      Not TRIAD. Needs its own Gate 0 (rendered frames, both orientations,
+      the row's own contrast numbers) before any implementation task
+      starts. Spec: `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md`
+      §5.1.
+- [ ] **PR C — the verification question.** Concept2 stores a sent row as
+      WORK metres only; the monitor's own accumulator and the driver's
+      last pre-reset reading disagree with each other by ~2 m, and neither
+      has been checked against what Concept2 actually compares. **TRIAD on
+      all three counts that matter to it** (a number's meaning). **Ordered
+      LAST on purpose**, so the cost of the open question stays visible.
+      Names no authoritative number and prescribes no payload change —
+      that choice is C1-C3's job, made after this PR's own spec. Spec:
+      `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md` §5.4.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
@@ -1652,6 +1690,35 @@ Each needs erg time or a deliberate recording session.
   (`representableCentiseconds` has never been sent to a real PM5).
 
 ## Small, queued, rides the next PR in its area
+
+- **FILED, and it is TRIAD (James's walk, 2026-09-04): our work distance is the
+  SUM OF OUR INTERVALS, the monitor reports a different total, and Concept2
+  verifies against the monitor — so a verification code cannot validate.**
+  Measured on hardware, three artefacts in one sitting:
+  - PM5 View Detail, `v12:30/3:00r...3`, Sep 04 2026: total row **25:00.0 /
+    5706 m**; interval rows 2837 + 1953 + 918 = **5708 m**; rests 357 + 168 + 0
+    = 525 m, 3:00 + 2:00 = 5:00. **The monitor's own total disagrees with the
+    sum of its own intervals by 2 m.**
+  - What we sent: work **5,708** m / 25:00.0, rest 525 / 5:00, so Concept2's
+    overall reads **6,233** where the monitor's own is 5706 + 525 = **6231**.
+  - Concept2, on entering the code `D9BD-F964-32E2-7F18` (which matches the
+    monitor and our own display exactly): *"This workout cannot be verified.
+    Please check your date, time and distance exactly match the monitor."*
+  **Mechanism:** `monitorRun.ts`'s `workMeters` is
+  `actuals.reduce((sum, a) => sum + a.distanceMeters, 0)`. Every gate we own
+  compares that sum against our own intervals, so all of them agree with each
+  other and none of them can see this — RF11 exactly, and the same
+  "an oracle that shares your definition is a mirror" shape that retired
+  `recordTwdVerdict`.
+  **Consequence, unhedged:** the verification code is ROADMAP's own "whole point
+  of the phase", and it cannot succeed today for an interval row whose totals
+  differ. Unknown and worth measuring: whether a single-interval or JustRow row
+  verifies fine (the two numbers coincide there), which would explain why
+  nothing caught it.
+  **Owed before any fix:** decide which number is authoritative and say why —
+  the monitor's own summary total, or our sum — then send that one, and gate it
+  with a replay whose expected value comes from the CAPTURE's summary frame
+  rather than from our own accumulator. **M/L**
 
 - **FILED (PR2 PM gate, 2026-09-04): three PR2 items whose only home was a plan
   or a PR body.** A plan is a record of intent, not a live register (RF14).

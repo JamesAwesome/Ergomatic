@@ -542,6 +542,124 @@
       .callout p:last-child {
         margin-bottom: 0;
       }
+
+      /* ---- the You DOORS group (added 2026-09-04, PR A) -------------
+         NEW PAGE CLASSES, declared as new rather than silently reused.
+         The app has no Concept2 row yet -- that is the thing this gate
+         approves -- so these carry the values of the row it copies,
+         `.diag-row` at `app/src/index.css:10024-10038`, read 2026-09-04:
+             min-height: var(--tap), which is 44px at tokens.css:160;
+             padding: 13px 2px; border-top: 1px solid var(--rule-2);
+             font-family: var(--font-mono); font-size: 12px;
+             letter-spacing: 0.08em; color: var(--ink-3);
+         MEASURED DRIFT, stated rather than quietly fixed: this page's own
+         older `.diag-row` rule (above) draws 11px / 0.16em / border-top
+         `--rule`, which is NOT what shipped. The twelve frames drawn
+         before 2026-09-04 keep it so their record is unchanged; every
+         frame in sections 7-10 uses the shipped values, for BOTH rows,
+         including the BEFORE half of every pair -- otherwise section 8.2's
+         comparisons would show a drift as if it were a change. Section 8.2
+         records the discrepancy in prose.
+         `.doors` carries ONE `margin-top: auto` for the GROUP, which is
+         invariant R7: two rows each carrying their own auto margin is a
+         flex free-space SPLIT, not a second row beneath the first. */
+      .doors {
+        margin-top: auto;
+        margin-bottom: 14px;
+        display: flex;
+        flex-direction: column;
+      }
+      .door {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 44px;
+        padding: 13px 2px;
+        border-top: 1px solid var(--rule-2);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        color: var(--ink-3);
+      }
+      .door-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      /* The row's state line. Default is the same `--ink-3` as the label
+         (6.69:1 on `--page`); `.on` is the OPTIONAL distinction section
+         8.1 puts to the gate, `--ink` at 600 (15.41:1). */
+      .door-state.on {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      /* ---- the /you/concept2 overlay screen ------------------------
+         `.screen-title` is `app/src/index.css:456-460` (serif, 500,
+         31px); the face is a system stack here, the size and weight are
+         the app's. `.backlink` already exists above and carries the
+         app's `.back-link` mono 12px/600/0.08em `--ink`; its 44x44
+         minimum (`index.css:1304`+`:1315`) is drawn inline on each use. */
+      .screen-back {
+        align-self: flex-start;
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        min-width: 44px;
+      }
+      .screen-title {
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 500;
+        font-size: 31px;
+        margin: 0;
+        color: var(--ink);
+      }
+      /* The tab bar, drawn ONLY in the section 8.5 screen frames and
+         nowhere else on this page. It is drawn there because it is
+         load-bearing for that screen and for nothing else: `.overlay-screen`
+         is `z-index: 10` and `index.css`'s tab-bar rule deliberately sits
+         ABOVE it, so the tab bar stays drawn and stays TAPPABLE while the
+         screen is open, and `.overlay-screen`'s own
+         `padding-bottom: calc(var(--tap) + env(safe-area-inset-bottom))`
+         reserves exactly this strip. Values from `index.css:462-470`:
+         `--surface` ground, `1px solid var(--rule)` top border. The active
+         mark is `--accent`, which is job 4 of accent's four declared
+         meanings, so it needs no dispensation. */
+      .tabbar {
+        margin-top: auto;
+        flex: 0 0 44px;
+        margin-left: -16px;
+        margin-right: -16px;
+        height: 44px;
+        display: flex;
+        background: var(--surface);
+        border-top: 1px solid var(--rule);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--ink-3);
+      }
+      .tabbar span {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .tabbar span.here {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .choice-tag {
+        display: inline-block;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        padding: 3px 7px;
+        border: 1px solid var(--ink);
+        background: var(--ink);
+        color: var(--on-color);
+        margin-bottom: 6px;
+      }
     </style>
   </head>
   <body>
@@ -570,8 +688,34 @@
       (approved copy or shape that this amendment moves, with the reason and the
       <code>file:line</code> that forces it), and
       <span class="badge b-new">NEW</span> (a state the board has no frame for).
-      <strong>Nothing here is implemented. This document IS the gate.</strong>
     </p>
+    <div class="callout">
+      <p><strong>REVISED 2026-09-04 &mdash; and sections 0 to 6 are now a
+      RECORD, not a pending gate.</strong> What they approved SHIPPED, in
+      <code>#290</code> (<code>2f258006</code>) and <code>#293</code>
+      (<code>3d0e2612</code>). James then walked the shipped surface twice, and
+      the fallout is <strong>&sect;7 to &sect;10</strong>, which are what this
+      page is now asking about. Reasoning:
+      <code>docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md</code>.</p>
+      <p><strong>&sect;7 &mdash; PR B, the link-outs.</strong> No pixel moves:
+      the three link-out buttons keep their labels, their colour and their 44px
+      row, and the tap leaves for the phone's default browser instead of an
+      in-app sheet that is signed out. Sections 2c, 2d and 2i each carry a note
+      saying so, and the behavioural sentence this page used to make about the
+      return is WITHDRAWN where it was argued (in 2c's callout).</p>
+      <p><strong>&sect;8 &mdash; PR A, the card leaves You.</strong> The whole
+      Concept2 card moves behind one quiet mono row on You, Diagnostics-shaped.
+      James, 2026-09-04: the Unlink button is <em>&quot;too loud&quot;</em>, and
+      <em>&quot;maybe we put it in a sub-menu like diagnostics.&quot;</em> The
+      card's own INTERIOR does not change, so &sect;1's eleven frames stay the
+      authority for what it draws; what is new is the row in front of it, the
+      screen chrome around it, and three combinations nobody has drawn.</p>
+      <p><strong>Nothing in &sect;7 to &sect;10 is implemented. Those sections
+      ARE the gate.</strong> Two of their frames are decisions James has not
+      made yet and both are drawn twice, side by side and labelled: the ORDER of
+      the two rows at the foot of You (&sect;8.4) and which of two strings the
+      Send block's reconnect sentence becomes (&sect;8.6).</p>
+    </div>
 
     <div class="callout">
       <p><strong>Why an amendment at all.</strong> The board was approved before
@@ -797,15 +941,141 @@
           no anchors and no subresources on purpose (the callback URL carries
           <code>code</code>; RFC 9700 §4.2). "here" therefore points at nothing.</td>
       </tr>
-    </table>
+          <tr>
+        <td class="num">13</td>
+        <td>The three link-outs open in an in-app sheet
+          (<code>SFSafariViewController</code> on native), and 2c's callout said
+          both surfaces come back with the row still on screen.</td>
+        <td><strong>All three open in the phone's DEFAULT BROWSER.</strong> No
+          label, colour, size or position changes on any of the three frames
+          (2c/2d's <em>View on Concept2 &rarr;</em>, 2i's <em>OPEN CONCEPT2
+          PROFILE</em>). The return promise is WITHDRAWN and replaced in 2c's
+          own callout by what the app can actually guarantee.
+          <strong>Walked directly at W3</strong> is the result link (2c/2d); 2i's
+          <em>OPEN CONCEPT2 PROFILE</em> was not reached on the walk (its
+          no-weight refusal cannot be provoked on an account whose weight
+          class Concept2 already knows), so its sharing this behaviour with
+          W3 is an INFERENCE from the two call sites calling the same
+          function, not a walked fact
+          (<code>docs/monitor/sessions/walk-2026-09-04-c2-linkout/README.md</code>,
+          W7).</td>
+        <td><strong>James, 2026-09-04:</strong> <em>&quot;opening in safari is
+          fine because it will be clear you're changing apps&quot;</em>, and
+          <em>&quot;the no-weight should externally link to concept 2&quot;</em>.
+          Measured on the walk of 2026-09-03: the sheet keeps a cookie jar of
+          its own, so a signed-out fetch of a result URL renders Concept2's
+          <em>&quot;The user has made this result private&quot;</em> page rather
+          than the row. The rower's Concept2 session lives in Safari.</td>
+      </tr>
+      <tr>
+        <td class="num">14</td>
+        <td>The Concept2 card is the You tab's discovery surface, sitting
+          between Reset baseline setup and the DIAGNOSTICS row.</td>
+        <td><strong>The card leaves You entirely and becomes ONE mono row</strong>
+          (label, state, chevron, 44px) in the same idiom as DIAGNOSTICS,
+          opening <code>/you/concept2</code>. Connect, Reconnect, the identity
+          line, all six panels, Unlink and its arm live there and nowhere else.
+          <strong>The card's own markup does not change</strong> (R6), so
+          &sect;1's frames survive as card frames.</td>
+        <td><strong>James, 2026-09-04:</strong> the Unlink button is <em>&quot;too
+          loud&quot;</em>, and <em>&quot;maybe we put it in a sub-menu like
+          diagnostics.&quot;</em> <strong>This SUPERSEDES the earlier answer to
+          the same complaint</strong> &mdash; re-tiering the Unlink button &mdash;
+          which is withdrawn, not kept alongside: a control on a screen the rower
+          opened on purpose is allowed to be the loudest thing there. The
+          measurement that killed the quieter tier stands and is in &sect;8.7.</td>
+      </tr>
+      <tr>
+        <td class="num">15</td>
+        <td>&mdash; (the board has no row, so it says nothing about what one
+          would show).</td>
+        <td><strong>The row says what the SERVER last said; the screen says what
+          the last TAP did.</strong> Four values, all four already rendered by
+          the card: <code>NOT LINKED</code>, <code>LINKED &check;</code>,
+          <code>RECONNECT NEEDED</code>, <code>COULDN'T READ</code>. No attempt
+          state ever reaches the row, and the row mints no new copy.</td>
+        <td>Forced, not chosen. The card's four attempt values
+          (<code>outcome</code>, <code>busy</code>, <code>armed</code>,
+          <code>unlinkFailed</code>) are <code>useState</code> inside
+          <code>you/Concept2Card.tsx:86-92</code>, and
+          <code>shell/AppRoutes.tsx:241-261</code> registers FLAT routes, so You
+          unmounts whenever the screen is open. There is no frame in which a
+          mounted row and a live attempt coexist. The card's fifth status value,
+          <code>WAITING</code>, is therefore unreachable on the row.</td>
+      </tr>
+      <tr>
+        <td class="num">16</td>
+        <td>1h Unavailable draws nothing, and the page treats a failed read the
+          same way.</td>
+        <td><strong>They are different, and the failed-read case is a LIVE
+          DEFECT this change closes.</strong> The row draws only once a
+          successful read has reported <code>available: true</code> on this
+          account, ever. So: no row where the surface is off, no row where this
+          account has never been told it exists, and <code>COULDN'T READ</code>
+          where it HAS been told and the read then failed.</td>
+        <td><code>you/Concept2Card.tsx:220</code> branches on <code>failed</code>
+          BEFORE the availability check at <code>:259</code>, so today any rower
+          who opens You while offline sees a CONCEPT2 error panel about a feature
+          gated to one account &mdash; on every deployment and every account.
+          <code>docs/screenshots/you-concept2-read-failed.png</code> is a picture
+          of it. <strong>The cost is stated rather than buried</strong> and it is
+          &sect;8.3's third frame: a rower whose FIRST-EVER read fails sees no row
+          and cannot reach the Retry until a read succeeds.</td>
+      </tr>
+      <tr>
+        <td class="num">17</td>
+        <td>2f renders the approved sentence <em>&quot;Concept2 stopped
+          accepting this link. Reconnect on the You tab.&quot;</em></td>
+        <td><strong>GATE 0 QUESTION, drawn both ways in &sect;8.6.</strong> After
+          PR A the You tab carries a mono row and no Connect control; Reconnect
+          is one tap deeper. Candidate (a) is the string unchanged; candidate (b)
+          names the door rather than the tab.</td>
+        <td>This is approved copy, drawn on this page, and changing a word of it
+          is a design question rather than an implementation one. The string is
+          rendered at <code>log/Concept2SendBlock.tsx:211</code> and asserted at
+          <code>log/Concept2SendBlock.test.tsx:375</code>. <strong>Neither
+          candidate is right for one account</strong> &mdash; the one that has
+          never had a successful read has nothing about Concept2 on the You tab
+          at all &mdash; and &sect;8.6 says so rather than picking around it.</td>
+      </tr>
+      <tr>
+        <td class="num">18</td>
+        <td>&mdash; (DIAGNOSTICS is You's only bottom row, and
+          <code>src/You.tsx:139-141</code> requires it stay the LAST child).</td>
+        <td><strong>GATE 0 QUESTION, drawn both ways in &sect;8.4.</strong> Two
+          rows now sit at the foot of You and their ORDER is unruled. CONCEPT2
+          above DIAGNOSTICS keeps that comment and
+          <code>e2e/concept2.spec.ts:305-307</code>'s readiness sentinel true;
+          CONCEPT2 below falsifies both.</td>
+        <td>Whichever order is ruled, exactly ONE auto top margin separates the
+          GROUP from the content above it, never one per row: CSS Flexbox
+          distributes positive free space equally among auto margins on the main
+          axis (SECONDARY &mdash; spec text, not measured in this engine), so two
+          rows each carrying <code>margin-top: auto</code> is a free-space SPLIT
+          rather than a second row beneath the first.
+          <code>src/index.css</code>'s M-3 comment says <code>.diag-row</code> is
+          used at a single JSX site, and that stops being true.</td>
+      </tr>
+</table>
 
     <h2>1 · You tab — the Concept2 card</h2>
     <p class="lede">
       Card idiom unchanged: <code>--surface</code> ground,
       <code>1px --rule</code> border, 2px radius, 16px padding, 12px gap; mono
-      <code>CONCEPT2</code> label left, mono status right. The card sits between
-      <em>Reset baseline setup</em> and the DIAGNOSTICS row on You
-      (<code>src/You.tsx:89-115</code>).
+      <code>CONCEPT2</code> label left, mono status right.
+    </p>
+    <p class="lede">
+      <strong>WHERE the card sits is superseded by &sect;8, and this paragraph
+      is rewritten rather than annotated.</strong> It used to say the card sits
+      between <em>Reset baseline setup</em> and the DIAGNOSTICS row on You. It
+      does today (<code>src/You.tsx:119</code>, read 2026-09-04, and James ruled
+      that position AS SHIPPED the same day); after PR A it is not on You at all
+      &mdash; it mounts on <code>/you/concept2</code>, behind a row. <strong>The
+      eleven frames below stay the authority for the card's own INTERIOR</strong>,
+      which does not change: invariant R6 is that the card's markup is untouched,
+      so every frame in this section still draws what the rower sees once the
+      screen is open. Read them as card frames, not as You frames &mdash;
+      &sect;8.5 draws the chrome that replaces the You furniture around them.
     </p>
 
     <h3>1a Unlinked, asking nothing <span class="badge b-changed">CHANGED</span></h3>
@@ -1764,8 +2034,12 @@
       <code>REASON: NO CONNECTION</code>.
     </p>
     <p class="lede">
-      <strong>Where it is NOT shown:</strong> the log row. The You card is the
-      sole discovery surface and owns the retry; a second Concept2 error panel on
+      <strong>Where it is NOT shown:</strong> the log row. The You SURFACE is the
+      sole discovery surface and owns the retry &mdash; that noun is corrected in
+      place rather than beneath: it is the card today and after PR A it is the
+      row plus the screen behind it (&sect;8), and the claim is unchanged either
+      way, because it was always about which SCREEN owns the retry. A second
+      Concept2 error panel on
       a screen about a rowing session is noise the rower cannot act on from
       there, so the Send block stays silent on a failed read exactly as it does
       when no account is linked.
@@ -2179,16 +2453,56 @@
     </div>
     <div class="callout">
       <p><strong>"View on Concept2 &rarr;" is a button, not an anchor, and it does
-      not navigate this document.</strong> On native a plain
-      <code>&lt;a href&gt;</code> would drive the Capacitor WebView itself to
-      concept2.com with no way back; on web today's only adapter
+      not navigate this document.</strong> On web today's only adapter
       (<code>openExternalUrl</code>) is
-      <code>window.location.assign</code> (<code>adapters/webNavigate.ts</code>),
-      which is right for the OAuth hop and wrong for a read-only look. PR2 adds a
-      second adapter arm that opens a new context on web and
+      <code>window.location.assign</code> (<code>adapters/webNavigate.ts:19-21</code>),
+      which is right for the OAuth hop and wrong for a read-only look. The row is
+      44px tall.</p>
+      <p><strong>WITHDRAWN 2026-09-04, and replaced here rather than corrected
+      beneath.</strong> This callout used to end: <em>&quot;PR2 adds a second
+      adapter arm that opens a new context on web and
       <code>SFSafariViewController</code> on native. Both surfaces come back to
-      Ergomatic with the row still on screen. The row is 44px tall.</p>
+      Ergomatic with the row still on screen.&quot;</em> After PR B the native arm
+      is not <code>SFSafariViewController</code> at all &mdash; the tap leaves for
+      the phone's default browser (&sect;7) &mdash; and &quot;comes back with the
+      row still on screen&quot; stops being something this app guarantees. It
+      becomes a property of iOS app-switching and memory pressure, which is not
+      ours to promise.</p>
+      <p><strong>What the app can honestly promise instead, read from the tree on
+      2026-09-04:</strong> nothing the rower has SAVED is lost by leaving, and the
+      row is exactly where they left it if iOS keeps the app alive. If iOS
+      reclaims the app, they come back to Today
+      (<code>shell/AppRoutes.tsx:149</code> sends <code>/</code> to
+      <code>/today</code>, and <code>capacitor.config.ts</code> declares no
+      <code>server</code> block, so a cold boot starts at the bundled
+      <code>/</code>) and reach the row from the log in two taps; an unsaved
+      reflection draft would not survive that, because it is component state
+      (<code>log/FromTheLog.tsx:263-268</code>). &sect;7 draws the full ledger of
+      what does and does not survive.</p>
+      <p><strong>And the anchor claim this callout opened with is TESTIMONY, not
+      a measurement &mdash; labelled rather than deleted.</strong> It used to
+      assert flatly that on native a plain <code>&lt;a href&gt;</code> drives the
+      Capacitor WebView itself to concept2.com with no way back. That doc
+      comment is gone from the file it lived in; the closest surviving
+      testimony is <code>log/Concept2SendBlock.tsx</code>'s own comment on why
+      the link-out is &quot;a button, not an anchor&quot; &mdash; so as not to
+      drive the WebView itself there &mdash; which carries no evidence beyond
+      the walk it cites, and a grep of the repo finds none; the same behaviour
+      is one of the four NO outcomes PR B's walk is scoped to distinguish
+      (&sect;7, W3). Treat it as an INFERENCE the walk settles, not as a fact
+      the drawing rests on.</p>
     </div>
+
+    <p class="lede">
+      <strong>PR B changes where this button GOES, not how it looks
+      &mdash; there is no pixel difference to hunt for above.</strong>
+      <code>.send-linkrow</code> keeps its 44px row, its <code>--accent</code>
+      label (5.94:1 on <code>--surface</code>, unchanged) and its arrow. What
+      changes is the destination: the tap opens the phone's default browser,
+      where the rower's Concept2 session already lives, instead of the in-app
+      sheet that has its own cookie jar. This is the frame whose tap produced the walk's original symptom &mdash; Concept2's &quot;The user has made this result private&quot; page instead of the rower's own row. &sect;7 draws that as a state
+      rather than as a pixel.
+    </p>
 
     <h3>2c-b Sent, with no link-out <span class="badge b-new">NEW STATE</span></h3>
     <p class="lede">
@@ -2331,6 +2645,17 @@
       </div>
     </div>
 
+    <p class="lede">
+      <strong>PR B changes where this button GOES, not how it looks
+      &mdash; there is no pixel difference to hunt for above.</strong>
+      <code>.send-linkrow</code> keeps its 44px row, its <code>--accent</code>
+      label (5.94:1 on <code>--surface</code>, unchanged) and its arrow. What
+      changes is the destination: the tap opens the phone's default browser,
+      where the rower's Concept2 session already lives, instead of the in-app
+      sheet that has its own cookie jar. 2d's link-out is the same call site as 2c's (both are <code>Concept2SendBlock.tsx:189</code>), so it can only behave the same way. &sect;7 draws that as a state
+      rather than as a pixel.
+    </p>
+
     <h3>2e Failed <span class="badge b-changed">CHANGED</span> &middot; 2f Reconnect needed <span class="badge b-new">NEW</span></h3>
     <p class="lede">
       2e keeps the board's copy and gains the same mono REASON line 1e does, for
@@ -2338,7 +2663,9 @@
       and "it didn't work" is not one of them. 2f is new &mdash; the upload route
       returns <code>409 needs_reauth</code>
       (<code>server/routes/concept2.ts:617-620</code>) and retrying cannot help,
-      so there is no Retry button; the fix lives on You.
+      so there is no Retry button; the fix lives on You &mdash; after PR A, one
+      tap deeper, behind the CONCEPT2 row, which is what makes 2f's own sentence
+      a Gate 0 question (&sect;8.6).
     </p>
     <div class="boards">
       <div class="board">
@@ -2377,6 +2704,10 @@
               Concept2 stopped accepting this link. Reconnect on the You tab.
             </p>
           </div>
+          <p class="board-cap" style="margin-top: 12px">
+            2f's SECOND SENTENCE IS A GATE 0 QUESTION AFTER PR A &mdash;
+            SEE &sect;8.6
+          </p>
           <span class="frame-dim">390 &times; 844</span>
         </div>
       </div>
@@ -2563,11 +2894,18 @@
         this state exists to make them not do. The 1g parallel was false:
         nothing a rower can do fixes a stale app build, while
         <em>everything</em> here is fixable in one visit &mdash; which is why the
-        state has a link-out at all. On native the link-out is
-        <code>SFSafariViewController</code>, chosen precisely because it
-        <em>returns to the app</em>, so the rower comes back to this still-mounted
-        block. Without a Send again there is no way to finish the instruction
-        except navigating away and back. <strong>It is the ink outline 2e draws
+        state has a link-out at all. <strong>Its reason changed on 2026-09-04
+        and is rewritten here, not annotated:</strong> this bullet used to
+        justify Send again by saying the native link-out is
+        <code>SFSafariViewController</code>, &quot;chosen precisely because it
+        <em>returns to the app</em>, so the rower comes back to this
+        still-mounted block&quot;. After PR B (&sect;7) it is the phone's
+        default browser and the return is iOS's to decide, so a still-mounted
+        block is no longer a promise. <strong>Send again survives on a stronger
+        reason:</strong> this is the one send failure the rower can repair, and a
+        state that tells them how and then offers no way to finish is worse than
+        useless &mdash; on a warm return the block is still there, and on a cold
+        one the row is still in the log and Send works from its detail screen. <strong>It is the ink outline 2e draws
         for Retry send, not the accent control &mdash; fix round 1; see the
         callout below the frames.</strong></li>
       <li><strong>Four server reasons, three sentences.</strong> The route answers
@@ -2683,8 +3021,12 @@
       5.94:1; Send again's label <code>--ink</code> on <code>--surface</code>
       17.11:1. All of them are rows in &sect;4 already. The link-out row is 44px,
       the same as View on Concept2 &mdash; and it is a <strong>button</strong>
-      for the same reason that one is: inside the Capacitor WebView a plain
-      anchor drives the WebView itself to concept2.com with no way back.</p>
+      for the same reason that one is: <code>openReadOnlyUrl</code> needs a
+      click handler, not a navigation. <strong>The WebView-navigation reason
+      given here is WITHDRAWN 2026-09-04 and corrected in 2c's own callout,
+      not repeated</strong> &mdash; after PR B the tap leaves for the phone's
+      default browser rather than the WebView navigating in place; the choice
+      of button over anchor does not change.</p>
       <p><strong>Send again is the ink outline 2e draws for Retry send &mdash;
       48px, <code>--ink</code> border, <code>--ink</code> label, i.e.
       <code>.btn-outline</code>. REDRAWN 2026-09-03 (fix round 1), because the
@@ -2727,13 +3069,24 @@
       <code>/account</code>, <code>/settings</code> and
       <code>/preferences</code> all 404. So the button targets the
       <strong>id-less</strong> <code>{origin}/profile</code>.</p>
-      <p><strong>And it opens signed out, which is why the id-less path
-      matters.</strong> The native arm is <code>SFSafariViewController</code>,
-      whose website data has been isolated from Safari since iOS 11 (SECONDARY;
-      it is the same isolation that forced the OAuth hop onto
-      <code>ASWebAuthenticationSession</code>). The rower's Concept2 session
-      lives in Safari's jar, so the sheet lands them at a sign-in and the id-less
-      path takes them to their own account afterwards.</p>
+      <p><strong>The id-less path matters MORE after PR B, and the premise
+      that argued for it has INVERTED &mdash; replaced here rather than left
+      standing.</strong> This paragraph used to read that the link &quot;opens
+      signed out&quot;, because the native arm was
+      <code>SFSafariViewController</code>, whose website data has been isolated
+      from Safari since iOS 11 (SECONDARY; it is the same isolation that forced
+      the OAuth hop onto <code>ASWebAuthenticationSession</code>), so the sheet
+      landed the rower at a sign-in. <strong>After PR B the link opens in the
+      browser that already holds their Concept2 session</strong>, so signing in
+      becomes the UNLIKELY case. <strong>The conclusion is unchanged and gets
+      stronger:</strong> target the id-less <code>{origin}/profile</code>. Signed
+      in, it IS the rower's own profile; signed out, it 302s to
+      <code>/login</code> and lands there after. The id-bearing path renders a
+      public read-only card with no form in either state, which is the
+      measurement below. <em>The measured behaviour of the sheet stands as a
+      record of what the walk of 2026-09-03 found: the sent-row link showed
+      Concept2's &quot;The user has made this result private&quot; page, which
+      is the defect PR B exists to fix.</em></p>
       <p><strong>The target is PROVISIONAL, and the gate should read it as
       such.</strong> No status code can say which Concept2 page carries the
       weight and weight-class fields; one logged-in glance can, and that glance
@@ -2746,11 +3099,26 @@
       repair.</p>
     </div>
 
+    <p class="lede">
+      <strong>PR B changes where this button GOES, not how it looks
+      &mdash; there is no pixel difference to hunt for above.</strong>
+      <code>.send-linkrow</code> keeps its 44px row, its <code>--accent</code>
+      label (5.94:1 on <code>--surface</code>, unchanged) and its arrow. What
+      changes is the destination: the tap opens the phone's default browser,
+      where the rower's Concept2 session already lives, instead of the in-app
+      sheet that has its own cookie jar. James ruled 2026-09-04 that the no-weight refusal gets the same treatment as the other two: <em>&quot;the no-weight should externally link to concept 2.&quot;</em> It is the rower's only remedy for what blocked their send, so it stays and it leaves the app like the others. &sect;7 draws that as a state
+      rather than as a pixel.
+    </p>
+
     <h3>2g Absent <span class="badge b-same">UNCHANGED</span></h3>
     <p class="lede">
       Not linked, or a non-qualifying row (manual, timer, no-reading, terminated,
       or missing work columns): the block does not render, ever. No pointer, no
-      disabled control. The You card is the sole discovery surface.
+      disabled control. The You surface is the sole discovery surface &mdash;
+      the card today, and after PR A the CONCEPT2 row and the screen behind it
+      (&sect;8). The noun is corrected here rather than beneath; the claim itself
+      does not move, because it is about which screen a rower discovers the
+      feature ON, not about which control they discover it as.
     </p>
     <div class="boards">
       <div class="board">
@@ -3019,14 +3387,30 @@
       <code>Cancel</code> at 44px in the 1b/1d block under "REMOVED FROM THE
       BOARD, SHOWN STRUCK FOR THE RECORD" &mdash; not a live control, which is
       why the substance holds and only the count was wrong. The remaining
-      in-card buttons are all live and all 52. Outside the card sit the
-      thirteen You-row Sign out chips, which carry their OWN inline 44px
-      (the earlier wording called them "unstyled" three words before quoting
-      that number), and Surface 2's Send block, which carries none.
+      in-card buttons are all live and all 52. Outside the card sit the You-row
+      Sign out chips, which carry their OWN inline 44px (the earlier wording
+      called them "unstyled" three words before quoting a count), and Surface
+      2's Send block, which carries none.
       The build had been aligned to this sentence rather than to the
       drawings and shipped 1e's Try again 4px short. <strong>The frames are
       the authority; a summary sentence is not &mdash; and an absolute over a
       class the page can grow is a census that will go stale again.</strong>
+      <strong>It did, and the counts above are re-measured here rather than left
+      to be discovered.</strong> Adding sections 7-10 on 2026-09-04 grew every
+      one of these classes, so the three numbers this paragraph used to quote
+      &mdash; &quot;seven&quot; live in-card outlines, &quot;eight&quot; under a
+      nesting-aware scan, &quot;thirteen&quot; Sign out chips &mdash; are
+      REPLACED, not annotated. Re-measured the same day, with a nesting-aware
+      scan over every <code>c2card</code> block and a literal count of
+      <code>&gt;Sign out&lt;/div&gt;</code>: <strong>ten</strong> live in-card
+      outline buttons, every one inline 52px; <strong>two</strong> non-live ones
+      &mdash; the struck 44px <code>Cancel</code> in the 1b/1d block, and the
+      48px inert Reconnect in &sect;8.5's frame 15, which draws a
+      <code>disabled</code> control on purpose and is labelled as one; and
+      <strong>thirty-two</strong> Sign out chips, all inline 44px. <strong>The
+      substance is unchanged in every case and only the counts moved, which is
+      what the sentence above predicted &mdash; so that sentence is the durable
+      one, and these numbers carry the date they were taken.</strong>
     </p>
     <p class="lede">
       <strong>2i introduces no new colour pairing</strong> &mdash; but the
@@ -3060,7 +3444,8 @@
       <strong>OPEN CONCEPT2 PROFILE</strong> (2i), which are mutually
       exclusive states of the same 44px link row. Measured rather than
       asserted, because this page has twice shipped a census that went stale:
-      <code>grep -n send-linkrow</code> returns thirteen lines &mdash; the CSS
+      <code>grep -n send-linkrow</code> returned thirteen lines when this census
+      was taken on 2026-09-03 &mdash; the CSS
       rule, this sentence, and eleven drawn rows, of which seven read
       <em>View on Concept2 &rarr;</em> (one of those the struck one in 2c's
       withdrawn comparison, which carries an inline
@@ -3074,6 +3459,21 @@
       it is the second reason 2i's re-send must not be accent: a Send again in
       <code>--accent</code> would have made this section's exception two
       unrelated things at once, which is the drift it exists to stop. The
+      <strong>Re-run 2026-09-04, after sections 7-10 were added: sixteen lines,
+      and the three new ones are PROSE, not rows.</strong> They are the
+      &quot;PR B changes where this button GOES&quot; note repeated under 2c, 2d
+      and 2i, each naming the class in a <code>&lt;code&gt;</code> span. The
+      eleven drawn rows are unchanged and there is no twelfth, which is the
+      substance this census exists to protect: PR B changes where these rows GO
+      and touches neither their count nor their colour.
+      <strong>One accent element IS new on the page, and it needs no
+      dispensation &mdash; recorded here so the census stays honest.</strong>
+      &sect;8.5's screen frames draw the tab bar, whose active mark is
+      <code>--accent</code> on <code>--surface</code> (5.94:1). That is job 4 of
+      the four declared meanings, the active tab mark, not a fifth. It is drawn
+      in those frames because <code>.overlay-screen</code> sits UNDER the tab bar
+      by design and the frames would be wrong at the bottom edge without it.
+      The
       precedent for a fifth candidate is <code>--action-connect</code>
       (<code>src/theme/tokens.css:33-41</code>), which was given its own token
       rather than made accent's fifth meaning. Two ways to settle it, and PR2
@@ -3152,8 +3552,1584 @@
       <li>§5's accent ruling.</li>
     </ul>
     <p class="lede">
-      Nothing is implemented until these are approved. Plan:
-      <code>docs/superpowers/plans/2026-09-03-concept2-pr2-client.md</code>.
+      <strong>This paragraph is corrected rather than annotated: the sentence
+      above the sections 7-10 revision is NOT the one that used to stand
+      here.</strong> It read &quot;Nothing is implemented until these are
+      approved&quot;, which was true when written and is not true now. Everything
+      in &sect;0 to &sect;6 was approved and SHIPPED, in <code>#290</code>
+      (<code>2f258006</code>) and <code>#293</code> (<code>3d0e2612</code>),
+      through <code>docs/superpowers/plans/2026-09-03-concept2-pr2-client.md</code>.
+      <strong>The open questions on this page are now &sect;7 to &sect;10</strong>,
+      which came out of walking that shipped surface, and &sect;10 lists them.
+    </p>
+
+    <h2>7 &middot; PR B &mdash; the link-outs leave the app</h2>
+    <p class="lede">
+      <strong>No pixel moves. Three buttons keep their labels, their colour,
+      their 44px row and their position; the tap opens the phone's default
+      browser instead of an in-app sheet.</strong> That is the whole of PR B, and
+      it is here because a behavioural sentence on an approved page is an
+      approved claim: the one this page made about the return is withdrawn above,
+      in 2c's own callout, where it was argued.
+    </p>
+    <p class="lede">
+      <strong>The three, named:</strong> the result link on a <strong>SENT</strong>
+      row (&sect;2c), the result link on an <strong>ALREADY THERE</strong> row
+      (&sect;2d), and <strong>OPEN CONCEPT2 PROFILE</strong> on the no-weight
+      refusal (&sect;2i). Mechanically that is two call sites of one function
+      (<code>log/Concept2SendBlock.tsx:189</code> and <code>:245</code>, both
+      calling <code>openReadOnlyUrl</code>) and three rendered states, because the
+      result-link button draws for both <code>sent</code> and
+      <code>duplicate</code>. No state gets a different browser.
+    </p>
+
+    <h3>7.1 What the rower is looking at after the tap <span class="badge b-changed">THE ONLY VISIBLE CHANGE</span></h3>
+    <p class="lede">
+      The two frames below are the difference, and they are the only place it is
+      visible: not on our screen, but on what fills the phone afterwards. This is
+      also the walk's own discriminator &mdash; a sheet shows
+      <strong>Done</strong> at the top left and no tab bar; the phone's default
+      browser shows a URL bar and a tab bar (Safari, for example, also shows a
+      <strong>&larr; Ergomatic</strong> chip when it returned from another app).
+      <em>iOS chrome below is drawn schematically in neutral greys. It is another
+      app's furniture, it uses none of our tokens, and it carries no contrast
+      claim &mdash; only the Ergomatic surfaces on this page do.</em>
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">TODAY &middot; the in-app sheet, measured on the walk of 2026-09-03</p>
+        <div class="frame" style="padding: 0; background: #ffffff">
+          <div style="background: #f2f2f7; border-bottom: 1px solid #c6c6c8; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; font-family: var(--font-sans); font-size: 15px; color: #007aff">
+            <span>Done</span>
+            <span style="color: #3c3c43; font-size: 13px">log.concept2.com</span>
+            <span style="color: #007aff">&hellip;</span>
+          </div>
+          <div style="padding: 40px 24px; font-family: var(--font-sans)">
+            <p style="font-size: 20px; font-weight: 700; margin: 0 0 10px; color: #1c1c1e">
+              The user has made this result private
+            </p>
+            <p style="font-size: 15px; color: #3c3c43; margin: 0">
+              This is what a tap on <em>View on Concept2 &rarr;</em> renders
+              today. The sheet keeps a cookie jar of its own, so the fetch is
+              signed out, and a signed-out fetch of a result URL is refused as
+              private. The rower's Concept2 session is in Safari.
+            </p>
+          </div>
+          <div style="margin-top: auto; background: #f2f2f7; border-top: 1px solid #c6c6c8; height: 44px"></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">AFTER PR B &middot; the phone's default browser, where the session already is</p>
+        <div class="frame" style="padding: 0; background: #ffffff">
+          <div style="background: #f2f2f7; border-bottom: 1px solid #c6c6c8; padding: 10px 16px; font-family: var(--font-sans)">
+            <p style="margin: 0 0 8px; font-size: 13px; color: #007aff">&larr; Ergomatic</p>
+            <div style="background: #ffffff; border: 1px solid #d1d1d6; border-radius: 8px; padding: 7px 12px; font-size: 14px; color: #3c3c43">
+              log.concept2.com/profile/2211/log/339
+            </div>
+          </div>
+          <div style="padding: 28px 24px; font-family: var(--font-sans)">
+            <p style="font-size: 20px; font-weight: 700; margin: 0 0 10px; color: #1c1c1e">
+              Steady 5k
+            </p>
+            <p style="font-size: 15px; color: #3c3c43; margin: 0 0 6px">
+              5,708 m &middot; 25:00.0 &middot; Sep 4, 2026
+            </p>
+            <p style="font-size: 15px; color: #3c3c43; margin: 0">
+              The rower's own row, because the browser carries their Concept2
+              session. This is what the link-out was always for.
+            </p>
+          </div>
+          <div style="margin-top: auto; background: #f2f2f7; border-top: 1px solid #c6c6c8; height: 44px"></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>PASS at the walk is the phone's default browser (Chrome on
+      the walked phone; Safari on a phone that never changed it), and a NO is
+      possible FOUR ways &mdash; naming them is what makes the observation an
+      observation.</strong> The sheet appears anyway; nothing happens at all
+      (WebKit dropped the <code>noopener</code> <code>window.open</code>); a
+      different app opens; or <strong>the Ergomatic WebView ITSELF navigates
+      to concept2.com with no way back</strong> &mdash; which is the outcome
+      our own tree predicts for a plain anchor
+      (<code>log/Concept2SendBlock.tsx</code>'s &quot;a button, not an
+      anchor&quot; comment), tagged INFERENCE above because it carries no
+      evidence and a grep of the repo finds none. &quot;It didn't open the
+      sheet&quot; is not a record; which of the four happened is.</p>
+      <p><strong>The precondition that makes a NO possible at all:</strong> in
+      the phone's default browser, NOT the app, open
+      <code>log.concept2.com</code> and confirm the rower is signed in, before
+      the build is launched. Without it, &quot;opened signed in&quot; cannot
+      be told apart from &quot;opened in a sheet&quot;.</p>
+    </div>
+
+    <h3>7.2 What a rower loses by leaving &mdash; read from the tree, not assumed</h3>
+    <p class="lede">
+      This replaces the withdrawn promise. On a <strong>warm return</strong> (the
+      normal case: the rower taps the back-to-Ergomatic chip) the WebView is not
+      unloaded &mdash; the app is backgrounded, not navigated &mdash; so React
+      state, the route and the DOM survive and the rower comes back to the same
+      log row. On a <strong>cold relaunch</strong> (iOS reclaimed the app) the
+      WebView boots from the bundled <code>dist/client</code> at <code>/</code>
+      and <code>shell/AppRoutes.tsx:149</code> sends <code>/</code> to
+      <code>/today</code>.
+    </p>
+    <table class="kv">
+      <tr><th>State</th><th>Where it lives</th><th>Survives a cold relaunch?</th></tr>
+      <tr>
+        <td>the row itself, <code>SENT</code>, <code>RESULT 339</code></td>
+        <td class="num">server row's <code>c2_result_id</code></td>
+        <td class="pass">YES &mdash; re-fetched by <code>/api/logs/:id</code></td>
+      </tr>
+      <tr>
+        <td><code>ALREADY THERE</code>, <code>SEND FAILED</code>, <code>NO WEIGHT CLASS</code> panels</td>
+        <td class="num">component <code>useState</code></td>
+        <td>NO &mdash; transient by design; a duplicate re-renders as SENT, because the colliding id was recorded first</td>
+      </tr>
+      <tr>
+        <td>an unsaved reflection draft (notes, pain, thumbs, mid-edit)</td>
+        <td class="num"><code>log/FromTheLog.tsx:263-268</code></td>
+        <td class="fail">NO</td>
+      </tr>
+      <tr>
+        <td>which screen the rower was on</td>
+        <td class="num">in-memory router history</td>
+        <td>NO &mdash; lands on Today; the row is two taps away in the log</td>
+      </tr>
+    </table>
+    <p class="lede">
+      <strong>One thing re-runs on the way back, and it is worth knowing
+      about.</strong> <code>useConcept2Link</code> re-reads
+      <code>GET /api/concept2/link</code> on every foreground
+      (<code>api/useConcept2Link.ts:200-213</code>), and returning from the
+      browser is a foreground transition. If that read FAILS &mdash; no network
+      yet on wake is the reachable case &mdash; the Send block renders nothing at
+      all and the You surface says <code>COULDN'T READ</code>. Both are
+      recoverable in one tap and <strong>both are pre-existing behaviour</strong>;
+      what PR B changes is how OFTEN the transition happens, since leaving for
+      the browser certainly backgrounds the app while a sheet over the WebView
+      may not. That is an INFERENCE and it is a named walk observation, not a
+      claim this page makes.
+    </p>
+    <div class="callout">
+      <p><strong>No CI gate on this repo can go red on PR B, and the record says
+      so plainly rather than implying coverage.</strong> Unit tests mock the
+      adapter and assert only that <code>openReadOnlyUrl</code> was called with a
+      URL, which stays true either way; <code>src/native/**</code> is
+      coverage-exempt and carries its own <code>v8 ignore</code>; e2e runs the
+      WEB arm, which does not change, so
+      <code>app/e2e/concept2.spec.ts:483-508</code> stays green through this
+      change and through a mutation of it. <strong>The only instrument that can
+      answer this is a phone in a hand.</strong> The walk is the gate.</p>
+    </div>
+
+    <h2>8 &middot; PR A &mdash; Concept2 becomes a row on You, and a screen behind it</h2>
+    <p class="lede">
+      <strong>The whole card leaves You. One quiet mono row takes its place, and
+      everything the card does happens on a screen behind it.</strong> James,
+      2026-09-04, on the Unlink button being <em>&quot;too loud&quot;</em>:
+      <em>&quot;maybe we put it in a sub-menu like diagnostics.&quot;</em> The
+      shape being copied is the one DIAGNOSTICS already has
+      (<code>src/You.tsx:142-145</code> for the row,
+      <code>src/you/Diagnostics.tsx</code> for the screen,
+      <code>shell/AppRoutes.tsx:241-260</code> for the flat route), and following
+      it rather than inventing one is most of this section.
+    </p>
+    <p class="lede">
+      <strong>The card's own markup does not change (invariant R6).</strong> The
+      screen mounts <code>Concept2Card</code> exactly as it is, so &sect;1's
+      eleven frames stay the authority for what the rower sees once the door is
+      open. What is genuinely new is three things: the row in front of it, the
+      chrome around it, and three state combinations nobody has ever drawn.
+    </p>
+
+    <h3>8.1 What the row says, and why those four values</h3>
+    <p class="lede">
+      <strong>The row shows what the SERVER last said; the screen shows what the
+      last TAP did.</strong> That partition is forced rather than chosen: the
+      card's four attempt values are <code>useState</code> inside the card
+      (<code>you/Concept2Card.tsx:86-92</code>) and the route is FLAT
+      (<code>shell/AppRoutes.tsx:241-261</code>), so You unmounts whenever the
+      screen is open and there is no frame in which a mounted row and a live
+      attempt coexist.
+    </p>
+    <p class="lede">
+      <strong>The row mints no copy.</strong> All four strings are ones the card
+      already renders: <code>LINKED &check;</code>,
+      <code>RECONNECT NEEDED</code>, <code>NOT LINKED</code>
+      (<code>Concept2Card.tsx:278-284</code>) and <code>COULDN'T READ</code>
+      (<code>:227</code>). The card's fifth status value,
+      <code>WAITING</code>, is an attempt state and is unreachable on the row, so
+      the row never says it. No new string means no second spelling of a state to
+      drift apart.
+    </p>
+    <p class="lede">
+      <strong>The row's value is a function of TWO independent inputs, plus a
+      third that is live on exactly two cells.</strong>
+      <code>useConcept2Link</code> returns <code>link</code> and
+      <code>failed</code> as independent state
+      (<code>api/useConcept2Link.ts:159-160</code>) and a failed read leaves
+      <code>link</code> untouched. <code>link</code> has exactly five shapes,
+      because <code>normalizeLink</code> is its only writer and collapses
+      everything into one of them (<code>:52-56</code>) &mdash; which is why
+      <code>available &amp;&amp; !linked &amp;&amp; needsReauth</code> is not
+      representable. <code>seen</code> is the persisted &quot;this account has
+      been told Concept2 is available&quot; fact, and it is an input only where
+      <code>link</code> is still <code>null</code>. <strong>Eleven leaf cells,
+      all eleven written out, because a table that hid an axis would be the
+      defect rather than the length.</strong>
+    </p>
+    <table class="kv">
+      <tr><th>#</th><th><code>link</code></th><th><code>failed</code></th><th><code>seen</code></th><th>the ROW says</th><th>why</th></tr>
+      <tr><td class="num">1</td><td class="num">null</td><td class="num">null</td><td class="num">either</td><td><strong>nothing</strong></td><td>no read has resolved this mount; a placeholder would be a state the rower has to learn</td></tr>
+      <tr><td class="num">2a</td><td class="num">null</td><td class="num">set</td><td class="num">false</td><td><strong>nothing</strong></td><td>the first thing we ever tell a rower about Concept2 must not be an error about a feature they may not have. This closes the live defect in &sect;0 row 16</td></tr>
+      <tr><td class="num">2b</td><td class="num">null</td><td class="num">set</td><td class="num">true</td><td><strong>COULDN'T READ</strong></td><td>this account HAS been told Concept2 is available, on a previous visit. The row keeps its door so the Retry behind it stays reachable</td></tr>
+      <tr><td class="num">3</td><td class="num">available: false</td><td class="num">null</td><td class="num">n/a</td><td><strong>nothing</strong></td><td>1h. The server said this deployment or this account has no Concept2, and it said it successfully</td></tr>
+      <tr><td class="num">4</td><td class="num">available: false</td><td class="num">set</td><td class="num">n/a</td><td><strong>nothing</strong></td><td>the retained link is a SUCCESSFUL read that said no. A later failed re-read is not evidence against it</td></tr>
+      <tr><td class="num">5</td><td class="num">available &amp;&amp; !linked</td><td class="num">null</td><td class="num">n/a</td><td><strong>NOT LINKED</strong></td><td>the discovery state, and the one most rowers are in</td></tr>
+      <tr><td class="num">6</td><td class="num">available &amp;&amp; !linked</td><td class="num">set</td><td class="num">n/a</td><td><strong>COULDN'T READ</strong></td><td>a retained AVAILABLE link, so the rower knows the feature exists and the failure is worth telling them about</td></tr>
+      <tr><td class="num">7</td><td class="num">linked, healthy</td><td class="num">null</td><td class="num">n/a</td><td><strong>LINKED &check;</strong></td><td>the door with an answer: reading the row is how they learn nothing has changed, without a tap</td></tr>
+      <tr><td class="num">8</td><td class="num">linked, healthy</td><td class="num">set</td><td class="num">n/a</td><td><strong>COULDN'T READ</strong></td><td>same as 6. The link was healthy when last read; the read failed; say so</td></tr>
+      <tr><td class="num">9</td><td class="num">linked, needsReauth</td><td class="num">null</td><td class="num">n/a</td><td><strong>RECONNECT NEEDED</strong></td><td>the server's own <code>needs_reauth_at</code>, rendered</td></tr>
+      <tr><td class="num">10</td><td class="num">linked, needsReauth</td><td class="num">set</td><td class="num">n/a</td><td><strong>RECONNECT NEEDED</strong></td><td><strong>the cell this design turns on &mdash; drawn on its own in 8.2.</strong> <code>needsReauth</code> is server-sticky and a read that FAILED cannot have resolved it (<code>server/routes/concept2.ts:459-462</code>: the server clears it only on a successful relink). Overwriting a sticky, rower-actionable warning with a transient one that reads as a network blip loses the warning exactly where it matters</td></tr>
+    </table>
+    <p class="lede">
+      <strong>What cell 10 costs, stated rather than buried:</strong> on that one
+      combination the rower is not told the read failed. That is the trade, it is
+      deliberate, and the screen behind the row still draws the read-failed panel
+      and its Retry in every state &mdash; so the failure is one tap away and the
+      warning that cannot be recovered any other way stays on the surface.
+      <strong>This departs from a ruling in the tree, and the departure is stated
+      rather than left as drift:</strong> <code>Concept2Card.tsx:212-219</code>
+      rules the opposite way for the CARD, and its reason is the last clause of
+      its own sentence &mdash; <em>&quot;the panel carries a Retry that fixes it in
+      one tap&quot;</em>. A one-line row has no Retry, so the reason does not
+      transfer. The card keeps its rule; the row takes the other one.
+    </p>
+
+    <h3>8.2 The row in situ, against the card it replaces</h3>
+    <p class="lede">
+      Both frames are the same account in the same state. The BEFORE is what
+      <code>docs/screenshots/you-concept2-unlinked.png</code> captures today,
+      redrawn here at real proportions because this page carries no images.
+      <strong>What a rower loses from You is the whole question, so the pair is
+      the point.</strong>
+    </p>
+    <p class="lede">
+      <strong>One drawing note, so a reader does not read a drift as a
+      change.</strong> This page's own older <code>.diag-row</code> rule &mdash;
+      the one the twelve frames in &sect;1 use &mdash; draws the DIAGNOSTICS row
+      at <strong>11px / 0.16em</strong>, and the shipped row is
+      <strong>12px / 0.08em</strong> (<code>src/index.css:10024-10038</code>,
+      read 2026-09-04). The older frames keep their rule so their own record is
+      unchanged. <strong>Every frame in &sect;7 to &sect;10 uses the shipped
+      values for BOTH rows</strong>, including the BEFORE halves, so nothing in
+      any pair below differs for a reason this design did not cause.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">BEFORE &middot; today &middot; the card on You, NOT LINKED</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <p class="c2explain">
+              Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-primary">CONNECT TO CONCEPT2</div>
+            <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER</p>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">AFTER &middot; the row &middot; decision table row 5</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">NOT LINKED</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">AFTER &middot; decision table row 7 &middot; the door with an answer</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">AFTER &middot; decision table row 9 &middot; the server set <code>needs_reauth_at</code></p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">RECONNECT NEEDED</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">AFTER &middot; decision table rows 6, 8 and 2b</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">COULDN'T READ</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>Decision table row 10 is the design's whole point, so it is
+      drawn on its own rather than described.</strong> This is a link the server
+      has flagged <code>needsReauth</code>, whose very next read then FAILED. The
+      row on the left is what this design ships; the row on the right is what the
+      card's own ordering would produce if it were carried across unchanged, and
+      it is the mutation a future edit is most likely to make by accident. The
+      rower on the right is told a network blip and never told their link is
+      dead, on the one surface that could have told them before they spent a send
+      finding out.</p>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">ROW 10 &middot; SHIPS &middot; the sticky warning survives the failed re-read</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">RECONNECT NEEDED</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">ROW 10 &middot; REJECTED &middot; what carrying the card's ordering across would draw</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">COULDN'T READ</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide">BEFORE &middot; LANDSCAPE &middot; today's card on You (<code>you-concept2-landscape.png</code>)</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <p class="c2explain">
+              Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-primary">CONNECT TO CONCEPT2</div>
+            <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER</p>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">AFTER &middot; LANDSCAPE &middot; the two rows at the foot, LINKED &check;</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost short">BASELINE EDITOR &middot; RETEST &middot; RESET</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>One thing the card does that the row must decide, and it is a
+      number question.</strong> <code>.c2-card-status-on</code> draws
+      <code>--ink</code> at weight 600 whenever the link is linked, so on the
+      card today <strong><code>LINKED &check;</code> and
+      <code>RECONNECT NEEDED</code> are drawn identically</strong> and are told
+      apart only by the word. On a one-line row that is worse than on a card. The
+      frame below draws the choice: all four values at
+      <code>--ink-3</code> (6.69:1 on <code>--page</code>) as this design
+      recommends, against <code>RECONNECT NEEDED</code> alone lifted to
+      <code>--ink</code> at 600 (15.41:1). <strong>What it must NOT take is
+      <code>--accent</code></strong> &mdash; that would grow accent's census on a
+      surface where &sect;5's dispensation is already the page's one exception.</p>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">THE STATE LINE'S WEIGHT &middot; both drawn, at the row's real 44px</p>
+        <div class="frame">
+          <p class="board-cap">RECOMMENDED &middot; ALL FOUR AT <code>--ink-3</code>, 6.69:1</p>
+          <div class="doors" style="margin-top: 0">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">NOT LINKED</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">RECONNECT NEEDED</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">COULDN'T READ</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <p class="board-cap" style="margin-top: 24px">ALTERNATIVE &middot; RECONNECT NEEDED AT <code>--ink</code> 600, 15.41:1</p>
+          <div class="doors" style="margin-top: 0">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">NOT LINKED</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state on">RECONNECT NEEDED</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">COULDN'T READ</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>8.3 The three silences, and the live defect one of them closes</h3>
+    <p class="lede">
+      <strong>After ruling 6 the absence of a row has two different causes, and
+      they are not the same product statement.</strong> The surface is
+      unavailable (table rows 3 and 4), or this account has never had a
+      successful read (row 2a). Both are drawn, beside the account that HAS been
+      told and whose read then failed (row 2b), because the trade this design
+      makes cannot be seen without the third frame.
+    </p>
+    <p class="lede">
+      <strong>The BEFORE frame is a live defect on production today, and the
+      committed capture is a picture of it.</strong>
+      <code>Concept2Card.tsx:220</code> branches on <code>failed</code> BEFORE
+      the availability check at <code>:259</code>, so any rower who opens You
+      while offline sees a CONCEPT2 error panel about a feature gated to one
+      account &mdash; on every deployment and every account.
+      <code>docs/screenshots/you-concept2-read-failed.png</code> is that frame,
+      and its fixture serves 502 to the FIRST read.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">BEFORE &middot; today &middot; a failed read on ANY account, including one with no Concept2</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">COULDN'T READ</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">COULDN'T READ CONCEPT2</p>
+              <p class="panel-line">Couldn't reach Concept2 linking.</p>
+              <p class="panel-reason">REASON: NO CONNECTION</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Retry</div>
+          </div>
+          <div class="diag-row"><span>DIAGNOSTICS</span><span>&rsaquo;</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">AFTER &middot; rows 3 and 4 &middot; the surface is off for this account. Silence, and it is the card's own behaviour today</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">AFTER &middot; row 2a &middot; a first-ever read failed and this account has never been told Concept2 exists</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">AFTER &middot; row 2b &middot; this account HAS been told, on a previous visit, and today's read failed</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">COULDN'T READ</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>The cost that remains, stated rather than buried, because this
+      gate rules on it.</strong> A rower whose FIRST-EVER read on a device fails
+      sees no row and cannot reach the Retry until a read succeeds. Their remedy
+      is the automatic re-read the hook already performs on every foreground and
+      on every fresh visit to You
+      (<code>api/useConcept2Link.ts:199-214</code>). It is a genuinely
+      first-visit-only cost and it is the one the flag cannot remove &mdash;
+      because the alternative is showing a Concept2 error panel to every rower
+      who has never had Concept2, which is the BEFORE frame above.
+      <strong>If this gate declines the trade, the row inherits today's ordering
+      unchanged and the live defect stays exactly as it is.</strong></p>
+      <p><strong>The stored fact this rests on can only ever WIDEN what a rower
+      is told, never narrow it.</strong> It asserts one thing &mdash; a
+      successful read on this account has reported <code>available: true</code>
+      at least once &mdash; and never linked, healthy, or current. A successful
+      <code>available: false</code> read clears it in the same pass that observes
+      it; signing out clears it, without which the next account on the device
+      inherits a cohort claim it was never granted; and a failed write degrades
+      to &quot;not seen&quot;, never to a claim. Its only consumer is the two
+      cells above.</p>
+    </div>
+
+    <h3>8.4 THE ROW ORDER &mdash; unruled, and drawn both ways <span class="badge b-changed">GATE 0 DECIDES</span></h3>
+    <p class="lede">
+      <strong>Two rows now sit at the foot of You and nothing in the tree says
+      which is first.</strong> They read as one group either way; what differs is
+      which door a rower's thumb lands on first, and what the tree has to be told
+      afterwards.
+    </p>
+    <p class="lede">
+      <strong>The cost of each, measured rather than felt.</strong>
+      <span class="choice-tag">A</span> CONCEPT2 above DIAGNOSTICS keeps two
+      existing claims true: <code>src/You.tsx:139-141</code> requires DIAGNOSTICS
+      to stay You's LAST child (<em>&quot;Stays the LAST child &hellip; per this
+      comment's own 'at the bottom of You, on purpose'&quot;</em>), and
+      <code>e2e/concept2.spec.ts:305-307</code> builds its readiness sentinel on
+      that same fact. <span class="choice-tag">B</span> CONCEPT2 below
+      DIAGNOSTICS falsifies both &mdash; the comment and the sentinel each need
+      rewriting in the same change. <strong>Neither claim is a reason on its
+      own</strong>: they are two sentences and one selector, and the argument for
+      B is that the feature door should outrank the tools door. That is the
+      question, and it is James's.
+    </p>
+    <p class="lede">
+      <strong>What is NOT a choice, in either order:</strong> exactly one auto
+      top margin separates the GROUP from the content above it, never one per
+      row. Two rows each carrying <code>margin-top: auto</code> is a flex
+      free-space SPLIT &mdash; positive free space is distributed equally among
+      auto margins on the main axis (SECONDARY: CSS Flexbox spec text, not
+      measured in this engine) &mdash; which would put half the empty screen
+      BETWEEN the two rows instead of above both. Both frames below draw the
+      group, not two independently pinned rows.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap"><span class="choice-tag">A</span> CONCEPT2 above DIAGNOSTICS &middot; SHORT CONTENT</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap"><span class="choice-tag">B</span> CONCEPT2 below DIAGNOSTICS &middot; SHORT CONTENT</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="doors">
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <p class="lede">
+      <strong>And the tall-content case, which is the one the group's single auto
+      margin exists for.</strong> When BASELINES content already fills the
+      screen there is no free space left to absorb, the auto margin resolves to
+      <code>0</code> rather than back to a fixed value, and the rows follow the
+      content in flow. Each row's own <code>border-top</code> still supplies the
+      separation, so nothing collapses illegibly. This adjacency has never been
+      drawn.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap"><span class="choice-tag">A</span> CONCEPT2 above DIAGNOSTICS &middot; TALL CONTENT, no free space</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR &middot; 2K</div>
+          <div class="ghost">BASELINE EDITOR &middot; 6K</div>
+          <div class="ghost tall">BASELINE EDITOR &middot; 30 MIN</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="ghost short">PROVENANCE</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap"><span class="choice-tag">B</span> CONCEPT2 below DIAGNOSTICS &middot; TALL CONTENT, no free space</p>
+        <div class="frame">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost tall">BASELINE EDITOR &middot; 2K</div>
+          <div class="ghost">BASELINE EDITOR &middot; 6K</div>
+          <div class="ghost tall">BASELINE EDITOR &middot; 30 MIN</div>
+          <div class="ghost short">RETEST SHORTCUT</div>
+          <div class="ghost short">RESET BASELINE SETUP</div>
+          <div class="ghost short">PROVENANCE</div>
+          <div class="doors">
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+          </div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide"><span class="choice-tag">A</span> LANDSCAPE</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost short">BASELINE EDITOR &middot; RETEST &middot; RESET</div>
+          <div class="doors">
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide"><span class="choice-tag">B</span> LANDSCAPE</p>
+        <div class="frame land">
+          <div class="you-row">
+            <div class="avatar">JA</div>
+            <div class="you-identity">
+              <p class="you-name">James Awesome</p>
+              <p class="you-email">james@jamestheaweso.me</p>
+            </div>
+            <div class="btn-outline" style="min-height: 44px; padding: 0 12px; font-size: 14px">Sign out</div>
+          </div>
+          <p class="section-heading">BASELINES</p>
+          <div class="ghost short">BASELINE EDITOR &middot; RETEST &middot; RESET</div>
+          <div class="doors">
+            <div class="door"><span>DIAGNOSTICS</span><span aria-hidden="true">&rsaquo;</span></div>
+            <div class="door"><span>CONCEPT2</span><span class="door-right"><span class="door-state">LINKED &check;</span><span aria-hidden="true">&rsaquo;</span></span></div>
+          </div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>A third element sits in this group on a dev build, and this gate
+      rules on it too.</strong> <code>You.tsx:22-23</code> lazily imports and
+      <code>:127-131</code> mounts <code>monitor/Concept2LinkProbe</code>,
+      between the card and the DIAGNOSTICS row. It is a Concept2 diagnostic, and
+      Concept2 diagnostics now live behind the row. <strong>Recommended: move it
+      behind <code>/you/concept2</code></strong> &mdash; its own stated reason
+      for being on You (<em>&quot;this probe needs a TAPPABLE entry point, and
+      the You tab is already one&quot;</em>, <code>You.tsx:19</code>) is
+      satisfied by the row, and moving it keeps this group to exactly two doors.
+      The alternative is to leave it and say so; what is not acceptable is a
+      claim that You carries no Concept2 component when it carries this one.</p>
+    </div>
+
+    <h3>8.5 The screen behind the row</h3>
+    <p class="lede">
+      <code>/you/concept2</code>, an overlay screen in Diagnostics' exact shape:
+      a <code>&larr; BACK</code> link first (44&times;44 minimum,
+      <code>index.css:1304</code> and <code>:1315</code>), then a serif
+      <code>screen-title</code> at 31px, then the card as it is today. The route
+      is registered FLAT, a sibling of <code>/you</code>, and it is deliberately
+      NOT in <code>HIDDEN_TABBAR_PREFIXES</code> &mdash; so the tab bar stays
+      drawn, exactly as it does over Diagnostics.
+    </p>
+    <p class="lede">
+      <strong>These frames draw the tab bar and no other frame on this page
+      does.</strong> That is a departure and it is deliberate: this is the first
+      screen on this page where the tab bar is load-bearing.
+      <code>.overlay-screen</code> is <code>z-index: 10</code> and the tab-bar
+      rule sits ABOVE it on purpose, so the bar is not only drawn but TAPPABLE
+      while the screen is open, and <code>.overlay-screen</code>'s own
+      <code>padding-bottom</code> reserves exactly that strip. The callout after
+      the frames says what that costs.
+    </p>
+    <p class="lede">
+      <strong>The screen is the asymmetric half of this design, and the asymmetry
+      IS the principle.</strong> A surface the rower did not ask for may go quiet
+      when it does not know; a screen the rower deliberately opened must always
+      answer. So the chrome renders in EVERY state, including before the first
+      read has resolved, and a failed read always draws the read-failed panel and
+      its Retry &mdash; retained link or not. It never renders nothing, because a
+      blank screen with no way out is the worst thing on this list.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">THE PENDING MOUNT &middot; the read has not landed yet. Chrome, and nothing else &mdash; never a blank screen, never a bounce</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">1a on the screen &middot; NOT LINKED</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">NOT LINKED</span>
+            </div>
+            <p class="c2explain">
+              Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-primary">CONNECT TO CONCEPT2</div>
+            <p class="c2foot">OPENS CONCEPT2 IN YOUR BROWSER</p>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">1c on the screen &middot; LINKED &check;</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <p class="c2helper">
+              Finished monitor rows can be sent from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">1f on the screen &middot; RECONNECT NEEDED. The Reconnect button the row's warning points at</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+            <div class="btn-primary">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">1i on the screen &middot; the read failed. Drawn in every state, retained link or not</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">COULDN'T READ</span>
+            </div>
+            <div class="panel">
+              <p class="panel-label">COULDN'T READ CONCEPT2</p>
+              <p class="panel-line">Couldn't reach Concept2 linking.</p>
+              <p class="panel-reason">REASON: NO CONNECTION</p>
+            </div>
+            <div class="btn-outline" style="min-height: 52px">Retry</div>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>The pending frame is not decoration; it is a pinned
+      predicate.</strong> The screen returns the rower to <code>/you</code> only
+      when the server has successfully said this account has no Concept2 &mdash;
+      <code>link !== null &amp;&amp; !link.available</code>. <strong>Never the
+      falsy form</strong>: <code>link</code> is <code>null</code> until the first
+      read lands, so <code>!link?.available</code> bounces on EVERY mount, the
+      screen becomes unopenable, and the row reads as a dead door. That is a
+      shape this repo has already shipped once
+      (<code>Countdown.tsx</code> navigating to a Timer that silently bounced to
+      Today), and deleting the redirect makes the pending case pass HARDER rather
+      than red &mdash; which is exactly how a screen ships unopenable behind a
+      gate that stayed green. <strong>&quot;Still loading&quot; is a third value,
+      not a falsy one, and the frame above is what it looks like.</strong></p>
+    </div>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap wide">LANDSCAPE &middot; LINKED &check; &middot; the card keeps its own two-column interior</p>
+        <div class="frame land">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <p class="c2identity">
+                  Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+                </p>
+                <p class="c2helper">
+                  Finished monitor rows can be sent from the log.
+                </p>
+              </div>
+              <div class="btn-danger">Unlink Concept2</div>
+            </div>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap wide">LANDSCAPE &middot; the read failed</p>
+        <div class="frame land">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status">COULDN'T READ</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center">
+              <div class="panel">
+                <p class="panel-label">COULDN'T READ CONCEPT2</p>
+                <p class="panel-line">Couldn't reach Concept2 linking.</p>
+                <p class="panel-reason">REASON: NO CONNECTION</p>
+              </div>
+              <div class="btn-outline" style="min-height: 52px">Retry</div>
+            </div>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">844 &times; 390</span>
+        </div>
+      </div>
+    </div>
+    <p class="lede">
+      <strong>Three combinations the card can render and this page has never
+      drawn.</strong> They are not new behaviour &mdash; the shipped component
+      reaches all three today, on You &mdash; but a gate that approves a screen
+      without drawing what it can show is approving a description. The third is
+      the one worth stopping on.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap">13 &middot; ARMED WHILE NEEDING RE-AUTH &middot; never drawn. <code>link.linked &amp;&amp; armed</code> is unconditional at <code>Concept2Card.tsx:500-523</code>; <code>needsReauth</code> does not suppress it</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+            <div class="btn-primary">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <p class="c2explain">
+              Unlink removes this app's access. Rows already sent stay on
+              Concept2.
+            </p>
+            <div class="btn-danger armed">Tap again to unlink</div>
+            <p class="c2foot">DISARMS ON ITS OWN AFTER 4 SECONDS</p>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">14 &middot; UNLINK REFUSED ON A RE-AUTH CARD &middot; never drawn. Same gate, at <code>:411</code>. Two sunken panels and a live Unlink</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+            <div class="panel">
+              <p class="panel-label">UNLINK DIDN'T HAPPEN</p>
+              <p class="panel-line">Couldn't unlink. Your link is unchanged.</p>
+              <p class="panel-reason">REASON: THE SERVER ANSWERED 500</p>
+            </div>
+            <div class="btn-primary">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap">15 &middot; RECONNECT IN FLIGHT &middot; never drawn, and it draws NO PANEL AT ALL</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <div class="panel">
+              <p class="panel-label">CONCEPT2 STOPPED ACCEPTING THIS LINK</p>
+              <p class="panel-line">
+                Your link is kept. Reconnect to send rows again.
+              </p>
+            </div>
+            <div class="btn-outline inert" style="min-height: 48px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.16em">RECONNECT CONCEPT2</div>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>Frame 15 is a defect the gate should see rather than a state it
+      should approve.</strong> <code>!link.linked &amp;&amp; opening</code> gates
+      the OPENING CONCEPT2 panel (<code>Concept2Card.tsx:429</code>), and a
+      reconnect happens on a card that IS linked &mdash; so during a reconnect
+      the panel never draws. Reconnect falls back to the disabled treatment
+      (<code>.c2-card-primary:disabled</code> is transparent,
+      <code>--rule-3</code> border, <code>--ink-3</code> label at 7.43:1 on
+      <code>--surface</code>), and <strong>Unlink has no disabled rule at all
+      &mdash; grep of <code>index.css</code> finds
+      <code>.c2-card-primary:disabled</code> and no
+      <code>.c2-card-danger:disabled</code></strong>, so it keeps its full accent
+      outline while being untappable. Nothing on the card says why either control
+      stopped working. <strong>No fix is specified here.</strong> It ships today
+      on You and this design does not make it worse; it is drawn because a screen
+      whose only job is this link is where it will be seen.</p>
+      <p><strong>And one reachable consequence of the tab bar staying
+      tappable.</strong> During the connect round trip the card's own buttons are
+      disabled and the You TAB is not: tap Connect, then tap You, and the card
+      unmounts with the link attempt still in flight. A cancel or a failure then
+      resolves into an unmounted component and is reported to nobody &mdash; the
+      row simply keeps saying <code>NOT LINKED</code>. This is the same shape as
+      tapping any other tab today, so it is not new; what IS new is that the You
+      tab now reads as &quot;go back to where I was&quot; rather than &quot;leave
+      the feature&quot;, which makes the tap likely rather than perverse.</p>
+    </div>
+    <p class="lede">
+      <strong>Two states are on the screen's list and are deliberately not drawn
+      as screens.</strong> <em>1h unavailable</em> never renders here at all
+      &mdash; the screen returns the rower to <code>/you</code>, reachable only
+      by a typed URL or a stale history entry, since the row is absent. And the
+      transient link states (1b opening, 1d armed, 1e failed, 1f-b, 1j) are
+      already drawn in &sect;1 and are unchanged: they are what the last TAP did,
+      they live in the card's own state, and they cannot coexist with a mounted
+      row.
+    </p>
+    <p class="lede">
+      <strong>What this screen costs the card's own spacing, named rather than
+      left to an implementer.</strong> <code>.c2-card</code>'s
+      <code>margin: 12px 0 0</code> was ruled against its neighbour on You
+      (<em>Reset baseline setup</em>). On this screen the neighbour is a 31px
+      serif title, so the number has to be re-argued or re-ruled rather than
+      inherited. The frames above draw it at the page frame's own 12px gap.
+    </p>
+
+    <h3>8.5b The word CONCEPT2 appears twice on the screen <span class="badge b-changed">GATE 0 DECIDES</span></h3>
+    <p class="lede">
+      The screen's own title says it, and the card's head says it again. On You
+      the card head was the only label there was; behind a titled door it is a
+      second one. <strong>Both are drawn; the recommendation is to keep the
+      card unchanged, and the price of the alternative is stated so it can be
+      paid knowingly.</strong>
+    </p>
+    <p class="lede">
+      <strong>Keeping the head costs nothing:</strong> the card's markup is
+      untouched, so four committed e2e fixtures, the whole-<code>innerHTML</code>
+      equality gate that pins them, and five of the six existing design-sweep
+      cases stay green without being retuned. <strong>Removing it spends
+      that:</strong> four fixtures regenerated, one equality test updated, and
+      the head's <code>space-between</code> rule reconsidered, because the status
+      chip would then be alone in it.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap"><span class="choice-tag">KEEP</span> title + card head &mdash; the word twice, and nothing regenerates</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <p class="c2helper">
+              Finished monitor rows can be sent from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap"><span class="choice-tag">DROP</span> the card head goes; the status chip is alone in a <code>space-between</code> head</p>
+        <div class="frame">
+          <p class="backlink screen-back">&larr; BACK</p>
+          <p class="screen-title">Concept2</p>
+          <div class="c2card">
+            <div class="c2head" style="justify-content: flex-end">
+              <span class="c2status on">LINKED &check;</span>
+            </div>
+            <p class="c2identity">
+              Concept2 jamesawesome &middot; Ergomatic james@jamestheaweso.me
+            </p>
+            <p class="c2helper">
+              Finished monitor rows can be sent from the log.
+            </p>
+            <div class="hair"></div>
+            <div class="btn-danger">Unlink Concept2</div>
+          </div>
+          <div class="tabbar"><span>TODAY</span><span>PLAN</span><span>LOG</span><span>NEWS</span><span class="here">YOU</span></div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>8.6 THE SEND BLOCK'S SENTENCE &mdash; approved copy, drawn both ways <span class="badge b-changed">GATE 0 DECIDES</span></h3>
+    <p class="lede">
+      <strong>This string already ships, and PR A moves the thing it points
+      at.</strong> <code>log/Concept2SendBlock.tsx:211</code> renders
+      <em>&quot;Concept2 stopped accepting this link. Reconnect on the You
+      tab.&quot;</em>, and it is drawn verbatim on this page at 2f. After PR A
+      the You tab carries a mono row and <strong>no Connect control</strong>:
+      Reconnect is one tap deeper, behind the row. Changing a word of approved
+      copy is a design question, so both candidates are drawn rather than one
+      being picked.
+    </p>
+    <div class="boards">
+      <div class="board">
+        <p class="board-cap"><span class="choice-tag">A</span> UNCHANGED &middot; the approved string, kept</p>
+        <div class="frame">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="backlink">&larr; LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <p class="log-meta">AUG 27 &middot; HELD &middot; 3/5</p>
+          <div class="ghost short">HEROES</div>
+          <div class="ghost">INTERVALS</div>
+          <div class="ghost short">MACHINE CONFIRMED &middot; WORK ONLY</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="send-line">
+              Concept2 stopped accepting this link. Reconnect on the You tab.
+            </p>
+          </div>
+          <div class="btn-l4" style="margin-top: 10px">Delete session</div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+      <div class="board">
+        <p class="board-cap"><span class="choice-tag">B</span> NAMES THE DOOR &middot; the row's own label and its own chevron</p>
+        <div class="frame">
+          <p class="eyebrow">FROM YOUR LOG</p>
+          <p class="backlink">&larr; LOG</p>
+          <p class="log-title">Steady 5k</p>
+          <p class="log-meta">AUG 27 &middot; HELD &middot; 3/5</p>
+          <div class="ghost short">HEROES</div>
+          <div class="ghost">INTERVALS</div>
+          <div class="ghost short">MACHINE CONFIRMED &middot; WORK ONLY</div>
+          <p class="plan-foot">Logged to Foundation &middot; session 4</p>
+          <div class="sendcard">
+            <div class="c2head">
+              <span class="c2label">CONCEPT2</span>
+              <span class="c2status on">RECONNECT NEEDED</span>
+            </div>
+            <p class="send-line">
+              Concept2 stopped accepting this link. Reconnect on You &rsaquo; CONCEPT2.
+            </p>
+          </div>
+          <div class="btn-l4" style="margin-top: 10px">Delete session</div>
+          <span class="frame-dim">390 &times; 844</span>
+        </div>
+      </div>
+    </div>
+    <table class="kv">
+      <tr><th></th><th>What it gets right</th><th>What it costs</th></tr>
+      <tr>
+        <td class="num"><span class="choice-tag">A</span></td>
+        <td>It is approved copy that has shipped and been read. It stays true at
+          the level of &quot;which tab&quot;, and it mints no new string, so
+          nothing regenerates: the sentence and its unit assertion
+          (<code>Concept2SendBlock.test.tsx:375</code>) are untouched.</td>
+        <td>It names a tab that no longer carries the control it names. A rower
+          who follows it lands on You and finds a mono row, not a Reconnect
+          button, and has to work out that the row is the way in.</td>
+      </tr>
+      <tr>
+        <td class="num"><span class="choice-tag">B</span></td>
+        <td>It names the door in the door's own words &mdash; <code>CONCEPT2</code>
+          is exactly what the row's label reads, and <code>&rsaquo;</code> is
+          exactly the glyph the row draws &mdash; so the instruction and the
+          target are the same two symbols.</td>
+        <td>A new string, so its unit assertion moves with it. It puts a chevron
+          inside a sentence, which nothing else in the app's prose does.</td>
+      </tr>
+    </table>
+    <p class="lede">
+      <strong>A third phrasing was considered and is NOT offered, for a reason
+      worth recording:</strong> &quot;Reconnect on the Concept2 <em>row</em> in
+      You&quot; reads cleanly in most apps and not in this one &mdash;
+      <em>row</em> is this product's word for a piece of rowing, and a sentence
+      on a log detail screen is the worst possible place to spend it on a list
+      item.
+    </p>
+    <div class="callout">
+      <p><strong>Neither candidate is right for one account, and saying so is
+      part of the question rather than a defect in the answer.</strong> An
+      account that has never had a successful read has NOTHING about Concept2 on
+      the You tab at all (decision table row 2a), so both sentences send that
+      rower to a tab with no Concept2 on it. That rower is also, by construction,
+      one whose link read has never succeeded &mdash; so they cannot have reached
+      a <code>needs_reauth</code> send in the first place without a read having
+      worked at some point. <strong>INFERENCE, and it is the reason this is
+      recorded as a limit rather than a blocker:</strong> the combination is
+      argued to be unreachable, not measured to be. If it is reachable, both
+      candidates are equally wrong and neither choice is the one that fixes
+      it.</p>
+    </div>
+
+    <h3>8.7 Unlink keeps its tier, its size and its arm &mdash; and here is the measurement that decided it</h3>
+    <p class="lede">
+      <strong>This section REPLACES the answer an earlier revision gave to
+      James's &quot;too loud&quot;.</strong> That revision proposed re-tiering
+      the Unlink button. It is withdrawn, not kept alongside: the complaint was
+      that Unlink was the loudest thing on a card the rower did not ask to see,
+      and the answer is that the card is no longer on You. <strong>On a screen
+      whose only job is this link, the destructive control being prominent in the
+      linked state is correct</strong> &mdash; in that state it is the only thing
+      there is to do. <code>.c2-card-danger</code> keeps its 52px accent outline
+      at rest and its accent fill armed. Nothing about it changes.
+    </p>
+    <p class="lede">
+      The measurement is kept because it is still true and still useful; what is
+      superseded is the conclusion it fed. Read from <code>src/index.css</code>
+      and <code>src/theme/tokens.css</code> on 2026-09-04; ratios computed with
+      the WCAG 2.x sRGB relative-luminance formula, not judged.
+    </p>
+    <table class="kv">
+      <tr><th>Control</th><th>Class</th><th>Min-height</th><th>Colour</th><th>Contrast</th></tr>
+      <tr><td>Unlink, at rest</td><td class="num">.c2-card-danger</td><td class="num">52px</td><td class="num">--accent on --surface</td><td class="num">5.94:1</td></tr>
+      <tr><td>Unlink, armed</td><td class="num">+ .c2-card-danger-armed</td><td class="num">52px</td><td class="num">--on-color on --accent</td><td class="num">5.94:1</td></tr>
+      <tr><td>Connect / Reconnect</td><td class="num">.c2-card-primary</td><td class="num">48px</td><td class="num">--on-color on --ink</td><td class="num">17.11:1</td></tr>
+      <tr><td>Retry</td><td class="num">.c2-card-retry</td><td class="num">52px</td><td class="num">--ink on --surface</td><td class="num">17.11:1</td></tr>
+      <tr><td>Sign out (You, the card's old neighbour)</td><td class="num">.button-outline</td><td class="num">44px</td><td class="num">--ink on --surface</td><td class="num">17.11:1</td></tr>
+    </table>
+    <p class="lede">
+      <strong>And the negative result the measurement produced, which is the more
+      useful half.</strong> The two &quot;quieter tier&quot; references named at
+      the time are <em>one tier</em>, and it is not quieter.
+      <code>log/FromTheLog.tsx:582</code> renders
+      <code>className=&quot;button-l4 log-delete-trigger&quot;</code>, and
+      <code>.log-delete-trigger</code> sets <code>margin: 24px 0 0</code> and
+      nothing else &mdash; its own comment says so. The tier itself
+      (<code>.button-l4</code>) is <code>min-height: 52px</code>,
+      <code>1px solid var(--accent)</code>, <code>color: var(--accent)</code>,
+      <code>font-size: 16px</code>, full width. Against
+      <code>.c2-card-danger</code> that is identical on every axis that carries
+      loudness, differing only in corner radius. <strong>Swapping to it would
+      have changed nothing a rower would call volume.</strong>
+    </p>
+    <p class="lede">
+      <strong>The two-tap arm stays, with its 4-second disarm</strong>, and the
+      binding reason is the third one. Relocation does not make the action less
+      destructive &mdash; unlinking revokes the grant and re-linking is a full
+      consent round trip. The arm is doing disclosure work as well as mis-tap
+      work: the sentence <em>&quot;Unlink removes this app's access. Rows already
+      sent stay on Concept2.&quot;</em> renders ONLY while armed, so removing the
+      arm means either losing that sentence or making it permanent &mdash; a new
+      copy decision and a new frame, for a problem nobody reported. And James
+      complained about volume, not friction; a design does not get to spend a
+      ruling it was not given.
+    </p>
+    <p class="lede">
+      One invariant changes one word: the arm could never survive leaving You,
+      and now it can never survive leaving <strong>the screen it was made
+      on</strong>. The mechanism is unchanged &mdash; the card's disarm cleanup
+      runs on unmount, and a route change unmounts the card exactly as leaving
+      You did.
+    </p>
+
+    <h2>9 &middot; Contrast and hit targets for sections 7 and 8, computed</h2>
+    <p class="lede">
+      Same method as &sect;4 and the same source values
+      (<code>app/src/theme/tokens.css</code>): WCAG 2.x relative luminance,
+      <code>(L<sub>hi</sub>+0.05)/(L<sub>lo</sub>+0.05)</code> over sRGB
+      linearised at the 0.04045 threshold, computed rather than eyeballed. This
+      table lists only pairings the NEW frames introduce; everything the card
+      itself paints is already in &sect;4 and is unchanged, because the card is
+      unchanged. <strong>The schematic iOS chrome in &sect;7.1 is deliberately
+      absent from this table: it is another app's furniture, it uses none of our
+      tokens, and no contrast claim is made about it.</strong>
+    </p>
+    <table class="kv">
+      <tr><th>Where</th><th>Foreground</th><th>Background</th><th>Ratio</th><th>AA</th></tr>
+      <tr><td>row label <code>CONCEPT2</code> / <code>DIAGNOSTICS</code></td><td class="num">--ink-3 #57544c</td><td class="num">--page #f4f1e8</td><td class="num">6.69:1</td><td class="pass">PASS</td></tr>
+      <tr><td>row state line, all four values, as recommended</td><td class="num">--ink-3 #57544c</td><td class="num">--page #f4f1e8</td><td class="num">6.69:1</td><td class="pass">PASS</td></tr>
+      <tr><td>row state line, the OPTIONAL distinction for <code>RECONNECT NEEDED</code> (8.2)</td><td class="num">--ink #1b1a17</td><td class="num">--page #f4f1e8</td><td class="num">15.41:1</td><td class="pass">PASS</td></tr>
+      <tr><td>row state line, if the gate prefers it DIMMER than the label</td><td class="num">--ink-4 #6f6a5f</td><td class="num">--page #f4f1e8</td><td class="num">4.76:1</td><td class="pass">PASS &mdash; offered, not recommended</td></tr>
+      <tr><td>row chevron (<code>aria-hidden</code>, decorative)</td><td class="num">--ink-3 #57544c</td><td class="num">--page #f4f1e8</td><td class="num">6.69:1</td><td>DECORATIVE &mdash; the label and state carry the meaning</td></tr>
+      <tr><td>row separator (<code>border-top</code>)</td><td class="num">--rule-2 #ded8c9</td><td class="num">--page #f4f1e8</td><td class="num">1.26:1</td><td>DECORATIVE &mdash; grouping only, never a state</td></tr>
+      <tr><td>screen title <em>Concept2</em>, 31px serif</td><td class="num">--ink #1b1a17</td><td class="num">--page #f4f1e8</td><td class="num">15.41:1</td><td class="pass">PASS</td></tr>
+      <tr><td>screen <code>&larr; BACK</code></td><td class="num">--ink #1b1a17</td><td class="num">--page #f4f1e8</td><td class="num">15.41:1</td><td class="pass">PASS</td></tr>
+      <tr><td>tab-bar labels (drawn in 8.5 only)</td><td class="num">--ink-3 #57544c</td><td class="num">--surface #fffdf7</td><td class="num">7.43:1</td><td class="pass">PASS</td></tr>
+      <tr><td>tab-bar active mark (accent's declared job 4)</td><td class="num">--accent #b5341f</td><td class="num">--surface #fffdf7</td><td class="num">5.94:1</td><td class="pass">PASS</td></tr>
+      <tr><td>disabled Reconnect label, frame 15 (<code>.c2-card-primary:disabled</code>)</td><td class="num">--ink-3 #57544c</td><td class="num">--surface #fffdf7</td><td class="num">7.43:1</td><td class="pass">PASS &mdash; the LABEL carries the state</td></tr>
+      <tr><td>disabled Reconnect border, frame 15</td><td class="num">--rule-3 #c9c3b2</td><td class="num">--surface #fffdf7</td><td class="num">1.73:1</td><td>DECORATIVE &mdash; and it is why the label has to carry it</td></tr>
+      <tr><td><strong>the value these frames REFUSE, as &sect;4 already does</strong></td><td class="num">--ink-4 #6f6a5f</td><td class="num">--surface-sunken #efeade</td><td class="num">4.48:1</td><td class="fail">FAIL &mdash; never on the panel</td></tr>
+      <tr><td><strong>the value the ROW refuses, and it PASSES</strong></td><td class="num">--accent #b5341f</td><td class="num">--page #f4f1e8</td><td class="num">5.35:1</td><td>REFUSED ON PURPOSE &mdash; see below</td></tr>
+    </table>
+    <p class="lede">
+      <strong>The last row is a negative result, stated because the number alone
+      would argue the other way.</strong> <code>--accent</code> on
+      <code>--page</code> is 5.35:1 and passes AA comfortably, so contrast is not
+      the reason it stays off the row. The reason is &sect;5: accent has four
+      declared meanings and this page already spends one dispensation on the Send
+      block's link-out. A <code>RECONNECT NEEDED</code> row painted in accent
+      would be a second, on a surface with no other coloured element, and that is
+      exactly the drift &sect;5 exists to stop. <strong>If the row needs a
+      distinction it takes <code>--ink</code> at 600 (15.41:1), which is the
+      treatment the card already gives a linked status and therefore no new
+      idiom at all.</strong>
+    </p>
+    <p class="lede">
+      <strong>Hit targets, measured in a browser rather than reasoned.</strong>
+      The row declares <code>min-height: var(--tap)</code> = <strong>44px</strong>
+      (<code>tokens.css:160</code>), and that declaration is what GUARANTEES the
+      floor whatever the line box does. <strong>An earlier draft of this
+      paragraph claimed the row's own padding and line could not reach 44 without
+      it. That was reasoned, not measured, and rendering the page disproved
+      it</strong> &mdash; every one of these frames' rows measures
+      <strong>45px</strong> from its 13px padding pair and its rendered mono
+      line, so the <code>min-height</code> is not load-bearing HERE. It is still
+      the right declaration, because 45 is this page's system-mono number and the
+      app ships IBM Plex Mono at a different metric; the guarantee must not
+      depend on which face loaded. The claim is replaced rather than annotated,
+      because the number a gate reads has to be the one somebody took.
+      <code>&larr; BACK</code> is
+      <strong>44&times;44</strong> (<code>index.css:1304</code> for the height and
+      <code>:1315</code> for the width, the latter added because the app's
+      shortest mono back label measured 40.83px wide). The tab bar is
+      <strong>44px</strong>. <strong>Every control inside the card is
+      unchanged</strong>, so &sect;4's sentence still governs them: Connect and
+      Reconnect 48, every live in-card outline button 52, Unlink 52, the three
+      link-out rows 44, Delete 44. PR B changes no control's size at all.
+    </p>
+
+    <h2>10 &middot; What THIS revision is asking for</h2>
+    <p class="lede">
+      Sections 0 to 6 were approved and shipped. These are the open questions,
+      and four of them are decisions only James makes.
+    </p>
+    <ul class="tight">
+      <li><strong>PR B, &sect;7 &mdash; the link-outs open in the phone's default
+        browser.</strong> Already ruled (<em>&quot;opening in safari is fine
+        because it will be clear you're changing apps&quot;</em>, and
+        <em>&quot;the no-weight should externally link to concept 2&quot;</em>);
+        what this gate approves is the RENDERED consequence, which is &sect;7.1's
+        pair, plus the withdrawal of this page's own return promise in 2c's
+        callout and the honest replacement in &sect;7.2. No frame in &sect;1 or
+        &sect;2 changes.</li>
+      <li><strong>PR A, &sect;8 &mdash; the card leaves You and becomes a
+        row.</strong> Already ruled in shape (<em>&quot;maybe we put it in a
+        sub-menu like diagnostics&quot;</em>); what this gate approves is which
+        states reach the row (&sect;8.1's eleven cells), what a rower loses from
+        You (&sect;8.2's before/after pairs), and the screen (&sect;8.5).</li>
+      <li><strong>DECISION 1 &mdash; the ROW ORDER (&sect;8.4).</strong> CONCEPT2
+        above DIAGNOSTICS, or below. Both drawn, in both content cases and in
+        landscape. A keeps two existing claims in the tree true; B falsifies a
+        comment and a test sentinel, both of which are rewritten in the same
+        change either way. There is no other cost on either side.</li>
+      <li><strong>DECISION 2 &mdash; the SEND BLOCK's sentence
+        (&sect;8.6).</strong> Keep the approved <em>&quot;Reconnect on the You
+        tab.&quot;</em>, or name the door: <em>&quot;Reconnect on You &rsaquo;
+        CONCEPT2.&quot;</em> Both drawn in the block's own frame.</li>
+      <li><strong>DECISION 3 &mdash; does <code>RECONNECT NEEDED</code> get its
+        own weight on the row (&sect;8.2)?</strong> All four values at
+        <code>--ink-3</code> (6.69:1), or that one lifted to <code>--ink</code>
+        at 600 (15.41:1). Not <code>--accent</code>, for &sect;5's reason rather
+        than for a contrast one.</li>
+      <li><strong>DECISION 4 &mdash; does the card keep its <code>CONCEPT2</code>
+        head behind a titled screen (&sect;8.5b)?</strong> Keeping it costs
+        nothing; dropping it regenerates four fixtures, one equality test and one
+        CSS rule.</li>
+      <li><strong>The trade in &sect;8.3, ruled explicitly rather than
+        inherited.</strong> A rower whose first-ever read fails sees no row until
+        a read succeeds, which is the price of not showing a Concept2 error panel
+        to every rower who has never had Concept2. Declining it leaves today's
+        live defect exactly as it is.</li>
+      <li><strong>Where the dev-only <code>Concept2LinkProbe</code> lives
+        (&sect;8.4's callout)</strong> &mdash; behind the row with the other
+        Concept2 diagnostics, or left on You and said so.</li>
+      <li><strong>Decision table row 10 (&sect;8.2's paired frames)</strong>
+        &mdash; the sticky <code>RECONNECT NEEDED</code> survives a failed
+        re-read, and the rower is not told about that one read failure. The
+        rejected alternative is drawn beside it.</li>
+    </ul>
+    <p class="lede">
+      <strong>Nothing in &sect;7 to &sect;10 is implemented and no plan is
+      written for it.</strong> Reasoning:
+      <code>docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md</code>.
+      A third piece, PR C, exists and is deliberately absent from this page: it
+      is the question of which of two stored distances is authoritative when
+      Concept2 refuses a verification code, it moves no pixel yet, and its own
+      gate is its own. It ships last, by ruling.
     </p>
   </body>
 </html>
