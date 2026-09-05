@@ -25,7 +25,7 @@
   ```sh
   grep -rnwiE 'difficulty|difficulties' domain src e2e scripts --exclude='*.test.*'
   ```
-  must return ONLY `src/news/content/releaseNotes.ts` (history) after Task 7. Under `server/`, only `server/compat/difficulty.ts`, `server/stores/workouts.ts`, `server/stores/preferences.ts`, `server/testing/fakes.ts`, `server/db/schema.ts` and the prefs route in `server/routes/data.ts` may match.
+  must return ONLY: `src/news/content/releaseNotes.ts` (history); the legacy-header strings in `domain/bulk.ts` and `src/builder/BulkImport.tsx` (the accepted old form has to be named to be accepted); and comments that say the word to record its removal ("left in Phase DE PR 1", "the server still serves it for pre-PR-1 builds"). No identifier, type, selector, label or test title. Under `server/`, only `server/compat/difficulty.ts`, `server/stores/workouts.ts`, `server/stores/preferences.ts`, `server/testing/fakes.ts`, `server/db/schema.ts` and the prefs route in `server/routes/data.ts` may match.
 
 ---
 

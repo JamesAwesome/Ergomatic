@@ -20,7 +20,7 @@ import { signInViaBackdoor } from "./helpers";
 // collapsed ~86px StepCard with inline EDIT/duplicate/delete, and only one
 // StepEditor is ever mounted at a time. SPM/REST/PACE-offset/REPEAT are all
 // "− value +" Stepper controls (src/builder/Stepper.tsx), not typable
-// fields, and EXPECTED PAIN/TYPE/DIFFICULTY are plain toggle buttons
+// fields, and EXPECTED PAIN/TYPE are plain toggle buttons
 // (`aria-pressed`), not radios — see ClassificationCard.tsx.
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -503,11 +503,11 @@ test.describe("new controls this phase introduced", () => {
     await page.reload();
     await expect(page.locator("h1.screen-title")).toHaveText("Import");
 
-    // Four-field header — "title | TYPE | difficulty | pain", no leading
-    // legacy number (domain/bulk.ts's parseHeader accepts both shapes; this
-    // paste exercises the current one).
+    // Three-field header — "title | TYPE | effort" (Phase DE PR 1; the
+    // legacy four- and five-field forms still parse, this paste exercises
+    // the current one).
     const title = "Import Screen Row";
-    const text = [`${title} | AT | medium | 3`, "w 5 6k @20"].join("\n");
+    const text = [`${title} | AT | 3`, "w 5 6k @20"].join("\n");
     await page.getByLabel("Bulk import text").fill(text);
     await page.getByRole("button", { name: "Import", exact: true }).click();
 
