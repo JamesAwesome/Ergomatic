@@ -7799,3 +7799,57 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   instrument records that it chose to do nothing; if none does, the diagnostic
   is part of the change** (the `rowingActive` pattern), because the first field
   report will otherwise be undiagnosable.
+
+### 2026-09-05 — Concept2 auto-send spec rev 2, DELTA pass (four new mechanisms)
+
+- **A prescribed client call that does not typecheck, whose two prescribed
+  gates could not have caught it if it did.** `api(path, init: RequestInit)`
+  cannot take `body: { tz, trigger }`, and the "fix" an implementer reaches for
+  (`JSON.stringify` without the sibling's `Content-Type` header) makes
+  `express.json()` skip, `tz` absent, and every automatic send 400 — silently,
+  because 400 is not a flag-setting code. **Technique: paste-test a prescribed
+  call against the ADAPTER'S SIGNATURE and against the sibling call site, then
+  ask what each gate observes — a unit gate asserting a mocked client's
+  arguments and an e2e fake that answers regardless of body are both blind to
+  serialisation. One gate must see the parsed wire body.**
+- **A stored CODE is not the key the copy is chosen by.** "The screen reuses the
+  block's strings for that code" — but the block's three no-weight sentences are
+  selected by a SUB-reason the column does not store, so every rower would get
+  the one sentence that is not actionable. **Technique: before reusing a
+  renderer from a stored value, open the function and read its PARAMETERS; a
+  response parser keyed on `(status, body)` is not a code→copy map, and the
+  difference is a stored-shape decision.**
+- **"Cleared on success" enumerated from the branch that says 200.** Two exits
+  leave the row carrying a result id without reaching it: the already-sent
+  short-circuit and the vendor's own 409 duplicate. **Technique: for any
+  sticky flag cleared "on success", enumerate the route's exits that mean
+  success IN THE WORLD (the row is at the vendor), not the branch that names
+  it — and look for the outcome an ordinary third-party integration produces
+  (here, a rower who also runs ErgData).**
+- **The flag's other clearer, found by reading what the same statement already
+  does.** The relink upsert clears `needs_reauth_at`, so preserving a failure
+  flag across a same-account reconnect flips the row from RECONNECT NEEDED
+  straight to SEND FAILED for a failure the replaced grant caused. **Technique:
+  when a rule says "X survives Y", read Y's full SET clause and ask what Y
+  means about the evidence X represents.**
+- **A diagnostic that cannot observe the failure it is justified by.** A
+  `trigger` field on the send body was justified as making "automatic isn't
+  working" diagnosable — but both silent-failure modes produce no request at
+  all. **Technique: for any instrument, state what it prints in the FAILING
+  case, not the working one; if the failure's signature is the absence of the
+  event the instrument rides on, the instrument is decoration.** Corollary:
+  never scope a STORED write by a client-asserted body field when the server
+  holds the same fact in a column.
+- **A conditional upsert is settleable in five minutes, both halves.** Drizzle
+  `.toSQL()` (run with `node --input-type=module -e` from `app/`, so
+  `node_modules` resolves) proves EXPRESSIBILITY without a database; piping the
+  emitted statement into a scratch `postgres:18.4` proves SEMANTICS for both
+  branches. **Technique: expressibility and semantics are two questions and each
+  has a cheap separate answer — never settle either by reading the ORM's docs.**
+- **`container_name` in compose is a structural proof of single-process.** A
+  fixed container name makes `docker compose up --scale` impossible, which is
+  stronger evidence for a per-process claim than "we only run one".
+- **Attacked and HELD:** per-process as the whole surface; F7's SQL in both
+  branches; the account-switch path having a supported producer (`/connect` has
+  no already-linked guard); the You row's fifth string breaking no existing test
+  (no exhaustiveness assertion anywhere, verified by grep rather than assumed).
