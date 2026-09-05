@@ -99,11 +99,11 @@ failed sessions are **one occurrence**, not two trials.
 
 Withdrawn from rev 1: "the 6-of-42-page Flipper read was the same state
 beginning to bite." That file is dated 2026-08-31 and was read at a desk; the
-Flipper file emulated in NF-FLIPPER-EMU-v1 is byte-identical to it. Whether
-James also took a fresh (identically truncated) read at the erg on 09-05 is
-unconfirmed (asked). Either way the inference has no event of that evening to
-attach to; if a fresh read did truncate at page 6 again, that supports A2, not
-"dark".
+Flipper file emulated in NF-FLIPPER-EMU-v1 is byte-identical to it. James
+confirms (2026-09-05, late) that he emulated that same saved 08-31 file and
+took NO fresh read at the erg before the reboot. So no Flipper observation of
+the real PM5 exists from the failure window; the only 09-05 Flipper read of
+the PM5 is the post-reboot one, which succeeded (pages count not recorded).
 
 ## The experiment that separates them ("control-tag bracket", ~4 min, no rowing, no app change)
 

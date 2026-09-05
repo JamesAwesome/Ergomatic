@@ -92,9 +92,9 @@ Consent is one **go**; consumed by reader starts (v2 rule).
 
 ## Still open, zero operator cost
 
-Whether James took a fresh Flipper read at the erg on 09-05 or emulated the
-08-31 file (asked; decides "NDEF-layer fault" vs "dark" for that evening).
-Whether the PM5 display carries a distinguishable Bluetooth indicator (no
+Answered: James emulated the saved 08-31 file and took no fresh read before
+the reboot, so no Flipper observation of the real PM5 exists from the failure
+window; the bracket is the first one. Whether the PM5 display carries a distinguishable Bluetooth indicator (no
 capture shows one; the photo records it either way).
 
 ## PM disposition
