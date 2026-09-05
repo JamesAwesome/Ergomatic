@@ -5,6 +5,18 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.38.1: git log v0.38.0..main --oneline at f927ef4d — two merges,
+    // both accounted (RF15, no `--merges`; main is squash-merged):
+    //   #304 the Library search field no longer zooms the page — the item.
+    //   #305 GET /api/today removed; no client ever called it, so no build
+    //     can notice: no item. This notes/capture PR adds no behavior.
+    version: "v0.38.1",
+    date: "2026-09-05",
+    items: [
+      "Tapping SEARCH BY NAME in the Library no longer zooms the page in.",
+    ],
+  },
+  {
     // v0.38.0: git log v0.37.0..main --oneline at e1337844 — six merges,
     // every one accounted (RF15, no `--merges`; main is squash-merged):
     //   #296 freestyle type chips on Today — the chip row item 2 lights.
