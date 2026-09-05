@@ -1003,7 +1003,7 @@ describe("Library", () => {
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "MINE",
+          name: "MY WORKOUTS",
         }),
       );
       await applySheet();
@@ -1029,10 +1029,10 @@ describe("Library", () => {
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
       const globalCell = within(dialog()).getByRole("button", {
-        name: "LIBRARY",
+        name: "ERGOMATIC LIBRARY",
       });
       const customCell = within(dialog()).getByRole("button", {
-        name: "MINE",
+        name: "MY WORKOUTS",
       });
       await userEvent.click(globalCell);
       expect(globalCell).toHaveAttribute("aria-pressed", "true");
@@ -1059,7 +1059,7 @@ describe("Library", () => {
       mockReady();
       await renderLibrary();
 
-      expect(screen.getByText(/Nothing of your own yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/None of my workouts yet/i)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "build one" })).toHaveAttribute(
         "href",
         "/library/new",
@@ -1426,7 +1426,7 @@ describe("Library", () => {
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "LIBRARY",
+          name: "ERGOMATIC LIBRARY",
         }),
       );
       await applySheet();

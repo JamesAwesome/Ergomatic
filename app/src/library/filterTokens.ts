@@ -88,7 +88,7 @@ export function filterTokens(f: Filters): Token[] {
   if (f.source !== null) {
     tokens.push({
       kind: "source",
-      label: f.source === "custom" ? "MINE" : "LIBRARY",
+      label: f.source === "custom" ? "MY WORKOUTS" : "ERGOMATIC LIBRARY",
       clear: (current) => ({ ...current, source: null }),
     });
   }

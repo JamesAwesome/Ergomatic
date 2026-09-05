@@ -45,14 +45,16 @@ export default function WorkoutRow({
       </span>
       <div className="workout-row-line2">
         <TypeBadge type={workout.type} />
-        {!workout.isGlobal && <span className="workout-row-custom">MINE</span>}
+        {!workout.isGlobal && (
+          <span className="workout-row-custom">MY WORKOUTS</span>
+        )}
         <span className="workout-row-meta">
           {workout.difficulty.toUpperCase()} · {daysLabel}
         </span>
         <PainBar pain={workout.pain} type={workout.type} />
       </div>
       {!workout.isGlobal && (
-        <span className="visually-hidden">, one of your own</span>
+        <span className="visually-hidden">, one of my workouts</span>
       )}
     </Link>
   );

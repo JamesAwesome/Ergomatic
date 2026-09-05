@@ -430,7 +430,9 @@ function WorkoutDetailView({
         {/* Same metadata tag as the library row (5H): a custom workout must
             read as yours here too — the list badge alone left the detail
             screen unmarked (device report, 2026-08-01). */}
-        {!workout.isGlobal && <span className="workout-row-custom">MINE</span>}
+        {!workout.isGlobal && (
+          <span className="workout-row-custom">MY WORKOUTS</span>
+        )}
         <span className="mono-status">{workout.difficulty.toUpperCase()}</span>
       </div>
       <h1 className="workout-detail-title">{workout.title}</h1>

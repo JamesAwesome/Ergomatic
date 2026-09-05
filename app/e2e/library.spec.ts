@@ -400,7 +400,7 @@ async function cleanupByTitle(page: Page, title: string): Promise<void> {
 }
 
 test.describe("SOURCE filter", () => {
-  test("selecting MINE narrows to an authored workout, and CLEAR ALL restores the full library", async ({
+  test("selecting MY WORKOUTS narrows to an authored workout, and CLEAR ALL restores the full library", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -433,14 +433,14 @@ test.describe("SOURCE filter", () => {
     await openFilterSheet(page);
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "MINE", exact: true })
+      .getByRole("button", { name: "MY WORKOUTS", exact: true })
       .click();
     await applyFilterSheet(page);
 
     await expect(rows).toHaveCount(1);
     await expect(rows.first().locator(".workout-row-title")).toHaveText(title);
     await expect(rows.first().locator(".workout-row-custom")).toHaveText(
-      "MINE",
+      "MY WORKOUTS",
     );
 
     await page.getByRole("button", { name: "CLEAR ALL" }).click();

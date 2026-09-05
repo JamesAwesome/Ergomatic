@@ -59,10 +59,10 @@ describe("FilterSheet", () => {
       within(dialog).getByRole("button", { name: "21D+" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "LIBRARY" }),
+      within(dialog).getByRole("button", { name: "ERGOMATIC LIBRARY" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "MINE" }),
+      within(dialog).getByRole("button", { name: "MY WORKOUTS" }),
     ).toBeInTheDocument();
   });
 
@@ -127,10 +127,9 @@ describe("FilterSheet", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "LIBRARY" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      screen.getByRole("button", { name: "ERGOMATIC LIBRARY" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   // Consumes filters.ts's own `toggleDifficulty` (M-10: the sheet must use
@@ -184,7 +183,7 @@ describe("FilterSheet", () => {
 
   it("clicking the CUSTOM SOURCE cell reports the set draft", async () => {
     const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "MINE" }));
+    await userEvent.click(screen.getByRole("button", { name: "MY WORKOUTS" }));
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
       source: "custom",
@@ -193,7 +192,9 @@ describe("FilterSheet", () => {
 
   it("clicking the GLOBAL SOURCE cell reports the set draft", async () => {
     const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "LIBRARY" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "ERGOMATIC LIBRARY" }),
+    );
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
       source: "global",

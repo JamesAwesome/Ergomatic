@@ -505,15 +505,22 @@ design sweep: both thumbs ≥ 44 px hit boxes in portrait and landscape.
   `autocapitalize="none"`, `enterkeyhint="search"`, no autofocus (the list
   is the point of the screen, not the field).
 - **I-17 Rename (ships in PR2, same two sheets, same Gate 0 captures — PM
-  finding).** `GLOBAL` → `LIBRARY`, `CUSTOM` → `MINE` at every RENDERED
-  site, six not four (PM count): `library/FilterSheet.tsx`,
-  `library/filterTokens.ts`, `today/TodayFilterSheet.tsx`,
-  `today/todayFilterTokens.ts`, the row badge in `library/WorkoutRow.tsx`
-  (`workout-row-custom`), and the Library empty state ("No custom workouts
-  yet"), plus the e2e selectors that read `name: "CUSTOM"`. Stored values
-  stay `"global"` / `"custom"`; no shape changes. **PR2's Gate 0 shows
-  LIBRARY / MINE beside BUILT-IN / MINE**: the PM notes a chip reading
-  LIBRARY inside the Library tab can read as "not yours", and James picks.
+  finding).** `GLOBAL` → `ERGOMATIC LIBRARY`, `CUSTOM` → `MY WORKOUTS` at
+  every RENDERED site — seven plus the accessible-name suffix (the delta
+  pass count): `library/FilterSheet.tsx`, `library/filterTokens.ts`,
+  `today/TodayFilterSheet.tsx`, `today/todayFilterTokens.ts`, the row badge
+  in `library/WorkoutRow.tsx` (`workout-row-custom`) and its visually
+  hidden suffix (", one of my workouts"), the workout DETAIL badge
+  (`workout/WorkoutDetail.tsx`, same class), and the Library empty state
+  ("None of my workouts yet"), plus the e2e selectors that read the old
+  words. Stored values stay `"global"` / `"custom"`; no shape changes.
+  **Gate 0 ruling (James, 2026-09-05): "Try 'ergomatic library' 'my
+  workouts'" → rendered in the half-width cells (wraps) and with SOURCE on
+  its own full-width row → "B. Make sure to match the filter tag" —
+  "Match".** So SOURCE leaves the shared LAST DONE row on both sheets and
+  takes a full row (LAST DONE takes one too), and the badge reads the same
+  words as the filter cell and token. Revision 1's LIBRARY / MINE and the
+  PM's BUILT-IN are superseded.
 
 ### 4.2 Gate 0
 
@@ -539,13 +546,11 @@ clean.
 ## 5. The rename, and why MINE
 
 James asked for LIBRARY in place of GLOBAL and a recommendation for CUSTOM.
-The pair has to read as two sources of one list: where a workout CAME FROM.
-`LIBRARY` / `MINE` does that in one word each and in the mono caps the
-tokens use; `YOURS` addresses the rower in the second person, which no other
-token does; `BUILT-IN` is two words and a hyphen at chip width. James is
-free to keep CUSTOM ("i'm okay keeping it too"); the spec ships MINE unless
-he says otherwise at PR2's Gate 0, where LIBRARY and BUILT-IN are both
-rendered for the first half.
+Revision 1 proposed `LIBRARY` / `MINE`; the PM gate flagged that LIBRARY
+inside the Library tab can read as "not yours" and offered `BUILT-IN`; at
+Gate 0 James chose **`ERGOMATIC LIBRARY` / `MY WORKOUTS`** (2026-09-05),
+which names the source in full and does not collide with the tab. Both are
+too long for the half-width SOURCE cells, so SOURCE takes its own row.
 
 ## 6. Decomposition and order
 

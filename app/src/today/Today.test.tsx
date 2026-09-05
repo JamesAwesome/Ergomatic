@@ -815,7 +815,7 @@ describe("Today (FILTER sheet)", () => {
     // Round 2 (2026-08-04): both new dims default to null — neither cell
     // of either pair starts pressed (no account preference seeds them, per
     // Today.tsx's own fresh-day initial state).
-    for (const label of ["<21D", "21D+", "LIBRARY", "MINE"]) {
+    for (const label of ["<21D", "21D+", "ERGOMATIC LIBRARY", "MY WORKOUTS"]) {
       expect(screen.getByRole("button", { name: label })).toHaveAttribute(
         "aria-pressed",
         "false",
@@ -839,7 +839,7 @@ describe("Today (FILTER sheet)", () => {
     await openFilterSheet();
     const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
     await userEvent.click(
-      within(sourceGroup).getByRole("button", { name: "MINE" }),
+      within(sourceGroup).getByRole("button", { name: "MY WORKOUTS" }),
     );
     expect(screen.getByText("1 OPTION")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
@@ -847,7 +847,7 @@ describe("Today (FILTER sheet)", () => {
     expect(
       screen.getByRole("heading", { name: "Gradient Wind" }),
     ).toBeVisible();
-    expect(screen.getByText("MINE")).toBeVisible();
+    expect(screen.getByText("MY WORKOUTS")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({ source: "custom" });
   });
 
@@ -1262,16 +1262,16 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
     const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
     await userEvent.click(
-      within(sourceGroup).getByRole("button", { name: "LIBRARY" }),
+      within(sourceGroup).getByRole("button", { name: "ERGOMATIC LIBRARY" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
-    expect(screen.getByText("LIBRARY")).toBeVisible();
+    expect(screen.getByText("ERGOMATIC LIBRARY")).toBeVisible();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove LIBRARY filter" }),
+      screen.getByRole("button", { name: "Remove ERGOMATIC LIBRARY filter" }),
     );
-    expect(screen.queryByText("LIBRARY")).not.toBeInTheDocument();
+    expect(screen.queryByText("ERGOMATIC LIBRARY")).not.toBeInTheDocument();
     expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({
       difficulties: ["easy", "medium"],
@@ -1299,14 +1299,14 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     );
     const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
     await userEvent.click(
-      within(sourceGroup).getByRole("button", { name: "LIBRARY" }),
+      within(sourceGroup).getByRole("button", { name: "ERGOMATIC LIBRARY" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(
       screen.getByRole("button", { name: "CLEAR ALL" }),
     ).toBeInTheDocument();
     expect(screen.getByText("<21D")).toBeVisible();
-    expect(screen.getByText("LIBRARY")).toBeVisible();
+    expect(screen.getByText("ERGOMATIC LIBRARY")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
 
@@ -1336,7 +1336,7 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
       "aria-valuenow",
       "60",
     );
-    for (const label of ["<21D", "21D+", "LIBRARY", "MINE"]) {
+    for (const label of ["<21D", "21D+", "ERGOMATIC LIBRARY", "MY WORKOUTS"]) {
       expect(screen.getByRole("button", { name: label })).toHaveAttribute(
         "aria-pressed",
         "false",

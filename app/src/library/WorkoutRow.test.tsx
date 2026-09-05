@@ -109,7 +109,7 @@ describe("WorkoutRow", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByText("MINE")).toBeInTheDocument();
+      expect(screen.getByText("MY WORKOUTS")).toBeInTheDocument();
     });
 
     it("omits the CUSTOM badge for a real seeded library workout", () => {
@@ -119,17 +119,17 @@ describe("WorkoutRow", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.queryByText("MINE")).not.toBeInTheDocument();
+      expect(screen.queryByText("MY WORKOUTS")).not.toBeInTheDocument();
     });
 
-    it("adds ', one of your own' to the row's accessible name only for the rower's own workouts", () => {
+    it("adds ', one of my workouts' to the row's accessible name only for the rower's own workouts", () => {
       const { rerender } = render(
         <MemoryRouter>
           <WorkoutRow workout={HOARFROST} durationMinutes={20} />
         </MemoryRouter>,
       );
       expect(screen.getByRole("link")).not.toHaveAccessibleName(
-        /, one of your own/,
+        /, one of my workouts/,
       );
 
       rerender(
@@ -138,7 +138,7 @@ describe("WorkoutRow", () => {
         </MemoryRouter>,
       );
       expect(screen.getByRole("link")).toHaveAccessibleName(
-        /, one of your own/,
+        /, one of my workouts/,
       );
     });
   });

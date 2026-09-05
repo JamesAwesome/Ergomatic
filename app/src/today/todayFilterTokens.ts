@@ -121,7 +121,8 @@ export function todayFilterTokens(
   if (overrides.source !== null) {
     tokens.push({
       key: "source",
-      label: overrides.source === "custom" ? "MINE" : "LIBRARY",
+      label:
+        overrides.source === "custom" ? "MY WORKOUTS" : "ERGOMATIC LIBRARY",
       onClear: () => onReset("source"),
     });
   }

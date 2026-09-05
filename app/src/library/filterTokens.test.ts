@@ -181,14 +181,14 @@ describe("filterTokens", () => {
       expect(filterTokens(f)[0].label).toBe("21D+");
     });
 
-    it("global reads LIBRARY (Phase SF PR2 rename: GLOBAL → LIBRARY, CUSTOM → MINE)", () => {
+    it("global reads ERGOMATIC LIBRARY (Phase SF PR2 rename: GLOBAL → ERGOMATIC LIBRARY, CUSTOM → MY WORKOUTS)", () => {
       const f: Filters = { ...EMPTY_FILTERS, source: "global" };
-      expect(filterTokens(f)[0].label).toBe("LIBRARY");
+      expect(filterTokens(f)[0].label).toBe("ERGOMATIC LIBRARY");
     });
 
-    it("custom reads MINE", () => {
+    it("custom reads MY WORKOUTS", () => {
       const f: Filters = { ...EMPTY_FILTERS, source: "custom" };
-      expect(filterTokens(f)[0].label).toBe("MINE");
+      expect(filterTokens(f)[0].label).toBe("MY WORKOUTS");
     });
   });
 

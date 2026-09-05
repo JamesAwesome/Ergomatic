@@ -1114,10 +1114,11 @@ with the same card on top every day. Spec:
       `DurationBucket` and its bucket helpers RETIRED (`git grep
       DurationBucket -- app/` returns comments naming the retirement
       only — see the dead-code row), `/api/today` on `rangeForCap`;
-      `todayFilters` v1 MAPS to v2; the source rename GLOBAL→LIBRARY (or
-      BUILT-IN, James picks at Gate 0), CUSTOM→MINE at SEVEN rendered sites
-      plus the row's accessible-name suffix (the delta pass found the
-      workout DETAIL badge the six-site census missed).
+      `todayFilters` v1 MAPS to v2; the source rename GLOBAL→ERGOMATIC LIBRARY,
+      CUSTOM→MY WORKOUTS (James's Gate 0 pick, 2026-09-05, badge matching
+      the filter tag; SOURCE moves to its own full-width row) at SEVEN
+      rendered sites plus the row's accessible-name suffix (the delta pass
+      found the workout DETAIL badge the six-site census missed).
       TRIAD. Gate 0 with both sheets, both orientations, before/after in
       BOTH directions on one pool. **M**
 - [ ] PR3 — Library SEARCH BY NAME field above FILTER ⌄ (rides the BACK

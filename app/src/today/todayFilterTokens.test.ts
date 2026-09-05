@@ -520,7 +520,7 @@ describe("todayFilterTokens", () => {
         vi.fn(),
       );
       expect(tokens).toStrictEqual([
-        { key: "source", label: "MINE", onClear: expect.any(Function) },
+        { key: "source", label: "MY WORKOUTS", onClear: expect.any(Function) },
       ]);
     });
 
@@ -536,7 +536,7 @@ describe("todayFilterTokens", () => {
         DEFAULTS,
         vi.fn(),
       );
-      expect(tokens[0].label).toBe("LIBRARY");
+      expect(tokens[0].label).toBe("ERGOMATIC LIBRARY");
     });
 
     it("onClear fires onReset('source')", () => {

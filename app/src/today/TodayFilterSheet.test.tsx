@@ -95,7 +95,7 @@ describe("TodayFilterSheet", () => {
       expect(screen.getByRole("button", { name: level })).toBeInTheDocument();
     }
     // Round 2 (2026-08-04): the Library's own LAST DONE/SOURCE pair.
-    for (const label of ["<21D", "21D+", "LIBRARY", "MINE"]) {
+    for (const label of ["<21D", "21D+", "ERGOMATIC LIBRARY", "MY WORKOUTS"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
     // No TYPE group — the type-swap chips stay on the plan line, untouched
@@ -133,7 +133,7 @@ describe("TodayFilterSheet", () => {
     expect(
       within(screen.getByRole("group", { name: "SOURCE" })).getByRole(
         "button",
-        { name: "MINE" },
+        { name: "MY WORKOUTS" },
       ),
     ).toBeInTheDocument();
   });
@@ -188,11 +188,10 @@ describe("TodayFilterSheet", () => {
       "aria-pressed",
       "false",
     );
-    expect(screen.getByRole("button", { name: "LIBRARY" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "MINE" })).toHaveAttribute(
+    expect(
+      screen.getByRole("button", { name: "ERGOMATIC LIBRARY" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "MY WORKOUTS" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -319,7 +318,9 @@ describe("TodayFilterSheet", () => {
       const { onChangeDraft } = renderSheet({
         draft: { ...EMPTY_DRAFT, source: "global" },
       });
-      await userEvent.click(screen.getByRole("button", { name: "MINE" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "MY WORKOUTS" }),
+      );
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
         source: "custom",
@@ -330,7 +331,9 @@ describe("TodayFilterSheet", () => {
       const { onChangeDraft } = renderSheet({
         draft: { ...EMPTY_DRAFT, source: "custom" },
       });
-      await userEvent.click(screen.getByRole("button", { name: "MINE" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "MY WORKOUTS" }),
+      );
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
         source: null,
@@ -339,7 +342,9 @@ describe("TodayFilterSheet", () => {
 
     it("clicking GLOBAL sets it", async () => {
       const { onChangeDraft } = renderSheet();
-      await userEvent.click(screen.getByRole("button", { name: "LIBRARY" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "ERGOMATIC LIBRARY" }),
+      );
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
         source: "global",

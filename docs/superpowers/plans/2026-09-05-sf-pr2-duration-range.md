@@ -9,7 +9,8 @@
 **Goal:** both filter sheets express TIME as a two-thumb minutes range
 (0..120 in 5-minute steps, 0 = no lower bound, 120 = none upper), the
 four-bucket API is retired everywhere, a stored bucket union is mapped to a
-range once, and GLOBAL / CUSTOM read LIBRARY / MINE at every rendered site.
+range once, and GLOBAL / CUSTOM read ERGOMATIC LIBRARY / MY WORKOUTS at
+every rendered site (James's Gate 0 pick; SOURCE on its own row).
 
 **Architecture:** `domain/duration.ts` owns `DurationRange` and the
 predicate (`inRange`, inclusive both ends, 120 = no upper bound);
@@ -28,8 +29,8 @@ its default from `rangeForCap`.
 - 44 px hit targets, WCAG AA; contrast computed and stated (below).
 - No em-dashes in user-facing copy.
 - Every new assertion gets a mutation that makes it fail, stated.
-- Exit criterion 8: `git grep DurationBucket -- app/` matches only the two
-  comments recording the retirement.
+- Exit criterion 8: `git grep DurationBucket -- app/` matches only the one
+  comment recording the retirement (`domain/duration.ts`).
 
 ---
 
@@ -67,8 +68,10 @@ its default from `rangeForCap`.
 **Produces:** `Filters.durationRange`, `setDurationRange`,
 `hasActiveFilters` via `isUnbounded`, `applyFilters` via `inRange`; the
 parser REQUIRES `durationRange` (a bucket-era record is rejected whole —
-it lives one BACK round trip); SOURCE reads LIBRARY / MINE; the row badge
-reads MINE; the empty state reads "Nothing of your own yet".
+it lives one BACK round trip); SOURCE reads ERGOMATIC LIBRARY / MY WORKOUTS on
+its own full-width row (James's Gate 0 pick); the row and detail badges
+and the accessible suffix read MY WORKOUTS / "one of my workouts"; the
+empty state reads "None of my workouts yet".
 
 - [x] 253 Library + component tests green.
 
@@ -108,11 +111,13 @@ and `today-filtered` now carries the `25–35′` token.
 - [x] Spec §3.3/§3.4 as-built notes; DEVIATIONS row 67 (TIME + SOURCE
       copy); ROADMAP PR2 line + dead-code row CLOSED; antagonist ledger
       entry (PR1's coin-flip e2e lesson) rides here.
-- [ ] Gate 0: both sheets, both orientations, before (main's
-      `today-sheet.png`) / after, count 78 → 32 on one pool for `[25,35]`,
-      exactly-at-cap now admitted (server test), LIBRARY vs BUILT-IN pair
-      rendered, contrast stated. James rules on LIBRARY vs BUILT-IN.
-- [ ] Antagonist DELTA on the control + mapping; PM final gate (TRIAD).
+- [x] Gate 0: both sheets, both orientations, before (main's
+      `today-sheet.png`, 71 OPTIONS) / after (78), LIBRARY vs BUILT-IN
+      rendered, then James's own words ERGOMATIC LIBRARY / MY WORKOUTS
+      rendered two ways; ruling: variant B (SOURCE on its own row), badge
+      matches the filter tag.
+- [x] Antagonist DELTA (FIX-THEN-PROCEED, five folded) + PM final gate
+      (PASS WITH CONDITIONS, seven folded).
 
 ## Contrast (computed from `tokens.css`, 2026-09-05)
 
@@ -124,4 +129,4 @@ and `today-filtered` now carries the `25–35′` token.
 | selected span `--accent` against the rail `--rule-3` | 3.43:1 |
 | rail `--rule-3` on `--page` (decorative track) | 1.56:1 |
 | focus ring `--accent` on `--page` | 5.35:1 |
-| MINE badge / LIBRARY cell `--ink-3` on `--page` | 6.69:1 |
+| MY WORKOUTS badge / ERGOMATIC LIBRARY cell `--ink-3` on `--page` | 6.69:1 |

@@ -848,21 +848,12 @@ button:disabled {
   gap: 7px;
 }
 
-.filter-sheet-group-half {
-  flex: 1;
-}
-
 .filter-sheet-group-label {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.16em;
   color: var(--ink-3);
-}
-
-.filter-sheet-row {
-  display: flex;
-  gap: 6px;
 }
 
 /* Today's own FILTER sheet only (Round 2, 2026-08-04) — the live pool count,

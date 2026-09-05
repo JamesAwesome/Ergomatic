@@ -170,46 +170,45 @@ export default function FilterSheet({
         }
       />
 
-      <div className="filter-sheet-row">
-        <CellGrid
-          className="filter-sheet-group-half"
-          label="LAST DONE"
-          cells={[
-            {
-              value: "under21",
-              label: `<${RECENCY_BOUNDARY_DAYS}D`,
-              pressed: draft.lastDone === "under21",
-            },
-            {
-              value: "over21",
-              label: `${RECENCY_BOUNDARY_DAYS}D+`,
-              pressed: draft.lastDone === "over21",
-            },
-          ]}
-          onToggle={(value) =>
-            onChangeDraft(setLastDone(draft, value as "under21" | "over21"))
-          }
-        />
-        <CellGrid
-          className="filter-sheet-group-half"
-          label="SOURCE"
-          cells={[
-            {
-              value: "global",
-              label: "LIBRARY",
-              pressed: draft.source === "global",
-            },
-            {
-              value: "custom",
-              label: "MINE",
-              pressed: draft.source === "custom",
-            },
-          ]}
-          onToggle={(value) =>
-            onChangeDraft(setSource(draft, value as "global" | "custom"))
-          }
-        />
-      </div>
+      {/* Phase SF PR2 Gate 0 (James: variant B): SOURCE on its own full-width
+          row so ERGOMATIC LIBRARY / MY WORKOUTS sit on one line; LAST DONE
+          takes a full row too, the same width as every other pair. */}
+      <CellGrid
+        label="LAST DONE"
+        cells={[
+          {
+            value: "under21",
+            label: `<${RECENCY_BOUNDARY_DAYS}D`,
+            pressed: draft.lastDone === "under21",
+          },
+          {
+            value: "over21",
+            label: `${RECENCY_BOUNDARY_DAYS}D+`,
+            pressed: draft.lastDone === "over21",
+          },
+        ]}
+        onToggle={(value) =>
+          onChangeDraft(setLastDone(draft, value as "under21" | "over21"))
+        }
+      />
+      <CellGrid
+        label="SOURCE"
+        cells={[
+          {
+            value: "global",
+            label: "ERGOMATIC LIBRARY",
+            pressed: draft.source === "global",
+          },
+          {
+            value: "custom",
+            label: "MY WORKOUTS",
+            pressed: draft.source === "custom",
+          },
+        ]}
+        onToggle={(value) =>
+          onChangeDraft(setSource(draft, value as "global" | "custom"))
+        }
+      />
 
       {/* The live match count, moved off the primary button's own copy
           (now the constant "Apply Filter") onto a small mono caption
