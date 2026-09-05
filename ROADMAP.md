@@ -1352,25 +1352,11 @@ X" is a real disposition — most of these are single files.
 
 ## Needs a decision from James
 
-- **`/api/today` is now DIVERGENT, not merely dead (PM final gate, Phase SF
-  PR1, 2026-09-04).** The route (`server/routes/data.ts`) has no client
-  caller — only comments and server tests name it — and since #297 the
-  client draws its first card at random within the least-recently-done tie
-  while the route still returns the deterministic head, so a caller that
-  appeared would disagree with the screen. Decide: delete the route (and
-  its integration tests), or make it mint and persist a draw server-side
-  so both agree. PR2 touched the route (`rangeForCap`) without the
-  decision being taken; deadline: PHASE CLOSE (a route no client calls
-  cannot reach a tester's screen — the exit pass — so the notes need not
-  mention it; the DECISION is what is owed
-  unmentioned).
-  **PM close recommendation (2026-09-05): DELETE it, in its own small
-  server-only PR after v0.38.0** — `git log -S` shows no client ever called
-  it in the repo's history, so no shipped build can break; `/api/workouts`
-  already returns `lastDoneDaysAgo`, so `isolation.integration.test.ts`'s
-  eight uses re-point there without losing isolation coverage. Making it
-  draw would persist a server-side pick for a caller that does not exist.
-  James rules.
+- _(none open)_ — the `/api/today` row that sat here from Phase SF PR1
+  closed 2026-09-05: James ruled DELETE, and the route, its unit block and
+  the isolation test's dependence on it left in the same PR (the "done is
+  per-user" proof now reads `/api/workouts`' `lastDoneDaysAgo`, the oracle
+  the Library and Today actually use).
 
 **Cleared 2026-08-31.** James settled every open row in one sitting; each one
 left this table for an owner, and the dispositions are recorded where the work
@@ -1729,6 +1715,11 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **`data.test.ts`'s 401 route table is short four routes** (found by the
+  review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
+  and the three `/api/article-reads` routes have no row, so a session-guard
+  regression on any of them has no gate. Add the rows; rides the next PR
+  touching that file.
 - **FILED, and it is TRIAD (James's walk, 2026-09-04): our work distance is the
   SUM OF OUR INTERVALS, the monitor reports a different total, and Concept2
   verifies against the monitor — so a verification code cannot validate.**
