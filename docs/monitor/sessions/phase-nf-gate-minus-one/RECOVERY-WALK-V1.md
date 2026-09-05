@@ -1,8 +1,9 @@
 # NF-RECOVERY-v1 — four A → B recovery checks
 
-Status: PM readiness PASS. Actual [setup v3](ZERO-SCAN-SETUP-V3-RESULT.md)
-closed the phone-preparation condition. Ready to request explicit scan consent;
-no scan is authorized yet.
+Status: COMPLETED — aborted before app launch. See
+[the stop record](RECOVERY-WALK-V1-ABORT.md). Zero NFC attempts; all four cases
+unrun. The original Start permission and run are consumed. The following
+PM-approved procedure is retained history, not an executable retry.
 
 Primary target: determine whether a held old NFC attempt can interfere with
 its immediate successor on this iPhone/PM5. Four cases share the prepared

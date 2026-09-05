@@ -35,14 +35,17 @@ new document and cleanup verified. Total operator time **1m42.366s**; zero
 installs and zero NFC attempts. James was released to lock the phone. Capture
 host PID 10805 is retired. Do not reuse this run or its ready permission.
 
-The [recovery protocol](RECOVERY-WALK-V1.md) is the next bounded hardware block.
-Its readiness section is authoritative; the successful setup result closes
-its previous phone-preparation condition. The next block still requires
-separate explicit scan consent. “Ready” for this completed zero-scan setup
-never authorizes NFC. No short timer starts before a required reply.
+[Recovery v1](RECOVERY-WALK-V1-ABORT.md) was explicitly started, then aborted
+before app launch when the capture controller's fresh phone listing timed out.
+Zero NFC attempts; all four cases remain unrun. Host PID 13869 is retired.
+Phone cleanup was not required because this run made no phone mutation.
+A later read-only connection check also failed. Do not treat the earlier
+installed identity or setup PASS as current connectivity proof.
 
-Use the [command card](RECOVERY-COMMAND-CARD.md), current helper pins in
-[INSPECTOR-LOADING-FIX.md](INSPECTOR-LOADING-FIX.md), and the existing signed
-recovery build. No design, build, helper change or unchanged test suite is
-needed when James returns. Fresh installed identity is checked before launch;
-any mismatch stops without reinstalling. Product implementation remains gated.
+**Stopped for handoff at James's request.** No clock, install permission,
+scan permission or retry is active. Start with
+[HANDOFF-TO-CLAUDE.md](HANDOFF-TO-CLAUDE.md). The next technical task is to
+establish why the Mac cannot currently reach the phone, using retained errors
+and read-only checks. No new design, rebuild, helper framework or unchanged
+suite is justified by this connection failure. Product implementation remains
+gated; preserve the existing work and do not push, merge or release.

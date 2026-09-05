@@ -1,0 +1,32 @@
+{
+  "outcome": "aborted-before-app-launch",
+  "startedAtUtc": "2026-09-05T01:08:41.972859+00:00",
+  "controllerFinishedAtUtc": "2026-09-05T01:09:33.864Z",
+  "elapsedToMachineStopMs": 51891,
+  "totalOperatorElapsedMs": null,
+  "timingNote": "Release message followed machine stop before the next tool timestamp at 01:10:46Z; exact chat delivery time was not retained. Machine duration is not a full operator-time claim.",
+  "initialIdentityVerified": true,
+  "version": "0.23.0",
+  "build": "789",
+  "freshCaptureListingSucceeded": false,
+  "captureListingErrorDomains": [
+    "com.apple.dt.CoreDeviceError:4000",
+    "com.apple.CoreDevice.ControlChannelConnectionError:1",
+    "com.apple.CoreDevice.ControlChannelConnectionError:0",
+    "Network.NWError:60"
+  ],
+  "appLaunchAttempted": false,
+  "installationsPerformed": 0,
+  "nfcAttempts": 0,
+  "inspectorInvoked": false,
+  "phoneCleanupRequired": false,
+  "controllerCleanupVerified": false,
+  "cleanupInterpretation": "Not attempted because listing failed before consoleLaunchAttempted; no phone mutation from this run.",
+  "captureHostPid": 13869,
+  "captureHostRetired": true,
+  "scanPermissionConsumed": true,
+  "reconnectionReadOnlyExitCode": 1,
+  "reconnectionCoreDeviceErrorCode": 1011,
+  "currentPhoneReachability": "not verified",
+  "currentInstalledIdentity": "unknown after connection failure; no mismatch observed"
+}

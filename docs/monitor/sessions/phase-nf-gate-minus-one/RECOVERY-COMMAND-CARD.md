@@ -1,8 +1,9 @@
 # NFC recovery — Codex command card
 
-Setup v3 is completed with PASS; its section below is historical. Execute
-`RECOVERY-WALK-V1.md` only after its
-required PM verdict and separate user scan permission. These are Codex-owned
+Setup v3 passed; recovery v1 later aborted before launch on a connection
+failure. Both runs are consumed. This card is reference for a future explicitly
+agreed resumed session, not permission to execute the old run. First read
+`HANDOFF-TO-CLAUDE.md` and restore verified phone reachability. These are Codex-owned
 commands, never instructions for James to paste. Do not restart design,
 research, builds or unchanged test suites when he returns.
 
