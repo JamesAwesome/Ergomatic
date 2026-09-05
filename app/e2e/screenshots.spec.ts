@@ -527,9 +527,34 @@ test("today", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "today-sheet.png"),
   });
 
-  // FILTERED: applied — the DIFFICULTY token ("EASY–MEDIUM") and CLEAR ALL.
+  // Phase SF PR2 Gate 0 (spec §3.5): the TIME range narrowed to 25–35′
+  // by keyboard (the thumbs are role=slider buttons), the live count
+  // moving with it; the same sheet in landscape; then applied, so the
+  // token row shows the range label beside the DIFFICULTY token.
+  const dialog = page.getByRole("dialog");
+  const longest = dialog.getByRole("slider", { name: "Longest" });
+  const shortest = dialog.getByRole("slider", { name: "Shortest" });
+  await longest.focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft"); // 60 -> 35
+  await shortest.focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight"); // 0 -> 25
+  await expect(shortest).toHaveAttribute("aria-valuenow", "25");
+  await expect(longest).toHaveAttribute("aria-valuenow", "35");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-sheet-range.png"),
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-sheet-landscape.png"),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  // FILTERED: applied — the DIFFICULTY token ("EASY–MEDIUM"), the TIME
+  // token ("25–35′") and CLEAR ALL.
   await page.getByRole("button", { name: "Apply Filter" }).click();
-  await expect(page.locator(".filter-token")).toBeVisible();
+  await expect(
+    page.locator(".filter-token", { hasText: "25–35′" }),
+  ).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-filtered.png"),
   });
@@ -1870,6 +1895,13 @@ test("library", async ({ page }) => {
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library-sheet.png"),
   });
+  // Phase SF PR2 Gate 0: the same sheet in landscape (the range rail is
+  // the widest control in it).
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-sheet-landscape.png"),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
 
   // FILTERED: applied — the O2 chip still selected with its descriptor
   // word visible, the TYPE token alongside the SOURCE token, the narrowed

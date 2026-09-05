@@ -7440,3 +7440,16 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   `swapType: null`. **Technique:** for every "first time today" mechanism, name
   the stored value that distinguishes "never happened" from "happened and was
   undone"; if one field carries both, the undo re-triggers the mechanism.
+
+## 2026-09-05 — Phase SF PR1 e2e: tests that pass by coin flip
+
+- **"The e2e suite is green, so the randomised order broke nothing."** Four
+  `today.spec.ts` tests imported two never-done fixtures and asserted which
+  one the card showed — an assumption that creation order breaks the tie,
+  which is exactly the determinism PR1 removed. They passed a four-spec run
+  by coin flip and failed the full run. **Technique:** when a change replaces
+  a deterministic order with a draw, list every test whose fixture has a TIE
+  under the old order (two rows with equal `lastDoneDaysAgo`, equal
+  `sortOrder`, equal anything the sort read) and run the suite several times
+  over (`--repeat-each 3`) before trusting green. A test that states the
+  draw (`pinToday`) is the fix; a test that happens to pass is not.

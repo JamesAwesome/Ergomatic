@@ -414,7 +414,11 @@ bucket only in a comment.
 record is MAPPED, not discarded** (PM finding: fail-whole is free on a
 dated record and costs permanent memory on an undated one): a bucket IS a
 range, so the union of stored buckets becomes `[lowest lower bound, highest
-upper bound]` with `60+` → 120 and an empty union → the key's default.
+upper bound]` with `60+` → 120, and an empty union — v1's "TIME off" — maps
+to the unbounded range (PR2 implementation: the parser cannot know a key's
+per-account default, and "off" IS unbounded; a garbage v1 union with no
+recognisable bucket maps the same way). A v1 set whose `durations` is not
+an array is dropped, that key alone.
 Library's sessionStorage record (`libraryFilters.ts`) makes `durationRange`
 REQUIRED in its parser (never lenient like `lastDone`); it lives one BACK
 round trip, so a rejected record costs nothing. `hasActiveFilters` and
@@ -430,13 +434,21 @@ requirement), rail height 4 px, thumb colour `--ink`, rail `--rule-3`,
 selected span `--accent`. Per §1.3 the control is CUSTOM: each thumb is a
 `<button role="slider">` carrying `aria-valuemin=0`, `aria-valuemax=120`,
 `aria-valuenow`, `aria-valuetext` ("25 minutes" / "no limit" / "any"),
-`aria-label="Shortest"` / `"Longest"`, and `tabIndex=0`. Keyboard per the
-APG list: arrows step 5, Home/End to the bounds, Page Up/Down step 15.
-Pointer: `pointerdown` on a thumb captures the pointer, `pointermove` maps
-x to the nearest step, the no-cross clamp stops the moving thumb at the
-other's value; a tap on the rail moves the NEARER thumb. Both sheets render
+`aria-label="Shortest"` / `"Longest"`, in the tab order. Keyboard per the
+APG list: arrows step 5, Home/End to the bounds (the lower thumb's End is
+the upper thumb; the upper thumb's Home is the lower), Page Up/Down step
+15. Pointer: `pointerdown` on a thumb captures the pointer, `pointermove`
+maps x to the nearest step, the no-cross clamp stops the moving thumb at
+the other's value; a tap on the rail moves the NEARER thumb. As built
+(PR2): the thumb's 44 px hit box is the whole button and the 24 px knob is
+drawn on its `::after`, so the rail reads as a rail; the two figures print
+above the rail ends (`ANY` at 0, `120′+` at the top). Both sheets render
 the identical component (`components/DurationRange.tsx`). Contrast and hit
-boxes are gated in §3.5/§3.6.
+boxes are gated in §3.5/§3.6; the rail line itself (`--rule-3` on
+`--page`, 1.56:1) is decorative — the state is carried by the accent span
+(3.43:1 against the rail, 5.35:1 against the page) and the ink knob
+(15.41:1), the same allowance the sheet's `--rule-3` cell borders already
+take.
 
 ### 3.5 Gate 0
 

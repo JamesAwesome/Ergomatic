@@ -1108,14 +1108,16 @@ with the same card on top every day. Spec:
       TRIAD: stored shapes `todayPick` (+shownIds), `todayOverrides`
       (filters out), NEW `todayFilters`; `/api/today` compiles against
       `suggest()`'s new `tieIds`. No tag until phase close (James). **M**
-- [ ] PR2 — TIME becomes a minutes range (a CUSTOM two-thumb control per
-      the APG pattern — the native overlay fell at the anchor pass — 5-min
-      steps, 0..120+) on BOTH sheets; `DurationBucket` and its bucket
-      helpers retire, `/api/today` moves to `rangeForCap`; `todayFilters`
-      v1 MAPS to v2; the source rename GLOBAL→LIBRARY (or BUILT-IN, James
-      picks at Gate 0), CUSTOM→MINE at six rendered sites. TRIAD. Gate 0
-      with both sheets, both orientations, before/after in BOTH directions
-      on one pool. **M**
+- [ ] PR2 — BUILT, Gate 0 pending (2026-09-05): TIME is a minutes range
+      (a CUSTOM two-thumb control per the APG pattern — the native overlay
+      fell at the anchor pass — 5-min steps, 0..120+) on BOTH sheets;
+      `DurationBucket` and its bucket helpers RETIRED (`git grep
+      DurationBucket -- app/` returns comments naming the retirement
+      only — see the dead-code row), `/api/today` on `rangeForCap`;
+      `todayFilters` v1 MAPS to v2; the source rename GLOBAL→LIBRARY (or
+      BUILT-IN, James picks at Gate 0), CUSTOM→MINE at six rendered sites.
+      TRIAD. Gate 0 with both sheets, both orientations, before/after in
+      BOTH directions on one pool. **M**
 - [ ] PR3 — Library SEARCH BY NAME field above FILTER ⌄ (rides the BACK
       record, cleared at the tab). James reviews; no PM gate. **S**
 - [ ] Phase close — antagonist exit pass, PM close, ONE release covering
@@ -1139,7 +1141,10 @@ at bdc098aa, tests excluded, twelve product files: `server/routes/data.ts`
 retired definitions themselves. `domain/recency.ts` names it in a comment
 only; seven test files follow their subjects. Exit criterion 8:
 `git grep DurationBucket -- app/` returns nothing (path-scoped: this row
-and the spec name the symbol forever).
+and the spec name the symbol forever). **CLOSED by PR2 (2026-09-05):**
+every consumer file migrated to `DurationRange`, `durationChips.ts` and
+`durationTokenLabel.ts` deleted; the grep now matches only two comments
+that record the retirement (`domain/duration.ts`, `domain/recency.ts`).
 
 **Constraint carried for a later phase:** the library may lazy-load one
 day (James). PR1's shuffle helpers are pure over the id arrays they are
