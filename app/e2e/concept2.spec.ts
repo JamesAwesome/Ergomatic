@@ -302,12 +302,34 @@ async function openLogDetail(page: Page, title: string): Promise<void> {
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 }
 
-/** You is rendered when its LAST child is on screen: the DIAGNOSTICS row is
- *  `You.tsx`'s own final element and its comment requires it stay there. A
- *  negative assertion about the card is worthless until this has passed. */
+/** You is rendered when its own container and a control that is ALWAYS on it
+ *  are on screen. Wave E PR A (spec 2026-09-04-concept2-walk-fixes §6.1, A3):
+ *  this used to be `.diag-row` — "You's LAST child" — and PR A put a second
+ *  `.diag-row` (the CONCEPT2 door) on You, which makes that locator a
+ *  Playwright strict-mode violation. Scoping it (`.nth(0)`, a text filter)
+ *  would fix strict mode and leave the third door to break it again, so the
+ *  sentinel moved to observables that do not depend on which feature rows
+ *  exist. A negative assertion about the Concept2 ROW is still worthless
+ *  until `fake.linkReads` has moved — the row is async and this sentinel is
+ *  not (RF21). */
 async function openYou(page: Page): Promise<void> {
   await page.goto("/you");
-  await expect(page.locator(".diag-row")).toBeVisible();
+  await expect(page.locator("main.you-screen")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+}
+
+/** The Concept2 SCREEN, entered the way a rower does — through the row on
+ *  You — so the door under test is the one the row actually opens. The row
+ *  exists only after a successful `available: true` read, so the poll on
+ *  `fake.linkReads` is a precondition, not a readiness nicety. */
+async function openConcept2Screen(page: Page, fake: C2Fake): Promise<void> {
+  await openYou(page);
+  await expect.poll(() => fake.linkReads).toBeGreaterThan(0);
+  await page.getByRole("link", { name: /CONCEPT2/ }).click();
+  await expect(page).toHaveURL(/\/you\/concept2$/);
+  await expect(
+    page.getByRole("heading", { name: "Concept2", exact: true }),
+  ).toBeVisible();
 }
 
 async function signIn(page: Page, slug: string): Promise<C2Fake> {
@@ -336,6 +358,9 @@ test.describe("Concept2 link and send, in a real browser", () => {
     await openYou(page);
     await expect.poll(() => fake.linkReads).toBeGreaterThan(0);
     await expect(page.locator(".c2-card")).toHaveCount(0);
+    // PR A: the ROW is the You surface now, and it is absent for the same
+    // reason the card was — `getByText("CONCEPT2")` covers its label too.
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toHaveCount(0);
     await expect(page.getByText("CONCEPT2")).toHaveCount(0);
 
     const readsBefore = fake.linkReads;
@@ -358,7 +383,7 @@ test.describe("Concept2 link and send, in a real browser", () => {
       body: { authorizeUrl: "/api/concept2/callback?stub=1", state: "s" },
     };
 
-    await openYou(page);
+    await openConcept2Screen(page, fake);
     const connect = page.getByRole("button", { name: "CONNECT TO CONCEPT2" });
     // LIVE ON FIRST PAINT (ruling i). Not "eventually enabled" — the card's
     // only gate on this button is `busy`, and nothing has been tapped.
@@ -396,7 +421,7 @@ test.describe("Concept2 link and send, in a real browser", () => {
   }) => {
     const fake = await signIn(page, "unlink");
     fake.linked();
-    await openYou(page);
+    await openConcept2Screen(page, fake);
 
     const email = `c2-unlink-${RUN_ID}@e2e.test`;
     await expect(page.locator(".c2-card-identity")).toHaveText(
@@ -641,8 +666,17 @@ test.describe("Concept2 link and send, in a real browser", () => {
     // Concept2, and drawing them the same way tells a rower whose server
     // does have it that it does not.
     const fake = await signIn(page, "readfail");
-    fake.link = { status: 502, body: { error: "upstream" } };
+    // PR A: a 502 on the FIRST-EVER read draws no row at all (decision-table
+    // cell 2a — the first thing a rower hears about Concept2 must not be an
+    // error), so there is no door to open. One good read mints ruling 6's
+    // `seen`; the read that fails AFTER it is cell 2b, and the row keeps its
+    // door. That is the path a real rower takes to this panel now.
+    fake.unlinked();
     await openYou(page);
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+    fake.link = { status: 502, body: { error: "upstream" } };
+    await page.reload();
+    await openConcept2Screen(page, fake);
 
     await expect(page.locator(".c2-card")).toBeVisible();
     await expect(page.locator(".c2-card-status")).toHaveText("COULDN'T READ");
@@ -673,7 +707,7 @@ test.describe("Concept2 link and send, in a real browser", () => {
     const fake = await signIn(page, "unlinkfail");
     fake.linked();
     fake.unlink = { status: 500, body: { error: "boom" } };
-    await openYou(page);
+    await openConcept2Screen(page, fake);
 
     await page.getByRole("button", { name: "Unlink Concept2" }).click();
     await page.getByRole("button", { name: "Tap again to unlink" }).click();
@@ -749,7 +783,7 @@ test.describe("coming back from Concept2", () => {
       status: 200,
       body: { authorizeUrl: "/api/concept2/callback?stub=1", state: "s" },
     };
-    await openYou(page);
+    await openConcept2Screen(page, fake);
 
     // A MARKER IN THE JS HEAP — the instrument this describe's header
     // names. A back-forward-cache RESTORE preserves this document and
@@ -789,5 +823,113 @@ test.describe("coming back from Concept2", () => {
     console.log(
       `[c2 back] document was ${restored === "alive" ? "RESTORED (bfcache — the pageshow listener is what re-read)" : "RELOADED (a fresh mount read got there first)"}`,
     );
+  });
+});
+
+// ── Wave E PR A: the CONCEPT2 row on You, and the screen behind it ─────────
+//
+// Spec 2026-09-04-concept2-walk-fixes §5.1 / §6.1. The row shows what the
+// SERVER last said (never attempt state); the screen shows the card as it was.
+// Every negative assertion about the row polls `fake.linkReads` first: the
+// row is async and You's sentinel is not (RF21).
+test.describe("Concept2 row on You (Wave E PR A)", () => {
+  test("an available, unlinked account gets a NOT LINKED row; the row opens the screen; BACK returns to You", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "row-unlinked");
+    fake.unlinked();
+    await openYou(page);
+    const row = page.getByRole("link", { name: /CONCEPT2/ });
+    await expect(row).toBeVisible();
+    await expect(row.locator(".diag-row-state")).toHaveText("NOT LINKED");
+    // No card on You any more (R10).
+    await expect(page.locator(".c2-card")).toHaveCount(0);
+
+    await row.click();
+    await expect(page).toHaveURL(/\/you\/concept2$/);
+    await expect(
+      page.getByRole("heading", { name: "Concept2", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    ).toBeEnabled();
+
+    await page.getByRole("link", { name: /BACK/ }).click();
+    await expect(page).toHaveURL(/\/you$/);
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+  });
+
+  test("a healthy link reads LINKED ✓ on the row", async ({ page }) => {
+    const fake = await signIn(page, "row-linked");
+    fake.linked();
+    await openYou(page);
+    await expect(
+      page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+    ).toHaveText("LINKED ✓");
+  });
+
+  test("needsReauth reads RECONNECT NEEDED, and a failed re-read does NOT overwrite it (ruling 5, cell 10)", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "row-reauth");
+    fake.linked({ needsReauth: true });
+    await openYou(page);
+    const state = page
+      .getByRole("link", { name: /CONCEPT2/ })
+      .locator(".diag-row-state");
+    await expect(state).toHaveText("RECONNECT NEEDED");
+
+    // The next read fails. `pageshow` is one of the two events the hook
+    // re-reads on (`useConcept2Link`), and it is the one a real return from
+    // the browser fires.
+    const readsBefore = fake.linkReads;
+    fake.link = { status: 502, body: { error: "upstream" } };
+    await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    // Still the sticky, server-set warning — not COULDN'T READ.
+    await expect(state).toHaveText("RECONNECT NEEDED");
+  });
+
+  test("a FIRST-EVER read that fails draws no row; once the account has been told, a failed read draws COULDN'T READ (R4, R11)", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "row-seen");
+    // 2a: fresh account, first read fails — nothing, and no error about a
+    // feature this account may not have.
+    fake.link = { status: 502, body: { error: "upstream" } };
+    await openYou(page);
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(0);
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toHaveCount(0);
+    await expect(page.getByText("COULDN'T READ")).toHaveCount(0);
+
+    // A successful available:true read mints `seen`.
+    fake.unlinked();
+    await page.reload();
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+
+    // 2b: the read fails on a later visit — the row keeps its door.
+    fake.link = { status: 502, body: { error: "upstream" } };
+    await page.reload();
+    const row = page.getByRole("link", { name: /CONCEPT2/ });
+    await expect(row.locator(".diag-row-state")).toHaveText("COULDN'T READ");
+    // ...and the screen behind it draws 1i's panel with its Retry (R5).
+    await row.click();
+    await expect(
+      page.getByRole("heading", { name: "Concept2", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("COULDN'T READ CONCEPT2")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  });
+
+  test("a typed /you/concept2 on an account without Concept2 lands back on You (R5)", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "row-typed");
+    fake.unavailable();
+    await page.goto("/you/concept2");
+    await expect(page).toHaveURL(/\/you$/);
+    await expect(page.locator("main.you-screen")).toBeVisible();
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(0);
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toHaveCount(0);
   });
 });
