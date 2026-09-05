@@ -100,7 +100,7 @@ code is checked against — the same numbers the app already displays.**
 
 Today the app is already internally split, and the send is the outlier:
 
-- **Display** (`src/log/LogRow.tsx` `heroDistanceMeters`/`heroTimeSeconds`, and
+- **Display** (`src/log/LogRow.tsx` `heroDistanceMeters`/`heroDistanceMeters`, and
   the `MACHINE CONFIRMED · WORK ONLY` block in `src/log/FromTheLog.tsx`) prefers
   `machineWorkMeters` and `machineWorkSeconds` when present. A rower already
   sees 5706, not 5708.
@@ -189,7 +189,7 @@ The gate PR C actually needs, and its two halves:
 ## 6 · What a rower sees (C5)
 
 **No displayed distance a rower reads moves** on a row that carries the machine
-total. The hero (`LogRow.tsx` `heroDistanceMeters`/`heroTimeSeconds`) and the
+total. The hero (`LogRow.tsx` `heroDistanceMeters`/`heroDistanceMeters`) and the
 MACHINE CONFIRMED block (`FromTheLog.tsx`) already prefer
 `machineWorkMeters`/`machineWorkSeconds` (§4), so the wire simply catches up to
 the screen. **The claim is grep-checked, not asserted:** the PR body lists every

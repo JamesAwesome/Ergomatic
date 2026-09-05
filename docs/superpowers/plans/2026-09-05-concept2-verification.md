@@ -64,7 +64,7 @@ index 344a6824..f96eb333 100644
 +    // two code-checked numeric fields (workout_type is already machine-
 +    // sourced below; date is the row's own instant). The predicate is the
 +    // hero's OWN — `!== null && > 0` (`src/log/LogRow.tsx` heroDistanceMeters
-+    // / heroTimeSeconds) — NOT `??`: a `0` machine total is a value `??`
++    //) — NOT `??`: a `0` machine total is a value `??`
 +    // would post while the hero falls back to our sum, reintroducing the
 +    // send≠display split this PR closes (lens 2). Falls back to our interval
 +    // sums for a row with no 0x0039 summary — today's behavior, which could
