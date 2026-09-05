@@ -414,7 +414,11 @@ bucket only in a comment.
 record is MAPPED, not discarded** (PM finding: fail-whole is free on a
 dated record and costs permanent memory on an undated one): a bucket IS a
 range, so the union of stored buckets becomes `[lowest lower bound, highest
-upper bound]` with `60+` → 120 and an empty union → the key's default.
+upper bound]` with `60+` → 120, and an empty union — v1's "TIME off" — maps
+to the unbounded range (PR2 implementation: the parser cannot know a key's
+per-account default, and "off" IS unbounded; a garbage v1 union with no
+recognisable bucket maps the same way). A v1 set whose `durations` is not
+an array is dropped, that key alone.
 Library's sessionStorage record (`libraryFilters.ts`) makes `durationRange`
 REQUIRED in its parser (never lenient like `lastDone`); it lives one BACK
 round trip, so a rejected record costs nothing. `hasActiveFilters` and
@@ -428,15 +432,28 @@ house mono numerals (`25′` … `35′`; `120′+` at the top; `0′` at the
 bottom reads `ANY`). 44 px thumbs (WCAG 2.5.5 target size, the repo's hard
 requirement), rail height 4 px, thumb colour `--ink`, rail `--rule-3`,
 selected span `--accent`. Per §1.3 the control is CUSTOM: each thumb is a
-`<button role="slider">` carrying `aria-valuemin=0`, `aria-valuemax=120`,
-`aria-valuenow`, `aria-valuetext` ("25 minutes" / "no limit" / "any"),
-`aria-label="Shortest"` / `"Longest"`, and `tabIndex=0`. Keyboard per the
-APG list: arrows step 5, Home/End to the bounds, Page Up/Down step 15.
-Pointer: `pointerdown` on a thumb captures the pointer, `pointermove` maps
-x to the nearest step, the no-cross clamp stops the moving thumb at the
-other's value; a tap on the rail moves the NEARER thumb. Both sheets render
+`<button role="slider">` carrying `aria-valuenow`, `aria-valuetext` ("25
+minutes" / "no limit" / "any"), and DEPENDENT bounds (delta pass F2, per
+the APG multi-thumb pattern: "When the range … of another slider is
+dependent on the current value of a slider, the values of aria-valuemin or
+aria-valuemax of the dependent sliders are updated when the value
+changes") — the lower thumb's `aria-valuemax` is the upper thumb's value,
+the upper thumb's `aria-valuemin` is the lower's, 0 and 120 otherwise —
+`aria-label="Shortest"` / `"Longest"`, in the tab order. Keyboard per the
+APG list: arrows step 5, Home/End to the bounds (the lower thumb's End is
+the upper thumb; the upper thumb's Home is the lower), Page Up/Down step
+15. Pointer: `pointerdown` on a thumb captures the pointer, `pointermove`
+maps x to the nearest step, the no-cross clamp stops the moving thumb at
+the other's value; a tap on the rail moves the NEARER thumb. As built
+(PR2): the thumb's 44 px hit box is the whole button and the 24 px knob is
+drawn on its `::after`, so the rail reads as a rail; the two figures print
+above the rail ends (`ANY` at 0, `120′+` at the top). Both sheets render
 the identical component (`components/DurationRange.tsx`). Contrast and hit
-boxes are gated in §3.5/§3.6.
+boxes are gated in §3.5/§3.6; the rail line itself (`--rule-3` on
+`--page`, 1.56:1) is decorative — the state is carried by the accent span
+(3.43:1 against the rail, 5.35:1 against the page) and the ink knob
+(15.41:1), the same allowance the sheet's `--rule-3` cell borders already
+take.
 
 ### 3.5 Gate 0
 
@@ -448,10 +465,15 @@ on `--page`). A number changes here — the sheet's live "N options" count —
 so the gate shows the count before and after for one identical pool —
 **in both directions**, because the change is not uniformly looser or
 stricter: `bucketsForCap(90)` admitted every bucket while `[0,90]` excludes a
-95-minute workout (stricter for caps 61–119), and at the boundary
-`bucketFor(60)` = `60+` was EXCLUDED by `bucketsForCap(60)` while
-`inRange(60, [0,60])` admits it (looser at the exact cap). The capture names
-one workout that flips each way.
+95-minute workout (stricter for caps 61–119, and — measured by the delta
+pass over the whole validated 10..300 range — much stricter for caps
+10–29, where the old `<30` bucket admitted everything under 30 and the
+range admits only up to the cap), and at the boundary `bucketFor(60)` =
+`60+` was EXCLUDED by `bucketsForCap(60)` while `inRange(60, [0,60])` admits
+it (looser at the exact cap: on the seed, ten 60-minute workouts flip in,
+none out). No client path writes `timeCapMinutes`, so every real account
+sits at 60, where only the exactly-at-cap direction is reachable — the
+sweep is recorded for accuracy, not promoted.
 
 ### 3.6 Oracles
 
@@ -483,15 +505,22 @@ design sweep: both thumbs ≥ 44 px hit boxes in portrait and landscape.
   `autocapitalize="none"`, `enterkeyhint="search"`, no autofocus (the list
   is the point of the screen, not the field).
 - **I-17 Rename (ships in PR2, same two sheets, same Gate 0 captures — PM
-  finding).** `GLOBAL` → `LIBRARY`, `CUSTOM` → `MINE` at every RENDERED
-  site, six not four (PM count): `library/FilterSheet.tsx`,
-  `library/filterTokens.ts`, `today/TodayFilterSheet.tsx`,
-  `today/todayFilterTokens.ts`, the row badge in `library/WorkoutRow.tsx`
-  (`workout-row-custom`), and the Library empty state ("No custom workouts
-  yet"), plus the e2e selectors that read `name: "CUSTOM"`. Stored values
-  stay `"global"` / `"custom"`; no shape changes. **PR2's Gate 0 shows
-  LIBRARY / MINE beside BUILT-IN / MINE**: the PM notes a chip reading
-  LIBRARY inside the Library tab can read as "not yours", and James picks.
+  finding).** `GLOBAL` → `ERGOMATIC LIBRARY`, `CUSTOM` → `MY WORKOUTS` at
+  every RENDERED site — seven plus the accessible-name suffix (the delta
+  pass count): `library/FilterSheet.tsx`, `library/filterTokens.ts`,
+  `today/TodayFilterSheet.tsx`, `today/todayFilterTokens.ts`, the row badge
+  in `library/WorkoutRow.tsx` (`workout-row-custom`) and its visually
+  hidden suffix (", one of my workouts"), the workout DETAIL badge
+  (`workout/WorkoutDetail.tsx`, same class), and the Library empty state
+  ("None of my workouts yet"), plus the e2e selectors that read the old
+  words. Stored values stay `"global"` / `"custom"`; no shape changes.
+  **Gate 0 ruling (James, 2026-09-05): "Try 'ergomatic library' 'my
+  workouts'" → rendered in the half-width cells (wraps) and with SOURCE on
+  its own full-width row → "B. Make sure to match the filter tag" —
+  "Match".** So SOURCE leaves the shared LAST DONE row on both sheets and
+  takes a full row (LAST DONE takes one too), and the badge reads the same
+  words as the filter cell and token. Revision 1's LIBRARY / MINE and the
+  PM's BUILT-IN are superseded.
 
 ### 4.2 Gate 0
 
@@ -517,13 +546,11 @@ clean.
 ## 5. The rename, and why MINE
 
 James asked for LIBRARY in place of GLOBAL and a recommendation for CUSTOM.
-The pair has to read as two sources of one list: where a workout CAME FROM.
-`LIBRARY` / `MINE` does that in one word each and in the mono caps the
-tokens use; `YOURS` addresses the rower in the second person, which no other
-token does; `BUILT-IN` is two words and a hyphen at chip width. James is
-free to keep CUSTOM ("i'm okay keeping it too"); the spec ships MINE unless
-he says otherwise at PR2's Gate 0, where LIBRARY and BUILT-IN are both
-rendered for the first half.
+Revision 1 proposed `LIBRARY` / `MINE`; the PM gate flagged that LIBRARY
+inside the Library tab can read as "not yours" and offered `BUILT-IN`; at
+Gate 0 James chose **`ERGOMATIC LIBRARY` / `MY WORKOUTS`** (2026-09-05),
+which names the source in full and does not collide with the tab. Both are
+too long for the half-width SOURCE cells, so SOURCE takes its own row.
 
 ## 6. Decomposition and order
 
@@ -581,8 +608,12 @@ it is named, so none is green on main.
    own fetches (PR1). Revision 0 counted requests and read zero — but zero
    is already main's value (anchor finding, RF21). The list form catches an
    added remount or refetch; the PR proves it red by adding one fetch.
-8. `git grep DurationBucket -- app/` returns nothing after PR2 (path-scoped:
-   the unscoped grep matches this spec and the ROADMAP row forever).
+8. `git grep -E 'DurationBucket|bucketFor|bucketsForCap|DURATION_BUCKETS|DURATION_LOWER_BOUND' -- app/`
+   returns only comments recording the retirement, and no comment
+   describes a control that no longer exists (PM final gate, PR2:
+   path-scoped because this spec and the ROADMAP row name the symbol
+   forever; "comments recording the retirement" because a grep on the
+   symbol cannot find prose about the thing).
 9. Every rendered SOURCE label reads the chosen pair, including the row
    badge and the empty state (e2e, PR2). Fails on main: CUSTOM / GLOBAL.
 

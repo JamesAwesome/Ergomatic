@@ -1,8 +1,8 @@
 import type { Difficulty } from "../../domain/types.js";
-import type { DurationBucket } from "../../domain/duration.js";
+import type { DurationRange } from "../../domain/duration.js";
 import { RECENCY_BOUNDARY_DAYS } from "../../domain/recency.js";
 import { collapseDifficulties } from "../components/difficultyTokenLabel";
-import { collapseDurations } from "../components/durationTokenLabel";
+import { formatRangeLabel } from "../components/durationRangeLabel";
 import type { Token } from "../components/TokenRow";
 import type { FilterSet } from "./todayFilters";
 
@@ -15,35 +15,19 @@ import type { FilterSet } from "./todayFilters";
  * subset — Today.tsx's INITIAL overrides record seeds from
  * `preferences.difficulties` for that separate concern: what a fresh
  * day's record starts as, not what counts as "unfiltered" here).
- * `durations` is the account's cap preference expanded to the buckets it
- * implies (`bucketsForCap`, todayOverrides.ts) — Amendment (2026-08-04
- * PR #50 round) replaces the old single-cap `capMinutes` default with this
- * bucket SET.
+ * `durationRange` is the account's cap preference as a range
+ * (`rangeForCap`, domain/duration.ts: `[0, cap]`, cap rounded down to the
+ * step) — Phase SF PR2 replaces the 2026-08-04 Amendment's bucket SET.
  */
 export interface TodayFilterDefaults {
   difficulties: Difficulty[];
-  durations: DurationBucket[];
+  // Phase SF PR2: `rangeForCap(timeCapMinutes)`, the key's TIME default.
+  durationRange: DurationRange;
 }
 
-// Empty durations is reachable two ways that must render two DIFFERENT
-// token labels despite behaving identically in suggest() (both = no
-// filtering, domain/suggest.ts's own predicate): explicitly selecting every
-// bucket reads as its own contiguous-range label
-// (`collapseDurations` below, e.g. "<30′–60′+"), but a genuinely EMPTY
-// selection has no bucket to name at all — this is that label. Only
-// rendered when empty deviates from a non-empty default (a narrower-than-
-// all-four default, e.g. a 60-min account preference), since an all-four
-// default matching an all-four override is no deviation and renders no
-// token either way.
-const NO_TIME_FILTER_LABEL = "ANY TIME";
-
-/** Set equality, order-independent — todayOverrides.ts's own parser
- *  de-dupes/canonically-orders `durations` on load and the sheet's own
- *  toggle logic never introduces a duplicate, so a plain length +
- *  membership check is enough (no defensive de-dupe needed here). */
-function sameDurationSet(a: DurationBucket[], b: DurationBucket[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((v) => b.includes(v));
+/** Range equality — both ends, nothing else to compare. */
+function sameRange(a: DurationRange, b: DurationRange): boolean {
+  return a.min === b.min && a.max === b.max;
 }
 
 /** Set equality, order-independent — todayOverrides.ts's own parser
@@ -103,13 +87,14 @@ export function todayFilterTokens(
     });
   }
 
-  if (!sameDurationSet(overrides.durations, defaults.durations)) {
+  // Spec I-13, stated per cell: a token whenever the range differs from
+  // the KEY'S DEFAULT and never otherwise — at default no token; the
+  // unbounded `[0, 120]` when the default is narrower reads ANY LENGTH (a
+  // real deviation with its own ✕, which restores the default).
+  if (!sameRange(overrides.durationRange, defaults.durationRange)) {
     tokens.push({
       key: "durations",
-      label:
-        overrides.durations.length === 0
-          ? NO_TIME_FILTER_LABEL
-          : collapseDurations(overrides.durations),
+      label: formatRangeLabel(overrides.durationRange),
       onClear: () => onReset("durations"),
     });
   }
@@ -136,7 +121,8 @@ export function todayFilterTokens(
   if (overrides.source !== null) {
     tokens.push({
       key: "source",
-      label: overrides.source === "custom" ? "CUSTOM" : "GLOBAL",
+      label:
+        overrides.source === "custom" ? "MY WORKOUTS" : "ERGOMATIC LIBRARY",
       onClear: () => onReset("source"),
     });
   }

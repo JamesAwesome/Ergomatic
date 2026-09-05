@@ -1,5 +1,10 @@
 import { estimateMinutes } from "../../domain/expand.js";
-import { bucketFor, type DurationBucket } from "../../domain/duration.js";
+import {
+  UNBOUNDED_RANGE,
+  inRange,
+  isUnbounded,
+  type DurationRange,
+} from "../../domain/duration.js";
 import { RECENCY_BOUNDARY_DAYS, isRecent } from "../../domain/recency.js";
 import type { Baselines } from "../../domain/types.js";
 import type { LibraryWorkout } from "../api/useWorkouts";
@@ -10,8 +15,7 @@ import type { Difficulty, WorkoutType } from "../../domain/types.js";
 // (Amendment, 2026-08-04 PR #50 round) so domain/suggest.ts's own duration
 // predicate can share the identical bucket definition, but nothing here
 // needs to change its own import path.
-export type { DurationBucket };
-export { bucketFor };
+export type { DurationRange };
 
 // Re-exported for every pre-existing importer (filterTokens.ts, FilterSheet.tsx,
 // filters.test.ts) — moved into domain/recency.ts (Round 2, 2026-08-04) so
@@ -43,7 +47,9 @@ export { RECENCY_BOUNDARY_DAYS, isRecent };
 export interface Filters {
   types: WorkoutType[];
   difficulties: Difficulty[];
-  durations: DurationBucket[];
+  // Phase SF PR2 (spec §3): a minutes range, `[0, 120]` meaning no filter
+  // (`isUnbounded`), replacing the four-bucket union.
+  durationRange: DurationRange;
   painLevels: number[];
   lastDone: "under21" | "over21" | null;
   source: "global" | "custom" | null;
@@ -52,7 +58,7 @@ export interface Filters {
 export const EMPTY_FILTERS: Filters = {
   types: [],
   difficulties: [],
-  durations: [],
+  durationRange: UNBOUNDED_RANGE,
   painLevels: [],
   lastDone: null,
   source: null,
@@ -104,11 +110,8 @@ export function toggleDifficulty(f: Filters, d: Difficulty): Filters {
   return { ...f, difficulties };
 }
 
-export function toggleDuration(f: Filters, d: DurationBucket): Filters {
-  const durations = f.durations.includes(d)
-    ? f.durations.filter((existing) => existing !== d)
-    : [...f.durations, d];
-  return { ...f, durations };
+export function setDurationRange(f: Filters, range: DurationRange): Filters {
+  return { ...f, durationRange: range };
 }
 
 export function togglePainLevel(f: Filters, level: number): Filters {
@@ -141,7 +144,7 @@ export function hasActiveFilters(f: Filters): boolean {
   return (
     f.types.length > 0 ||
     f.difficulties.length > 0 ||
-    f.durations.length > 0 ||
+    !isUnbounded(f.durationRange) ||
     f.painLevels.length > 0 ||
     f.lastDone !== null ||
     f.source !== null
@@ -185,9 +188,11 @@ export function applyFilters(
     if (f.lastDone === "over21" && isRecent(w.lastDoneDaysAgo)) return false;
     // Baselines are required to estimate duration; when unknown, the
     // duration chips are skipped rather than hiding every workout.
-    if (f.durations.length > 0 && baselines !== null) {
+    if (!isUnbounded(f.durationRange) && baselines !== null) {
+      // The SAME integer the row prints — never a float — so a card and
+      // the filter can never disagree by rounding (spec §3.6).
       const { minutes } = estimateMinutes(w.steps, baselines);
-      if (!f.durations.includes(bucketFor(minutes))) return false;
+      if (!inRange(minutes, f.durationRange)) return false;
     }
     return true;
   });

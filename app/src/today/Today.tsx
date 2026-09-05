@@ -19,7 +19,7 @@ import {
   suggest,
   suggestFreestyle,
 } from "../../domain/suggest.js";
-import { bucketsForCap } from "../../domain/duration.js";
+import { rangeForCap } from "../../domain/duration.js";
 import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
 import {
   planPrescription,
@@ -234,9 +234,9 @@ export function elapsedSinceStart(run: SessionRun, now: Date): number {
 // bucket filter needs *some* estMinutes number per entry. Building
 // estMinutes as 0 here does NOT by itself make the filter harmless the way
 // it did under the old single-value cap (0 <= any positive cap,
-// unconditionally): `bucketFor(0)` is `"<30"`, a real bucket a narrower
-// `durations` selection (e.g. `["45-60"]`) would legitimately exclude,
-// wrongly treating an UNKNOWABLE duration as a known short one. What
+// unconditionally): 0 is inside any range whose `min` is 0, and a range
+// with `min > 0` (e.g. `[45, 60]`) would legitimately exclude it, wrongly
+// treating an UNKNOWABLE duration as a known short one. What
 // actually keeps the filter harmless is passing `durationsUnknown: true`
 // in prefs below — domain/suggest.ts's own `passesDurationFilter` skips
 // the bucket check ENTIRELY when that flag is set, regardless of which
@@ -289,7 +289,7 @@ function computeSuggestion(
 ) {
   const prefs: SuggestPrefs = {
     difficulties: filters.difficulties,
-    durations: filters.durations,
+    durationRange: filters.durationRange,
     painLevels: filters.painLevels,
     // Round 2 (2026-08-04): the two new dims — see domain/suggest.ts's own
     // SuggestPrefs doc comment for why they're optional there (the server's
@@ -299,10 +299,9 @@ function computeSuggestion(
     source: filters.source,
     // See toLibraryEntry's comment: with no baselines, every entry's
     // estMinutes is a 0 placeholder. This flag does double duty in
-    // domain/suggest.ts — it skips the duration-bucket FILTER entirely
-    // (not just the reason text) so the placeholder's own bucket
-    // (`bucketFor(0)` is `"<30"`) never wrongly includes or excludes an
-    // unknown-duration entry, and it keeps the reason text from claiming a
+    // domain/suggest.ts — it skips the TIME FILTER entirely (not just the
+    // reason text) so the 0 placeholder never wrongly includes or
+    // excludes an unknown-duration entry, and it keeps the reason text from claiming a
     // duration was actually checked against a real number.
     durationsUnknown: baselines === null,
   };
@@ -621,7 +620,7 @@ function TodayContent({
   // below (Task 2, 2026-08-04 round: FILTER ⌄ + TodayFilterSheet, replacing
   // the old inline chips); it still needs the raw server preferences to
   // seed those overrides' defaults on first mount
-  // (bucketsForCap(preferences.timeCapMinutes), preferences.difficulties) and
+  // (rangeForCap(preferences.timeCapMinutes), preferences.difficulties) and
   // `baselines` to compute durationsUnknown itself, so both are passed
   // through rather than a pre-built SuggestPrefs.
   const session = sessionsLoggedToday(
@@ -899,10 +898,8 @@ function TodayView({
   // own difficulties, the cap's buckets, pain/recency/source off).
   const seedSet: FilterSet = {
     difficulties: preferences.difficulties,
-    // Approximates the rower's real preference to the buckets it implies
-    // — see bucketsForCap's own doc comment for why this is a deliberate
-    // approximation, not an exact re-derivation.
-    durations: bucketsForCap(preferences.timeCapMinutes),
+    // `[0, cap]` with the cap rounded down to the step (spec I-12).
+    durationRange: rangeForCap(preferences.timeCapMinutes),
     painLevels: [],
     lastDone: null,
     source: null,
@@ -1066,7 +1063,7 @@ function TodayView({
   // TodayFilterDefaults' own doc comment.
   const filterDefaults: TodayFilterDefaults = {
     difficulties: ALL_DIFFICULTIES,
-    durations: bucketsForCap(preferences.timeCapMinutes),
+    durationRange: rangeForCap(preferences.timeCapMinutes),
   };
 
   // The FILTER ⌄ sheet's own state: whether it's open, its in-progress
@@ -1106,7 +1103,10 @@ function TodayView({
     if (group === "difficulties") {
       updateFilters({ ...filters, difficulties: filterDefaults.difficulties });
     } else if (group === "durations") {
-      updateFilters({ ...filters, durations: filterDefaults.durations });
+      updateFilters({
+        ...filters,
+        durationRange: filterDefaults.durationRange,
+      });
     } else if (group === "pain") {
       updateFilters({ ...filters, painLevels: [] });
     } else if (group === "lastDone") {
@@ -1125,7 +1125,7 @@ function TodayView({
   function clearAllFilters() {
     updateFilters({
       difficulties: filterDefaults.difficulties,
-      durations: filterDefaults.durations,
+      durationRange: filterDefaults.durationRange,
       painLevels: [],
       lastDone: null,
       source: null,

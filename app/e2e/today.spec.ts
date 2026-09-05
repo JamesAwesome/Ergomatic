@@ -570,7 +570,7 @@ test.describe("Today enhancements: SOURCE=CUSTOM and the keep-or-move guarantee"
     const dialog = page.getByRole("dialog");
     const sourceGroup = dialog.getByRole("group", { name: "SOURCE" });
     const customCell = sourceGroup.getByRole("button", {
-      name: "CUSTOM",
+      name: "MY WORKOUTS",
       exact: true,
     });
     await expect(customCell).toHaveAttribute("aria-pressed", "false");
@@ -1422,7 +1422,7 @@ test.describe("Today enhancements: the piece region", () => {
     const dialog = page.getByRole("dialog");
     await dialog
       .getByRole("group", { name: "SOURCE" })
-      .getByRole("button", { name: "CUSTOM", exact: true })
+      .getByRole("button", { name: "MY WORKOUTS", exact: true })
       .click();
     await expect(filterSheetCount(page)).toHaveText("1 OPTION");
     await applyFilterSheet(page);

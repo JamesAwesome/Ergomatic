@@ -1333,12 +1333,12 @@ describe("custom badge on the detail screen", () => {
   // list, so an opened custom workout showed nothing marking it yours.
   it("shows CUSTOM beside the type badge for a personal workout", async () => {
     await renderDetail("/library/w3"); // PERSONAL_WORKOUT, isGlobal: false
-    expect(screen.getByText("CUSTOM")).toBeInTheDocument();
+    expect(screen.getByText("MY WORKOUTS")).toBeInTheDocument();
   });
 
   it("shows no CUSTOM tag for a seeded global workout", async () => {
     await renderDetail("/library/w1"); // WORKOUT, isGlobal: true
-    expect(screen.queryByText("CUSTOM")).not.toBeInTheDocument();
+    expect(screen.queryByText("MY WORKOUTS")).not.toBeInTheDocument();
   });
 });
 

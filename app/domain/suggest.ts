@@ -1,5 +1,5 @@
 import type { Difficulty, WorkoutType } from "./types.js";
-import { bucketFor, type DurationBucket } from "./duration.js";
+import { inRange, isUnbounded, type DurationRange } from "./duration.js";
 import { isRecent } from "./recency.js";
 
 export interface LibraryEntry {
@@ -19,27 +19,23 @@ export interface LibraryEntry {
 
 export interface SuggestPrefs {
   difficulties: Difficulty[];
-  // A union, not a threshold — mirrors the Library's own duration-bucket
-  // filter (`src/library/filters.ts`'s `Filters.durations`, same
-  // `DurationBucket`/`bucketFor` from `domain/duration.ts`): when non-empty
-  // (and known — see `durationsUnknown` below), only entries whose
-  // `estMinutes` bucket is IN this set survive. Empty/undefined means
-  // "off" — every duration passes, identical to Library's own semantics.
-  // Amendment (2026-08-04 PR #50 round): replaces the old
-  // `timeCapMinutes: number | null` single-value cap — Today's TIME group
-  // is now the Library's own four buckets, multi-select, not a cap.
-  durations?: DurationBucket[];
+  // Phase SF PR2 (spec §3): a minutes RANGE — mirrors the Library's own
+  // `Filters.durationRange` (`domain/duration.ts`'s `DurationRange`,
+  // `inRange`). When set, bounded (not `[0, 120]`) and known (see
+  // `durationsUnknown` below), only entries whose `estMinutes` is inside
+  // survive. Unset or unbounded means "off" — every duration passes.
+  durationRange?: DurationRange;
   // Set when the caller could not compute a real `estMinutes` for any
   // library entry (no baselines yet — the standing convention is every
   // entry gets `estMinutes: 0` in that case). This flag GATES THE FILTER
   // ITSELF, not merely the reason text: `passesDurationFilter` (below)
   // skips the bucket-membership check entirely whenever this is true,
   // regardless of which bucket the 0 placeholder would resolve to.
-  // `bucketFor(0)` is always `"<30"` — without this flag, a `durations`
-  // union that happens to include `"<30"` would wrongly let every
-  // unknown-duration entry through (a coincidence, not a real match), and
-  // a union that EXCLUDES `"<30"` (e.g. `["45-60"]`) would wrongly reject
-  // every one of them (treating "unknowable" as "known short"). Under the
+  // A 0 placeholder is inside any range whose `min` is 0 — without this
+  // flag such a range would wrongly let every unknown-duration entry
+  // through (a coincidence, not a real match), and a range with `min > 0`
+  // (e.g. `[45, 60]`) would wrongly reject every one of them (treating
+  // "unknowable" as "known short"). Under the
   // old single-value cap this replaced, the 0 placeholder alone was
   // sufficient to keep the filter harmless (`0 <= any positive cap`
   // unconditionally); a bucket UNION has no such universal member, so this
@@ -231,7 +227,10 @@ function buildReason(
   fellBack: boolean,
   prefs: SuggestPrefs,
 ): string {
-  const timeChecked = !!prefs.durations?.length && !prefs.durationsUnknown;
+  const timeChecked =
+    !!prefs.durationRange &&
+    !isUnbounded(prefs.durationRange) &&
+    !prefs.durationsUnknown;
   if (pickOverride) {
     return `YOUR PICK: last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
@@ -250,14 +249,20 @@ function buildReason(
   return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}).`;
 }
 
-/** The duration-union clause shared by `suggest`/`suggestFreestyle`'s own
- *  filter predicates: skipped (never excludes) whenever `durations` is
- *  empty/unset or `durationsUnknown` is set, otherwise an entry survives
- *  only when its own `bucketFor(estMinutes)` is IN the union — mirrors the
- *  Library's own `applyFilters` (`src/library/filters.ts`) exactly. */
+/** The TIME clause shared by `suggest`/`suggestFreestyle`'s own filter
+ *  predicates: skipped (never excludes) whenever `durationRange` is unset,
+ *  unbounded, or `durationsUnknown` is set, otherwise an entry survives
+ *  only when its own `estMinutes` is `inRange` — mirrors the Library's own
+ *  `applyFilters` (`src/library/filters.ts`) exactly. */
 function passesDurationFilter(e: LibraryEntry, prefs: SuggestPrefs): boolean {
-  if (!prefs.durations?.length || prefs.durationsUnknown) return true;
-  return prefs.durations.includes(bucketFor(e.estMinutes));
+  if (
+    !prefs.durationRange ||
+    isUnbounded(prefs.durationRange) ||
+    prefs.durationsUnknown
+  ) {
+    return true;
+  }
+  return inRange(e.estMinutes, prefs.durationRange);
 }
 
 /** The LAST DONE clause shared by `suggest`/`suggestFreestyle`'s own filter

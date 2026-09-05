@@ -14,7 +14,7 @@ import {
 
 const AT_SET: FilterSet = {
   difficulties: ["easy", "hard"],
-  durations: ["<30", "45-60"],
+  durationRange: { min: 25, max: 60 },
   painLevels: [1, 3, 5],
   lastDone: "under21",
   source: "custom",
@@ -22,7 +22,7 @@ const AT_SET: FilterSet = {
 
 const DEFAULTS: FilterSet = {
   difficulties: ["easy", "medium", "hard"],
-  durations: ["<30", "30-45", "45-60"],
+  durationRange: { min: 0, max: 60 },
   painLevels: [],
   lastDone: null,
   source: null,
@@ -48,7 +48,7 @@ describe("saveTodayFilters / loadTodayFilters", () => {
 
   it("round-trips a store with two keys written, UNDATED (no date, plan or doneN to match)", () => {
     const store: TodayFilters = {
-      v: 1,
+      v: 2,
       byKey: { AT: AT_SET, ANY: DEFAULTS },
     };
     expect(saveTodayFilters(store)).toBe(true);
@@ -74,10 +74,10 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     localStorage.setItem(
       TODAY_FILTERS_KEY,
       JSON.stringify({
-        v: 1,
+        v: 2,
         byKey: {
           AT: AT_SET,
-          TR: { ...AT_SET, durations: ["90+"] },
+          TR: { ...AT_SET, durationRange: "60+" },
           XX: AT_SET,
         },
       }),
@@ -85,15 +85,15 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     expect(loadTodayFilters().byKey).toStrictEqual({ AT: AT_SET });
   });
 
-  it("de-dupes and canonically orders durations and pain levels inside a set", () => {
+  it("clamps a tampered durationRange and de-dupes/sorts pain levels inside a set", () => {
     localStorage.setItem(
       TODAY_FILTERS_KEY,
       JSON.stringify({
-        v: 1,
+        v: 2,
         byKey: {
           O2: {
             ...AT_SET,
-            durations: ["60+", "<30", "<30"],
+            durationRange: { min: 24.6, max: 500 },
             painLevels: [5, 1, 5],
           },
         },
@@ -101,17 +101,50 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     );
     expect(loadTodayFilters().byKey.O2).toStrictEqual({
       ...AT_SET,
-      durations: ["<30", "60+"],
+      durationRange: { min: 25, max: 120 },
       painLevels: [1, 5],
     });
+  });
+
+  // Phase SF PR2 (spec §3.3, the PM's finding): a v1 store is permanent
+  // memory and is MAPPED, never discarded — each bucket union becomes the
+  // range it spans; an empty union (v1's "TIME off") becomes unbounded.
+  it("maps a v1 store's bucket unions to ranges, key by key, and reads back as v2", () => {
+    localStorage.setItem(
+      TODAY_FILTERS_KEY,
+      JSON.stringify({
+        v: 1,
+        byKey: {
+          AT: {
+            ...AT_SET,
+            durationRange: undefined,
+            durations: ["<30", "45-60"],
+          },
+          O2: { ...AT_SET, durationRange: undefined, durations: [] },
+          TR: {
+            ...AT_SET,
+            durationRange: undefined,
+            durations: ["45-60", "60+"],
+          },
+          AN: { ...AT_SET, durationRange: undefined, durations: "<30" },
+        },
+      }),
+    );
+    const store = loadTodayFilters();
+    expect(store.v).toBe(2);
+    expect(store.byKey.AT?.durationRange).toStrictEqual({ min: 0, max: 60 });
+    expect(store.byKey.O2?.durationRange).toStrictEqual({ min: 0, max: 120 });
+    expect(store.byKey.TR?.durationRange).toStrictEqual({ min: 45, max: 120 });
+    expect(store.byKey.AN).toBeUndefined();
+    expect(store.byKey.AT?.difficulties).toStrictEqual(["easy", "hard"]);
   });
 
   it("ignores unknown top-level fields (the revision-1 rollSuppressed flag James struck reads as nothing)", () => {
     localStorage.setItem(
       TODAY_FILTERS_KEY,
-      JSON.stringify({ v: 1, rollSuppressed: true, byKey: { AT: AT_SET } }),
+      JSON.stringify({ v: 2, rollSuppressed: true, byKey: { AT: AT_SET } }),
     );
-    expect(loadTodayFilters()).toStrictEqual({ v: 1, byKey: { AT: AT_SET } });
+    expect(loadTodayFilters()).toStrictEqual({ v: 2, byKey: { AT: AT_SET } });
   });
 
   describe("reads the EMPTY store for a store-level problem", () => {
@@ -132,9 +165,16 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     it.each([
       ["difficulties not an array", { ...AT_SET, difficulties: "easy" }],
       ["unknown difficulty", { ...AT_SET, difficulties: ["extreme"] }],
-      ["durations not an array", { ...AT_SET, durations: "<30" }],
-      ["unknown bucket", { ...AT_SET, durations: ["90+"] }],
-      ["a number where a bucket goes", { ...AT_SET, durations: [45] }],
+      ["durationRange not an object", { ...AT_SET, durationRange: "<30" }],
+      [
+        "durationRange with a non-number member",
+        { ...AT_SET, durationRange: { min: "0", max: 60 } },
+      ],
+      ["durationRange missing max", { ...AT_SET, durationRange: { min: 0 } }],
+      [
+        "a v1 field on a v2 record (durations, no durationRange)",
+        { ...AT_SET, durationRange: undefined, durations: ["<30"] },
+      ],
       ["painLevels not an array", { ...AT_SET, painLevels: 3 }],
       ["out-of-range pain level", { ...AT_SET, painLevels: [0] }],
       ["non-integer pain level", { ...AT_SET, painLevels: [4.5] }],
@@ -151,7 +191,7 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     ])("%s", (_name, set) => {
       localStorage.setItem(
         TODAY_FILTERS_KEY,
-        JSON.stringify({ v: 1, byKey: { AT: set } }),
+        JSON.stringify({ v: 2, byKey: { AT: set } }),
       );
       expect(loadTodayFilters().byKey.AT).toBeUndefined();
     });
