@@ -16,17 +16,20 @@
 
 ## Global Constraints
 
-- **Migration 0024 is hand-written** (SQL, `meta/0024_snapshot.json`, `meta/_journal.json`). Measured 2026-09-05: `pnpm db:generate` on the renamed schema errors non-interactively (`Interactive prompts require a TTY terminal`) — it does not emit DROP+ADD. The gate is `pnpm db:generate < /dev/null` printing `No schema changes, nothing to migrate` after the hand edit; already measured green in this worktree. **Not rollback-safe** — the RELEASING.md floor row lands in this PR (Task 7).
-- **API dual-field (spec §4.3):** every response that carried `pain` carries `pain` AND `effort` with one value; every write accepts either; both present and non-null and unequal → 400 `field: "effort"`; `effort: null` beside `pain: 3` is NOT a disagreement (null is "no answer"). The inbound adapter preserves KEY PRESENCE (`PATCH /api/logs/:id` branches on `"pain" in body`).
-- **`compat.pain_write`:** one `console.info` structured line per `pain`-keyed write (workout or log). PR 3's trigger; PR 3 deletes it.
-- **Identifiers that do NOT move** (stored or committed data): step JSON key `ref.effort`; builder-draft row field `refEffort` (fingerprinted, persisted); `patterns.json` key `effortShare`; `EnginePhase.targetKind: "effort"` literal. Each gets a one-line comment saying so.
+- **Migration 0024 is hand-written** (SQL, `meta/0024_snapshot.json`, `meta/_journal.json` — committed at `d0053846`; `schema.ts` is NOT yet renamed on this branch, Task 1 does that). Measured 2026-09-05: `pnpm db:generate` on a renamed `schema.ts` errors non-interactively (`Interactive prompts require a TTY terminal`) — it does not emit DROP+ADD. The gate is `pnpm db:generate < /dev/null` printing `No schema changes, nothing to migrate` with `schema.ts` renamed AND the 0024 snapshot present; measured green once on a scratch tree with both, and Task 1 re-runs it on the committed tree. The migration's `UPDATE article_reads` carries `AND NOT EXISTS (… slug = 'effort-scale')` so a pre-existing new-slug row (no supported producer today) cannot violate the `(user_id, slug)` PK. **Not rollback-safe** — the RELEASING.md floor row lands in this PR (Task 7).
+- **API dual-field (spec §4.3):** every response that carried `pain` carries `pain` AND `effort` with one value; every write accepts either; both present and non-null and unequal → 400 `field: "effort"`; `effort: null` beside `pain: 3` is NOT a disagreement (null is "no answer"). The inbound adapter preserves KEY PRESENCE (`PATCH /api/logs/:id` branches on `"pain" in body`), treats a `pain` key valued `undefined` as absent, and passes a NON-RECORD body through untouched (Express 5 leaves `req.body` undefined for a bodiless or non-JSON request; the two workouts routes hand `req.body` straight to `validateWorkoutInput`, which already answers non-records with 400 — the adapter must not turn that into a 500).
+- **The response-site census is a COMMAND, not a count:** `grep -nE 'res\.(status\([0-9]+\)\.)?json\(' server/routes/data.ts` filtered to workout/log rows. At the plan's base that is: workouts list (row map), create (201), get, PUT, bulk `created` array; logs list, log get, PATCH no-op read (the empty-patch early return) AND PATCH update — TEN sites, two of them on the PATCH route. The dual-field test drives every one.
+- **`compat.pain_write`:** one `console.info` structured line per request whose body CARRIED a `pain` key (`sawPainKey`), whether or not that key's value won. PR 3's trigger; PR 3 deletes it.
+- **Old-client error wording:** log routes keep `pain must be an integer 1..5 or null` under `field: "pain"` when the pain key won (`usedPainKey`); the workouts routes cannot — `validateWorkoutInput` returns joined messages with no field — so an old client sending a bad `pain` on a workout save reads "effort must be 1..5". Accepted and named here; a cosmetic wording change on a stale build's error toast.
+- **Article-read compat is TWO-sided:** the migration moves stored `pain-scale` rows to `effort-scale` for new clients; the three `/api/article-reads` routes alias `pain-scale` ↔ `effort-scale` for old ones (GET lists `pain-scale` beside `effort-scale` when the latter is read; POST/DELETE of `pain-scale` act on `effort-scale`). Symmetric with `withPainAlias`; PR 3 deletes it.
+- **Identifiers that do NOT move** (stored or committed data): step JSON key `ref.effort`; builder-draft row field `refEffort` (fingerprinted, persisted); `patterns.json` key `effortShare`; `EnginePhase.targetKind: "effort"` literal. Each gets a one-line comment saying so. `PaceRefInput.tsx`'s module-local chip discriminant `kind: "base" | "effort"` is NOT persisted and IS renamed (`"word"`), so it does not join this list.
 - **Copy:** no em-dashes in new user-facing strings. The five level words (Motion, Work you could keep doing, Comfortably hard, Hard intervals, All out) do not change.
 - **Gates per task:** typecheck, lint, scoped tests; before ready: `pnpm test`, `pnpm test:coverage` per-file check, `pnpm build && pnpm dist:grep`, `pnpm e2e`, `pnpm screenshots`, `pnpm test --project integration`, and the by-hand stale-build check (Task 8). All in `app/` of `/Users/james/projects/github/jamesawesome/Ergomatic-wt-de2`.
 - **Every commit:** `git rev-parse --show-toplevel` first; commit BEFORE any mutation probe (RF22).
 - **Two finishing greps**, pasted into the PR body:
   ```sh
   grep -rniE '\bpain' domain server src e2e scripts --exclude='*.test.*'      # only: release-note history, the compat adapters + their comments in server/routes/data.ts, the legacy bulk header strings
-  grep -rhoE '\b[a-zA-Z]*[eE]ffort[A-Za-z]*\b' domain src --exclude='*.test.*' | sort -u   # only: effort, effortLevels, Effort*-free — i.e. the 1–5 figure's names, plus the four frozen keys above and English prose (bestEffort, effortful, efforts)
+  grep -rnwE 'effort' domain src --exclude='*.test.*' | grep -vE 'effortLevels|\.effort\b|effort:|"effort"|effort \(|EFFORT|effort,|effort\)|effort;|effort\?' | wc -l   # per-LOCATION: every remaining bare `effort` token is the 1–5 figure, one of the four frozen keys, or prose; the PR body pastes the base-vs-head counts of `\beffort\b`, `PaceWord`, and the pace-word literal `"effort"` (frozen: targetKind only) so a surviving pace-word use cannot hide inside a deduplicated list
   ```
 
 ---
@@ -68,10 +71,10 @@ it("0024 renames pain → effort on workouts and session_logs, keeps the 1..5 CH
 });
 ```
 
-(Use the file's existing `db`, `sql`, user fixture names.) The `article_reads` half: insert `('pain-scale')` for a user BEFORE running migrations in a fresh-DB test if the harness allows; otherwise assert by running `UPDATE` idempotently and reading back — the SQL was paste-tested on Postgres 18.4 with a seeded read row (spec §4.2).
+(Use the file's existing `db`, `sql`, user fixture names — the top-level describe migrates the FULL folder in `beforeAll` and creates no user, so this block goes in a NEW describe.) The `article_reads` half uses the file's own truncated-folder pattern (migrations 0008–0021 each have one): migrate a fresh DB up to `0023`, insert a user and a `('pain-scale')` read row, migrate the rest, assert the row now reads `effort-scale` and that a user holding BOTH slugs pre-migration ends with exactly one `effort-scale` row (the `AND NOT EXISTS` guard) and no `pain-scale` row left behind — add a second `DELETE` statement to the migration for that residue if the assertion shows one.
 
 - [ ] **Step 2:** `pnpm test --project integration -- server/db` is the footgun form; run `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project integration server/db/schema.integration.test.ts`. Expected: FAIL (columns still `pain`) — note the migration files are already on disk; the assertion fails only if you run against a DB without 0024. If the harness migrates from the folder, it PASSES immediately; then the red half is Step 1's `effort: 6` rejection message, which pins the constraint NAME.
-- [ ] **Step 3:** `schema.ts` already renamed (`effort` columns, `*_effort_check`); update the three comments still saying `pain` (lines ~178, ~196-199, ~407-408) to say `effort` and cite 0024. Fix the other integration tests' raw inserts (`pain:` → `effort:`).
+- [ ] **Step 3:** Rename in `schema.ts`: `pain: integer("pain")` → `effort: integer("effort")` on both tables, both CHECKs to `*_effort_check` over `t.effort`; update the three comments still saying `pain` (lines ~178, ~196-199, ~407-408) to say `effort` and cite 0024. Fix the other integration tests' raw inserts (`pain:` → `effort:`).
 - [ ] **Step 4:** `pnpm db:generate < /dev/null` → `No schema changes, nothing to migrate`. Paste that line into the commit message.
 - [ ] **Step 5:** Commit: `"Phase DE PR 2 task 1: migration 0024 renames pain → effort (hand-authored; db:generate reports no drift)"`.
 
@@ -87,13 +90,13 @@ it("0024 renames pain → effort on workouts and session_logs, keeps the 1..5 CH
   ```ts
   // server/routes/effortCompat.ts
   export function effortError(value: unknown): string | null;           // "effort must be an integer 1..5 or null" | null
-  export type AdoptResult = { ok: true; usedPainKey: boolean } | { ok: false; field: "effort"; error: string };
-  export function adoptEffortKey(body: Record<string, unknown>): AdoptResult; // mutates body; presence-preserving
+  export type AdoptResult = { ok: true; sawPainKey: boolean; usedPainKey: boolean } | { ok: false; field: "effort"; error: string };
+  export function adoptEffortKey(body: unknown): AdoptResult; // mutates a record body; presence-preserving; non-records pass through
   export function withPainAlias<T extends { effort: number | null }>(row: T): T & { pain: number | null };
   export function notePainWrite(route: string): void;                    // console.info(JSON.stringify({ event: "compat.pain_write", route }))
   ```
 
-- [ ] **Step 1: Failing unit tests** `effortCompat.test.ts`:
+- [ ] **Step 1: Unit tests** `effortCompat.test.ts` — ON DISK and green (10/10 after the `/harden` fold: non-record bodies, `pain: undefined`, `sawPainKey` on the agree branch, `effortError(3.0)` is null). The block below is the pre-fold sketch; the file is authoritative.
 
 ```ts
 import { describe, it, expect, vi } from "vitest";
@@ -214,7 +217,7 @@ export function notePainWrite(route: string): void {
 }
 ```
 
-- [ ] **Step 4:** Run → PASS. Commit: `"Phase DE PR 2 task 2a: effortCompat adapters"`.
+- [ ] **Step 4:** Already committed with the plan (`d0053846`) and revised in the fold commit.
 - [ ] **Step 5: Failing route tests** in `data.test.ts` (copy the file's `asA(request(app))` idiom):
 
 ```ts
@@ -234,8 +237,18 @@ describe("Phase DE PR 2 dual-field compat (spec §4.3)", () => {
     expect(logs.body[0]).toMatchObject({ effort: 3, pain: 3 });
     const detail = await asA(request(app).get(`/api/logs/${log.body.id}`));
     expect(detail.body).toMatchObject({ effort: 3, pain: 3 });
+    const put = await asA(request(app).put(`/api/workouts/${created.body.id}`)).send(validWorkoutBody({ effort: 1 }));
+    expect(put.body).toMatchObject({ effort: 1, pain: 1 });
     const patched = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({ effort: 5 });
     expect(patched.body).toMatchObject({ effort: 5, pain: 5 });
+    // The PATCH route's OTHER exit: an empty patch returns the row unchanged — aliased too.
+    const noop = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({ unknownKey: 1 });
+    expect(noop.body).toMatchObject({ effort: 5, pain: 5 });
+  });
+  it("a non-object body on POST/PUT /api/workouts is still a 400, not a 500", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/workouts")).set("content-type", "text/plain").send("pain");
+    expect(res.status).toBe(400);
   });
   it("accepts an old client's pain on create and PATCH, stores it as effort, and logs compat.pain_write once per write", async () => {
     const spy = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -247,14 +260,25 @@ describe("Phase DE PR 2 dual-field compat (spec §4.3)", () => {
     expect(log.status).toBe(201);
     const p = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({ pain: 4 });
     expect(p.body.effort).toBe(4);
-    expect(spy.mock.calls.filter((c) => String(c[0]).includes("compat.pain_write"))).toHaveLength(3);
+    // Agreeing keys still CARRY the old key: counted (sawPainKey), value not used.
+    await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({ pain: 4, effort: 4 });
+    expect(spy.mock.calls.filter((c) => String(c[0]).includes("compat.pain_write"))).toHaveLength(4);
     spy.mockRestore();
   });
   it("a PATCH carrying neither key leaves effort untouched (presence contract)", async () => {
     const app = appFor(makeStores());
     const log = await asA(request(app).post("/api/logs")).send({ ...validLogBody(), effort: 3 });
     const p = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({ held: "held" });
-    expect(p.body.effort).toBe(3);
+    expect(p.body).toMatchObject({ effort: 3, pain: 3 });
+  });
+  it("article reads: an old client's pain-scale is served, marked and unmarked as effort-scale", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).post("/api/article-reads/pain-scale"));
+    const list = await asA(request(app).get("/api/article-reads"));
+    expect(list.body.slugs).toEqual(expect.arrayContaining(["effort-scale", "pain-scale"]));
+    await asA(request(app).delete("/api/article-reads/pain-scale"));
+    const after = await asA(request(app).get("/api/article-reads"));
+    expect(after.body.slugs).not.toContain("effort-scale");
   });
   it("400s when pain and effort are both non-null and disagree, naming effort; pain-keyed validation errors still name pain", async () => {
     const app = appFor(makeStores());
@@ -271,9 +295,9 @@ describe("Phase DE PR 2 dual-field compat (spec §4.3)", () => {
 
 (`validLogBody` — use whatever the file's existing log fixture builder is called; the two `GET /api/logs/:id`/`PATCH` shapes exist today.)
 
-- [ ] **Step 6:** Run → FAIL. Implement: rename `pain` → `effort` in `stores/logs.ts` (`LogRow`, `LogPatch`, select map, `set.effort`, `create`), `stores/workouts.ts` (`derivedDifficulty(input.effort)`), `fakes.ts`, `compat/difficulty.ts` (`derivedDifficulty(effort: number)`), `seed.ts` (`row.effort === w.effort`), seed files (`sed -i '' 's/^\(\s*\)pain: \([1-5]\),$/\1effort: \2,/'` on the five, then grep-check 0 `pain:`), `library.test.ts` (`w.effort`, `PAIN_BY_TYPE` → `EFFORT_BY_TYPE`, titles), `storeContracts.ts`. In `data.ts`: import the four helpers; delete `painError`; at each write site call `adoptEffortKey(body)` FIRST — `POST /api/workouts`, `PUT /api/workouts/:id`, `POST /api/workouts/bulk` (no: the bulk body is TEXT; skip, the parser owns the header), `POST /api/logs`, `PATCH /api/logs/:id` — return `badRequest(res, r.error, r.field)` on `ok: false`, call `notePainWrite("<METHOD> <route>")` when `usedPainKey`; validate with `effortError` under `field: "effort"` EXCEPT when the value came from the `pain` key, where the message/field stay `pain` (the test pins it: `usedPainKey && effortError(...)` → `badRequest(res, msg.replace(/^effort/, "pain"), "pain")`). At each of the nine response sites wrap with `withPainAlias` (list: `res.json(rows.map(withPainAlias…))` at the workouts list, `.status(201).json(withPainAlias(row))` on create, get, PUT, bulk `created.map(withPainAlias)`, logs list `rows.map(withPainAlias)`, log get, PATCH response, and the log detail). `POST /api/logs` returns `{ id }` only — no alias needed; say so in a comment.
+- [ ] **Step 6:** Run → FAIL. Implement: rename `pain` → `effort` in `stores/logs.ts` (`LogRow`, `LogPatch`, select map, `set.effort`, `create`), `stores/workouts.ts` (`derivedDifficulty(input.effort)`), `fakes.ts`, `compat/difficulty.ts` (`derivedDifficulty(effort: number)`), `seed.ts` (`row.effort === w.effort`), seed files (`sed -i '' 's/^\(\s*\)pain: \([1-5]\),$/\1effort: \2,/'` on the five, then grep-check 0 `pain:`), `library.test.ts` (`w.effort`, `PAIN_BY_TYPE` → `EFFORT_BY_TYPE`, titles), `storeContracts.ts`. In `data.ts`: import the four helpers; delete `painError`; at each write site call `adoptEffortKey(req.body)` FIRST (it tolerates a non-record; the workouts POST/PUT have no `body` local and must keep handing `req.body` to `validateWorkoutInput` unchanged) — `POST /api/workouts`, `PUT /api/workouts/:id`, `POST /api/logs`, `PATCH /api/logs/:id`; NOT `/bulk` (its body is text; the header parser owns the word). Return `badRequest(res, r.error, r.field)` on `ok: false`; call `notePainWrite("<METHOD> <route>")` when `sawPainKey`; on the LOG routes validate with `effortError`, and when `usedPainKey` report `msg.replace(/^effort/, "pain")` under `field: "pain"`. Wrap every site the census command lists (TEN, both PATCH exits) with `withPainAlias`. `POST /api/logs` returns `{ id }` only — no alias needed; say so in a comment. **Article reads (2c):** in the three `/api/article-reads` routes, map an incoming `pain-scale` to `effort-scale` before the store call and, on GET, append `pain-scale` to the list when `effort-scale` is present — one `LEGACY_READ_SLUGS` const in `effortCompat.ts`, deleted by PR 3.
 - [ ] **Step 7:** `pnpm typecheck` (server) and the server unit project green. Commit: `"Phase DE PR 2 task 2b: stores and seed speak effort; routes serve pain+effort and accept either; compat.pain_write logged"`.
-- [ ] **Step 8: Mutation probes (after commit):** (a) delete the `withPainAlias` at ONE site (the logs list) → the dual-field test fails on `logs.body[0]`; (b) change `adoptEffortKey`'s `if (!hasPain) return` to `body.effort = body.pain ?? body.effort` style (the natural bug) → the presence test fails (`"effort" in body` true). Record both failures; revert with `git checkout`.
+- [ ] **Step 8: Mutation probes (after commit):** (a) delete the `withPainAlias` at ONE site — the PATCH no-op read — → the dual-field test's `noop` assertion fails; (b) in `adoptEffortKey` replace the `!sawPainKey` early return with `body.effort = body.pain ?? body.effort` (the natural bug) → the "neither key" unit test fails (`"effort" in body` true); (c) remove the `isRecord` guard → the text/plain route test 500s. Record all three; revert with `git checkout`.
 
 ### Task 3: Domain — `WorkoutInput.effort`, `effortLevels`, `PaceWord*` family
 
@@ -296,6 +320,7 @@ describe("Phase DE PR 2 dual-field compat (spec §4.3)", () => {
   | `effortShare` (function, `archetype.ts`) | `paceWordShare` | the `patterns.json` KEY `effortShare` stays; the code reading it says so |
   | `effortCount`, `effortBucket`, `effortMatch` | `paceWordCount`, `paceWordBucket`, `paceWordMatch` | |
   | `isValidEffort` | `isValidPaceWord` | |
+  | `PaceRefInput.tsx` chip `kind: "effort"` | `kind: "word"` | module-local `CHIPS` discriminant, not persisted (lens 1 verified) |
   | `refEffort` (BuilderRow field) | UNCHANGED | persisted in the builder draft + fingerprint; comment |
   | `targetKind: "effort"` | UNCHANGED | runtime discriminant; comment on `EnginePhase.targetKind` |
 
@@ -330,17 +355,17 @@ it("reads a pre-PR-2 set's painLevels as effortLevels when effortLevels is absen
   expect(JSON.parse(localStorage.getItem(TODAY_FILTERS_KEY)!).byKey.AT).not.toHaveProperty("painLevels");
 });
 it("prefers effortLevels when both keys are present; a malformed effortLevels fails the set even with a valid painLevels beside it", () => { /* effortLevels: [1], painLevels: [5] → [1]; effortLevels: "x", painLevels: [5] → set undefined */ });
-// libraryFilters.test.ts: same two, against the whole-record-strict parser (malformed effortLevels → EMPTY_FILTERS + scroll cleared)
-// builderDraft.test.ts: a draft with form.pain: 3 and no form.effort loads with form.effort === 3; a draft with both prefers effort
+// libraryFilters.test.ts: NO fallback (sessionStorage) — a record with painLevels and no effortLevels is a wrong shape → EMPTY_FILTERS + scroll cleared; effortLevels: null → EMPTY_FILTERS
+// builderDraft.test.ts: an EDIT-mode draft with form.pain: 3 and baseline.pain: 3 (no effort keys) loads with both halves' effort === 3 and no pain keys; a draft with both keys prefers effort; a NEW-mode draft with pain: null restores effort: null
 ```
 
-- [ ] **Step 2:** Implement: `FilterSet.effortLevels` / `Filters.effortLevels`; in each parser `const levels = o.effortLevels !== undefined ? o.effortLevels : o.painLevels;` then the existing array check on `levels` (undefined → fail as today); write only `effortLevels`. `builderDraft.ts`: `const effort = value.effort ?? value.pain` in the restore mapping (form field `effort: number | null`). Comments cite spec §4.2 and PR 3's deletion.
+- [ ] **Step 2:** Implement. **Today (`todayFilters.ts`, localStorage):** `const levels = o.effortLevels !== undefined ? o.effortLevels : o.painLevels;` then the existing array check on `levels` — so `effortLevels: null` is PRESENT and MALFORMED (that set fails, as any malformed field fails today), `effortLevels` absent falls back, both absent fails as today; write only `effortLevels`. Add `null` to the malformed table. **Library (`libraryFilters.ts`) gets NO fallback:** it is sessionStorage (`libraryFilters.ts:6`), whose lifetime ends at app relaunch, so no native pre-PR-2 record can reach the new bundle; the only producer would be a same-session bundle swap on web, and `loadLibraryFilters` already falls back to `EMPTY_FILTERS` whole on any unknown shape. Rename the key, keep the strictness, state this in the parser comment (spec §4.2's table is corrected in Task 7). **Builder draft (`builderDraft.ts`, localStorage):** `loadBuilderDraft` currently returns the parsed record from a loose guard with no reconstruction — add one: after the guard, for BOTH `form` and `baseline` (edit-mode drafts carry a baseline that `Builder.tsx` fingerprints against a fresh `fromWorkout`; a missing `effort` there stringifies as `null` and silently DISCARDS the draft), `effort = "effort" in f ? f.effort : (f.pain ?? null)`, then delete `pain`. Test the EDIT-MODE case with `pain: 3` on both halves and assert the restored draft's baseline fingerprint equals `formFingerprint(fromWorkout(workoutWithEffort3))`; mutation: drop the baseline half → that assertion fails.
 - [ ] **Step 3: Rename sweep.** `PainBar.tsx` → `EffortBar.tsx` (`git mv`), component `EffortBar`, props `effort`, classes `.effort-bar`, `.effort-bar-segment`, token `--effort-empty` (tokens.css + `tokens.test.ts` census); `todayFilterTokens.ts`/`filterTokens.ts` `collapseEffort` → `EFFORT n`; `TokenKind "pain"` → `"effort"`, Today reset group `"pain"` → `"effort"`; sheets `label="EFFORT"`; `ClassificationCard` `EXPECTED EFFORT`, aria `Effort n`, `.classification-chip-effort`; `Builder.tsx` body `effort: form.effort`; `builderState.ts` `BuilderForm.effort`, `fromWorkout`; `useWorkouts.ts` `LibraryWorkout.effort`; `useRecentLogs.ts` `effort`; `FromTheLog.tsx` `edit.effort`/`patch.effort`; `LogSession.tsx` `effort` state + wire key; `PostWorkoutSummary`, `JustRowLog`, `LogRow` ("EFFORT n/5"), `storedSummary.ts`, `WorkoutDetail`, `Today.tsx` (`EFFORT {n}/5`, `effortLevels`), `TimerRuler`, `summaryModel.ts`, `traceModel.ts`/`TraceChart.tsx` (read comments; rename only the figure, not the pace word), `typeWords.ts`, `CellGrid.tsx`/`IntervalSegments.tsx`/`DurationInput.tsx`/`PaceRefInput.tsx` (pace-word family only — Task 3's map), `useMonitorSession.ts` (comments), `library-moves.ts`. Every test fixture `pain:` → `effort:`; every `"Pain n"` selector → `"Effort n"`; every `PAIN` text assertion → `EFFORT`.
 - [ ] **Step 4: Article.** `bodies/painScale.tsx` → `effortScale.tsx`, `EffortScaleBody`; `articles.tsx` slug `"effort-scale"`, title `"The effort scale, without a heart rate monitor"`; add and export `LEGACY_ARTICLE_SLUGS: Record<string, string> = { "pain-scale": "effort-scale" }`; in `Reader.tsx`: `const canonical = slug ? LEGACY_ARTICLE_SLUGS[slug] ?? slug : undefined;` and `<Navigate replace to={`/news/${canonical}`} />` when `canonical !== slug`; `pickingAWorkout.tsx` link `to="/news/effort-scale"` text "effort from 1 to 5". Rewrite the boundary paragraph:
 
   > This scale is effort, not injury. Everything below describes the discomfort a hard row is supposed to produce, and it fades within the session or by the next day. Sharp, sudden, or joint-specific pain (a rib, a wrist, your lower back on the drive) is a different signal entirely: stop, and let it settle before you row again.
 
-  Tests: `articles.test.tsx` slugs; `bodies.test.tsx` href; a `Reader.test.tsx` case `/news/pain-scale` renders the effort-scale article (redirect).
+  `article` stays computed from the RAW `slug` (rules-of-hooks; `articleBySlug("pain-scale")` is now `undefined`), so the mark-read effect can never fire for the old slug. Tests: `articles.test.tsx` slugs; `bodies.test.tsx` href; `Reader.test.tsx`: `/news/pain-scale` renders the effort-scale article AND `markRead` is called with `"effort-scale"`, never `"pain-scale"`.
 - [ ] **Step 5:** `pnpm typecheck && pnpm lint && pnpm lint:prune`; `pnpm test --project client` and `--project unit` green. Commit: `"Phase DE PR 2 task 4: the client says EFFORT everywhere; three localStorage parsers fall back from pain*; article moves to effort-scale with the old slug redirecting"`.
 - [ ] **Step 6: Mutation probes (after commit):** in each parser, drop the `?? o.painLevels` fallback → the fallback test fails; in `Reader.tsx` drop the alias → the redirect test fails. Record, revert.
 
@@ -354,8 +379,8 @@ it("prefers effortLevels when both keys are present; a malformed effortLevels fa
 
 ### Task 7: RELEASING floor row, ROADMAP, spec §4.5
 
-- [ ] `docs/RELEASING.md` § Rollback constraints — new row: `| the tag carrying migration 0024 (workouts.pain → effort, session_logs.pain → effort, article_reads slug; Phase DE PR 2) | One-way RENAME. A pre-0024 image selects a column named pain and 500s every workout and log read; deploy.sh's health-gated auto-rollback would restore exactly that image after the migration has run. FORWARD-FIX ONLY: fix and redeploy, or reverse the four RENAMEs by hand in psql before rolling back. |`
-- [ ] `ROADMAP.md`: PR 2 row ticked with `(#NNN)` once the PR exists; DELETE "Does not open until AUD-016's PR … has merged" (AUD-016 was struck 2026-08-31 in #240 — the aud016 worktree is a stale pre-#239 spec branch, PM misread; recorded in the PR body); status line updated. Spec §4.5: replace the AUD-016 paragraph with one sentence saying the same.
+- [ ] `docs/RELEASING.md` § Rollback constraints — new row: `| the tag carrying migration 0024 (workouts.pain → effort, session_logs.pain → effort, article_reads slug; Phase DE PR 2) | One-way RENAME. A pre-0024 image selects a column named pain and 500s every workout and log read; deploy.sh's health-gated auto-rollback would restore exactly that image after the migration has run. FORWARD-FIX ONLY: fix and redeploy, or reverse the four RENAMEs and the article_reads slug UPDATE by hand in psql before rolling back. |`
+- [ ] `ROADMAP.md`: PR 2 row ticked with `(#NNN)` once the PR exists; DELETE "Does not open until AUD-016's PR … has merged" (AUD-016 was struck 2026-08-31 in #240 — the aud016 worktree is a stale pre-#239 spec branch, PM misread; recorded in the PR body); status line updated. Spec §4.5: replace the AUD-016 paragraph with one sentence saying the same. Spec §4.2's localStorage table: the Library row becomes "sessionStorage — no fallback (no native producer)"; §4.3 gains the article-reads alias and the TEN-site census.
 - [ ] Commit.
 
 ### Task 8: Gates, bundle probe, stale-build check
@@ -375,6 +400,7 @@ it("prefers effortLevels when both keys are present; a malformed effortLevels fa
 ## Self-review (author, 2026-09-05)
 
 - **Spec coverage:** §4.1 invariant → Tasks 3-5 + Task 8's greps; §4.2 migration → Task 1 (authored, `No schema changes` measured), rollback row → Task 7, localStorage table → Task 4 steps 1-2; §4.3 dual-field → Task 2 (adapters, nine sites, three write sites, presence contract, disagreement rule, `compat.pain_write`); §4.4 word list + `PaceWord*` family + article → Tasks 3-4; §4.5 sequencing → Task 7 (AUD-016 condition retired with the reason); §6.3 stale-build → Task 8.
-- **Frozen keys enumerated:** `ref.effort`, `refEffort`, `patterns.json:effortShare`, `targetKind: "effort"` — each with a comment task.
+- **Frozen keys enumerated:** `ref.effort`, `refEffort`, `patterns.json:effortShare`, `targetKind: "effort"` — each with a comment task; `PaceRefInput`'s `kind` is renamed, not frozen.
+- **`/harden` run (2026-09-05, both lenses, folded in this revision):** lens 1 falsified the "schema.ts already renamed" claim, the builder-draft fallback's home and its null-only test, the unguarded `req.body` at the workouts routes, the `sort -u` grep, the Library storage medium, the trigger's agree-branch hole, and the one-sided article-read compat; lens 2 added the non-object 400→500, the two unexercised alias sites, the truncated-folder migration test, `effortLevels: null`, the workouts error wording, and the Reader mark-read guard. One ledger entry landed.
 - **Placeholders:** the parser tests in Task 4 step 1 are sketched for two of three files (`/* … */`) — the implementer writes them from the Today example, which is complete; `validLogBody` is named as "the file's existing log fixture builder" because its name must be read from `data.test.ts`.
 - **Type consistency:** `adoptEffortKey`/`withPainAlias`/`effortError`/`notePainWrite` signatures match between the Interfaces block, the code block and the route steps; `effortLevels` is the one client key name across Today, Library and suggest.

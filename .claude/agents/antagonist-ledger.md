@@ -7704,3 +7704,56 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   constraint names checked in `pg_constraint`: four minutes, and it settled
   the "does RENAME CONSTRAINT exist under that name" question the anchor
   pass could only read about.
+
+## 2026-09-05 — Phase DE PR 2 `/harden` (delta + lens 2): a rename's compat lives in the halves nobody renamed
+
+- **A plan that says "already authored/already renamed" is a claim about the
+  TREE, and trees move.** Task 1 said `schema.ts` was already renamed and the
+  `db:generate` no-drift gate already green; `git diff --stat origin/main..HEAD`
+  listed six files and `schema.ts` was not one of them. **Technique: for every
+  "already done" sentence in a plan, run `git diff --stat <base>..HEAD` and
+  match the file list against the sentence — a measured gate on an unrecorded
+  tree state is a number without a tree.**
+- **A field rename inside a FINGERPRINT breaks the record that decides whether
+  the record is kept.** The builder draft's compat fallback was prescribed for
+  `form`; the value that decides survival is `baseline`, compared through
+  `formFingerprint`, which carried the renamed field. `JSON.stringify` renders
+  `undefined` inside an array as `null`, so the null-valued (new-mode) case
+  the plan sketched passes by accident while the valued (edit-mode) case
+  silently drops the draft. **Technique: grep the renamed field for every
+  hash/fingerprint/equality helper that reads it, and test the case whose OLD
+  value was non-null; a fallback test written against a null field cannot
+  fail.**
+- **Express 5 leaves `req.body` undefined, so a body adapter using `in` turns
+  400s into 500s.** Measured: `content-type: text/plain` and a bodiless POST
+  both yield `typeof req.body === "undefined"`; two routes passed `req.body`
+  straight to a validator that already handled non-records. **Technique:
+  before prescribing "call the adapter FIRST at every write site", open each
+  site and check whether a `body` local (and its `isRec` guard) even exists —
+  the sites that already had one are not the sites that will break.**
+- **A `sort -u` token census cannot gate a MEANING.** `grep … | sort -u`
+  collapsed 925 occurrences to one line, so a surviving pace-word literal
+  (`kind: "effort"`) left the gate green while the stated goal was false.
+  **Technique: a gate about ambiguity must be per-LOCATION with a base-vs-head
+  count; a deduplicated token list only ever catches new COMPOUND
+  identifiers.**
+- **Check the storage MEDIUM before writing a one-release fallback.** Two of
+  three "localStorage parsers" were localStorage; the Library's is
+  sessionStorage, whose lifetime ends at relaunch, so its fallback had no
+  native producer at all. **Technique: grep the parser file for
+  `sessionStorage` before believing a plan's storage table.**
+- **A compat trigger keyed on "the value came from the old key" misses "the
+  request carried the old key".** `usedPainKey` was false whenever both keys
+  agreed. **Technique: state a log-based trigger as a property of the REQUEST
+  (`"pain" in body`), never of the resolution.**
+- **A rename migration moves ONE side of a two-sided identity.** The
+  `article_reads` slug UPDATE preserved the read for the new client and
+  orphaned it for the installed old one, which keeps asking for the old slug.
+  **Technique: for every value a migration rewrites, ask which key the OLD
+  client will send afterwards — the migration is the server's half; the alias
+  is the client's.**
+- **Lens 2 on the same plan found the response-site census wrong by one route
+  (PATCH has two `res.json` exits) and one dual-field site (PUT) with no
+  request in the contract test.** **Technique: a census of `res.json` sites is
+  the grep, and the contract test is checked against the grep's output, not
+  the plan's list.**

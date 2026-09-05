@@ -7,34 +7,73 @@ import {
 } from "./effortCompat.js";
 
 describe("adoptEffortKey (spec §4.3: presence-preserving, effort wins, disagreement is 400)", () => {
+  it("passes a non-record body through untouched (Express 5 leaves req.body undefined)", () => {
+    for (const body of [undefined, null, "x", 5, true, ["pain"]]) {
+      expect(adoptEffortKey(body)).toStrictEqual({
+        ok: true,
+        sawPainKey: false,
+        usedPainKey: false,
+      });
+    }
+  });
   it("leaves a body with neither key untouched — no effort key is created", () => {
     const body: Record<string, unknown> = { held: "held" };
     expect(adoptEffortKey(body)).toStrictEqual({
       ok: true,
+      sawPainKey: false,
       usedPainKey: false,
     });
     expect("effort" in body).toBe(false);
     expect("pain" in body).toBe(false);
   });
+  it("treats a pain key whose value is undefined as absent (never assigns undefined)", () => {
+    const body: Record<string, unknown> = { pain: undefined };
+    expect(adoptEffortKey(body)).toStrictEqual({
+      ok: true,
+      sawPainKey: true,
+      usedPainKey: false,
+    });
+    expect("effort" in body).toBe(false);
+  });
   it("copies a pain key to effort when effort is absent, including an explicit null (a clear)", () => {
     const b1: Record<string, unknown> = { pain: 3 };
-    expect(adoptEffortKey(b1)).toStrictEqual({ ok: true, usedPainKey: true });
+    expect(adoptEffortKey(b1)).toStrictEqual({
+      ok: true,
+      sawPainKey: true,
+      usedPainKey: true,
+    });
     expect(b1.effort).toBe(3);
     const b2: Record<string, unknown> = { pain: null };
-    expect(adoptEffortKey(b2)).toStrictEqual({ ok: true, usedPainKey: true });
+    expect(adoptEffortKey(b2)).toStrictEqual({
+      ok: true,
+      sawPainKey: true,
+      usedPainKey: true,
+    });
     expect("effort" in b2 && b2.effort === null).toBe(true);
   });
-  it("effort wins when both are present and agree, and when pain is null", () => {
+  it("effort wins when both are present and agree (the request still SAW the pain key), and when pain is null", () => {
     const b1: Record<string, unknown> = { pain: 3, effort: 3 };
-    expect(adoptEffortKey(b1).ok).toBe(true);
+    expect(adoptEffortKey(b1)).toStrictEqual({
+      ok: true,
+      sawPainKey: true,
+      usedPainKey: false,
+    });
     expect(b1.effort).toBe(3);
     const b2: Record<string, unknown> = { pain: null, effort: 4 };
-    expect(adoptEffortKey(b2).ok).toBe(true);
+    expect(adoptEffortKey(b2)).toStrictEqual({
+      ok: true,
+      sawPainKey: true,
+      usedPainKey: false,
+    });
     expect(b2.effort).toBe(4);
   });
   it("pain wins when effort is null beside a non-null pain (null is 'no answer', not a disagreement)", () => {
     const b: Record<string, unknown> = { pain: 3, effort: null };
-    expect(adoptEffortKey(b)).toStrictEqual({ ok: true, usedPainKey: true });
+    expect(adoptEffortKey(b)).toStrictEqual({
+      ok: true,
+      sawPainKey: true,
+      usedPainKey: true,
+    });
     expect(b.effort).toBe(3);
   });
   it("rejects two non-null values that disagree, naming effort", () => {
@@ -51,6 +90,10 @@ describe("adoptEffortKey (spec §4.3: presence-preserving, effort wins, disagree
     expect(b.effort).toBe("3");
     expect(effortError("3")).toBe("effort must be an integer 1..5 or null");
     expect(effortError(0)).toBe("effort must be an integer 1..5 or null");
+    expect(effortError(true)).toBe("effort must be an integer 1..5 or null");
+    expect(effortError([])).toBe("effort must be an integer 1..5 or null");
+    expect(effortError(2.5)).toBe("effort must be an integer 1..5 or null");
+    expect(effortError(3.0)).toBeNull(); // 3.0 IS the integer 3 in JS
     expect(effortError(null)).toBeNull();
     expect(effortError(undefined)).toBeNull();
     expect(effortError(5)).toBeNull();

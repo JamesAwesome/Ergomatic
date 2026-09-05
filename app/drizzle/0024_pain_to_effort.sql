@@ -11,7 +11,10 @@
 --   * session_logs.pain    → session_logs.effort    (+ its CHECK, same rule 1..5)
 --   * article_reads: the pain-scale article's slug becomes effort-scale, so
 --     every rower's read of it survives the rename (otherwise the article
---     reverts to unread and the News tab's next-unread walk changes).
+--     reverts to unread and the News tab's next-unread walk changes). The
+--     UPDATE skips a user who somehow already holds an effort-scale row
+--     (the (user_id, slug) PK would otherwise abort the migration) and the
+--     DELETE clears any pain-scale residue that skip leaves.
 --
 -- ROLLBACK: NOT rollback-safe. A pre-0024 image selects a column named `pain`
 -- that no longer exists and 500s every workout and log read. deploy.sh's
@@ -23,4 +26,5 @@ ALTER TABLE "workouts" RENAME COLUMN "pain" TO "effort";--> statement-breakpoint
 ALTER TABLE "workouts" RENAME CONSTRAINT "workouts_pain_check" TO "workouts_effort_check";--> statement-breakpoint
 ALTER TABLE "session_logs" RENAME COLUMN "pain" TO "effort";--> statement-breakpoint
 ALTER TABLE "session_logs" RENAME CONSTRAINT "session_logs_pain_check" TO "session_logs_effort_check";--> statement-breakpoint
-UPDATE "article_reads" SET "slug" = 'effort-scale' WHERE "slug" = 'pain-scale';
+UPDATE "article_reads" r SET "slug" = 'effort-scale' WHERE r."slug" = 'pain-scale' AND NOT EXISTS (SELECT 1 FROM "article_reads" n WHERE n."user_id" = r."user_id" AND n."slug" = 'effort-scale');--> statement-breakpoint
+DELETE FROM "article_reads" WHERE "slug" = 'pain-scale';
