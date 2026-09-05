@@ -91,3 +91,9 @@ recovery matrix and a product question for shipped Scan-NFC. The "set reply"
 delta is WITHDRAWN. Owed at the desk before any v4: research the PM5 NFC
 lifecycle (does a BLE connect suppress the tag) and redesign the between-case
 protocol around a PM5-NFC-availability check. See RECOVERY-WALK-V3-RESULT.md.
+
+**Standing operator rule (James, 2026-09-05): the Flipper Zero comes to every
+NFC walk as the independent tag validator.** Every NFC consent invitation's
+ready state includes "Flipper in hand", and when a reader start ends with no
+tag (Core NFC 201) the first action is a Flipper read at the spot, so a dark
+PM5 is named as such instead of being scored against the app or helper.
