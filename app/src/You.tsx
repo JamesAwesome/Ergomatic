@@ -54,9 +54,13 @@ export default function You({
           onClick={async () => {
             // I-D (spec 2026-09-04-concept2-walk-fixes §5.1): the Concept2
             // row's persisted "this account has been told" fact must not
-            // outlive the account on this device. Cleared BEFORE the
-            // adapter's sign-out so a failed sign-out cannot leave it
-            // behind either.
+            // outlive the account on this device — enforced on THIS path
+            // only. `useMe`'s 401/throw path signs the rower out without
+            // calling this, leaving the same account's own fact behind:
+            // bounded by I-A (no other account can read it) and self-healing
+            // by I-C (the next successful read re-derives it). Cleared
+            // BEFORE the adapter's sign-out so a failed sign-out on THIS
+            // path cannot leave it behind either.
             clearConcept2Seen(user.id);
             await authSignOut();
             onSignedOut();

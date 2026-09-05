@@ -106,10 +106,12 @@ describe("Concept2Screen — /you/concept2 (spec §5.1 R5, R6)", () => {
   });
 
   it("the screen's own read and the card's can disagree: a card gone unavailable while the screen's read failed leaves chrome over an empty body — the known window", async () => {
-    // TWO reads per mount, one per hook instance, and React runs the CHILD's
-    // effect first — so the card's read is call 1 and the screen's is call
-    // 2. Answering call 1 `available:false` and call 2 with a 502 is the
-    // disagreement directly: the card goes silent (its own `!link.available`
+    // TWO reads per mount, one per hook instance, and the card's read is
+    // call 1 and the screen's is call 2 — child-before-parent effect order,
+    // INFERENCE from the measured run (react.dev's useEffect reference does
+    // not state an inter-component ordering; checked 2026-09-04, no such
+    // sentence found). Answering call 1 `available:false` and call 2 with a
+    // 502 is the disagreement directly: the card goes silent (its own `!link.available`
     // return), the screen's `link` stays null with `failed` set, and its
     // redirect predicate (`link !== null && !link.available`) cannot fire.
     // The same shape arises in production when the card's Retry succeeds
@@ -120,9 +122,10 @@ describe("Concept2Screen — /you/concept2 (spec §5.1 R5, R6)", () => {
     // count only proves the requests STARTED, and `.c2-card` is absent at
     // mount anyway (the card returns null while `link === null`), so neither
     // is a readiness observable — measured: a screen mutated to redirect on
-    // a FAILED read stayed green against the count-gated version. React
-    // runs the CHILD's effect first, so resolver 0 is the card's read and
-    // resolver 1 is the screen's.
+    // a FAILED read stayed green against the count-gated version. Resolver 0
+    // is the card's read and resolver 1 is the screen's, child-before-parent
+    // (INFERENCE from this measured run, not a cited React ordering
+    // guarantee — see the note above).
     const answer: Array<(r: Response) => void> = [];
     vi.mocked(api).mockImplementation((path: string) => {
       if (path !== "/api/concept2/link")

@@ -21,9 +21,13 @@
  * error about a feature they may not have.
  *
  * PER ACCOUNT (I-A): the key carries the account id, so no account can read
- * another's. Sign-out ALSO clears it (I-D, `You.tsx`'s Sign out handler) —
- * NOT because another account could read it (I-A pins that) but because
- * THIS account may sign back in on this device after being removed from
+ * another's. Sign-out ALSO clears it (I-D) via `You.tsx`'s Sign out button —
+ * the ONLY path that does; `useMe`'s 401/throw path signs the rower out
+ * without calling it, leaving the same account's own fact behind, bounded by
+ * I-A (no other account can read it) and self-healing by I-C (the next
+ * successful read re-derives it). The clear exists NOT because another
+ * account could read the fact (I-A already pins that) but because THIS
+ * account may sign back in on this device after being removed from
  * `C2_ALLOWED_EMAILS`, and a stale `true` would give it a door on the one
  * read that fails.
  *
