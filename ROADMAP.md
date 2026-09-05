@@ -1038,15 +1038,17 @@ closed with zero Concept2 contact.
       `docs/screenshots/`: `you-concept2-*` (You, doors group) and
       `concept2-screen-*` (the screen); each set covers unlinked, linked,
       reconnect/armed, read-failed and landscape.
-- [ ] **PR C — the verification question.** Concept2 stores a sent row as
-      WORK metres only; the monitor's own accumulator and the driver's
-      last pre-reset reading disagree with each other by ~2 m, and neither
-      has been checked against what Concept2 actually compares. **TRIAD on
-      all three counts that matter to it** (a number's meaning). **Ordered
-      LAST on purpose**, so the cost of the open question stays visible.
-      Names no authoritative number and prescribes no payload change —
-      that choice is C1-C3's job, made after this PR's own spec. Spec:
-      `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md` §5.4.
+- [ ] **PR C — send the number the verification code was minted over.**
+      SETTLED 2026-09-05 by a live API test: posting the PM5's own code with
+      distance 5706 (the monitor's 0x0039 total, already stored as
+      `machine_work_meters`) verified; 5708 (our interval sum, `work_meters`,
+      what we send today) did not. The app already DISPLAYS the machine total;
+      only the send is the outlier. Fix: `buildC2Payload` posts
+      `machineWorkMeters`/`machineWorkSeconds` when present, falling back to our
+      totals. **TRIAD (a number's meaning on the wire)** — full antagonist on
+      the spec, PM gate on the PR. Spec:
+      `docs/superpowers/specs/2026-09-05-concept2-verification.md`; the C1
+      research is `docs/superpowers/research/2026-09-05-c2-verification-code.md`.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
