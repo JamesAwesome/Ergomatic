@@ -41,6 +41,66 @@ function filterSheetCount(page: Page) {
   return page.locator(".today-filter-sheet-count");
 }
 
+/** Phase SF PR1: Today's first card is DRAWN at random within the
+ *  least-recently-done tie (spec I-2) and a freestyle day ROLLS its type
+ *  (I-5), from `crypto.getRandomValues` with no seam in the production
+ *  build this stack runs. Tests below that import TWO never-done fixtures
+ *  and then assert which one the card shows were relying on creation order
+ *  breaking that tie — exactly the determinism the spec removed — so they
+ *  now state the draw's outcome up front: this writes the day's records the
+ *  way a draw of `title` / a roll of `type` would have (the same shapes
+ *  `src/today/todayPick.ts` and `src/today/todayOverrides.ts` own, keyed
+ *  on the real `/api/plan` state and the browser's own local date).
+ *  Duplicated from `e2e/screenshots.spec.ts`'s identical helper (this
+ *  file's per-file helper precedent). Run after sign-in, before
+ *  `goto("/today")`. */
+async function pinToday(
+  page: Page,
+  opts: { type?: "O2" | "AT" | "TR" | "AN"; title?: string },
+): Promise<void> {
+  const result = await page.evaluate(async ({ type, title }) => {
+    const now = new Date();
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const planRes = await fetch("/api/plan");
+    if (!planRes.ok) return { ok: false, body: `plan ${planRes.status}` };
+    const plan = (await planRes.json()) as {
+      planKey: string | null;
+      doneN: number;
+    };
+    if (type !== undefined) {
+      localStorage.setItem(
+        "ergomatic.todayOverrides",
+        JSON.stringify({
+          date,
+          planKey: plan.planKey,
+          doneN: plan.doneN,
+          swapType: type,
+        }),
+      );
+    }
+    if (title !== undefined) {
+      const res = await fetch("/api/workouts");
+      if (!res.ok) return { ok: false, body: `workouts ${res.status}` };
+      const rows = (await res.json()) as { id: string; title: string }[];
+      const row = rows.find((w) => w.title === title);
+      if (!row) return { ok: false, body: `no workout titled ${title}` };
+      localStorage.setItem(
+        "ergomatic.todayPick",
+        JSON.stringify({
+          date,
+          planKey: plan.planKey,
+          doneN: plan.doneN,
+          workoutId: row.id,
+          shownIds: [row.id],
+          shuffled: false,
+        }),
+      );
+    }
+    return { ok: true, body: "" };
+  }, opts);
+  if (!result.ok) throw new Error(`pinToday failed: ${result.body}`);
+}
+
 async function setBaselines(
   page: Page,
   baselines: { k2Seconds: number; k6Seconds: number },
@@ -361,6 +421,8 @@ test.describe("Today enhancements: visible filter chips", () => {
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
+    // Two never-done O2 fixtures tie; state the draw (see pinToday).
+    await pinToday(page, { title: highPainTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
     await expect(page.locator(".today-plan-line")).toContainText(
@@ -595,6 +657,10 @@ test.describe("Today enhancements: §5.5 — deleting a log releases the LAST DO
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
+    // released/control tie as never-done O2 fixtures; state the draw as
+    // CONTROL, so the SHUFFLE below (a draw from the unshown pool) can only
+    // land on released — the pick this test then excludes and releases.
+    await pinToday(page, { title: controlTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
 
@@ -1111,6 +1177,8 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
+    // Two never-done O2 fixtures tie; state the draw (see pinToday).
+    await pinToday(page, { title: highPainTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
     await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
@@ -1260,6 +1328,9 @@ test.describe("Today enhancements: the piece region", () => {
         "w 2' 6k+6 @22",
       ].join("\n"),
     );
+    // Freestyle: the day rolls a type; the fixture is O2, so SOURCE=CUSTOM
+    // under any other rolled type would be an empty pool. State the roll.
+    await pinToday(page, { type: "O2" });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
 
