@@ -163,10 +163,15 @@ and `filters.ts:198` would additionally drop such rows from the pool.
 
 So PR 1 changes nothing in Postgres. The column, its enum and
 `preferences.difficulties` stay exactly as they are until PR 3. For one tag
-cycle the **server store derives `difficulty` from effort on every workout
-insert and update** (1–2 → easy, 3 → medium, 4–5 → hard) in
-`server/stores/workouts.ts`, so the NOT NULL column is always satisfied
-and an old build always has a word to print. This is compat plumbing: no
+cycle the **server store derives `difficulty` from effort at every one of
+its FOUR write sites** — `create`, `createMany`, `update` and
+`updateGlobal` in `server/stores/workouts.ts` (each currently writes
+`difficulty: input.difficulty`) — as one helper called by all four, so the
+NOT NULL column is always satisfied and an old build always has a word to
+print. `createMany` is a live door, not seed-only: `POST /api/workouts/bulk`
+calls it for personal imports (`data.ts`, the `/bulk` route), and a
+derivation added to `create`/`update` alone would 500 every bulk import
+for the whole cycle. The mapping: 1–2 → easy, 3 → medium, 4–5 → hard. This is compat plumbing: no
 new build reads, shows or accepts the value; PR 3 deletes the derivation
 with the column. It is not the "derive a band" product option James
 declined — that option would have kept a chip and a filter. The band
@@ -210,10 +215,15 @@ difficulty and reads a NOT NULL column that is still NOT NULL. Cosmetic
   (recurring failure 5: grep `.classification-chip-difficulty`,
   `difficulty` across `src/` and `e2e/` after deletion).
 - The DIFFICULTY group leaves both filter sheets. `todayFilters.ts`'s
-  parser accepts a stored blob that still carries `difficulties` and drops
-  the key (today, line 119 REJECTS a blob missing it — that branch
-  inverts); the Library filter store does the same. Filter token labels
-  lose the DIFFICULTY token.
+  parser (`parseFilterSet`, tolerant per filter-key set) accepts a stored
+  blob that still carries `difficulties` and drops the key (today it
+  REJECTS a blob missing it — that branch inverts). The Library store is
+  DIFFERENT and stays so: `libraryFilters.ts`'s `parseFilters` is
+  whole-record strict by its own documented design (any malformed field
+  nulls the whole `Filters` and clears the Library scroll), so there the
+  rule is: an unknown `difficulties` key is ignored, a missing one is not
+  an error, and nothing else about its strictness changes. Filter token
+  labels lose the DIFFICULTY token.
 - `ClassificationCard` loses its difficulty radiogroup; the card is TYPE
   and the 1–5 picker (still labelled PAIN in this PR — PR 2 renames).
   `builderDraft.ts` drops the field and its parser tolerates old drafts
@@ -346,8 +356,15 @@ because it holds no pain — `LogSession.tsx:712` is `useState`):
 | Library filters | `painLevels` | `effortLevels` |
 | Builder draft (`builderDraft.ts:33`) | `pain` | `effort` |
 
-Each parser reads `effort*` first, falls back to `pain*`, and writes only
-the new key.
+Each parser reads `effort*` first, falls back to `pain*` only when the
+`effort*` key is ABSENT, and writes only the new key. Strictness is
+inherited from the host parser, not relaxed for the fallback: in
+`libraryFilters.ts` a present-but-malformed `effortLevels` (or a
+present-but-malformed `painLevels` when `effortLevels` is absent) nulls the
+whole record exactly as any other malformed field does today; in
+`todayFilters.ts` and `builderDraft.ts` it fails the way that parser
+already fails. A fallback never produces a half-populated record the host
+parser would otherwise have rejected.
 
 ### 4.3 API dual-field (the compat contract)
 
@@ -358,16 +375,34 @@ column rename alone would silently remove `pain` from nine sites. The
 contract:
 
 - One **outbound adapter** applied at every one of those nine sites (the
-  plan enumerates them by line against PR 2's base): `effort` is the
-  column; `pain` is copied from it. Both keys, same value.
+  plan enumerates them by line against PR 2's base). The ninth, and the
+  one an implementer following a list of single-row `res.json(row)` sites
+  misses, is the `/bulk` route's `created` ARRAY — a map over rows, not a
+  row. `effort` is the column; `pain` is copied from it. Both keys, same
+  value.
 - One **inbound adapter** applied before `validateWorkoutInput` (called
   from POST, PUT and `/bulk` with `req.body` directly) and before the log
-  POST/PATCH validators: `effort` wins if present; else `pain` is copied
-  to `effort`; if both are present and unequal, **400** with
-  `field: "effort"` — redundant inputs are allowed, disagreeing ones are
-  not. `painError` becomes `effortError` ("effort must be an integer 1..5
-  or null"); the `pain`-keyed path reports the same message under
-  `field: "pain"` so an old client's error handling is unchanged.
+  POST/PATCH validators. **It preserves key PRESENCE**, because
+  `PATCH /api/logs/:id` branches on `"pain" in body` (absent = leave
+  alone, present-null = clear): the adapter creates an `effort` key ONLY
+  when the body has a `pain` key and no `effort` key, and never assigns
+  `undefined` — the natural `body.effort = body.effort ?? body.pain`
+  is exactly the bug, since it makes `"effort" in body` true on a
+  `{held: "held"}` PATCH and silently clears the rower's stored effort.
+  "Present" for the disagreement rule means key exists with a NON-NULL
+  value: if both are non-null and unequal, **400** with `field: "effort"`;
+  `effort: null` beside `pain: 3` is not a disagreement (null is "no
+  answer" in every validator here), `pain` wins; `{effort: null}` alone is
+  a clear, as `{pain: null}` is today. `painError` becomes `effortError`
+  ("effort must be an integer 1..5 or null"); the `pain`-keyed path
+  reports the same message under `field: "pain"` so an old client's error
+  handling is unchanged. **One RF24 seam test per adapter**: a request
+  carrying only `pain` enters the route and the assertion reads the STORE
+  (`effort` column set, and on PATCH-without-either, the column
+  untouched); a `{difficulty: "hard", effort: 2}` create from an "old
+  client" is read back through the store as `difficulty: "easy"` — the
+  body's word is ignored, the derived one wins, and the caller controls
+  neither.
 - **The inbound adapter counts.** Every `pain`-keyed write emits one
   structured server log line (`compat.pain_write`). That line is PR 3's
   trigger (§5) and PR 3 deletes it.
@@ -438,9 +473,16 @@ ready-time, per the agent briefing's second-merger-regenerates rule.
 ## 5. PR 3 — drop compat (measured, not confirmed)
 
 **Trigger:** the tag carrying PR 1 and PR 2 has been deployed, and the
-server log shows **zero `compat.pain_write` lines for seven consecutive
-days after that deploy** (`docker logs` over the window on the prod host,
-command and output pasted in PR 3's body). "Every device is updated" is
+prod app container shows **zero `compat.pain_write` lines over a
+container lifetime of at least seven days** — both facts from the same
+container, pasted in PR 3's body:
+`docker inspect --format '{{.State.StartedAt}}' <app>` (≥ 7 days ago)
+and `docker logs <app> 2>&1 | grep -c compat.pain_write` (`0`).
+`compose.yml` sets no log driver or retention and `deploy.sh` recreates
+the container on every code deploy, so `docker logs` only ever covers the
+current container: a deploy inside the window RESETS the clock, and the
+gate says so rather than pretending a fresh container's empty log is
+seven clean days. "Every device is updated" is
 not a thing anyone can know — TestFlight says nothing about a phone
 nobody opened — so the compat layer measures its own use instead. The
 tag cycle itself is not ceremony: without the dual field a stale build's
@@ -474,9 +516,12 @@ compat layer to serve). PR 3 rides whatever tag follows its trigger.
 1. `grep -rniE "difficult|\bpain\b" domain server src e2e --exclude='*.test.*' -l`
    (in `app/`) returns only: release-note history and the PR 3 compat paths
    (until PR 3). It returns 69 files at `f014c944`, so the gate is known to
-   go red. And `grep -rn "effort" domain src --exclude='*.test.*'` returns
-   only the 1–5 figure plus `PaceWordRef`'s stored key and its comment.
-   Both run in the phase-close gate and pasted.
+   go red. And `grep -rln "effort" domain src --exclude='*.test.*'` (51
+   files at `f014c944`) returns only files where every hit is the 1–5
+   figure or `PaceWordRef`'s stored key and its comment — checked by
+   `grep -rn` over that list with the pace-word family command from §2
+   returning only `PaceWord*` names. Both run in the phase-close gate and
+   pasted.
 2. Both filter sheets, `WorkoutRow`, `ClassificationCard`, `LogRow` and
    the article render with EFFORT; `pnpm e2e` and `pnpm screenshots`
    green with refreshed captures.
