@@ -1048,7 +1048,15 @@ closed with zero Concept2 contact.
       totals. **TRIAD (a number's meaning on the wire)** — full antagonist on
       the spec, PM gate on the PR. Spec:
       `docs/superpowers/specs/2026-09-05-concept2-verification.md`; the C1
-      research is `docs/superpowers/research/2026-09-05-c2-verification-code.md`.
+      research is `docs/superpowers/research/2026-09-05-c2-verification-code.md`
+      and the live result is `…/2026-09-05-c2-verification-measurement.md`.
+      **OWED after merge (one clean confirming send, to close the
+      log-dev-vs-production edge):** either a fresh 5708 API POST — which needs
+      the real log-dev row 85921 deleted first, a destructive step James rules
+      on — or a production hardware send of a divergent interval row once the
+      server ships. Not required to settle which number is authoritative (the
+      5706/5707 API test did); required only to confirm production behaves as
+      log-dev did.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
