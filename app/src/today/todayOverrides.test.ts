@@ -11,6 +11,7 @@ const FULL: TodayOverrides = {
   planKey: "sprint",
   doneN: 11,
   swapType: "AT",
+  session: 0,
 };
 
 // The pre-PR1 (Phase SF) v4 shape: the five filter groups rode this
@@ -21,6 +22,7 @@ const V4_RECORD = {
   planKey: "sprint",
   doneN: 11,
   swapType: "AT",
+  session: 0,
   difficulties: ["easy", "hard"],
   durations: ["<30", "45-60"],
   painLevels: [1, 3, 5],
@@ -33,7 +35,9 @@ beforeEach(() => localStorage.clear());
 describe("saveTodayOverrides / loadTodayOverrides", () => {
   it("round-trips and returns the record when date, planKey, and doneN all match", () => {
     expect(saveTodayOverrides(FULL)).toBe(true);
-    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(FULL);
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11, 0)).toStrictEqual(
+      FULL,
+    );
   });
 
   it("round-trips a freestyle record (planKey and doneN both null) with a lit chip", () => {
@@ -44,7 +48,7 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
       swapType: "TR",
     };
     saveTodayOverrides(freestyle);
-    expect(loadTodayOverrides("2026-08-01", null, null)).toStrictEqual(
+    expect(loadTodayOverrides("2026-08-01", null, null, 0)).toStrictEqual(
       freestyle,
     );
   });
@@ -52,7 +56,7 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
   it("round-trips swapType: null (no swap)", () => {
     const noSwap: TodayOverrides = { ...FULL, swapType: null };
     saveTodayOverrides(noSwap);
-    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11, 0)).toStrictEqual(
       noSwap,
     );
   });
@@ -64,31 +68,43 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
   // named-field parser, only a rename does.)
   it("loads a same-day v4 record, keeping the swap and dropping the retired filter fields", () => {
     localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(V4_RECORD));
-    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(FULL);
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11, 0)).toStrictEqual(
+      FULL,
+    );
+  });
+
+  it("discards the record when a session has been logged since (freestyle re-roll key), and rejects a malformed session", () => {
+    saveTodayOverrides(FULL);
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11, 1)).toBeNull();
+    localStorage.setItem(
+      TODAY_OVERRIDES_KEY,
+      JSON.stringify({ ...FULL, session: 1.5 }),
+    );
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11, 1.5)).toBeNull();
   });
 
   it("returns null when nothing is stored", () => {
-    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toBeNull();
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11, 0)).toBeNull();
   });
 
   it("discards the stored record on a date change", () => {
     saveTodayOverrides(FULL);
-    expect(loadTodayOverrides("2026-08-02", "sprint", 11)).toBeNull();
+    expect(loadTodayOverrides("2026-08-02", "sprint", 11, 0)).toBeNull();
   });
 
   it("discards the stored record when the plan switched", () => {
     saveTodayOverrides(FULL);
-    expect(loadTodayOverrides("2026-08-01", "head", 11)).toBeNull();
+    expect(loadTodayOverrides("2026-08-01", "head", 11, 0)).toBeNull();
   });
 
   it("discards the stored record when doneN advanced (a session logged since)", () => {
     saveTodayOverrides(FULL);
-    expect(loadTodayOverrides("2026-08-01", "sprint", 12)).toBeNull();
+    expect(loadTodayOverrides("2026-08-01", "sprint", 12, 0)).toBeNull();
   });
 
   it("discards a plan-mode record when read back in freestyle context", () => {
     saveTodayOverrides(FULL);
-    expect(loadTodayOverrides("2026-08-01", null, null)).toBeNull();
+    expect(loadTodayOverrides("2026-08-01", null, null, 0)).toBeNull();
   });
 
   describe("rejects malformed stored values (falls back to null)", () => {
@@ -107,11 +123,25 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
       ["swapType wrong shape", JSON.stringify({ ...FULL, swapType: 2 })],
       [
         "swapType missing (undefined is not null)",
-        JSON.stringify({ date: "2026-08-01", planKey: "sprint", doneN: 11 }),
+        JSON.stringify({
+          date: "2026-08-01",
+          planKey: "sprint",
+          doneN: 11,
+          session: 0,
+        }),
+      ],
+      [
+        "session missing (a pre-'logged only' same-day record)",
+        JSON.stringify({
+          date: "2026-08-01",
+          planKey: "sprint",
+          doneN: 11,
+          swapType: "AT",
+        }),
       ],
     ])("%s", (_name, raw) => {
       store(raw);
-      expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toBeNull();
+      expect(loadTodayOverrides("2026-08-01", "sprint", 11, 0)).toBeNull();
     });
   });
 
@@ -123,11 +153,13 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
         throw new DOMException("storage is denied", "SecurityError");
       });
     try {
-      expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toBeNull();
+      expect(loadTodayOverrides("2026-08-01", "sprint", 11, 0)).toBeNull();
     } finally {
       getItem.mockRestore();
     }
-    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(FULL);
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11, 0)).toStrictEqual(
+      FULL,
+    );
     const setItem = vi
       .spyOn(Storage.prototype, "setItem")
       .mockImplementation(() => {

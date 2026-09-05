@@ -117,8 +117,26 @@ function fallbackKey(
   today: string,
   planKey: string | null,
   doneN: number | null,
+  session: number,
 ): string {
-  return `${today}|${planKey ?? ""}|${doneN ?? ""}`;
+  return `${today}|${planKey ?? ""}|${doneN ?? ""}|${session}`;
+}
+
+/** James (2026-09-04, "logged only"): in freestyle a LOGGED session re-keys
+ *  the day, so Today rolls a fresh type and draws a fresh card afterwards.
+ *  Counted from the recent-logs fetch, by the log's own local calendar day
+ *  (`todayDateString` on `loggedAt`, the same rule the records use).
+ *  Always 0 with a plan: a plan-mode log bumps `doneN`, which is already
+ *  in the key, and I-7 keeps plan mode's swap/pin behaviour untouched. A
+ *  saved-but-unlogged session is not a log and does not count. */
+function sessionsLoggedToday(
+  logs: RecentLog[],
+  planKey: string | null,
+  today: string,
+): number {
+  if (planKey !== null) return 0;
+  return logs.filter((log) => todayDateString(new Date(log.loggedAt)) === today)
+    .length;
 }
 
 // Chip order: O2, AT, TR, AN — the pyramid's base-first order, matching
@@ -332,7 +350,11 @@ export default function Today() {
   const baselinesState = useBaselines();
   const planState = usePlan();
   const preferencesState = usePreferences();
-  const recentLogsState = useRecentLogs(3);
+  // Ten, not three: the list below still shows the last three, but the
+  // freestyle re-roll key (`sessionsLoggedToday`, TodayView) counts how many
+  // of these were logged today, and three would stop counting at the
+  // fourth session of a day.
+  const recentLogsState = useRecentLogs(10);
 
   // Lazy initializer, same read-once-at-mount idiom every session screen
   // uses (Countdown.tsx/Timer.tsx's own comment on this): F2's cold-start
@@ -597,14 +619,20 @@ function TodayContent({
   // (bucketsForCap(preferences.timeCapMinutes), preferences.difficulties) and
   // `baselines` to compute durationsUnknown itself, so both are passed
   // through rather than a pre-built SuggestPrefs.
+  const session = sessionsLoggedToday(
+    recentLogsState.logs,
+    planState.plan.planKey,
+    todayDateString(),
+  );
   return (
     <TodayView
-      key={`${planState.plan.planKey}-${planState.plan.doneN}`}
+      key={`${planState.plan.planKey}-${planState.plan.doneN}-${session}`}
       library={workoutsState.workouts}
       baselines={baselines}
       preferences={preferencesState.preferences}
       plan={planState.plan}
       logs={recentLogsState.logs}
+      session={session}
     />
   );
 }
@@ -799,6 +827,7 @@ function TodayView({
   preferences,
   plan,
   logs,
+  session,
 }: {
   library: LibraryWorkout[];
   // Null the moment EITHER side is null (the app-wide partial-pair
@@ -810,6 +839,8 @@ function TodayView({
   preferences: PreferencesData;
   plan: PlanData;
   logs: RecentLog[];
+  /** `sessionsLoggedToday` — part of every day record's key. */
+  session: number;
 }) {
   const today = todayDateString();
   // Read once per render — this screen has no ticking display (unlike
@@ -870,7 +901,7 @@ function TodayView({
     source: null,
   };
 
-  const fbKey = fallbackKey(today, plan.planKey, plan.doneN);
+  const fbKey = fallbackKey(today, plan.planKey, plan.doneN, session);
 
   // The two persistence owners (RF25). Each writes the record and keeps the
   // session fallback exact: cleared on a landed write, set on a failed one
@@ -891,6 +922,7 @@ function TodayView({
       date: today,
       planKey: plan.planKey,
       doneN: plan.doneN,
+      session,
       ...drawn,
     });
     if (landed) {
@@ -925,12 +957,13 @@ function TodayView({
       planKey: plan.planKey,
       doneN: plan.doneN,
       swapType: null,
+      session,
     };
     const fallback = sessionFallback.get(fbKey);
     if (fallback?.swapType !== undefined) {
       return { ...record, swapType: fallback.swapType };
     }
-    const stored = loadTodayOverrides(today, plan.planKey, plan.doneN);
+    const stored = loadTodayOverrides(today, plan.planKey, plan.doneN, session);
     if (stored !== null) return stored;
     if (prescribedCode === null && baselines !== null) {
       // A candidate is a type whose pool under ITS remembered filters is
@@ -1144,7 +1177,7 @@ function TodayView({
   const [pick, setPick] = useState<StoredPick | null>(() => {
     const fallback = sessionFallback.get(fbKey);
     if (fallback?.pick !== undefined) return fallback.pick;
-    const stored = loadTodayPick(today, plan.planKey, plan.doneN);
+    const stored = loadTodayPick(today, plan.planKey, plan.doneN, session);
     if (stored !== null) return stored;
     if (prescribed !== null || baselines === null) return null;
     const first = computeSuggestion(
@@ -1486,7 +1519,7 @@ function TodayView({
           <p className="mono-status">No sessions logged yet.</p>
         ) : (
           <ul className="today-log-list">
-            {logs.map((log) => (
+            {logs.slice(0, 3).map((log) => (
               <li key={log.id}>
                 <Link
                   to={`/today/log/${log.id}`}

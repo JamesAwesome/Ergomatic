@@ -73,12 +73,27 @@ async function pinToday(
         planKey: string | null;
         doneN: number;
       };
+      // The freestyle re-roll key: sessions logged today (local day), 0
+      // with a plan — the same rule `Today.tsx`'s `sessionsLoggedToday`
+      // uses.
+      let session = 0;
+      if (plan.planKey === null) {
+        const logsRes = await fetch("/api/logs?limit=10");
+        if (!logsRes.ok) return { ok: false, body: `logs ${logsRes.status}` };
+        const logs = (await logsRes.json()) as { loggedAt: string }[];
+        session = logs.filter((log) => {
+          const d = new Date(log.loggedAt);
+          const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          return day === date;
+        }).length;
+      }
       if (type !== undefined) {
         const record: TodayOverrides = {
           date,
           planKey: plan.planKey,
           doneN: plan.doneN,
           swapType: type,
+          session,
         };
         localStorage.setItem(overridesKey, JSON.stringify(record));
       }
@@ -95,6 +110,7 @@ async function pinToday(
           workoutId: row.id,
           shownIds: [row.id],
           shuffled: false,
+          session,
         };
         localStorage.setItem(pickKey, JSON.stringify(record));
       }
@@ -1085,6 +1101,58 @@ test.describe("Phase SF PR1: SHUFFLE is random, without repeats, and the pick su
     await expect(page.locator(".filter-token")).toBeVisible();
     await page.waitForLoadState("networkidle");
     expect(requests).toStrictEqual(mountRequests);
+  });
+});
+
+// James (2026-09-04, "logged only"): a session LOGGED today re-keys a
+// freestyle day, so Today rolls and draws afresh afterwards. A real log
+// through the real API, a real reload; the records' `session` field is the
+// deterministic observable (the new chip and card are random by design).
+test.describe("Phase SF PR1: a logged session re-rolls the freestyle day", () => {
+  test("logging a session bumps the day records' session key and redraws", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-reroll-after-log@e2e.test",
+      name: "Today Reroll After Log",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await pinToday(page, { type: "AT", title: "Occluded Front" });
+    await page.goto("/today");
+    await page.locator(".today-card").waitFor();
+    await expect(page.locator(".today-card-title")).toHaveText(
+      "Occluded Front",
+    );
+    const read = () =>
+      page.evaluate(
+        ({ pickKey, overridesKey }) => ({
+          pick: JSON.parse(localStorage.getItem(pickKey) ?? "null") as {
+            session: number;
+            shuffled: boolean;
+            shownIds: string[];
+          },
+          overrides: JSON.parse(
+            localStorage.getItem(overridesKey) ?? "null",
+          ) as { session: number },
+        }),
+        { pickKey: TODAY_PICK_KEY, overridesKey: TODAY_OVERRIDES_KEY },
+      );
+    const before = await read();
+    expect(before.pick.session).toBe(0);
+    expect(before.overrides.session).toBe(0);
+
+    await postLogForWorkout(page, "Occluded Front");
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    const after = await read();
+    expect(after.overrides.session).toBe(1);
+    expect(after.pick.session).toBe(1);
+    expect(after.pick.shuffled).toBe(false);
+    expect(after.pick.shownIds).toHaveLength(1);
+    // Exactly one chip is lit again (a fresh roll, whichever type it chose).
+    await expect(
+      page.locator(".type-chip-grid .chip[aria-pressed='true']"),
+    ).toHaveCount(1);
   });
 });
 

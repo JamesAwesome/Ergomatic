@@ -354,12 +354,27 @@ async function pinToday(
         planKey: string | null;
         doneN: number;
       };
+      // The freestyle re-roll key: sessions logged today (local day), 0
+      // with a plan — the same rule `Today.tsx`'s `sessionsLoggedToday`
+      // uses.
+      let session = 0;
+      if (plan.planKey === null) {
+        const logsRes = await fetch("/api/logs?limit=10");
+        if (!logsRes.ok) return { ok: false, body: `logs ${logsRes.status}` };
+        const logs = (await logsRes.json()) as { loggedAt: string }[];
+        session = logs.filter((log) => {
+          const d = new Date(log.loggedAt);
+          const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          return day === date;
+        }).length;
+      }
       if (type !== undefined) {
         const record: TodayOverrides = {
           date,
           planKey: plan.planKey,
           doneN: plan.doneN,
           swapType: type,
+          session,
         };
         localStorage.setItem(overridesKey, JSON.stringify(record));
       }
@@ -376,6 +391,7 @@ async function pinToday(
           workoutId: row.id,
           shownIds: [row.id],
           shuffled: false,
+          session,
         };
         localStorage.setItem(pickKey, JSON.stringify(record));
       }

@@ -65,6 +65,7 @@ function seedClearedFreestyleDay(): void {
     planKey: null,
     doneN: 0,
     swapType: null,
+    session: 0,
   };
   localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(record));
 }
@@ -4393,6 +4394,60 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("a session LOGGED today re-keys the freestyle day: the next mount rolls a fresh type and draws a fresh card (James: 'logged only')", async () => {
+    rngQueue.push(1); // [O2, AT] -> AT
+    mockReady({ plan: FREESTYLE_PLAN, logs: [] });
+    const before = await renderToday();
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .session,
+    ).toBe(0);
+    before.unmount();
+
+    // One log dated TODAY (local) lands in the recent-logs fetch. A remount
+    // reads the records under session 1, finds none, and rolls again.
+    const loggedToday: RecentLog = {
+      ...LOGS[0],
+      id: "log-today",
+      loggedAt: new Date().toISOString(),
+    };
+    rngQueue.push(0); // a fresh roll: [O2, AT] -> O2
+    // A fresh module registry so the second mockReady's hook mocks bind
+    // (Today is already imported above with the first mocks); storage and
+    // the rng queue are outside the registry and carry over.
+    vi.resetModules();
+    mockReady({ plan: FREESTYLE_PLAN, logs: [loggedToday] });
+    await renderToday();
+    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(rngQueue).toStrictEqual([]);
+    const stored = JSON.parse(
+      localStorage.getItem(TODAY_OVERRIDES_KEY)!,
+    ) as TodayOverrides;
+    expect(stored.session).toBe(1);
+    expect(storedPick().session).toBe(1);
+    expect(storedPick().shownIds).toHaveLength(1);
+  });
+
+  it("a saved-but-unlogged session and a plan-mode log do NOT re-key: no log row, or the plan's doneN already carries it", async () => {
+    // Plan mode: the log fixtures are July dates, but even one dated today
+    // leaves `session` at 0 with a plan — doneN is the plan's own re-key.
+    const loggedToday: RecentLog = {
+      ...LOGS[0],
+      id: "log-today",
+      loggedAt: new Date().toISOString(),
+    };
+    mockReady({ logs: [loggedToday] });
+    await renderToday();
+    expect(storedPick().session).toBe(0);
   });
 
   it("CLEAR ALL resets only the current key; the other key's memory survives", async () => {

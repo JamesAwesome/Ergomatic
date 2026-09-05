@@ -32,6 +32,10 @@ export interface TodayOverrides {
   planKey: string | null;
   doneN: number | null;
   swapType: WorkoutType | null; // null = no swap
+  /** Sessions logged today when written (freestyle), 0 with a plan — see
+   *  `TodayPick.session`. A logged session re-keys the day, so the next
+   *  mount rolls a fresh type (James, 2026-09-04: "logged only"). */
+  session: number;
 }
 
 function parseOverrides(raw: string): TodayOverrides | null {
@@ -49,11 +53,13 @@ function parseOverrides(raw: string): TodayOverrides | null {
   if (o.planKey !== null && typeof o.planKey !== "string") return null;
   if (o.doneN !== null && typeof o.doneN !== "number") return null;
   if (o.swapType !== null && !isWorkoutType(o.swapType)) return null;
+  if (!Number.isInteger(o.session) || (o.session as number) < 0) return null;
   return {
     date: o.date,
     planKey: o.planKey,
     doneN: o.doneN,
     swapType: o.swapType,
+    session: o.session as number,
   };
 }
 
@@ -70,6 +76,7 @@ export function loadTodayOverrides(
   today: string,
   planKey: string | null,
   doneN: number | null,
+  session: number,
 ): TodayOverrides | null {
   try {
     const raw = localStorage.getItem(TODAY_OVERRIDES_KEY);
@@ -79,7 +86,8 @@ export function loadTodayOverrides(
     if (
       parsed.date !== today ||
       parsed.planKey !== planKey ||
-      parsed.doneN !== doneN
+      parsed.doneN !== doneN ||
+      parsed.session !== session
     ) {
       return null;
     }

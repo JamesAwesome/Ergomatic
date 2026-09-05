@@ -27,6 +27,13 @@ export interface TodayPick {
    *  SHUFFLE ("YOUR PICK", beats the pin). `nextShuffle`'s reset restarts
    *  `shownIds` at one id, so length alone cannot tell the two apart. */
   shuffled: boolean;
+  /** James (2026-09-04, "logged only"): the number of sessions LOGGED today
+   *  when this record was written, in freestyle; always 0 with a plan (a
+   *  plan-mode log bumps `doneN`, which already re-keys). A logged session
+   *  makes the next mount's context mismatch, so the day re-rolls its type
+   *  and re-draws its card as if it were a new day. Counted from the
+   *  recent-logs fetch Today already makes (last 10), never a new write. */
+  session: number;
 }
 
 /** What `loadTodayPick` hands back: the id on screen, the shown list, and
@@ -54,7 +61,9 @@ function isTodayPick(value: unknown): value is TodayPick {
     typeof v.workoutId === "string" &&
     Array.isArray(v.shownIds) &&
     v.shownIds.every((id) => typeof id === "string") &&
-    typeof v.shuffled === "boolean"
+    typeof v.shuffled === "boolean" &&
+    Number.isInteger(v.session) &&
+    (v.session as number) >= 0
   );
 }
 
@@ -69,6 +78,7 @@ export function loadTodayPick(
   today: string,
   planKey: string | null,
   doneN: number | null,
+  session: number,
 ): StoredPick | null {
   let raw: string | null;
   try {
@@ -91,7 +101,8 @@ export function loadTodayPick(
   if (
     parsed.date !== today ||
     parsed.planKey !== planKey ||
-    parsed.doneN !== doneN
+    parsed.doneN !== doneN ||
+    parsed.session !== session
   ) {
     return null;
   }
