@@ -240,12 +240,12 @@ function buildReason(
     // sheet's own group order (TIME, PAIN, LAST DONE, SOURCE) — truthy
     // checks (not `!== undefined`) since both fields are null-when-off,
     // same honesty rule as painLevels above. Phase DE PR 1 removed the
-    // DIFFICULTY group, so the list can be empty: then it is just
-    // "filters", never a named one that was not checked.
+    // DIFFICULTY group, which used to open this list unconditionally; the
+    // list is still never empty here, because `fellBack` needs a predicate
+    // that excluded something, and these four are the only predicates.
     if (prefs.lastDone) parts.push("recency");
     if (prefs.source) parts.push("source");
-    const what = parts.length ? `${parts.join("/")} filters` : "filters";
-    return `Nothing fit your ${what}. Closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+    return `Nothing fit your ${parts.join("/")} filters. Closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}).`;
 }
