@@ -15,6 +15,7 @@ describe("filterTokens", () => {
       painLevels: [4, 5],
       lastDone: "under21",
       source: "custom",
+      query: "",
     };
     expect(filterTokens(f).map((t) => t.kind)).toStrictEqual([
       "difficulty",
@@ -47,6 +48,7 @@ describe("filterTokens", () => {
         painLevels: [4],
         lastDone: "under21",
         source: "custom",
+        query: "",
       };
       const tokens = filterTokens(busy);
       expect(tokens.map((t) => t.kind)).toStrictEqual([
@@ -91,6 +93,7 @@ describe("filterTokens", () => {
         painLevels: [4],
         lastDone: "under21",
         source: "custom",
+        query: "",
       };
       const tokens = filterTokens(busy);
       const difficultyToken = tokens.find((t) => t.kind === "difficulty")!;
@@ -201,6 +204,7 @@ describe("filterTokens", () => {
         painLevels: [4, 5],
         lastDone: "under21",
         source: "custom",
+        query: "",
       };
       const tokens = filterTokens(busy);
       // Five, not six: the active TYPE contributes no token (2026-08-12).

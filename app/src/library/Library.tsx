@@ -7,6 +7,7 @@ import type { Baselines, WorkoutType } from "../../domain/types.js";
 import {
   applyFilters,
   clearFilters,
+  setQuery,
   hasActiveFilters,
   isTypeSelected,
   toggleType,
@@ -365,6 +366,39 @@ export default function Library() {
         )}
       </div>
       <div className="library-filter-bar">
+        {/* Phase SF PR3 (spec §4, I-14/I-16): SEARCH BY NAME — live,
+            case-insensitive substring on the title, AND-ed with every
+            other filter; a 44px field with its own clear control (the
+            native `type=search` clear is suppressed in CSS so the tap
+            target is ours). No autofocus: the list is the point of the
+            screen. It rides the BACK record with the rest of `filters`
+            and is cleared at the LIBRARY tab with them (I-15). */}
+        <div className="library-search">
+          <input
+            type="search"
+            className="library-search-input"
+            value={filters.query}
+            onChange={(event) =>
+              setFilters(setQuery(filters, event.target.value))
+            }
+            placeholder="SEARCH BY NAME"
+            aria-label="Search by name"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="search"
+          />
+          {filters.query !== "" && (
+            <button
+              type="button"
+              className="library-search-clear"
+              aria-label="Clear search"
+              onClick={() => setFilters(setQuery(filters, ""))}
+            >
+              ✕
+            </button>
+          )}
+        </div>
         <div className="library-filter-row">
           <button
             type="button"

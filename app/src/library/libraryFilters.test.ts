@@ -15,6 +15,7 @@ const FULL: Filters = {
   painLevels: [4, 5],
   lastDone: "over21",
   source: "custom",
+  query: "fog",
 };
 
 // The pre-Task-4 (v1) shape, kept verbatim as a fixture rather than reused
@@ -173,6 +174,21 @@ describe("libraryFilters", () => {
       store(raw);
       expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
     });
+  });
+
+  // Phase SF PR3: `query` is a NEW concept — a record from before it
+  // upgrades in place to "" (the lastDone/source precedent), while a
+  // present non-string still fails strict.
+  it("upgrades a record with no query field to query: '' rather than rejecting it, and rejects a non-string query", () => {
+    const { query: _q, ...noQuery } = FULL;
+    void _q;
+    sessionStorage.setItem(LIBRARY_FILTERS_KEY, JSON.stringify(noQuery));
+    expect(loadLibraryFilters()).toStrictEqual({ ...FULL, query: "" });
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, query: 7 }),
+    );
+    expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
   });
 
   it("de-dupes duplicated types from a tampered value", () => {

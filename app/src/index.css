@@ -10880,3 +10880,65 @@ section:not(.news-pinned) .news-row:last-of-type {
     0 0 0 1px var(--ink),
     0 0 0 4px var(--accent);
 }
+
+/* Phase SF PR3 (spec §4): the Library's SEARCH BY NAME field. 44px tall
+   (`--tap`), mono like the tokens and count beside it, the same 1px
+   `--rule-3` border the sheet cells wear; the placeholder is `--ink-4`
+   (4.76:1 on --page, computed in the PR's Gate 0 — the same token the
+   builder's `.split-input::placeholder` uses, opacity 1 so Firefox does not
+   fade it under 4.5). The native `type=search` cancel button is suppressed
+   so the clear control is ours: a 44px `✕` inside the field's right edge,
+   rendered only while there is text to clear. */
+.library-search {
+  position: relative;
+}
+
+.library-search-input {
+  width: 100%;
+  height: var(--tap);
+  padding: 0 var(--tap) 0 12px;
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.library-search-input::-webkit-search-cancel-button,
+.library-search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.library-search-input::placeholder {
+  color: var(--ink-4);
+  opacity: 1;
+  letter-spacing: 0.08em;
+}
+
+.library-search-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.library-search-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--tap);
+  height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}

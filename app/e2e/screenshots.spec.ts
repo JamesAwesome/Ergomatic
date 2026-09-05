@@ -1922,6 +1922,21 @@ test("library", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "library-filtered.png"),
   });
 
+  // Phase SF PR3 Gate 0: SEARCH BY NAME with `fog` typed (the O2 chip and
+  // the SOURCE token cleared first so the search alone narrows), portrait
+  // and landscape.
+  await page.getByRole("button", { name: "CLEAR ALL" }).click();
+  await page.getByRole("searchbox", { name: "Search by name" }).fill("fog");
+  await expect(page.locator(".workout-row").first()).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-search.png"),
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-search-landscape.png"),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+
   await cleanupByTitle(page, customTitle);
 });
 

@@ -78,6 +78,10 @@ function parseFilters(raw: string): Filters | null {
   if (f.source !== null && f.source !== "global" && f.source !== "custom") {
     return null;
   }
+  // PR3: `query` is a GENUINELY NEW concept (like lastDone/source were in
+  // Round 2), so its absence upgrades in place to "" rather than failing
+  // the record; a present non-string still fails strict.
+  if (f.query !== undefined && typeof f.query !== "string") return null;
   return {
     // De-duped defensively: toggleType/toggleDifficulty/toggleDuration/
     // togglePainLevel can never produce a duplicate, but a tampered/legacy
@@ -90,6 +94,7 @@ function parseFilters(raw: string): Filters | null {
     painLevels: [...new Set(f.painLevels)],
     lastDone: f.lastDone,
     source: f.source,
+    query: f.query === undefined ? "" : f.query,
   };
 }
 

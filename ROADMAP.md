@@ -1121,8 +1121,11 @@ with the same card on top every day. Spec:
       found the workout DETAIL badge the six-site census missed).
       TRIAD. Gate 0 with both sheets, both orientations, before/after in
       BOTH directions on one pool. **M**
-- [ ] PR3 — Library SEARCH BY NAME field above FILTER ⌄ (rides the BACK
-      record, cleared at the tab). James reviews; no PM gate. **S**
+- [ ] PR3 — BUILT, Gate 0 pending (2026-09-05): Library SEARCH BY NAME
+      field above FILTER ⌄ (rides the BACK record, cleared at the tab).
+      James reviews; no PM gate; antagonist SKIP spoken (inherits phase
+      ground; a client-side substring over an array already in memory, no
+      new invariant class). **S**
 - [ ] Phase close — antagonist exit pass, PM close, ONE release covering
       #296 + PR1 + PR2 + PR3 (James: "release after all of this phase";
       notes must say a freestyle morning now narrows to one type and how

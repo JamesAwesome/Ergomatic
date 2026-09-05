@@ -503,7 +503,14 @@ design sweep: both thumbs ≥ 44 px hit boxes in portrait and landscape.
 - **I-16 Field.** 44 px tall, mono placeholder `SEARCH BY NAME`, a clear
   control inside the field when non-empty (44 px), `type="search"`,
   `autocapitalize="none"`, `enterkeyhint="search"`, no autofocus (the list
-  is the point of the screen, not the field).
+  is the point of the screen, not the field). As built (PR3): the native
+  `type=search` cancel button is suppressed in CSS so the clear control is
+  ours; the field is `Filters.query`, matched via `normalizeQuery` (trim +
+  lower-case) in `applyFilters`; it counts as active only when non-blank;
+  the sheet's CLEAR leaves it alone (not a sheet group); the parser treats
+  a missing `query` as "" (a new concept, the lastDone/source precedent)
+  and a non-string as a rejected record. Placeholder `--ink-4` on `--page`
+  4.76:1.
 - **I-17 Rename (ships in PR2, same two sheets, same Gate 0 captures — PM
   finding).** `GLOBAL` → `ERGOMATIC LIBRARY`, `CUSTOM` → `MY WORKOUTS` at
   every RENDERED site — seven plus the accessible-name suffix (the delta

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { EMPTY_FILTERS } from "./filters";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -254,6 +255,79 @@ function setTime(min: number, max: number) {
 }
 
 describe("Library", () => {
+  // Phase SF PR3 (spec §4): SEARCH BY NAME.
+  describe("search by name", () => {
+    const field = () =>
+      screen.getByRole("searchbox", { name: "Search by name" });
+
+    it("filters the list live on a case-insensitive, trimmed substring, shows the count row and CLEAR ALL, and renders no token for it", async () => {
+      mockReady();
+      await renderLibrary();
+      await userEvent.type(field(), "  LADDER ");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-an"]);
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "CLEAR ALL" }),
+      ).toBeInTheDocument();
+      expect(document.querySelector(".filter-token")).not.toBeInTheDocument();
+    });
+
+    it("composes AND with a TYPE chip, reaching the empty state when nothing matches", async () => {
+      mockReady();
+      await renderLibrary();
+      await userEvent.type(field(), "sprint");
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      expect(screen.getByText(/No workouts match/i)).toBeInTheDocument();
+    });
+
+    it("its own clear control empties the field and restores the list; CLEAR ALL clears it too", async () => {
+      mockReady();
+      await renderLibrary();
+      await userEvent.type(field(), "cruise");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Clear search" }),
+      );
+      expect(field()).toHaveValue("");
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Clear search" }),
+      ).not.toBeInTheDocument();
+
+      await userEvent.type(field(), "cruise");
+      await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
+      expect(field()).toHaveValue("");
+      expect(visibleHrefs()).toHaveLength(3);
+    });
+
+    it("the sheet's CLEAR leaves the query in place (it is not a sheet group)", async () => {
+      mockReady();
+      await renderLibrary();
+      await userEvent.type(field(), "cruise");
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "CLEAR",
+        }),
+      );
+      await applySheet();
+      expect(field()).toHaveValue("cruise");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+    });
+
+    it("is restored from the BACK record (sessionStorage) with the list already narrowed, and does not autofocus", async () => {
+      sessionStorage.setItem(
+        "ergomatic.libraryFilters",
+        JSON.stringify({ ...EMPTY_FILTERS, query: "ladder" }),
+      );
+      mockReady();
+      await renderLibrary();
+      expect(field()).toHaveValue("ladder");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-an"]);
+      expect(field()).not.toHaveFocus();
+    });
+  });
+
   it("shows an IMPORT link beside + NEW so bulk-paste no longer hides inside the builder", async () => {
     mockReady();
     await renderLibrary();
