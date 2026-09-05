@@ -104,7 +104,7 @@
 #   `Concept2LinkProbe.tsx`'s own `data-c2-link-probe` value, the same
 #   "stable data-attribute, not a function identifier" shape as
 #   `Just Row observer (instrument)` above. The card is lazy-imported on
-#   `You.tsx` behind the SAME `DEV`-or-explicit-flag condition shape
+#   `you/Concept2Screen.tsx` behind the SAME `DEV`-or-explicit-flag condition shape
 #   (`VITE_ENABLE_C2_LINK_PROBE` this time) — this string appearing in a
 #   PRODUCTION build (the flag unset) means that gate failed the same way
 #   the `Just Row observer` check's would. Flipped on purpose in the walk

@@ -127,7 +127,7 @@ export function describeFailure(outcome: LinkOutcome): LinkFailure | null {
     // or walk build, `Concept2LinkProbe`'s `outcomeDetail` already prints
     // the kind plus the plugin's `code` and `message` verbatim, and those
     // builds are where these four members actually get hit. On a plain
-    // TestFlight build the probe is not compiled in (`You.tsx` gates it on
+    // TestFlight build the probe is not compiled in (`Concept2Screen.tsx` gates it on
     // `import.meta.env.DEV || VITE_ENABLE_C2_LINK_PROBE === "1"`), the link
     // flow posts nothing to our server on this path, and the probe's own
     // header says so: the code and message "reach no server log". So

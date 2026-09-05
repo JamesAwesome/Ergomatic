@@ -6364,50 +6364,116 @@ async function openC2You(page: Page, email: string): Promise<void> {
   await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
   await setBaselines(page);
   await page.goto("/you");
-  await expect(page.locator(".diag-row")).toBeVisible();
+  // PR A: the sentinel is You's own container plus a control always on it,
+  // never a feature row's class (two `.diag-row`s now — strict mode).
+  await expect(page.locator("main.you-screen")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+}
+
+/** The Concept2 SCREEN behind the row, entered through the row. Its captures
+ *  are VIEWPORT shots, never `fullPage`: `/you/concept2` is `.overlay-screen`
+ *  (`position: fixed; inset: 0`), and this file's own diagnostics captures
+ *  record that `fullPage: true` is useless on that route shape — the fixed
+ *  overlay is exactly one viewport tall whatever the document behind it
+ *  measures. */
+async function openC2Screen(page: Page, email: string): Promise<void> {
+  await openC2You(page, email);
+  await page.getByRole("link", { name: /CONCEPT2/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Concept2", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".c2-card")).toBeVisible();
 }
 
 test("you-concept2-unlinked", async ({ page }) => {
-  // GATE 0's OWN ARTIFACT, and the reason this capture is full-page: the
-  // card's position relative to RESET BASELINE SETUP has never been rendered
-  // for anyone. Every in-situ frame on the amendment page draws the card in
-  // the slot the reset ghost occupies in its own frame, and no frame draws
-  // both — so the page cannot settle the order and the shipped order lives
-  // only in a `You.tsx` comment. This image is what that decision looks like.
-  //
-  // It is ALSO the visual record of what the two weight-class rulings
-  // changed: the board's 1a drew a WEIGHT CLASS section and a two-option
-  // control between the explanation and the button, and the first amendment
-  // replaced them with a helper line saying where the class comes from.
-  // James, 2026-09-04: "Stop talking about the weight class." Nothing stands
-  // in their place — the explanation, the rule and the button, and that is
-  // what this image now shows.
+  // Wave E PR A (spec 2026-09-04-concept2-walk-fixes §5.1): the card is gone
+  // from You; one quiet mono row stands at the foot beside DIAGNOSTICS. This
+  // is decision-table cell 5 — the discovery state most rowers are in — and
+  // the adjacency Gate 0 §8.2/8.4 drew and James approved on 2026-09-04
+  // (CONCEPT2 above DIAGNOSTICS). Full page, so the row's place at the foot
+  // is in the picture.
   const fake: C2ShotFake = {
     link: { status: 200, body: C2_SHOT_UNLINKED },
     send: { status: 200, body: {} },
   };
   await routeC2(page, fake);
   await openC2You(page, "screenshots-c2-unlinked@e2e.test");
-  await expect(
-    page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
-  ).toBeEnabled();
-  await expect(page.locator(".c2-card").getByRole("radiogroup")).toHaveCount(0);
-  // Shot only once the card demonstrably says nothing about the class —
-  // otherwise the capture is the record of a screen nobody checked.
-  await expect(page.locator(".c2-card").getByText(/weight class/i)).toHaveCount(
-    0,
-  );
+  const row = page.getByRole("link", { name: /CONCEPT2/ });
+  await expect(row.locator(".diag-row-state")).toHaveText("NOT LINKED");
+  await expect(page.locator(".c2-card")).toHaveCount(0);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you-concept2-unlinked.png"),
     fullPage: true,
   });
 });
 
+test("you-concept2-linked", async ({ page }) => {
+  // Cell 7: the door with an answer.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-linked@e2e.test");
+  await expect(
+    page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+  ).toHaveText("LINKED ✓");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-linked.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-reconnect", async ({ page }) => {
+  // Cell 9: the pre-emptive warning the row exists for — the server's own
+  // `needs_reauth_at`, on a surface the rower passes anyway, before they
+  // spend a send on it.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: { ...C2_SHOT_LINKED, needsReauth: true } },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-reconnect@e2e.test");
+  await expect(
+    page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+  ).toHaveText("RECONNECT NEEDED");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-reconnect.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-read-failed", async ({ page }) => {
+  // Cell 2b: an account that HAS been told Concept2 exists for it (one good
+  // read, which mints ruling 6's persisted `seen`), whose read then fails.
+  // The row keeps its door so the Retry behind it stays reachable. A 502 on
+  // the FIRST-EVER read would draw NO row (cell 2a) — that is the live
+  // defect this design closes, and it is why the fixture serves one good
+  // read before the failing one.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-read-failed@e2e.test");
+  await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+  fake.link = { status: 502, body: { error: "upstream" } };
+  await page.reload();
+  await expect(page.locator("main.you-screen")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+  ).toHaveText("COULDN'T READ");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-read-failed.png"),
+    fullPage: true,
+  });
+});
+
 test("you-concept2-landscape", async ({ page }) => {
-  // THE SECOND ORIENTATION, which the Gate 0 rule asks for by name. The
-  // landscape rule is what turns the card's tell/act pair into two columns
-  // (`index.css`'s `.c2-card-body-split` media block), and until now that
-  // rule has only ever been measured, never looked at.
+  // THE SECOND ORIENTATION, which the Gate 0 rule asks for by name: the two
+  // doors at the foot of You, landscape. Viewport, not full page (a fullPage
+  // capture paints the FIXED tab bar at its viewport position across the
+  // middle of the page — measured on the card's landscape capture).
   const fake: C2ShotFake = {
     link: { status: 200, body: C2_SHOT_UNLINKED },
     send: { status: 200, body: {} },
@@ -6415,50 +6481,57 @@ test("you-concept2-landscape", async ({ page }) => {
   await routeC2(page, fake);
   await page.setViewportSize({ width: 844, height: 390 });
   await openC2You(page, "screenshots-c2-landscape@e2e.test");
-  await expect(
-    page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
-  ).toBeEnabled();
-  // VIEWPORT, not full page, and the portrait capture's own comment does not
-  // apply here. In portrait the whole screen fits the 390x844 viewport, so
-  // `fullPage` and a viewport shot are the same image. In landscape the
-  // screen is taller than the 390px viewport, and a `fullPage` capture
-  // paints the FIXED tab bar at its viewport position — measured, it landed
-  // across the middle of the page over the two door buttons, which is a
-  // picture of a layout that does not exist. Scrolling the card into a real
-  // viewport shows what a rower actually sees.
-  await page.locator(".c2-card").scrollIntoViewIfNeeded();
+  const row = page.getByRole("link", { name: /CONCEPT2/ });
+  await expect(row.locator(".diag-row-state")).toHaveText("NOT LINKED");
+  await page.locator(".you-doors").scrollIntoViewIfNeeded();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you-concept2-landscape.png"),
   });
 });
 
-test("you-concept2-linked", async ({ page }) => {
+test("concept2-screen-unlinked", async ({ page }) => {
+  // The screen behind the row: BackLink, title, and the card exactly as it
+  // was on You (R6). 1a.
   const fake: C2ShotFake = {
-    link: { status: 200, body: C2_SHOT_LINKED },
+    link: { status: 200, body: C2_SHOT_UNLINKED },
     send: { status: 200, body: {} },
   };
   await routeC2(page, fake);
-  await openC2You(page, "screenshots-c2-linked@e2e.test");
-  // The identity line names BOTH accounts — the Concept2 username and the
-  // Ergomatic address it is bound to. That pairing is the whole point of
-  // the state, so the capture proves it before shooting.
-  await expect(page.locator(".c2-card-identity")).toContainText(
-    "Concept2 jamesawesome · Ergomatic screenshots-c2-linked-",
-  );
-  await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
+  await openC2Screen(page, "screenshots-c2-screen-unlinked@e2e.test");
+  await expect(
+    page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+  ).toBeEnabled();
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "you-concept2-linked.png"),
-    fullPage: true,
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-unlinked.png"),
   });
 });
 
-test("you-concept2-armed", async ({ page }) => {
+test("concept2-screen-linked", async ({ page }) => {
   const fake: C2ShotFake = {
     link: { status: 200, body: C2_SHOT_LINKED },
     send: { status: 200, body: {} },
   };
   await routeC2(page, fake);
-  await openC2You(page, "screenshots-c2-armed@e2e.test");
+  await openC2Screen(page, "screenshots-c2-screen-linked@e2e.test");
+  await expect(page.locator(".c2-card-identity")).toContainText(
+    "Concept2 jamesawesome · Ergomatic screenshots-c2-screen-linked",
+  );
+  await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-linked.png"),
+  });
+});
+
+test("concept2-screen-armed", async ({ page }) => {
+  // 1d, on the screen it now lives on. Unlink keeps its tier, its size and
+  // its two-tap arm (spec §5.1 R8/R9): on a screen whose only job is this
+  // link, the destructive control being the loudest thing there is correct.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2Screen(page, "screenshots-c2-screen-armed@e2e.test");
   await page.getByRole("button", { name: "Unlink Concept2" }).click();
   await expect(
     page.getByRole("button", { name: "Tap again to unlink" }),
@@ -6467,28 +6540,50 @@ test("you-concept2-armed", async ({ page }) => {
     page.getByText("DISARMS ON ITS OWN AFTER 4 SECONDS"),
   ).toBeVisible();
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "you-concept2-armed.png"),
-    fullPage: true,
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-armed.png"),
   });
 });
 
-test("you-concept2-read-failed", async ({ page }) => {
-  // Amendment 1i, and the state the invisibility case must never be
-  // confused with: a read that FAILED is a different answer from a
-  // deployment that has no Concept2, and drawing them the same way tells a
-  // rower whose server does have it that it does not.
+test("concept2-screen-read-failed", async ({ page }) => {
+  // 1i on the screen: chrome in every state (R5), and the card's own panel
+  // with its Retry. The screen is reached through a row that exists only
+  // after one good read, so this is the same one-good-read-then-502 path as
+  // `you-concept2-read-failed` — cell 2b, one tap deeper.
   const fake: C2ShotFake = {
-    link: { status: 502, body: { error: "upstream" } },
+    link: { status: 200, body: C2_SHOT_UNLINKED },
     send: { status: 200, body: {} },
   };
   await routeC2(page, fake);
-  await openC2You(page, "screenshots-c2-read-failed@e2e.test");
+  await openC2You(page, "screenshots-c2-screen-read-failed@e2e.test");
+  await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+  fake.link = { status: 502, body: { error: "upstream" } };
+  await page.reload();
+  await page.getByRole("link", { name: /CONCEPT2/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Concept2", exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".c2-card-status")).toHaveText("COULDN'T READ");
   await expect(page.getByText("REASON: THE SERVER ANSWERED 502")).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "you-concept2-read-failed.png"),
-    fullPage: true,
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-read-failed.png"),
+  });
+});
+
+test("concept2-screen-landscape", async ({ page }) => {
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await openC2Screen(page, "screenshots-c2-screen-landscape@e2e.test");
+  await expect(
+    page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+  ).toBeEnabled();
+  await page.locator(".c2-card").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-landscape.png"),
   });
 });
 

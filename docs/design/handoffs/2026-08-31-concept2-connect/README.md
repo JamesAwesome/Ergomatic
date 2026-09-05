@@ -45,8 +45,11 @@ implementation.
 Two surfaces that link a rower's Concept2 logbook account and send finished
 monitor rows to it, one row at a time, manually:
 
-1. **You tab · Concept2 card** — owns the link (OAuth via the system
-   browser) and unlink. It asks the rower nothing (2026-09-03 ruling).
+1. **Concept2 card** — owns the link (OAuth via the system browser) and
+   unlink. It asks the rower nothing (2026-09-03 ruling). **Moved
+   2026-09-04 (PR A): the card no longer sits on the You tab itself — a
+   CONCEPT2 row on You opens `/you/concept2`, which mounts the card
+   unchanged (amendment §8, invariant R6).**
 2. **Log detail · Send block** — owns the per-row manual send and its
    persistent send state.
 
@@ -59,9 +62,12 @@ user-facing copy (periods/colons/middle dots instead).
 
 `Concept2 connect.dc.html` is a **design reference created in HTML** — a
 rendered state board, not production code. Recreate these designs in the
-target codebase's existing environment (`app/src/You.tsx` composition for
-Surface 1; `app/src/log/FromTheLog.tsx` for Surface 2) using its
-established patterns. **Corrected 2026-09-04: this line used to name
+target codebase's existing environment (`app/src/you/Concept2Screen.tsx`
+composition for Surface 1; `app/src/log/FromTheLog.tsx` for Surface 2)
+using its established patterns. **Corrected 2026-09-04 (PR A): this line
+named `app/src/You.tsx`, which is now wrong a second time** — PR A moved
+Surface 1's composition off You.tsx entirely; You.tsx carries only the
+CONCEPT2 row that opens the screen. **Earlier, this line used to name
 `app/src/log/LogRow.tsx`, and that was the wrong file** (amendment
 observation 1). `LogRow.tsx` renders the LIST row, inside a `<Link>` on
 Today and History — an interactive control there would nest a button in an
@@ -133,8 +139,9 @@ this file still quotes an older one, the amendment wins.
 - **Weight class does not show on ANY card** (1a, 1c, 1d) — there is none
   to show. Linked state is LINKED ✓, the identity line, helper, unlink.
 - **Not linked → nothing on the log row.** The Concept2 block renders only
-  when an account is linked. No pointer, no disabled control. The You card
-  is the sole discovery surface.
+  when an account is linked. No pointer, no disabled control. The CONCEPT2
+  row on You (opening the card's screen, since PR A) is the sole discovery
+  surface.
 - **Non-qualifying rows** (manual, terminated, no work/rest columns): the
   block does not render, ever.
 - **Mechanism note, added 2026-09-02 (PR1.75b), reconciliation only — no
@@ -197,7 +204,13 @@ It also carries §3 (the callback pages as the server renders them), §4
 
 ## Screens / States
 
-### Surface 1 — You: Concept2 card (board IDs 1a-1e; the amendment adds 1f-1j)
+### Surface 1 — Concept2 card (board IDs 1a-1e; the amendment adds 1f-1j)
+
+**Moved 2026-09-04 (PR A): the heading above used to read "You: Concept2
+card"; the card no longer sits on You.** A CONCEPT2 row on You opens
+`/you/concept2`, which mounts this card unchanged (amendment §8, invariant
+R6 — the card's own markup does not change). Read the states below as the
+card's own interior, not as a You-tab layout.
 
 House card: `#fffdf7` background, `1px solid #d8d3c4` border,
 `border-radius: 2px`, 16px padding, 12px vertical gap. Card header row: mono
@@ -205,7 +218,8 @@ label `CONCEPT2` (11px, 600, letter-spacing 0.16em, `#1b1a17`) left; mono
 status right (11px, letter-spacing 0.12em: muted `#6f6a5f` for NOT LINKED /
 WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
 
-- **1a Unlinked** (in situ on You, 390×844): explainer "Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log." ·
+- **1a Unlinked** (~~in situ on You~~ — MOVED 2026-09-04: now the screen
+  behind the row, amendment §8.2 — 390×844): explainer "Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log." ·
   hairline `#ded8c9` · **[WITHDRAWN 2026-09-03: the WEIGHT CLASS section,
   its 2-column segmented control, its "Concept2 requires a weight class.
   Asked once, at connect." ask, its 61.5/75 kg helper, and the dimmed-

@@ -7501,3 +7501,47 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   comments where the same PR had reduced it to one. **Technique: run every
   prescribed grep at REVIEW time too, not only at spec time, and grep the
   withdrawn PHRASING ("returns nothing") across every file that repeated it.**
+
+## 2026-09-04 — Wave E PR A: gates that measure the wrong distance
+
+- **A mutation that moves a declaration is not the mutation that reproduces the
+  design alternative.** A gate for "ONE auto margin on the wrapper pins the
+  group" prescribed moving `margin-top: auto` from the wrapper onto its
+  children; inside a wrapper that is itself a flex ITEM there is no free space
+  to split, so the rows stayed flush and the gate stayed green in both
+  orientations. **Technique: paint the mutant and the counterfactual SIDE BY
+  SIDE in a real engine before writing the expected failure** — the real
+  counterfactual (delete the wrapper, put the auto margin back on the rows as
+  direct flex children) split 174.5px in portrait and 0 in landscape, which is
+  also how you learn which orientation the gate can even fail in.
+- **An adjacency assertion cannot fail on a position defect.** The same gate
+  asserted `|diag.y - (c2.y + c2.height)| <= 1` and nothing else, so a mutant
+  that moved the whole group 349px up the screen was green. **Technique: for a
+  layout invariant with two halves ("pinned to X" and "adjacent to each other"),
+  write one assertion per half and name which mutant reddens each** — a comment
+  arguing about half A above an assertion measuring half B reads as coverage.
+- **`fullPage: true` is a claim, and on a `position: fixed` overlay it is a
+  false one.** Four new captures carried the flag across from captures shot on a
+  plain-flow screen. **Technique: before copying a capture flag onto a new
+  route, grep the screenshot file for its own documented rule and for the
+  nearest existing capture of the SAME route shape** — this file already said
+  "`fullPage: true` is useless on this route" and its three `.overlay-screen`
+  captures already took plain viewport shots.
+- **Two instances of the same read hook are two authorities, and the plan named
+  the mechanism without the consequence.** A screen ran its own
+  `useConcept2Link` for a redirect while its child ran another for its content;
+  the child's Retry re-reads only the child, so a child that goes silent
+  (`available: false`) under a parent still holding `null` leaves chrome over an
+  empty body — which the parent's own header sentence said could never happen.
+  **Technique: when a design justifies duplicating a reader with "nothing else
+  here can observe the child's null return", treat that sentence as the finding
+  and ask what the child renders in each state and who re-reads after a retry.**
+  RF25/AUD-016's shape with a reader instead of a writer.
+- **A test's stated precondition is not enforced by the file it lives in.** An
+  I-D sign-out test explained itself with "the fact is MINTED by this mount", on
+  a suite whose setup file is one `import` line and whose `afterEach` clears no
+  storage — two earlier tests in the same file had already minted the key.
+  **Technique: for any test whose comment asserts a precondition about persisted
+  state, read the file's `afterEach` and the shared setup before believing it;
+  a precondition satisfied by leakage is a precondition that will stop being
+  satisfied when someone reorders the file.**

@@ -30,6 +30,9 @@ vi.mock("../session/Timer", () => ({
 vi.mock("../session/LogSession", () => ({
   default: () => <h1>Log Session</h1>,
 }));
+vi.mock("../you/Concept2Screen", () => ({
+  default: () => <h1>Concept2 screen stub</h1>,
+}));
 vi.mock("../monitor/JustRowObserver", () => ({
   default: () => <h1>Just Row Observer</h1>,
 }));
@@ -288,6 +291,21 @@ describe("AppRoutes", () => {
     );
     expect(
       await screen.findByRole("heading", { name: "Monitor Logs" }),
+    ).toBeVisible();
+  });
+
+  // Wave E PR A: the Concept2 screen behind You's CONCEPT2 row, behind the
+  // same signed-in guard. The screen itself is stubbed — its own file tests
+  // its states; this pins only that the route exists and is signed-in only.
+  it("routes /you/concept2 when signed in", async () => {
+    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+    render(
+      <MemoryRouter initialEntries={["/you/concept2"]}>
+        <AppRoutes user={user} onSignedOut={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Concept2 screen stub" }),
     ).toBeVisible();
   });
 
