@@ -1,19 +1,13 @@
 import { Router, type RequestHandler, type Response } from "express";
 import { parseBulk } from "../../domain/bulk.js";
-import { rangeForCap } from "../../domain/duration.js";
-import { estimateMinutes } from "../../domain/expand.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { PLANS } from "../../domain/plans.js";
-import { suggest, type LibraryEntry } from "../../domain/suggest.js";
 import {
   isFreeRow,
   isWorkoutType,
   LOG_SOURCES,
-  type Baselines,
   type Difficulty,
   type LogSource,
-  type Step,
-  type WorkoutType,
 } from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
 import { logSourceContradiction } from "../logSource.js";
@@ -2083,96 +2077,6 @@ export function createDataRouter({
 
   router.get("/api/test-history", async (req, res) => {
     res.json(await stores.testHistory.list(req.user!.id));
-  });
-
-  // -- today ------------------------------------------------------------
-
-  router.get("/api/today", async (req, res) => {
-    const userId = req.user!.id;
-    const baselinesRow = await stores.baselines.get(userId);
-    if (
-      !baselinesRow ||
-      baselinesRow.k2Seconds === null ||
-      baselinesRow.k6Seconds === null
-    ) {
-      res.status(422).json({ error: "baselines_required" });
-      return;
-    }
-    const baselines: Baselines = {
-      k2Seconds: baselinesRow.k2Seconds,
-      k6Seconds: baselinesRow.k6Seconds,
-    };
-
-    const planRow = await stores.planState.get(userId);
-    // No plan chosen yet: default to the sprint preset at day 0 rather than
-    // erroring — /today should always have something to say. The response's
-    // own `planKey` still reports null in that case (see below) so callers
-    // can tell "no plan selected" apart from "sprint is selected".
-    const effectivePlanKey: PlanKey = planRow?.planKey ?? "sprint";
-    const doneN = planRow?.doneN ?? 0;
-    const sequence = PLANS[effectivePlanKey].sessions;
-    const todayCode: WorkoutType =
-      sequence[Math.min(doneN, sequence.length - 1)].type;
-
-    const [prefs, workouts, lastDone] = await Promise.all([
-      stores.preferences.get(userId),
-      stores.workouts.list(userId),
-      stores.logs.lastDonePerWorkout(userId),
-    ]);
-
-    // Controller addendum (Phase 6I Task 7, design spec's "invisible
-    // outside onboarding" rule): the two designated GLOBAL onboarding
-    // workouts never enter the suggestion pool here, mirroring the
-    // client's own exclusion (Today.tsx's `entries`) — a veteran with real
-    // baselines set (the only account this route ever runs for; see the
-    // 422 guard above) must never be SUGGESTED "6K Test"/"2K Test".
-    // Final-review fix (2026-08-09): also require `isGlobal` — a rower's
-    // own CUSTOM workout that happens to share one of these titles
-    // (`w.isGlobal === false`, `withIsGlobal`'s own `userId !== null`
-    // case) is a real, ownable workout; excluding it by title alone
-    // orphaned it from this route's suggestion pool with no way back.
-    const library: LibraryEntry[] = workouts
-      .filter((w) => !(isOnboardingTitle(w.title) && w.isGlobal))
-      .map((w) => ({
-        id: w.id,
-        type: w.type,
-        difficulty: w.difficulty,
-        pain: w.pain,
-        estMinutes: estimateMinutes(w.steps as Step[], baselines).minutes,
-        lastDoneDaysAgo: lastDone[w.id] ?? null,
-        // Round 2 (2026-08-04): LibraryEntry.isGlobal is required, mirroring
-        // `w.isGlobal` from `stores.workouts.list()` (server/stores/workouts.ts's
-        // own `withIsGlobal`) exactly.
-        isGlobal: w.isGlobal,
-      }));
-
-    const suggestion = suggest({
-      todayCode,
-      library,
-      prefs: {
-        difficulties: prefs.difficulties,
-        // Phase SF PR2: SuggestPrefs' TIME field is a minutes range —
-        // `rangeForCap` derives the same `[0, cap]` default the client's
-        // own Today screen seeds a never-written key from (domain/
-        // duration.ts). Inclusive at the cap, where the old bucket union
-        // excluded a workout estimated at exactly the cap.
-        durationRange: rangeForCap(prefs.timeCapMinutes),
-        // Round 2 (2026-08-04): lastDone/source are deliberately OMITTED
-        // here, not set to null — server-side suggestions have no
-        // client-side overrides to derive a LAST DONE/SOURCE preference
-        // from at all (both are optional on SuggestPrefs for exactly this
-        // reason; see that interface's own doc comment).
-      },
-    });
-
-    res.json({
-      recommendation: suggestion.recommendationId,
-      reason: suggestion.reason,
-      pool: suggestion.poolIds,
-      todayCode,
-      doneN,
-      planKey: planRow?.planKey ?? null,
-    });
   });
 
   return router;

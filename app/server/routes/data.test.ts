@@ -6,7 +6,6 @@ import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import type { NewWorkoutInput } from "../stores/workouts.js";
 import type { WorkoutInput } from "../../domain/types.js";
 import { PLANS } from "../../domain/plans.js";
-import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { PREFERENCES_DEFAULTS } from "../stores/preferences.js";
 import { makeFakeStores } from "../testing/fakes.js";
 import { createDataRouter, type Stores } from "./data.js";
@@ -156,7 +155,6 @@ describe("data router: auth guard", () => {
     ["put", "/api/prefs"],
     ["get", "/api/test-history"],
     ["post", "/api/test-history"],
-    ["get", "/api/today"],
   ];
 
   it.each(routes)("401s %s %s without a session", async (method, path) => {
@@ -4454,203 +4452,12 @@ describe("GET /api/test-history", () => {
 });
 
 describe("GET /api/today", () => {
-  it("422s with baselines_required when baselines are unset", async () => {
+  // Removed 2026-09-05 (James's ruling, ROADMAP "Needs a decision"): no
+  // client ever called it, and since #297 the screen draws its first card
+  // at random while this route returned the deterministic head. Pinned as
+  // absent so a stray re-add has to argue with this test.
+  it("is gone: 404 for a signed-in rower", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/today"));
-    expect(res.status).toBe(422);
-    expect(res.body).toStrictEqual({ error: "baselines_required" });
-  });
-
-  it("422s when only one baseline is set", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({ k2Seconds: 120 });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(422);
-  });
-
-  it("with no active plan, falls back to the sprint plan at doneN 0 but reports planKey: null", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({
-      todayCode: PLANS.sprint.sessions[0].type,
-      doneN: 0,
-      planKey: null,
-    });
-  });
-
-  it("recommends a matching-type workout from the library", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const todayCode = PLANS.sprint.sessions[0].type;
-    const created = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({
-        type: todayCode as "AN" | "O2" | "AT" | "TR",
-      }),
-    );
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.body.recommendation).toBe(created.body.id);
-    expect(res.body.pool).toContain(created.body.id);
-  });
-
-  it("reports no recommendation when the library has no matching-type workout", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.body.recommendation).toBeNull();
-    expect(res.body.pool).toStrictEqual([]);
-  });
-
-  it("the pool spans globals: a global workout of the matching type appears in poolIds", async () => {
-    const stores = makeStores();
-    const app = appFor(stores);
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const todayCode = PLANS.sprint.sessions[0].type;
-    // Seeded via the same test-only seam data.test.ts's "global starter
-    // library" block uses — no personal workout created at all here, so if
-    // the global didn't show up in the pool, it could only be because
-    // stores.workouts.list()/today's library-building step failed to span
-    // globals.
-    const g = seedGlobalWorkout(stores, {
-      sortOrder: 900,
-      title: "Global Pool Entry",
-      type: todayCode as "AN" | "O2" | "AT" | "TR",
-    });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body.pool).toContain(g.id);
-    expect(res.body.recommendation).toBe(g.id);
-  });
-
-  // Controller addendum (Phase 6I Task 7, design spec's "invisible outside
-  // onboarding" rule): the designated onboarding workout is never
-  // suggested to an account that already has real baselines set — this
-  // route 422s before ever reaching the suggestion pool for a brand-new
-  // account (the only account these workouts are actually FOR), so the
-  // only account this exclusion can be observed against is a returning one
-  // that happens to still have "6K Test" in its library.
-  it("excludes the designated onboarding workout from the pool/recommendation, even at a matching type", async () => {
-    const stores = makeStores();
-    const app = appFor(stores);
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const todayCode = PLANS.sprint.sessions[0].type;
-    const onboarding = seedGlobalWorkout(stores, {
-      sortOrder: 900,
-      title: ONBOARDING_TITLES.k6,
-      type: todayCode,
-    });
-    const real = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ title: "A Real Workout", type: todayCode }),
-    );
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body.pool).not.toContain(onboarding.id);
-    expect(res.body.pool).toContain(real.body.id);
-    expect(res.body.recommendation).toBe(real.body.id);
-  });
-
-  // Final-review fix: the exclusion must key off isGlobal, not title alone
-  // — a rower's own custom workout that happens to be named "6K Test"
-  // (the POST route's own "personal workout sharing a global's title" case,
-  // pinned above) is a real, ownable workout, not a stray collision with
-  // the seeded pair. Excluding it by title alone would orphan it from
-  // /api/today's suggestion pool with no way back.
-  it("a CUSTOM workout named the same as a designated onboarding title stays in the pool — only the GLOBAL row is excluded", async () => {
-    const stores = makeStores();
-    const app = appFor(stores);
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const todayCode = PLANS.sprint.sessions[0].type;
-    const onboarding = seedGlobalWorkout(stores, {
-      sortOrder: 900,
-      title: ONBOARDING_TITLES.k6,
-      type: todayCode,
-    });
-    // Seeded through the STORE, not the route: since the 2026-08-31
-    // reservation ALL THREE workout-writing routes (POST, PUT, bulk —
-    // the PM gate caught bulk unguarded) reject the designated titles,
-    // so the only remaining producer of a personal row with one is
-    // history — rows created before the check. This test now guards exactly that
-    // legacy class: such a row STAYS suggestable, and only the GLOBAL is
-    // excluded from the pool.
-    const custom = await stores.workouts.create("user-a", {
-      ...validWorkoutBody({ title: ONBOARDING_TITLES.k6, type: todayCode }),
-      source: "user",
-    });
-    expect(custom.isGlobal).toBe(false);
-
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body.pool).not.toContain(onboarding.id);
-    expect(res.body.pool).toContain(custom.id);
-    expect(res.body.recommendation).toBe(custom.id);
-  });
-
-  it("uses the selected plan and doneN, not the fallback, and reports the real planKey", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    await asA(request(app).put("/api/plan")).send({ planKey: "head" });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.body.todayCode).toBe(PLANS.head.sessions[0].type);
-    expect(res.body.planKey).toBe("head");
-  });
-
-  // Phase SF PR2: the cap is a RANGE end and inclusive — a workout
-  // estimated at exactly the cap is IN the pool (the old bucket union put
-  // exactly-60 in `60+` and excluded it; spec §3.5 names this direction).
-  it("includes a workout estimated at exactly the account's 60-min cap in the pool (rangeForCap is inclusive at the cap)", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const todayCode = PLANS.sprint.sessions[0].type;
-    const short = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({
-        title: "Well Under The Cap",
-        type: todayCode as "AN" | "O2" | "AT" | "TR",
-      }),
-    );
-    // r 10' + a 50' work step (fixed `duration: {kind: "time"}`, so its
-    // seconds don't depend on baselines/pace) = exactly 60 minutes total.
-    const atCap = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({
-        title: "Exactly At The Cap",
-        type: todayCode as "AN" | "O2" | "AT" | "TR",
-        steps: [
-          { k: "r", minutes: 10 },
-          {
-            k: "w",
-            duration: { kind: "time", minutes: 50 },
-            ref: { base: "2k", off: 10 },
-          },
-        ],
-      }),
-    );
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body.pool).toContain(short.body.id);
-    expect(res.body.pool).toContain(atCap.body.id);
-    expect(res.body.recommendation).toBe(short.body.id);
+    expect(res.status).toBe(404);
   });
 });

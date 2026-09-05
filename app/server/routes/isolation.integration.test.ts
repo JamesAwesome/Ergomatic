@@ -47,7 +47,7 @@ import type { Stores } from "./data.js";
 // GLOBAL_LIBRARY_SEED (the 300-workout library plus the two designated
 // onboarding rows). The client/server "invisible outside onboarding"
 // exclusion has since landed (isOnboardingTitle, applied at Today's pool,
-// the Library list, and /api/today's suggestion input) — but /api/workouts
+// and the Library list) — but /api/workouts
 // itself deliberately serves all GLOBAL_LIBRARY_SEED.length rows,
 // onboarding pair included, because detail routes (e.g. the no-baseline
 // card's own workout lookups) need to be able to fetch them by id.
@@ -343,16 +343,9 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     });
 
     expect((await asB().get("/api/test-history")).body).toStrictEqual([]);
-
-    // B has no baselines yet: /api/today 422s rather than leaking A's plan/library state.
-    expect((await asB().get("/api/today")).status).toBe(422);
-    expect((await asB().get("/api/today")).body).toStrictEqual({
-      error: "baselines_required",
-    });
   });
 
   it("A can still see everything after B's reads", async () => {
-    expect((await asA().get("/api/today")).status).toBe(200);
     const workoutsA = await asA().get("/api/workouts");
     expect(workoutsA.body).toHaveLength(LIBRARY_COUNT + 1);
     // A's isTestResult baseline update landed a test-history row that B's
@@ -556,7 +549,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     expect(readsB.body).toStrictEqual({ slugs: ["workout-types"] });
   });
 
-  it('logging a GLOBAL workout end to end: the FK holds, and "done" status is isolated per user through /api/today', async () => {
+  it('logging a GLOBAL workout end to end: the FK holds, and "done" status is isolated per user through /api/workouts\' lastDoneDaysAgo', async () => {
     // A fresh, independent pair (C/D) rather than reusing A/B: this test's
     // assertions depend on knowing each account's plan/doneN state exactly,
     // which is easiest to reason about starting from a brand-new account
@@ -577,7 +570,8 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     const asC = () => bearerAgent(() => bearerC);
     const asD = () => bearerAgent(() => bearerD);
 
-    // /api/today 422s without baselines regardless of library state.
+    // Baselines first, so both accounts are the veteran shape the Library
+    // and Today read for.
     expect(
       (
         await asC()
@@ -603,14 +597,16 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
       (await asD().put("/api/plan").send({ planKey: "sprint" })).status,
     ).toBe(200);
 
-    const preC = await asC().get("/api/today");
+    // /api/workouts is the recency oracle the Library and Today both read:
+    // `lastDoneDaysAgo` per row, null for never-done.
+    const lastDoneFor = (
+      rows: { id: string; lastDoneDaysAgo: number | null }[],
+    ) => rows.find((w) => w.id === globalWorkoutId)?.lastDoneDaysAgo;
+    const preC = await asC().get("/api/workouts");
     expect(preC.status).toBe(200);
-    expect(preC.body.todayCode).toBe("O2");
     // globalWorkoutId (captured in the very first test above) is
-    // "Sea Fret", type O2, difficulty easy, 15 minutes — already
-    // known to sit inside C/D's default prefs filters (all difficulties,
-    // 60 min cap), so it's in the O2 pool for a totally fresh account too.
-    expect(preC.body.pool).toContain(globalWorkoutId);
+    // "Sea Fret", type O2 — never done by a totally fresh account.
+    expect(lastDoneFor(preC.body)).toBeNull();
 
     // C logs a REAL session against the global workout's id. This is the
     // FK-holds assertion: session_logs.workout_id -> workouts.id succeeds
@@ -643,46 +639,29 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     expect(logRes.status).toBe(201);
 
     // Any log bumps plan_state.done_n (see stores/logs.ts's transactional
-    // bump), which would otherwise advance C's plan to day 1 ('AT') and
-    // make the before/after O2 pools incomparable. Reset zeroes doneN
-    // back to day 0 WITHOUT touching planKey or, crucially, the log just
-    // created — session_logs is a separate table, untouched by this —
-    // so the two /today snapshots below stay on the same 'O2' day and the
-    // only difference between them is C's new log history.
+    // bump). Reset zeroes doneN back to day 0 WITHOUT touching planKey or,
+    // crucially, the log just created — session_logs is a separate table,
+    // untouched by this — so C's plan state is back where D's is and the
+    // only difference between the two accounts is C's new log history.
     expect((await asC().put("/api/plan").send({ reset: true })).status).toBe(
       200,
     );
+    expect((await asC().get("/api/plan")).body).toMatchObject({
+      planKey: "sprint",
+      doneN: 0,
+    });
 
-    const afterC = await asC().get("/api/today");
-    const afterD = await asD().get("/api/today");
+    const afterC = await asC().get("/api/workouts");
+    const afterD = await asD().get("/api/workouts");
     expect(afterC.status).toBe(200);
     expect(afterD.status).toBe(200);
-    expect(afterC.body.todayCode).toBe("O2");
-    expect(afterD.body.todayCode).toBe("O2");
 
-    // domain/suggest.ts's byLeastRecentlyDone sorts never-done (null
-    // lastDoneDaysAgo) entries ahead of ANY done entry, regardless of how
-    // recently the done one happened. /api/today doesn't return
-    // lastDoneDaysAgo directly, but this ranking rule is the only
-    // user-visible signal it exposes for "have I done this" — so C's
-    // just-logged global must drop to the very end of C's O2 pool (it's
-    // now the only non-null entry among otherwise all-never-done O2
-    // siblings), while D — who has logged nothing — sees it in its
-    // original, untouched, first position. That contrast IS the proof that
-    // "done" status is per-user, not global: the global workout row itself
-    // is shared and identical for both, but each user's own log history
-    // determines its ranking independently.
-    const poolC = afterC.body.pool as string[];
-    const poolD = afterD.body.pool as string[];
-    expect(poolC).toContain(globalWorkoutId);
-    expect(poolD).toContain(globalWorkoutId);
-    expect(poolC.indexOf(globalWorkoutId)).toBe(poolC.length - 1);
-    expect(poolD.indexOf(globalWorkoutId)).toBe(0);
-
-    // The recommendation flips for the identical reason: D's top pick is
-    // the (still never-done, for D) global; C's is not, because it is no
-    // longer never-done FOR C SPECIFICALLY.
-    expect(afterD.body.recommendation).toBe(globalWorkoutId);
-    expect(afterC.body.recommendation).not.toBe(globalWorkoutId);
+    // The contrast IS the proof that "done" status is per-user, not
+    // global: the global workout row itself is shared and identical for
+    // both, but each account's own log history determines its recency
+    // independently — C's just-logged global reads done today (0 days
+    // ago), while D, who has logged nothing, still reads never-done.
+    expect(lastDoneFor(afterC.body)).toBe(0);
+    expect(lastDoneFor(afterD.body)).toBeNull();
   });
 });
