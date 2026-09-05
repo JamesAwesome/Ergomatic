@@ -68,11 +68,12 @@ plus James's own live website refusal of this code against the 5708 row on
 - **PRIMARY**, developer docs, quoted: _"For the verification code to be
   accepted, the date, time, distance, workout_type and machine type must match
   that of the code."_ Five fields, exact, no band.
-- **INFERENCE, by parity, and the antagonist should rule on it.** Only
-  **distance** was empirically divergent on James's row; `time` happened to
-  agree (25:00.0 both). But `time` is in the checked-field list and we derive it
-  the same way we derive distance (`Σ`, not the machine's own), so the same
-  divergence class applies. See §4.
+- **PRIMARY, corrected by lens 2.** `time` diverges too: it agreed on James's
+  row (25:00.0), but the corpus has a divergent-seconds capture —
+  `oracleCorpusReplay.test.ts`'s KEYSTONE, machine **138.7** s vs ours
+  **138.8** s (`c2Tenths` 1387 vs 1388). So moving `time` to the machine's own
+  value is empirical, not parity: the same defect distance shows, seconds show
+  on a real capture. See §4.
 
 ## 3 · Research record
 
@@ -115,9 +116,12 @@ Today the app is already internally split, and the send is the outlier:
   `SessionLogRow` (`server/concept2/mapping.ts`) or in `toMappingRow`
   (`server/routes/concept2.ts`) — add them to both (nullable). That is the whole
   thread; the loader is untouched.
-- `buildC2Payload` posts, for the code-checked fields:
-  - `distance: machineWorkMeters ?? workMeters`
-  - `time: c2Tenths(machineWorkSeconds ?? workSeconds)`
+- `buildC2Payload` posts, for the code-checked fields, using the HERO's own
+  `!== null && > 0` predicate (`src/log/LogRow.tsx`), NOT `??` — a `0` machine
+  total is a value `??` would post while the hero falls back to our sum,
+  reintroducing the send≠display split this PR closes (lens 2):
+  - `distance: machineWorkMeters (when non-null and > 0) else workMeters`
+  - `time: c2Tenths(machineWorkSeconds (when non-null and > 0) else workSeconds)`
   - `workout_type` — already machine-sourced (`machineSummary.workoutType`).
   - `date`/`timezone` — already the row's own completion instant; unchanged.
 - **Fallback is deliberate, not incidental.** Eligibility already requires
@@ -133,15 +137,14 @@ Today the app is already internally split, and the send is the outlier:
 or waits. Case for now: same authority, same derivation, same checked-field
 list; the display already uses `machineWorkSeconds`, so moving `time` keeps
 send = display = machine, and a future row whose work-seconds sum diverges from
-0x0039 (as distance did) fails verification silently if we don't. Case for
-waiting: only distance is empirically proven divergent, and no capture in the
-corpus has divergent seconds (confirmed against `oracleCorpusReplay` — every
-capture's `machine.elapsedSeconds` equals ours), so time cannot be gated on
-observed divergence. **The spec's recommendation, which the antagonist pass
-confirmed: move both. Distance is gated by the seam test (§5); time is gated by
-a seeded `buildC2Payload` unit test (§5's carve-out, forced because reality has
-produced no divergent-seconds capture); and the PR body states time is
-by-parity, not observed.**
+0x0039 (as distance did) fails verification silently if we don't — and this is
+not hypothetical: `oracleCorpusReplay`'s KEYSTONE capture already shows machine
+138.7 s vs ours 138.8 s. **Recommendation, ruled by James ("Go") and corrected
+by lens 2: move both.** Distance is gated by the seam test (§5); time is gated
+by a seeded `buildC2Payload` unit test at the store→payload seam, while
+`oracleCorpusReplay` independently gates the wire→`machine_work_seconds` step
+(where the KEYSTONE divergence lives). The PR states time's divergence is real,
+not by-parity.
 
 ## 5 · What can and cannot be gated (C4)
 
@@ -169,17 +172,15 @@ The gate PR C actually needs, and its two halves:
   while the display shows the machine number — the exact send≠display split this
   PR closes, reintroduced one layer down). The second is the RF24 mutation and
   it is why the test must start at the DB row, not at a `SessionLogRow`.
-- **Time — gated by a SEEDED unit test, and here is why that exception is
-  forced.** No capture in the corpus has divergent work-SECONDS — checked:
-  `oracleCorpusReplay`'s `rest-boundary` has `machine.elapsedSeconds` 60.0 =
-  ours, and every other capture agrees too. So there is no divergent-seconds
-  fixture to gate time the way distance is gated, and a `buildC2Payload` unit
-  test with a seeded `machineWorkSeconds ≠ workSeconds` (asserting the posted
-  `time` uses the machine value; mutation reverts to `workSeconds`) is the only
-  gate that can bite. This is a deliberate carve-out from "not seeded": the seam
-  test above cannot exercise time divergence because reality has not produced
-  one, and the PR body states that time is moved **by parity** with distance,
-  gated structurally rather than on observed divergence.
+- **Time — gated by a SEEDED unit test at THIS seam, and by
+  `oracleCorpusReplay` upstream.** Seconds do diverge in reality
+  (`oracleCorpusReplay` KEYSTONE, machine 138.7 vs ours 138.8), but that
+  divergence is at the wire→`machine_work_seconds` step, which
+  `oracleCorpusReplay` already gates. PR C touches the store→payload step, and
+  no STORED row in a test replays the KEYSTONE wire, so a `buildC2Payload` unit
+  test with a seeded `machineWorkSeconds ≠ workSeconds` (posted `time` uses the
+  machine value; mutation reverts to `workSeconds`) is the right gate for this
+  seam. The PR body states seconds diverge for real and names both gates.
 - **The honest limit:** CI proves which stored number we post. It does not
   re-run Concept2's acceptance — but §2's live test did, once, at one distance,
   and the PR body carries that as the end-to-end evidence CI cannot be, with its
@@ -193,8 +194,9 @@ MACHINE CONFIRMED block (`FromTheLog.tsx`) already prefer
 `machineWorkMeters`/`machineWorkSeconds` (§4), so the wire simply catches up to
 the screen. **The claim is grep-checked, not asserted:** the PR body lists every
 `app/src` surface that renders a distance and shows each already prefers the
-machine total (or, in a `machineWorkMeters: null` fallback tier, shows
-`work_meters` — the same value the send falls back to, so still send = display).
+machine total (or, in a fallback tier where the machine total is null OR 0,
+shows `work_meters` — the same value the send falls back to, because the
+send uses the hero's own `> 0` predicate, so still send = display).
 The standing design gate's "a number change is a design question too" clause is
 satisfied by that fact. **If the antagonist or
 the PM finds a surface that displays `work_meters`, that surface is the design
