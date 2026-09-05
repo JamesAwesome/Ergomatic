@@ -732,7 +732,7 @@ test.describe("library screen", () => {
   // a sheet `CellGrid` that had `role="group"` + a visible label — axe's
   // own scan above doesn't catch a missing GROUP around otherwise-correctly-
   // named buttons, so this is a dedicated structural pin, mirroring the
-  // sheet's own "DIFFICULTY/TIME/PAIN each expose a role=group" sweep
+  // sheet's own "TIME/PAIN each expose a role=group" sweep
   // further down this file for `TodayFilterSheet`/`FilterSheet`.
   test("the TYPE chip row exposes a role=group named TYPE", async ({
     page,

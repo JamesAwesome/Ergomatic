@@ -525,6 +525,8 @@ describe("workouts CRUD", () => {
     const app = appFor(makeStores());
     const created = await asA(request(app).post("/api/workouts")).send({
       ...validWorkoutBody({ title: "Old client", pain: 2 }),
+      // The old client's own word — must never reach the row.
+      difficulty: "hard",
     });
     expect(created.status).toBe(201);
     expect(created.body.difficulty).toBe("easy");

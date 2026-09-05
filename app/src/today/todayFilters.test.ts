@@ -136,6 +136,20 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     expect(store.byKey.AN).toBeUndefined();
   });
 
+  // Phase DE PR 1: every installed rower's record still carries the
+  // deleted group's key. It must parse exactly as the keyless record does,
+  // whatever it holds — the key is unknown now, not validated.
+  it.each([
+    ["a legacy difficulties array", ["easy"]],
+    ["a malformed difficulties value", "garbage"],
+  ])("parses a stored set that still carries %s, dropping the key", (_n, v) => {
+    localStorage.setItem(
+      TODAY_FILTERS_KEY,
+      JSON.stringify({ v: 2, byKey: { AT: { ...AT_SET, difficulties: v } } }),
+    );
+    expect(loadTodayFilters().byKey).toStrictEqual({ AT: AT_SET });
+  });
+
   it("ignores unknown top-level fields (the revision-1 rollSuppressed flag James struck reads as nothing)", () => {
     localStorage.setItem(
       TODAY_FILTERS_KEY,

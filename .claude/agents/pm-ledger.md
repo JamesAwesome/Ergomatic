@@ -4756,3 +4756,32 @@ the `/api/today` ruling). v0.38.0 recommended.
   largest gap between this app and a stranger using it". The justification
   (a stranger reading `PAIN 4/5` is itself a north-star failure; the rename
   only gets more expensive) existed nowhere in the file.
+
+## 2026-09-05 — Phase DE PR 1 final gate: a re-sort is a WRITE to every row it moves
+
+- **Reordering seeded content is a deploy-time UPDATE, and it drags every
+  derived field with it.** `seed.ts`'s `contentEqual` compares
+  `(type, pain, sortOrder, steps)`, so a stable re-sort flipped 38 rows out of
+  equality, sent each through `updateGlobal`, and let the new compat helper
+  rewrite their stored `difficulty` — 27 `medium`→`hard` on rows a pre-PR-1
+  build still renders and filters. The change edited no difficulty value
+  anywhere. **Before pricing a content re-order, read the converge's equality
+  tuple and list everything the UPDATE path writes that the diff did not.**
+- **A compat layer's "old builds are unaffected" claim is scoped by which ROWS
+  the deploy touches, not by which FIELDS the change edits.** §3.2's exemption
+  ("seeded rows are never rewritten") was true when written and falsified by a
+  later task in the same PR. When a PR adds a task after its spec is vetted,
+  re-read the spec's exemptions against it.
+- **The one-tag rule contains the CLIENT half only.** Server changes land at
+  merge; a phase whose PRs share a compat contract must say which effects are
+  live between the two merges, not just which build ships.
+- **A PM condition can create scope, and that is the PM's to price.** Condition
+  2 (restate the ordering invariant on the surviving axis) forced the re-sort,
+  because the data did not satisfy the invariant the deleted axis had held. When
+  imposing "restate, do not delete", ask at the open gate whether the surviving
+  axis already satisfies the relation — the answer is a `sort` one-liner.
+- **Fold: 209 words / 7 bullets / longest 41 — FAIL.** Series: #228 274 ·
+  #230 266 · #268 186 · door PR B 121 · SF PR1 246 · SF PR2 109 · **DE PR1 209.**
+  Regression source: compat mechanism explained above the fold (41-word bullet).
+  The compat story is a Record item; the fold owes only "installed builds keep
+  working".

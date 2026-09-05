@@ -45,14 +45,14 @@ const V2_RECORD = {
   source: null,
 };
 
-// A record that is otherwise fully v3-shaped (has `difficulties`,
-// `durations`, `painLevels`, `lastDone`, `source` all present and valid)
-// but still carries the RENAMED field under its old name (`type`, not
-// `types`) — unlike `V2_RECORD`, which is missing `difficulties` too, this
-// is rejected by ONE check alone (`!Array.isArray(f.types)`), isolating
-// that check from every other field's own validation (whole-branch review
-// I-5: `V2_RECORD`'s rejection can't tell the `types`-presence check apart
-// from the `difficulties`-presence check, since it fails both).
+// A record that is otherwise fully v3-shaped (`durations`, `painLevels`,
+// `lastDone`, `source` all present and valid) but still carries the
+// RENAMED field under its old name (`type`, not `types`), so it is
+// rejected by ONE check alone (`!Array.isArray(f.types)`), isolating that
+// check from every other field's own validation (whole-branch review
+// I-5). Since Phase DE PR 1 removed the `difficulties` check it is
+// shaped identically to `V2_RECORD`; it stays a separate name because the
+// two tests that use it pin different claims.
 const HALF_MIGRATED_RECORD = {
   type: "O2",
   durations: [],
@@ -64,6 +64,17 @@ const HALF_MIGRATED_RECORD = {
 describe("libraryFilters", () => {
   beforeEach(() => {
     sessionStorage.clear();
+  });
+
+  // Phase DE PR 1: a pre-PR-1 record carries `difficulties`; the key is
+  // unknown now and ignored, and the record's OTHER fields still parse
+  // strictly (the wrong-shape table below is unchanged).
+  it("parses a stored record that still carries difficulties, dropping the key", () => {
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, difficulties: ["easy", "hard"] }),
+    );
+    expect(loadLibraryFilters()).toStrictEqual(FULL);
   });
 
   it("round-trips a fully-populated Filters", () => {
