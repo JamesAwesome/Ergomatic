@@ -1926,8 +1926,11 @@ test("library", async ({ page }) => {
   // the SOURCE token cleared first so the search alone narrows), portrait
   // and landscape.
   await page.getByRole("button", { name: "CLEAR ALL" }).click();
-  await page.getByRole("searchbox", { name: "Search by name" }).fill("fog");
+  const search = page.getByRole("searchbox", { name: "Search by name" });
+  await search.fill("fog");
   await expect(page.locator(".workout-row").first()).toBeVisible();
+  // Blur so the capture is the typed state, not the focus ring.
+  await search.blur();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library-search.png"),
   });

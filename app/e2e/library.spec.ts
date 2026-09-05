@@ -608,12 +608,17 @@ test.describe("Phase SF PR3: search by name", () => {
     await expect(page.locator(".filter-token")).toHaveCount(0);
 
     // BACK round trip: the query and the narrowed list come back.
-    await rows.first().locator("a").click();
+    await rows.first().click();
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await page.goBack();
-    await waitForLibraryLoaded(page);
+    // Not `waitForLibraryLoaded`: that helper asserts the REST count
+    // ("N WORKOUTS"), and the restored query means the count is filtered.
+    await expect(page.locator(".workout-row").first()).toBeVisible();
     await expect(field).toHaveValue("fog");
     await expect(page.locator(".workout-row")).toHaveCount(narrowed);
+    await expect(page.locator(".library-count")).toHaveText(
+      `${narrowed} OF ${total} SHOWN`,
+    );
 
     // The tab forgets it, like every other filter.
     await page.getByRole("link", { name: "TODAY" }).click();
