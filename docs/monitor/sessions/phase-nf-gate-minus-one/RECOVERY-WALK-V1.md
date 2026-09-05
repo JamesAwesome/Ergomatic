@@ -1,8 +1,8 @@
 # NF-RECOVERY-v1 — four A → B recovery checks
 
-Status: desk rehearsal complete; PM reviewed the concrete scope and protocol.
-NOT READY for an erg invitation solely until actual idle phone setup passes.
-This is not permission to scan.
+Status: PM readiness PASS. Actual [setup v3](ZERO-SCAN-SETUP-V3-RESULT.md)
+closed the phone-preparation condition. Ready to request explicit scan consent;
+no scan is authorized yet.
 
 Primary target: determine whether a held old NFC attempt can interfere with
 its immediate successor on this iPhone/PM5. Four cases share the prepared
@@ -21,8 +21,8 @@ Each pair has a 90-second maximum observation allowance. A new case requires
 at least 135 seconds remaining, including its 45-second cleanup reserve.
 These are operator caps, not new app/reader timeouts or a promise all four fit.
 
-No install occurs during this walk. `NF-RECOVERY-SETUP-v3` must first prove the
-exact installed recovery build, authenticated diagnostic controls, capture,
+No install occurs during this walk. `NF-RECOVERY-SETUP-v3` proved the exact
+installed recovery build, authenticated diagnostic controls, complete capture,
 same-process idle reload and cleanup. Recheck installed identity immediately
 before the walk. A mismatch stops; it never authorizes installation.
 
@@ -43,8 +43,9 @@ After **go**, include ordinary unlock and PM5 setup in the original clock:
 >    both. I control the app and collect the result. If an unexpected prompt
 >    appears, reply **blocked**.
 
-Codex verifies fresh identity, attached capture and idle controls before it
-starts A. The initial physical positioning is allowed to precede reader start;
+Codex verifies fresh identity and attached capture, then runs the reviewed
+idle command once before A to establish the actual You route, complete
+canary and new idle document within this same eight-minute clock. The initial physical positioning is allowed to precede reader start;
 the user is not asked to tap through a sheet or race a chat reply.
 
 After each successful pair, send one short block for the next numbered case:
@@ -113,12 +114,19 @@ evidence, final assembly and overlay retirement remain separate Gate -1 work.
 
 ## PM disposition
 
-The [host rehearsal](RECOVERY-HOST-PREPARATION.md) and
-[command card](RECOVERY-COMMAND-CARD.md) are complete and code-reviewed.
-`/root/walk_pm` reviewed this concrete four-case scope and grouped protocol;
-no revision or more desk preparation is required. The sole remaining readiness
-gate before the erg invitation is actual setup-v3 PASS: current installation,
-authenticated controls, complete capture check, document reload, zero reader
-starts and verified cleanup. Supply that result to close readiness; do not
-restart protocol review or infer scan permission from setup.
-The approved product design is unchanged; implementation remains gated.
+`/root/walk_pm`: **PASS — NF-RECOVERY-v1.** Actual setup-v3 PASS closed the
+remaining phone-preparation condition: current installation, authenticated
+controls, complete capture, same-process document reload, zero NFC starts and
+verified cleanup. Run the reviewed idle command once in the fresh walk capture
+before A, within the original eight-minute total. No further desk build,
+helper change or unchanged suite is required. Physical blocks and stopping
+rules above remain unchanged. Product implementation is still gated.
+
+Exact approved consent invitation:
+
+> Four recovery pairs are ready: at most eight NFC reader starts, eight minutes
+> total, no retries or installation. No rowing or heart-rate belt. Reply **go**
+> when you want to begin.
+
+No scan is authorized until that reply. If James is away from the erg, he can
+wait until he is there before replying; no clock runs across that wait.

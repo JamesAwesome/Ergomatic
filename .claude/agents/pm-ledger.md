@@ -4612,3 +4612,11 @@ Its success did not establish authenticated route readiness. Setup v2 also
 discarded the last DOM observation, so its phone failure cannot be assigned
 to the subsequently reproduced loading defect. V3 retains minimal safe
 observations and tests that unresolved phone path without another install.
+
+## Recovery walk readiness, 2026-09-05
+
+Actual setup-v3 PASS closed the phone-preparation gate for NF-RECOVERY-v1.
+PM approved its four-pair, eight-minute protocol. Fresh capture still runs
+the reviewed idle check before A within that same clock; prior route
+readiness does not survive relaunch by assumption. Scan consent remains
+separate.

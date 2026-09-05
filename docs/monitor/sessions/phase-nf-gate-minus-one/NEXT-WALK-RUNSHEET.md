@@ -29,12 +29,20 @@ canary. Cleanup completed in **2m14.519s total**, with zero NFC attempts. See
 [the result](ZERO-SCAN-SETUP-V2-RESULT.md). That installation permission and run
 are consumed; do not repeat them.
 
-The [host loading correction](INSPECTOR-LOADING-FIX.md) addresses a reproduced
-lazy-mount guard defect; the actual phone stop's exact cause remains unknown.
-The next bounded prerequisite is [no-install setup v3](ZERO-SCAN-SETUP-V3.md).
-It has PM PASS and final code-review PASS; the sole next user action is its
-ready/unlock block. It reuses the existing installation only
-if a fresh listing still matches; a mismatch aborts without reinstalling.
-Do not invite James to the erg or start a scan before phone preparation passes
-and the separate [recovery protocol](RECOVERY-WALK-V1.md) has PM readiness PASS
-and explicit scan consent. No short timer starts before a required reply.
+[No-install setup v3](ZERO-SCAN-SETUP-V3-RESULT.md) now **PASS**: fresh install
+identity, actual phone controls, all four capture-canary lines, same-process
+new document and cleanup verified. Total operator time **1m42.366s**; zero
+installs and zero NFC attempts. James was released to lock the phone. Capture
+host PID 10805 is retired. Do not reuse this run or its ready permission.
+
+The [recovery protocol](RECOVERY-WALK-V1.md) is the next bounded hardware block.
+Its readiness section is authoritative; the successful setup result closes
+its previous phone-preparation condition. The next block still requires
+separate explicit scan consent. “Ready” for this completed zero-scan setup
+never authorizes NFC. No short timer starts before a required reply.
+
+Use the [command card](RECOVERY-COMMAND-CARD.md), current helper pins in
+[INSPECTOR-LOADING-FIX.md](INSPECTOR-LOADING-FIX.md), and the existing signed
+recovery build. No design, build, helper change or unchanged test suite is
+needed when James returns. Fresh installed identity is checked before launch;
+any mismatch stops without reinstalling. Product implementation remains gated.

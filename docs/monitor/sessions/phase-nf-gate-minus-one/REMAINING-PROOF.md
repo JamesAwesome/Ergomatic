@@ -46,9 +46,9 @@ The signed recovery build now includes the trace and approved temporary native
 hold/release overlay; its 231-file manifest and signature were reverified on
 2026-09-04. After the recorded identity mismatch, setup v2 installed and independently
 verified it with explicit permission. A later read-only listing still matched
-0.23.0/789 and that installation URL. The idle check stopped before canary
-with zero NFC attempts; preparation remains incomplete. See
-`ZERO-SCAN-SETUP-V2-RESULT.md` and the no-install `ZERO-SCAN-SETUP-V3.md`.
+0.23.0/789 and that installation URL. Setup v2 stopped before canary. The later no-install setup v3 passed actual
+phone controls, complete capture and same-process reload with zero NFC
+attempts and cleanup verified. See `ZERO-SCAN-SETUP-V3-RESULT.md`.
 
 The existing probe's held-stage handler uses export/reload/Start B. Simulator
 has proved the corrected Inspector's actual idle component reload; unattended
@@ -69,8 +69,8 @@ block rather than another unprepared one-scan handoff. Physical background
 and multi-tag legs still need explicitly feasible actions; previous failed
 Home swipes and two-object presentations are not approved prerequisites.
 
-No next hardware session is ready yet. Once its build, controls, capture and
-cleanup have been demonstrated, PM must approve the concrete grouped runsheet.
+The phone-preparation condition is now satisfied. The exact next hardware
+readiness and PM disposition are recorded in `RECOVERY-WALK-V1.md`.
 Any phone installation requires James's explicit permission for that install;
 scan consent is separate. The product design and implementation gate remain
 unchanged. Do not keep James waiting at the erg for this preparation.

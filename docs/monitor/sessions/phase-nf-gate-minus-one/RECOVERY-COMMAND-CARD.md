@@ -1,7 +1,8 @@
 # NFC recovery — Codex command card
 
-Use with `ZERO-SCAN-SETUP-V3.md` and `RECOVERY-WALK-V1.md` only after their
-required PM verdicts and separate user permissions. These are Codex-owned
+Setup v3 is completed with PASS; its section below is historical. Execute
+`RECOVERY-WALK-V1.md` only after its
+required PM verdict and separate user scan permission. These are Codex-owned
 commands, never instructions for James to paste. Do not restart design,
 research, builds or unchanged test suites when he returns.
 
@@ -60,10 +61,15 @@ result, zero NFC start counts and independently verified cleanup.
 ## At the erg after setup PASS, PM PASS and explicit go
 
 Create a separate fresh capture directory D and original eight-minute clock.
-Copy the authorized setup's install receipt as provenance, not current state;
+Copy R/authorized-setup-v3-hrsovf1a/install.json as provenance, not current state;
 obtain a new `installed-apps.json`, then use the same capture command, which
 independently rechecks identity. A mismatch aborts without reinstalling.
 Keep a single attached capture/native process across the four cases.
+Require WebView-loaded and a fresh process listing, then invoke the same
+`--mode idle` command above once in this fresh directory before the first A.
+This establishes the actual You route, controls, canary and new idle document
+within the original eight-minute clock; do not assume a previous route survives
+relaunch. No new phone instruction or NFC start is part of this readiness step.
 
 After capture/DOM readiness and the appropriate physical block, invoke exactly
 one scenario, in order, through the same command:

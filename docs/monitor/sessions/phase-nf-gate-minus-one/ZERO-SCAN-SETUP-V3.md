@@ -1,7 +1,8 @@
 # NF-RECOVERY-SETUP-v3 — no-install idle check
 
-Status: PM PASS; final code-review PASS and helper pins recorded. Ready for
-the exact operator block below. No session or scan is authorized yet.
+Status: COMPLETED — PASS. See [the result](ZERO-SCAN-SETUP-V3-RESULT.md).
+No install or scan occurred; cleanup verified in 1m42.366s total. This run
+and ready permission are consumed. The procedure below is retained history.
 This is one bounded experiment to establish whether the already-installed
 recovery diagnostic's authenticated You page, console capture and idle reload
 work together on the physical phone. Setup v2 installed and verified the app,
