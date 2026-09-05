@@ -268,6 +268,13 @@ pnpm lint
 pnpm format:check
 ```
 
+- [ ] **Step 4b: Mutation (this task had no mutation table before; added at
+  Task 7's reconciliation).** `grep -c 'localStorage.getItem' app/src/you/concept2Seen.ts` must be 1 before mutating; revert with `git checkout -- <file>` on the now-clean file (commit Step 5 first if it has not landed yet, so the revert is a no-op).
+
+| # | mutation (file, anchor → replacement) | measured failure |
+| --- | --- | --- |
+| I-B | `concept2Seen.ts`: `localStorage.getItem(concept2SeenKey(accountId)) === "1"` → `localStorage.getItem(concept2SeenKey(accountId)) !== null` | `1 failed`: "I-B: a foreign value under our key is NOT a claim…" — `AssertionError: expected true to be false` (the foreign `"true"` string now reads as seen) |
+
 - [ ] **Step 5: Commit**
 
 ```
@@ -649,7 +656,7 @@ git commit -m "PR A Task 2: the CONCEPT2 row and its decision table"
 | R3(ii) | same file: move `if (failed !== null) return "COULDN'T READ";` ABOVE the `needsReauth` line (the card's ordering) | `2 failed`: cell 10, "cell 10 is ruling 5…" — `AssertionError: expected 'COULDN\'T READ' to be 'RECONNECT NEEDED'` |
 | R4 | same file: `return failed !== null && seen ? "COULDN'T READ" : null;` → `return failed !== null ? "COULDN'T READ" : null;` | `3 failed`: cell 2a (×2), "I-A: a second account…" — `AssertionError: expected 'COULDN\'T READ' to be null` |
 | R11(a) | `Concept2Row.tsx`: `useState(() => readConcept2Seen(accountId));` → `useState(() => false && readConcept2Seen(accountId));` | `1 failed`: "cell 2b: an account that HAS been told…" — `Unable to find an element with the text: COULDN'T READ` |
-| R2 | **no code to mutate.** The row cannot reach `busy`/`outcome`/`armed`/`unlinkFailed` — they are `Concept2Card`'s `useState` and the row imports nothing from it. R2 is gated by STRUCTURE (`grep -n "Concept2Card" app/src/you/Concept2Row.tsx` → 0) and by the "R2: the row carries no attempt state" case; the PR body says so rather than claiming a mutation. | n/a — record the grep |
+| R2 | **no code to mutate.** The row cannot reach `busy`/`outcome`/`armed`/`unlinkFailed` — they are `Concept2Card`'s `useState` and the row imports nothing from it. R2 is gated by STRUCTURE (`grep -n "import.*Concept2Card" app/src/you/Concept2Row.tsx` → 0 — plain `grep -n "Concept2Card"` returns 3, all header-comment prose, so the anchor must be the import line) and by the "R2: the row carries no attempt state" case; the PR body says so rather than claiming a mutation. | n/a — record the grep |
 
 Record each mutation's actual output in your report, verbatim. If any differs from the table, the table is wrong and the report says so.
 
@@ -780,9 +787,11 @@ describe("Concept2Screen — /you/concept2 (spec §5.1 R5, R6)", () => {
   });
 
   it("the screen's own read and the card's can disagree: a card gone unavailable while the screen's read failed leaves chrome over an empty body — the known window", async () => {
-    // TWO reads per mount, one per hook instance, and React runs the CHILD's
-    // effect first — so the card's read is call 1 and the screen's is call
-    // 2. Answering call 1 `available:false` and call 2 with a 502 is the
+    // TWO reads per mount, one per hook instance, and the card's read is
+    // call 1 and the screen's is call 2 — child-before-parent effect order,
+    // INFERENCE from the measured run (react.dev's useEffect reference does
+    // not state an inter-component ordering; checked 2026-09-04, no such
+    // sentence found). Answering call 1 `available:false` and call 2 with a 502 is the
     // disagreement directly: the card goes silent (its own `!link.available`
     // return), the screen's `link` stays null with `failed` set, and its
     // redirect predicate (`link !== null && !link.available`) cannot fire.
@@ -794,9 +803,10 @@ describe("Concept2Screen — /you/concept2 (spec §5.1 R5, R6)", () => {
     // count only proves the requests STARTED, and `.c2-card` is absent at
     // mount anyway (the card returns null while `link === null`), so neither
     // is a readiness observable — measured: a screen mutated to redirect on
-    // a FAILED read stayed green against the count-gated version. React
-    // runs the CHILD's effect first, so resolver 0 is the card's read and
-    // resolver 1 is the screen's.
+    // a FAILED read stayed green against the count-gated version. Resolver 0
+    // is the card's read and resolver 1 is the screen's, child-before-parent
+    // (INFERENCE from this measured run, not a cited React ordering
+    // guarantee — see the note above).
     const answer: Array<(r: Response) => void> = [];
     vi.mocked(api).mockImplementation((path: string) => {
       if (path !== "/api/concept2/link")
@@ -1036,7 +1046,7 @@ git commit -m "PR A Task 3: /you/concept2 — the screen behind the row; the pro
 | # | mutation | measured failure |
 | --- | --- | --- |
 | R5(i) | `Concept2Screen.tsx`: delete the three-line `if (link !== null && !link.available) { return <Navigate … /> }` block | `1 failed`: "returns the rower to /you when a SUCCESSFUL read says the surface is unavailable…" — `Unable to find an element with the text: YOU SCREEN at /you` |
-| R5(ii) | same file: `if (link !== null && !link.available) {` → `if (link === null \|\| !link.available) {` (AUD-015's shape) | `4 failed`: pending, read-failed, mounts-the-card, BACK cases — `Unable to find an accessible element with the role "heading" and name "Concept2"` — the screen bounced on every mount, which is exactly the unopenable-door defect |
+| R5(ii) | same file: `if (link !== null && !link.available) {` → `if (link === null \|\| !link.available) {` (AUD-015's shape) | `5 failed`, not 4: pending, read-failed, mounts-the-card, BACK, and the disagreement case (which TIMES OUT rather than failing an assertion) — `Unable to find an accessible element with the role "heading" and name "Concept2"` on the first four — the screen bounced on every mount, which is exactly the unopenable-door defect |
 | R5(iii) | same file: destructure `failed` and widen to `if ((link !== null && !link.available) \|\| failed !== null) {` (redirect on a FAILED read) | `2 failed`: the disagreement case — `Unable to find an accessible element with the role "heading" and name "Concept2"` — and the read-failed case — `Unable to find an element with the text: COULDN'T READ CONCEPT2`. (Against the count-gated first draft of the disagreement case this mutant was GREEN, which is why the case resolves both reads deterministically before asserting.) |
 
 ---
@@ -1257,7 +1267,7 @@ index 274dd475..829ce4ca 100644
  });
 ```
 
-- [ ] **Step 2: Run — expect the four "You: the Concept2 row" cases to FAIL**
+- [ ] **Step 2: Run — expect THREE of the four "You: the Concept2 row" cases to FAIL** (the unavailable case is green on both the old card-bearing shape and the new row shape — it asserts an absence, and both shapes agree there is nothing to find)
 
 ```
 cd /Users/james/projects/github/jamesawesome/Ergomatic-wt-c2pra/app

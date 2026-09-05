@@ -57,7 +57,8 @@ import { startLink, type LinkOutcome } from "../adapters/linkFlow";
  *
  * Build-time flag gated (`VITE_ENABLE_C2_LINK_PROBE`), same shape as
  * `AppRoutes.tsx`'s `VITE_ENABLE_FAKE_MONITOR` seam: mounted behind a dynamic
- * `import()` guarded by a build-time-folded condition (`You.tsx:19-23`), so
+ * `import()` guarded by a build-time-folded condition (`you/Concept2Screen.tsx`'s
+ * `c2LinkProbeEnabled`), so
  * this card and its distinctive `data-c2-link-probe` literal are ABSENT from a
  * production build with the flag unset -- `dist-grep.sh:127`'s eighth needle
  * is that exact string, and `ios-release.sh:42-45` refuses to run at all while
