@@ -11,6 +11,9 @@ import {
   setSource,
   toggleDifficulty,
   setDurationRange,
+  setQuery,
+  normalizeQuery,
+  clearSheetFilters,
   togglePainLevel,
   toggleType,
   type Filters,
@@ -133,6 +136,7 @@ describe("chip/cell state transitions", () => {
       painLevels: [4, 5],
       lastDone: "under21",
       source: "custom",
+      query: "",
     };
     expect(clearFilters()).toStrictEqual(EMPTY_FILTERS);
     expect(busy).not.toStrictEqual(EMPTY_FILTERS);
@@ -346,6 +350,50 @@ describe("source", () => {
     expect(custom.source).toBe("custom");
     expect(setSource(custom, "global").source).toBe("global");
     expect(clearFilters().source).toBeNull();
+  });
+});
+
+// Phase SF PR3 (spec §4, I-14): SEARCH BY NAME.
+describe("query", () => {
+  it("matches a case-insensitive, trimmed substring of the title, AND-ed with the other filters", () => {
+    const rows = [
+      w({ id: "fog", type: "O2", title: "River Fog" }),
+      w({ id: "bow", type: "AT", title: "Fog Bow" }),
+      w({ id: "calm", type: "O2", title: "Dead Calm" }),
+    ];
+    const ids = (f: Filters) =>
+      applyFilters(rows, f, baselines).map((r) => r.id);
+    expect(ids(setQuery(EMPTY_FILTERS, "FOG"))).toStrictEqual(["fog", "bow"]);
+    expect(ids(setQuery(EMPTY_FILTERS, "  fog  "))).toStrictEqual([
+      "fog",
+      "bow",
+    ]);
+    expect(ids(setQuery(EMPTY_FILTERS, "bow"))).toStrictEqual(["bow"]);
+    expect(ids(setQuery(toggleType(EMPTY_FILTERS, "O2"), "fog"))).toStrictEqual(
+      ["fog"],
+    );
+    expect(ids(setQuery(EMPTY_FILTERS, "   "))).toStrictEqual([
+      "fog",
+      "bow",
+      "calm",
+    ]);
+    expect(ids(setQuery(EMPTY_FILTERS, "zzz"))).toStrictEqual([]);
+  });
+
+  it("normalizes by trimming and lower-casing", () => {
+    expect(normalizeQuery("  Fog Bow ")).toBe("fog bow");
+    expect(normalizeQuery("")).toBe("");
+  });
+
+  it("counts as active only when non-blank, and the sheet's CLEAR leaves it alone", () => {
+    expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "fog"))).toBe(true);
+    expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "   "))).toBe(false);
+    const both = setQuery(toggleDifficulty(EMPTY_FILTERS, "easy"), "fog");
+    expect(clearSheetFilters(both)).toStrictEqual({
+      ...EMPTY_FILTERS,
+      query: "fog",
+    });
+    expect(clearFilters().query).toBe("");
   });
 });
 
