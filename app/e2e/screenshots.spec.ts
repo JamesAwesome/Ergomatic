@@ -13,6 +13,11 @@ import { buildDraft, startDraft } from "../src/session/draft";
 import { advance, buildRun } from "../src/session/engine";
 import { buildLogSeed } from "../src/session/logDraft";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../src/monitor/monitorRun";
+import { TODAY_PICK_KEY, type TodayPick } from "../src/today/todayPick";
+import {
+  TODAY_OVERRIDES_KEY,
+  type TodayOverrides,
+} from "../src/today/todayOverrides";
 import { RUN_KEY, type SessionRun } from "../src/session/run";
 
 // Committed into docs/screenshots/ for PR bodies. NOT diff-asserted — a
@@ -324,6 +329,83 @@ async function resetPlanProgress(page: Page): Promise<void> {
   }
 }
 
+/** Phase SF PR1: Today's first card is DRAWN at random within the
+ *  least-recently-done tie (spec I-2) and a freestyle day ROLLS its type
+ *  (I-5) — both from `crypto.getRandomValues`, with no seam in the
+ *  production build this stack runs. A committed capture has to be
+ *  reviewable frame to frame, so this writes the day's records the way a
+ *  draw of exactly `title`/`type` would have: the same `todayPick` /
+ *  `todayOverrides` shapes `src/today/todayPick.ts` and
+ *  `src/today/todayOverrides.ts` own, keyed on the real `/api/plan` state
+ *  and the browser's own local date (`todayDateString`'s rule). Pixels are
+ *  identical to a real draw of that outcome; only the dice are removed.
+ *  Must run after sign-in, on the app origin, before `goto("/today")`. */
+async function pinToday(
+  page: Page,
+  opts: { type?: "O2" | "AT" | "TR" | "AN"; title?: string },
+): Promise<void> {
+  const result = await page.evaluate(
+    async ({ type, title, overridesKey, pickKey }) => {
+      const now = new Date();
+      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const planRes = await fetch("/api/plan");
+      if (!planRes.ok) return { ok: false, body: `plan ${planRes.status}` };
+      const plan = (await planRes.json()) as {
+        planKey: string | null;
+        doneN: number;
+      };
+      // The freestyle re-roll key: sessions logged today (local day), 0
+      // with a plan — the same rule `Today.tsx`'s `sessionsLoggedToday`
+      // uses.
+      let session = 0;
+      if (plan.planKey === null) {
+        const logsRes = await fetch("/api/logs?limit=10");
+        if (!logsRes.ok) return { ok: false, body: `logs ${logsRes.status}` };
+        const logs = (await logsRes.json()) as { loggedAt: string }[];
+        session = logs.filter((log) => {
+          const d = new Date(log.loggedAt);
+          const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          return day === date;
+        }).length;
+      }
+      if (type !== undefined) {
+        const record: TodayOverrides = {
+          date,
+          planKey: plan.planKey,
+          doneN: plan.doneN,
+          swapType: type,
+          session,
+        };
+        localStorage.setItem(overridesKey, JSON.stringify(record));
+      }
+      if (title !== undefined) {
+        const res = await fetch("/api/workouts");
+        if (!res.ok) return { ok: false, body: `workouts ${res.status}` };
+        const rows = (await res.json()) as { id: string; title: string }[];
+        const row = rows.find((w) => w.title === title);
+        if (!row) return { ok: false, body: `no workout titled ${title}` };
+        const record: TodayPick = {
+          date,
+          planKey: plan.planKey,
+          doneN: plan.doneN,
+          workoutId: row.id,
+          shownIds: [row.id],
+          shuffled: false,
+          session,
+        };
+        localStorage.setItem(pickKey, JSON.stringify(record));
+      }
+      return { ok: true, body: "" };
+    },
+    {
+      ...opts,
+      overridesKey: TODAY_OVERRIDES_KEY,
+      pickKey: TODAY_PICK_KEY,
+    },
+  );
+  if (!result.ok) throw new Error(`pinToday failed: ${result.body}`);
+}
+
 /** Seeds `count` real logs via `POST /api/logs` so Today's LAST THREE
  *  renders its populated layout, not the "No sessions logged yet." empty
  *  state — duplicated from `e2e/design.spec.ts`'s identical helper. */
@@ -415,6 +497,7 @@ test("today", async ({ page }) => {
   await seedLogs(page, 3);
   await choosePlan(page, "sprint");
   await resetPlanProgress(page);
+  await pinToday(page, { title: "Sea Fret" });
   await page.goto("/today");
   // Today shows "LOADING…" until all five of its data hooks resolve — wait
   // for the suggested-workout card itself before shooting.
@@ -452,11 +535,14 @@ test("today", async ({ page }) => {
   });
 });
 
-// Freestyle chips (2026-09-04): the no-plan Today, which now carries the
-// same four-chip type row as the plan-driven capture above — none lit,
-// the word row reading ANY TYPE — beside a second frame with AT tapped.
-// Landscape at the same 844×390 frame the other landscape captures use,
-// since the chip row is the widest element on the screen.
+// Freestyle chips (2026-09-04, #296) + Phase SF PR1's daily roll: the
+// no-plan Today lights one chip on the day's first mount (pinned to AT
+// here — see `pinToday`) with that type's card; the second frame is the
+// clear (tap the lit chip → ANY TYPE, the whole library, for the rest of
+// the day); the
+// landscape frame is the rolled state at the 844×390 frame the other
+// landscape captures use, since the chip row is the widest element on
+// the screen.
 test("today-freestyle", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-today-freestyle@e2e.test",
@@ -464,21 +550,24 @@ test("today-freestyle", async ({ page }) => {
   });
   await setBaselines(page);
   await seedLogs(page, 3);
+  await pinToday(page, { type: "AT", title: "Occluded Front" });
   await page.goto("/today");
   await page.locator(".today-card").waitFor();
   await expect(page.locator(".today-plan-line-freestyle")).toBeVisible();
-  await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
+  await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
+  await expect(page.locator(".today-card-title")).toHaveText("Occluded Front");
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-freestyle.png"),
   });
 
   await page.getByRole("button", { name: "AT", exact: true }).click();
-  await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
-  await expect(page.locator(".today-card .type-badge")).toHaveText("AT");
+  await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "today-freestyle-narrowed.png"),
+    path: path.join(SCREENSHOTS_DIR, "today-freestyle-cleared.png"),
   });
 
+  await page.getByRole("button", { name: "AT", exact: true }).click();
+  await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
   await page.setViewportSize({ width: 844, height: 390 });
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-freestyle-landscape.png"),
@@ -557,6 +646,9 @@ test("today-capped", async ({ page }) => {
       "w 2' 6k+6 @22",
     ].join("\n"),
   );
+  // The imported workout is O2; the freestyle day's rolled type must be
+  // O2 too, or SOURCE=CUSTOM under another type is an empty pool.
+  await pinToday(page, { type: "O2" });
   await page.goto("/today");
   await page.locator(".today-card").waitFor();
 
@@ -600,6 +692,7 @@ test("today-rolled", async ({ page }) => {
     page,
     [`${title} | AT | medium | 4`, "x9", "w 1000m 6k+2 @26 r1"].join("\n"),
   );
+  await pinToday(page, { type: "AT" });
   await page.goto("/today");
   await page.locator(".today-card").waitFor();
 
@@ -954,6 +1047,7 @@ test("today-interrupted", async ({ page }) => {
     key: MONITOR_RUN_KEY,
     value: JSON.stringify(run),
   });
+  await pinToday(page, { type: "O2", title: "Sea Fret" });
 
   await page.goto("/today");
   await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
@@ -1009,6 +1103,7 @@ test("recovery-today-portrait", async ({ page }) => {
   });
   await setBaselines(page);
   await seedRecoveryScreenshotRun(page);
+  await pinToday(page, { type: "O2", title: "Sea Fret" });
   await page.goto("/today");
   await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
   await page.screenshot({
@@ -1023,6 +1118,7 @@ test("recovery-today-landscape", async ({ page }) => {
   });
   await setBaselines(page);
   await seedRecoveryScreenshotRun(page);
+  await pinToday(page, { type: "O2", title: "Sea Fret" });
   await page.setViewportSize({ width: 844, height: 390 });
   await page.goto("/today");
   await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();

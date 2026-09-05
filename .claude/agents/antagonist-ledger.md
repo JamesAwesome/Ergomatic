@@ -7378,3 +7378,65 @@ the two that changed the design are first, and both are mirrors.**
   rest 0. **Technique:** prove partial eligibility from its own ordered
   evidence—accepted prior actual, then the new interval's rowing reading,
   then `partial-written`—not from the workout grammar.
+
+## 2026-09-04 — Phase SF anchor: the platform ships one thumb
+
+Spec `docs/superpowers/specs/2026-09-04-shuffle-and-filters-design.md`,
+revision 0 → 1. Eleven findings, two of which changed the design.
+
+- **"Two overlaid native `<input type=range>` gives a two-thumb slider keyboard-,
+  screen-reader- and touch-complete for free, so building a custom control would
+  be hand-rolling what the platform ships."** False, and it inverted the repo's
+  own RF8. **Technique:** ask what the PLATFORM actually ships before invoking
+  "don't hand-roll it". The native element carries one value (MDN), nothing in
+  the HTML spec limits a range input's hit region to its thumb, so the overlay
+  needs `pointer-events` on `::-webkit-slider-thumb` — which MDN itself labels
+  *"Non-standard … We do not recommend using non-standard features in
+  production"* — and the CSSWG's own replacement (`css-forms-1`) carries an OPEN
+  issue reading *"The pseudo elements for the 'slider' controls do not support
+  multiple thumbs."* Then check what real implementations DO: MUI's thumb is a
+  styled span wrapping a hidden native input; the APG pattern is custom
+  `role="slider"` nodes; USWDS ships single-thumb only. **Reuse-vs-invent is
+  settled by finding two shipping implementations, not by asserting a primitive
+  exists.**
+- **"The write happens inside the same lazy initializer that reads, so the second
+  StrictMode invocation reads the first's write."** True (react.dev confirms
+  `useState` initializers double-invoke, development-only) — and it was the wrong
+  thing to be worried about. **Technique:** when a spec names one concurrency
+  hazard, check whether the WRITE can fail instead. `saveTodayPick` returns a
+  boolean nobody reads; under storage denial the read-then-write initializer
+  redraws on every mount, turning a stable card into a card that changes on every
+  tab round trip — a regression against behaviour that is currently stable.
+  RF25's shape, found by reading the writer's return type rather than the race.
+- **"An rng injected into `suggest()` draws once."** No: `suggestion` is
+  recomputed on every render and a second time per render against the sheet
+  draft. **Technique:** for any "draw once" claim, count the CALL SITES of the
+  function that draws, per render, before placing the draw. The fix was to
+  return the tie class and let the one initializer that persists draw.
+- **"Bumping a stored shape means the old record fails validation and reads as
+  null."** False for a shape change that only REMOVES fields: a hand-written
+  validator that builds its result from named keys ignores extras, so the old
+  record validates cleanly. **Technique:** removal and rename fail differently.
+  Read the parser's RETURN statement, not its checks — the checks tell you what
+  is rejected; the return tells you what a surviving record becomes.
+- **"A no-filter sentinel and a default can both govern the same control."** They
+  cannot, silently. `[0,120]` = "no filter, render no token" and "deviation is
+  measured against the key's default `[0,60]`" produce a state that IS a filter
+  and shows nothing. **Technique:** for any control with both a SENTINEL and a
+  per-account DEFAULT, enumerate the four cells (at-default / at-sentinel /
+  both / neither) and name the token for each. A rule stated per-cell cannot
+  hide the contradiction that two prose sentences can.
+- **"An e2e route counter reading zero proves the interaction issues no request."**
+  Decoration when the count is already zero on main. **Technique:** before
+  accepting any counter-reads-zero gate, run it against BASE. If base is already
+  the pass value, the gate cannot go red — replace the count with a snapshot of
+  the request LIST compared to a recorded baseline, so an added mount is caught,
+  and prove it red by adding a fetch.
+- **"`git grep <symbol>` is empty after the removal PR."** Never, when the phase's
+  own ROADMAP row and spec name the symbol they are retiring. **Technique:** run
+  every prescribed grep AT SPEC TIME and read the hit list — a removal criterion
+  must be path-scoped (`-- app/`) or it is unpassable by construction.
+- **"A cleared chip and an un-rolled day are distinguishable."** Both were
+  `swapType: null`. **Technique:** for every "first time today" mechanism, name
+  the stored value that distinguishes "never happened" from "happened and was
+  undone"; if one field carries both, the undo re-triggers the mechanism.

@@ -9,15 +9,13 @@ import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 import { DURATION_CHIPS } from "../components/durationChips";
-import type { TodayOverrides } from "./todayOverrides";
+import type { FilterSet } from "./todayFilters";
 
-/** The sheet's own scratch copy of the five fields it edits — a subset of
- *  `TodayOverrides`, not the whole record (swapType/date/planKey/doneN are
- *  none of this sheet's business). */
-export type TodayFilterDraft = Pick<
-  TodayOverrides,
-  "difficulties" | "durations" | "painLevels" | "lastDone" | "source"
->;
+/** The sheet's own scratch copy of the five fields it edits — since Phase
+ *  SF PR1 exactly one `FilterSet` (todayFilters.ts), the per-type memory's
+ *  own unit; the day's swap record (swapType/date/planKey/doneN) is none
+ *  of this sheet's business. */
+export type TodayFilterDraft = FilterSet;
 
 // PAIN's five cells, matching Library's own 1-5 union (FilterSheet.tsx's
 // PAIN_LEVELS) — a local copy per the same duplication convention.

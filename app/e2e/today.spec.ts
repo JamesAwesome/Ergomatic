@@ -1,5 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { signInViaBackdoor } from "./helpers";
+import { TODAY_PICK_KEY, type TodayPick } from "../src/today/todayPick";
+import {
+  TODAY_OVERRIDES_KEY,
+  type TodayOverrides,
+} from "../src/today/todayOverrides";
 
 // Today enhancements (post-6C, Task 4): the four flows the task's own plan
 // names — visible filters actually narrowing the suggestion, a
@@ -39,6 +44,85 @@ function applyFilterSheet(page: Page) {
  *  can assert its CONTENTS without knowing the exact count in advance. */
 function filterSheetCount(page: Page) {
   return page.locator(".today-filter-sheet-count");
+}
+
+/** Phase SF PR1: Today's first card is DRAWN at random within the
+ *  least-recently-done tie (spec I-2) and a freestyle day ROLLS its type
+ *  (I-5), from `crypto.getRandomValues` with no seam in the production
+ *  build this stack runs. Tests below that import TWO never-done fixtures
+ *  and then assert which one the card shows were relying on creation order
+ *  breaking that tie — exactly the determinism the spec removed — so they
+ *  now state the draw's outcome up front: this writes the day's records the
+ *  way a draw of `title` / a roll of `type` would have (the same shapes
+ *  `src/today/todayPick.ts` and `src/today/todayOverrides.ts` own, keyed
+ *  on the real `/api/plan` state and the browser's own local date).
+ *  Duplicated from `e2e/screenshots.spec.ts`'s identical helper (this
+ *  file's per-file helper precedent). Run after sign-in, before
+ *  `goto("/today")`. */
+async function pinToday(
+  page: Page,
+  opts: { type?: "O2" | "AT" | "TR" | "AN"; title?: string },
+): Promise<void> {
+  const result = await page.evaluate(
+    async ({ type, title, overridesKey, pickKey }) => {
+      const now = new Date();
+      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const planRes = await fetch("/api/plan");
+      if (!planRes.ok) return { ok: false, body: `plan ${planRes.status}` };
+      const plan = (await planRes.json()) as {
+        planKey: string | null;
+        doneN: number;
+      };
+      // The freestyle re-roll key: sessions logged today (local day), 0
+      // with a plan — the same rule `Today.tsx`'s `sessionsLoggedToday`
+      // uses.
+      let session = 0;
+      if (plan.planKey === null) {
+        const logsRes = await fetch("/api/logs?limit=10");
+        if (!logsRes.ok) return { ok: false, body: `logs ${logsRes.status}` };
+        const logs = (await logsRes.json()) as { loggedAt: string }[];
+        session = logs.filter((log) => {
+          const d = new Date(log.loggedAt);
+          const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          return day === date;
+        }).length;
+      }
+      if (type !== undefined) {
+        const record: TodayOverrides = {
+          date,
+          planKey: plan.planKey,
+          doneN: plan.doneN,
+          swapType: type,
+          session,
+        };
+        localStorage.setItem(overridesKey, JSON.stringify(record));
+      }
+      if (title !== undefined) {
+        const res = await fetch("/api/workouts");
+        if (!res.ok) return { ok: false, body: `workouts ${res.status}` };
+        const rows = (await res.json()) as { id: string; title: string }[];
+        const row = rows.find((w) => w.title === title);
+        if (!row) return { ok: false, body: `no workout titled ${title}` };
+        const record: TodayPick = {
+          date,
+          planKey: plan.planKey,
+          doneN: plan.doneN,
+          workoutId: row.id,
+          shownIds: [row.id],
+          shuffled: false,
+          session,
+        };
+        localStorage.setItem(pickKey, JSON.stringify(record));
+      }
+      return { ok: true, body: "" };
+    },
+    {
+      ...opts,
+      overridesKey: TODAY_OVERRIDES_KEY,
+      pickKey: TODAY_PICK_KEY,
+    },
+  );
+  if (!result.ok) throw new Error(`pinToday failed: ${result.body}`);
 }
 
 async function setBaselines(
@@ -361,6 +445,8 @@ test.describe("Today enhancements: visible filter chips", () => {
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
+    // Two never-done O2 fixtures tie; state the draw (see pinToday).
+    await pinToday(page, { title: highPainTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
     await expect(page.locator(".today-plan-line")).toContainText(
@@ -595,6 +681,10 @@ test.describe("Today enhancements: §5.5 — deleting a log releases the LAST DO
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
+    // released/control tie as never-done O2 fixtures; state the draw as
+    // CONTROL, so the SHUFFLE below (a draw from the unshown pool) can only
+    // land on released — the pick this test then excludes and releases.
+    await pinToday(page, { title: controlTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
 
@@ -841,7 +931,7 @@ test.describe("Today enhancements: freestyle spot-check", () => {
   // Today does, and opening it shows every group the sheet has (the sheet
   // has no notion of a plan at all). Round 2 (2026-08-04) adds LAST DONE/
   // SOURCE to that same unconditional set — five groups now, not three.
-  test("a no-plan user sees FILTER ⌄ and all five of its sheet's groups, plus an unlit type chip row that narrows on tap", async ({
+  test("a no-plan user sees FILTER ⌄ and all five of its sheet's groups, plus the chip row with the day's rolled type lit", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -875,36 +965,254 @@ test.describe("Today enhancements: freestyle spot-check", () => {
     await expect(
       painGroup.getByRole("button", { name: "1", exact: true }),
     ).toBeVisible();
-
-    // Freestyle chips (2026-09-04): the same four-chip row a plan-driven
-    // Today shows, but with NO chip lit (nothing to swap away from) and
-    // the word row reading ANY TYPE. Tapping one narrows the suggestion
-    // to that type; tapping the lit chip again clears it.
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    // Freestyle chips (#296) + Phase SF PR1 (spec I-5): the day's first
+    // mount ROLLS a type — exactly one chip lit, the word row reading that
+    // type's word, the card's badge matching. Which type is the dice's
+    // business; the invariant is "exactly one, and consistent".
     const chips = page.locator(".type-chip-grid .chip");
     await expect(chips).toHaveText(["O2", "AT", "TR", "AN"]);
-    for (let i = 0; i < 4; i++) {
-      await expect(chips.nth(i)).toHaveAttribute("aria-pressed", "false");
-    }
+    const pressed = page.locator(".type-chip-grid .chip[aria-pressed='true']");
+    await expect(pressed).toHaveCount(1);
+    const rolled = (await pressed.textContent())!.trim();
+    await expect(page.locator(".today-card .type-badge")).toHaveText(rolled);
+    await expect(page.locator(".type-word")).not.toHaveText("ANY TYPE");
+    // The plan line stays FREESTYLE — no swap arrow, nothing was swapped.
+    await expect(page.locator(".today-plan-line-freestyle")).toHaveText(
+      /^FREESTYLE/,
+    );
+
+    // I-1: a reload reads the record, never re-rolls.
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    await expect(
+      page.getByRole("button", { name: rolled, exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // Clearing: tap the lit chip → ANY TYPE, none lit, and a reload keeps
+    // it that way for the rest of today (the record exists, so no re-roll);
+    // tomorrow rolls again — the client test with a stubbed clock pins
+    // that half.
+    await page.getByRole("button", { name: rolled, exact: true }).click();
+    await expect(pressed).toHaveCount(0);
+    await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    await expect(pressed).toHaveCount(0);
     await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
 
+    // A tap lights that chip and narrows the card to it.
     await page.getByRole("button", { name: "AT", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "AT", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
     await expect(page.locator(".today-card .type-badge")).toHaveText("AT");
-    // The plan line stays FREESTYLE — no swap arrow, nothing was swapped.
-    await expect(page.locator(".today-plan-line-freestyle")).toHaveText(
-      /^FREESTYLE/,
+  });
+});
+
+// Phase SF PR1, exit criterion 1 (spec §7): SHUFFLE is a uniform draw from
+// the unshown pool, so two independent runs from a cleared store differ,
+// neither repeats inside itself, and a reload keeps the last card. The PM
+// gate ran revision 0's "twelve distinct titles" against main and found it
+// GREEN on the old strict cycle — the two-run difference is what the cycle
+// cannot produce.
+test.describe("Phase SF PR1: SHUFFLE is random, without repeats, and the pick survives a reload", () => {
+  async function shuffleRun(page: Page, taps: number): Promise<string[]> {
+    const title = page.locator(".today-card-title");
+    const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
+    const seen: string[] = [];
+    let previous = (await title.textContent())!.trim();
+    for (let i = 0; i < taps; i++) {
+      await shuffle.click();
+      await expect(title).not.toHaveText(previous);
+      previous = (await title.textContent())!.trim();
+      seen.push(previous);
+    }
+    return seen;
+  }
+
+  test("two runs of twelve taps from a cleared store give different sequences with no repeat inside either; a reload keeps the twelfth", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-shuffle-random@e2e.test",
+      name: "Today Shuffle Random",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await page.goto("/today");
+    await page.locator(".today-card").waitFor();
+    const first = (await page.locator(".today-card-title").textContent())!;
+
+    const runOne = await shuffleRun(page, 12);
+    expect(new Set([first.trim(), ...runOne]).size).toBe(13);
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    await expect(page.locator(".today-card-title")).toHaveText(runOne[11]);
+    await expect(page.getByText(/YOUR PICK/)).toBeVisible();
+
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    const second = (await page.locator(".today-card-title").textContent())!;
+    const runTwo = await shuffleRun(page, 12);
+    expect(new Set([second.trim(), ...runTwo]).size).toBe(13);
+    expect(runTwo).not.toStrictEqual(runOne);
+  });
+
+  // Exit criterion 7, made real (anchor pass F6): a request COUNT of zero
+  // is main's value too, so it cannot go red; the request LIST across the
+  // interactions must equal the mount's own fetches exactly, which an added
+  // remount or refetch breaks. The PR's record names the mutation that
+  // turned this red (a fetch inside handleShuffle).
+  test("twelve SHUFFLE taps, two chip taps and one sheet apply issue NO request beyond the mount's own fetches", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-shuffle-network@e2e.test",
+      name: "Today Shuffle Network",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    const requests: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith("/api/")) {
+        requests.push(`${request.method()} ${url.pathname}`);
+      }
+    });
+    await page.goto("/today");
+    await page.locator(".today-card").waitFor();
+    // Let the mount's own fetches finish landing before the baseline is cut.
+    await page.waitForLoadState("networkidle");
+    const mountRequests = [...requests];
+    expect(mountRequests.length).toBeGreaterThan(0);
+
+    await shuffleRun(page, 12);
+    await page.getByRole("button", { name: "AT", exact: true }).click();
+    await page.getByRole("button", { name: "O2", exact: true }).click();
+    await openFilterSheet(page);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "HARD", exact: true })
+      .click();
+    await applyFilterSheet(page);
+    await expect(page.locator(".filter-token")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    expect(requests).toStrictEqual(mountRequests);
+  });
+});
+
+// James (2026-09-04, "logged only"): a session LOGGED today re-keys a
+// freestyle day, so Today rolls and draws afresh afterwards. A real log
+// through the real API, a real reload; the records' `session` field is the
+// deterministic observable (the new chip and card are random by design).
+test.describe("Phase SF PR1: a logged session re-rolls the freestyle day", () => {
+  const rerollTitle = "Today Reroll After Log E2E";
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, rerollTitle);
+  });
+
+  test("logging a session bumps the day records' session key and redraws", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-reroll-after-log@e2e.test",
+      name: "Today Reroll After Log",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    // `postLogForWorkout` resolves PERSONAL workouts only, so the session
+    // logged is this account's own tiny AT fixture; the pinned card is the
+    // same row, which the log then pushes out of the least-recently-done
+    // tie for good measure.
+    await importBulk(
+      page,
+      [`${rerollTitle} | AT | medium | 2`, "w 1:00 6k"].join("\n"),
     );
+    await pinToday(page, { type: "AT", title: rerollTitle });
+    await page.goto("/today");
+    await page.locator(".today-card").waitFor();
+    await expect(page.locator(".today-card-title")).toHaveText(rerollTitle);
+    const read = () =>
+      page.evaluate(
+        ({ pickKey, overridesKey }) => ({
+          pick: JSON.parse(localStorage.getItem(pickKey) ?? "null") as {
+            session: number;
+            shuffled: boolean;
+            shownIds: string[];
+          },
+          overrides: JSON.parse(
+            localStorage.getItem(overridesKey) ?? "null",
+          ) as { session: number },
+        }),
+        { pickKey: TODAY_PICK_KEY, overridesKey: TODAY_OVERRIDES_KEY },
+      );
+    const before = await read();
+    expect(before.pick.session).toBe(0);
+    expect(before.overrides.session).toBe(0);
+
+    await postLogForWorkout(page, rerollTitle);
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    const after = await read();
+    expect(after.overrides.session).toBe(1);
+    expect(after.pick.session).toBe(1);
+    expect(after.pick.shuffled).toBe(false);
+    expect(after.pick.shownIds).toHaveLength(1);
+    // Exactly one chip is lit again (a fresh roll, whichever type it chose).
+    await expect(
+      page.locator(".type-chip-grid .chip[aria-pressed='true']"),
+    ).toHaveCount(1);
+  });
+});
+
+// Phase SF PR1, exit criterion 3 (spec I-6): filters are remembered PER
+// TYPE, undated — a deviation applied under one chip is absent under
+// another, back again under the first, and survives a reload.
+test.describe("Phase SF PR1: filters are remembered per type", () => {
+  test("a DIFFICULTY deviation under O2 is gone under AT, back under O2, and still there after a reload", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-filter-memory@e2e.test",
+      name: "Today Filter Memory",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    // A plan makes the lit chip deterministic (sprint session 1 is O2).
+    await page.evaluate(async () => {
+      await fetch("/api/plan", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planKey: "sprint" }),
+      });
+    });
+    await page.goto("/today");
+    await page.locator(".today-card").waitFor();
+    await expect(
+      page.getByRole("button", { name: "O2", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await openFilterSheet(page);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "HARD", exact: true })
+      .click();
+    await applyFilterSheet(page);
+    const token = page.locator(".filter-token", { hasText: "EASY–MEDIUM" });
+    await expect(token).toBeVisible();
 
     await page.getByRole("button", { name: "AT", exact: true }).click();
-    await expect(
-      page.getByRole("button", { name: "AT", exact: true }),
-    ).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
+    await expect(token).toHaveCount(0);
+    await page.getByRole("button", { name: "O2", exact: true }).click();
+    await expect(token).toBeVisible();
+
+    await page.reload();
+    await page.locator(".today-card").waitFor();
+    await expect(token).toBeVisible();
+    await page.getByRole("button", { name: "AT", exact: true }).click();
+    await expect(token).toHaveCount(0);
   });
 });
 
@@ -953,6 +1261,8 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
+    // Two never-done O2 fixtures tie; state the draw (see pinToday).
+    await pinToday(page, { title: highPainTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
     await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
@@ -1102,6 +1412,9 @@ test.describe("Today enhancements: the piece region", () => {
         "w 2' 6k+6 @22",
       ].join("\n"),
     );
+    // Freestyle: the day rolls a type; the fixture is O2, so SOURCE=CUSTOM
+    // under any other rolled type would be an empty pool. State the roll.
+    await pinToday(page, { type: "O2" });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
 

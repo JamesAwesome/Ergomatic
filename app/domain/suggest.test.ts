@@ -1118,3 +1118,236 @@ describe("suggestFreestyle", () => {
     });
   });
 });
+
+// Phase SF PR1 (spec §2.2): the tie class, and the two pure draw helpers.
+// `rng` here is the domain's contract — a function returning a uniform
+// integer in [0, 2^32) — fed from a scripted sequence so every branch is
+// reachable deterministically.
+import { RNG_RANGE, drawOne, nextShuffle } from "./suggest.js";
+
+function scripted(values: number[]): () => number {
+  let i = 0;
+  return () => {
+    if (i >= values.length) throw new Error("scripted rng exhausted");
+    return values[i++];
+  };
+}
+
+describe("tieIds", () => {
+  it("names every never-done entry when the pool's least-recently-done class is null, in pool order", () => {
+    const r = suggestFreestyle(
+      [
+        w("a", { lastDoneDaysAgo: 3 }),
+        w("b", { lastDoneDaysAgo: null }),
+        w("c", { lastDoneDaysAgo: null }),
+        w("d", { lastDoneDaysAgo: 40 }),
+      ],
+      { ...prefs, difficulties: [...prefs.difficulties], durations: [] },
+    );
+    expect(r.tieIds).toStrictEqual(["b", "c"]);
+    expect(r.recommendationId).toBe("b");
+  });
+
+  it("names the single oldest entry when nothing ties, and the whole class when several share a day count", () => {
+    const single = suggest({
+      todayCode: "AT",
+      prefs: { ...prefs, difficulties: [...prefs.difficulties], durations: [] },
+      library: [
+        w("a", { lastDoneDaysAgo: 3 }),
+        w("b", { lastDoneDaysAgo: 40 }),
+      ],
+    });
+    expect(single.tieIds).toStrictEqual(["b"]);
+    const tied = suggest({
+      todayCode: "AT",
+      prefs: { ...prefs, difficulties: [...prefs.difficulties], durations: [] },
+      library: [
+        w("a", { lastDoneDaysAgo: 40 }),
+        w("b", { lastDoneDaysAgo: 40 }),
+        w("c", { lastDoneDaysAgo: 3 }),
+      ],
+    });
+    expect(tied.tieIds).toStrictEqual(["a", "b"]);
+  });
+
+  it("is empty for an empty pool, and describes the POOL on a prescribed day (the pin is not a member)", () => {
+    const empty = suggest({
+      todayCode: "AT",
+      prefs: { ...prefs, difficulties: [...prefs.difficulties], durations: [] },
+      library: [w("x", { type: "O2" })],
+    });
+    expect(empty.tieIds).toStrictEqual([]);
+    const pinned = suggest({
+      todayCode: "AT",
+      prefs: { ...prefs, difficulties: [...prefs.difficulties], durations: [] },
+      library: [
+        w("a", { lastDoneDaysAgo: null }),
+        w("b", { lastDoneDaysAgo: 5 }),
+      ],
+      prescribed: {
+        entry: w("test-2k", { lastDoneDaysAgo: null }),
+        reason: "2k day",
+      },
+    });
+    expect(pinned.recommendationId).toBe("test-2k");
+    expect(pinned.tieIds).toStrictEqual(["a"]);
+  });
+});
+
+describe("drawnId (the day's drawn first card)", () => {
+  const library = [
+    w("a", { lastDoneDaysAgo: null }),
+    w("b", { lastDoneDaysAgo: null }),
+    w("c", { lastDoneDaysAgo: 3 }),
+  ];
+  const p = { ...prefs, difficulties: [...prefs.difficulties], durations: [] };
+
+  it("is honoured for the card and reported as least recently done, never YOUR PICK, in both modes", () => {
+    const r = suggest({ todayCode: "AT", prefs: p, library, drawnId: "b" });
+    expect(r.recommendationId).toBe("b");
+    expect(r.reason).toBe("Least recently done (never done).");
+    const f = suggestFreestyle(library, p, undefined, "b");
+    expect(f.recommendationId).toBe("b");
+    expect(f.reason).toBe("Least recently done (never done).");
+  });
+
+  it("loses to the rower's own todayPickId, which alone says YOUR PICK", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "b",
+      todayPickId: "c",
+    });
+    expect(r.recommendationId).toBe("c");
+    expect(r.reason).toBe("YOUR PICK: last done 3 days ago.");
+    expect(suggestFreestyle(library, p, "c", "b").recommendationId).toBe("c");
+  });
+
+  it("is ignored when it is no longer in the pool (a filter or type changed since the draw)", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "gone",
+    });
+    expect(r.recommendationId).toBe("a");
+    expect(r.reason).toBe("Least recently done (never done).");
+  });
+
+  it("keeps the fell-back reason when the filters matched nothing", () => {
+    const hard = [
+      w("a", { lastDoneDaysAgo: null, difficulty: "hard" }),
+      w("b", { lastDoneDaysAgo: null, difficulty: "hard" }),
+    ];
+    const r = suggest({
+      todayCode: "AT",
+      prefs: { difficulties: ["easy"], durations: [] },
+      library: hard,
+      drawnId: "b",
+    });
+    expect(r.recommendationId).toBe("b");
+    expect(r.reason).toMatch(/^Nothing fit your difficulty filters/);
+  });
+
+  it("NEVER beats a checkpoint pin — the draw is not the rower's act; SHUFFLE (todayPickId) is the escape", () => {
+    const pin = { entry: w("k2", { lastDoneDaysAgo: null }), reason: "2k day" };
+    const r = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "b",
+      prescribed: pin,
+    });
+    expect(r.recommendationId).toBe("k2");
+    expect(r.reason).toBe("2k day");
+    const escaped = suggest({
+      todayCode: "AT",
+      prefs: p,
+      library,
+      drawnId: "b",
+      todayPickId: "a",
+      prescribed: pin,
+    });
+    expect(escaped.recommendationId).toBe("a");
+  });
+});
+
+describe("drawOne", () => {
+  it("returns null for an empty list and the only member for a singleton without consulting rng", () => {
+    expect(drawOne([], scripted([]))).toBeNull();
+    expect(drawOne(["only"], scripted([]))).toBe("only");
+  });
+
+  it("maps a 32-bit draw to a member by modulo, covering every member", () => {
+    const ids = ["a", "b", "c"];
+    expect(drawOne(ids, scripted([0]))).toBe("a");
+    expect(drawOne(ids, scripted([1]))).toBe("b");
+    expect(drawOne(ids, scripted([2]))).toBe("c");
+    expect(drawOne(ids, scripted([3]))).toBe("a");
+  });
+
+  it("rejects draws in the biased tail and redraws (rejection sampling), never returning a member out of proportion", () => {
+    // For n = 3 the largest accepted draw is the greatest multiple of 3
+    // below 2^32, minus one; anything at or above it is rejected. The
+    // sequence below hits the tail first, then lands on "c".
+    // Independent literals, not derived from RNG_RANGE (RF21): for n = 3
+    // the accept limit is 2^32 - (2^32 % 3) = 4294967295, so a draw of
+    // 4294967295 is rejected and 4294967294 (≡ 2 mod 3) is the largest
+    // accepted one.
+    expect(
+      drawOne(["a", "b", "c"], scripted([4294967295, 4294967295, 2])),
+    ).toBe("c");
+    expect(drawOne(["a", "b", "c"], scripted([4294967294]))).toBe("c");
+    expect(RNG_RANGE).toBe(4294967296);
+  });
+});
+
+describe("nextShuffle", () => {
+  it("draws only from members not yet shown and not on screen, appending the draw to shownIds", () => {
+    const r = nextShuffle(["a", "b", "c", "d"], ["a"], "b", scripted([0]));
+    // candidates = [c, d]; draw 0 -> c
+    expect(r).toStrictEqual({ id: "c", shownIds: ["a", "c"] });
+  });
+
+  it("resets the shown set once every member has been shown, excluding only the card on screen", () => {
+    const r = nextShuffle(["a", "b", "c"], ["a", "b", "c"], "c", scripted([1]));
+    // candidates after reset = [a, b]; draw 1 -> b; shownIds restarts at [b]
+    expect(r).toStrictEqual({ id: "b", shownIds: ["b"] });
+  });
+
+  it("treats a stale shown id (not in the pool) as simply not a candidate, and an off-pool current id as no exclusion", () => {
+    const r = nextShuffle(["a", "b"], ["zzz"], "pinned-test", scripted([1]));
+    expect(r).toStrictEqual({ id: "b", shownIds: ["zzz", "b"] });
+  });
+
+  it("returns the current id unchanged when the pool is only that id, and null for an empty pool", () => {
+    expect(nextShuffle(["a"], ["a"], "a", scripted([]))).toStrictEqual({
+      id: "a",
+      shownIds: ["a"],
+    });
+    expect(nextShuffle([], [], null, scripted([]))).toBeNull();
+  });
+
+  it("walks the whole pool before any repeat under a fixed rng, then resets", () => {
+    const pool = ["a", "b", "c", "d", "e"];
+    let shown: string[] = [];
+    let current: string | null = null;
+    const seen: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r: { id: string; shownIds: string[] } = nextShuffle(
+        pool,
+        shown,
+        current,
+        scripted([7]),
+      )!;
+      seen.push(r.id);
+      shown = r.shownIds;
+      current = r.id;
+    }
+    expect([...seen].sort()).toStrictEqual(pool);
+    const sixth = nextShuffle(pool, shown, current, scripted([0]))!;
+    expect(sixth.shownIds).toStrictEqual([sixth.id]);
+    expect(sixth.id).not.toBe(current);
+  });
+});
