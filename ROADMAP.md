@@ -1422,8 +1422,10 @@ X" is a real disposition — most of these are single files.
   while the route still returns the deterministic head, so a caller that
   appeared would disagree with the screen. Decide: delete the route (and
   its integration tests), or make it mint and persist a draw server-side
-  so both agree. PR2 touches it either way (`rangeForCap`), so the decision
-  is cheapest taken before PR2's plan.
+  so both agree. PR2 touches it either way (`rangeForCap`), PR2 touched the route
+  (`rangeForCap`) without the decision being taken; deadline: PHASE CLOSE
+  (the release notes must not ship a route that disagrees with the screen
+  unmentioned).
 
 **Cleared 2026-08-31.** James settled every open row in one sitting; each one
 left this table for an owner, and the dispositions are recorded where the work

@@ -4646,3 +4646,31 @@ Verdict OPEN WITH CONDITIONS; all folded into revision 1.
   files), so CLAUDE.md's letter required the full cycle. Honest disclosure, in
   the Record block. Whichever way he rules, the resolution is a CLAUDE.md edit —
   the rule as written and the practice have diverged.
+
+## 2026-09-05 — Phase SF PR2 final gate: the before/after of a MEMBERSHIP change is the DEFAULT count
+
+- **A demo pair is not a before/after.** PR2 headlined "78 OPTIONS → 32 for
+  `[25,35]`" as its number-change evidence. That compares the new control
+  against itself and cannot move if the predicate's meaning were unchanged.
+  The real pair was already committed and unnamed: main's `today-sheet.png`
+  reads **71 OPTIONS**, the branch's reads **78** — same account, same pool,
+  no user action. **For a change to what a filter ADMITS, the design gate's
+  number is the DEFAULT state's count on both sides; a narrowed demo shows
+  the control, not the meaning.** RF11's shape in Gate 0 form.
+- **A criterion naming `(e2e)` is satisfied by an assertion, not a capture.**
+  SF's criterion 4 ("`[25,35]` yields a card whose printed minutes are within
+  25–35, e2e") shipped with an e2e asserting the TOKEN and a screenshot that
+  happens to show `25′`. Second gate running on this phase's criteria (PR1:
+  tick the clauses). Read the criterion's parenthesis as a contract too.
+- **Retiring a symbol: sweep comments that DESCRIBE the retired control, not
+  only comments that NAME it.** `git grep DurationBucket` came back to one
+  retirement comment — clean — while two `design.spec.ts` comments still
+  explained TIME's default as "bucketsForCap(60), the first three buckets"
+  beside code that reads a range. A grep on the symbol cannot find prose
+  about the thing.
+- **A rename can collide with a NAVIGATION label.** GLOBAL→LIBRARY puts the
+  word on the tab bar and on a SOURCE cell meaning "not yours", on the same
+  screen. Before approving a rename, grep the candidate word against the
+  tab labels and screen titles, not only the surface being renamed.
+- **Fold: 109 words / 6 bullets / longest 20 — PASS, and the self-count was
+  right.** Series: #268 186 · door PR B 121 · SF PR1 246 · **SF PR2 109.**

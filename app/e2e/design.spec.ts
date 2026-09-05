@@ -1380,9 +1380,8 @@ test.describe("today screen (plan active, logs present)", () => {
   // AT/TR type-swap chips are untouched (they stay on the plan line, never
   // moved into the sheet).
   //
-  // Amendment (2026-08-04 PR #50 round): TIME's default is the bucket SET
-  // `bucketsForCap(60)` derives (the first three buckets), not a single
-  // cap chip.
+  // Phase SF PR2: TIME's default is the range `rangeForCap(60)` derives
+  // ([0, 60] on the two-thumb control), not a set of cells.
   test("the chip row's default aria-pressed state matches the unmodified server preferences", async ({
     page,
   }) => {
@@ -1626,9 +1625,8 @@ test.describe("today screen (plan active, logs present)", () => {
 
     // Task 3 (2026-08-04 round): the setup that narrows to this solo
     // fixture moves through the FILTER sheet — EASY/MEDIUM no longer
-    // render inline. Amendment (2026-08-04 PR #50 round): TIME's default
-    // (bucketsForCap(60) — the first three buckets) already covers this
-    // fixture's 20-min estimate (2026-08-09: no `wu` line any more — a
+    // render inline. Phase SF PR2: TIME's default range ([0, 60],
+    // `rangeForCap(60)`) already covers this fixture's 20-min estimate (2026-08-09: no `wu` line any more — a
     // workout's own displayed/estimated duration is work-only now, per the
     // warmup-setting spec §5), so no TIME cell needs touching at all to
     // narrow to HARD alone.

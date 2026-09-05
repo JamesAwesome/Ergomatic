@@ -400,7 +400,7 @@ async function cleanupByTitle(page: Page, title: string): Promise<void> {
 }
 
 test.describe("SOURCE filter", () => {
-  test("selecting CUSTOM narrows to an authored workout, and CLEAR ALL restores the full library", async ({
+  test("selecting MINE narrows to an authored workout, and CLEAR ALL restores the full library", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {

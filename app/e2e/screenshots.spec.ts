@@ -555,6 +555,12 @@ test("today", async ({ page }) => {
   await expect(
     page.locator(".filter-token", { hasText: "25–35′" }),
   ).toBeVisible();
+  // Spec exit criterion 4 (a SEAM check, both sides `estimateMinutes`): the
+  // card the range admits prints minutes inside it.
+  const printed = (await page.locator(".today-card-duration").textContent())!;
+  const minutes = Number(printed.replace(/[^0-9]/g, ""));
+  expect(minutes).toBeGreaterThanOrEqual(25);
+  expect(minutes).toBeLessThanOrEqual(35);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-filtered.png"),
   });

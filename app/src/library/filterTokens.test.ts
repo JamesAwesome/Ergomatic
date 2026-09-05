@@ -186,7 +186,7 @@ describe("filterTokens", () => {
       expect(filterTokens(f)[0].label).toBe("LIBRARY");
     });
 
-    it("custom reads CUSTOM", () => {
+    it("custom reads MINE", () => {
       const f: Filters = { ...EMPTY_FILTERS, source: "custom" };
       expect(filterTokens(f)[0].label).toBe("MINE");
     });

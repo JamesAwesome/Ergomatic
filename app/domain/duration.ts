@@ -49,7 +49,11 @@ export function rangeForCap(cap: number): DurationRange {
 /** Clamps and orders an arbitrary pair into a valid range: integers, within
  *  `[0, DURATION_RANGE_MAX]`, `min ≤ max` (a crossed pair collapses to a
  *  point at the lower of the two). Parsers use it after validating that
- *  both members are finite numbers. */
+ *  both members are finite numbers. Deliberately NOT snapped to
+ *  `DURATION_STEP`: the control only ever produces step values, and a
+ *  hand-edited record holding 27 is honoured as 27 (the thumb prints `27′`
+ *  and arrows walk 27 → 32 …) rather than silently moved — a tolerated
+ *  non-invariant, not a promise (PM final gate, PR2). */
 export function clampRange(range: DurationRange): DurationRange {
   const clamp = (n: number) =>
     Math.min(DURATION_RANGE_MAX, Math.max(0, Math.round(n)));

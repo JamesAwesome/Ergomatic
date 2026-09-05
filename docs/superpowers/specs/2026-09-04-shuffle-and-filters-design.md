@@ -593,8 +593,12 @@ it is named, so none is green on main.
    own fetches (PR1). Revision 0 counted requests and read zero — but zero
    is already main's value (anchor finding, RF21). The list form catches an
    added remount or refetch; the PR proves it red by adding one fetch.
-8. `git grep DurationBucket -- app/` returns nothing after PR2 (path-scoped:
-   the unscoped grep matches this spec and the ROADMAP row forever).
+8. `git grep -E 'DurationBucket|bucketFor|bucketsForCap|DURATION_BUCKETS|DURATION_LOWER_BOUND' -- app/`
+   returns only comments recording the retirement, and no comment
+   describes a control that no longer exists (PM final gate, PR2:
+   path-scoped because this spec and the ROADMAP row name the symbol
+   forever; "comments recording the retirement" because a grep on the
+   symbol cannot find prose about the thing).
 9. Every rendered SOURCE label reads the chosen pair, including the row
    badge and the empty state (e2e, PR2). Fails on main: CUSTOM / GLOBAL.
 
