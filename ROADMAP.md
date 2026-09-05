@@ -2408,8 +2408,23 @@ trigger is the whole entry.
   exact-name targeted BLE connect/disconnect, both automatic exports and verified
   cleanup, in 1 minute 46 seconds. See
   [`NORMAL-TRACE-V8-RESULT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V8-RESULT.md).
-  Its final-export finish rule corrects v7's premature host cleanup. The attempt
-  budget is exhausted; no additional walk is approved or running.
+  Its final-export finish rule corrects v7's premature host cleanup. **Since
+  v8 (2026-09-05):** recovery v1 aborted on a Wi-Fi CoreDevice tunnel drop;
+  recovery v2 ran wired and stopped on a host-helper display guard that was a
+  FALSE NEGATIVE (fixed:
+  [`RECOVERY-GUARD-FIX.md`](docs/monitor/sessions/phase-nf-gate-minus-one/RECOVERY-GUARD-FIX.md));
+  recovery v3 **closed case 1 (stop-during-connect)** and stopped at case 2
+  when two 60 s NDEF windows found no PM5 tag
+  ([`RECOVERY-WALK-V3-RESULT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/RECOVERY-WALK-V3-RESULT.md)).
+  A Flipper-emulated replica of the tag now reads on the phone byte-for-byte
+  (desk, no erg), so the NFC read path is desk-testable up to the BLE
+  boundary. **Open finding, PM5 NFC availability:** cause of the no-tag windows
+  not identified, five alternatives live
+  ([research note](docs/superpowers/research/2026-09-05-pm5-nfc-availability.md));
+  `NF-RECOVERY-v4` (control-tag bracket, then cases 2-4) is PM-passed and
+  awaits James. Owed to the design spec: a "PM5 NFC availability" section
+  (no-tag is an expected outcome; do not attribute a cause; no rule may be
+  conditioned on the PM5's power cycle) — Gate 0 only if copy changes.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

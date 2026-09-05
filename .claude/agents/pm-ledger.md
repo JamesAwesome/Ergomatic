@@ -4676,3 +4676,21 @@ all four, do NOT accept case 1 from the v2 receipt: that verdict came from the
 broken helper, and the abort preceded post-drain adjudication. Standing watch,
 not a gate: the Python redaction is a hand-mirror of `redactNfcRecord` (TS);
 if that rule changes, the mirror must change with it or the guard mis-scores.
+
+## Recovery v4 bracket readiness, 2026-09-05
+
+`NF-RECOVERY-v4` PASS WITH CONDITIONS. The control-tag bracket earns its cap
+increase (ten reader starts / ten minutes) and a two-visit split is REFUSED on
+a structural ground, not cost: the no-tag event followed a connect cycle, so a
+bracket-only visit reads a rested PM5 and cannot reproduce the condition. New
+standing points: **a walk that grows a second evidence target names which one
+this visit decides** — v4 had acquired "why did the PM5 read fail" beside v1's
+"can an old attempt interfere with its successor" and said so only in a
+subclause. **An observation reply is not an acknowledgement reply**; the
+2026-09-04 grouped-walk ruling bans timing handshakes, so any bracket reply the
+controller could read off a receipt is cut, and the rest collapse into one
+message. **A limit inherited "verbatim" cannot be contradicted silently**: v4
+added the first photo of these walks while claiming v1 (which bans photos)
+stands unchanged. And RF13 again: the Flipper's `Pages read: N of 42` — the one
+observation separating "PM5 dark" from "NDEF-layer fault" — is evidenced only
+by a saved `.nfc` file, never by anyone seeing that screen.
