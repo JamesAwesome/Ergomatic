@@ -175,7 +175,10 @@ export default function Concept2Card({ email }: { email: string }) {
   async function connect(): Promise<void> {
     setBusy(true);
     setOutcome(null);
-    // A failed mode write was about the link this attempt replaces.
+    // The A7 line ("Couldn't change this") was about the mode of the link
+    // this attempt replaces; without this clear it outlived an unlink and
+    // reappeared under a freshly linked account's control (harden lens 1
+    // F2 / lens 2 F4). This is the ONE clear site on the relink path.
     setModeFailed(false);
     try {
       const result = await startLink();
@@ -200,10 +203,11 @@ export default function Concept2Card({ email }: { email: string }) {
       // operation that succeeded" is the defect being avoided).
       if (res.ok || res.status === 404) {
         setOutcome(null);
-        // The A7 line ("Couldn't change this") was about THIS link's mode;
-        // without a clear here it outlived an unlink and reappeared under a
-        // freshly linked account's control (harden lens 1 F2 / lens 2 F4).
-        setModeFailed(false);
+        // `modeFailed` is NOT cleared here, deliberately: the mode block
+        // unmounts with the link, and every way back to a linked card runs
+        // through `connect()`, which clears it on entry. A clear here was
+        // measured redundant (its mutation stayed green — RF21), so the one
+        // site that owns the invariant is `connect()`.
         // Invariant I4 needs no clear site here any more: an earlier
         // revision reset a weight-class draft on unlink so a relink would
         // ask again. There is no draft, and nothing about the removed
