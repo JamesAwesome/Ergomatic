@@ -491,7 +491,7 @@ function WorkoutDetailView({
               Start Timer
             </button>
             <span className="step-row-no-target">
-              <em>no target</em> <Link to="/you">Set baselines</Link>
+              <em>no target</em> <Link to="/you/baselines">Set baselines</Link>
             </span>
           </>
         ) : replaceStage === null ? (
@@ -559,7 +559,7 @@ function WorkoutDetailView({
           </Link>
         ) : (
           <span className="step-row-no-target">
-            <em>no target</em> <Link to="/you">Set baselines</Link>
+            <em>no target</em> <Link to="/you/baselines">Set baselines</Link>
           </span>
         )}
         {/* Globals are read-only server-side (a 403 on any mutation) — the

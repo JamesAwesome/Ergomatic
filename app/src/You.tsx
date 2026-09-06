@@ -1,12 +1,9 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
-import BaselineEditor from "./you/BaselineEditor";
+import BaselinesRow from "./you/BaselinesRow";
 import { clearConcept2Seen } from "./you/concept2Seen";
 import Concept2Row from "./you/Concept2Row";
-import ResetBaselineSetup from "./you/ResetBaselineSetup";
-import RetestShortcut from "./you/RetestShortcut";
 
 function initials(name: string): string {
   return name
@@ -24,12 +21,6 @@ export default function You({
   user: Me;
   onSignedOut: () => void;
 }) {
-  // Phase BL PR C: bumped by Reset baseline setup's successful clear —
-  // remounts BaselineEditor (key below) so its draft re-seeds from the
-  // now-empty server state instead of keeping the cleared numbers on
-  // screen as if they still existed.
-  const [resetGeneration, setResetGeneration] = useState(0);
-
   return (
     // M-3 (final whole-branch review): `you-screen` pairs with the
     // `.you-screen` CSS rule (index.css, Task 3's own comment block) that
@@ -69,20 +60,6 @@ export default function You({
           Sign out
         </button>
       </section>
-      <h2 className="section-heading">BASELINES</h2>
-      <BaselineEditor key={resetGeneration} />
-      {/* Phase BL PR B, reshaped by James's tester feedback (2026-08-22):
-          row the 6k / race the 2k, one tap from the numbers to each
-          designated test's DETAIL screen (Connect / Start Timer / Log it
-          after) — the shortcut's own doc comment (you/RetestShortcut.tsx)
-          covers identity, the from:"/you" back chain, and where the
-          start guards live now. */}
-      <RetestShortcut />
-      {/* Phase BL PR C: the staged-confirm Reset baseline setup — the
-          product answer to "the doors are unreachable once set" (spec rev
-          2's Reset onboarding ruling). Sits with the BASELINES section it
-          destroys, below the shortcut. */}
-      <ResetBaselineSetup onReset={() => setResetGeneration((g) => g + 1)} />
       {/* No SETTINGS section: the mock's settings rows (PRE-WORKOUT
           COUNTDOWN, PACE TOLERANCE, ACCENT COLOR) are filler
           (DEVIATIONS.md/handoff README §7) and are deliberately not
@@ -91,13 +68,25 @@ export default function You({
           James's 2026-08-23 ruling (the teaching lives in News's pinned
           articles alone now). */}
       {/* THE DOORS (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1,
-          Gate 0 amendment §8 approved 2026-09-04): the foot of You is one
-          GROUP of two quiet mono rows, pinned to the bottom by ONE
+          Gate 0 amendment §8 approved 2026-09-04; THIRD ROW added by the
+          baselines-subpage Gate 0, 2026-09-05): the foot of You is one
+          GROUP of quiet mono rows, pinned to the bottom by ONE
           `margin-top: auto` on this wrapper (`.you-doors`, index.css) —
-          invariant R7; two rows each carrying their own auto margin would
-          be a flex free-space split, not a second row under the first.
-          ORDER RULED (ruling 7): CONCEPT2 ABOVE DIAGNOSTICS, which keeps
-          the DIAGNOSTICS row You's last child.
+          invariant R7; rows each carrying their own auto margin would
+          be a flex free-space split, not a stack. ORDER: BASELINES,
+          CONCEPT2, DIAGNOSTICS — ruling 7 fixed CONCEPT2 above
+          DIAGNOSTICS and keeps DIAGNOSTICS You's last child; BASELINES
+          goes on top because it is the only one of the three a rower
+          reads FOR its value rather than opens for a task.
+
+          BASELINES (Gate 0, 2026-09-05 — James: "move baselines into a
+          subpage of You, I'd still like them to be visible when they are
+          collapsed"): the editor, the re-test shortcut and Reset baseline
+          setup all moved to `/you/baselines`
+          (`you/BaselinesScreen.tsx`); this row keeps the two splits
+          readable without opening it (`you/BaselinesRow.tsx` carries the
+          decision table). Unlike CONCEPT2 it ALWAYS renders — baselines
+          are not a capability an account may lack.
 
           CONCEPT2: the row replaces the card that stood here (PR2's
           Surface 1). It renders NOTHING unless a successful read has said
@@ -117,10 +106,11 @@ export default function You({
           rare "something went wrong" moment. Opens the menu screen
           (`you/Diagnostics.tsx`), not Monitor logs directly — the menu is
           the extensible home for whatever diagnostic tools follow.
-          `state={{ from: "/you" }}`: the same origin idiom RetestShortcut
-          above uses, so the menu's own BackLink returns HERE. Stays the
+          `state={{ from: "/you" }}`: the same origin idiom the two rows
+          above use, so the menu's own BackLink returns HERE. Stays the
           LAST child of You. */}
       <nav className="you-doors" aria-label="More">
+        <BaselinesRow />
         <Concept2Row accountId={user.id} />
         <Link
           to="/you/diagnostics"

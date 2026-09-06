@@ -120,57 +120,40 @@ describe("You", () => {
     await vi.waitFor(() => expect(onSignedOut).toHaveBeenCalledOnce());
   });
 
-  describe("Reset baseline setup wiring (Phase BL PR C)", () => {
-    // The full staged-confirm behavior lives in ResetBaselineSetup's own
-    // test; this pins You's OWN contribution — a successful reset remounts
-    // the editor so it refetches the now-empty server state instead of
-    // keeping the cleared numbers on screen.
-    it("a confirmed reset makes the baseline editor refetch (remount via the generation key)", async () => {
-      const calls: { url: string; method: string }[] = [];
-      const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-        const method = init?.method ?? "GET";
-        calls.push({ url, method });
-        if (url === "/api/baselines" && method === "DELETE") {
-          return new Response(
-            JSON.stringify({ k2Seconds: null, k6Seconds: null }),
-            { status: 200 },
-          );
-        }
-        if (url === "/api/baselines") {
-          return new Response(
-            JSON.stringify({ k2Seconds: 118, k6Seconds: 127 }),
-            { status: 200 },
-          );
-        }
-        return new Response(JSON.stringify([]), { status: 200 });
-      });
-      vi.stubGlobal("fetch", fetchMock);
-      renderYou();
+  // The baseline editor, the re-test shortcut and Reset baseline setup all
+  // left You for `/you/baselines` (Gate 0, 2026-09-05). Their wiring — the
+  // reset's remount of the editor included — is pinned in
+  // `you/BaselinesScreen.test.tsx` now; what You owes is the ROW.
+  it("carries a BASELINES row into the doors group, with the numbers on it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url === "/api/baselines"
+          ? new Response(JSON.stringify({ k2Seconds: 112.3, k6Seconds: 125 }), {
+              status: 200,
+            })
+          : new Response(JSON.stringify([]), { status: 200 }),
+      ),
+    );
+    renderYou(user);
+    const row = await screen.findByRole("link", { name: /BASELINES/ });
+    expect(row).toHaveAttribute("href", "/you/baselines");
+    expect(screen.getByText("2K 1:52.3 · 6K 2:05.0")).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "More" })).toContainElement(
+      row,
+    );
+  });
 
-      // The editor's first mount fetched and shows the stored pair (the
-      // typed field's resting value since Option T).
-      expect(
-        await screen.findByRole("textbox", { name: "2k split" }),
-      ).toHaveValue("1:58.0");
-      const baselineGets = () =>
-        calls.filter((c) => c.url === "/api/baselines" && c.method === "GET")
-          .length;
-      expect(baselineGets()).toBe(1);
-
-      await userEvent.click(
-        screen.getByRole("button", { name: "Reset baseline setup" }),
-      );
-      await userEvent.click(
-        screen.getByRole("button", { name: "Reset baseline setup" }),
-      );
-
-      // The DELETE went out AND the remounted editor re-fetched — the
-      // consequence, not the callback's existence (TESTING.md §3).
-      await vi.waitFor(() => expect(baselineGets()).toBe(2));
-      expect(
-        calls.some((c) => c.url === "/api/baselines" && c.method === "DELETE"),
-      ).toBe(true);
-    });
+  it("no longer renders the editor, the shortcut or the reset on You itself", async () => {
+    renderYou(user);
+    // A positive observable first: the row the editor's controls were
+    // replaced BY, so this absence is read off a settled screen.
+    await screen.findByRole("link", { name: /BASELINES/ });
+    expect(screen.queryByRole("textbox", { name: "2k split" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "RACE THE 2K" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Reset baseline setup/i }),
+    ).toBeNull();
   });
 
   // Task 3 (Gate 0 rev 2/3): the quiet DIAGNOSTICS row at the bottom of
@@ -192,9 +175,12 @@ describe("You: the Concept2 row (Wave E PR A, spec §5.1)", () => {
     renderYou(user);
     const row = await screen.findByRole("link", { name: /CONCEPT2/ });
     const diagnostics = screen.getByRole("link", { name: /DIAGNOSTICS/ });
-    const reset = screen.getByRole("button", { name: /Reset baseline setup/i });
+    const baselines = screen.getByRole("link", { name: /BASELINES/ });
     const following = Node.DOCUMENT_POSITION_FOLLOWING;
-    expect(reset.compareDocumentPosition(row) & following).toBeTruthy();
+    // BASELINES, then CONCEPT2, then DIAGNOSTICS — order is the ruling
+    // (ruling 7 for the lower pair), and presence alone would pass any of
+    // the six permutations.
+    expect(baselines.compareDocumentPosition(row) & following).toBeTruthy();
     expect(row.compareDocumentPosition(diagnostics) & following).toBeTruthy();
     const group = screen.getByRole("navigation", { name: "More" });
     expect(group).toContainElement(row);

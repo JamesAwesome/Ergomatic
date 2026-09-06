@@ -125,7 +125,7 @@ export default function StepRow({
           </span>
         ) : (
           <span className="step-row-no-target">
-            <em>no target</em> <Link to="/you">Set baselines</Link>
+            <em>no target</em> <Link to="/you/baselines">Set baselines</Link>
           </span>
         )}
       </div>

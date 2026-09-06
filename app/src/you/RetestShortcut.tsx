@@ -13,15 +13,18 @@ import { useWorkouts } from "../api/useWorkouts";
  *  Timer, and `ConnectAction`'s `connectGuardStage` on Connect — this
  *  component itself starts nothing and writes nothing.
  *
- *  `state={{ from: "/you" }}`: the detail's `BackLink` reads it, so BACK
- *  returns HERE, not the /library fallback ("Make sure back takes you to
- *  the You screen") — the same origin idiom every other entry Link uses.
+ *  `state={{ from: "/you/baselines" }}`: the detail's `BackLink` reads it,
+ *  so BACK returns HERE, not the /library fallback ("Make sure back takes
+ *  you to the You screen") — the same origin idiom every other entry Link
+ *  uses. The target moved with this component when the baseline editor left
+ *  You for `/you/baselines` (Gate 0, 2026-09-05); "here" is still whichever
+ *  screen the shortcut is rendered on.
  *
  *  Identity: the designated GLOBAL rows only (`ONBOARDING_TITLES` +
  *  `isGlobal`, domain/onboarding.ts's own rule). A missing row hides its
  *  link; a loading or errored library renders nothing at all — this is
- *  a shortcut, not a capability the screen owes, and You must never gate
- *  its baselines editor behind the workouts fetch. */
+ *  a shortcut, not a capability the screen owes, and `/you/baselines` must
+ *  never gate its editor behind the workouts fetch. */
 export default function RetestShortcut() {
   const workoutsState = useWorkouts();
   if (workoutsState.state !== "ready") return null;
@@ -39,7 +42,7 @@ export default function RetestShortcut() {
       {k6 !== undefined && (
         <Link
           to={`/library/${k6.id}`}
-          state={{ from: "/you" }}
+          state={{ from: "/you/baselines" }}
           className="button-l3 retest-button"
         >
           ROW THE 6K
@@ -48,7 +51,7 @@ export default function RetestShortcut() {
       {k2 !== undefined && (
         <Link
           to={`/library/${k2.id}`}
-          state={{ from: "/you" }}
+          state={{ from: "/you/baselines" }}
           className="button-l3 retest-button"
         >
           RACE THE 2K

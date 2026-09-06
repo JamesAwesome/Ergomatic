@@ -423,7 +423,7 @@ describe("WorkoutDetail", () => {
     expect(noTargets.every((el) => el.tagName === "EM")).toBe(true);
     expect(
       screen.getAllByRole("link", { name: /set baselines/i })[0],
-    ).toHaveAttribute("href", "/you");
+    ).toHaveAttribute("href", "/you/baselines");
   });
 
   it("renders Log it after as a real, enabled link to /library/:id/log when baselines are set", async () => {
@@ -549,7 +549,7 @@ describe("WorkoutDetail", () => {
     expect(caption).toHaveTextContent(/no target/i);
     expect(
       within(caption).getByRole("link", { name: /set baselines/i }),
-    ).toHaveAttribute("href", "/you");
+    ).toHaveAttribute("href", "/you/baselines");
   });
 
   it("deep-copies the workout's steps into the draft — mutating one never touches the other", async () => {

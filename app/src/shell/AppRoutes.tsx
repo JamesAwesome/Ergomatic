@@ -31,6 +31,7 @@ import ReviewSession from "../session/ReviewSession";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
+import BaselinesScreen from "../you/BaselinesScreen";
 import Diagnostics from "../you/Diagnostics";
 import Concept2Screen from "../you/Concept2Screen";
 import MonitorLogs from "../you/MonitorLogs";
@@ -245,6 +246,12 @@ export default function AppRoutes({
               path="/you"
               element={<You user={user} onSignedOut={onSignedOut} />}
             />
+            {/* The baselines door (Gate 0, 2026-09-05). Flat, a sibling of
+                /you like /you/concept2 and /you/diagnostics, and inside this
+                signed-in fragment because baselines are account data. NOT in
+                HIDDEN_TABBAR_PREFIXES — the tab bar stays, as on the other
+                two. */}
+            <Route path="/you/baselines" element={<BaselinesScreen />} />
             {/* Task 3 (Gate 0 rev 2/3): the diagnostics door, behind the
                 same signed-in guard as /you itself — reaching the ring's
                 own logs makes sense only for a signed-in rower. The menu
