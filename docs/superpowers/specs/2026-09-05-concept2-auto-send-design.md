@@ -446,7 +446,14 @@ Postgres; the account-switch path has a supported producer (`/connect` has no
 already-linked guard); the fifth row string breaks no existing test and the
 decision table grows 11 → 15 cells.
 
-**Owed before the plan:** Gate 0 — the redrawn card (control, mode line, pill),
-the You row's `SEND FAILED`, the three reason lines, needsReauth-with-control,
-OFF-armed, and the unlinked card's copy question, drawn at real proportions in
-both orientations with every ratio as a number.
+**Gate 0 APPROVED (James, 2026-09-05)** on
+`docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-05-autosend.html`
+(artifact 5ef07651…), with the page's recommendations: mode-line copy (a) for
+both modes; the armed OFF spans the whole control as today's full-width
+_Tap again to unlink_ (James, on sight: the third-width label sat off-centre);
+needsReauth line _"Sends are paused until you reconnect."_; the three reason
+lines with the _"Rows aren't being sent:"_ prefix and the OPEN CONCEPT2 PROFILE
+remedy; `SEND FAILED` at `--ink-3` on the row, `--ink` 600 on the card's pill
+(the pill's existing `.on` treatment); the unlinked explainer unchanged; the
+unified pre-link control not built; UNSENT-without-reason after an automatic
+failure accepted. **Next: the plan.**
