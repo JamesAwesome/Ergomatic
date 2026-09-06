@@ -5210,3 +5210,61 @@ four blockers are in the fix work itself, not in the ground v2 cleared.
   both superseded, the second withdrawn by this PM's own v2 entry. Replace a
   superseded canonical figure; do not leave it standing under a "current is
   v3" sentence.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v4: NOT READY)
+
+v4 cleared every v3 finding. All three blockers are again inside the fixes —
+the fourth consecutive gate where the fix, not the ground, was the defect.
+
+- **A copy instruction must name the label the OPERATOR'S account will
+  render, not the one the happy path renders.** v4's leg-1 fix prescribed
+  "tap **Save**"; `PostWorkoutSummary.tsx` reads
+  `plan === null ? "Save" : "Save without logging"`, and with a plan the
+  LEAD button is `Log against plan · SESSION n OF N` — which writes the
+  walk's row into the operator's real plan progress. Grep the ternary
+  around any literal a runsheet tells someone to tap, and ask which
+  ACCOUNT state selects it. Related: a walk that can mutate James's own
+  data needs a stop rule saying so.
+- **A timing discriminator needs an ANCHOR and a SEPARATION, and they are
+  different checks.** v4 named `processUptimeMs`, which the emitter really
+  does write — but a committed capture
+  (`phase-nf-gate-minus-one/normal-trace-v8-diagnostics.json`, 337,805,051)
+  shows it is uptime-since-boot, so comparing it to a spoken "locked"
+  crosses two clocks with no stated mapping. And the phase's OWN receipt
+  (`BACKGROUND-OBSERVATIONS.md`: "Native reader ending userCancelled"
+  arriving BEFORE the delivered pause) means a system invalidation and our
+  pause-abort emit the identical line at the identical instant. Existence
+  of the field (v3's finding) is the cheap half; that the field's values
+  can differ between the hypotheses is the half that decides the leg.
+- **Check BOTH directions of an inference the runsheet already flags in
+  one.** v4 tags "whether a PM5 resumes advertising after a disconnect" as
+  unestablished INFERENCE, and silently assumes the converse — that leaving
+  Connect Device STOPS advertising — as leg 2's entire NO-condition. The
+  repo argues the other way (`pm5-interface-notes.md` §Setup: advertising
+  starts on wake and "stays awake for a few minutes"; the spec says only
+  that it advertises WHILE on Connect Device). A leg whose failure state
+  cannot be staged is a leg whose inconclusive branch must be written.
+- **"Extracted mechanically" is a claim about a REPRODUCIBLE rule, not
+  about the answer.** v4's counts are right (11/20/8 = 39, re-extracted at
+  this gate) but re-running the stated rule over the table also catches the
+  literal `(200)` in leg 4's prose. Name the column the marks live in, or
+  the next recount diverges again.
+- **Cheap positive techniques worth keeping:** the whole state-machine walk
+  (END → `handleConnectedEnded` → `/library/:id/log?from=monitor` →
+  `LogSession` → one `PostWorkoutSummary` → `retireHandoff("save-success")`)
+  took six greps and settled the residue argument, the one-summary claim,
+  and the no-second-screen claim (`postTestOffer` returns null for a
+  non-global title) in one pass. And `update({ deviceName })` landing AFTER
+  the GATT connect while still in `pairing` is what makes the
+  "CONNECTING then the name" sequence observable real — worth checking
+  whenever a runsheet asks an operator to see a SEQUENCE rather than a
+  state.
+- **Fold: 130 words / 5 bullets / longest 24 — PASS.** Series: door PR B 121
+  · SF PR1 246 · SF PR2 109 · DE PR1 209 · DE PR2 122 · auto-send 214 ·
+  NF product v1 219 · v2 130 · v3 130 · **v4 130**. #277 and fold/Record
+  merge-order agree; both superseded figures the v3 gate named ("28
+  counted interactions", the haptic-as-observable) are replaced rather than
+  appended to. One residue: the Record attributes "39 interactions
+  extracted mechanically" to RUNSHEET v2, which is v4's fix — the
+  version-attribution sibling of v2's "a sentence citing a gate must match
+  a check that gate ran".
