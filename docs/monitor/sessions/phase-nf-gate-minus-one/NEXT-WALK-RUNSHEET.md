@@ -112,6 +112,6 @@ PM readiness.
 **SCOPE CUT, 2026-09-06 (James, on the antagonist's verdict).** Cases 2-4 and
 the v5 query-scenario diagnosis are dropped as ship gates: probe-only
 constructs (grep-proven), never in the spec's NO-GO list or countable exit,
-harm ceiling a recoverable retry. Physical multi-tag dropped too — iOS refuses
-multiple tags itself. No further Gate -1 erg walks are planned. Remaining work
+harm ceiling a recoverable retry. Physical multi-tag presentation dropped too:
+the rejection is our controller's count check (crit 8), injected-testable. No further Gate -1 erg walks are planned. Remaining work
 is desk-side; see REMAINING-PROOF.md "Ship decision".
