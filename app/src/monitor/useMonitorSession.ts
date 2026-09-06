@@ -5738,9 +5738,9 @@ export function useMonitorSession(
     // press Connect again immediately.
     attemptRef.current += 1;
     connectingRef.current = false;
-    // Phase NF: Cancel from the interstitial mid targeted scan aborts the
-    // scan's signal; the transport awaits `stopLEScan()` before rejecting.
-    targetedAbortRef.current?.controller.abort();
+    // Phase NF: the targeted scan's abort lives in `teardown()` (called
+    // below), which every cancel path reaches; a second abort here survived
+    // its own mutation (Task 10, S12) and was removed as decoration.
     const driver = driverRef.current;
     // MEDIUM-9 (task-5 re-review), landed by the fix wave's H1: CLAIM the
     // ref synchronously, before the `await driver.terminate()` below

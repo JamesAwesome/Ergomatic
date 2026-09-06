@@ -28,6 +28,20 @@ import {
 import type { InjectedFakeScript } from "../monitor/transports/index";
 import type { NfcScript } from "../monitor/nfc/scriptedNfcReader";
 
+// The detail screen's foreground lease: the real web arm never calls back
+// (Minor 9), so the lifecycle seam is mocked with a capturing registration
+// that stays a no-op unless a test drives it — the S22 mutation ("foreground
+// loss leaves the NFC attempt armed") has no other reachable red path.
+const lifecycleCallbacks: ((event: "background" | "foreground") => void)[] = [];
+vi.mock("../adapters/appLifecycle", () => ({
+  registerAppLifecycleListener: vi.fn(
+    (cb: (event: "background" | "foreground") => void) => {
+      lifecycleCallbacks.push(cb);
+      return () => undefined;
+    },
+  ),
+}));
+
 const WORKOUT: LibraryWorkout = {
   id: "w1",
   title: "NFC Test Piece",
@@ -238,6 +252,38 @@ describe("Scan NFC outcomes on detail (states table)", () => {
         (e) => e.kind === "session-requested",
       ),
     ).toHaveLength(1);
+  });
+
+  it("foreground loss (the pause event) mid-read aborts the attempt: quiet return, reader stopped, no interstitial", async () => {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => {
+      open = r;
+    });
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+      gate,
+    });
+    lifecycleCallbacks.length = 0;
+    await renderDetail();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    await waitFor(() => expect(lifecycleCallbacks.length).toBeGreaterThan(0));
+    await act(async () => {
+      for (const cb of lifecycleCallbacks) cb("background");
+      await Promise.resolve();
+    });
+    open();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Scan NFC" })).toBeEnabled(),
+    );
+    expect(screen.queryByText(/Connecting|Ready when you pull/)).toBeNull();
+    expect(document.querySelector(".baseline-error")).toBeNull();
+    expect(stagedRetireAttemptId()).toBeNull();
+    const trace = latestConnectionAttemptTrace()?.map((e) => e.kind) ?? [];
+    expect(trace).toContain("foreground-abort");
+    expect(trace).not.toContain("handoff-accepted");
   });
 
   it("unmount mid-read aborts the attempt and discards the staged receipt", async () => {

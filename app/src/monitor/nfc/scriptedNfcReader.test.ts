@@ -77,6 +77,22 @@ describe("createScriptedNfcReader", () => {
     }
   });
 
+  it("a malformed scripted record (a byte out of range) is terminal as a tagFailure, like the native arm's invalid-for-attempt", async () => {
+    const bad = [{ tnf: 4, type: [...fixture[0]!.type], payload: [-1] }];
+    const { result, trace } = read({
+      capability: "supported",
+      outcome: { kind: "records", records: bad },
+    });
+    const err = (await result.catch((e: unknown) => e)) as Error & {
+      cause?: unknown;
+    };
+    expect(err.name).toBe("NfcInvalidatedError");
+    expect(err.cause).toBe("tagFailure");
+    expect(trace.entries().map((e) => e.kind)).toContain(
+      "invalid-native-event",
+    );
+  });
+
   it("start-failed never starts a session and traces start-failed", async () => {
     const { reader, trace, result } = read({
       capability: "supported",

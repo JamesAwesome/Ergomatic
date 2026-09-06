@@ -167,8 +167,10 @@ export default function ConnectAction({
   // anything itself — "Connect anyway" below goes straight to
   // `onProceed`, the shape this component shipped with before the retire
   // briefly (and wrongly) lived here at press time.
+  // `busy` guards through `disabled={busy}` on both buttons (below), which
+  // is what a tap actually meets; an extra early return here survived its
+  // own mutation (Task 10, S6) and was removed as decoration (RF21).
   function handleEntry(kind: ConnectionEntryIntent["kind"]) {
-    if (busy) return;
     const attemptId = mintAttemptId();
     const monitorEntry = currentUnretiredHandoff();
     stageRetireHandoff(
