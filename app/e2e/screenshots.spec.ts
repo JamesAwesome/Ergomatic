@@ -2346,6 +2346,14 @@ test("releases", async ({ page }) => {
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "releases.png"),
   });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page
+    .locator(".releases-screen .news-whatsnew")
+    .first()
+    .evaluate((card) => card.scrollIntoView({ block: "start" }));
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "releases-landscape.png"),
+  });
 });
 
 test("import", async ({ page }) => {
@@ -4489,6 +4497,20 @@ test("news", async ({ page }) => {
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "news.png"),
+  });
+  // The top-of-feed capture does not reach the newest release card.
+  const whatsNew = page.locator(".news-whatsnew");
+  await expect(whatsNew.locator(".news-release-version")).toContainText(
+    NEWEST_RELEASE_VERSION,
+  );
+  await whatsNew.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "news-whats-new.png"),
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await whatsNew.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "news-whats-new-landscape.png"),
   });
 });
 

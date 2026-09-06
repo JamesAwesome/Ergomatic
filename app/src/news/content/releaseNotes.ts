@@ -5,6 +5,25 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.39.1: git log v0.39.0..origin/main --oneline at 1cda41e7 —
+    // four merges, each accounted for (RF15; no --merges):
+    //   #315 moves the baseline editor and its links — item 1.
+    //   #317 paints the keyboard-accessory gap; it keeps the tabs
+    //     available, rather than hiding them — item 2.
+    //   #318 is repository design-gate guidance — no rower-facing item.
+    //   #319 reorders target nudges and disables unsupported WEB Connect
+    //     at every entry point — items 3 and 4. Native keeps its transport.
+    // This notes-and-captures PR adds packaging, not another behavior.
+    version: "v0.39.1",
+    date: "2026-09-06",
+    items: [
+      "Your 2K and 6K baselines are readable on You. Tap BASELINES to edit them, re-test or reset your setup. Set baselines links elsewhere now open that screen too.",
+      "The Library no longer shows through the gap below the tab bar while you type. The tabs stay available with the keyboard open.",
+      "Target nudges now put ▼ before ▲. Down makes the target split one second faster; up makes it one second slower.",
+      "On the web, Connect stays disabled in browsers without Bluetooth support instead of opening an error screen. This applies to workouts and Just Row. Connect in the iPhone app stays available.",
+    ],
+  },
+  {
     // v0.39.0: git log v0.38.1..main --oneline at d3ad7fb7 — six merges,
     // every one accounted (RF15, no `--merges`; main is squash-merged):
     //   #307 Wave E PR C — the Concept2 send carries the monitor's own
