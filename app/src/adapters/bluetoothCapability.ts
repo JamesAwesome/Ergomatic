@@ -16,6 +16,21 @@ interface BluetoothAvailabilityProbe {
 
 export type BluetoothCapability = "available" | "off" | "absent";
 
+/** Synchronous support check so an unsupported browser never has a clickable
+ *  Connect while the optional radio-availability probe is still pending.
+ *  Native permission/radio recovery stays with the BLE plugin. The fake arm
+ *  matches transports/index.ts: only an injected script in a dev/e2e build
+ *  supplies a transport when the browser has no Web Bluetooth API. */
+export function canConnectMonitor(): boolean {
+  if (isNative()) return true;
+  if (
+    (import.meta.env.DEV || import.meta.env.VITE_ENABLE_FAKE_MONITOR === "1") &&
+    window.__pm5FakeScript__
+  )
+    return true;
+  return Boolean(navigator.bluetooth);
+}
+
 export async function probeBluetoothStatus(): Promise<BluetoothCapability> {
   if (isNative()) {
     // WKWebView has no navigator.bluetooth; the Capacitor plugin owns

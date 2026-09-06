@@ -12,7 +12,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildLogSeed } from "../session/logDraft";
 import type { ConnectedInterstitialProps } from "./ConnectedInterstitial";
 
@@ -134,9 +134,19 @@ async function openConnect(): Promise<void> {
 
 beforeEach(() => {
   localStorage.clear();
+  Object.defineProperty(navigator, "bluetooth", {
+    configurable: true,
+    value: {
+      requestDevice: vi.fn().mockRejectedValue(new Error("Test scan failed")),
+    },
+  });
   navigate.mockClear();
   capturedProps = null;
   preferencesReturn = READY_PREFS;
+});
+
+afterEach(() => {
+  Reflect.deleteProperty(navigator, "bluetooth");
 });
 
 describe("the log seed WorkoutDetail builds (7C Task 1)", () => {

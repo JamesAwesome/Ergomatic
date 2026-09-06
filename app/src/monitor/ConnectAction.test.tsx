@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -20,6 +20,23 @@ import {
   type HandoffReceipt,
 } from "./handoffStore";
 import ConnectAction from "./ConnectAction";
+
+function installSupportedWebBluetooth(): void {
+  Object.defineProperty(navigator, "bluetooth", {
+    configurable: true,
+    value: {
+      requestDevice: vi.fn().mockRejectedValue(new Error("Test scan failed")),
+    },
+  });
+}
+
+beforeEach(() => {
+  installSupportedWebBluetooth();
+});
+
+afterEach(() => {
+  delete (navigator as { bluetooth?: unknown }).bluetooth;
+});
 
 // 7C Task 1: `createMonitorRun`'s `logSeed` arg is required now. This
 // file's subject is the Connect guard's destructive step, not seed

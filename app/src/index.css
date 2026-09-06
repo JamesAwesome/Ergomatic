@@ -292,6 +292,13 @@ button:disabled {
   background: var(--action-connect-hover);
 }
 
+.button-connect:disabled,
+.button-connect:disabled:hover {
+  background: var(--surface);
+  border: 1px dashed var(--rule-3);
+  color: var(--ink-3);
+}
+
 /* 2 · secondary — surface fill, ink border/label, same type as L1. May
    stack (Log it after / Edit); never shares a row with another action. */
 .button-l2 {
@@ -5804,46 +5811,10 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin: 0;
 }
 
-/* Bluetooth-off / absent (handoff §1): "Same dashed idiom as a disabled
-   SHUFFLE. Still tappable." Applied from OUTSIDE `ConnectAction`'s own
-   markup (that component's own doc comment: Task 5's job is presentation
-   "around" the mounted control) via a descendant selector on its trigger
-   button — nothing here disables the control, only its border/label read
-   as inert. `--ink-3`, NOT the handoff's own literal `--ink-5`: this
-   button stays genuinely tappable (unlike a real `:disabled` control,
-   which is where `--ink-5` stays reserved throughout this file — the
-   contrast sweep's own standing rule, this file's Countdown/Live-timer
-   comments, DEVIATIONS row 35's identical precedent), and the handoff's own
-   header states the same standing law ("no small mono label lighter than
-   --ink-3") one paragraph above the literal it names here. Computed
-   contrast: --ink-3 on --surface 7.432:1, the same figure already verified
-   elsewhere in this file — clears the 4.5:1 AA floor comfortably; --ink-5
-   measures 2.754:1 on --surface (2.481:1 on --page — a DIFFERENT
-   background; this treatment never sits on --page) — the one time this
-   exact literal was tried on live text before (see this file's Live-timer
-   comment block), nowhere close either way. DEVIATIONS row (added this fix
-   round) records the substitution itself.
-
-   Fast-follow spec §4 (adversarial I9): retargeted from `.button-l2` to
-   `.button-connect` in the SAME edit that swapped `ConnectAction.tsx`'s
-   own class. NOT a bare rename: `.button-l2`'s own resting fill was
-   already `--surface` (unfilled), so the original rule only had to touch
-   border-style/color and text color. `.button-connect` is filled
-   (`--action-connect`, a solid blue) — reapplying only those two overrides
-   would leave dark `--ink-3` text sitting on a solid blue fill, which is
-   both visually wrong (this idiom reads as "inert", not "still the
-   primary, just dashed") and a real contrast failure (`--ink-3` on
-   `--action-connect` computes well under 4.5:1). `background: var(--surface)`
-   joins the override so the dashed state reverts to the SAME unfilled
-   look the idiom has always had, keeping the same measured 7.432:1
-   ratio above. `border: 1px dashed var(--rule-3)` (shorthand, not a
-   style/color-only override) because `.button-connect`'s own base rule is
-   `border: none` — no explicit width to inherit — so the width must be
-   stated here too, same as the shorthand this file's other dashed rule
-   (`.workout-detail-actions .button-l2:disabled`, below) already uses.
-   `WorkoutDetail.test.tsx` pins that the wrapper's `connect-block-dashed`
-   class and the trigger's `button-connect` class still land on the same
-   pair of elements this selector assumes. */
+/* The workout detail's radio-off and unsupported-browser states share this
+   dashed presentation. Radio-off remains tappable; ConnectAction disables
+   unsupported browsers from the first render. Keep --ink-3 on --surface
+   (7.432:1), since the tappable radio-off state needs normal text contrast. */
 .connect-block-dashed .button-connect {
   background: var(--surface);
   border: 1px dashed var(--rule-3);

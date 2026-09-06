@@ -140,16 +140,10 @@ export default function StepRow({
               2026-08-16): ▲ raises the split (2:09 -> 2:10, slower), ▼
               lowers it (2:09 -> 2:08, faster). The previous mapping read
               "up = harder" and tested as reversed at the erg. The
-              aria-labels stay effort-worded — a screen reader hears
-              faster/slower either way. */}
-          <button
-            type="button"
-            className="nudge-btn"
-            aria-label="Nudge slower"
-            onClick={() => onNudge(1)}
-          >
-            ▲
-          </button>
+              down/faster control comes first, matching the requested ▼▲
+              reading and keyboard order. The aria-labels stay
+              effort-worded — a screen reader hears faster/slower either
+              way. */}
           <button
             type="button"
             className="nudge-btn"
@@ -157,6 +151,14 @@ export default function StepRow({
             onClick={() => onNudge(-1)}
           >
             ▼
+          </button>
+          <button
+            type="button"
+            className="nudge-btn"
+            aria-label="Nudge slower"
+            onClick={() => onNudge(1)}
+          >
+            ▲
           </button>
         </div>
       )}
