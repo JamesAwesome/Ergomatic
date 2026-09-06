@@ -66,7 +66,7 @@ export const EMPTY_TODAY_FILTERS: TodayFilters = {
 
 const EFFORT_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
-function isPainLevel(v: unknown): v is number {
+function isEffortLevel(v: unknown): v is number {
   return typeof v === "number" && EFFORT_LEVELS.includes(v);
 }
 
@@ -124,7 +124,7 @@ function parseFilterSet(value: unknown, version: 1 | 2): FilterSet | null {
   // old key only when the new one is absent, write only the new key. PR 3
   // deletes the fallback.
   const levels = o.effortLevels !== undefined ? o.effortLevels : o.painLevels;
-  if (!Array.isArray(levels) || !levels.every(isPainLevel)) {
+  if (!Array.isArray(levels) || !levels.every(isEffortLevel)) {
     return null;
   }
   if (o.lastDone !== null && !isLastDone(o.lastDone)) return null;

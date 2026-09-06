@@ -27,7 +27,7 @@ function sameRange(a: DurationRange, b: DurationRange): boolean {
  *  maps (unlike TIME's own collapse above, EFFORT's shape never drifted
  *  between the two screens the way TIME's cap-vs-bucket-union split did,
  *  so there's no equivalent pressure to genuinely share this one). */
-function collapsePain(levels: number[]): string {
+function collapseEffort(levels: number[]): string {
   const sorted = [...levels].sort((a, b) => a - b);
   const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
   if (!contiguous) return `EFFORT ${sorted.join(", ")}`;
@@ -73,7 +73,7 @@ export function todayFilterTokens(
   if (overrides.effortLevels.length > 0) {
     tokens.push({
       key: "effort",
-      label: collapsePain(overrides.effortLevels),
+      label: collapseEffort(overrides.effortLevels),
       onClear: () => onReset("effort"),
     });
   }

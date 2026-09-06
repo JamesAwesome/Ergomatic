@@ -110,7 +110,7 @@ export function setDurationRange(f: Filters, range: DurationRange): Filters {
   return { ...f, durationRange: range };
 }
 
-export function togglePainLevel(f: Filters, level: number): Filters {
+export function toggleEffortLevel(f: Filters, level: number): Filters {
   const effortLevels = f.effortLevels.includes(level)
     ? f.effortLevels.filter((existing) => existing !== level)
     : [...f.effortLevels, level];

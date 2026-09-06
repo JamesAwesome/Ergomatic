@@ -185,7 +185,7 @@ export const sessionLogs = pgTable(
     // Post-workout-summary spec (2026-08-17), §3 "Stored shapes": nullable
     // now (`DROP NOT NULL`, migration 0009) — the redesigned reflection card
     // makes every answer optional (James's ruling), so a rower who skips the
-    // HELD question entirely must be storable, not just one who skips PAIN
+    // HELD question entirely must be storable, not just one who skips EFFORT
     // (which was already impossible before this migration: both were
     // required together). R-A ordered this: the null-tolerant READ side
     // (`RecentLog.held`, src/api/useRecentLogs.ts) shipped and tagged
@@ -193,7 +193,7 @@ export const sessionLogs = pgTable(
     // client white-screens on one.
     held: heldResultEnum("held"),
     // Same ruling as `held` above — nullable, `DROP NOT NULL`. The
-    // `session_logs_pain_check` CHECK below is left untouched: Postgres
+    // `session_logs_effort_check` CHECK below (renamed by 0024) is left untouched: Postgres
     // passes a CHECK constraint on NULL by definition (NULL is neither TRUE
     // nor FALSE, and a CHECK only ever REJECTS an explicit FALSE), so an
     // absent effort value satisfies `effort between 1 and 5` unchanged — no

@@ -27,7 +27,7 @@ const WORKOUT_TYPES_TITLE =
   "The four workout types, and how hard each should feel";
 const BASELINES_TITLE = "What a baseline is, and why every pace comes from one";
 const PICKING_A_WORKOUT_TITLE = "Picking a workout by how much it should hurt";
-const PAIN_SCALE_TITLE = "The effort scale, without a heart rate monitor";
+const EFFORT_SCALE_TITLE = "The effort scale, without a heart rate monitor";
 const YOUR_FIRST_ROW_TITLE = "Your first row";
 const CONNECT_THE_MONITOR_TITLE =
   "Connect the monitor, and it drives the piece";
@@ -480,7 +480,7 @@ test("BACK-walks-the-stack round: an in-prose cross-link inside an article retra
   await expect(crossLink).toHaveAttribute("href", "/news/effort-scale");
   await crossLink.click();
   await expect(page).toHaveURL(/\/news\/effort-scale$/);
-  await expect(page.locator(".reader-title")).toHaveText(PAIN_SCALE_TITLE);
+  await expect(page.locator(".reader-title")).toHaveText(EFFORT_SCALE_TITLE);
 
   // (a) James's exact path, one level deeper than the field report: ← BACK
   // from the cross-linked article must land back on picking-a-workout —
@@ -565,7 +565,7 @@ test("article titles used by this file exist in the registry", async ({
     WORKOUT_TYPES_TITLE,
     BASELINES_TITLE,
     PICKING_A_WORKOUT_TITLE,
-    PAIN_SCALE_TITLE,
+    EFFORT_SCALE_TITLE,
     YOUR_FIRST_ROW_TITLE,
     CONNECT_THE_MONITOR_TITLE,
   ]) {

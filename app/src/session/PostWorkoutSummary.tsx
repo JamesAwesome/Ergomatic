@@ -402,22 +402,22 @@ export function SummaryIntervalsBlock({
  *  identical inline JSX it used to carry directly. */
 export function SummaryReflectionCard({
   hint,
-  expectedPain,
+  expectedEffort,
   held,
   onHeld,
   effort,
-  onPain,
+  onEffort,
   thumbs,
   onThumbs,
   notes,
   onNotes,
 }: {
   hint: string | undefined;
-  expectedPain: number | null;
+  expectedEffort: number | null;
   held: HeldResult | null;
   onHeld: (value: HeldResult | null) => void;
   effort: number | null;
-  onPain: (value: number | null) => void;
+  onEffort: (value: number | null) => void;
   thumbs: Thumbs | null;
   onThumbs: (value: Thumbs | null) => void;
   notes: string;
@@ -472,8 +472,8 @@ export function SummaryReflectionCard({
       <div className="summary-reflection-group">
         <div className="summary-reflection-label-row">
           <p className="summary-reflection-label">ACTUAL EFFORT</p>
-          {expectedPain !== null && (
-            <p className="summary-hint">EXPECTED {expectedPain}/5</p>
+          {expectedEffort !== null && (
+            <p className="summary-hint">EXPECTED {expectedEffort}/5</p>
           )}
         </div>
         <div className="summary-effort-row">
@@ -484,7 +484,7 @@ export function SummaryReflectionCard({
               className="summary-effort-chip"
               aria-pressed={effort === level}
               aria-label={`Effort ${level}`}
-              onClick={() => onPain(effort === level ? null : level)}
+              onClick={() => onEffort(effort === level ? null : level)}
             >
               {level}
             </button>
@@ -524,11 +524,11 @@ export interface PostWorkoutSummaryProps {
    *  single-target rule the connected door does (`LogSession.tsx`'s own
    *  comment at that call site). */
   hint: string | undefined;
-  expectedPain: number | null;
+  expectedEffort: number | null;
   held: HeldResult | null;
   onHeld: (value: HeldResult | null) => void;
   effort: number | null;
-  onPain: (value: number | null) => void;
+  onEffort: (value: number | null) => void;
   thumbs: Thumbs | null;
   onThumbs: (value: Thumbs | null) => void;
   notes: string;
@@ -603,11 +603,11 @@ export default function PostWorkoutSummary({
   model,
   pacesOffCaption,
   hint,
-  expectedPain,
+  expectedEffort,
   held,
   onHeld,
   effort,
-  onPain,
+  onEffort,
   thumbs,
   onThumbs,
   notes,
@@ -717,11 +717,11 @@ export default function PostWorkoutSummary({
 
       <SummaryReflectionCard
         hint={hint}
-        expectedPain={expectedPain}
+        expectedEffort={expectedEffort}
         held={held}
         onHeld={onHeld}
         effort={effort}
-        onPain={onPain}
+        onEffort={onEffort}
         thumbs={thumbs}
         onThumbs={onThumbs}
         notes={notes}

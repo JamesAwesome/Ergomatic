@@ -8,7 +8,7 @@ import {
   setLastDone,
   setSource,
   setDurationRange,
-  togglePainLevel,
+  toggleEffortLevel,
   type Filters,
 } from "./filters";
 
@@ -150,7 +150,7 @@ export default function FilterSheet({
           pressed: draft.effortLevels.includes(level),
         }))}
         onToggle={(value) =>
-          onChangeDraft(togglePainLevel(draft, Number(value)))
+          onChangeDraft(toggleEffortLevel(draft, Number(value)))
         }
       />
 

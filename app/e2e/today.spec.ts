@@ -408,12 +408,12 @@ async function deleteLog(page: Page, id: string): Promise<void> {
 }
 
 test.describe("Today enhancements: visible filter chips", () => {
-  const highPainTitle = "Today Filters High Effort E2E";
-  const lowPainTitle = "Today Filters Low Effort E2E";
+  const highEffortTitle = "Today Filters High Effort E2E";
+  const lowEffortTitle = "Today Filters Low Effort E2E";
 
   test.afterEach(async ({ page }) => {
-    await cleanupByTitle(page, highPainTitle);
-    await cleanupByTitle(page, lowPainTitle);
+    await cleanupByTitle(page, highEffortTitle);
+    await cleanupByTitle(page, lowEffortTitle);
   });
 
   test("tap EFFORT cells 1+2 -> the suggestion card changes (a real title swap); reload -> cells and card unchanged", async ({
@@ -436,17 +436,17 @@ test.describe("Today enhancements: visible filter chips", () => {
     // one only surfaces once the 1+2 effort union excludes the high-effort one.
     await importBulk(
       page,
-      [`${highPainTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
+      [`${highEffortTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
     );
     await importBulk(
       page,
-      [`${lowPainTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
+      [`${lowEffortTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
     );
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
     // Two never-done O2 fixtures tie; state the draw (see pinToday).
-    await pinToday(page, { title: highPainTitle });
+    await pinToday(page, { title: highEffortTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
     await expect(page.locator(".today-plan-line")).toContainText(
@@ -456,7 +456,7 @@ test.describe("Today enhancements: visible filter chips", () => {
 
     // Pre-filter: the high-effort fixture, created first, wins the
     // never-done tie.
-    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(highEffortTitle);
 
     // Task 3 (2026-08-04 round): the tap moves inside the FILTER sheet — the
     // EFFORT cells no longer render on the screen itself.
@@ -478,14 +478,14 @@ test.describe("Today enhancements: visible filter chips", () => {
 
     // A real, provable change: the recommendation itself swapped to the
     // low-effort fixture now that the high-effort one is filtered out.
-    await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(lowEffortTitle);
 
     // Reload: the override persists (same day, same planKey/doneN) — the
     // card stays on the filtered pick, not back to the pre-filter default,
     // and re-opening the sheet shows the cells still pressed.
     await page.reload();
     await expect(page.locator(".today-card")).toBeVisible();
-    await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(lowEffortTitle);
     await openFilterSheet(page);
     const effortGroupAfterReload = page
       .getByRole("dialog")
@@ -1231,12 +1231,12 @@ test.describe("Phase SF PR1: filters are remembered per type", () => {
 // ALL removes the tokens AND the card returns to the day's real, unfiltered
 // pick — never an empty-pool dead end.
 test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () => {
-  const highPainTitle = "Today Clear All High Effort E2E";
-  const lowPainTitle = "Today Clear All Low Effort E2E";
+  const highEffortTitle = "Today Clear All High Effort E2E";
+  const lowEffortTitle = "Today Clear All Low Effort E2E";
 
   test.afterEach(async ({ page }) => {
-    await cleanupByTitle(page, highPainTitle);
-    await cleanupByTitle(page, lowPainTitle);
+    await cleanupByTitle(page, highEffortTitle);
+    await cleanupByTitle(page, lowEffortTitle);
   });
 
   test("two groups off-default -> CLEAR ALL -> tokens gone and the card shows the unfiltered pick, not an empty pool", async ({
@@ -1253,20 +1253,20 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
     await neutralizeGlobalRecency(page, "O2");
     await importBulk(
       page,
-      [`${highPainTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
+      [`${highEffortTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
     );
     await importBulk(
       page,
-      [`${lowPainTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
+      [`${lowEffortTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
     );
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
     // Two never-done O2 fixtures tie; state the draw (see pinToday).
-    await pinToday(page, { title: highPainTitle });
+    await pinToday(page, { title: highEffortTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
-    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(highEffortTitle);
     // At rest, nothing deviates from the day's defaults — no tokens, no
     // CLEAR ALL.
     await expect(page.locator(".filter-token")).toHaveCount(0);
@@ -1288,7 +1288,7 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
     await applyFilterSheet(page);
 
     await expect(page.locator(".filter-token")).toHaveCount(2);
-    await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(lowEffortTitle);
     const clearAll = page.getByRole("button", { name: "CLEAR ALL" });
     await expect(clearAll).toBeVisible();
 
@@ -1300,7 +1300,7 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
     // ...AND the card is back on the real, unfiltered pick — never an
     // empty-pool dead end (the Library's own CLEAR ALL, which empties
     // TYPE to nothing, would zero this exact pool if Today reused it).
-    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(highEffortTitle);
 
     // Re-opening confirms the draft itself reset too, not just the applied
     // record — every cell back to its default state (the Longest thumb

@@ -709,7 +709,7 @@ export interface LogFormFields {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useLogForm(onSaved: (logId: string | null) => void) {
   const [held, setHeld] = useState<HeldResult | null>(null);
-  const [effort, setPain] = useState<number | null>(null);
+  const [effort, setEffort] = useState<number | null>(null);
   // Post-workout-summary spec (2026-08-17), §3: `thumbs` joins the
   // held/effort/notes quintet — clearable the same way (tap the selected
   // option again to return to null), same reason as its siblings: it must
@@ -885,7 +885,7 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
     held,
     setHeld,
     effort,
-    setPain,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -1292,7 +1292,7 @@ export function TimerSummary({
     held,
     setHeld,
     effort,
-    setPain,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -1435,7 +1435,7 @@ export function TimerSummary({
       : (chosenType ??
         validWorkoutType(matchedDraft?.type) ??
         validWorkoutType(libraryWorkout?.type));
-  const expectedPain = libraryWorkout?.effort ?? null;
+  const expectedEffort = libraryWorkout?.effort ?? null;
   // TS narrowing from the `run === null` guard above doesn't survive into a
   // function DECLARED later in this component (the arrow function passed
   // to `submit`, below) — a separately-typed `const` alias is the standard
@@ -1554,11 +1554,11 @@ export function TimerSummary({
       model={model}
       pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
       hint={singleTargetHint(logSteps)}
-      expectedPain={expectedPain}
+      expectedEffort={expectedEffort}
       held={held}
       onHeld={setHeld}
       effort={effort}
-      onPain={setPain}
+      onEffort={setEffort}
       thumbs={thumbs}
       onThumbs={setThumbs}
       notes={notes}
@@ -1719,7 +1719,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     held,
     setHeld,
     effort,
-    setPain,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -2028,11 +2028,11 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       // so this arrival gets the rule the connected door itself uses, and
       // shows no hint at all when the workout has no single target.
       hint={connectedNoRecord ? singleTargetHint(logSteps) : "BY FEEL"}
-      expectedPain={workout.effort}
+      expectedEffort={workout.effort}
       held={held}
       onHeld={setHeld}
       effort={effort}
-      onPain={setPain}
+      onEffort={setEffort}
       thumbs={thumbs}
       onThumbs={setThumbs}
       notes={notes}
@@ -2099,7 +2099,7 @@ export function ProgrammedMonitorSummary({
     held,
     setHeld,
     effort,
-    setPain,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -2349,11 +2349,11 @@ export function ProgrammedMonitorSummary({
       model={model}
       pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
       hint={singleTargetHint(logSteps)}
-      expectedPain={workout?.effort ?? null}
+      expectedEffort={workout?.effort ?? null}
       held={held}
       onHeld={setHeld}
       effort={effort}
-      onPain={setPain}
+      onEffort={setEffort}
       thumbs={thumbs}
       onThumbs={setThumbs}
       notes={notes}

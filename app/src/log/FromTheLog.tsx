@@ -262,7 +262,7 @@ export default function FromTheLog() {
   // from an earlier abandoned edit.
   const [editing, setEditing] = useState(false);
   const [held, setHeld] = useState<HeldResult | null>(null);
-  const [effort, setPain] = useState<number | null>(null);
+  const [effort, setEffort] = useState<number | null>(null);
   const [thumbs, setThumbs] = useState<Thumbs | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -271,7 +271,7 @@ export default function FromTheLog() {
   function enterEdit() {
     if (row === null) return;
     setHeld(row.held);
-    setPain(row.effort);
+    setEffort(row.effort);
     setThumbs(row.thumbs);
     setNotes(row.notes ?? "");
     setSaveError(null);
@@ -482,11 +482,11 @@ export default function FromTheLog() {
             <>
               <SummaryReflectionCard
                 hint={undefined}
-                expectedPain={null}
+                expectedEffort={null}
                 held={held}
                 onHeld={setHeld}
                 effort={effort}
-                onPain={setPain}
+                onEffort={setEffort}
                 thumbs={thumbs}
                 onThumbs={setThumbs}
                 notes={notes}

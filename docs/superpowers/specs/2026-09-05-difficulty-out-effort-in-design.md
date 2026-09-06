@@ -525,10 +525,15 @@ compat layer to serve). PR 3 rides whatever tag follows its trigger.
 
 ## 6. Exit criteria
 
-1. `grep -rniE "difficult|\bpain\b" domain server src e2e --exclude='*.test.*' -l`
-   (in `app/`) returns only: release-note history and the PR 3 compat paths
-   (until PR 3). It returns 69 files at `f014c944`, so the gate is known to
-   go red. And `grep -rln "effort" domain src --exclude='*.test.*'` (51
+1. `grep -rni 'pain' domain server src e2e scripts --exclude='*.test.*' | grep -viE 'paint'`
+   (in `app/`) returns only: release-note history (`releaseNotes.ts`), the
+   named compat files (`server/routes/effortCompat.ts`, the adapter call
+   sites and comments in `server/routes/data.ts`), the legacy bulk-header
+   strings, and comments that name the removal. **Case-insensitive with NO
+   word boundary** — the PR 2 PM gate found `\bpain\b` blind to `setPain`,
+   `expectedPain` and `togglePainLevel` (≈55 lines in 14 files), so a word
+   boundary is the wrong instrument in a camelCase codebase. It returns 69
+   files at `f014c944`, so the gate is known to go red. And `grep -rln "effort" domain src --exclude='*.test.*'` (51
    files at `f014c944`) returns only files where every hit is the 1–5
    figure or `PaceWordRef`'s stored key and its comment — checked by
    `grep -rn` over that list with the pace-word family command from §2

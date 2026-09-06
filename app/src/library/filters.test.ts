@@ -13,7 +13,7 @@ import {
   setQuery,
   normalizeQuery,
   clearSheetFilters,
-  togglePainLevel,
+  toggleEffortLevel,
   toggleType,
   type Filters,
 } from "./filters";
@@ -89,9 +89,9 @@ describe("chip/cell state transitions", () => {
   });
 
   it("accumulates effort levels (multi-select union) and removes on repeat", () => {
-    const f = togglePainLevel(togglePainLevel(EMPTY_FILTERS, 1), 4);
+    const f = toggleEffortLevel(toggleEffortLevel(EMPTY_FILTERS, 1), 4);
     expect(f.effortLevels).toStrictEqual([1, 4]);
-    expect(togglePainLevel(f, 1).effortLevels).toStrictEqual([4]);
+    expect(toggleEffortLevel(f, 1).effortLevels).toStrictEqual([4]);
   });
 
   it("makes under21 and over21 mutually exclusive", () => {
@@ -228,7 +228,7 @@ describe("applyFilters", () => {
       w({ id: "p3", effort: 3 }),
       w({ id: "p4", effort: 4 }),
     ];
-    const f = togglePainLevel(togglePainLevel(EMPTY_FILTERS, 1), 4);
+    const f = toggleEffortLevel(toggleEffortLevel(EMPTY_FILTERS, 1), 4);
     expect(applyFilters(rows, f, baselines).map((r) => r.id)).toStrictEqual([
       "p1",
       "p4",
@@ -268,7 +268,7 @@ describe("applyFilters", () => {
       w({ id: "wrongtype", type: "O2", effort: 2 }),
       w({ id: "toopainful", type: "AT", effort: 5 }),
     ];
-    const f = togglePainLevel(toggleType(EMPTY_FILTERS, "AT"), 2);
+    const f = toggleEffortLevel(toggleType(EMPTY_FILTERS, "AT"), 2);
     expect(applyFilters(rows, f, baselines).map((r) => r.id)).toStrictEqual([
       "match",
     ]);
@@ -351,7 +351,7 @@ describe("query", () => {
   it("counts as active only when non-blank, and the sheet's CLEAR leaves it alone", () => {
     expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "fog"))).toBe(true);
     expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "   "))).toBe(false);
-    const both = setQuery(togglePainLevel(EMPTY_FILTERS, 2), "fog");
+    const both = setQuery(toggleEffortLevel(EMPTY_FILTERS, 2), "fog");
     expect(clearSheetFilters(both)).toStrictEqual({
       ...EMPTY_FILTERS,
       query: "fog",

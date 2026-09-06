@@ -641,7 +641,7 @@ function libraryWorkoutFixture(id: string, title: string): LibraryWorkout {
  * Mounts `LogSession` at the manual door's own monitor-mode route
  * (`/library/:id/log?from=monitor` — `monitorModeRun`'s own condition 1)
  * over whatever `MonitorRun` a prior `runReplay` call already wrote to
- * `localStorage`, drives the door's Save flow (`chooseHeldAndPain` +
+ * `localStorage`, drives the door's Save flow (`chooseHeldAndEffort` +
  * `LogSession.test.tsx`'s own default no-plan "Save" button, no
  * active plan), and returns the resulting save POST's parsed body.
  * EXPORTED for reuse (task brief): Task 2 (leg 2) and Task 4 (leg 3)
@@ -708,7 +708,7 @@ export async function mountLogSessionAndSave(
     ),
   );
   await screen.findByRole("heading", { name: workoutTitle });
-  // `LogSession.test.tsx`'s own `chooseHeldAndPain` — "Effort 2" is real
+  // `LogSession.test.tsx`'s own `chooseHeldAndEffort` — "Effort 2" is real
   // (Hoarfrost's own seeded value, `libraryWorkoutFixture`'s metadata
   // source), not a hand-picked number this fixture invented.
   await userEvent.click(screen.getByRole("button", { name: "HELD" }));

@@ -13,7 +13,7 @@ export const LIBRARY_FILTERS_KEY = "ergomatic.libraryFilters";
 
 const EFFORT_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
-function isPainLevel(v: unknown): v is number {
+function isEffortLevel(v: unknown): v is number {
   return typeof v === "number" && EFFORT_LEVELS.includes(v);
 }
 
@@ -60,7 +60,7 @@ function parseFilters(raw: string): Filters | null {
   // at app relaunch, so no pre-PR-2 record can reach a new native bundle;
   // a same-session web bundle swap falls back to EMPTY_FILTERS whole, by
   // this parser's own design.
-  if (!Array.isArray(f.effortLevels) || !f.effortLevels.every(isPainLevel)) {
+  if (!Array.isArray(f.effortLevels) || !f.effortLevels.every(isEffortLevel)) {
     return null;
   }
   if (
@@ -79,7 +79,7 @@ function parseFilters(raw: string): Filters | null {
   if (f.query !== undefined && typeof f.query !== "string") return null;
   return {
     // De-duped defensively: toggleType/toggleDuration/
-    // togglePainLevel can never produce a duplicate, but a tampered/legacy
+    // toggleEffortLevel can never produce a duplicate, but a tampered/legacy
     // stored value could, and .includes-based state plus code/level
     // matching both silently tolerate dupes — better to normalise here
     // than trust storage.

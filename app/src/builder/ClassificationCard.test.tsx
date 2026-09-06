@@ -8,7 +8,7 @@ type Handlers = {
   type: WorkoutType;
   effort: number | null;
   onTypeChange: (type: WorkoutType) => void;
-  onPainChange: (effort: number) => void;
+  onEffortChange: (effort: number) => void;
 };
 
 function setup(overrides: Partial<Handlers> = {}) {
@@ -16,7 +16,7 @@ function setup(overrides: Partial<Handlers> = {}) {
     type: "O2" as WorkoutType,
     effort: null as number | null,
     onTypeChange: vi.fn<(type: WorkoutType) => void>(),
-    onPainChange: vi.fn<(effort: number) => void>(),
+    onEffortChange: vi.fn<(effort: number) => void>(),
     ...overrides,
   };
   const view = render(<ClassificationCard {...props} />);
@@ -88,7 +88,7 @@ describe("ClassificationCard", () => {
         type: "O2" as WorkoutType,
         effort: null as number | null,
         onTypeChange: vi.fn(),
-        onPainChange: vi.fn(),
+        onEffortChange: vi.fn(),
       };
       const { rerender } = render(<ClassificationCard {...props} />);
       expect(screen.getByText("LOW & SLOW")).toBeInTheDocument();
@@ -170,10 +170,10 @@ describe("ClassificationCard", () => {
     });
 
     it("reports the chosen effort level", async () => {
-      const onPainChange = vi.fn();
-      setup({ onPainChange });
+      const onEffortChange = vi.fn();
+      setup({ onEffortChange });
       await userEvent.click(screen.getByRole("button", { name: "Effort 4" }));
-      expect(onPainChange).toHaveBeenCalledWith(4);
+      expect(onEffortChange).toHaveBeenCalledWith(4);
     });
   });
 

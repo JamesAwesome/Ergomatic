@@ -211,25 +211,33 @@ export function JustRowSummary({
     planState.state === "ready" && planState.plan.planKey !== null
       ? planState.plan
       : null;
-  const { held, effort, setPain, notes, setNotes, saving, saveError, submit } =
-    useLogForm(() => {
-      // Each kind clears ITS OWN record and only that one (the lifetime
-      // table's "successful save" clear site for the timer run).
-      if (door?.kind === "monitor") {
-        retireHandoff(
-          [
-            {
-              sessionKey: door.entry.sessionKey,
-              revision: door.entry.revision,
-            },
-          ],
-          "save-success",
-        );
-      } else if (door?.kind === "timer") {
-        if (loadRun()?.startedAt === door.run.startedAt) clearRun();
-      }
-      void navigate("/today/log");
-    });
+  const {
+    held,
+    effort,
+    setEffort,
+    notes,
+    setNotes,
+    saving,
+    saveError,
+    submit,
+  } = useLogForm(() => {
+    // Each kind clears ITS OWN record and only that one (the lifetime
+    // table's "successful save" clear site for the timer run).
+    if (door?.kind === "monitor") {
+      retireHandoff(
+        [
+          {
+            sessionKey: door.entry.sessionKey,
+            revision: door.entry.revision,
+          },
+        ],
+        "save-success",
+      );
+    } else if (door?.kind === "timer") {
+      if (loadRun()?.startedAt === door.run.startedAt) clearRun();
+    }
+    void navigate("/today/log");
+  });
   void held; // the targets question does not exist here; see the header.
 
   if (door.kind === "timer") {
@@ -239,7 +247,7 @@ export function JustRowSummary({
         run={door.run}
         plan={plan}
         effort={effort}
-        setPain={setPain}
+        setEffort={setEffort}
         notes={notes}
         setNotes={setNotes}
         saving={saving}
@@ -379,7 +387,7 @@ export function JustRowSummary({
 
       <Reflection
         effort={effort}
-        setPain={setPain}
+        setEffort={setEffort}
         notes={notes}
         setNotes={setNotes}
       />
@@ -405,7 +413,7 @@ function TimerDoor({
   run,
   plan,
   effort,
-  setPain,
+  setEffort,
   notes,
   setNotes,
   saving,
@@ -416,7 +424,7 @@ function TimerDoor({
   run: SessionRun;
   plan: PlanData | null;
   effort: number | null;
-  setPain: (effort: number | null) => void;
+  setEffort: (effort: number | null) => void;
   notes: string;
   setNotes: (notes: string) => void;
   saving: boolean;
@@ -446,7 +454,7 @@ function TimerDoor({
 
       <Reflection
         effort={effort}
-        setPain={setPain}
+        setEffort={setEffort}
         notes={notes}
         setNotes={setNotes}
       />
@@ -506,12 +514,12 @@ function SaveStack({
 /** EFFORT + NOTES, shared by both kinds — one markup, one set of labels. */
 function Reflection({
   effort,
-  setPain,
+  setEffort,
   notes,
   setNotes,
 }: {
   effort: number | null;
-  setPain: (effort: number | null) => void;
+  setEffort: (effort: number | null) => void;
   notes: string;
   setNotes: (notes: string) => void;
 }) {
@@ -529,7 +537,7 @@ function Reflection({
               className="summary-effort-chip"
               aria-pressed={effort === level}
               aria-label={`Effort ${level}`}
-              onClick={() => setPain(effort === level ? null : level)}
+              onClick={() => setEffort(effort === level ? null : level)}
             >
               {level}
             </button>

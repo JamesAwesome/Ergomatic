@@ -3485,16 +3485,16 @@ test.describe("builder screen", () => {
     const typeChipRow = page.locator(".classification-chip-row").first();
     const effortRow = page.locator(".classification-chip-row").nth(1);
     const beforeType = await stableBoundingBox(typeChipRow);
-    const beforePain = await stableBoundingBox(effortRow);
+    const beforeEffort = await stableBoundingBox(effortRow);
 
     await page.getByRole("button", { name: "AT", exact: true }).click();
     await expect(page.getByText("COMFORTABLY HARD")).toBeVisible();
 
     const afterType = await stableBoundingBox(typeChipRow);
-    const afterPain = await stableBoundingBox(effortRow);
+    const afterEffort = await stableBoundingBox(effortRow);
 
     expect(afterType?.y).toBe(beforeType?.y);
-    expect(afterPain?.y).toBe(beforePain?.y);
+    expect(afterEffort?.y).toBe(beforeEffort?.y);
   });
 
   // Same iOS device report as the library screen's callout test: a typed

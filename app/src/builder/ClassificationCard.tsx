@@ -68,12 +68,12 @@ export default function ClassificationCard({
   type,
   effort,
   onTypeChange,
-  onPainChange,
+  onEffortChange,
 }: {
   type: WorkoutType;
   effort: number | null;
   onTypeChange: (type: WorkoutType) => void;
-  onPainChange: (effort: number) => void;
+  onEffortChange: (effort: number) => void;
 }) {
   const effortWord = effort !== null ? EFFORT_WORDS[effort - 1] : undefined;
   const typeWord = TYPE_WORDS[type];
@@ -129,7 +129,7 @@ export default function ClassificationCard({
                 aria-pressed={selected}
                 aria-label={`Effort ${level}`}
                 className="classification-chip classification-chip-effort"
-                onClick={() => onPainChange(level)}
+                onClick={() => onEffortChange(level)}
               >
                 {level}
               </button>

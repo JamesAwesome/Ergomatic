@@ -550,7 +550,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
             type={form.type}
             effort={form.effort}
             onTypeChange={(type) => setForm((f) => ({ ...f, type }))}
-            onPainChange={(effort) => setForm((f) => ({ ...f, effort }))}
+            onEffortChange={(effort) => setForm((f) => ({ ...f, effort }))}
           />
         </div>
         {errors.effort && <p className="field-error">{errors.effort}</p>}

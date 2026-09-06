@@ -23,7 +23,7 @@ export interface Token {
   clear(f: Filters): Filters;
 }
 
-function collapsePain(levels: number[]): string {
+function collapseEffort(levels: number[]): string {
   const sorted = [...levels].sort((a, b) => a - b);
   const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
   if (!contiguous) return `EFFORT ${sorted.join(", ")}`;
@@ -58,7 +58,7 @@ export function filterTokens(f: Filters): Token[] {
   if (f.effortLevels.length > 0) {
     tokens.push({
       kind: "effort",
-      label: collapsePain(f.effortLevels),
+      label: collapseEffort(f.effortLevels),
       clear: (current) => ({ ...current, effortLevels: [] }),
     });
   }
