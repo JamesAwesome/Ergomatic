@@ -30,7 +30,9 @@ Copied from the spec; every task's requirements include this section.
 - No tracked source, test or plan file may contain a NUL byte (lens 1, F2: one made `nfc.test.ts` and this plan binary to `grep`). Gate: `bash scripts/nul-check.sh` (added in Task 5), part of `pnpm lint`.
 - There is NO pre-start foreground read in the NFC reader (lens 1, F1; spec §1 withdrawal). Foreground loss during an attempt aborts the attempt's `AbortController` from the `pause` event on the detail screen.
 - A plugin `nfcEvent` that carries this attempt's ID but no usable `ndefMessage` is a terminal `tagFailure` (lens 1, F3), never "keep waiting".
-- `pnpm build` + `pnpm dist:grep` prove the web bundle contains no NFC, haptics or scripted-reader code (string-literal needles, both directions).
+- `pnpm build` + `pnpm dist:grep` prove the web bundle contains no scripted-reader code (needle `scripted start failure`, a thrown-string literal; proven red by a static import with a usage, then green). The NFC and haptics plugin chunks DO ship lazily behind a runtime `isNative()`, exactly as `@capacitor/app`'s chunk already does (RF12: Rollup folds an `import()` only behind a build-time constant) — the earlier constraint over-claimed (lens 2).
+- Every identity mint (session id, attempt id) uses `src/monitor/uuidV4.ts`, which carries the iOS < 15.4 `crypto.randomUUID()` fallback; the attempt-mint test seam is gated behind the fake fold (lens 2).
+- Hardening lens 2 (2026-09-06) findings folded: a mismatched keyed take is a PURE READ; disabled hardware buttons keep the cream label (the global disabled colour is 2.4:1 on the fills); every `await` inside an attempt sits inside its `try`; a poisoned tail reached through the picker maps to `scan-cleanup-failed`; a picker request's attempt ID is validated; unattributable `nfcSessionEnd` and swallowed stop failures are terminal / recorded; the trace is threaded `connect(request, trace)` → `scanTarget(request, signal, trace)` and copied as the ring prefix at GATT connect; the capability probe never publishes a trace snapshot; the fake validates requests and the replay fails closed on ambiguity and abort.
 - All work in the worktree `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/phase-nf-nfc-design`, branch `codex/phase-nf-nfc-design`. Before every commit run `git rev-parse --show-toplevel` and require that path. No push, merge or release without James's word. Commit before every mutation probe; revert probes with `git checkout -- <file>` only after `git status` shows the file clean (RF22).
 - Paste-test findings folded into the blocks: `@typescript-eslint/only-throw-error` rejects `throw poisoned` on a module-level `let` (copy to a `const` first); a manual test clock must drain ~25 microtasks per `advance()` because `scanTarget` crosses five awaits before it schedules its deadline; attach a `.catch` to a promise you expect to reject before advancing fake timers past its rejection.
 - Lint rules the paste-test hit: `vitest/prefer-strict-equal` (write `toStrictEqual`, never `toEqual`) and TypeScript excess-property checks on object literals typed as `Transport` (build a `Transport & TargetedScanTransport` variable before passing it).
@@ -62,7 +64,9 @@ Monitor layer:
 - Create `app/src/monitor/nfc/paintBarrier.ts` — two consecutive `requestAnimationFrame` turns, abortable.
 - Create `app/src/monitor/nfc/runNfcAttempt.ts` — the detail coordinator: authorize → read → stop → parse → haptic → paint → hand off.
 - Create `app/src/monitor/nfc/fixtures.ts` — loads `docs/monitor/nfc/pm5-tag-2026-09-04-iphone.json` for tests.
-- Create `app/src/monitor/ConnectionEntry.tsx` (replaces `ConnectAction.tsx`) — both hardware buttons, one guard, one intent, one attempt ID.
+- Modify `app/src/monitor/ConnectAction.tsx` — generalised IN PLACE into the shared connection-entry owner (both hardware buttons, one guard, one intent, one attempt ID); the file keeps its name and its test history. (The plan first said "create `ConnectionEntry.tsx`, delete `ConnectAction.tsx`"; generalising in place is what the spec's "extracts or generalizes" allows and is the smaller diff.)
+- Create `app/src/monitor/nfc/attemptIdMint.ts` — the attempt-ID mint with a test seam (a component file may export only components: react-refresh lint).
+- Create `app/src/monitor/nfc/nfcCapabilityCache.ts` — the process-scoped capability cache with a test reset (same lint reason).
 - Create `app/src/monitor/mountLease.ts` — identity-bound StrictMode-safe mount lease, CLAIMED by `ConnectedInterstitial`'s mount-once effect (lens 1, F8: it is not dead code; the loss callback discards the attempt's staged receipt on a genuine unmount).
 - Modify `app/src/monitor/handoffStore.ts` — staged retire keyed by attempt ID.
 - Modify `app/src/monitor/transports/capacitorBle.ts` — `scanTarget`, operation tail, poison, named errors, injectable constants.
@@ -71,7 +75,7 @@ Monitor layer:
 - Modify `app/src/workout/ConnectedInterstitial.tsx` — `request` prop, new copy, retry policy.
 - Modify `app/src/workout/WorkoutDetail.tsx` — NFC path, accepted state, inline NFC errors.
 - Modify `app/src/theme/tokens.css`, `app/src/index.css` — `--action-nfc`, `.button-nfc`, accepted state.
-- Delete `app/src/monitor/ConnectAction.tsx` (+ test); move its guard tests into `ConnectionEntry.test.tsx`.
+- `app/src/monitor/ConnectAction.test.tsx` keeps every guard test and gains the shared-owner tests (presence rules, intent kinds, busy, accepted, one pending intent).
 
 Proof infrastructure and gates:
 
@@ -1652,9 +1656,11 @@ Interstitial: add `request` to props, `NOT_A_MACHINE_REFUSAL` entries for the fi
 
 ## Task 8: The shared connection-entry owner, the Scan NFC path on workout detail, tokens and CSS
 
+**As built (2026-09-06):** `ConnectAction.tsx` generalised in place (props `nfcCapability`, `busy`, `accepted`; `onProceed(intent)`), `attemptIdMint.ts` and `nfcCapabilityCache.ts` split out for react-refresh, `WorkoutDetail.tsx` gains `useNfcCapability`, `handleNfcProceed`, `handleEntryProceed` and a shared `proceedWithRequest(request): boolean` that discards the staged receipt by ID on both of its failure returns. The trace's `parser-rejected` entry carries NO detail (the parser's reason strings name the record type, which the trace's name guard refuses).
+
 **Files:**
-- Create: `app/src/monitor/ConnectionEntry.tsx` (+ test, absorbing `ConnectAction.test.tsx`'s guard tests), `app/src/monitor/nfc/runNfcAttempt.ts` (+ test), `app/src/monitor/nfc/paintBarrier.ts` (+ test)
-- Delete: `app/src/monitor/ConnectAction.tsx`, `app/src/monitor/ConnectAction.test.tsx`
+- Create: `app/src/monitor/nfc/runNfcAttempt.ts` (+ test), `app/src/monitor/nfc/paintBarrier.ts` (+ test), `app/src/monitor/nfc/attemptIdMint.ts`, `app/src/monitor/nfc/nfcCapabilityCache.ts`
+- Modify: `app/src/monitor/ConnectAction.tsx` (+ test)
 - Modify: `app/src/workout/WorkoutDetail.tsx` (+ tests), `app/src/theme/tokens.css`, `app/src/index.css`, `docs/design/DEVIATIONS.md`
 
 **Interfaces:**
@@ -1667,8 +1673,9 @@ export interface ConnectionEntryProps {
   busy: boolean;                               // an attempt is live: both buttons disabled
   accepted: boolean;                           // render `✓ PM5 found` in the NFC button's place
   onProceed(intent: ConnectionEntryIntent): void;
-  onCancelStaged(attemptId: ConnectionAttemptId): void; // parent may clear inline errors
 }
+// All three presentation props are REQUIRED (lens 2): `busy` defaulting to
+// false would hand a forgetful caller two live buttons during an attempt.
 ```
 
 `runNfcAttempt(deps)`:
@@ -1723,7 +1730,7 @@ CSS (`tokens.css`): `--action-nfc: #49624f; --action-nfc-hover: #3f5545;` with t
 ## Task 9: The routed producer-to-consumer proof, e2e flow, captures and bundle gates
 
 **Files:**
-- Create: `app/src/workout/WorkoutDetail.nfcRouted.test.tsx`
+- Create: `app/src/workout/WorkoutDetail.nfc.test.tsx` (presence, every inline outcome, busy, unmount abort, AND the routed proof — one file, one harness)
 - Modify: `app/e2e/connected.spec.ts`, `app/e2e/design.spec.ts`, `app/e2e/screenshots.spec.ts`, `docs/screenshots/workout-detail-nfc.png`, `docs/screenshots/workout-detail-nfc-landscape.png`
 
 - [ ] **Step 1: The routed test (RF24: starts upstream of every producer).** Render the real `WorkoutDetail` at `/library/w1` with baselines seeded, `window.__nfcScript__ = { capability: "supported", outcome: { kind: "records", records: fixture } }`, `window.__pm5FakeScript__ = { program: <compiled by the test from the same seeded workout>, deviceName: "PM5 432331249 Row" }`, and a fixed attempt-ID mint injected through `ConnectionEntry`'s `mintAttemptId` prop default (a module-level `setAttemptIdMintForTests(() => "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f")`). Click `Scan NFC`. Assert, in order: `✓ PM5 found` rendered; the fake's `targetedRequests()` equals `[{ kind: "advertised-name", attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f", exactName: "PM5 432331249 Row" }]` (independent literals); `scan()` never called; the interstitial reaches `ready` (the `armed` acceptance: the existing "READY" copy is on screen); `stagedRetireAttemptId()` is `null` after `armed` consumed it. The test constructs NO discovery request itself.

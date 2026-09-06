@@ -46,6 +46,7 @@ import {
 import {
   isValidAttemptId,
   type DiscoveredMonitor,
+  type DiscoveryTrace,
   type TargetedMonitorDiscoveryRequest,
   type TargetedScanTransport,
   type Transport,
@@ -138,12 +139,15 @@ class ScanTimeoutError extends Error {
 // operation and the operation tail it shares with the manual picker.
 //
 // POLICY CONSTANTS, not platform facts. Gate -1 measured the first matching
-// `requestLEScan` callback 103 ms after scan start and the next duplicate
-// 1 ms later (`docs/monitor/sessions/phase-nf-gate-minus-one/
-// REPAIRED-NORMAL.md`). The deadline is ~100x the observed match latency,
-// the collision window ~1000x the observed duplicate spacing. Tests pin both
-// with INDEPENDENT literals (9_999/10_000, 999/1_000), never these names
-// (RF21: a test importing the constant it gates proves nothing about it).
+// `requestLEScan` callback 103 ms after scan start in one sample
+// (`docs/monitor/sessions/phase-nf-gate-minus-one/REPAIRED-NORMAL.md`) and
+// 169 ms in another (`normal-trace-v8-receipt.json`); the PM5's advertising
+// interval itself is unmeasured. The deadline bounds the WHOLE attempt
+// (armed at entry, ~60x the worse first-match sample) and the collision
+// window — the time a second, DISTINCT device would take to first appear —
+// is ~6x it, paid on every successful targeted connect. Tests pin both with
+// INDEPENDENT literals (9_999/10_000, 999/1_000), never these names (RF21:
+// a test importing the constant it gates proves nothing about it).
 export const TARGET_SCAN_DEADLINE_MS = 10_000;
 export const TARGET_COLLISION_WINDOW_MS = 1_000;
 
@@ -686,6 +690,7 @@ export function createCapacitorBleTransport(
     async scanTarget(
       requestValue: TargetedMonitorDiscoveryRequest,
       signal: AbortSignal,
+      trace?: DiscoveryTrace,
     ): Promise<DiscoveredMonitor[]> {
       const poisonBefore = poisoned;
       if (poisonBefore !== null) throw poisonBefore;
@@ -724,6 +729,7 @@ export function createCapacitorBleTransport(
             poisoned ??= new ScanCleanupFailedError(
               "stopLEScan() did not settle within the deadline",
             );
+            trace?.record("ble-scan-cleanup-failed", "did not settle");
             finish({ err: poisoned });
           },
           deadlineMs,
@@ -740,6 +746,7 @@ export function createCapacitorBleTransport(
             poisoned = new ScanCleanupFailedError(
               err instanceof Error ? err.message : String(err),
             );
+            trace?.record("ble-scan-cleanup-failed", "rejected");
             finish({ err: poisoned });
           },
         );
@@ -753,15 +760,17 @@ export function createCapacitorBleTransport(
       // INVARIANT comment says can wait "forever if the rower walks away"
       // behind a modal picker. Armed at entry; before the radio is live an
       // expiry is not "not advertising" — the scan never reached the radio.
-      deadlineTimer = schedule(
-        () =>
-          settle({
-            err: scanning
-              ? new TargetMonitorNotAdvertisingError()
-              : new TargetScanInterruptedError(),
-          }),
-        deadlineMs,
-      );
+      deadlineTimer = schedule(() => {
+        trace?.record(
+          "ble-scan-timed-out",
+          scanning ? "not advertising" : "preamble",
+        );
+        settle({
+          err: scanning
+            ? new TargetMonitorNotAdvertisingError()
+            : new TargetScanInterruptedError(),
+        });
+      }, deadlineMs);
       const interruptedIfAborted = (): void => {
         if (signal.aborted) throw new TargetScanInterruptedError();
       };
@@ -799,6 +808,7 @@ export function createCapacitorBleTransport(
           ]);
           settledOrAborted();
           if (held.some((d) => d.name === request.exactName)) {
+            trace?.record("held-device-conflict");
             throw new TargetAlreadyConnectedError();
           }
           lastScanOutcome = "targeted scan by exact advertised name";
@@ -816,12 +826,16 @@ export function createCapacitorBleTransport(
             (raw: unknown) => {
               if (settled) return;
               const result = decodeScanResult(raw);
-              if (result === null) return;
+              if (result === null) {
+                trace?.record("invalid-scan-result");
+                return;
+              }
               if (result.localName !== request.exactName) return;
               if (seen.has(result.deviceId)) return;
               seen.add(result.deviceId);
               matches.push({ id: result.deviceId, name: request.exactName });
               if (matches.length === 1) {
+                trace?.record("ble-scan-matched");
                 if (deadlineTimer !== null) unschedule(deadlineTimer);
                 deadlineTimer = null;
                 // Keep scanning for the collision window: a second DISTINCT
@@ -835,6 +849,7 @@ export function createCapacitorBleTransport(
               }
             },
           );
+          trace?.record("ble-scan-started");
         } catch (err: unknown) {
           settle({
             err: err instanceof Error ? err : new Error(String(err)),
@@ -843,7 +858,20 @@ export function createCapacitorBleTransport(
       })();
       const result = await outcome;
       signal.removeEventListener("abort", onAbort);
-      release();
+      // The drain follows the PREDECESSOR too (lens 2): releasing while
+      // `prior` is still pending would let the next operation queue behind
+      // a picker sheet this operation never owned. Released at OUR settle
+      // once the predecessor has settled, whichever is later.
+      void prior.then(
+        () => {
+          trace?.record("scan-drain-settled");
+          release();
+        },
+        () => {
+          trace?.record("scan-drain-settled");
+          release();
+        },
+      );
       if ("err" in result) throw result.err;
       return result.ok;
     },

@@ -126,13 +126,14 @@ export interface ConnectionEntryProps {
   onProceed: (intent: ConnectionEntryIntent) => void;
   /** `"unknown"` (the async probe has not resolved) and `"unsupported"`
    *  render NO Scan NFC button — no placeholder, no reserved height. */
-  nfcCapability?: NfcCapability | "unknown";
+  nfcCapability: NfcCapability | "unknown";
   /** An attempt is live (an NFC read, or its handoff): both hardware
    *  buttons are disabled until it settles (spec §3: only one entry
-   *  attempt may exist). */
-  busy?: boolean;
+   *  attempt may exist). REQUIRED, no default (lens 2): a caller that
+   *  forgets it must not get two live buttons during an attempt. */
+  busy: boolean;
   /** Render `✓ PM5 found` in the Scan NFC slot for one committed paint. */
-  accepted?: boolean;
+  accepted: boolean;
 }
 
 /** THE SHARED CONNECTION-ENTRY OWNER (Phase NF generalised this component
@@ -142,9 +143,9 @@ export interface ConnectionEntryProps {
  *  pending intent. The file keeps its name and its history. */
 export default function ConnectAction({
   onProceed,
-  nfcCapability = "unknown",
-  busy = false,
-  accepted = false,
+  nfcCapability,
+  busy,
+  accepted,
 }: ConnectionEntryProps) {
   // One nullable union, not a boolean plus a reason — `WorkoutDetail`'s own
   // `replaceStage` comment explains the choice: either non-null value both
@@ -228,10 +229,11 @@ export default function ConnectAction({
             type="button"
             className="button-primary"
             onClick={() => {
-              const intent = pending ?? {
-                kind: "manual",
-                attemptId: mintAttemptId(),
-              };
+              // `stage` is only ever set together with `pending`; a
+              // fallback mint here would produce an ID `stageRetire` never
+              // saw and orphan the authorization (lens 2).
+              if (pending === null) return;
+              const intent = pending;
               setPending(null);
               setStage(null);
               onProceed(intent);

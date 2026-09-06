@@ -5740,7 +5740,13 @@ async function captureWorkoutDetailNfc(
   await page.getByRole("button", { name: "Save to library" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+$/);
   await page.locator(".workout-detail-title").waitFor();
-  await expect(page.getByRole("button", { name: "Scan NFC" })).toBeVisible();
+  const scanNfc = page.getByRole("button", { name: "Scan NFC" });
+  await expect(scanNfc).toBeVisible();
+  // Landscape keeps today's scrolling document column (spec: no landscape
+  // reflow), so the pair sits below the first fold there; the capture is
+  // of the two buttons, not of the fold. RF7: look at the PNG afterwards.
+  await scanNfc.scrollIntoViewIfNeeded();
+  await page.getByRole("button", { name: "Connect" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, file) });
   await cleanupByTitle(page, title);
 }

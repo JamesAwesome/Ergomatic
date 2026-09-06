@@ -531,6 +531,29 @@ describe("tombstones — post-retire refusal and masking", () => {
   });
 });
 
+describe("staged retire is keyed by attempt ID (Phase NF)", () => {
+  const A = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+  const B = "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+  it("a take under another attempt's ID is a PURE READ — the set stays staged for its owner", () => {
+    store.stageRetire([{ sessionKey: "k", revision: 1 }], A);
+    expect(store.takeStagedRetire(B)).toStrictEqual([]);
+    expect(store.stagedRetireAttemptId()).toBe(A);
+    expect(store.takeStagedRetire(A)).toStrictEqual([
+      { sessionKey: "k", revision: 1 },
+    ]);
+    expect(store.stagedRetireAttemptId()).toBeNull();
+  });
+  it("a discard under another attempt's ID is a no-op; under the owner's ID it discards and receipts", () => {
+    store.stageRetire([{ sessionKey: "k", revision: 1 }], A);
+    store.discardStagedRetire(B);
+    expect(store.stagedRetireAttemptId()).toBe(A);
+    receipts.length = 0;
+    store.discardStagedRetire(A);
+    expect(store.stagedRetireAttemptId()).toBeNull();
+    expect(receipts.map((r) => r.kind)).toContain("staged-retire-discarded");
+  });
+});
+
 describe("retire — sets, per-entry receipts, claim states, no-op", () => {
   it("no-op retire: a set naming a key the store has nothing current for emits NOTHING", () => {
     store.retire(

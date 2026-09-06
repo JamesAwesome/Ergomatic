@@ -87,8 +87,8 @@ export async function runNfcAttempt(
   const parsed = parsePm5NfcTarget(records);
   if ("code" in parsed) {
     // No detail: the parser's reason strings name the record type (which
-    // starts with "PM5 "), and the trace's name guard refuses any such
-    // detail by construction. The reasons are pinned by `nfc.test.ts`.
+    // starts with "PM5 "), and the trace's name guard would redact them.
+    // The reasons are pinned by `nfc.test.ts`.
     trace.record("parser-rejected");
     return { kind: "inline-error", copy: "Unsupported NFC tag" };
   }

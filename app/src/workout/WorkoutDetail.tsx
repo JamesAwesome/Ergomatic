@@ -103,11 +103,13 @@ function useNfcCapability(reader: NfcReader): NfcCapabilityState {
     if (readCachedNfcCapability() !== null) return;
     let cancelled = false;
     const trace = createConnectionAttemptTrace();
+    // The probe records but never `complete()`s: it is not an attempt, and
+    // publishing it would clobber the last attempt's snapshot on a device
+    // whose probe is flaky (lens 2).
     const timer = setTimeout(() => {
       if (cancelled) return;
       cancelled = true;
       trace.record("capability-timed-out");
-      trace.complete();
     }, NFC_CAPABILITY_DEADLINE_MS);
     reader.capability().then(
       (result) => {
@@ -116,7 +118,6 @@ function useNfcCapability(reader: NfcReader): NfcCapabilityState {
         clearTimeout(timer);
         cacheNfcCapability(result);
         trace.record(result);
-        trace.complete();
         setCapability(result);
       },
       () => {
@@ -124,7 +125,6 @@ function useNfcCapability(reader: NfcReader): NfcCapabilityState {
         cancelled = true;
         clearTimeout(timer);
         trace.record("capability-failed");
-        trace.complete();
       },
     );
     return () => {
@@ -254,6 +254,8 @@ function WorkoutDetailView({
     nudgedCount: number;
     /** Phase NF: how the interstitial finds the monitor for THIS attempt. */
     request: MonitorDiscoveryRequest;
+    /** Phase NF: the attempt's trace, when the NFC route produced one. */
+    trace?: ConnectionAttemptTrace;
   } | null>(null);
   // Lazy read-once, refreshed explicitly when the interstitial hands
   // control back (see `handleInterstitialExit`/`handleRowInstead` below) —
@@ -345,14 +347,22 @@ function WorkoutDetailView({
     const controller = new AbortController();
     nfcAbortRef.current = controller;
     const trace: ConnectionAttemptTrace = createConnectionAttemptTrace();
-    const unsubscribe = await registerAppLifecycleListener((event) => {
-      if (event === "background") {
-        trace.record("foreground-abort");
-        controller.abort();
-      }
-    });
+    let unsubscribe: (() => void) | null = null;
     let handedOff = false;
     try {
+      // Inside the try (lens 2): a rejected registration must still run
+      // the finally below, or the buttons stay disabled for good.
+      try {
+        unsubscribe = await registerAppLifecycleListener((event) => {
+          if (event === "background") {
+            trace.record("foreground-abort");
+            controller.abort();
+          }
+        });
+      } catch {
+        trace.record("listener-registration-failed");
+        throw new Error("lifecycle listener registration failed");
+      }
       const outcome = await runNfcAttempt({
         attemptId,
         reader: nfcReader,
@@ -368,16 +378,23 @@ function WorkoutDetailView({
       });
       if (!mountedRef.current) return;
       if (outcome.kind === "target") {
-        handedOff = proceedWithRequest({
-          kind: "advertised-name",
-          attemptId,
-          exactName: outcome.target.advertisingName,
-        });
+        handedOff = proceedWithRequest(
+          {
+            kind: "advertised-name",
+            attemptId,
+            exactName: outcome.target.advertisingName,
+          },
+          trace,
+        );
       } else if (outcome.kind === "inline-error") {
         setConnectError(outcome.copy);
       }
+    } catch {
+      // Any throw out of the attempt (a listener that would not register,
+      // a seam that broke) is the approved "stopped" copy, never silence.
+      if (mountedRef.current) setConnectError("NFC scan stopped. Try again.");
     } finally {
-      unsubscribe();
+      unsubscribe?.();
       trace.complete();
       if (nfcAbortRef.current === controller) nfcAbortRef.current = null;
       if (!handedOff) discardStagedRetire(attemptId);
@@ -400,7 +417,10 @@ function WorkoutDetailView({
    *  interstitial with `request`. Returns whether the handoff happened; a
    *  `false` return has already shown its inline reason AND discarded the
    *  attempt's staged receipt (spec §3: every pre-handoff terminal path). */
-  function proceedWithRequest(request: MonitorDiscoveryRequest): boolean {
+  function proceedWithRequest(
+    request: MonitorDiscoveryRequest,
+    trace?: ConnectionAttemptTrace,
+  ): boolean {
     setConnectError(null);
     // Phase 6I: `needsBaselines` (domain/needsBaselines.ts) is the SAME
     // predicate every other coupled guard site shares — nudging never
@@ -445,6 +465,7 @@ function WorkoutDetailView({
       baselines,
       nudgedCount,
       request,
+      ...(trace !== undefined ? { trace } : {}),
     });
     return true;
   }
@@ -542,6 +563,7 @@ function WorkoutDetailView({
         onRowInstead={handleRowInstead}
         onEnded={handleConnectedEnded}
         request={connecting.request}
+        trace={connecting.trace}
       />
     );
   }

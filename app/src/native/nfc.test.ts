@@ -176,6 +176,29 @@ describe("createNativeNfcReader", () => {
     }
   });
 
+  it("an nfcSessionEnd with NO attempt ID is terminal (tagFailure): the session on the device has ended and nothing else will arrive", async () => {
+    const { result, trace } = start();
+    await settle();
+    fire("nfcSessionEnd", { reason: "invalidated" });
+    const err = (await result.catch((e: unknown) => e)) as Error & {
+      cause?: unknown;
+    };
+    expect(err.name).toBe("NfcInvalidatedError");
+    expect(err.cause).toBe("tagFailure");
+    expect(trace.entries().map((e) => e.kind)).toContain(
+      "invalid-native-event",
+    );
+  });
+
+  it("a rejected stopScanning is recorded as reader-stop-failed, never swallowed silently", async () => {
+    mocks.stopScanning.mockRejectedValue(new Error("no session"));
+    const { result, trace } = start();
+    await settle();
+    fire("nfcEvent", nativeRecords());
+    await expect(result).resolves.toHaveLength(3);
+    expect(trace.entries().map((e) => e.kind)).toContain("reader-stop-failed");
+  });
+
   it("ignores an nfcSessionEnd for another attempt", async () => {
     const { result } = start();
     await settle();

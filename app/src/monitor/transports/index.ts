@@ -79,6 +79,7 @@
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import {
   hasTargetedScan,
+  type DiscoveryTrace,
   type TargetedMonitorDiscoveryRequest,
   type Transport,
 } from "../../../domain/monitor/types.js";
@@ -247,7 +248,8 @@ export function autoTicking(
         scanTarget: (
           request: TargetedMonitorDiscoveryRequest,
           signal: AbortSignal,
-        ) => fake.scanTarget(request, signal),
+          trace?: DiscoveryTrace,
+        ) => fake.scanTarget(request, signal, trace),
       }
     : {};
   const timer = setInterval(() => fake.tick(AUTO_TICK_MS), AUTO_TICK_MS);

@@ -364,23 +364,20 @@ export function takeStagedRetire(attemptId: ConnectionAttemptId): readonly {
   sessionKey: string;
   revision: number;
 }[] {
+  // Phase NF (antagonist delta pass F7, then hardening lens 2): a set
+  // staged by attempt A may authorize ONLY attempt A's armed retire.
+  // Phase NF creates a state that did not exist before — a rower back on
+  // workout detail with a set still staged after a quiet/inline NFC
+  // outcome — and JustRow's zero-argument `connect()` mints its own ID and
+  // never stages. A mismatched take is a PURE READ: it neither consumes
+  // nor destroys the set (lens 2: destroying it would let another
+  // attempt's armed event orphan A's authorization). Invariant, not
+  // mechanism: a staged set authorizes exactly one attempt ID's armed
+  // retire and nothing else.
+  if (stagedRetireAttempt !== attemptId) return [];
   const set = stagedRetireSet;
-  const owner = stagedRetireAttempt;
   stagedRetireSet = [];
   stagedRetireAttempt = null;
-  if (owner !== attemptId) {
-    // Phase NF (antagonist delta pass F7): a set staged by attempt A may
-    // authorize ONLY attempt A's armed retire. Phase NF creates a state
-    // that did not exist before — a rower back on workout detail with a
-    // set still staged after a quiet/inline NFC outcome — and JustRow's
-    // zero-argument `connect()` mints its own ID and never stages, so it
-    // can never inherit one. Invariant, not mechanism: a staged set
-    // authorizes exactly one attempt ID's armed retire and nothing else.
-    if (set.length > 0) {
-      emit({ kind: "staged-retire-discarded", discarded: set });
-    }
-    return [];
-  }
   return set;
 }
 

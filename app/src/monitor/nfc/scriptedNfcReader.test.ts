@@ -83,10 +83,13 @@ describe("createScriptedNfcReader", () => {
       outcome: { kind: "start-failed" },
     });
     await expect(result).rejects.toMatchObject({ name: "NfcStartError" });
-    expect(reader.starts()).toBe(0);
+    // Parity with the native arm: the attempt is stopped and settled.
+    expect(reader.starts()).toBe(1);
+    expect(reader.stops()).toStrictEqual([ATTEMPT]);
     expect(trace.entries().map((e) => e.kind)).toStrictEqual([
       "session-requested",
       "start-failed",
+      "reader-settled",
     ]);
   });
 

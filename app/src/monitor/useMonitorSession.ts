@@ -46,6 +46,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { isValidPm5AdvertisingName } from "../../domain/monitor/nfc.js";
+import { newUuidV4 } from "./uuidV4";
+import type { ConnectionAttemptTrace } from "./nfc/connectionAttemptTrace";
 import {
   hasTargetedScan,
   isValidAttemptId,
@@ -993,7 +995,10 @@ export interface MonitorSession {
    *  ID; an `advertised-name` request runs the picker-free exact-name scan
    *  through `TargetedScanTransport.scanTarget` and fails closed —
    *  `transport-missing`, no radio call — when the transport lacks it. */
-  connect(request?: MonitorDiscoveryRequest): Promise<void>;
+  connect(
+    request?: MonitorDiscoveryRequest,
+    trace?: ConnectionAttemptTrace,
+  ): Promise<void>;
   program(p: WorkoutProgram, identity: RunIdentity): Promise<void>;
   /** Phase JR PR 2: arms for the machine's OWN free row, filing the record
    *  under a Just Row identity (`workoutId: null`, `mode: "justrow"`).
@@ -1601,6 +1606,13 @@ function mapProgramFailure(err: unknown): ConnectedError {
 function mapRadioFailure(err: unknown): ConnectedError {
   const message = err instanceof Error ? err.message : String(err);
   const name = err instanceof Error ? err.name : "";
+  // Phase NF (hardening lens 2): a POISONED operation tail rejects the
+  // manual picker's `scan()` with the same named error the targeted path
+  // maps to the restart-required copy; it must not fall through to
+  // `link-failed` with a live Try again that fails identically forever.
+  if (name === "ScanCleanupFailedError") {
+    return { ...TARGETED_FAILURE_COPY.ScanCleanupFailedError!, raw: message };
+  }
   // ORDERING PIN: these two name checks come BEFORE the message-regex arms
   // below on purpose. A `BluetoothPermissionError`'s message can itself
   // match the `unavailable` regex (a plugin whose denied-permission string
@@ -1740,17 +1752,8 @@ function mintAttemptId(): ConnectionAttemptId {
  *  is not load-bearing for its correctness — which is the only reason a
  *  SECONDARY-only citation is acceptable here. */
 function defaultSessionId(): string {
-  const c = globalThis.crypto;
-  if (typeof c?.randomUUID === "function") return c.randomUUID();
-  const bytes = c.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
-  return (
-    `${hex[0]}${hex[1]}${hex[2]}${hex[3]}-${hex[4]}${hex[5]}-` +
-    `${hex[6]}${hex[7]}-${hex[8]}${hex[9]}-` +
-    `${hex[10]}${hex[11]}${hex[12]}${hex[13]}${hex[14]}${hex[15]}`
-  );
+  // The body moved to `uuidV4.ts` (Phase NF: the attempt mint shares it).
+  return newUuidV4();
 }
 
 /** THE LOGICAL CONNECTED SESSION — id and log in ONE object, born together
@@ -3720,7 +3723,10 @@ export function useMonitorSession(
         // Phase NF: KEYED take — a set staged by another attempt (a
         // detail press whose NFC read ended quietly, then JustRow's own
         // zero-argument connect) authorizes nothing here.
-        const staged = takeStagedRetireHandoff(attemptIdRef.current ?? "");
+        const staged =
+          attemptIdRef.current === null
+            ? []
+            : takeStagedRetireHandoff(attemptIdRef.current);
         if (staged.length > 0) {
           retireHandoff(staged, "connect-guard-armed");
         }
@@ -4745,7 +4751,10 @@ export function useMonitorSession(
   );
 
   const connect = useCallback(
-    async (request?: MonitorDiscoveryRequest): Promise<void> => {
+    async (
+      request?: MonitorDiscoveryRequest,
+      trace?: ConnectionAttemptTrace,
+    ): Promise<void> => {
       // Since cancel() claims driverRef SYNCHRONOUSLY before its awaits (the
       // MEDIUM-9 deadlock fix), this guard alone does not cover an in-flight
       // cancel: driverRef is already null while cancel's terminate is still
@@ -4762,6 +4771,17 @@ export function useMonitorSession(
         kind: "picker",
         attemptId: mintAttemptId(),
       };
+      // EVERY request's attempt ID is validated (lens 2): a picker request
+      // with an empty or malformed ID would otherwise reach the armed
+      // handler's keyed take and mismatch the staged set.
+      if (!isValidAttemptId(discovery.attemptId)) {
+        connectingRef.current = false;
+        fail({
+          reason: "transport-missing",
+          detail: "This device has no Bluetooth transport.",
+        });
+        return;
+      }
       attemptIdRef.current = discovery.attemptId;
       const attempt = (attemptRef.current += 1);
       /** True once `cancel()` (or a later `connect()`) has moved on. A
@@ -4914,14 +4934,24 @@ export function useMonitorSession(
           // The foreground lease for the SCAN (the session's own lifecycle
           // listener is registered only after GATT connect, further down):
           // a background transition aborts to the named interrupted state.
-          // Registration is async on native; awaited so the listener is
-          // live before the first radio call.
-          const scanLifecycle = await registerAppLifecycleListener((event) => {
-            if (event === "background") controller.abort();
-          });
+          // Registration is async on native; awaited INSIDE the try so a
+          // rejected registration cannot strand the abort ref (lens 2).
+          let scanLifecycle: (() => void) | null = null;
           try {
+            try {
+              scanLifecycle = await registerAppLifecycleListener((event) => {
+                if (event === "background") controller.abort();
+              });
+            } catch (err: unknown) {
+              trace?.record("listener-registration-failed");
+              throw err;
+            }
             if (superseded()) throw new Error("superseded");
-            found = await transport.scanTarget(discovery, controller.signal);
+            found = await transport.scanTarget(
+              discovery,
+              controller.signal,
+              trace,
+            );
           } catch (err: unknown) {
             if (superseded()) {
               bestEffort(transport.disconnect());
@@ -4932,7 +4962,7 @@ export function useMonitorSession(
             bestEffort(transport.disconnect());
             return;
           } finally {
-            scanLifecycle();
+            scanLifecycle?.();
             // Object identity: a late attempt-A settle must not clear B's ref.
             if (targetedAbortRef.current?.controller === controller) {
               targetedAbortRef.current = null;
@@ -4974,6 +5004,18 @@ export function useMonitorSession(
           depsRef.current.createLog ??
           (() => createEventLog(undefined, livenessDepsRef.current.now))
         )();
+        // Phase NF: on a successful GATT connect the connection-attempt
+        // trace becomes the PREFIX of the session's own ring (spec
+        // "Instrumentation and replay"), so a walk's export carries the
+        // NFC read and the targeted scan ahead of the first frame.
+        if (trace !== undefined) {
+          for (const entry of trace.entries()) {
+            log.record(
+              `nfc-attempt:${entry.kind}`,
+              entry.detail ?? `seq ${entry.seq}`,
+            );
+          }
+        }
         // THE LOGICAL SESSION BEGINS HERE, AND ONLY HERE (review round 5,
         // item 1, P1). The link is up and the log exists, so this is the one
         // moment a new connected session can be said to have started — and

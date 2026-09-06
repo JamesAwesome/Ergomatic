@@ -166,14 +166,17 @@ import {
   SPLIT_INTERVAL_DATA_UUID,
   TRANSMIT_CHARACTERISTIC_UUID,
 } from "../../../domain/monitor/pm5/uuids.js";
-import type {
-  DiscoveredMonitor,
-  IntervalActual,
-  MonitorFrame,
-  TargetedMonitorDiscoveryRequest,
-  TargetedScanTransport,
-  Transport,
+import {
+  isValidAttemptId,
+  type DiscoveryTrace,
+  type DiscoveredMonitor,
+  type IntervalActual,
+  type MonitorFrame,
+  type TargetedMonitorDiscoveryRequest,
+  type TargetedScanTransport,
+  type Transport,
 } from "../../../domain/monitor/types.js";
+import { isValidPm5AdvertisingName } from "../../../domain/monitor/nfc.js";
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 
 /** One "tick" in the script's timeline: a full rowing/resting status
@@ -2643,13 +2646,24 @@ export function createFakeTransport(script: FakeScript): Transport &
     scanTarget(
       request: TargetedMonitorDiscoveryRequest,
       signal: AbortSignal,
+      trace?: DiscoveryTrace,
     ): Promise<DiscoveredMonitor[]> {
       targetedRequests.push(request);
+      trace?.record("ble-scan-started");
       const fail = (name: string): Promise<never> => {
         const err = new Error(name);
         err.name = name;
         return Promise.reject(err);
       };
+      // The same request validation the Capacitor transport performs, so
+      // every routed test and e2e run that enters through this seam has a
+      // reachable red path for an invalid request (lens 2).
+      if (
+        !isValidAttemptId(request.attemptId) ||
+        !isValidPm5AdvertisingName(request.exactName)
+      ) {
+        return fail("TargetedRequestInvalidError");
+      }
       if (signal.aborted) return fail("TargetScanInterruptedError");
       const deviceName = script.deviceName ?? "PM5 (fake)";
       const kind =
@@ -2657,6 +2671,7 @@ export function createFakeTransport(script: FakeScript): Transport &
         (request.exactName === deviceName ? "match" : "not-advertising");
       switch (kind) {
         case "match":
+          trace?.record("ble-scan-matched");
           return Promise.resolve([{ id: "fake-pm5", name: deviceName }]);
         case "not-advertising":
           return fail("TargetMonitorNotAdvertisingError");

@@ -117,16 +117,24 @@ export function createNativeNfcReader(): NfcReader {
         const endHandle = await CapacitorNfc.addListener(
           "nfcSessionEnd",
           (value: unknown) => {
-            const v = value as {
-              attemptId?: unknown;
-              reason?: unknown;
-              cause?: unknown;
-            } | null;
-            if (
-              v === null ||
-              typeof v !== "object" ||
-              v.attemptId !== attemptId
-            ) {
+            const v =
+              typeof value === "object" && value !== null
+                ? (value as {
+                    attemptId?: unknown;
+                    reason?: unknown;
+                    cause?: unknown;
+                  })
+                : {};
+            const id = v.attemptId;
+            if (typeof id !== "string" || id.length === 0) {
+              // An ending we cannot attribute at all: the session on the
+              // device HAS ended, nothing else will arrive — terminal, as a
+              // tag failure (lens 2, the ending-event twin of F3).
+              trace.record("invalid-native-event");
+              finish(new NfcInvalidatedError("tagFailure"));
+              return;
+            }
+            if (id !== attemptId) {
               trace.record("stale-id-dropped");
               return;
             }
@@ -168,10 +176,19 @@ export function createNativeNfcReader(): NfcReader {
           // Explicit stop, by attempt ID: the patched controller resolves it
           // only once THIS generation is invalidated and cannot emit. A
           // rejection here is not an ending — the ending event is.
-          await CapacitorNfc.stopScanning({ attemptId }).catch(() => undefined);
+          await CapacitorNfc.stopScanning({ attemptId }).catch(() => {
+            // The controller was not told to invalidate this generation —
+            // the plausible producer of a stuck sheet. Recorded, never
+            // swallowed silently (lens 2).
+            trace.record("reader-stop-failed");
+          });
         }
         await Promise.all(
-          removers.splice(0).map((remove) => remove().catch(() => undefined)),
+          removers.splice(0).map((remove) =>
+            remove().catch(() => {
+              trace.record("reader-stop-failed", "listener");
+            }),
+          ),
         );
         trace.record("reader-settled");
       }

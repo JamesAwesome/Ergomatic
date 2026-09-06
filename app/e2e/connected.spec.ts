@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CDPSession, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
@@ -343,7 +344,7 @@ function pm5NfcFixtureRecords(): {
   const raw = JSON.parse(
     readFileSync(
       path.join(
-        __dirname,
+        path.dirname(fileURLToPath(import.meta.url)),
         "../../docs/monitor/nfc/pm5-tag-2026-09-04-iphone.json",
       ),
       "utf8",
@@ -1804,7 +1805,7 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
     await expect(
       page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
     ).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator(".connected-status-label")).toHaveText(NAME);
+    await expect(page.locator(".connected-status-label")).toContainText(NAME);
   });
 
   test("an unsupported tag: inline copy, no interstitial, both buttons back", async ({

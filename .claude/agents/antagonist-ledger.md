@@ -7193,8 +7193,42 @@ controller; the findings were applied as a fix round against committed code
   consumed it. Invariants over mechanisms: a staged set authorizes exactly
   one attempt ID's armed retire, and a never-cleared attempt ref can only
   fail to match.
-- **Process note:** the branch advanced four commits DURING this pass, so
-  the findings landed as fix-round items against committed code rather than
-  as plan edits. Hardening a document while its implementation races ahead
-  costs the pass its leverage — the cheap half of /harden is worth nothing
-  after the paste.
+- **Lens 2 of the same run (the prescribed code read as code, one Opus
+  dispatch) — techniques that paid, for the record:**
+  - **Build it and grep the OUTPUT, not the needle's intent.** Three
+    dist-grep needles were green while both plugin chunks shipped: a
+    `registerPlugin("X"` needle cannot match a minified `e(\`X\`` and a
+    header COMMENT is stripped before the grep ever runs. The only needle
+    that can go red is a string literal that survives minification — a
+    thrown message did. RF12, again.
+  - **Every option, flag and prop: what happens when the caller omits it?**
+    `busy = false` on the shared entry owner would have handed a forgetful
+    caller two live buttons mid-attempt; an optional `attemptId` check on
+    the picker branch let `""` reach the keyed take. Required props and one
+    validation at the entry, not per branch.
+  - **Compute the DISABLED state's contrast too.** The token comment's three
+    numbers recomputed exactly; the global `button:disabled` label colour
+    on the two fills was 2.38:1 and 2.42:1. A design gate that measures the
+    rest state measures half the control.
+  - **An `await` outside its `try` is a stranded `finally`.** Two
+    registrations (`registerAppLifecycleListener`) sat above their `try`;
+    a rejection would have left both hardware buttons disabled for the life
+    of the screen with no error. The "who would want this" question: a
+    plugin bridge on a phone that just denied a permission.
+  - **A closed vocabulary with unproduced members is a lie the reader
+    cannot see.** Eight of twenty-four trace kinds had zero producers; the
+    BLE half of every attempt was uninstrumented while `latest` read as
+    complete. Thread the instrument to where the events happen, or delete
+    the names.
+  - **Mismatch means READ, never destroy.** The keyed take's mismatch arm
+    cleared the set it was not authorized to consume — the exact orphaning
+    it existed to prevent, one attempt over.
+  - **Repeat the fallback, not the call.** A second `crypto.randomUUID()`
+    with no `getRandomValues` fallback re-shipped PR #258 round 4's P1 on
+    iOS 15.0-15.3, twenty lines from the comment that documents it. One
+    generator module now.
+- **Process note:** the branch advanced four commits DURING lens 1 and one
+  more during lens 2, so the findings landed as fix-round items against
+  committed code rather than as plan edits. Hardening a document while its
+  implementation races ahead costs the pass its leverage — the cheap half of
+  /harden is worth nothing after the paste.

@@ -383,6 +383,30 @@ describe("scanTarget (Phase NF)", () => {
       transport.scanTarget(request, new AbortController().signal),
     ).resolves.toStrictEqual([{ id: "b", name: "PM5 2" }]);
   });
+  it("fails closed by name when two recorded devices advertise the exact name, and on a pre-aborted signal", async () => {
+    const recording = buildRecording([
+      {
+        t: 0,
+        kind: "scan",
+        devices: [
+          { id: "a", name: "PM5 2" },
+          { id: "b", name: "PM5 2" },
+        ],
+      },
+    ]);
+    const { transport } = createReplayTransport(recording);
+    await expect(
+      transport.scanTarget(request, new AbortController().signal),
+    ).rejects.toMatchObject({ name: "TargetMonitorAmbiguousError" });
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      transport.scanTarget(request, ac.signal),
+    ).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+  });
+
   it("rejects by name when no recorded device advertised the exact name", async () => {
     const recording = buildRecording([
       { t: 0, kind: "scan", devices: [{ id: "a", name: "PM5 1" }] },

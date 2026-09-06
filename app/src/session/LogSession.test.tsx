@@ -6256,7 +6256,14 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     // it, but this is no longer a bare store-level stand-in for the
     // whole thing: the AUTHORIZATION half is real UI now.
     const { default: ConnectAction } = await import("../monitor/ConnectAction");
-    render(<ConnectAction onProceed={() => undefined} />);
+    render(
+      <ConnectAction
+        onProceed={() => undefined}
+        nfcCapability="unsupported"
+        busy={false}
+        accepted={false}
+      />,
+    );
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     const staged = handoffStore.takeStagedRetire(

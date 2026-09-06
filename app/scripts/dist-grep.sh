@@ -124,15 +124,17 @@ if [ ! -d "$DIST" ]; then
   exit 1
 fi
 
-# Phase NF adds three: `scripted NFC reader (dev harness)` is the header
-# literal of `src/monitor/nfc/scriptedNfcReader.ts` (reached only through
-# `adapters/nfcReader.ts`'s fold-away gate); `CapacitorNfc` is the
-# `registerPlugin('CapacitorNfc'` literal inside `@capgo/capacitor-nfc`'s
-# own JS, which only `src/native/nfc.ts` imports; `Haptics` is the same
-# shape for `@capacitor/haptics` (`src/native/haptics.ts`). Each proven
-# able to go red on 2026-09-06 by adding a static import to `src/main.tsx`
-# and watching this script FIND it, then reverting.
-NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "C2 link probe (dev harness)" "scripted NFC reader (dev harness)" "registerPlugin(\"CapacitorNfc\"" "registerPlugin(\"Haptics\"")
+# Phase NF adds ONE: `scripted start failure` is a thrown-string literal
+# inside `src/monitor/nfc/scriptedNfcReader.ts`, which is reached only
+# through `adapters/nfcReader.ts`'s fold-away gate (the same
+# `DEV || VITE_ENABLE_FAKE_MONITOR` fold the fake transport lives behind).
+# A first draft used the file's header COMMENT and two
+# `registerPlugin("…")` needles; the build strips comments and renames the
+# identifier, so none of the three could go red (hardening lens 2). The NFC
+# and haptics plugin chunks themselves DO ship, lazily, behind a runtime
+# `isNative()` — exactly as `@capacitor/app`'s chunk already does — because
+# Rollup folds an `import()` only behind a build-time constant (RF12).
+NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "C2 link probe (dev harness)" "scripted start failure")
 FAILED=0
 
 for needle in "${NEEDLES[@]}"; do

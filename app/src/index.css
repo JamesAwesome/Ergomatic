@@ -316,9 +316,23 @@ button:disabled {
   background: var(--action-nfc-hover);
 }
 
+/* Disabled = a live attempt. The label stays cream on the full fill —
+   `button:disabled`'s global `--ink-5` label would be 2.38:1 on fern and
+   2.42:1 on Connect's blue (measured, hardening lens 2), below AA. On iOS
+   the cursor is inert, so the visual "busy" signal is the sheet itself
+   (NFC) or the `✓ PM5 found` status; Connect is disabled only for the
+   duration of an NFC read the rower is already looking at. */
 .button-nfc:disabled,
 .button-nfc:disabled:hover {
   background: var(--action-nfc);
+  color: var(--on-color);
+  cursor: progress;
+}
+
+.button-connect:disabled,
+.button-connect:disabled:hover {
+  background: var(--action-connect);
+  color: var(--on-color);
   cursor: progress;
 }
 
@@ -5726,6 +5740,13 @@ section:not(.news-pinned) .news-row:last-of-type {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* Phase NF (Gate 0): the two hardware primaries sit at the action stack's
+   own 12 px rhythm even though they share `.connect-block`'s 4 px caption
+   gap — 4 + 8 = 12, pinned by `e2e/design.spec.ts`. */
+.connect-block .button-nfc {
+  margin-bottom: 8px;
 }
 
 .connect-block-caption {

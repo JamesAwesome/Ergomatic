@@ -15309,6 +15309,52 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     vi.doUnmock("../adapters/appLifecycle");
   });
 
+  it("a poisoned tail reached through the PICKER maps to scan-cleanup-failed (no live Try again), not link-failed", async () => {
+    const scan = vi.fn(async () => {
+      const err = new Error("stopLEScan() failed: boom");
+      err.name = "ScanCleanupFailedError";
+      throw err;
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({ createTransport: () => stubRadio({ scan }) }),
+    );
+    await connect(result);
+    expect(result.current.error?.reason).toBe("scan-cleanup-failed");
+    expect(result.current.error?.detail).toBe(
+      "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
+    );
+  });
+
+  it("a picker request with an invalid attempt ID fails closed before any radio call", async () => {
+    const scan = vi.fn(async () => [{ id: "d", name: DEVICE_NAME }]);
+    const { result } = renderHook(() =>
+      useMonitorSession({ createTransport: () => stubRadio({ scan }) }),
+    );
+    await connect(result, { kind: "picker", attemptId: "" });
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error?.reason).toBe("transport-missing");
+    expect(scan).not.toHaveBeenCalled();
+  });
+
+  it("the attempt trace is copied as the prefix of the session ring at GATT connect", async () => {
+    const { createConnectionAttemptTrace } =
+      await import("./nfc/connectionAttemptTrace");
+    const trace = createConnectionAttemptTrace(() => 0);
+    trace.record("tag-event");
+    trace.record("handoff-accepted");
+    const { result } = harness({ program: ONE_INTERVAL });
+    await act(async () => {
+      await result.current.connect(targeted(), trace);
+    });
+    const ring = JSON.parse(result.current.exportLog()) as { kind: string }[];
+    const kinds = ring.map((e) => e.kind);
+    expect(kinds.indexOf("nfc-attempt:tag-event")).toBeGreaterThanOrEqual(0);
+    expect(kinds.indexOf("nfc-attempt:tag-event")).toBeLessThan(
+      kinds.indexOf("nfc-attempt:handoff-accepted"),
+    );
+    expect(kinds).toContain("nfc-attempt:ble-scan-started");
+  });
+
   it("a zero-argument connect() still uses scan() and never scanTarget", async () => {
     const { result, fake, transport } = harness({ program: ONE_INTERVAL });
     await connect(result);
@@ -15326,11 +15372,9 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     await connect(result);
     await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
     expect(result.current.phase).toBe("ready");
-    expect(stagedRetireAttemptIdForTest()).toBeNull();
-    // The hook owns the store's receipt channel and mirrors every receipt
-    // into its own ring as `store-receipt:<kind>`.
-    const ring = result.current.exportLog();
-    expect(ring).toContain("store-receipt:staged-retire-discarded");
-    expect(ring).not.toContain("connect-guard-armed");
+    // A's set is untouched (a mismatched take is a pure read, lens 2) and
+    // nothing was retired under "connect-guard-armed".
+    expect(stagedRetireAttemptIdForTest()).toBe(ATTEMPT);
+    expect(result.current.exportLog()).not.toContain("connect-guard-armed");
   });
 });

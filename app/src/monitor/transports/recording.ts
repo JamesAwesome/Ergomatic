@@ -1,6 +1,7 @@
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import {
   hasTargetedScan,
+  type DiscoveryTrace,
   type TargetedMonitorDiscoveryRequest,
   type Transport,
 } from "../../../domain/monitor/types.js";
@@ -206,8 +207,9 @@ export function createRecordingTransport(
           async scanTarget(
             request: TargetedMonitorDiscoveryRequest,
             signal: AbortSignal,
+            trace?: DiscoveryTrace,
           ) {
-            const devices = await inner.scanTarget(request, signal);
+            const devices = await inner.scanTarget(request, signal, trace);
             record({ kind: "scan", devices });
             return devices;
           },

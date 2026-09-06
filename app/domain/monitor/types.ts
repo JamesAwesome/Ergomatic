@@ -695,10 +695,19 @@ export type MonitorDiscoveryRequest =
  *  dropped target into a privilege downgrade (spec, "Rejected approaches").
  *  A transport without this method cannot serve an advertised-name request
  *  and the session fails closed before any radio call. */
+/** Phase NF: the structural shape of the connection-attempt trace a
+ *  targeted scan may record into (the real type lives above the domain, in
+ *  `src/monitor/nfc/connectionAttemptTrace.ts`). Optional at every seam so
+ *  a caller without a trace records nothing; a transport never invents one. */
+export interface DiscoveryTrace {
+  record(kind: string, detail?: string): void;
+}
+
 export interface TargetedScanTransport {
   scanTarget(
     request: TargetedMonitorDiscoveryRequest,
     signal: AbortSignal,
+    trace?: DiscoveryTrace,
   ): Promise<DiscoveredMonitor[]>;
 }
 

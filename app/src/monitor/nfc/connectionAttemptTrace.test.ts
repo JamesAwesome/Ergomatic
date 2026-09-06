@@ -26,6 +26,7 @@ const SPEC_KINDS = [
   "parser-rejected",
   "haptic-failed",
   "reader-settled",
+  "reader-stop-failed",
   "foreground-abort",
   "held-device-conflict",
   "ble-scan-started",
@@ -64,12 +65,14 @@ describe("createConnectionAttemptTrace", () => {
     ]);
   });
 
-  it("refuses a detail that carries a PM5-shaped name", () => {
+  it("redacts (never throws on) a detail that carries a PM5-shaped name", () => {
     const trace = createConnectionAttemptTrace(() => 0);
-    expect(() => trace.record("ble-scan-matched", "PM5 432331249 Row")).toThrow(
-      "must not carry a name",
-    );
-    expect(trace.entries()).toStrictEqual([]);
+    expect(() =>
+      trace.record("ble-scan-matched", "PM5 432331249 Row"),
+    ).not.toThrow();
+    expect(trace.entries()).toStrictEqual([
+      { seq: 0, atMs: 0, kind: "ble-scan-matched", detail: "redacted" },
+    ]);
   });
 
   it("is bounded: the oldest entries drop once capacity is exceeded", () => {

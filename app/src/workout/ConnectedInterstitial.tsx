@@ -23,6 +23,7 @@ import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { MonitorDiscoveryRequest } from "../../domain/monitor/types.js";
 import { discardStagedRetire } from "../monitor/handoffStore";
+import type { ConnectionAttemptTrace } from "../monitor/nfc/connectionAttemptTrace";
 import { claimMountLease, onMountLeaseLost } from "../monitor/mountLease";
 import type { Baselines } from "../../domain/types.js";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
@@ -201,6 +202,9 @@ export interface ConnectedInterstitialProps {
    *  unchanged to `session.connect(request)` on mount AND on Try again, so
    *  a targeted retry repeats the exact target and never opens the picker. */
   request: MonitorDiscoveryRequest;
+  /** Phase NF: the attempt's redacted trace, recorded into by the targeted
+   *  scan and copied as the prefix of the session ring at GATT connect. */
+  trace?: ConnectionAttemptTrace;
   /** Test-only injection point (`useMonitorSession`'s own `deps`
    *  parameter). Production callers omit this — see the file's header
    *  note on why a production `createTransport` is NOT threaded through
@@ -218,6 +222,7 @@ export default function ConnectedInterstitial({
   onRowInstead,
   onEnded,
   request,
+  trace,
   deps,
 }: ConnectedInterstitialProps) {
   const session = useMonitorSession(deps);
@@ -316,7 +321,7 @@ export default function ConnectedInterstitial({
     onMountLeaseLost(request.attemptId, () =>
       discardStagedRetire(request.attemptId),
     );
-    void session.connect(request);
+    void session.connect(request, trace);
     return () => lease.release();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -426,7 +431,7 @@ export default function ConnectedInterstitial({
     // line — see the test file's own "the walk's dead button" section).
     programmedForDeviceRef.current = null;
     retryingRef.current = true;
-    void session.connect(request).finally(() => {
+    void session.connect(request, trace).finally(() => {
       retryingRef.current = false;
     });
   }

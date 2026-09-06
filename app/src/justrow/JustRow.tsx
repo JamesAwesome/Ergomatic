@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import ConnectAction from "../monitor/ConnectAction";
+import ConnectAction, {
+  type ConnectionEntryIntent,
+} from "../monitor/ConnectAction";
+import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
+import { mintAttemptId } from "../monitor/nfc/attemptIdMint";
 import {
   connectGuardStage,
   type ConnectGuardStage,
@@ -64,9 +68,24 @@ export default function JustRow() {
   // surface takes over regardless.
   const [showNumbers, setShowNumbers] = useState(false);
 
-  const handleProceed = useCallback(() => {
-    setStarted(true);
-    void session.connect();
+  // Phase NF: the press's own attempt ID keys the guard's staged receipt, so
+  // it travels into `connect(request)`; Try again reuses it (the same
+  // attempt on the same record, never a second authorization). Just Row is
+  // NOT the workout detail — no Scan NFC here (spec ruling 3 puts it on
+  // workout detail only), so the entry owner renders Connect alone.
+  const lastAttemptRef = useRef<ConnectionAttemptId | null>(null);
+  const handleProceed = useCallback(
+    (intent: ConnectionEntryIntent) => {
+      lastAttemptRef.current = intent.attemptId;
+      setStarted(true);
+      void session.connect({ kind: "picker", attemptId: intent.attemptId });
+    },
+    [session],
+  );
+  const retryConnect = useCallback(() => {
+    const attemptId = lastAttemptRef.current ?? mintAttemptId();
+    lastAttemptRef.current = attemptId;
+    void session.connect({ kind: "picker", attemptId });
   }, [session]);
 
   // AXES, NEVER `session.phase`. `connectedAxes.ts` exists so that no
@@ -166,7 +185,12 @@ export default function JustRow() {
         <p className="justrow-band">Start a free row session.</p>
 
         <div className="action-stack">
-          <ConnectAction onProceed={handleProceed} />
+          <ConnectAction
+            onProceed={handleProceed}
+            nfcCapability="unsupported"
+            busy={false}
+            accepted={false}
+          />
           <StartTimerAction />
         </div>
       </main>
@@ -230,7 +254,7 @@ export default function JustRow() {
             className="button-l1"
             onClick={() => {
               armedThisStart.current = false;
-              void session.connect();
+              retryConnect();
             }}
           >
             Try again
@@ -267,7 +291,7 @@ export default function JustRow() {
             className="button-l1"
             onClick={() => {
               armedThisStart.current = false;
-              void session.connect();
+              retryConnect();
             }}
           >
             Try again

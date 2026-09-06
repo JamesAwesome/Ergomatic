@@ -31,6 +31,7 @@ export type ConnectionAttemptTraceKind =
   | "parser-rejected"
   | "haptic-failed"
   | "reader-settled"
+  | "reader-stop-failed"
   | "foreground-abort"
   | "held-device-conflict"
   | "ble-scan-started"
@@ -61,6 +62,7 @@ export const CONNECTION_ATTEMPT_TRACE_KINDS: readonly ConnectionAttemptTraceKind
     "parser-rejected",
     "haptic-failed",
     "reader-settled",
+    "reader-stop-failed",
     "foreground-abort",
     "held-device-conflict",
     "ble-scan-started",
@@ -106,15 +108,16 @@ export function createConnectionAttemptTrace(
       if (!KIND_SET.has(kind)) {
         throw new Error(`connectionAttemptTrace: unknown kind ${kind}`);
       }
-      if (detail !== undefined && detail.includes("PM5 ")) {
-        // The one PM5-shaped string a caller could leak is an advertising
-        // name; refusing it here keeps the redaction rule mechanical.
-        throw new Error("connectionAttemptTrace: detail must not carry a name");
-      }
+      // The one PM5-shaped string a caller could leak is an advertising
+      // name. Redacted, NOT thrown (hardening lens 2): a throw inside a
+      // listener or continuation silences the user-visible outcome it was
+      // recording — the guard must never be the reason a rower sees nothing.
+      const safeDetail =
+        detail !== undefined && detail.includes("PM5 ") ? "redacted" : detail;
       const entry: ConnectionAttemptTraceEntry =
-        detail === undefined
+        safeDetail === undefined
           ? { seq: nextSeq, atMs: now(), kind }
-          : { seq: nextSeq, atMs: now(), kind, detail };
+          : { seq: nextSeq, atMs: now(), kind, detail: safeDetail };
       entries.push(entry);
       nextSeq += 1;
       if (entries.length > CONNECTION_ATTEMPT_TRACE_CAPACITY) {

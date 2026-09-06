@@ -128,7 +128,14 @@ function connectAsTaskFiveWill(): void {
 }
 
 function renderConnect() {
-  render(<ConnectAction onProceed={connectAsTaskFiveWill} />);
+  render(
+    <ConnectAction
+      onProceed={connectAsTaskFiveWill}
+      nfcCapability="unsupported"
+      busy={false}
+      accepted={false}
+    />,
+  );
 }
 
 describe("ConnectAction: the destruction it stands in front of", () => {
@@ -293,7 +300,12 @@ describe("ConnectAction: the guard", () => {
   it("uses the house panel classes, not a new confirm idiom", async () => {
     saveRun(unloggedSessionRun());
     const { container } = render(
-      <ConnectAction onProceed={connectAsTaskFiveWill} />,
+      <ConnectAction
+        onProceed={connectAsTaskFiveWill}
+        nfcCapability="unsupported"
+        busy={false}
+        accepted={false}
+      />,
     );
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
@@ -539,10 +551,19 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
   });
 
   function renderEntry(
-    props: Partial<ComponentProps<typeof ConnectAction>> = {},
+    props: Partial<
+      Omit<ComponentProps<typeof ConnectAction>, "onProceed">
+    > = {},
   ) {
     const onProceed = vi.fn();
-    render(<ConnectAction onProceed={onProceed} {...props} />);
+    render(
+      <ConnectAction
+        onProceed={onProceed}
+        nfcCapability={props.nfcCapability ?? "unsupported"}
+        busy={props.busy ?? false}
+        accepted={props.accepted ?? false}
+      />,
+    );
     return { onProceed };
   }
 
@@ -550,7 +571,12 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
     "renders Connect ALONE when capability is %s — no Scan NFC button, no placeholder element",
     (nfcCapability) => {
       const { container } = render(
-        <ConnectAction onProceed={vi.fn()} nfcCapability={nfcCapability} />,
+        <ConnectAction
+          onProceed={vi.fn()}
+          nfcCapability={nfcCapability}
+          busy={false}
+          accepted={false}
+        />,
       );
       expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
       expect(container.querySelector(".button-nfc")).toBeNull();
@@ -560,7 +586,12 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
 
   it("renders Scan NFC DIRECTLY ABOVE Connect when supported, both enabled", () => {
     const { container } = render(
-      <ConnectAction onProceed={vi.fn()} nfcCapability="supported" />,
+      <ConnectAction
+        onProceed={vi.fn()}
+        nfcCapability="supported"
+        busy={false}
+        accepted={false}
+      />,
     );
     const buttons = Array.from(container.querySelectorAll("button"));
     expect(buttons.map((b) => b.textContent)).toStrictEqual([

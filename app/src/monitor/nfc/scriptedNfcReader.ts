@@ -51,10 +51,6 @@ export function createScriptedNfcReader(script: NfcScript): ScriptedNfcReader {
     async readOne({ attemptId, signal, trace }: NfcReadOptions) {
       if (signal.aborted) throw new NfcAbortError();
       trace.record("session-requested");
-      if (script.outcome.kind === "start-failed") {
-        trace.record("start-failed");
-        throw new NfcStartError("scripted start failure");
-      }
       starts += 1;
       let aborted = false;
       const onAbort = (): void => {
@@ -63,6 +59,13 @@ export function createScriptedNfcReader(script: NfcScript): ScriptedNfcReader {
       };
       signal.addEventListener("abort", onAbort, { once: true });
       try {
+        // Same shape as the native arm: a start failure is still followed by
+        // the stop and the `reader-settled` entry (lens 2: the instrument
+        // must not diverge from the arm it stands in for).
+        if (script.outcome.kind === "start-failed") {
+          trace.record("start-failed");
+          throw new NfcStartError("scripted start failure");
+        }
         if (script.gate) await script.gate;
         if (aborted) throw new NfcAbortError();
         const outcome = script.outcome;

@@ -252,12 +252,30 @@ export function createReplayTransport(
   // (this module never imports capacitorBle's error classes).
   async function scanTarget(
     request: TargetedMonitorDiscoveryRequest,
+    signal: AbortSignal,
   ): Promise<DiscoveredMonitor[]> {
+    const named = (name: string, message: string): Error => {
+      const err = new Error(message);
+      err.name = name;
+      return err;
+    };
+    if (signal.aborted) {
+      throw named("TargetScanInterruptedError", "aborted before replay");
+    }
     const exact = (await scan()).filter((d) => d.name === request.exactName);
     if (exact.length === 0) {
-      const err = new Error("no recorded device advertised the exact name");
-      err.name = "TargetMonitorNotAdvertisingError";
-      throw err;
+      throw named(
+        "TargetMonitorNotAdvertisingError",
+        "no recorded device advertised the exact name",
+      );
+    }
+    if (exact.length > 1) {
+      // Production fails closed on a second distinct device; so does the
+      // replay (lens 2: the instrument must not be more permissive).
+      throw named(
+        "TargetMonitorAmbiguousError",
+        "more than one recorded device advertised the exact name",
+      );
     }
     return exact;
   }

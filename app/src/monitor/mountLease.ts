@@ -15,10 +15,10 @@
 //    queue, which is where React drains a StrictMode replay.
 //
 // LIFETIME: `pendingRelease`/`lost` are module-scoped maps keyed by attempt
-// ID. An entry is minted by `release()` and cleared by the committing
-// microtask or by `reclaimMountLease`; `onMountLeaseLost` entries are
-// cleared when they fire or when `claimMountLease` is called again for the
-// same ID (a fresh claim replaces a stale callback). Nothing survives a
+// ID. A `pendingRelease` entry is minted by `release()` and cleared by the
+// committing microtask or by `reclaimMountLease`; a `lost` entry is set by
+// `onMountLeaseLost` (a later registration for the same ID replaces it) and
+// cleared when it fires. Nothing survives a
 // document reload — which is correct: a reloaded document has no staged
 // receipt either (`handoffStore.ts`'s own `stagedRetireSet` is in-memory).
 

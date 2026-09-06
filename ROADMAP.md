@@ -2441,9 +2441,18 @@ trigger is the whole entry.
   `cause: multipleTags | tagFailure` on endings it forced (spec section
   "Reader-ending seam" has the evidence, rule and lifetime; four more
   mutations bite). No copy changed. **Gate -1 is complete; James scheduled
-  product implementation 2026-09-06** — next is the product-PR plan
-  (writing-plans, then `/harden`, whose antagonist lens takes the DELTA on the
-  new `cause` wire field).
+  product implementation 2026-09-06, AHEAD of Wave A ("Do it now").**
+  **PRODUCT IMPLEMENTATION IN FLIGHT** on `codex/phase-nf-nfc-design`: plan
+  `docs/superpowers/plans/2026-09-06-phase-nf-scan-nfc-product.md`; `/harden`
+  lens 1 ran (seven code findings applied, ledger entry landed); Tasks 1-8
+  committed (probe retired, parser, `scanTarget` + operation tail,
+  decorators, NFC reader port + native arm + scripted reader + trace,
+  keyed staged retire + mount lease, `connect(request)`, Scan NFC on detail
+  with the routed click-to-`armed` proof); remaining: e2e/captures run,
+  mutation sweep, iOS build verification, walk runsheet PM readiness
+  (`docs/monitor/sessions/phase-nf-product-walk/RUNSHEET.md`, DRAFT), the
+  PR. Open number for James: the 1_000 ms collision window is paid on every
+  NFC connect.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

@@ -3870,6 +3870,19 @@ describe("createFakeTransport: scanTarget (Phase NF)", () => {
       ).rejects.toMatchObject({ name });
     }
   });
+  it("validates the request like the Capacitor transport (bad id or name → TargetedRequestInvalidError)", async () => {
+    const fake = createFakeTransport({ program: PROGRAM, deviceName: "PM5 1" });
+    await expect(
+      fake.scanTarget(
+        { ...req("PM5 1"), attemptId: "nope" },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ name: "TargetedRequestInvalidError" });
+    await expect(
+      fake.scanTarget(req("pm5 1"), new AbortController().signal),
+    ).rejects.toMatchObject({ name: "TargetedRequestInvalidError" });
+  });
+
   it("rejects a pre-aborted signal as interrupted", async () => {
     const fake = createFakeTransport({ program: PROGRAM, deviceName: "PM5 1" });
     const ac = new AbortController();
