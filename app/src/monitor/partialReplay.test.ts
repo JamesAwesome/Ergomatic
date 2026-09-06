@@ -504,6 +504,13 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
       actualSpm: 25,
       actualSeconds: 60,
       actualMeters: 197,
+      // Phase LP: the same seq-772 0x0038 fields the actual above carries,
+      // copied by `buildMonitorLogSteps` under their `machine*` names.
+      machineCalories: 10,
+      machineCalPerHour: 641,
+      machineWatts: 99,
+      machineDragFactor: 101,
+      machineRestHr: null,
     });
     expect(steps[1]).toStrictEqual(PARTIAL_STEP_LEG_B);
     expect(steps[2]).toStrictEqual(BARE_STEP);

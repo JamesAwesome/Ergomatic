@@ -1103,6 +1103,37 @@ function derivedAvgSplit(
   return distanceMeters > 0 ? (500 * elapsedSeconds) / distanceMeters : 0;
 }
 
+/** Phase LP: the fake models the PM5's OWN per-split relations honestly
+ *  (agent briefing: never "helpfully"), so a screen reading them cannot
+ *  mistake a wired fake for an unwired field. Measured on the committed
+ *  captures (spec 2026-09-06-logbook-parity §1.1): the wire's watts equal
+ *  round(2.80/pace³) with pace in s/m (15/15 splits); its cal/hr equals
+ *  floor(300 + 4 × 0.8604 × W) from the UNROUNDED watts; its calories are
+ *  cal/hr × t / 3600 rounded (the per-split sum matches 0x003A's total on
+ *  9/9 captures); drag reads 100-104 on every capture. Zero distance or
+ *  time is the "nothing rowed" case and writes 0, as `derivedAvgSplit`
+ *  does. (The LOGBOOK's cal/hr is a different quantity — calories ÷ time —
+ *  and is what the screen shows; `src/session/logbookDerived.ts`.) */
+const FAKE_DRAG_FACTOR = 101;
+
+function fakeSplitWattsUnrounded(seconds: number, meters: number): number {
+  if (!(seconds > 0) || !(meters > 0)) return 0;
+  return 2.8 / (seconds / meters) ** 3;
+}
+
+function fakeSplitWatts(seconds: number, meters: number): number {
+  return Math.round(fakeSplitWattsUnrounded(seconds, meters));
+}
+
+function fakeSplitCalPerHour(seconds: number, meters: number): number {
+  const w = fakeSplitWattsUnrounded(seconds, meters);
+  return w === 0 ? 0 : Math.floor(300 + 4 * 0.8604 * w);
+}
+
+function fakeSplitCalories(seconds: number, meters: number): number {
+  return Math.round((fakeSplitCalPerHour(seconds, meters) * seconds) / 3600);
+}
+
 /** `machineState` is the state the PM is in AT THE MOMENT OF DELIVERY (the
  *  last status tick it sent), which is what decides the forward attribution
  *  of the Split/Interval Number this boundary carries — see
@@ -1150,11 +1181,26 @@ function boundaryBundle(
         actual.elapsedSeconds,
         actual.distanceMeters,
       ),
-      splitIntervalTotalCalories: 0,
-      splitIntervalAvgCalories: 0,
-      splitIntervalSpeedMetersPerSecond: 0,
-      splitIntervalPowerWatts: 0,
-      splitAvgDragFactor: 130,
+      // Phase LP: the PM5's OWN relations, never literal zeros — see
+      // `fakeSplitWatts` and friends below.
+      splitIntervalTotalCalories: fakeSplitCalories(
+        actual.elapsedSeconds,
+        actual.distanceMeters,
+      ),
+      splitIntervalAvgCalories: fakeSplitCalPerHour(
+        actual.elapsedSeconds,
+        actual.distanceMeters,
+      ),
+      splitIntervalSpeedMetersPerSecond:
+        actual.elapsedSeconds > 0
+          ? Math.round((actual.distanceMeters / actual.elapsedSeconds) * 1000) /
+            1000
+          : 0,
+      splitIntervalPowerWatts: fakeSplitWatts(
+        actual.elapsedSeconds,
+        actual.distanceMeters,
+      ),
+      splitAvgDragFactor: FAKE_DRAG_FACTOR,
       splitIntervalNumber: wireIndex,
       // RC-8: see `statusBundle`'s own `ergMachineType` comment — same
       // fact, same fix, the other site the antagonist named.

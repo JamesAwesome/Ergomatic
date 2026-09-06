@@ -1962,13 +1962,14 @@ describe("createPm5Driver: terminate + Appendix-E — the RUN closes, the driver
         // `restDistanceMeters` above.
         restSeconds: 0,
         type: 0,
-        // Phase LP: the 0x0038 fields `toIntervalActual` now keeps. These
-        // are the FAKE's own values for a 1 m / 1 s boundary (T8 makes the
-        // fake model the PM5's real relations instead of literal zeros).
+        // Phase LP: the 0x0038 fields `toIntervalActual` now keeps, at the
+        // fake's own PM5 relations for a 1 m / 1 s boundary (hand computed:
+        // W = 2.8/1³ = 2.8 → 3; cal/hr = floor(300 + 3.4416×2.8) = 309;
+        // cal = round(309 × 1 / 3600) = 0 — a genuine 0, a value).
         calories: 0,
-        calPerHour: 0,
-        watts: 0,
-        dragFactor: 130,
+        calPerHour: 309,
+        watts: 3,
+        dragFactor: 101,
         restHeartRateBpm: null,
       },
     });
