@@ -98,6 +98,9 @@ import type { FakeControls, FakeScript } from "./fake";
 // through the dynamic `import("./holdOpen")` below, ONE layer under the
 // SAME `fakeMonitorEnabled` gate as `recording.ts`.
 import type { HoldOpenControls } from "./holdOpen";
+// Phase NF: TYPE-ONLY, like every sibling above — the scripted NFC reader
+// is reached solely through `adapters/nfcReader.ts`'s fold-away gate.
+import type { NfcScript } from "../nfc/scriptedNfcReader";
 
 /** `FakeScript` plus one field that belongs to the INJECTION SEAM, not to
  *  `fake.ts`'s own hardware-modeling contract — which is why it is declared
@@ -122,6 +125,13 @@ declare global {
      *  every unit test, which injects through `MonitorSessionDeps
      *  .createTransport` instead) means "build the real transport". */
     __pm5FakeScript__?: InjectedFakeScript;
+    /** Phase NF: set by an e2e test's `page.addInitScript` (or a unit test),
+     *  never by product code — the NFC sibling of `__pm5FakeScript__`, read
+     *  by `adapters/nfcReader.ts` behind the SAME `fakeMonitorEnabled` gate,
+     *  so a real deploy's build folds the scripted reader away with the
+     *  fake. Declared here, beside its siblings, so e2e specs (which import
+     *  from `src/monitor/transports/index` types) see it. */
+    __nfcScript__?: NfcScript;
     /** Set by THIS file, the instant it builds a fake from
      *  `__pm5FakeScript__` above — never by product code, and never read by
      *  it either. `e2e/connected.spec.ts`'s own discovery: Chromium

@@ -5713,3 +5713,51 @@ test("justrow-history-chip", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "justrow-history-chip.png"),
   });
 });
+
+// Phase NF (design spec 2026-09-03, Gate 0 / countable exit 2): the shipped
+// Scan NFC layout in both orientations, with the scripted reader reporting
+// support. RF7: seeded with a real personal workout so the capture shows the
+// button above a populated screen, not a fallback.
+async function captureWorkoutDetailNfc(
+  page: Page,
+  file: string,
+  email: string,
+): Promise<void> {
+  await page.addInitScript(() => {
+    window.__nfcScript__ = {
+      capability: "supported",
+      outcome: { kind: "cancelled" },
+    };
+  });
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await setBaselines(page);
+  const title = "Screenshot NFC Workout";
+  await page.goto("/library/new");
+  await page.getByLabel("Title").fill(title);
+  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  await page.getByRole("button", { name: "DONE" }).click();
+  await page.getByRole("button", { name: "Save to library" }).click();
+  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await page.locator(".workout-detail-title").waitFor();
+  await expect(page.getByRole("button", { name: "Scan NFC" })).toBeVisible();
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, file) });
+  await cleanupByTitle(page, title);
+}
+
+test("workout-detail-nfc", async ({ page }) => {
+  await captureWorkoutDetailNfc(
+    page,
+    "workout-detail-nfc.png",
+    "screenshots-detail-nfc@e2e.test",
+  );
+});
+
+test("workout-detail-nfc-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await captureWorkoutDetailNfc(
+    page,
+    "workout-detail-nfc-landscape.png",
+    "screenshots-detail-nfc-landscape@e2e.test",
+  );
+});

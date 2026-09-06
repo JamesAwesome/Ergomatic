@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useWorkouts } from "../api/useWorkouts";
@@ -25,7 +26,27 @@ import {
   currentUnretired as currentUnretiredHandoff,
   retire as retireHandoff,
 } from "../monitor/handoffStore";
-import ConnectAction from "../monitor/ConnectAction";
+import ConnectAction, {
+  type ConnectionEntryIntent,
+} from "../monitor/ConnectAction";
+import { registerAppLifecycleListener } from "../adapters/appLifecycle";
+import { successHaptic } from "../adapters/haptics";
+import {
+  resolveNfcReader,
+  type NfcCapability,
+  type NfcReader,
+} from "../adapters/nfcReader";
+import { discardStagedRetire } from "../monitor/handoffStore";
+import {
+  createConnectionAttemptTrace,
+  type ConnectionAttemptTrace,
+} from "../monitor/nfc/connectionAttemptTrace";
+import {
+  cacheNfcCapability,
+  readCachedNfcCapability,
+} from "../monitor/nfc/nfcCapabilityCache";
+import { paintBarrier } from "../monitor/nfc/paintBarrier";
+import { runNfcAttempt } from "../monitor/nfc/runNfcAttempt";
 import type { RunIdentity } from "../monitor/useMonitorSession";
 import type {
   ConnectionAttemptId,
@@ -61,6 +82,57 @@ function useBluetoothStatus(): BluetoothStatus {
     };
   }, []);
   return status;
+}
+
+/** Phase NF: the NFC capability probe. `"unknown"` renders nothing (the
+ *  spec's absent layout), `"supported"` renders Scan NFC. A resolution is
+ *  cached for the PROCESS (never persisted); a rejection or a timeout keeps
+ *  `"unknown"`, records a distinct trace outcome, and is NOT cached, so the
+ *  next mount retries (hardening lens 1, F11: one hiccup at first mount must
+ *  not hide the button for the whole process). The 2_000 ms deadline is a
+ *  fail-closed bound, ~50x the measured `capabilityLatencyMs` of 41 ms
+ *  (`normal-trace-v8-receipt.json`). */
+type NfcCapabilityState = "unknown" | NfcCapability;
+const NFC_CAPABILITY_DEADLINE_MS = 2_000;
+
+function useNfcCapability(reader: NfcReader): NfcCapabilityState {
+  const [capability, setCapability] = useState<NfcCapabilityState>(
+    () => readCachedNfcCapability() ?? "unknown",
+  );
+  useEffect(() => {
+    if (readCachedNfcCapability() !== null) return;
+    let cancelled = false;
+    const trace = createConnectionAttemptTrace();
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      cancelled = true;
+      trace.record("capability-timed-out");
+      trace.complete();
+    }, NFC_CAPABILITY_DEADLINE_MS);
+    reader.capability().then(
+      (result) => {
+        if (cancelled) return;
+        cancelled = true;
+        clearTimeout(timer);
+        cacheNfcCapability(result);
+        trace.record(result);
+        trace.complete();
+        setCapability(result);
+      },
+      () => {
+        if (cancelled) return;
+        cancelled = true;
+        clearTimeout(timer);
+        trace.record("capability-failed");
+        trace.complete();
+      },
+    );
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [reader]);
+  return capability;
 }
 
 export default function WorkoutDetail() {
@@ -192,6 +264,23 @@ function WorkoutDetailView({
     loadLastDevice(),
   );
   const bluetoothStatus = useBluetoothStatus();
+  // Phase NF: one reader per mount (the platform conditional resolves once),
+  // the capability it reports, and the live attempt's abort owner. The
+  // abort owner is aborted on unmount and on foreground loss (`pause`),
+  // never on the ACTIVE/INACTIVE axis (hardening lens 1, F1).
+  const [nfcReader] = useState<NfcReader>(() => resolveNfcReader());
+  const nfcCapability = useNfcCapability(nfcReader);
+  const [entryBusy, setEntryBusy] = useState(false);
+  const [nfcAccepted, setNfcAccepted] = useState(false);
+  const nfcAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      nfcAbortRef.current?.abort();
+    };
+  }, []);
   // "Row on the phone timer instead"'s OWN saveDraft failure (below) — kept
   // separate from `useStartWorkout`'s own `startError` since this flow
   // never goes through the hook at all (Connect's own guard, not Start's,
@@ -239,6 +328,79 @@ function WorkoutDetailView({
   // a `useMonitorSession` failure and does not deserve a phase transition
   // or a driver connection at all.
   function handleConnectProceed(attemptId: ConnectionAttemptId) {
+    proceedWithRequest({ kind: "picker", attemptId });
+  }
+
+  // Phase NF (spec §4): the NFC intent. Runs the shared authorization
+  // (already cleared by `ConnectAction`'s guard), reads ONE tag, closes the
+  // reader, parses the PM5 target or shows `Unsupported NFC tag`, commits
+  // `✓ PM5 found` synchronously, crosses the one-paint barrier, then compiles
+  // exactly as manual Connect does and hands the advertised-name request to
+  // the interstitial. INVARIANT (lens 1, F7): every outcome except a target
+  // that reaches `setConnecting` discards this attempt's staged receipt by
+  // ID before returning to detail.
+  async function handleNfcProceed(attemptId: ConnectionAttemptId) {
+    setConnectError(null);
+    setEntryBusy(true);
+    const controller = new AbortController();
+    nfcAbortRef.current = controller;
+    const trace: ConnectionAttemptTrace = createConnectionAttemptTrace();
+    const unsubscribe = await registerAppLifecycleListener((event) => {
+      if (event === "background") {
+        trace.record("foreground-abort");
+        controller.abort();
+      }
+    });
+    let handedOff = false;
+    try {
+      const outcome = await runNfcAttempt({
+        attemptId,
+        reader: nfcReader,
+        trace,
+        signal: controller.signal,
+        haptic: successHaptic,
+        paint: (signal) => paintBarrier(signal),
+        // Committed SYNCHRONOUSLY so the two frames the barrier counts come
+        // after the accepted state is on screen (lens 1, F10).
+        onAccepted: () => {
+          if (mountedRef.current) flushSync(() => setNfcAccepted(true));
+        },
+      });
+      if (!mountedRef.current) return;
+      if (outcome.kind === "target") {
+        handedOff = proceedWithRequest({
+          kind: "advertised-name",
+          attemptId,
+          exactName: outcome.target.advertisingName,
+        });
+      } else if (outcome.kind === "inline-error") {
+        setConnectError(outcome.copy);
+      }
+    } finally {
+      unsubscribe();
+      trace.complete();
+      if (nfcAbortRef.current === controller) nfcAbortRef.current = null;
+      if (!handedOff) discardStagedRetire(attemptId);
+      if (mountedRef.current) {
+        setNfcAccepted(false);
+        setEntryBusy(false);
+      }
+    }
+  }
+
+  function handleEntryProceed(intent: ConnectionEntryIntent) {
+    if (intent.kind === "nfc") {
+      void handleNfcProceed(intent.attemptId);
+      return;
+    }
+    handleConnectProceed(intent.attemptId);
+  }
+
+  /** Compiles THIS workout at its preview-nudged targets and mounts the
+   *  interstitial with `request`. Returns whether the handoff happened; a
+   *  `false` return has already shown its inline reason AND discarded the
+   *  attempt's staged receipt (spec §3: every pre-handoff terminal path). */
+  function proceedWithRequest(request: MonitorDiscoveryRequest): boolean {
     setConnectError(null);
     // Phase 6I: `needsBaselines` (domain/needsBaselines.ts) is the SAME
     // predicate every other coupled guard site shares — nudging never
@@ -258,14 +420,16 @@ function WorkoutDetailView({
       setConnectError(
         "Set your baselines first. Connect needs a target to program.",
       );
-      return;
+      discardStagedRetire(request.attemptId);
+      return false;
     }
     const draft = buildNudgedDraft(workout, nudges);
     const run = buildRun(draft, baselines, new Date());
     const compiled = compileProgram(run.phases);
     if ("code" in compiled) {
       setConnectError(compiled.message);
-      return;
+      discardStagedRetire(request.attemptId);
+      return false;
     }
     const nudgedCount = Object.values(nudges).filter((v) => v !== 0).length;
     // 7C Task 1: the log seed, built from the SAME `run.phases` `compiled`
@@ -280,8 +444,9 @@ function WorkoutDetailView({
       identity: { workoutId: workout.id, title: workout.title, logSeed },
       baselines,
       nudgedCount,
-      request: { kind: "picker", attemptId },
+      request,
     });
+    return true;
   }
 
   // Cancel, from any interstitial state: lands back on Workout detail, and
@@ -485,7 +650,10 @@ function WorkoutDetailView({
         <ConnectBlock
           bluetoothStatus={bluetoothStatus}
           lastDevice={lastDevice}
-          onProceed={handleConnectProceed}
+          onProceed={handleEntryProceed}
+          nfcCapability={nfcCapability}
+          busy={entryBusy}
+          accepted={nfcAccepted}
         />
         {connectError && <p className="baseline-error">{connectError}</p>}
         {/* Start Timer — spec §4: renamed from "Start" and demoted from L1
@@ -588,10 +756,16 @@ function ConnectBlock({
   bluetoothStatus,
   lastDevice,
   onProceed,
+  nfcCapability,
+  busy,
+  accepted,
 }: {
   bluetoothStatus: BluetoothStatus;
   lastDevice: string | null;
-  onProceed: (attemptId: ConnectionAttemptId) => void;
+  onProceed: (intent: ConnectionEntryIntent) => void;
+  nfcCapability: NfcCapabilityState;
+  busy: boolean;
+  accepted: boolean;
 }) {
   const dashed = bluetoothStatus === "off" || bluetoothStatus === "absent";
   return (
@@ -600,7 +774,12 @@ function ConnectBlock({
         dashed ? "connect-block connect-block-dashed" : "connect-block"
       }
     >
-      <ConnectAction onProceed={onProceed} />
+      <ConnectAction
+        onProceed={onProceed}
+        nfcCapability={nfcCapability}
+        busy={busy}
+        accepted={accepted}
+      />
       {bluetoothStatus === "off" && (
         <p className="mono-status connect-block-caption">BLUETOOTH IS OFF</p>
       )}

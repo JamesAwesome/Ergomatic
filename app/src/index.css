@@ -231,7 +231,8 @@ button:disabled {
 .button-l3,
 .button-l4,
 .button-l4-armed,
-.button-connect {
+.button-connect,
+.button-nfc {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -290,6 +291,39 @@ button:disabled {
 
 .button-connect:hover {
   background: var(--action-connect-hover);
+}
+
+/* Scan NFC — Phase NF (design spec 2026-09-03, Gate 0): the OTHER hardware
+   primary, directly above Connect, same 56 px geometry and weight, its own
+   `--action-nfc` fern token. Rendered ONLY when native iOS reports NFC
+   support (no placeholder, no reserved height elsewhere). A screen-specific
+   one-off like `.button-connect`, not a numbered level. `:disabled` keeps
+   the full fill (a 60% fill would fall to ~2.6:1 against cream text —
+   below AA) and signals the live attempt with the cursor instead.
+   `.button-nfc-accepted` is the SAME fill carrying `✓ PM5 found` for one
+   committed paint before the interstitial replaces it. */
+.button-nfc {
+  min-height: 56px;
+  background: var(--action-nfc);
+  border: none;
+  color: var(--on-color);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.button-nfc:hover {
+  background: var(--action-nfc-hover);
+}
+
+.button-nfc:disabled,
+.button-nfc:disabled:hover {
+  background: var(--action-nfc);
+  cursor: progress;
+}
+
+.button-nfc-accepted {
+  cursor: default;
 }
 
 /* 2 · secondary — surface fill, ink border/label, same type as L1. May

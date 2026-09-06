@@ -39,6 +39,13 @@
      the fifth candidate that does NOT become accent's fifth thing. */
   --action-connect: #2a6275;
   --action-connect-hover: #224f5e;
+  /* Phase NF (design spec 2026-09-03, Gate 0 tokens): the Scan NFC action's
+     own muted-fern fill — the second of two EQUAL hardware routes, never a
+     repaint of --accent or --action-connect. Measured (spec table): fill vs
+     cream text #fffdf7 = 6.57:1; fill vs page #f4f1e8 = 5.92:1; hover fill
+     vs cream = 7.95:1. All clear WCAG AA (4.5:1 text, 3:1 boundary). */
+  --action-nfc: #49624f;
+  --action-nfc-hover: #3f5545;
   --type-o2: #2a6275;
   --type-at: #8a5f18;
   --type-an: #5c4382;

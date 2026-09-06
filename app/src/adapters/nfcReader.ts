@@ -17,7 +17,6 @@
 import type { NfcRecord } from "../../domain/monitor/nfc.js";
 import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
 import type { ConnectionAttemptTrace } from "../monitor/nfc/connectionAttemptTrace";
-import type { NfcScript } from "../monitor/nfc/scriptedNfcReader";
 import { isNative } from "../platform";
 
 export type NfcCapability = "supported" | "unsupported";
@@ -82,15 +81,6 @@ export class NfcUnsupportedError extends Error {
   constructor() {
     super("NFC is not available on this surface.");
     this.name = "NfcUnsupportedError";
-  }
-}
-
-declare global {
-  interface Window {
-    /** Set by a test's `page.addInitScript` (or a unit test), never by
-     *  product code — the NFC sibling of `__pm5FakeScript__`, read behind
-     *  the same fold-away gate. See `scriptedNfcReader.ts`. */
-    __nfcScript__?: NfcScript;
   }
 }
 

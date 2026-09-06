@@ -658,8 +658,14 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
     //  - `nfc/connectionAttemptTrace.ts: latest` — the last COMPLETED
     //    connection-attempt trace, a process-local diagnostic snapshot of
     //    fixed-vocabulary entries (no run, no identity).
+    //  - `nfc/attemptIdMint.ts: mint` — the attempt-ID generator, a
+    //    function reference a test may swap for a fixed literal.
+    //  - `nfc/nfcCapabilityCache.ts: cached` — the process-scoped NFC
+    //    capability resolution (`"supported" | "unsupported" | null`).
     expect(found).toStrictEqual([
+      "src/monitor/nfc/attemptIdMint.ts: mint",
       "src/monitor/nfc/connectionAttemptTrace.ts: latest",
+      "src/monitor/nfc/nfcCapabilityCache.ts: cached",
       "src/monitor/transports/capacitorBle.ts: operationTail",
       "src/monitor/transports/capacitorBle.ts: poisoned",
       "src/monitor/transports/capacitorBle.ts: initPromise",

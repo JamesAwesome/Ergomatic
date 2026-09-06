@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import type { ComponentProps } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -524,5 +525,137 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     expect(
       takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
     ).toStrictEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase NF (design spec 2026-09-03 §3, Gate 0): the component is now the
+// SHARED connection-entry owner — Scan NFC directly above Connect when native
+// reports support, one guard, one pending intent, one attempt ID.
+describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+
+  function renderEntry(
+    props: Partial<ComponentProps<typeof ConnectAction>> = {},
+  ) {
+    const onProceed = vi.fn();
+    render(<ConnectAction onProceed={onProceed} {...props} />);
+    return { onProceed };
+  }
+
+  it.each(["unknown", "unsupported"] as const)(
+    "renders Connect ALONE when capability is %s — no Scan NFC button, no placeholder element",
+    (nfcCapability) => {
+      const { container } = render(
+        <ConnectAction onProceed={vi.fn()} nfcCapability={nfcCapability} />,
+      );
+      expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
+      expect(container.querySelector(".button-nfc")).toBeNull();
+      expect(container.querySelectorAll("button")).toHaveLength(1);
+    },
+  );
+
+  it("renders Scan NFC DIRECTLY ABOVE Connect when supported, both enabled", () => {
+    const { container } = render(
+      <ConnectAction onProceed={vi.fn()} nfcCapability="supported" />,
+    );
+    const buttons = Array.from(container.querySelectorAll("button"));
+    expect(buttons.map((b) => b.textContent)).toStrictEqual([
+      "Scan NFC",
+      "Connect",
+    ]);
+    expect(buttons[0]).toHaveClass("button-nfc");
+    expect(buttons[1]).toHaveClass("button-connect");
+    expect(buttons[0]).toBeEnabled();
+    expect(buttons[1]).toBeEnabled();
+  });
+
+  it("a Scan NFC press mints a v4 UUID, stages under it, and proceeds with an nfc intent", async () => {
+    const { onProceed } = renderEntry({ nfcCapability: "supported" });
+    await userEvent.click(screen.getByRole("button", { name: "Scan NFC" }));
+    expect(onProceed).toHaveBeenCalledTimes(1);
+    const intent = onProceed.mock.calls[0]![0] as {
+      kind: string;
+      attemptId: string;
+    };
+    expect(intent.kind).toBe("nfc");
+    expect(intent.attemptId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+  });
+
+  it("a Connect press proceeds with a manual intent carrying its own fresh ID", async () => {
+    const { onProceed } = renderEntry({ nfcCapability: "supported" });
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(onProceed).toHaveBeenCalledTimes(2);
+    const [a, b] = onProceed.mock.calls.map(
+      (c) => c[0] as { kind: string; attemptId: string },
+    );
+    expect(a!.kind).toBe("manual");
+    expect(b!.kind).toBe("manual");
+    expect(a!.attemptId).not.toBe(b!.attemptId);
+  });
+
+  it("busy disables BOTH buttons and a press proceeds nothing", async () => {
+    const { onProceed } = renderEntry({
+      nfcCapability: "supported",
+      busy: true,
+    });
+    const nfc = screen.getByRole("button", { name: "Scan NFC" });
+    const connect = screen.getByRole("button", { name: "Connect" });
+    expect(nfc).toBeDisabled();
+    expect(connect).toBeDisabled();
+    await userEvent.click(nfc);
+    await userEvent.click(connect);
+    expect(onProceed).not.toHaveBeenCalled();
+  });
+
+  it("accepted swaps the Scan NFC slot for the `✓ PM5 found` status (aria-live), same fill class", () => {
+    render(
+      <ConnectAction
+        onProceed={vi.fn()}
+        nfcCapability="supported"
+        accepted
+        busy
+      />,
+    );
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("✓ PM5 found");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveClass("button-nfc");
+    expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
+  });
+
+  it("with an unlogged session on record, EITHER press stages the panel in place of BOTH buttons; Cancel restores both; Connect anyway resumes the SAME intent", async () => {
+    saveRun(unloggedSessionRun());
+    const { onProceed } = renderEntry({ nfcCapability: "supported" });
+    await userEvent.click(screen.getByRole("button", { name: "Scan NFC" }));
+    expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    expect(screen.getByText(/unlogged session/)).toBeInTheDocument();
+    const stagedId = stagedRetireAttemptId();
+    expect(stagedId).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.getByRole("button", { name: "Scan NFC" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(stagedRetireAttemptId()).toBeNull();
+    expect(onProceed).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Scan NFC" }));
+    const resumedId = stagedRetireAttemptId();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect anyway" }),
+    );
+    expect(onProceed).toHaveBeenCalledTimes(1);
+    expect(onProceed.mock.calls[0]![0]).toStrictEqual({
+      kind: "nfc",
+      attemptId: resumedId,
+    });
   });
 });

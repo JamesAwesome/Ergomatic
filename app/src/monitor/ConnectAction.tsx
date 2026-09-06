@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
+import type { NfcCapability } from "../adapters/nfcReader";
+import { mintAttemptId } from "./nfc/attemptIdMint";
 import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
 import {
   currentUnretired as currentUnretiredHandoff,
@@ -110,28 +112,48 @@ import {
  * two-button panel that has replaced its trigger cannot be left ambiguously
  * armed and so has never carried one. Cancel is the only way back.
  */
-/** Phase NF: the press mints the attempt ID that keys the staged receipt
- *  and travels, unchanged, through the interstitial into
- *  `useMonitorSession.connect(request)`. Same generator the session id uses
- *  (`crypto.randomUUID()` where present). */
-function mintAttemptId(): ConnectionAttemptId {
-  return crypto.randomUUID();
+/** Phase NF (design spec 2026-09-03 §3, "One connection-entry owner shares
+ *  the safety lock"): the hardware-entry group's ONE pending intent. A
+ *  press mints its ID and stages the guard's authorization under that ID
+ *  before either native sheet opens; Cancel discards only that attempt's
+ *  receipt; Connect anyway resumes the same intent and ID. */
+export type ConnectionEntryIntent = {
+  kind: "manual" | "nfc";
+  attemptId: ConnectionAttemptId;
+};
+
+export interface ConnectionEntryProps {
+  onProceed: (intent: ConnectionEntryIntent) => void;
+  /** `"unknown"` (the async probe has not resolved) and `"unsupported"`
+   *  render NO Scan NFC button — no placeholder, no reserved height. */
+  nfcCapability?: NfcCapability | "unknown";
+  /** An attempt is live (an NFC read, or its handoff): both hardware
+   *  buttons are disabled until it settles (spec §3: only one entry
+   *  attempt may exist). */
+  busy?: boolean;
+  /** Render `✓ PM5 found` in the Scan NFC slot for one committed paint. */
+  accepted?: boolean;
 }
 
+/** THE SHARED CONNECTION-ENTRY OWNER (Phase NF generalised this component
+ *  in place rather than duplicating its guard: two local stages and two
+ *  independently staged retire receipts were exactly the shape the spec
+ *  rules out). Both hardware buttons live here, above one guard and one
+ *  pending intent. The file keeps its name and its history. */
 export default function ConnectAction({
   onProceed,
-}: {
-  onProceed: (attemptId: ConnectionAttemptId) => void;
-}) {
+  nfcCapability = "unknown",
+  busy = false,
+  accepted = false,
+}: ConnectionEntryProps) {
   // One nullable union, not a boolean plus a reason — `WorkoutDetail`'s own
   // `replaceStage` comment explains the choice: either non-null value both
   // blocks the immediate `onProceed()` AND picks the panel's copy, so the
   // two can never disagree about which case triggered the stage.
   const [stage, setStage] = useState<ConnectGuardStage>(null);
-  // The pending intent's attempt ID: minted at the press, kept while the
-  // confirm panel is up so "Connect anyway" resumes the SAME attempt.
-  const [pendingAttempt, setPendingAttempt] =
-    useState<ConnectionAttemptId | null>(null);
+  // The pending intent: minted at the press, kept while the confirm panel
+  // is up so "Connect anyway" resumes the SAME kind and attempt ID.
+  const [pending, setPending] = useState<ConnectionEntryIntent | null>(null);
 
   // Task 5 review fix round: stages the AUTHORIZATION in the STORE, not
   // local state — `handoffStore.ts`'s own `stagedRetireSet` doc comment
@@ -144,7 +166,8 @@ export default function ConnectAction({
   // anything itself — "Connect anyway" below goes straight to
   // `onProceed`, the shape this component shipped with before the retire
   // briefly (and wrongly) lived here at press time.
-  function handleConnect() {
+  function handleEntry(kind: ConnectionEntryIntent["kind"]) {
+    if (busy) return;
     const attemptId = mintAttemptId();
     const monitorEntry = currentUnretiredHandoff();
     stageRetireHandoff(
@@ -160,11 +183,11 @@ export default function ConnectAction({
     );
     const staged = connectGuardStage(monitorEntry !== null);
     if (staged !== null) {
-      setPendingAttempt(attemptId);
+      setPending({ kind, attemptId });
       setStage(staged);
       return;
     }
-    onProceed(attemptId);
+    onProceed({ kind, attemptId });
   }
 
   if (stage !== null) {
@@ -185,10 +208,10 @@ export default function ConnectAction({
             type="button"
             className="button-outline"
             onClick={() => {
-              if (pendingAttempt !== null) {
-                discardStagedRetireHandoff(pendingAttempt);
+              if (pending !== null) {
+                discardStagedRetireHandoff(pending.attemptId);
               }
-              setPendingAttempt(null);
+              setPending(null);
               setStage(null);
             }}
           >
@@ -205,9 +228,13 @@ export default function ConnectAction({
             type="button"
             className="button-primary"
             onClick={() => {
-              const attemptId = pendingAttempt ?? mintAttemptId();
-              setPendingAttempt(null);
-              onProceed(attemptId);
+              const intent = pending ?? {
+                kind: "manual",
+                attemptId: mintAttemptId(),
+              };
+              setPending(null);
+              setStage(null);
+              onProceed(intent);
             }}
           >
             Connect anyway
@@ -221,9 +248,39 @@ export default function ConnectAction({
   // compete with Start" is the OLD handoff §1 ruling this supersedes) —
   // Connect is now the screen's single primary, L1 geometry via its own
   // `.button-connect` class and `--action-connect` token.
+  // Phase NF (Gate 0): Scan NFC sits DIRECTLY ABOVE Connect, equal weight,
+  // present only when native reports support. `accepted` swaps the NFC
+  // button for its `✓ PM5 found` state (a status, not a control) for one
+  // committed paint before the interstitial takes over.
   return (
-    <button type="button" className="button-connect" onClick={handleConnect}>
-      Connect
-    </button>
+    <>
+      {nfcCapability === "supported" &&
+        (accepted ? (
+          <div
+            className="button-nfc button-nfc-accepted"
+            role="status"
+            aria-live="polite"
+          >
+            ✓ PM5 found
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="button-nfc"
+            disabled={busy}
+            onClick={() => handleEntry("nfc")}
+          >
+            Scan NFC
+          </button>
+        ))}
+      <button
+        type="button"
+        className="button-connect"
+        disabled={busy}
+        onClick={() => handleEntry("manual")}
+      >
+        Connect
+      </button>
+    </>
   );
 }
