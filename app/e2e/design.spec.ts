@@ -11151,14 +11151,20 @@ test.describe("the tab bar's fill below the fold", () => {
         background: after.backgroundColor,
         barBackground: getComputedStyle(el).backgroundColor,
         barHeight: el.getBoundingClientRect().height,
+        barBorderTop: parseFloat(getComputedStyle(el).borderTopWidth),
       };
     });
     // A fill that is not there at all reports `content: "none"`.
     expect(fill.content).not.toBe("none");
     expect(fill.position).toBe("absolute");
-    // `top: 100%` resolves against the bar's own height, so the fill starts
-    // exactly at its bottom edge with no seam.
-    expect(parseFloat(fill.top)).toBeCloseTo(fill.barHeight, 0);
+    // `top: 100%` on an absolutely-positioned child resolves against the
+    // containing block's PADDING box, so the expected offset is the bar's
+    // border-box height less its own 1px top rule — the fill starts exactly
+    // at the bar's bottom edge, with no seam and no overlap.
+    expect(parseFloat(fill.top)).toBeCloseTo(
+      fill.barHeight - fill.barBorderTop,
+      1,
+    );
     // Deeper than the ~66px accessory bar measured on device, by an
     // INDEPENDENT literal — not the CSS's own 140 (RF21's first smell).
     expect(parseFloat(fill.height)).toBeGreaterThan(100);
@@ -11166,27 +11172,28 @@ test.describe("the tab bar's fill below the fold", () => {
     expect(fill.background).toBe(fill.barBackground);
   });
 
-  test("costs the document no height, in both orientations", async ({
+  test("adds nothing to the bar's own height, in both orientations", async ({
     page,
   }) => {
-    // `position: absolute` inside a `position: fixed` parent is out of
-    // flow. If it ever stopped being, every screen would grow a 140px
-    // scroll tail — the exact regression this asserts against.
+    // The fill is out of flow, so the bar is exactly as tall as its tabs.
+    // An earlier version of this test measured the DOCUMENT's scroll height
+    // instead and could not go red at all: the fill lives inside a
+    // `position: fixed` parent, which never contributes document height
+    // however the fill itself is positioned (RF21 — the mutation that was
+    // supposed to bite, `position: static`, left it green). What a static
+    // fill DOES do is make the bar 140px taller, pushing the tabs off the
+    // bottom of the screen, and that is what this measures.
     for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
       await page.setViewportSize(vp);
-      const overflow = await page.evaluate(() => {
-        const doc = document.documentElement;
-        return doc.scrollHeight - doc.clientHeight;
-      });
-      const withoutFill = await page.evaluate(() => {
-        const el = document.querySelector(".tabbar") as HTMLElement;
-        el.style.display = "none";
-        const doc = document.documentElement;
-        const value = doc.scrollHeight - doc.clientHeight;
-        el.style.display = "";
-        return value;
-      });
-      expect(overflow).toBe(withoutFill);
+      const bar = await stableBoundingBox(page.locator(".tabbar"));
+      if (bar == null) throw new Error("the tab bar did not render");
+      // INDEPENDENT literals: the bar is one 44px tap row plus padding, and
+      // the fill is 140px deep, so anything at or over 100 means the fill
+      // joined the flow.
+      expect(bar.height).toBeGreaterThanOrEqual(44);
+      expect(bar.height).toBeLessThan(100);
+      // And its bottom edge is still the viewport's, not pushed past it.
+      expect(bar.y + bar.height).toBeLessThanOrEqual(vp.height + 1);
     }
   });
 });
