@@ -6782,6 +6782,13 @@ async function captureWorkoutDetailNfc(
       capability: "supported",
       outcome: { kind: "cancelled" },
     };
+    // #319 disables Connect when the host has no Web Bluetooth; the NFC
+    // capture depicts an NFC-capable PHONE, where Bluetooth exists, so the
+    // browser capability is made explicit (the same stub `helpers.ts` uses).
+    Object.defineProperty(navigator, "bluetooth", {
+      value: {},
+      configurable: true,
+    });
   });
   await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
   await setBaselines(page);
