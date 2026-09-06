@@ -34,7 +34,7 @@ Checked on 2026-09-06 after fetching tags: `git log v0.39.0..origin/main --oneli
 
 The merged source is authoritative for #317: `app/src/index.css` has `.tabbar::after`; the old PR body describes a withdrawn keyboard-hiding approach. Do not repeat that description in the release notes.
 
-The only open PR at this check is #316, the NFC design. It is outside this release. Concept2 cohort activation is also outside this release; existing dark functionality is not announced as newly available. The latest git tag is verified; App Store Connect's last processed build still needs the preflight check below.
+The only open PR at this check is #316, the NFC design. It is outside this release. Concept2 cohort activation is also outside this release; existing dark functionality is not announced as newly available. The latest git tag is verified. The release uses the existing Xcode CLI account; no browser sign-in is required.
 
 Main's [post-merge CI and deployment](https://github.com/JamesAwesome/Ergomatic/actions/runs/34043313335) passed for `1cda41e7`: 522 browser tests passed. Production `/api/health` returned `ok: true`, `db: true`, version `v0.39.0-4-g1cda41e7`. Refresh these receipts after the notes PR merges.
 
@@ -71,7 +71,7 @@ Main's [post-merge CI and deployment](https://github.com/JamesAwesome/Ergomatic/
 
 **Files:** no hand-authored version-file changes. **Consumes:** the approved notes PR and green checks. **Produces:** an annotated v0.39.1 tag containing all release notes, followed by a TestFlight upload receipt.
 
-- [ ] In App Store Connect, confirm the most recent processed Ergomatic version/build and internal tester group. Resolve any discrepancy with the git release baseline before cutting a tag.
+- [x] Verify the CLI release path and its existing authentication. `docs/RELEASING.md` and `app/scripts/ios-release.sh` use `xcodebuild -allowProvisioningUpdates` with the Apple ID already signed into Xcode. Xcode 26.6 is installed. No separate App Store Connect sign-in or API key is required for upload.
 - [ ] Refresh the merge census one last time. Confirm the notes PR's current head has all required checks green, then squash-merge that approved head. Wait for main's own CI including deployment, and cross-check `curl --fail --silent --show-error https://ergomatic.waffle.haus/api/health` against the deployed commit.
 - [ ] Update the main checkout with `git pull --ff-only`. Verify the notes are in main, the release branch has no unique uncommitted work, and main's existing local files are preserved. From the repository root, down this worktree's stack with `POSTGRES_PASSWORD=devpass TEST_AUTH_SECRET=e2e-secret ERGO_STACK=ergomatic-57467 docker compose -p ergomatic-57467 -f compose.yml -f compose.e2e.yml down -v`, then remove `.claude/worktrees/testflight-ui-release` and its merged branch. This exact project name was derived with `REPO_ROOT="$PWD"; source app/scripts/stack-env.sh` from the release worktree; derive it again if execution uses a different worktree.
 - [ ] Confirm `git tag --list v0.39.1` is empty and the current HEAD is the intended release commit. With the release approval in hand, run from the repository root:
@@ -88,7 +88,7 @@ bash scripts/version.sh
 
 **Consumes:** the uploaded version/build. **Produces:** confirmation that internal testers can install the intended build and the named UI fixes work there.
 
-- [ ] Confirm that exact version/build appears in App Store Connect → TestFlight, completes processing and is available to the intended internal testers. An upload-success message alone does not establish availability.
+- [ ] Use the CLI upload receipt and any processing status it supplies to verify delivery of the exact version/build. If separate processing or internal tester availability cannot be queried with the existing CLI authentication, report that limit explicitly; do not require a browser login or claim availability from upload success alone.
 - [ ] Open News and Releases in the installed build; v0.39.1 is first and all four notes are readable.
 - [ ] In portrait and landscape, open You → BASELINES, edit a baseline, return to You and confirm the displayed value agrees. Check a Set baselines link and the re-test BACK path return to the moved editor. Use a test account for edits/reset checks.
 - [ ] Open Library search with the software keyboard visible, scroll, and confirm the gap below the tabs is filled. Use a tab with the keyboard open, then close it. Repeat in landscape; pinch zoom with no keyboard must not hide the navigation. The #317 native harness record supplies the earlier evidence; desktop browser gates alone do not establish this appearance.
@@ -103,4 +103,4 @@ Execution receipts before mutation probes: lint, typecheck, formatting, 7,230 un
 
 Mutation receipts on committed notes: removing v0.39.1 failed with expected 41 / received 40; placing it below v0.39.0 failed with expected v0.39.1 / received v0.39.0. Each run rebuilt the compose web image and its distinct probe marker was found in the served `/usr/share/nginx/html/assets/` bundle. The source was precisely restored and matches its committed version.
 
-Final local browser gate after source restoration: 522 passed. Neither mutation marker remains in the served bundle. Existing native keyboard evidence remains the hardware-specific receipt; no physical iPhone is available to this host for the post-install smoke check, and App Store Connect sign-in has been requested for delivery verification.
+Final local browser gate after source restoration: 522 passed. Neither mutation marker remains in the served bundle. Existing native keyboard evidence remains the hardware-specific receipt; `xcrun devicectl list devices` reports the paired iPhone unavailable for the post-install smoke check. James directed use of the existing CLI release path; the unnecessary browser sign-in request is withdrawn. `xcrun altool --help` offers build-status queries but requires separate credentials, whereas the repository's upload script uses the existing Xcode account.
