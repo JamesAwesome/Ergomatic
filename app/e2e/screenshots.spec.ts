@@ -6780,12 +6780,16 @@ for (const viewport of [
       page.getByRole("button", { name: "Connect", exact: true }),
     ).toBeDisabled();
     await expect(page.getByText("NO BLUETOOTH ON THIS DEVICE")).toBeVisible();
+    if (orientation === "landscape") {
+      await page
+        .getByRole("button", { name: "Connect", exact: true })
+        .evaluate((button) => button.scrollIntoView({ block: "center" }));
+    }
     await page.screenshot({
       path: path.join(
         SCREENSHOTS_DIR,
         `workout-detail-unsupported-${orientation}.png`,
       ),
-      fullPage: true,
     });
     await page.goto("/justrow");
     await expect(
@@ -6796,7 +6800,6 @@ for (const viewport of [
         SCREENSHOTS_DIR,
         `just-row-unsupported-${orientation}.png`,
       ),
-      fullPage: true,
     });
   });
 }
