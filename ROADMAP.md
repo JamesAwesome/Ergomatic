@@ -521,6 +521,44 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 `effort: 3`, and a workout it creates carries a derived difficulty)
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
+## Phase KB — The keyboard shrinks the WebView
+
+**Status:** OPENED 2026-09-06 by James's device report on v0.39.1 ("still
+failed"). Spec `docs/superpowers/specs/2026-09-06-keyboard-webview-resize-design.md`;
+research `docs/superpowers/research/2026-09-06-ios-keyboard-fixed-viewport.md`.
+Not TRIAD; not fast path (native dependency, device interaction). **S.**
+
+**Goal:** with the software keyboard up, nothing shows between the tab bar
+and the keyboard — on any screen with a field, at any scroll position.
+
+**The mechanism, measured.** PR #317's `.tabbar::after` fill shipped in
+v0.39.1 and paints zero pixels on the phone: iOS WebKit keeps the
+fixed-position viewport unshrunk under the keyboard (the bar sits behind
+it until a scroll), then re-anchors fixed elements to the visual viewport
+and clips them to it. Three fill mechanisms on the probe page stopped at
+one line (`barBottom 356 = visualViewport.height 356`, James's iPhone,
+2026-09-06). No CSS on the bar can reach the strip. The fix is
+`@capacitor/keyboard` with `resize: "native"` — the WebView itself
+shrinks to the keyboard's top — plus `autoBackdropColor: "dom"` so the
+tray sits over `--page`.
+
+**One PR:** the dependency and config; `.tabbar::after` and its two e2e
+tests deleted; a config test that can go red; DEVIATIONS row 66, the
+keyboard-harness doc and the `index.css` comment reconciled (all three
+carry the falsified "already flush with the visual viewport" premise); the
+probe page and four device captures committed under
+`docs/testing/2026-09-06-keyboard-probe/`.
+
+**Gates:** antagonist anchor pass on the spec via `/harden`; PM at open
+SKIPPED (one bug, James-opened); **Gate 0 is the dev build on James's
+phone** — Library, Builder, Baselines, session door, both orientations,
+beside v0.39.1, with `innerHeight`, the bar's `rect.bottom` and the
+safe-area pad stated as numbers (spec §4). PM close = the release call.
+
+**Exit:** Gate 0 approved; e2e green with no web capture moved; the
+withdrawn phrasings grepped out of `app/src`, `docs/design`,
+`docs/testing`; v0.39.2 recommended with the note in spec §6.
+
 ## Wave A — The front door
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
