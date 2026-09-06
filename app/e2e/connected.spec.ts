@@ -2294,11 +2294,18 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
     await importBulk(page, BULK_TEXT(title));
     await page.locator(".workout-row").filter({ hasText: title }).click();
     await page.getByRole("button", { name: "Scan NFC" }).click();
+    // Two lines with a break between them (follow-on Gate 0, James
+    // 2026-09-06); the name is the fake's advertised name.
     await expect(
       page.locator(".connected-serif-line", {
-        hasText: "Open Connect Device on this PM5, then try again.",
+        hasText: "Couldn't reach PM5 432331249 Row.",
       }),
     ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.locator(".connected-body-line", {
+        hasText: "Check nothing else is connected to it, then try again.",
+      }),
+    ).toBeVisible();
     await expect(
       page.getByText("End whatever is showing on the monitor"),
     ).toHaveCount(0);

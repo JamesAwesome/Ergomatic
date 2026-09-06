@@ -569,7 +569,20 @@ export default function ConnectedInterstitial({
           </p>
           {error !== null && (
             <>
-              <p className="connected-serif-line">{failedSerifLine(error)}</p>
+              {/* A detail carrying a line break (the not-advertising card,
+                  follow-on Gate 0) reads as serif line + body line; every
+                  other detail is one line and renders exactly as before. */}
+              <p className="connected-serif-line">
+                {failedSerifLine(error).split("\n")[0]}
+              </p>
+              {failedSerifLine(error)
+                .split("\n")
+                .slice(1)
+                .map((line) => (
+                  <p key={line} className="connected-body-line">
+                    {line}
+                  </p>
+                ))}
               {!NOT_A_MACHINE_REFUSAL[error.reason] && (
                 <p className="connected-body-line">
                   End whatever is showing on the monitor, then try again.

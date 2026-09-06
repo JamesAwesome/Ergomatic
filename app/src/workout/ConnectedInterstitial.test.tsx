@@ -1868,12 +1868,40 @@ describe("targeted failures (Phase NF)", () => {
     return { ...view, session: current, onExit, onRowInstead, onEnded };
   }
 
+  it("target-not-advertising: the first line is the serif line, the second the body line, the DETAIL panel keeps both", () => {
+    renderTargeted({
+      phase: "failed",
+      error: connectedError({
+        reason: "target-not-advertising",
+        detail:
+          "Couldn't reach PM5 999.\nCheck nothing else is connected to it, then try again.",
+      }),
+    });
+    expect(screen.getByText("Couldn't reach PM5 999.")).toHaveClass(
+      "connected-serif-line",
+    );
+    expect(
+      screen.getByText(
+        "Check nothing else is connected to it, then try again.",
+      ),
+    ).toHaveClass("connected-body-line");
+    expect(
+      screen.queryByText(
+        "End whatever is showing on the monitor, then try again.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.classList.contains("connected-detail-line") === true &&
+          el.textContent ===
+            "Couldn't reach PM5 999.\nCheck nothing else is connected to it, then try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
   it.each([
-    [
-      "target-not-advertising",
-      "Open Connect Device on this PM5, then try again.",
-      true,
-    ],
     [
       "target-already-connected",
       "End this PM5's current connection, then try again.",
@@ -1920,7 +1948,8 @@ describe("targeted failures (Phase NF)", () => {
       phase: "failed",
       error: connectedError({
         reason: "target-not-advertising",
-        detail: "Open Connect Device on this PM5, then try again.",
+        detail:
+          "Couldn't reach PM5 999.\nCheck nothing else is connected to it, then try again.",
       }),
     });
     expect(s.connect).toHaveBeenCalledTimes(1);

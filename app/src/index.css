@@ -6070,6 +6070,7 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 .connected-detail-line {
+  white-space: pre-line; /* a two-line detail (follow-on Gate 0) keeps its break */
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-2);

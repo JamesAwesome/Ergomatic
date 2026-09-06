@@ -1671,9 +1671,14 @@ function mapRadioFailure(err: unknown): ConnectedError {
 const TARGETED_FAILURE_COPY: Readonly<
   Record<string, { reason: ConnectedError["reason"]; detail: string }>
 > = {
+  // The detail for this one is BUILT from the request's exact name in
+  // `mapTargetedFailure` (follow-on Gate 0, James 2026-09-06: two sentences,
+  // a line break between them; the PM5 advertises whenever it is awake and
+  // not already connected, on any screen, so the old "Open Connect Device"
+  // instruction asked for something the rower does not need to do).
   TargetMonitorNotAdvertisingError: {
     reason: "target-not-advertising",
-    detail: "Open Connect Device on this PM5, then try again.",
+    detail: "",
   },
   TargetAlreadyConnectedError: {
     reason: "target-already-connected",
@@ -1700,9 +1705,22 @@ const TARGETED_FAILURE_COPY: Readonly<
   },
 };
 
-function mapTargetedFailure(err: unknown): ConnectedError {
+/** The not-advertising card's two lines, separated by `\n` — the failure
+ *  screen renders the first as its serif line and the rest as a body line. */
+export function notAdvertisingDetail(exactName: string): string {
+  return `Couldn't reach ${exactName}.\nCheck nothing else is connected to it, then try again.`;
+}
+
+function mapTargetedFailure(err: unknown, exactName: string): ConnectedError {
   const name = err instanceof Error ? err.name : "";
   const raw = err instanceof Error ? err.message : String(err);
+  if (name === "TargetMonitorNotAdvertisingError") {
+    return {
+      reason: "target-not-advertising",
+      detail: notAdvertisingDetail(exactName),
+      raw,
+    };
+  }
   const hit = TARGETED_FAILURE_COPY[name];
   if (hit !== undefined) return { ...hit, raw };
   return mapRadioFailure(err);
@@ -4979,7 +4997,7 @@ export function useMonitorSession(
               return;
             }
             connectingRef.current = false;
-            fail(mapTargetedFailure(err));
+            fail(mapTargetedFailure(err, discovery.exactName));
             bestEffort(transport.disconnect());
             return;
           } finally {
