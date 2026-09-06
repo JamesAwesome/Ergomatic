@@ -2424,7 +2424,7 @@ trigger is the whole entry.
   terminal publishes and the failure screen's export window carries it); a
   `cause` beside a non-`invalidated` reason failed OPEN to silence (now
   cause-first); Gate 0's fold claim was filed under a one-row capture (now
-  a 4 × 2000 m personal workout); a comment cited a dist-grep needle that
+  the Gate 0 workout itself, and the claim says what the capture shows); a comment cited a dist-grep needle that
   never existed; and seven mutation rows read "not run" behind an "all
   bite" header (re-run, see MUTATIONS.md). PM readiness on runsheet v1:
   NOT READY (ten legs → five, three blocks, ≤ 15 min, ≤ 6 reader starts;
