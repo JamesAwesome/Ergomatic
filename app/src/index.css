@@ -9993,14 +9993,16 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* Phase BL PR B, reshaped by James's tester feedback (2026-08-22) — the
-   You-screen re-test shortcut (RetestShortcut.tsx), directly under the
-   baselines card: two compact L3 links (48px via .button-l3, over the
+   re-test shortcut (RetestShortcut.tsx), directly under the baselines card
+   on `/you/baselines` (on You itself until Gate 0, 2026-09-05): two compact L3 links (48px via .button-l3, over the
    44px floor) straight to each designated test's detail screen. No
    caption ("the buttons speak for themselves") and no staged-confirm
    wrapper any more — the links start nothing, so the .baseline-confirm
    reuse and the full-width staged item died with the in-place start. */
-/* Phase BL PR C: Reset baseline setup's slot under the BASELINES section
-   (you/ResetBaselineSetup.tsx). The staged confirm inside reuses the
+/* Phase BL PR C: Reset baseline setup's slot at the foot of the baselines
+   screen (you/ResetBaselineSetup.tsx). It sat under a `.section-heading`
+   reading BASELINES on You until Gate 0 (2026-09-05); the screen it moved
+   to carries a `.screen-title` instead. The staged confirm inside reuses the
    editor's own .baseline-confirm / .baseline-actions vocabulary. */
 .reset-baselines {
   margin-top: 12px;
@@ -10032,19 +10034,24 @@ section:not(.news-pinned) .news-row:last-of-type {
    All four hit targets (.diag-row, .diag-card, .diag-copy) are >=44px. */
 
 /* M-3 (final whole-branch review, matching the gate artifact's `.e-body`
-   flex-column + `margin-top:auto` wrapper): the DIAGNOSTICS row is pinned
-   to the bottom of the You screen, not left sitting directly under Reset
-   baseline setup. Scoped to `.you-screen` alone (an addition alongside
+   flex-column + `margin-top:auto` wrapper): the doors group is pinned to
+   the bottom of the You screen, not left sitting directly under the
+   content above it. Scoped to `.you-screen` alone (an addition alongside
    `.screen` on You.tsx's `<main>`, never a change to the shared `.screen`
    rule itself) — `.screen` is the generic screen frame every other route
    also uses, and giving it a flex column unconditionally would restyle
    every one of them. `min-height` mirrors `.app-shell`'s own tab-bar
    reservation (index.css:445) so the row lands just above the tab bar, not
    below its fold: full viewport minus the same `var(--tap)` +
-   `env(safe-area-inset-bottom)` the tab bar itself occupies. When BASELINES
-   content is tall enough to exceed that height on its own, the row simply
-   follows it in flow (no `margin-top: auto` room left to absorb) and the
-   page scrolls, same as before this task. */
+   `env(safe-area-inset-bottom)` the tab bar itself occupies. If content
+   above the group ever exceeds that height, the group simply follows it in
+   flow (no `margin-top: auto` room left to absorb) and the page scrolls.
+   That overflow case was BASELINES content when this rule was written and
+   is unreachable today — Gate 0 (2026-09-05) moved the editor to
+   `/you/baselines` and left You holding an identity card and three rows,
+   which no phone viewport comes close to filling. The rule stays because
+   it is what puts the group at the foot at all, not because the overflow
+   still happens. */
 .you-screen {
   display: flex;
   flex-direction: column;

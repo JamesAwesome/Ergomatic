@@ -67,9 +67,9 @@ function DetailProbe() {
 async function renderShortcut() {
   const { default: RetestShortcut } = await import("./RetestShortcut");
   return render(
-    <MemoryRouter initialEntries={["/you"]}>
+    <MemoryRouter initialEntries={["/you/baselines"]}>
       <Routes>
-        <Route path="/you" element={<RetestShortcut />} />
+        <Route path="/you/baselines" element={<RetestShortcut />} />
         <Route path="/library/:id" element={<DetailProbe />} />
         {/* The OLD destination — kept routed so a regression that starts
             the timer again shows up as this marker, not a router 404. */}
@@ -108,7 +108,7 @@ describe("RetestShortcut", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("tapping ROW THE 6K lands on the detail screen carrying from=/you, and starts nothing", async () => {
+  it("tapping ROW THE 6K lands on the detail screen carrying from=/you/baselines, and starts nothing", async () => {
     mockWorkouts({
       state: "ready",
       workouts: [
@@ -120,7 +120,7 @@ describe("RetestShortcut", () => {
     await userEvent.click(screen.getByRole("link", { name: "ROW THE 6K" }));
 
     expect(
-      await screen.findByText("DETAIL id-6k-test from=/you"),
+      await screen.findByText("DETAIL id-6k-test from=/you/baselines"),
     ).toBeInTheDocument();
     // Never the timer: the tap is a navigation, not a start — no draft,
     // no run, no countdown.
@@ -140,7 +140,7 @@ describe("RetestShortcut", () => {
     await renderShortcut();
     await userEvent.click(screen.getByRole("link", { name: "RACE THE 2K" }));
     expect(
-      await screen.findByText("DETAIL id-2k-test from=/you"),
+      await screen.findByText("DETAIL id-2k-test from=/you/baselines"),
     ).toBeInTheDocument();
   });
 

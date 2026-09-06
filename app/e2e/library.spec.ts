@@ -343,7 +343,7 @@ test.describe("baseline changes propagate to a workout's detail targets", () => 
     const before = await target.innerText();
     expect(before).toMatch(/\d/);
 
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     // Retype BOTH splits (Option T typed fields): the first target's pace
     // ref could be based on either 2k or 6k, and this test asserts the
     // end-to-end wiring (a baseline change reaches the detail screen), not

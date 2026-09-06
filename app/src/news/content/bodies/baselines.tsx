@@ -60,9 +60,9 @@ export function BaselinesBody() {
         perfect one someday. When you finish and save a test, the app offers
         your measured average split as the baseline: accept it and it's set, and
         every workout in the library starts speaking in your numbers. The editor
-        on the You tab is still there whenever you'd rather type a number in by
-        hand. Re-test whenever workouts have felt noticeably easier or harder
-        than their forecasts for a couple of weeks.
+        behind BASELINES on the You tab is still there whenever you'd rather
+        type a number in by hand. Re-test whenever workouts have felt noticeably
+        easier or harder than their forecasts for a couple of weeks.
       </p>
     </>
   );
