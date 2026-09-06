@@ -237,9 +237,11 @@ below is on the branch:
   restore).
 - Tests, each red before its module existed: `adapters/keyboard.test.ts`
   (restore: native calls once with `true`, web never; subscribe: native
-  reports show/hide in order and unsubscribes, web never fires),
+  reports show/hide in order and unsubscribes, an unsubscribe that beats
+  the plugin import opens nothing, web never fires),
   `shell/keyboardOpen.test.ts` (starts closed, follows the adapter, one
-  shared subscription, unsubscribes with the last consumer),
+  shared subscription, unsubscribes with the last consumer, forgets an open
+  keyboard once nobody is listening),
   `shell/AppRoutes.test.tsx` (bar absent on `/library` while open, back
   when closed), `capacitorConfig.test.ts` (`resize === "none"` against an
   independent literal; no backdrop keys).
@@ -264,6 +266,11 @@ below is on the branch:
   arriving. If `keyboardWillHide` were ever missed, the bar would stay
   hidden until the next show/hide pair — visible immediately, recoverable
   by tapping any field. No detector; the failure is self-announcing.
+- **Untested, named (branch review NIT 5):** with a hardware (Bluetooth)
+  keyboard paired, iOS may post `willShow` for the shortcuts bar alone
+  (INFERENCE), which would hide the tab bar though nothing covers it. Not
+  measured; no height threshold added (an unmeasured cut-off is RF30's
+  shape). If a tester reports it, that is the next spec's first capture.
 
 ## 8. Exit
 

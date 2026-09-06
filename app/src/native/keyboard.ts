@@ -16,7 +16,9 @@ export async function nativeSetAccessoryBarVisible(
  *  notifications, posted as the keyboard STARTS to animate, so a listener
  *  reacts before a single frame of it is on screen. Returns the
  *  unsubscribe; the handles resolve asynchronously, so an unsubscribe that
- *  races registration removes them once they exist. */
+ *  races registration removes them once they exist. A rejected
+ *  `addListener` surfaces as an unhandled rejection in the WebView console;
+ *  there is nothing to recover, so it is not caught here. */
 export function nativeSubscribeKeyboard(
   onShow: () => void,
   onHide: () => void,

@@ -2,8 +2,9 @@ import { isNative } from "../platform";
 
 /** Puts the keyboard's ‹ › ✓ accessory tray back on native.
  *
- *  Phase KB installs `@capacitor/keyboard` for `resize: native` (the WebView
- *  shrinks to the keyboard's top — `capacitor.config.ts`). The plugin's own
+ *  Phase KB installs `@capacitor/keyboard` for its keyboardWillShow/WillHide
+ *  events (`resize: none` — `capacitor.config.ts`; the WebView is never
+ *  resized). The plugin's own
  *  `load()` ALSO hides the input-accessory tray, unconditionally and with no
  *  config key to say otherwise (Keyboard.m 8.0.5, `self.hideFormAccessoryBar
  *  = YES;`; antagonist anchor pass, 2026-09-06). On the numeric keypad —

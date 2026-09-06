@@ -61,6 +61,16 @@ describe("subscribeKeyboardOpen", () => {
     expect(nativeUnsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  it("on native, an unsubscribe that beats the plugin import never opens a native subscription", async () => {
+    vi.doMock("../platform", () => ({ isNative: () => true }));
+    const { subscribeKeyboardOpen } = await import("./keyboard");
+    const unsubscribe = subscribeKeyboardOpen(() => {});
+    unsubscribe();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(nativeSubscribeKeyboard).not.toHaveBeenCalled();
+    expect(nativeUnsubscribe).not.toHaveBeenCalled();
+  });
+
   it("on the web, never fires and touches no plugin", async () => {
     vi.doMock("../platform", () => ({ isNative: () => false }));
     const { subscribeKeyboardOpen } = await import("./keyboard");

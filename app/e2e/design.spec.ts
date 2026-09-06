@@ -11117,8 +11117,8 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
 // Phase KB (docs/superpowers/specs/2026-09-06-keyboard-webview-resize-design.md).
 // The fill this suite used to pin under the tab bar is gone — it painted
 // nothing on iOS (research doc 2026-09-06-ios-keyboard-fixed-viewport.md §2)
-// — and the keyboard is now handled by shrinking the native WebView, which
-// Chromium cannot show. What survives is the one fill-independent invariant
+// — and the tab bar now hides on the plugin's keyboardWillShow/WillHide
+// events, which Chromium cannot raise. What survives is the one fill-independent invariant
 // the deleted suite carried: with no keyboard, the bar's box ends exactly at
 // the viewport's bottom edge, both orientations. Two-sided on purpose: a bar
 // pushed past the edge AND a bar floating above it both fail. Mutation

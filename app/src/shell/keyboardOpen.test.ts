@@ -49,4 +49,16 @@ describe("useKeyboardOpen", () => {
     b.unmount();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
+
+  it("forgets an open keyboard once nobody is listening: the next consumer starts closed", async () => {
+    // A stale `true` would hide the main navigation until the next
+    // show/hide pair; the keyboard can move while no consumer is mounted.
+    const { useKeyboardOpen } = await import("./keyboardOpen");
+    const first = renderHook(() => useKeyboardOpen());
+    act(() => listener?.(true));
+    expect(first.result.current).toBe(true);
+    first.unmount();
+    const second = renderHook(() => useKeyboardOpen());
+    expect(second.result.current).toBe(false);
+  });
 });

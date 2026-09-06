@@ -22,11 +22,11 @@ describe("capacitor.config Keyboard plugin", () => {
     expect(config.plugins?.Keyboard?.resize).toBe("none");
   });
 
-  it("declares no backdrop colour: with the WebView never resized, the window behind it never shows", () => {
-    // Builds A–C set `autoBackdropColor` and a `backgroundColor` for the band
-    // a shrunk WebView exposes; `none` exposes nothing, so both are gone
-    // rather than left as config that does nothing (RF29's spirit).
+  it("declares no keyboard backdrop key: with the WebView never resized, the window behind it never shows", () => {
+    // Builds A–C set `autoBackdropColor` for the band a shrunk WebView
+    // exposes; `none` exposes nothing, so the key is gone rather than left
+    // as config that does nothing (RF29's spirit). `backgroundColor` (a
+    // general WebView key) is not pinned — a future use is legitimate.
     expect(config.plugins?.Keyboard?.autoBackdropColor).toBeUndefined();
-    expect(config.backgroundColor).toBeUndefined();
   });
 });
