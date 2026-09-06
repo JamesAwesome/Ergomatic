@@ -1,4 +1,4 @@
-# NF-PRODUCT-v8 — Scan NFC product walk (v8 · 2026-09-06 · hardened as a TIMED PROTOCOL, both lenses; v7 PM gate: one record clause, fixed here; awaiting the PM delta PASS)
+# NF-PRODUCT-v8 — Scan NFC product walk (v8 · 2026-09-06 · hardened as a TIMED PROTOCOL, both lenses · PM READY (delta gate) · awaiting James's go)
 
 **Status:** v8 — v5 had the PM readiness PASS (2026-09-06); James then asked
 for the walk to be hardened as a TIMED PROTOCOL ("minimal gaps between human

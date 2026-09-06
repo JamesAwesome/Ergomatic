@@ -5363,3 +5363,29 @@ fix — the fifth consecutive gate where that is true.
   the branch. The rule has now been stated at v4, v5 and v7 without sticking:
   when a round produces two commits, the Record names both or explicitly says
   which one is gated.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v8: READY — delta)
+
+Seventh gate, first delta gate. Six named items, all six verified against the
+file and the PR body; a `git diff` proved nothing else moved, which is what made
+the gate cheap enough to be worth running at all. James closed the loop here
+("No more after this round").
+
+- **Scope a delta re-gate with a diff, not with trust.** `git diff <prev>..<head>`
+  over the three files took one command and turned "re-run nothing you already
+  settled" from a request into a checked fact. A delta gate whose scope is
+  asserted rather than shown is a full gate with the evidence omitted.
+- **A fix that DELETES the unsupported number beats one that re-tags it.** I
+  asked for row 2's `~1 s` to be tagged H; v8 removed the figure and replaced the
+  trigger with the condition the header actually documents ("a tap while the
+  previous session is still ending"), keeping "count to three" as a stated
+  conservative rule. Re-tagging preserves a fabricated value behind an honest
+  label; deleting it removes the thing a later reader would cite.
+- **Fixing one contradiction surfaces its neighbours for free.** Rewriting leg
+  4's observable column to be one-way also made it agree with its own FAIL
+  column, which had disagreed about outcome (d) since v7 and which no gate — mine
+  included — had caught. When a cell is rewritten, read the row.
+- **Verify a stated count rather than accepting it.** The controller reported the
+  fold at 126/24; my own extraction says 121/23. Both pass, so it changed
+  nothing here — but the number a gate records should be the one the gate
+  measured, or the series it feeds drifts by whoever last quoted it.

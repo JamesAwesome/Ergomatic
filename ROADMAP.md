@@ -2435,9 +2435,15 @@ trigger is the whole entry.
   does not exist, a console field the emitter never writes, a recount off
   by one, a photo at a mid-leg state; third entry); v4 NOT READY (a
   plan-dependent save label, a timing discriminator with no shared clock,
-  leg 2's unstated "stops advertising" premise; fourth entry); **v5 READY
-  (PM PASS, fifth entry; four should-fixes landed the same day)**. Next:
-  James's go, one permitted install (`0.23.0/9001`), the walk. **Walk-verified countable exits** (spec): 2, 4,
+  leg 2's unstated "stops advertising" premise; fourth entry); v5 READY
+  (fifth entry). **James then asked for the walk hardened as a TIMED
+  PROTOCOL; `/harden` ran both lenses (v6 timer table + holds + block
+  re-cut + leg 4 decided by ending code; v7 operator blocks in screen
+  text); v7's gate found one record clause (200 attributes nothing, only
+  202 ⇒ iOS); v8 READY at the delta gate (seventh entry). James closed the
+  review loop: "No more after this round."** Next: James's go, one
+  permitted install (`0.23.0/9001`, build block paste-tested), the walk
+  per RUNSHEET v8. **Walk-verified countable exits** (spec): 2, 4,
   5, 6, 7 and 9 close only at the walk; the walk precedes merge. The
   branch is NOT pushed; James's word gates push, PR, walk and merge. Open
   number for James: the 1_000 ms collision window is paid on every NFC
