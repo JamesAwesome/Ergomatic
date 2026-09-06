@@ -140,11 +140,11 @@ function baseProps(
     model: monitorModel(),
     pacesOffCaption: "PACES OFF 6K 2:09.0",
     hint: "TARGET 2:09.0",
-    expectedPain: 3,
+    expectedEffort: 3,
     held: null,
     onHeld: vi.fn(),
-    pain: null,
-    onPain: vi.fn(),
+    effort: null,
+    onEffort: vi.fn(),
     thumbs: null,
     onThumbs: vi.fn(),
     notes: "",
@@ -376,45 +376,45 @@ describe("PostWorkoutSummary — reflection card (§2D)", () => {
     expect(screen.getByText("BY FEEL")).toBeInTheDocument();
   });
 
-  it("ACTUAL PAIN: selecting a level clears on a second tap, and the caption reads the three-way band", async () => {
+  it("ACTUAL EFFORT: selecting a level clears on a second tap, and the caption reads the three-way band", async () => {
     const user = userEvent.setup();
-    const onPain = vi.fn();
-    const { rerender } = renderSummary({ onPain, pain: null });
+    const onEffort = vi.fn();
+    const { rerender } = renderSummary({ onEffort, effort: null });
     expect(screen.getByText("TAP TO RATE")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Pain 1" }));
-    expect(onPain).toHaveBeenCalledWith(1);
+    await user.click(screen.getByRole("button", { name: "Effort 1" }));
+    expect(onEffort).toHaveBeenCalledWith(1);
 
     rerender(
       <MemoryRouter>
-        <PostWorkoutSummary {...baseProps({ onPain, pain: 1 })} />
+        <PostWorkoutSummary {...baseProps({ onEffort, effort: 1 })} />
       </MemoryRouter>,
     );
     expect(screen.getByText("EASIER THAN PLANNED")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Pain 1" }));
-    expect(onPain).toHaveBeenCalledWith(null);
+    await user.click(screen.getByRole("button", { name: "Effort 1" }));
+    expect(onEffort).toHaveBeenCalledWith(null);
 
     rerender(
       <MemoryRouter>
-        <PostWorkoutSummary {...baseProps({ onPain, pain: 2 })} />
+        <PostWorkoutSummary {...baseProps({ onEffort, effort: 2 })} />
       </MemoryRouter>,
     );
     expect(screen.getByText("AS PLANNED")).toBeInTheDocument();
 
     rerender(
       <MemoryRouter>
-        <PostWorkoutSummary {...baseProps({ onPain, pain: 4 })} />
+        <PostWorkoutSummary {...baseProps({ onEffort, effort: 4 })} />
       </MemoryRouter>,
     );
     expect(screen.getByText("HARDER THAN PLANNED")).toBeInTheDocument();
   });
 
-  it("renders the EXPECTED n/5 hint only when expectedPain is present", () => {
-    const { rerender } = renderSummary({ expectedPain: 3 });
+  it("renders the EXPECTED n/5 hint only when expectedEffort is present", () => {
+    const { rerender } = renderSummary({ expectedEffort: 3 });
     expect(screen.getByText("EXPECTED 3/5")).toBeInTheDocument();
     rerender(
       <MemoryRouter>
-        <PostWorkoutSummary {...baseProps({ expectedPain: null })} />
+        <PostWorkoutSummary {...baseProps({ expectedEffort: null })} />
       </MemoryRouter>,
     );
     expect(screen.queryByText(/EXPECTED/)).not.toBeInTheDocument();

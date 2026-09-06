@@ -430,7 +430,7 @@ describe("the --c-size-* connected-only scale (index.css, on .connected-surface)
 
 // The two censuses above prove no dead name inside their own scales. This one
 // generalises the same rule to EVERY token tokens.css defines, because the
-// gap between them is where `--pain-ramp-1..5` lived.
+// gap between them is where `--effort-ramp-1..5` lived.
 //
 // WHAT IT COST TO NOT HAVE THIS: the ramp outlived its only consumer by
 // weeks, and THREE separate comments — `index.css`, `ClassificationCard.tsx`

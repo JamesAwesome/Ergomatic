@@ -1,5 +1,5 @@
 import { useRef, type KeyboardEvent } from "react";
-import type { Effort, PaceBase } from "../../domain/types.js";
+import type { PaceWord, PaceBase } from "../../domain/types.js";
 
 // One radiogroup, four chips: the two split bases the domain's PaceRef
 // ever accepts, plus the two efforts (Phase 5G) — "8k" (the defect that
@@ -9,12 +9,12 @@ import type { Effort, PaceBase } from "../../domain/types.js";
 // MIN); `selectByIndex`'s wrap-around modulo and the arrow-key handler
 // below both key off `CHIPS.length`, so this list is the only place a
 // future fifth chip would need to be added.
-const CHIPS: readonly { value: PaceBase | Effort; kind: "base" | "effort" }[] =
+const CHIPS: readonly { value: PaceBase | PaceWord; kind: "base" | "word" }[] =
   [
     { value: "2k", kind: "base" },
     { value: "6k", kind: "base" },
-    { value: "max", kind: "effort" },
-    { value: "min", kind: "effort" },
+    { value: "max", kind: "word" },
+    { value: "min", kind: "word" },
   ];
 
 // Mirrors the domain's own ±60 bound (builderState.ts's `toSteps`, ultimately
@@ -46,10 +46,10 @@ export default function PaceRefInput({
   base: PaceBase;
   off: number;
   // null = split mode (a base chip is checked, the offset stepper shows).
-  // Set to an Effort when the user has tapped MAX/MIN — mirrors
+  // Set to an PaceWord when the user has tapped MAX/MIN — mirrors
   // BuilderRow.refEffort (builderState.ts) exactly, so a caller can pass a
   // row's three pace fields straight through without translating them.
-  effort: Effort | null;
+  effort: PaceWord | null;
   // `base`/`off` are always both reported back, even when `effort` is set —
   // the caller (StepEditor via Builder) is what holds them steady across a
   // chip round trip (Task 3's contract: refBase/refOff on the row are left
@@ -58,7 +58,7 @@ export default function PaceRefInput({
   onChange: (next: {
     base: PaceBase;
     off: number;
-    effort: Effort | null;
+    effort: PaceWord | null;
   }) => void;
   rowLabel: string;
   // Optional error wiring from StepRowEditor's `fieldError("ref")` — the
@@ -69,7 +69,7 @@ export default function PaceRefInput({
   errorId?: string;
 }) {
   // Roving tabindex (WAI-ARIA radiogroup pattern), same pattern the deleted
-  // PainPicker.tsx used: the group is one tab stop and arrow keys move
+  // EffortPicker.tsx used: the group is one tab stop and arrow keys move
   // focus (and selection) within it.
   const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -77,7 +77,7 @@ export default function PaceRefInput({
     onChange(
       chip.kind === "base"
         ? { base: chip.value as PaceBase, off, effort: null }
-        : { base, off, effort: chip.value as Effort },
+        : { base, off, effort: chip.value as PaceWord },
     );
   }
 

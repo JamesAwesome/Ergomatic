@@ -241,7 +241,6 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
         // Today.test.tsx's own DEFAULT_PREFS shape — the filter tokens
         // read `difficulties.length` unconditionally.
         preferences: {
-          difficulties: ["easy", "medium", "hard"],
           timeCapMinutes: 60,
         },
       }),
@@ -301,7 +300,7 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     expect(screen.getByText("6:34")).toBeInTheDocument();
     expect(screen.getByText("1,396 m")).toBeInTheDocument();
     expect(screen.getByText("2:21.0")).toBeInTheDocument();
-    expect(screen.getByText("PAIN")).toBeInTheDocument();
+    expect(screen.getByText("EFFORT")).toBeInTheDocument();
     expect(
       screen.queryByText(/DID YOU HOLD THE TARGETS/),
     ).not.toBeInTheDocument();

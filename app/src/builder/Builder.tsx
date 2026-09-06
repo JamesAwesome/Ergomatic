@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
 import { useWorkouts } from "../api/useWorkouts";
-import { effortWord, resolveSplit } from "../../domain/pace.js";
+import { paceWordLabel, resolveSplit } from "../../domain/pace.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { Baselines, PaceRef, WorkoutType } from "../../domain/types.js";
 import BackLink from "../shell/BackLink";
@@ -40,7 +40,7 @@ import Stepper from "./Stepper";
 //
 // An effort row (refEffort set) is a DELIBERATE exception to the
 // baselines-gate below: MAX/MIN's target is the word itself
-// (effortWord), which needs no resolution at all — there's no split to
+// (paceWordLabel), which needs no resolution at all — there's no split to
 // look up, so there's nothing for missing baselines to block. This is why
 // the check comes first, ahead of `baselines === null`, rather than
 // falling through to the same null a split row gets when baselines are
@@ -50,7 +50,7 @@ function splitLabelFor(
   row: BuilderRow,
   baselines: Baselines | null,
 ): string | null {
-  if (row.refEffort) return effortWord(row.refEffort);
+  if (row.refEffort) return paceWordLabel(row.refEffort);
   if (baselines === null) return null;
   const ref: PaceRef = { base: row.refBase, off: row.refOff };
   const resolved = resolveSplit(baselines, ref);
@@ -91,7 +91,7 @@ function pluralStep(n: number): string {
 }
 
 // Only a row-scoped error key (`row:<id>:<field>`) needs its owning card
-// expanded before a failed Save can focus it — `title`/`pain` are always
+// expanded before a failed Save can focus it — `title`/`effort` are always
 // visible regardless of the accordion state. Matched against the same four
 // fields `toSteps` ever keys an error under (see `RowField` above).
 const ROW_ERROR_KEY = /^row:(.+):(?:dur|ref|spm|rest)$/;
@@ -407,7 +407,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       // their `fieldRefs` entries) don't exist until StepEditor mounts them.
       // React flushes a discrete event's state update synchronously before
       // this handler returns, so by the time the microtask queue drains, the
-      // newly-expanded row is already mounted and registered. `title`/`pain`
+      // newly-expanded row is already mounted and registered. `title`/`effort`
       // are always mounted regardless of `editing`, so deferring their focus
       // here too is harmless — same microtask-focus idiom `handleClone` (see
       // `handleDuplicateExpanded`'s sibling in earlier phases) established.
@@ -431,8 +431,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       const body = JSON.stringify({
         title: form.title,
         type: form.type,
-        difficulty: form.difficulty,
-        pain: form.pain,
+        effort: form.effort,
         steps: result.steps,
       });
       const path = mode ? `/api/workouts/${mode.id}` : "/api/workouts";
@@ -544,21 +543,17 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
           className="builder-classification-wrap"
           tabIndex={-1}
           ref={(el) => {
-            fieldRefs.current.pain = el;
+            fieldRefs.current.effort = el;
           }}
         >
           <ClassificationCard
             type={form.type}
-            difficulty={form.difficulty}
-            pain={form.pain}
+            effort={form.effort}
             onTypeChange={(type) => setForm((f) => ({ ...f, type }))}
-            onDifficultyChange={(difficulty) =>
-              setForm((f) => ({ ...f, difficulty }))
-            }
-            onPainChange={(pain) => setForm((f) => ({ ...f, pain }))}
+            onEffortChange={(effort) => setForm((f) => ({ ...f, effort }))}
           />
         </div>
-        {errors.pain && <p className="field-error">{errors.pain}</p>}
+        {errors.effort && <p className="field-error">{errors.effort}</p>}
       </div>
 
       <div className="builder-steps">

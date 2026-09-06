@@ -50,7 +50,7 @@ describe("BulkImport", () => {
     await renderBulkImport();
 
     expect(document.body.textContent).toMatch(
-      /title \| TYPE \| difficulty \| pain/,
+      /title \| TYPE \| difficulty \| effort/,
     );
   });
 

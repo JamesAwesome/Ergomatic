@@ -143,10 +143,10 @@ export interface LogInput {
   // Post-workout-summary spec (2026-08-17), §3: nullable now (R-A ordered
   // this after the null-tolerant READ side shipped and tagged v0.10.1) —
   // the redesigned reflection card makes every answer optional, so a saved
-  // session with no HELD/PAIN chosen is now a real, storable shape, not a
+  // session with no HELD/EFFORT chosen is now a real, storable shape, not a
   // client-side bug.
   held: HeldResult | null;
-  pain: number | null;
+  effort: number | null;
   notes: string | null;
   steps: LogStep[];
   // Post-workout-summary spec (2026-08-17), §3: optional/nullable, same
@@ -282,7 +282,7 @@ export interface LogInput {
 export interface LogPatch {
   thumbs?: Thumbs | null;
   held?: HeldResult | null;
-  pain?: number | null;
+  effort?: number | null;
   notes?: string | null;
 }
 
@@ -340,7 +340,7 @@ const LOG_LIST_COLUMNS = {
   baselineK2: sessionLogs.baselineK2,
   baselineK6: sessionLogs.baselineK6,
   held: sessionLogs.held,
-  pain: sessionLogs.pain,
+  effort: sessionLogs.effort,
   notes: sessionLogs.notes,
   deviceName: sessionLogs.deviceName,
   // Just Row unconnected spec (2026-09-02): a small scalar, same idiom as
@@ -713,7 +713,7 @@ export function createLogsStore(db: Db) {
       const set: Record<string, unknown> = {};
       if ("thumbs" in patch) set.thumbs = patch.thumbs;
       if ("held" in patch) set.held = patch.held;
-      if ("pain" in patch) set.pain = patch.pain;
+      if ("effort" in patch) set.effort = patch.effort;
       if ("notes" in patch) set.notes = patch.notes;
 
       const rows = await db
@@ -941,7 +941,7 @@ export function createLogsStore(db: Db) {
             baselineK2: input.baselineK2,
             baselineK6: input.baselineK6,
             held: input.held,
-            pain: input.pain,
+            effort: input.effort,
             notes: input.notes,
             steps: input.steps,
             deviceName: input.deviceName ?? null,

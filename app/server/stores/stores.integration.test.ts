@@ -31,8 +31,7 @@ describe("domain stores against real Postgres", () => {
   ): NewWorkoutInput => ({
     title: "Steady state",
     type: "AT",
-    difficulty: "medium",
-    pain: 2,
+    effort: 2,
     steps: [{ k: "r", minutes: 10 }],
     source: "user",
     ...overrides,
@@ -426,7 +425,7 @@ describe("domain stores against real Postgres", () => {
         baselineK2: null,
         baselineK6: null,
         held: "held",
-        pain: 1,
+        effort: 1,
         notes: null,
         source: "manual",
         steps: [],
@@ -547,7 +546,7 @@ describe("domain stores against real Postgres", () => {
       baselineK2: 420,
       baselineK6: 1500,
       held: "held",
-      pain: 2,
+      effort: 2,
       notes: null,
       steps: [
         {
@@ -1087,7 +1086,7 @@ describe("domain stores against real Postgres", () => {
 
     it("reads are per-user", async () => {
       const s = store();
-      await s.markRead(userA, "pain-scale");
+      await s.markRead(userA, "effort-scale");
       expect(await s.list(userB)).toStrictEqual([]);
     });
   });

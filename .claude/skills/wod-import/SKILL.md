@@ -52,12 +52,13 @@ cannot verify its own state write stops and says so.
 4. Translate each keeper into ONE bulk-grammar block:
    - Original title in the app's naming voice. Never C2's own text as
      the title.
-   - Type, difficulty, and pain per the house rubric. Read, in this
-     order, before your first classification of the run:
+   - Type and effort (the 1-to-5 figure; the bulk header is
+     `title | TYPE | effort`, Phase DE PR 1) per the house rubric. Read,
+     in this order, before your first classification of the run:
      `app/src/news/content/bodies/workoutTypes.tsx` (what the types
      mean), `app/domain/generation/patterns.json` (work:rest and spm
-     bands per type x duration), and the pain-scale article
-     (`painScale.tsx`) for the 1-to-5 semantics.
+     bands per type x duration), and the effort-scale article
+     (`effortScale.tsx`) for the 1-to-5 semantics.
    - `w`/`r` lines only. Never author `wu` lines: the app dropped
      workout-owned warm-ups (the warmup setting); the import would
      drop them anyway.

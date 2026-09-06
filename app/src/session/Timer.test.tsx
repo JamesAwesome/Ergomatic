@@ -416,7 +416,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     // PHASE WU CHANGED BOTH STRINGS. Phase 0 was a warm-up, so the step
     // line read `· WARM-UP` (`phaseKindWord`'s deleted arm) and its target
     // was the warm-up's own `Easy` label. It is an authored EASY effort
-    // step now: `· WORK`, and `effortWord`'s uppercase `EASY`.
+    // step now: `· WORK`, and `paceWordLabel`'s uppercase `EASY`.
     expect(screen.getByText("STEP 1 OF 5 · WORK")).toBeInTheDocument();
     expect(screen.getByText("RUNNING")).toBeInTheDocument();
     expect(screen.getByText("4:00")).toBeInTheDocument(); // 240s remaining

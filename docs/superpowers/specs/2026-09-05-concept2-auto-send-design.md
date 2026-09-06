@@ -82,7 +82,7 @@ and a **Gate 0** for the redrawn card and the You row's new state — owed next.
   instrument sees a send that never fired** — rev 2's `trigger` diagnostic was
   withdrawn for exactly that reason (it could attribute arms only among sends
   that arrived, the case nobody reports).
-- **Migration numbering:** the next index at head is 0024; the plan checks
+- **Migration numbering (HAPPENED, rev 4):** the next index at head was 0024; Phase DE PR 2 (#310) landed `0024_pain_to_effort` first and this branch regenerated as `0025_classy_red_ghost` at the merge of main. The plan checks
   open PRs for a competing 0024 and REGENERATES if this branch merges second
   (agent-briefing rule) — the number is not pinned here.
 

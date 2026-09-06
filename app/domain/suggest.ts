@@ -1,12 +1,11 @@
-import type { Difficulty, WorkoutType } from "./types.js";
+import type { WorkoutType } from "./types.js";
 import { inRange, isUnbounded, type DurationRange } from "./duration.js";
 import { isRecent } from "./recency.js";
 
 export interface LibraryEntry {
   id: string;
   type: WorkoutType;
-  difficulty: Difficulty;
-  pain: number;
+  effort: number;
   estMinutes: number;
   lastDoneDaysAgo: number | null;
   // Round 2 (2026-08-04): mirrors the Library's own `LibraryWorkout.isGlobal`
@@ -18,7 +17,6 @@ export interface LibraryEntry {
 }
 
 export interface SuggestPrefs {
-  difficulties: Difficulty[];
   // Phase SF PR2 (spec §3): a minutes RANGE — mirrors the Library's own
   // `Filters.durationRange` (`domain/duration.ts`'s `DurationRange`,
   // `inRange`). When set, bounded (not `[0, 120]`) and known (see
@@ -42,7 +40,7 @@ export interface SuggestPrefs {
   // flag — not the placeholder value — is what actually keeps the filter
   // harmless now. It also still keeps the REASON text honest: without it,
   // the standard/fellback reasons below would claim a duration was
-  // actually checked ("difficulty/time filters") when every duration fed
+  // actually checked ("time filters") when every duration fed
   // in was a placeholder. Set true and both reasons drop any mention of
   // time instead of asserting something never verified. An empty/unset
   // `durations` takes the same no-claim branch for the REASON text, but —
@@ -50,13 +48,13 @@ export interface SuggestPrefs {
   // union already means "off" on its own, independent of what any single
   // entry's estMinutes happens to be.
   durationsUnknown?: boolean;
-  // A union, not a threshold — mirrors Library's own `Filters.painLevels`
-  // (src/library/filters.ts): when non-empty, only entries whose `pain` is
-  // IN this set survive. Empty/undefined means "off" — every pain level
+  // A union, not a threshold — mirrors Library's own `Filters.effortLevels`
+  // (src/library/filters.ts): when non-empty, only entries whose `effort` is
+  // IN this set survive. Empty/undefined means "off" — every effort level
   // passes, and (same honesty rule as the rest of this interface) the
-  // reason text below never claims a pain filter was checked when it
+  // reason text below never claims an effort filter was checked when it
   // wasn't.
-  painLevels?: number[];
+  effortLevels?: number[];
   // A mutually-exclusive pair, not a threshold — mirrors Library's own
   // `Filters.lastDone` (src/library/filters.ts): `"under21"` keeps only
   // entries `isRecent` (domain/recency.ts) calls recent, `"over21"` keeps
@@ -64,7 +62,7 @@ export interface SuggestPrefs {
   // `"over21"` — the Library's pinned rule, shared boundary constant).
   // null/undefined means "off" — every entry passes, same honesty rule as
   // every other field here (the reason text below never claims this was
-  // checked when it wasn't). Optional (unlike `difficulties`) because the
+  // checked when it wasn't). Optional because the
   // server's own `/api/today` route (server/routes/data.ts) builds
   // `SuggestPrefs` with no LAST DONE/SOURCE dimension at all — server
   // suggestions have no client-side overrides to derive one from — and this
@@ -108,7 +106,7 @@ export interface Suggestion {
   recommendationId: string | null;
   reason: string;
   poolIds: string[];
-  fellBack: boolean; // difficulty/time/pain filters matched nothing; pool is the unfiltered type list
+  fellBack: boolean; // time/effort/recency/source filters matched nothing; pool is the unfiltered type list
   /** Phase SF PR1 (spec §2.2): the least-recently-done TIE CLASS of the
    *  pool — every id sharing `poolIds[0]`'s `lastDoneDaysAgo` (null ties
    *  with null), in pool order. The client draws the day's first card
@@ -235,13 +233,16 @@ function buildReason(
     return `YOUR PICK: last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   if (fellBack) {
-    const parts = ["difficulty"];
+    const parts: string[] = [];
     if (timeChecked) parts.push("time");
-    if (prefs.painLevels?.length) parts.push("pain");
+    if (prefs.effortLevels?.length) parts.push("effort");
     // Round 2 (2026-08-04): recency/source append last, mirroring the
-    // sheet's own group order (DIFFICULTY, TIME, PAIN, LAST DONE, SOURCE) —
-    // truthy checks (not `!== undefined`) since both fields are
-    // null-when-off, same honesty rule as painLevels above.
+    // sheet's own group order (TIME, EFFORT, LAST DONE, SOURCE) — truthy
+    // checks (not `!== undefined`) since both fields are null-when-off,
+    // same honesty rule as effortLevels above. Phase DE PR 1 removed the
+    // DIFFICULTY group, which used to open this list unconditionally; the
+    // list is still never empty here, because `fellBack` needs a predicate
+    // that excluded something, and these four are the only predicates.
     if (prefs.lastDone) parts.push("recency");
     if (prefs.source) parts.push("source");
     return `Nothing fit your ${parts.join("/")} filters. Closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
@@ -292,9 +293,8 @@ export function suggest(input: SuggestInput): Suggestion {
   const typeMatched = library.filter((e) => e.type === todayCode);
   const filtered = typeMatched.filter(
     (e) =>
-      prefs.difficulties.includes(e.difficulty) &&
       passesDurationFilter(e, prefs) &&
-      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)) &&
+      (!prefs.effortLevels?.length || prefs.effortLevels.includes(e.effort)) &&
       passesLastDoneFilter(e, prefs) &&
       passesSourceFilter(e, prefs),
   );
@@ -357,9 +357,8 @@ export function suggestFreestyle(
 ): Suggestion {
   const filtered = library.filter(
     (e) =>
-      prefs.difficulties.includes(e.difficulty) &&
       passesDurationFilter(e, prefs) &&
-      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)) &&
+      (!prefs.effortLevels?.length || prefs.effortLevels.includes(e.effort)) &&
       passesLastDoneFilter(e, prefs) &&
       passesSourceFilter(e, prefs),
   );

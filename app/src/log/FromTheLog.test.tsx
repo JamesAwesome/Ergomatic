@@ -35,7 +35,7 @@ function storedRow(overrides: Partial<StoredLog> = {}): StoredLog {
     workoutType: SEA_FRET.type,
     loggedAt: "2026-08-18T18:57:00.000Z",
     held: null,
-    pain: null,
+    effort: null,
     notes: null,
     thumbs: null,
     deviceName: "PM5 432331249",
@@ -294,7 +294,7 @@ describe("FromTheLog — ready state rendering", () => {
           JSON.stringify(
             storedRow({
               held: "under",
-              pain: 3,
+              effort: 3,
               thumbs: "up",
               notes: "felt great",
             }),
@@ -304,7 +304,7 @@ describe("FromTheLog — ready state rendering", () => {
     );
     await renderFromTheLog();
     expect(
-      await screen.findByText("UNDER · FASTER · PAIN 3/5 · LIKED"),
+      await screen.findByText("UNDER · FASTER · EFFORT 3/5 · LIKED"),
     ).toBeVisible();
     expect(screen.getByText("felt great")).toBeVisible();
     expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
@@ -570,7 +570,7 @@ describe("FromTheLog — §4 N6 edit", () => {
       () =>
         new Response(
           JSON.stringify(
-            storedRow({ held: "held", pain: 2, thumbs: "down", notes: "ok" }),
+            storedRow({ held: "held", effort: 2, thumbs: "down", notes: "ok" }),
           ),
           { status: 200 },
         ),
@@ -581,7 +581,7 @@ describe("FromTheLog — §4 N6 edit", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Pain 2" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Effort 2" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -617,7 +617,7 @@ describe("FromTheLog — §4 N6 edit", () => {
     )!;
     expect(patchCall[0]).toBe("/api/logs/log-1");
     // The exact SET of keys sent — a subset assertion, not toMatchObject,
-    // so a mutation that also sends pain/thumbs/notes unchanged turns
+    // so a mutation that also sends effort/thumbs/notes unchanged turns
     // this red (self-mutation target, per this task's own brief).
     expect(parsedBody(patchCall)).toStrictEqual({ held: "held" });
   });
@@ -651,10 +651,10 @@ describe("FromTheLog — §4 N6 edit", () => {
     expect(screen.getByText("new note")).toBeVisible();
   });
 
-  it("editing pain alone sends only pain in the PATCH", async () => {
+  it("editing effort alone sends only effort in the PATCH", async () => {
     const apiMock = mockApi((_path, init) => {
       if (init?.method === "PATCH") {
-        return new Response(JSON.stringify(storedRow({ pain: 4 })), {
+        return new Response(JSON.stringify(storedRow({ effort: 4 })), {
           status: 200,
         });
       }
@@ -664,7 +664,7 @@ describe("FromTheLog — §4 N6 edit", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Add how it felt" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Pain 4" }));
+    await userEvent.click(screen.getByRole("button", { name: "Effort 4" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
@@ -673,7 +673,7 @@ describe("FromTheLog — §4 N6 edit", () => {
     const patchCall = apiMock.mock.calls.find(
       ([, init]) => (init as RequestInit | undefined)?.method === "PATCH",
     )!;
-    expect(parsedBody(patchCall)).toStrictEqual({ pain: 4 });
+    expect(parsedBody(patchCall)).toStrictEqual({ effort: 4 });
   });
 
   it("editing thumbs alone sends only thumbs in the PATCH", async () => {
@@ -887,7 +887,7 @@ describe("FromTheLog — criterion 2 (a v0.11.0, all-null-hero row)", () => {
               timeSeconds: null,
               distanceMeters: null,
               held: "held",
-              pain: 2,
+              effort: 2,
               steps: [
                 {
                   label: "Work",
@@ -912,7 +912,7 @@ describe("FromTheLog — criterion 2 (a v0.11.0, all-null-hero row)", () => {
     // this row's own point is the HERO absence, not row judging).
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     // The read-back still renders from the two answered fields.
-    expect(screen.getByText("HELD · PAIN 2/5")).toBeVisible();
+    expect(screen.getByText("HELD · EFFORT 2/5")).toBeVisible();
   });
 
   // Just Row unconnected spec (2026-09-02), §Mechanism 6 / handoff board

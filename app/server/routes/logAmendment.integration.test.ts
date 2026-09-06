@@ -104,7 +104,7 @@ describe("POST/GET /api/logs: optional targetSplit and paired actuals round-trip
         workoutTitle: "Microburst",
         workoutType: "AN",
         held: "held",
-        pain: 3,
+        effort: 3,
         notes: null,
         steps,
         source: "timer",

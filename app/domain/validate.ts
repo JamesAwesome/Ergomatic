@@ -1,5 +1,4 @@
 import type {
-  Difficulty,
   PaceRef,
   Step,
   WorkDuration,
@@ -8,7 +7,6 @@ import type {
 } from "./types.js";
 
 const TYPES: WorkoutType[] = ["AN", "O2", "AT", "TR"];
-const DIFFS: Difficulty[] = ["easy", "medium", "hard"];
 
 const isRec = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
@@ -38,11 +36,11 @@ function checkRef(v: unknown, errs: string[], i: number): v is PaceRef {
     (v.base === "2k" || v.base === "6k") &&
     typeof v.off === "number" &&
     Math.abs(v.off) <= 60;
-  const isValidEffort =
+  const isValidPaceWord =
     isRec(v) &&
     Object.keys(v).length === 1 &&
     (v.effort === "max" || v.effort === "min");
-  if (!isValidSplit && !isValidEffort) {
+  if (!isValidSplit && !isValidPaceWord) {
     errs.push(`step ${i}: invalid pace ref`);
     return false;
   }
@@ -140,9 +138,7 @@ export function validateWorkoutInput(
   )
     errors.push("title 1..80 chars");
   if (!TYPES.includes(value.type as WorkoutType)) errors.push("invalid type");
-  if (!DIFFS.includes(value.difficulty as Difficulty))
-    errors.push("invalid difficulty");
-  if (!int(value.pain, 1, 5)) errors.push("pain must be 1..5");
+  if (!int(value.effort, 1, 5)) errors.push("effort must be 1..5");
   const steps = validateSteps(value.steps);
   if (!steps.ok) errors.push(...steps.errors);
   return errors.length

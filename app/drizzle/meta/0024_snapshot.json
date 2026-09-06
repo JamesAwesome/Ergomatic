@@ -1,5 +1,5 @@
 {
-  "id": "c6a00c44-2ea4-4488-ae95-bc68af35d7ff",
+  "id": "80833454-aeb3-4403-ab2f-c0aca5e6c032",
   "prevId": "9f2990a5-7602-40d0-b433-e01a3c7bfc1c",
   "version": "7",
   "dialect": "postgresql",
@@ -231,25 +231,6 @@
         "needs_reauth_at": {
           "name": "needs_reauth_at",
           "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auto_send": {
-          "name": "auto_send",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "send_failed_at": {
-          "name": "send_failed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "send_failed_reason": {
-          "name": "send_failed_reason",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -485,8 +466,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "pain": {
-          "name": "pain",
+        "effort": {
+          "name": "effort",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -682,9 +663,9 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "session_logs_pain_check": {
-          "name": "session_logs_pain_check",
-          "value": "\"session_logs\".\"pain\" between 1 and 5"
+        "session_logs_effort_check": {
+          "name": "session_logs_effort_check",
+          "value": "\"session_logs\".\"effort\" between 1 and 5"
         }
       },
       "isRLSEnabled": false
@@ -977,8 +958,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "pain": {
-          "name": "pain",
+        "effort": {
+          "name": "effort",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -1047,9 +1028,9 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "workouts_pain_check": {
-          "name": "workouts_pain_check",
-          "value": "\"workouts\".\"pain\" between 1 and 5"
+        "workouts_effort_check": {
+          "name": "workouts_effort_check",
+          "value": "\"workouts\".\"effort\" between 1 and 5"
         }
       },
       "isRLSEnabled": false

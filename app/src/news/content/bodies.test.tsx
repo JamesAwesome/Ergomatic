@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { WorkoutTypesBody } from "./bodies/workoutTypes";
 import { BaselinesBody } from "./bodies/baselines";
 import { PickingAWorkoutBody } from "./bodies/pickingAWorkout";
-import { PainScaleBody } from "./bodies/painScale";
+import { EffortScaleBody } from "./bodies/effortScale";
 import { YourFirstRowBody } from "./bodies/yourFirstRow";
 import { NotationBody } from "./bodies/notation";
 import { LIBRARY_EXAMPLES } from "./bodies/notationExamples";
@@ -104,26 +104,26 @@ describe("article body components", () => {
     ).toBeInTheDocument();
   });
 
-  it("PickingAWorkoutBody's inline cross-link points at /news/pain-scale (item J)", () => {
+  it("PickingAWorkoutBody's inline cross-link points at /news/effort-scale (item J)", () => {
     render(
       <MemoryRouter>
         <PickingAWorkoutBody />
       </MemoryRouter>,
     );
     expect(
-      screen.getByRole("link", { name: "pain from 1 to 5" }),
-    ).toHaveAttribute("href", "/news/pain-scale");
+      screen.getByRole("link", { name: "effort from 1 to 5" }),
+    ).toHaveAttribute("href", "/news/effort-scale");
   });
 
-  it("PainScaleBody renders with distinctive text", () => {
-    render(<PainScaleBody />);
+  it("EffortScaleBody renders with distinctive text", () => {
+    render(<EffortScaleBody />);
     expect(
       screen.getByText(/You don't need a heart rate monitor to train well/),
     ).toBeInTheDocument();
   });
 
-  it("PainScaleBody draws the sharp-pain boundary before the numbered levels (item K)", () => {
-    render(<PainScaleBody />);
+  it("EffortScaleBody draws the sharp-effort boundary before the numbered levels (item K)", () => {
+    render(<EffortScaleBody />);
     expect(
       screen.getByText(/stop, and let it settle before you row again/),
     ).toBeInTheDocument();
@@ -197,7 +197,7 @@ describe("article body cross-links carry the reading chain's origin (crosslink r
     }) as Record<string, string>;
 
     // Six bodies exist today (registry order: workoutTypes, baselines,
-    // pickingAWorkout, painScale, yourFirstRow, connectTheMonitor) plus
+    // pickingAWorkout, effortScale, yourFirstRow, connectTheMonitor) plus
     // PyramidFigure — asserting the glob found files at all keeps this test
     // from silently passing on an empty match if the path ever drifts.
     const files = Object.keys(sources);

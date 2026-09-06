@@ -1,7 +1,7 @@
 import type { WorkoutType } from "../../domain/types.js";
 
 // One-word (well, one-phrase) summary per WorkoutType, mirroring
-// builderState.ts's own PAIN_WORDS — originally defined inline in
+// builderState.ts's own EFFORT_WORDS — originally defined inline in
 // builderState.ts for the classification card's TYPE group (Phase 5G,
 // James's mid-phase request), extracted here (2026-08-08 round) so Today's
 // plan line can show the same word for the currently EFFECTIVE type without

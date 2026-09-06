@@ -71,8 +71,7 @@ function workoutInput(
   return {
     title: "Steady state",
     type: "AT",
-    difficulty: "medium",
-    pain: 2,
+    effort: 2,
     steps: [{ k: "r", minutes: 10 }],
     source: "user",
     ...overrides,
@@ -87,7 +86,7 @@ function logInput(overrides: Partial<LogInput> = {}): LogInput {
     baselineK2: null,
     baselineK6: null,
     held: "held",
-    pain: 2,
+    effort: 2,
     notes: null,
     steps: [],
     // Just Row unconnected spec (2026-09-02): NOT NULL on the row, so the
@@ -237,6 +236,40 @@ export function describeStoreContracts(
     });
 
     describe("workouts", () => {
+      // Phase DE PR 1 (spec §3.2): the product has no difficulty, but the
+      // NOT NULL column stays for one tag cycle so pre-PR-1 builds (which
+      // render `difficulty.toUpperCase()`) never see NULL. Every write site
+      // derives the word from effort; the caller's own word, if any, never
+      // reaches the row. PR 3 deletes this test with the column.
+      it("writes a difficulty DERIVED from effort at create, createMany, update and updateGlobal; a caller-sent word is never stored", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const created = await stores.workouts.create(userId, {
+          ...workoutInput({ title: "Derive create", effort: 2 }),
+          // An old client still sends this; the store must not read it.
+          ...({ difficulty: "hard" } as object),
+        });
+        expect(created.difficulty).toBe("easy");
+        const [many] = await stores.workouts.createMany(userId, [
+          workoutInput({ title: "Derive many", effort: 5 }),
+        ]);
+        expect(many!.difficulty).toBe("hard");
+        const updated = await stores.workouts.update(
+          userId,
+          created.id,
+          workoutInput({ title: "Derive update", effort: 3 }),
+        );
+        expect(updated!.difficulty).toBe("medium");
+        const g = await stores.seedGlobalWorkout(
+          workoutInput({ title: "Derive global", effort: 1, sortOrder: 9001 }),
+        );
+        const gUpdated = await stores.workouts.updateGlobal(g.id, {
+          ...workoutInput({ title: "Derive global", effort: 4 }),
+          sortOrder: 9001,
+        });
+        expect(gUpdated!.difficulty).toBe("hard");
+      });
+
       it("create/list/get round-trip, decorated isGlobal: false", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
@@ -418,16 +451,14 @@ export function describeStoreContracts(
         const updated = await stores.workouts.updateGlobal(g.id, {
           ...workoutInput({
             title: "Converge Me",
-            difficulty: "hard",
-            pain: 5,
+            effort: 5,
           }),
           sortOrder: 7,
         });
         expect(updated).toMatchObject({
           id: g.id,
           title: "Converge Me",
-          difficulty: "hard",
-          pain: 5,
+          effort: 5,
           sortOrder: 7,
           isGlobal: true,
         });
@@ -721,20 +752,20 @@ export function describeStoreContracts(
         expect(await stores.logs.lastDonePerWorkout(userB)).toStrictEqual({});
       });
 
-      // Post-workout-summary spec (2026-08-17), §3: held/pain go nullable,
+      // Post-workout-summary spec (2026-08-17), §3: held/effort go nullable,
       // thumbs is a brand-new nullable column — create() must round-trip
       // null through to `list()` unchanged (not coerced to a default, not
       // dropped from the row).
-      it("create round-trips held: null, pain: null, thumbs: null", async () => {
+      it("create round-trips held: null, effort: null, thumbs: null", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
         const { id } = await stores.logs.create(
           userId,
-          logInput({ held: null, pain: null, thumbs: null }),
+          logInput({ held: null, effort: null, thumbs: null }),
         );
         const list = await stores.logs.list(userId, 10);
         const row = list.find((r) => r.id === id);
-        expect(row).toMatchObject({ held: null, pain: null, thumbs: null });
+        expect(row).toMatchObject({ held: null, effort: null, thumbs: null });
       });
 
       // thumbs is optional on LogInput (undefined ≠ explicit null on the
@@ -1509,15 +1540,15 @@ export function describeStoreContracts(
             userId,
             logInput({
               held: "held",
-              pain: 2,
+              effort: 2,
               notes: "orig",
               thumbs: "up",
             }),
           );
-          const updated = await stores.logs.update(userId, id, { pain: 4 });
+          const updated = await stores.logs.update(userId, id, { effort: 4 });
           expect(updated).toMatchObject({
             held: "held",
-            pain: 4,
+            effort: 4,
             notes: "orig",
             thumbs: "up",
           });
@@ -1537,7 +1568,7 @@ export function describeStoreContracts(
         });
 
         // Task 2 review, LOW 2 fix-round coverage gap: the subset test
-        // above only ever exercises `pain`'s (and, separately, `notes`')
+        // above only ever exercises `effort`'s (and, separately, `notes`')
         // own `"key" in patch` branch directly against the REAL store —
         // `held` and `thumbs` were only ever proven via the fake (through
         // the PATCH route's own tests), leaving those two branches
@@ -1552,14 +1583,19 @@ export function describeStoreContracts(
             const userId = await stores.makeUser();
             const { id } = await stores.logs.create(
               userId,
-              logInput({ held: "held", pain: 2, notes: "orig", thumbs: "up" }),
+              logInput({
+                held: "held",
+                effort: 2,
+                notes: "orig",
+                thumbs: "up",
+              }),
             );
             const updated = await stores.logs.update(userId, id, {
               [field]: value,
             });
             expect(updated).toMatchObject({
               held: field === "held" ? value : "held",
-              pain: 2,
+              effort: 2,
               notes: "orig",
               thumbs: field === "thumbs" ? value : "up",
             });
@@ -1570,7 +1606,7 @@ export function describeStoreContracts(
           const stores = await makeStores();
           const userId = await stores.makeUser();
           expect(
-            await stores.logs.update(userId, NON_EXISTENT_UUID, { pain: 3 }),
+            await stores.logs.update(userId, NON_EXISTENT_UUID, { effort: 3 }),
           ).toBeNull();
         });
 
@@ -2304,7 +2340,7 @@ export function describeStoreContracts(
         const stores = await makeStores();
         const userA = await stores.makeUser();
         const userB = await stores.makeUser();
-        await stores.articleReads.markRead(userA, "pain-scale");
+        await stores.articleReads.markRead(userA, "effort-scale");
         expect(await stores.articleReads.list(userB)).toEqual([]);
       });
 
@@ -2341,11 +2377,11 @@ export function describeStoreContracts(
         const stores = await makeStores();
         const userA = await stores.makeUser();
         const userB = await stores.makeUser();
-        await stores.articleReads.markRead(userA, "pain-scale");
-        await stores.articleReads.markRead(userB, "pain-scale");
-        await stores.articleReads.unmarkRead(userA, "pain-scale");
+        await stores.articleReads.markRead(userA, "effort-scale");
+        await stores.articleReads.markRead(userB, "effort-scale");
+        await stores.articleReads.unmarkRead(userA, "effort-scale");
         expect(await stores.articleReads.list(userA)).toEqual([]);
-        expect(await stores.articleReads.list(userB)).toEqual(["pain-scale"]);
+        expect(await stores.articleReads.list(userB)).toEqual(["effort-scale"]);
       });
     });
   });

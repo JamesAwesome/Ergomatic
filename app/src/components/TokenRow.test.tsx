@@ -14,7 +14,7 @@ describe("TokenRow", () => {
       <TokenRow
         tokens={[
           { key: "type", label: "AT", onClear: vi.fn() },
-          { key: "pain", label: "PAIN 3", onClear: vi.fn() },
+          { key: "effort", label: "EFFORT 3", onClear: vi.fn() },
         ]}
       />,
     );
@@ -25,7 +25,7 @@ describe("TokenRow", () => {
       screen.getByRole("button", { name: "Remove AT filter" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Remove PAIN 3 filter" }),
+      screen.getByRole("button", { name: "Remove EFFORT 3 filter" }),
     ).toBeInTheDocument();
   });
 
@@ -47,12 +47,12 @@ describe("TokenRow", () => {
     render(
       <TokenRow
         tokens={[
-          { key: "pain", label: "PAIN 3", onClear: vi.fn() },
+          { key: "effort", label: "EFFORT 3", onClear: vi.fn() },
           { key: "difficulty", label: "EASY", onClear: vi.fn() },
         ]}
       />,
     );
-    for (const label of ["PAIN 3", "EASY"]) {
+    for (const label of ["EFFORT 3", "EASY"]) {
       const pill = screen.getByText(label, {
         selector: ".filter-token-label",
       }).parentElement!;

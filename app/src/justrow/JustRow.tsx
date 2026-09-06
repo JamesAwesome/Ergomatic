@@ -34,7 +34,7 @@ import { freeRowTotals } from "./totals";
  * it was a normal workout"). The rower arrives from a two-word control on
  * Today and finds the same anatomy every workout has, with the parts a free
  * row does not have simply missing: no type badge (the badge row carries
- * the derived JR chip instead — `FreeRowChip.tsx`), no difficulty, no pain
+ * the derived JR chip instead — `FreeRowChip.tsx`), no difficulty, no effort
  * estimate, no duration, no steps. What is left is the chip, the title, one
  * line saying what this is, and Connect.
  *

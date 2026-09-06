@@ -83,7 +83,7 @@ export async function signInViaBackdoor(
  *  fails on drift the test never meant to measure. Two consecutive
  *  animation-frame-spaced reads must agree before the box is trusted;
  *  fonts.ready is awaited once up front (an 11px word swapping in late is
- *  exactly the reflow the pain/type tests exist to bound). Worsened from
+ *  exactly the reflow the effort/type tests exist to bound). Worsened from
  *  rare to most-runs by main's scroll-restore change (#84); root fix here
  *  rather than retries that would also swallow real regressions. */
 export async function stableBoundingBox(

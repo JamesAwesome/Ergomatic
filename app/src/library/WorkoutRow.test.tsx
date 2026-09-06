@@ -22,8 +22,7 @@ function fromSeed(
     id: `w-${title}`,
     title: seed.title,
     type: seed.type,
-    difficulty: seed.difficulty,
-    pain: seed.pain,
+    effort: seed.effort,
     steps: seed.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -40,8 +39,7 @@ const HOARFROST: LibraryWorkout = {
   id: "w-hoarfrost",
   title: "Hoarfrost",
   type: "O2",
-  difficulty: "easy",
-  pain: 2,
+  effort: 2,
   steps: [
     { k: "reps", count: 2 },
     {

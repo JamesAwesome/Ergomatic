@@ -109,7 +109,7 @@ describe("POST/GET /api/logs: source is required (v0.35.0 sunset), refused when 
       workoutTitle: "Steady State",
       workoutType: "AT",
       held: null,
-      pain: null,
+      effort: null,
       notes: null,
       steps: [ASSUMED_STEP],
       advancesPlan: false,

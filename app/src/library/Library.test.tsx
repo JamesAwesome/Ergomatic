@@ -28,8 +28,7 @@ const WORKOUTS: LibraryWorkout[] = [
     id: "w-at",
     title: "Anaerobic Threshold Blitz",
     type: "AT",
-    difficulty: "medium",
-    pain: 3,
+    effort: 3,
     steps: [timeWork(30)],
     isGlobal: true,
     lastDoneDaysAgo: 5,
@@ -38,8 +37,7 @@ const WORKOUTS: LibraryWorkout[] = [
     id: "w-o2",
     title: "Steady State Cruise",
     type: "O2",
-    difficulty: "easy",
-    pain: 1,
+    effort: 1,
     steps: [timeWork(20)],
     isGlobal: true,
     lastDoneDaysAgo: 40,
@@ -48,8 +46,7 @@ const WORKOUTS: LibraryWorkout[] = [
     id: "w-an",
     title: "Sprint Ladder",
     type: "AN",
-    difficulty: "hard",
-    pain: 5,
+    effort: 5,
     steps: [timeWork(60)],
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -60,8 +57,7 @@ const CUSTOM_WORKOUT: LibraryWorkout = {
   id: "w-custom",
   title: "My Interval Build",
   type: "O2",
-  difficulty: "medium",
-  pain: 2,
+  effort: 2,
   steps: [timeWork(25)],
   isGlobal: false,
   lastDoneDaysAgo: null,
@@ -81,8 +77,7 @@ function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
     id,
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
-    pain: w.pain,
+    effort: w.effort,
     steps: w.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -99,8 +94,7 @@ function realLibraryEntry(title: string, id: string): LibraryWorkout {
     id,
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
-    pain: w.pain,
+    effort: w.effort,
     steps: w.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -128,8 +122,7 @@ function realWorkoutsOfType(
       id: `w-real-${type}-${i}`,
       title: w.title,
       type: w.type,
-      difficulty: w.difficulty,
-      pain: w.pain,
+      effort: w.effort,
       steps: w.steps,
       isGlobal: true,
       lastDoneDaysAgo: null,
@@ -376,8 +369,8 @@ describe("Library", () => {
       expect(toggle).toHaveAttribute("aria-expanded", "true");
       expect(screen.getByRole("dialog", { name: "Filter" })).toBeVisible();
 
-      // PAIN 3, not TYPE — TYPE left the sheet this round; w-at is the
-      // fixture's only pain-3 workout, so this still narrows to exactly 1.
+      // EFFORT 3, not TYPE — TYPE left the sheet this round; w-at is the
+      // fixture's only effort-3 workout, so this still narrows to exactly 1.
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
           name: "3",
@@ -397,7 +390,7 @@ describe("Library", () => {
       await renderLibrary();
 
       await openSheet();
-      // PAIN 3, not TYPE — TYPE left the sheet this round.
+      // EFFORT 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
           name: "3",
@@ -423,7 +416,7 @@ describe("Library", () => {
       await renderLibrary();
 
       await openSheet();
-      // PAIN 3, not TYPE — TYPE left the sheet this round.
+      // EFFORT 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
           name: "3",
@@ -459,7 +452,7 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
-      // PAIN 3, not TYPE — TYPE left the sheet this round.
+      // EFFORT 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
         within(dialog()).getByRole("button", { name: "3" }),
       );
@@ -478,7 +471,7 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
-      // PAIN 3, not TYPE — TYPE left the sheet this round.
+      // EFFORT 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
         within(dialog()).getByRole("button", { name: "3" }),
       );
@@ -513,7 +506,7 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
-      // PAIN 5 is w-an's own level, not w-o2's — combined with the
+      // EFFORT 5 is w-an's own level, not w-o2's — combined with the
       // already-active TYPE=O2 this is a genuine zero-match draft, proving
       // the two groups actually compose before CLEAR is pressed.
       await userEvent.click(
@@ -527,7 +520,7 @@ describe("Library", () => {
         within(dialog()).getByRole("button", { name: "CLEAR" }),
       );
 
-      // The sheet's own PAIN group is reset...
+      // The sheet's own EFFORT group is reset...
       expect(
         within(dialog()).getByRole("button", { name: "5" }),
       ).toHaveAttribute("aria-pressed", "false");
@@ -553,7 +546,7 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
-      // PAIN 1 (only w-o2) and 60′+ (only w-an, its 60-minute step buckets
+      // EFFORT 1 (only w-o2) and 60′+ (only w-an, its 60-minute step buckets
       // as 60+) share no workout — TYPE, which used to drive this test via
       // AT + <30′, left the sheet this round.
       await userEvent.click(
@@ -569,14 +562,14 @@ describe("Library", () => {
 
     // library-filter-unification round, Task 2: DIFFICULTY joins the sheet
     // in TYPE's old slot.
-    it("narrows via DIFFICULTY in the sheet", async () => {
+    it("narrows via EFFORT in the sheet", async () => {
       mockReady();
       await renderLibrary();
 
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "HARD",
+          name: "5",
         }),
       );
       await applySheet();
@@ -609,8 +602,8 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
-      // 30–45′ + PAIN 3 both match w-at (fixture: a 30-minute step buckets
-      // as 30-45, pain 3) — two groups active together, still exactly one
+      // 30–45′ + EFFORT 3 both match w-at (fixture: a 30-minute step buckets
+      // as 30-45, effort 3) — two groups active together, still exactly one
       // result. TYPE, which used to be the first of the pair, left the
       // sheet this round.
       setTime(30, 45);
@@ -620,12 +613,12 @@ describe("Library", () => {
       await applySheet();
 
       expect(tokenLabel("30–45′")).toBeInTheDocument();
-      expect(screen.getByText("PAIN 3")).toBeInTheDocument();
+      expect(screen.getByText("EFFORT 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
 
       await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
 
-      expect(screen.queryByText("PAIN 3")).not.toBeInTheDocument();
+      expect(screen.queryByText("EFFORT 3")).not.toBeInTheDocument();
       expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual([
         "/library/w-at",
@@ -638,8 +631,8 @@ describe("Library", () => {
       mockReady();
       await renderLibrary();
 
-      // Applied in two sheet visits (30–45′ alone, then +PAIN 3) — w-at is
-      // the fixture's only 30-45-bucket *and* only pain-3 workout, so
+      // Applied in two sheet visits (30–45′ alone, then +EFFORT 3) — w-at is
+      // the fixture's only 30-45-bucket *and* only effort-3 workout, so
       // selecting both in one draft would still resolve to exactly it, but
       // going through two visits proves the SECOND apply doesn't clobber
       // the first group, only adds to it. TYPE, which used to be the
@@ -657,7 +650,7 @@ describe("Library", () => {
       await applySheet();
 
       expect(tokenLabel("30–45′")).toBeInTheDocument();
-      expect(screen.getByText("PAIN 3")).toBeInTheDocument();
+      expect(screen.getByText("EFFORT 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
 
       await userEvent.click(
@@ -667,7 +660,7 @@ describe("Library", () => {
       expect(
         screen.queryByText("30–45′", { selector: ".filter-token-label" }),
       ).not.toBeInTheDocument();
-      expect(screen.getByText("PAIN 3")).toBeInTheDocument();
+      expect(screen.getByText("EFFORT 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual(["/library/w-at"]);
     });
@@ -815,7 +808,7 @@ describe("Library", () => {
         "aria-pressed",
         "true",
       );
-      expect(screen.getByText("PAIN 1")).toBeInTheDocument();
+      expect(screen.getByText("EFFORT 1")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
 
       await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
@@ -831,7 +824,7 @@ describe("Library", () => {
       expect(
         screen.queryByText("O2", { selector: ".filter-token-label" }),
       ).not.toBeInTheDocument();
-      expect(screen.queryByText("PAIN 1")).not.toBeInTheDocument();
+      expect(screen.queryByText("EFFORT 1")).not.toBeInTheDocument();
       expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual([
         "/library/w-at",
@@ -935,8 +928,8 @@ describe("Library", () => {
       );
       await applySheet();
 
-      // The pain filter tokenizes...
-      expect(tokenLabel("PAIN 1")).toBeInTheDocument();
+      // The effort filter tokenizes...
+      expect(tokenLabel("EFFORT 1")).toBeInTheDocument();
       // ...the type does not, in either the label or a removal button.
       expect(
         screen.queryByText("O2", { selector: ".filter-token-label" }),
@@ -981,10 +974,9 @@ describe("Library", () => {
       "ergomatic.libraryFilters",
       JSON.stringify({
         types: ["AT"],
-        difficulties: [],
         // w-at prints 30′, and the range is inclusive — 25 keeps it out.
         durationRange: { min: 0, max: 25 },
-        painLevels: [],
+        effortLevels: [],
         lastDone: null,
         source: null,
       }),
@@ -1123,9 +1115,8 @@ describe("Library", () => {
         "ergomatic.libraryFilters",
         JSON.stringify({
           types: [],
-          difficulties: [],
           durationRange: { min: 0, max: 120 },
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: "custom",
         }),
@@ -1177,9 +1168,8 @@ describe("Library", () => {
         "ergomatic.libraryFilters",
         JSON.stringify({
           types: [],
-          difficulties: [],
           durationRange: { min: 0, max: 120 },
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: "custom",
         }),
@@ -1255,7 +1245,7 @@ describe("Library", () => {
       expect(await screen.findByRole("list")).toBeInTheDocument();
       expect(scrollToSpy).toHaveBeenCalledTimes(1);
 
-      // PAIN 3, not TYPE — TYPE left the sheet this round; any filter
+      // EFFORT 3, not TYPE — TYPE left the sheet this round; any filter
       // change proves the point (a second scrollTo does NOT fire).
       await openSheet();
       await userEvent.click(
@@ -1412,9 +1402,8 @@ describe("Library", () => {
         "ergomatic.libraryFilters",
         JSON.stringify({
           types: ["AT"],
-          difficulties: [],
           durationRange: { min: 0, max: 120 },
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         }),
@@ -1446,9 +1435,8 @@ describe("Library", () => {
         "ergomatic.libraryFilters",
         JSON.stringify({
           types: ["AT"],
-          difficulties: [],
           durationRange: { min: 0, max: 120 },
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         }),
@@ -1474,7 +1462,7 @@ describe("Library", () => {
       // TYPE left the sheet this round (library-filter-unification, Task 1
       // pulled forward) — this test used to drive its first filter change
       // through the sheet's own TYPE cell, which no longer exists there.
-      // PAIN and SOURCE are still sheet groups, so they carry the same
+      // EFFORT and SOURCE are still sheet groups, so they carry the same
       // "every change persists" point without pretending type filtering
       // works via a control this branch doesn't have.
       mockReady();
@@ -1490,10 +1478,10 @@ describe("Library", () => {
       await applySheet();
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ painLevels: [3] });
+      ).toMatchObject({ effortLevels: [3] });
 
       // GLOBAL, not CUSTOM: every WORKOUTS fixture row is isGlobal:true, so
-      // adding SOURCE=global on top of the PAIN 3 filter still matches
+      // adding SOURCE=global on top of the EFFORT 3 filter still matches
       // w-at (proving the change persisted alongside the first, rather
       // than replacing it) instead of narrowing to zero and disabling the
       // sheet's own primary.
@@ -1506,14 +1494,14 @@ describe("Library", () => {
       await applySheet();
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ painLevels: [3], source: "global" });
+      ).toMatchObject({ effortLevels: [3], source: "global" });
 
       // CLEAR ALL empties the persisted set too — a BACK after clearing
       // must not resurrect the cleared filters.
       await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ painLevels: [], source: null });
+      ).toMatchObject({ effortLevels: [], source: null });
     });
 
     it("ignores a malformed stored value and mounts unfiltered", async () => {
@@ -1525,7 +1513,7 @@ describe("Library", () => {
       expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
     });
 
-    it("ignores a v1-shaped stored value (painMax3/recency/customOnly) and mounts unfiltered", async () => {
+    it("ignores a v1-shaped stored value (effortMax3/recency/customOnly) and mounts unfiltered", async () => {
       // The pre-Task-4 shape — falls back to EMPTY_FILTERS the same as any
       // other malformed record (libraryFilters.ts's own validator never
       // reads these field names at all).
@@ -1534,7 +1522,7 @@ describe("Library", () => {
         JSON.stringify({
           type: "AT",
           durationRange: { min: 0, max: 120 },
-          painMax3: true,
+          effortMax3: true,
           recency: "recent",
           customOnly: false,
         }),

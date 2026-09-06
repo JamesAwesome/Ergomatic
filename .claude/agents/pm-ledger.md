@@ -4756,3 +4756,61 @@ the `/api/today` ruling). v0.38.0 recommended.
   largest gap between this app and a stranger using it". The justification
   (a stranger reading `PAIN 4/5` is itself a north-star failure; the rename
   only gets more expensive) existed nowhere in the file.
+
+## 2026-09-05 — Phase DE PR 1 final gate: a re-sort is a WRITE to every row it moves
+
+- **Reordering seeded content is a deploy-time UPDATE, and it drags every
+  derived field with it.** `seed.ts`'s `contentEqual` compares
+  `(type, pain, sortOrder, steps)`, so a stable re-sort flipped 38 rows out of
+  equality, sent each through `updateGlobal`, and let the new compat helper
+  rewrite their stored `difficulty` — 27 `medium`→`hard` on rows a pre-PR-1
+  build still renders and filters. The change edited no difficulty value
+  anywhere. **Before pricing a content re-order, read the converge's equality
+  tuple and list everything the UPDATE path writes that the diff did not.**
+- **A compat layer's "old builds are unaffected" claim is scoped by which ROWS
+  the deploy touches, not by which FIELDS the change edits.** §3.2's exemption
+  ("seeded rows are never rewritten") was true when written and falsified by a
+  later task in the same PR. When a PR adds a task after its spec is vetted,
+  re-read the spec's exemptions against it.
+- **The one-tag rule contains the CLIENT half only.** Server changes land at
+  merge; a phase whose PRs share a compat contract must say which effects are
+  live between the two merges, not just which build ships.
+- **A PM condition can create scope, and that is the PM's to price.** Condition
+  2 (restate the ordering invariant on the surviving axis) forced the re-sort,
+  because the data did not satisfy the invariant the deleted axis had held. When
+  imposing "restate, do not delete", ask at the open gate whether the surviving
+  axis already satisfies the relation — the answer is a `sort` one-liner.
+- **Fold: 209 words / 7 bullets / longest 41 — FAIL.** Series: #228 274 ·
+  #230 266 · #268 186 · door PR B 121 · SF PR1 246 · SF PR2 109 · **DE PR1 209.**
+  Regression source: compat mechanism explained above the fold (41-word bullet).
+  The compat story is a Record item; the fold owes only "installed builds keep
+  working".
+
+## 2026-09-05 — Phase DE PR 2 final gate: a rename's own grep cannot see camelCase
+
+- **`\bpain\b` cannot match `setPain`, and a rename PR is exactly where that
+  matters.** DE's §4.1 invariant said the word appears "nowhere an agent can
+  grep it in product code"; exit criterion 1 tested it with `\bpain\b`, which
+  returned clean against ≈55 lines carrying 9 live identifiers (`setPain`,
+  `onPain`, `expectedPain`, `onPainChange`, `togglePainLevel`, `isPainLevel`,
+  `collapsePain`, `PAIN_SCALE_TITLE`) across 14 files including `LogSession`
+  and `PostWorkoutSummary`. **When a criterion greps for a WORD in a codebase
+  that spells it in camelCase, the word boundary is the bug.** RF21 in
+  exit-criterion form, and the third DE/SF gate to catch a criterion's own
+  instrument rather than its subject.
+- **A compat exemption swallows the survivor census.** The finishing grep was
+  read as clean because every hit was "in the compat adapters" — true of the
+  hits the grep could see. Enumerate the exempt FILES by name and grep the
+  rest with no pattern narrowing.
+- **The PR-1 lesson applied cleanly and the negative is worth recording.**
+  PR 2's seed diff is rename-only (0 changed `title:` lines, `sortOrder`
+  untouched), so `contentEqual` flips no rows and this deploy writes nothing —
+  the check that caught PR 1's 38-row re-sort took two minutes and came back
+  empty.
+- **Deferring a code-hygiene gap past a MEASURED trigger is not deferral.**
+  PR 3 waits on seven clean days of `compat.pain_write`; anything parked there
+  sits half-done for a week-plus with the close gate reading green. Park work
+  behind a date, never behind a measurement.
+- **Fold: 122 words / 6 bullets / longest 20 — PASS.** Series: #228 274 ·
+  #230 266 · #268 186 · door PR B 121 · SF PR1 246 · SF PR2 109 · DE PR1 209 ·
+  **DE PR2 122.**

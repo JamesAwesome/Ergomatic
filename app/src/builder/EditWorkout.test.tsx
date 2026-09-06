@@ -21,8 +21,7 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
   id: "w1",
   title: "Ladder Sets",
   type: "AT",
-  difficulty: "medium",
-  pain: 3,
+  effort: 3,
   steps: [
     {
       k: "w",
@@ -287,8 +286,7 @@ describe("EditWorkout", () => {
       body: JSON.stringify({
         title: "Ladder Sets",
         type: "AT",
-        difficulty: "medium",
-        pain: 3,
+        effort: 3,
         steps: [
           {
             k: "w",

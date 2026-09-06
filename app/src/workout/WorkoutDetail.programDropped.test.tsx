@@ -85,8 +85,7 @@ const WORKOUT: LibraryWorkout = {
   id: "w-t5-livedrop-composition",
   title: "T5 Live Drop Composition",
   type: "O2",
-  difficulty: "easy",
-  pain: 2,
+  effort: 2,
   steps: [
     {
       k: "w",
@@ -195,7 +194,7 @@ vi.mock("../api/useBaselines", () => ({
 vi.mock("../api/usePreferences", () => ({
   usePreferences: () => ({
     state: "ready",
-    preferences: { difficulties: [], timeCapMinutes: 60, countdownSeconds: 10 },
+    preferences: { timeCapMinutes: 60, countdownSeconds: 10 },
   }),
 }));
 vi.mock("../api/usePlan", () => ({
@@ -439,7 +438,7 @@ describe("WorkoutDetail -> real live program drop -> LogSession (Wave F PR 1 Tas
     // storage agree — matching `WorkoutDetail.connectedRecovery.test.tsx`'s
     // own POST-body assertions for the same shape, on a shorter fixture.
     await userEvent.click(screen.getByRole("button", { name: "HELD" }));
-    await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Effort 2" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(apiFn).toHaveBeenCalled());
     const [, init] = apiFn.mock.calls[0]!;

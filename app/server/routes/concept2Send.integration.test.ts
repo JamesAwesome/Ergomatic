@@ -139,7 +139,7 @@ function finishedLogBody(extra: Record<string, unknown> = {}) {
     workoutTitle: "Steady State",
     workoutType: "AT",
     held: null,
-    pain: null,
+    effort: null,
     notes: null,
     steps: [{ label: "2000 m" }],
     deviceName: "PM5 432331249 Row",

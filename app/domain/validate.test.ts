@@ -169,8 +169,7 @@ describe("validateWorkoutInput", () => {
   const base = {
     title: "Ladder Day",
     type: "AT",
-    difficulty: "medium",
-    pain: 3,
+    effort: 3,
     steps: [work()],
   };
   it("accepts a valid workout", () => {
@@ -182,12 +181,12 @@ describe("validateWorkoutInput", () => {
     const errors = r.ok ? [] : r.errors;
     expect(errors).toStrictEqual(["not an object"]);
   });
-  it("rejects pain outside 1..5 and book-era difficulty labels", () => {
-    expect(validateWorkoutInput({ ...base, pain: 7 }).ok).toBe(false);
-    expect(validateWorkoutInput({ ...base, pain: 0 }).ok).toBe(false);
-    expect(
-      validateWorkoutInput({ ...base, difficulty: "introductory" }).ok,
-    ).toBe(false);
+  it("rejects pain outside 1..5", () => {
+    expect(validateWorkoutInput({ ...base, effort: 7 }).ok).toBe(false);
+    expect(validateWorkoutInput({ ...base, effort: 0 }).ok).toBe(false);
+  });
+  it("ignores a difficulty field an old client still sends (Phase DE PR 1)", () => {
+    expect(validateWorkoutInput({ ...base, difficulty: "hard" }).ok).toBe(true);
   });
   it("rejects bad title/type", () => {
     expect(validateWorkoutInput({ ...base, title: "" }).ok).toBe(false);
@@ -196,14 +195,13 @@ describe("validateWorkoutInput", () => {
   it("rejects a non-integer pain even when the value is in range", () => {
     // 2.5 falls inside 1..5, so this only fails if integer-ness is actually
     // enforced rather than just the numeric range.
-    expect(validateWorkoutInput({ ...base, pain: 2.5 }).ok).toBe(false);
+    expect(validateWorkoutInput({ ...base, effort: 2.5 }).ok).toBe(false);
   });
   it("accepts a workout with effort-ref work steps end to end", () => {
     const res = validateWorkoutInput({
       title: "T",
       type: "AN",
-      difficulty: "hard",
-      pain: 5,
+      effort: 5,
       steps: [
         {
           k: "w",
@@ -234,8 +232,7 @@ describe("whole-second durations", () => {
   const workout = (steps: unknown[]) => ({
     title: "T",
     type: "O2",
-    difficulty: "easy",
-    pain: 3,
+    effort: 3,
     steps,
   });
 

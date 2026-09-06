@@ -5,7 +5,7 @@ import { useReadingTrail } from "./useReadingTrail";
 /**
  * THE one way an article body links to another article (crosslink round —
  * James's field bug, 2026-08-09: Today → START HERE step 3 → the
- * picking-a-workout article → the in-prose "pain from 1 to 5" cross-link →
+ * picking-a-workout article → the in-prose "effort from 1 to 5" cross-link →
  * ✕ landed on NEWS, not Today). The two body cross-links
  * (`content/bodies/workoutTypes.tsx`, `pickingAWorkout.tsx`) used to render
  * a raw `react-router-dom` `Link` (added in the persona round) — no

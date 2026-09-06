@@ -420,7 +420,7 @@ async function seedLogs(page: Page, count: number): Promise<void> {
           workoutTitle: `Screenshot Session ${i + 1}`,
           workoutType: "AT",
           held: i % 2 === 0 ? "held" : "under",
-          pain: 2,
+          effort: 2,
           notes: null,
           steps: [
             {
@@ -478,14 +478,14 @@ test("signin", async ({ page }) => {
 //
 // Task 3 (2026-08-04 round): three captures from one continuous flow — the
 // same "multiple screenshots per test" idiom the "library" test below (and
-// "today-unlogged" above it in history) already uses — now that DIFFICULTY/
-// TIME/PAIN live behind a FILTER ⌄ sheet instead of always-on chip rows.
+// "today-unlogged" above it in history) already uses — now that TIME/EFFORT
+// live behind a FILTER ⌄ sheet instead of always-on chip rows.
 // `today.png` is the REST state (FILTER ⌄ beside SHUFFLE, no chip groups on
 // screen); `today-sheet.png` and `today-filtered.png` mirror
 // `library-sheet.png`/`library-filtered.png`'s own open/applied pair.
 //
-// Round 2 (2026-08-04): `today-sheet.png` now shows all FIVE groups
-// (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE), and the Revision (mid-round)
+// Round 2 (2026-08-04): `today-sheet.png` shows every group (TIME/EFFORT/
+// LAST DONE/SOURCE — DIFFICULTY left in Phase DE PR 1), and the Revision (mid-round)
 // replaced the live-counting primary ("Show N options") with the constant
 // "Apply Filter" plus a small mono count caption above it.
 test("today", async ({ page }) => {
@@ -503,22 +503,22 @@ test("today", async ({ page }) => {
   // for the suggested-workout card itself before shooting.
   await page.locator(".today-card").waitFor();
 
-  // REST: FILTER ⌄ beside SHUFFLE, no DIFFICULTY/TIME/PAIN chip groups on
+  // REST: FILTER ⌄ beside SHUFFLE, no TIME/EFFORT chip groups on
   // the screen itself.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today.png"),
   });
 
-  // SHEET: open, all five groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE),
-  // and the constant "Apply Filter" primary with its own live-count caption.
-  // Deselecting HARD is a real, visible DIFFICULTY deviation with zero risk
-  // of a zero-result pool — the 300-workout library's own O2 quota (today's
-  // sprint-plan code) has no HARD entries at all (design.spec.ts's own
-  // SHUFFLE-disabled comment).
+  // SHEET: open, all four groups (TIME/EFFORT/LAST DONE/SOURCE), and the
+  // constant "Apply Filter" primary with its own live-count caption.
+  // Selecting EFFORT 1 is a real, visible EFFORT deviation with zero risk of a
+  // zero-result pool — the pinned Sea Fret is itself a effort-1 O2 workout,
+  // and the library's O2 block opens with eight of them.
   await page.getByRole("button", { name: "FILTER ⌄" }).click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "HARD", exact: true })
+    .getByRole("group", { name: "EFFORT" })
+    .getByRole("button", { name: "1", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Apply Filter" }),
@@ -530,7 +530,7 @@ test("today", async ({ page }) => {
   // Phase SF PR2 Gate 0 (spec §3.5): the TIME range narrowed to 25–35′
   // by keyboard (the thumbs are role=slider buttons), the live count
   // moving with it; the same sheet in landscape; then applied, so the
-  // token row shows the range label beside the DIFFICULTY token.
+  // token row shows the range label beside the EFFORT token.
   const dialog = page.getByRole("dialog");
   const longest = dialog.getByRole("slider", { name: "Longest" });
   const shortest = dialog.getByRole("slider", { name: "Shortest" });
@@ -549,8 +549,8 @@ test("today", async ({ page }) => {
   });
   await page.setViewportSize({ width: 390, height: 844 });
 
-  // FILTERED: applied — the DIFFICULTY token ("EASY–MEDIUM"), the TIME
-  // token ("25–35′") and CLEAR ALL.
+  // FILTERED: applied — the EFFORT token ("EFFORT 1"), the TIME token
+  // ("25–35′") and CLEAR ALL.
   await page.getByRole("button", { name: "Apply Filter" }).click();
   await expect(
     page.locator(".filter-token", { hasText: "25–35′" }),
@@ -709,8 +709,8 @@ test("today-capped", async ({ page }) => {
 // already uses for exactly the same reason (no recency race against the
 // 300 seeded globals, no plan/type coupling). A custom import rather than
 // filtering the real global Ostro entry itself: with 300 seeded workouts,
-// no combination of TYPE/DURATION/DIFFICULTY/PAIN filters reliably narrows
-// the pool to that one title (many share type+duration+difficulty), so
+// no combination of TYPE/DURATION/EFFORT filters reliably narrows the pool
+// to that one title (many share type+duration+effort), so
 // SOURCE=CUSTOM stays the only deterministic pick in this account.
 test("today-rolled", async ({ page }) => {
   const title = "Screenshot Today Rolled Workout";
@@ -1630,7 +1630,7 @@ test("plan-linked", async ({ page }) => {
       workoutTitle: title,
       workoutType: type,
       held: "held",
-      pain: 2,
+      effort: 2,
       avgSplitSeconds: 130,
       timeSeconds: 780,
       distanceMeters: 3000,
@@ -1737,7 +1737,7 @@ test("plan-standin", async ({ page }) => {
         workoutTitle: title,
         workoutType: type,
         held: "held",
-        pain: 2,
+        effort: 2,
         avgSplitSeconds: 130,
         timeSeconds: 780,
         distanceMeters: 3000,
@@ -1811,14 +1811,14 @@ test("library", async ({ page }) => {
   // global, so without authoring one of its own first, no capture below
   // would ever show the badge at all — same reasoning as "workout-detail"'s
   // own builder-authored personal workout further down. Simplest valid
-  // form: title + pain + one row's duration — `newForm()`'s own default
-  // TYPE (O2) and DIFFICULTY (easy) are left untouched, which matters
+  // form: title + effort + one row's duration — `newForm()`'s own default
+  // TYPE (O2) is left untouched, which matters
   // below: the chip-row TYPE filter this flow adds has to actually match
   // this workout, or SOURCE=CUSTOM would narrow to zero instead of one.
   const customTitle = "Screenshot Custom Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(customTitle);
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "Save to library" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -1887,8 +1887,8 @@ test("library", async ({ page }) => {
     .click();
 
   // SHEET: open, with SOURCE=CUSTOM selected but not yet applied — the
-  // DIFFICULTY group (Task 2's own addition, first in the sheet now that
-  // TYPE has left it for the chip row) and the "Apply Filter" primary with
+  // four groups (TIME first, now that TYPE left for the chip row and
+  // DIFFICULTY left in Phase DE PR 1) and the "Apply Filter" primary with
   // its live-counting caption (spec §3, singular-aware: "1 WORKOUT") are
   // the point of this capture.
   await page.getByRole("button", { name: "FILTER ⌄" }).click();
@@ -2016,7 +2016,7 @@ test("workout-detail", async ({ page }) => {
   const title = "Screenshot Personal Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(title);
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "DONE" }).click();
 
@@ -2061,7 +2061,7 @@ test("workout-detail-no-target", async ({ page }) => {
   const title = "Screenshot No Target Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(title);
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "Save to library" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -2106,7 +2106,7 @@ test("workout-detail-no-target", async ({ page }) => {
  *  state the screenshot needs to capture. */
 async function fillSampleWorkout(page: Page): Promise<void> {
   await page.getByLabel("Title").fill("Screenshot Intervals");
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
 
   // Row 1: base defaults to 6k (builderState.ts's newRow) — ten clicks on
   // the "slower" stepper reaches "6k +10". "45" digits into the masked
@@ -2287,7 +2287,7 @@ test("plan-badge-unknown", async ({ page }) => {
       workoutTitle: title,
       workoutType: type,
       held: "held",
-      pain: 2,
+      effort: 2,
       advancesPlan: true,
       steps: [{ label: "Work" }],
     });
@@ -3018,10 +3018,10 @@ test("post-workout-summary", async ({ page }) => {
   await expect(prescribedRow.locator(".summary-row-dash")).toHaveText("—");
 
   // Realistic, non-empty state (CLAUDE.md's own "screenshots that capture
-  // empty states" rule): a real Held answer, pain level, and note, not the
+  // empty states" rule): a real Held answer, effort level, and note, not the
   // screen's own just-opened blank form.
   await page.getByRole("button", { name: "HELD" }).click();
-  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page.getByRole("button", { name: "Effort 2" }).click();
   await page.getByLabel("NOTES").fill("Felt strong.");
 
   // Task 4: six rows plus the reflection card no longer fit the 390×844
@@ -3092,7 +3092,7 @@ async function postLog(
     // `justrow-history-chip` seeds one that came through the monitor.
     workoutType: string | null;
     held?: "held" | "under" | "over" | null;
-    pain?: number | null;
+    effort?: number | null;
     thumbs?: "up" | "down" | null;
     notes?: string | null;
     avgSplitSeconds?: number | null;
@@ -3227,7 +3227,7 @@ async function postLog(
       body: JSON.stringify({
         workoutId: null,
         held: null,
-        pain: null,
+        effort: null,
         notes: null,
         steps: [{ label: "Work" }],
         advancesPlan: false,
@@ -3351,7 +3351,7 @@ async function postV0110Log(page: Page, title: string): Promise<void> {
         workoutTitle: t,
         workoutType: "AT",
         held: "held",
-        pain: 2,
+        effort: 2,
         notes: null,
         steps: [
           {
@@ -3390,7 +3390,7 @@ test("log-history", async ({ page }) => {
     workoutTitle: "Sea Fret",
     workoutType: "O2",
     held: "held",
-    pain: 2,
+    effort: 2,
     avgSplitSeconds: 124.5,
     distanceMeters: 5000,
   });
@@ -3398,7 +3398,7 @@ test("log-history", async ({ page }) => {
     workoutTitle: "Occluded Front",
     workoutType: "AT",
     held: "under",
-    pain: 1,
+    effort: 1,
     avgSplitSeconds: 118.2,
     distanceMeters: 6200,
   });
@@ -3406,7 +3406,7 @@ test("log-history", async ({ page }) => {
     workoutTitle: "Pressure Ridge",
     workoutType: "TR",
     held: "over",
-    pain: 3,
+    effort: 3,
     avgSplitSeconds: 132.7,
     distanceMeters: 4500,
   });
@@ -3465,7 +3465,7 @@ test("log-detail", async ({ page }) => {
     // than door-ambiguous "LOGGED BY HAND".
     deviceName: "PM5 432331249",
     held: "under",
-    pain: 3,
+    effort: 3,
     thumbs: "up",
     // PM gate fix wave: the old note ("Held on through the back half.")
     // narrated a long multi-piece session that no longer exists on this
@@ -3584,7 +3584,7 @@ test("log-detail", async ({ page }) => {
     "4:04 total · plus 242 m coasting in rest",
   );
   await expect(
-    page.getByText("UNDER · FASTER · PAIN 3/5 · LIKED"),
+    page.getByText("UNDER · FASTER · EFFORT 3/5 · LIKED"),
   ).toBeVisible();
   await expect(
     page.getByText("Legs felt fresher on the second one."),
@@ -3732,7 +3732,7 @@ async function seedPartialLogDetail(page: Page): Promise<void> {
     deviceName: "PM5 432331249",
     endedBy: "rower",
     held: "held",
-    pain: 3,
+    effort: 3,
     thumbs: "up",
     notes: "Cut it short. Legs had nothing left after the second one.",
     // The legacy stored-fallback trio — never read on a tier-A row, kept
@@ -3965,7 +3965,7 @@ async function seedPartialTimeLogDetail(page: Page): Promise<void> {
     deviceName: "PM5 432331249",
     endedBy: "rower",
     held: "under",
-    pain: 4,
+    effort: 4,
     thumbs: "down",
     notes: "Third one went nowhere. Stopped a minute and a half in.",
     // The legacy stored-fallback trio, never read on a tier-A row — kept
@@ -4132,7 +4132,7 @@ test("log-detail-partial-link-lost", async ({ page }) => {
     deviceName: "PM5 432331249",
     endedBy: "link-lost",
     held: "held",
-    pain: 2,
+    effort: 2,
     avgSplitSeconds: 112.4,
     timeSeconds: 112,
     distanceMeters: 500,
@@ -4202,7 +4202,7 @@ test("log-history-partial", async ({ page }) => {
     deviceName: "PM5 432331249",
     endedBy: "finished",
     held: "held",
-    pain: 2,
+    effort: 2,
     avgSplitSeconds: 118.0,
     timeSeconds: 1416,
     distanceMeters: 6000,
@@ -4261,7 +4261,7 @@ test("log-delete-confirm", async ({ page }) => {
     workoutTitle: "Sea Fret",
     workoutType: "O2",
     held: "under",
-    pain: 3,
+    effort: 3,
     thumbs: "up",
     notes: "Held on through the back half.",
     avgSplitSeconds: 130,
@@ -4321,7 +4321,7 @@ test("log-delete-confirm", async ({ page }) => {
 // failure #7: `.summary-heroes` must be ABSENT entirely (not present-but-
 // empty, not dashes) — `SummaryHeroesBlock`'s own "every hero undefined
 // → return null" gate (PostWorkoutSummary.tsx) — while the row and the
-// reflection read-back (`held: "held", pain: 2`, no thumbs/notes) render
+// reflection read-back (`held: "held", effort: 2`, no thumbs/notes) render
 // exactly as they do for a current-shape log.
 test("log-detail-legacy", async ({ page }) => {
   await signInViaBackdoor(page, {
@@ -4346,9 +4346,9 @@ test("log-detail-legacy", async ({ page }) => {
   await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
 
   // Rows + reflection read-back still render (storedSummary.ts's
-  // buildReadBack: HELD_READBACK_LABEL.held + "PAIN 2/5").
+  // buildReadBack: HELD_READBACK_LABEL.held + "EFFORT 2/5").
   await expect(page.locator(".summary-row-list .summary-row")).toHaveCount(1);
-  await expect(page.getByText("HELD · PAIN 2/5")).toBeVisible();
+  await expect(page.getByText("HELD · EFFORT 2/5")).toBeVisible();
 
   // Trace-rendering spec (Phase LT spec 3), Task 3, §1's own ABSENT case:
   // a pre-spec-2 row (this fixture's whole point, `postV0110Log`'s own
@@ -4421,7 +4421,7 @@ test("post-workout-summary-manual", async ({ page }) => {
   // rule), same values as the session door's own capture for a fair visual
   // comparison between the two doors.
   await page.getByRole("button", { name: "HELD" }).click();
-  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page.getByRole("button", { name: "Effort 2" }).click();
   await page
     .getByLabel("NOTES")
     .fill("Rowed at the gym, logging it after the fact.");
@@ -5269,7 +5269,7 @@ async function openLogMonitorForm(
   // screenshots" rule), same fill idiom as `post-workout-summary`/
   // `post-workout-summary-manual` above.
   await page.getByRole("button", { name: "HELD" }).click();
-  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page.getByRole("button", { name: "Effort 2" }).click();
   await page
     .getByLabel("NOTES")
     .fill("Rowed against a connected monitor for the first time.");
@@ -6059,7 +6059,7 @@ test("justrow-log", async ({ page }) => {
   await page.getByRole("button", { name: "End session" }).click();
   await page.getByRole("button", { name: "Tap again to end" }).click();
   await expect(page).toHaveURL(/\/justrow\/log$/, { timeout: 15_000 });
-  await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+  await expect(page.getByText("EFFORT", { exact: true })).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "justrow-log.png"),
   });
@@ -6116,7 +6116,7 @@ async function finishJustRowTimer(page: Page): Promise<void> {
 test("justrow-log-timer", async ({ page }) => {
   await openJustRowTimer(page, "screenshots-justrow-log-timer@e2e.test");
   await finishJustRowTimer(page);
-  await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+  await expect(page.getByText("EFFORT", { exact: true })).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "justrow-log-timer.png"),
   });
@@ -6147,7 +6147,7 @@ test("justrow-log-plan", async ({ page }) => {
       workoutTitle: title,
       workoutType: type,
       held: "held",
-      pain: 2,
+      effort: 2,
       avgSplitSeconds: 130,
       timeSeconds: 780,
       distanceMeters: 3000,
@@ -6162,7 +6162,7 @@ test("justrow-log-plan", async ({ page }) => {
     timeout: 10_000,
   });
   await finishJustRowTimer(page);
-  await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+  await expect(page.getByText("EFFORT", { exact: true })).toBeVisible();
   const lead = page.getByRole("button", {
     name: "Log against plan · SESSION 5 OF 84",
   });
@@ -6192,7 +6192,7 @@ test("justrow-history-chip", async ({ page }) => {
     workoutTitle: "Sea Fret",
     workoutType: "O2",
     held: "held",
-    pain: 2,
+    effort: 2,
     avgSplitSeconds: 124.5,
     distanceMeters: 5000,
   });
@@ -6316,7 +6316,7 @@ async function seedC2Row(page: Page, title: string): Promise<void> {
     timeSeconds: 124,
     distanceMeters: 500,
     held: "under",
-    pain: 3,
+    effort: 3,
     thumbs: "up",
     notes: "Legs felt fresher on the second one.",
     steps: [

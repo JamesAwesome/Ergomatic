@@ -5,9 +5,8 @@ import userEvent from "@testing-library/user-event";
 import TodayFilterSheet, { type TodayFilterDraft } from "./TodayFilterSheet";
 
 const EMPTY_DRAFT: TodayFilterDraft = {
-  difficulties: [],
   durationRange: { min: 0, max: 60 },
-  painLevels: [],
+  effortLevels: [],
   lastDone: null,
   source: null,
 };
@@ -77,16 +76,14 @@ function renderSheet(
 }
 
 describe("TodayFilterSheet", () => {
-  it("renders as a labelled dialog holding all five groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE), and no TYPE group", () => {
+  it("renders as a labelled dialog holding all four groups (TIME/EFFORT/LAST DONE/SOURCE), and no TYPE or DIFFICULTY group", () => {
     renderSheet();
     const dialog = screen.getByRole("dialog", { name: "Filter" });
     expect(dialog).toBeInTheDocument();
-    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(screen.getByText(label)).toBeVisible();
     }
-    for (const label of ["EASY", "MEDIUM", "HARD"]) {
-      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-    }
+    expect(screen.queryByText("DIFFICULTY")).not.toBeInTheDocument();
     expect(
       screen.getByRole("slider", { name: "Shortest" }),
     ).toBeInTheDocument();
@@ -110,19 +107,19 @@ describe("TodayFilterSheet", () => {
   // hand-rolled chip groups had (fix round 2, M4).
   it("each group exposes an accessible name matching its own visible label", () => {
     renderSheet();
-    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(screen.getByRole("group", { name: label })).toBeInTheDocument();
     }
     expect(
-      within(screen.getByRole("group", { name: "DIFFICULTY" })).getByRole(
-        "button",
-        { name: "EASY" },
-      ),
-    ).toBeInTheDocument();
+      screen.queryByRole("group", { name: "DIFFICULTY" }),
+    ).not.toBeInTheDocument();
     expect(
-      within(screen.getByRole("group", { name: "PAIN" })).getByRole("button", {
-        name: "3",
-      }),
+      within(screen.getByRole("group", { name: "EFFORT" })).getByRole(
+        "button",
+        {
+          name: "3",
+        },
+      ),
     ).toBeInTheDocument();
     expect(
       within(screen.getByRole("group", { name: "LAST DONE" })).getByRole(
@@ -141,25 +138,12 @@ describe("TodayFilterSheet", () => {
   it("aria-pressed on each cell reflects the draft prop, not internal state", () => {
     renderSheet({
       draft: {
-        difficulties: ["easy", "hard"],
         durationRange: { min: 30, max: 120 },
-        painLevels: [2, 4],
+        effortLevels: [2, 4],
         lastDone: "under21",
         source: "global",
       },
     });
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
     expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
       "aria-valuenow",
       "30",
@@ -200,23 +184,23 @@ describe("TodayFilterSheet", () => {
   describe("DIFFICULTY (multi-select)", () => {
     it("clicking an unselected cell adds it to the draft", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, difficulties: ["easy"] },
+        draft: { ...EMPTY_DRAFT },
       });
-      await userEvent.click(screen.getByRole("button", { name: "MEDIUM" }));
+      await userEvent.click(screen.getByRole("button", { name: "3" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        difficulties: ["easy", "medium"],
+        effortLevels: [3],
       });
     });
 
-    it("clicking an already-selected cell removes it (deselecting every difficulty is allowed)", async () => {
+    it("clicking an already-selected cell removes it (deselecting every effort level is allowed)", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, difficulties: ["easy"] },
+        draft: { ...EMPTY_DRAFT, effortLevels: [2] },
       });
-      await userEvent.click(screen.getByRole("button", { name: "EASY" }));
+      await userEvent.click(screen.getByRole("button", { name: "2" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        difficulties: [],
+        effortLevels: [],
       });
     });
   });
@@ -224,7 +208,7 @@ describe("TodayFilterSheet", () => {
   // Amendment (2026-08-04 PR #50 round): TIME unifies on the Library's own
   // bucket UNION — the old cap single-select ("exactly one always active")
   // is gone; clicking a cell now toggles it independently, same union
-  // semantics as DIFFICULTY/PAIN above.
+  // semantics as DIFFICULTY/EFFORT above.
   describe("TIME (a minutes range)", () => {
     it("stepping the upper thumb reports the new range in the draft, other groups untouched", () => {
       const { onChangeDraft } = renderSheet({
@@ -253,26 +237,26 @@ describe("TodayFilterSheet", () => {
     });
   });
 
-  describe("PAIN (multi-select union)", () => {
+  describe("EFFORT (multi-select union)", () => {
     it("clicking an unselected level adds it, sorted", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, painLevels: [4] },
+        draft: { ...EMPTY_DRAFT, effortLevels: [4] },
       });
       await userEvent.click(screen.getByRole("button", { name: "2" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        painLevels: [2, 4],
+        effortLevels: [2, 4],
       });
     });
 
     it("clicking an already-selected level removes it", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, painLevels: [2, 4] },
+        draft: { ...EMPTY_DRAFT, effortLevels: [2, 4] },
       });
       await userEvent.click(screen.getByRole("button", { name: "2" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        painLevels: [4],
+        effortLevels: [4],
       });
     });
   });
@@ -430,9 +414,9 @@ describe("TodayFilterSheet", () => {
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
-    it("moves focus into the sheet on open — the first control, EASY", () => {
+    it("moves focus into the sheet on open — the first control, the TIME rail's Shortest thumb (DIFFICULTY left in Phase DE PR 1)", () => {
       renderSheet();
-      expect(screen.getByRole("button", { name: "EASY" })).toHaveFocus();
+      expect(screen.getByRole("slider", { name: "Shortest" })).toHaveFocus();
     });
 
     // The one genuinely different wiring vs. Library's FilterSheet.tsx:

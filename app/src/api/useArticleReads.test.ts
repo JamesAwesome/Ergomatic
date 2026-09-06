@@ -42,20 +42,20 @@ describe("useArticleReads", () => {
     const { markRead } = result.current;
 
     act(() => {
-      markRead("pain-scale");
+      markRead("effort-scale");
     });
 
     // Visible before the PUT resolves.
     if (result.current.state !== "ready") throw new Error("expected ready");
-    expect(result.current.readSlugs.has("pain-scale")).toBe(true);
-    expect(apiMock).toHaveBeenCalledWith("/api/article-reads/pain-scale", {
+    expect(result.current.readSlugs.has("effort-scale")).toBe(true);
+    expect(apiMock).toHaveBeenCalledWith("/api/article-reads/effort-scale", {
       method: "PUT",
     });
 
     resolvePut?.();
     await waitFor(() => {
       if (result.current.state !== "ready") throw new Error("expected ready");
-      expect(result.current.readSlugs.has("pain-scale")).toBe(true);
+      expect(result.current.readSlugs.has("effort-scale")).toBe(true);
     });
   });
 
@@ -200,12 +200,12 @@ describe("useArticleReads", () => {
     const { markUnread } = result.current;
 
     act(() => {
-      markUnread("pain-scale"); // never was in readSlugs
+      markUnread("effort-scale"); // never was in readSlugs
     });
 
     expect(apiMock).toHaveBeenCalledTimes(1); // just the initial GET
     if (result.current.state !== "ready") throw new Error("expected ready");
-    expect(result.current.readSlugs.has("pain-scale")).toBe(false);
+    expect(result.current.readSlugs.has("effort-scale")).toBe(false);
   });
 
   // The read-after-write barrier (2026-08-12). This is the race behind

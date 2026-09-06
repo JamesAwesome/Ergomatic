@@ -297,7 +297,7 @@ async function postLog(page: Page, body: LogBody): Promise<{ id: string }> {
       body: JSON.stringify({
         workoutId: null,
         held: null,
-        pain: null,
+        effort: null,
         notes: null,
         advancesPlan: false,
         ...b,
@@ -994,7 +994,7 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     await page.goto(`/library/${workoutId!}/log`);
     await expect(page.locator("h1.screen-title")).toBeVisible();
     await page.getByRole("button", { name: "HELD" }).click();
-    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByRole("button", { name: "Effort 3" }).click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page).toHaveURL(/\/today$/);
   }

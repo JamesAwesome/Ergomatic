@@ -445,9 +445,9 @@ fixed.
 
 ## Phase DE — Difficulty out, effort in
 
-**Status: OPEN 2026-09-05 — spec rev 2 (anchor pass folded in, PM open
-gate PASS WITH CONDITIONS folded in); James confirmed the two rev-2 asks
-2026-09-05; no PR has started.** **TRIAD** (stored shape).
+**Status: OPEN 2026-09-05 — spec merged (#308); PR 1 MERGED as #309
+(2026-09-05); PR 2 in flight (worktree `Ergomatic-wt-de2`); release HELD
+until PR 2 merges (one tag for both).** **TRIAD** (stored shape).
 **M.** Spec:
 `docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
 
@@ -466,7 +466,7 @@ Three PRs, in order; **PR 1 and PR 2 ride ONE tag — no release between
 them** (a tag after PR 1 alone ships a half-move and a second stale-build
 generation):
 
-- [ ] **PR 1 — remove difficulty.** No migration: the column, enum and
+- [x] **PR 1 — remove difficulty (#309).** No migration: the column, enum and
       `preferences.difficulties` stay as read-only compat until PR 3, and
       the server writes a difficulty DERIVED from effort on every insert
       (1–2 easy, 3 medium, 4–5 hard) so pre-PR-1 builds — which call
@@ -476,12 +476,15 @@ generation):
       `title | TYPE | effort`; the 4- and 5-field legacy headers still parse
       with difficulty ignored. Today's suggestion filters on type, time and
       effort only. `library.test.ts`'s within-type ordering invariant is
-      re-expressed over effort, not deleted. **Gate 0 captures** (row, Today
+      re-expressed over effort, not deleted — which required a stable
+      re-sort of the AT and TR seed blocks (38 rows move; the seeder's
+      converge then rewrites their stored difficulty at merge, 27 of them
+      medium→hard as pre-PR-1 builds see it). **Gate 0 captures** (row, Today
       card, both sheets, classification card) before implementation.
       Reconciles the DEVIATIONS "Difficulty" row, the "picking a workout"
       article's false "easy and a 4" example, `library-moves.ts`, both
       skills' pasteable headers.
-- [ ] **PR 2 — rename pain → effort.** HAND-WRITTEN migration (drizzle has
+- [x] **PR 2 — rename pain → effort (#310).** HAND-WRITTEN migration (drizzle has
       never generated a RENAME here; its non-TTY fallback is DROP+ADD):
       column renames on `workouts` and `session_logs` plus an
       `article_reads.slug` UPDATE. NOT rollback-safe and `deploy.sh`'s
@@ -496,9 +499,9 @@ generation):
       (~20 names: `Effort`, `EffortRef`, `isEffortRef`, `effortWord`, …) →
       `PaceWord*`, **stored key `{effort: "max"}` untouched.** Gate 0 is the
       word list (spec §4.4), no captures; the committed filter-sheet
-      screenshots are refreshed in the PR. **Does not open until AUD-016's
-      PR (worktree `Ergomatic-wt-aud016`, rewrites `LogSession.tsx`) has
-      merged or James rules it abandoned.**
+      screenshots are refreshed in the PR. (An earlier "waits for AUD-016"
+      condition here was void: AUD-016 shipped as #239 and was struck in
+      #240; `Ergomatic-wt-aud016` is a stale pre-#239 spec branch.)
 - [ ] **PR 3 — drop compat.** Trigger is a MEASUREMENT: zero
       `compat.pain_write` lines in the prod server log for seven consecutive
       days after the PR 1+2 tag deploys (command and output in the PR body).

@@ -214,8 +214,7 @@ const WORKOUT: LibraryWorkout = {
   id: "w-row2-late-burst",
   title: "Row 2 Late Burst",
   type: "O2",
-  difficulty: "easy",
-  pain: 2,
+  effort: 2,
   steps: [
     {
       k: "w",
@@ -268,7 +267,7 @@ vi.mock("../api/useBaselines", () => ({
 vi.mock("../api/usePreferences", () => ({
   usePreferences: () => ({
     state: "ready",
-    preferences: { difficulties: [], timeCapMinutes: 60, countdownSeconds: 10 },
+    preferences: { timeCapMinutes: 60, countdownSeconds: 10 },
   }),
 }));
 vi.mock("../api/usePlan", () => ({
@@ -640,13 +639,13 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     // reflection card sits directly under the heroes — and one tap on it
     // is a production rerender with no bearing on the record.
     //
-    // The tap is the feel chip rather than a pain chip DELIBERATELY:
-    // `screenText()` is the whole of `<main>`, and the pain row renders
-    // its own caption (`PostWorkoutSummary.tsx`'s `painCaption`:
-    // `TAP TO RATE` -> `EASIER THAN PLANNED`), so a pain tap moves that
+    // The tap is the feel chip rather than a effort chip DELIBERATELY:
+    // `screenText()` is the whole of `<main>`, and the effort row renders
+    // its own caption (`PostWorkoutSummary.tsx`'s `effortCaption`:
+    // `TAP TO RATE` -> `EASIER THAN PLANNED`), so a effort tap moves that
     // string for a legitimate reason and the `toBe` equality below could
     // no longer be used. The feel chip changes only its own
-    // `aria-pressed`. A pain tap follows immediately after, carrying the
+    // `aria-pressed`. A effort tap follows immediately after, carrying the
     // narrower assertions its caption change still allows.
     // ---------------------------------------------------------------
     await userEvent.click(
@@ -680,7 +679,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     // held to the narrower claim its caption change allows: the machine's
     // figures are still not on this screen. The rower's own reflection
     // moves; the record's numbers do not.
-    await userEvent.click(screen.getByRole("button", { name: "Pain 1" }));
+    await userEvent.click(screen.getByRole("button", { name: "Effort 1" }));
     expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
     expect(
       screen.queryByText(String(LATE_SUMMARY.meters)),
@@ -827,7 +826,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
 
     // THE CONSUMER'S HALF, with a real rerender first so the equality is
     // not satisfied by a screen that never re-ran (round 5's finding 1, the
-    // same feel chip and the same reason it rather than a pain chip carries
+    // same feel chip and the same reason it rather than a effort chip carries
     // the whole-screen equality).
     await userEvent.click(
       screen.getByRole("button", { name: "↑ MORE LIKE THIS" }),

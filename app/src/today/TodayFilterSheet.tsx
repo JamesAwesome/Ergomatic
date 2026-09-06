@@ -1,9 +1,7 @@
 import type { RefObject } from "react";
-import type { Difficulty } from "../../domain/types.js";
 import { RECENCY_BOUNDARY_DAYS } from "../../domain/recency.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
-import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 import { DurationRange } from "../components/DurationRange";
 import type { FilterSet } from "./todayFilters";
 
@@ -13,9 +11,9 @@ import type { FilterSet } from "./todayFilters";
  *  of this sheet's business. */
 export type TodayFilterDraft = FilterSet;
 
-// PAIN's five cells, matching Library's own 1-5 union (FilterSheet.tsx's
-// PAIN_LEVELS) — a local copy per the same duplication convention.
-const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
+// EFFORT's five cells, matching Library's own 1-5 union (FilterSheet.tsx's
+// EFFORT_LEVELS) — a local copy per the same duplication convention.
+const EFFORT_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
 // The one h2 in this sheet — SheetShell points its own `aria-labelledby`
 // at this id, same pattern as Library's FilterSheet.tsx.
@@ -33,7 +31,7 @@ const COUNT_ID = "today-filter-sheet-count";
  * Today's own FILTER sheet: slides up over the screen (Today.tsx never
  * pushes history for it — same BACK-with-sheet-open decision as Library's
  * FilterSheet.tsx, documented there). Operates entirely on a DRAFT copy of
- * `{difficulties, durations, painLevels, lastDone, source}` that the caller
+ * `{durationRange, effortLevels, lastDone, source}` that the caller
  * owns (`draft`/`onChangeDraft`); nothing here writes to Today's actually-
  * applied `TodayOverrides` record directly. `onApply` commits the draft
  * (Today.tsx's own merge-and-save); `onDismiss` (backdrop tap, Escape, or
@@ -53,7 +51,7 @@ const COUNT_ID = "today-filter-sheet-count";
  *
  * LAST DONE/SOURCE (Round 2, 2026-08-04): the Library's own half-width pair
  * (FilterSheet.tsx's `filter-sheet-row`/`filter-sheet-group-half`), same
- * mutually-exclusive toggle-off semantics, added below PAIN.
+ * mutually-exclusive toggle-off semantics, added below EFFORT.
  *
  * The dialog machinery (backdrop, `role="dialog"`, the focus trap/restore)
  * lives in SheetShell (extracted from Library's FilterSheet.tsx, Task 1 of
@@ -112,24 +110,6 @@ export default function TodayFilterSheet({
         </h2>
       </div>
 
-      <CellGrid
-        label="DIFFICULTY"
-        cells={DIFFICULTY_CHIPS.map(({ value, label }) => ({
-          value,
-          label,
-          pressed: draft.difficulties.includes(value),
-        }))}
-        onToggle={(value) => {
-          const v = value as Difficulty;
-          onChangeDraft({
-            ...draft,
-            difficulties: draft.difficulties.includes(v)
-              ? draft.difficulties.filter((d) => d !== v)
-              : [...draft.difficulties, v],
-          });
-        }}
-      />
-
       {/* Phase SF PR2 (spec §3): TIME is a minutes range on one rail —
           the shared `DurationRange` control, identical on Library's
           sheet. */}
@@ -140,19 +120,19 @@ export default function TodayFilterSheet({
       />
 
       <CellGrid
-        label="PAIN"
-        cells={PAIN_LEVELS.map((level) => ({
+        label="EFFORT"
+        cells={EFFORT_LEVELS.map((level) => ({
           value: String(level),
           label: String(level),
-          pressed: draft.painLevels.includes(level),
+          pressed: draft.effortLevels.includes(level),
         }))}
         onToggle={(value) => {
           const level = Number(value);
           onChangeDraft({
             ...draft,
-            painLevels: draft.painLevels.includes(level)
-              ? draft.painLevels.filter((l) => l !== level)
-              : [...draft.painLevels, level].sort((a, b) => a - b),
+            effortLevels: draft.effortLevels.includes(level)
+              ? draft.effortLevels.filter((l) => l !== level)
+              : [...draft.effortLevels, level].sort((a, b) => a - b),
           });
         }}
       />

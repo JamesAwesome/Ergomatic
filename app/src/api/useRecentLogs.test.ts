@@ -14,7 +14,7 @@ const LOGS = [
     workoutType: "O2",
     loggedAt: "2026-07-29T12:00:00.000Z",
     held: "held",
-    pain: 2,
+    effort: 2,
   },
 ];
 

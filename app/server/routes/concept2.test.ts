@@ -192,7 +192,7 @@ function buildApp(
 
 // Task 5's own fixture (mapping.test.ts's FINISHED_ROW), transcribed from a
 // real capture (that file's own comment) — reused here rather than a
-// hand-built minimum (agent briefing: realistic fixtures). `held`/`pain`/
+// hand-built minimum (agent briefing: realistic fixtures). `held`/`effort`/
 // `notes`/`steps`/`advancesPlan` are the ordinary LogInput scaffolding a
 // session log always carries; none of them are read by this router.
 const FINISHED_LOG_INPUT: LogInput = {
@@ -202,7 +202,7 @@ const FINISHED_LOG_INPUT: LogInput = {
   baselineK2: null,
   baselineK6: null,
   held: null,
-  pain: null,
+  effort: null,
   notes: null,
   steps: [],
   advancesPlan: false,

@@ -196,7 +196,7 @@ describe("StepRow effort refs (Phase 5G)", () => {
 
     // The VISIBLE label still reads the chip word ("MAX") — only the
     // accessible name substitutes effort language (domain/pace.ts's
-    // effortSpoken), matching the spec's own example verbatim.
+    // paceWordSpoken), matching the spec's own example verbatim.
     const label = screen.getByText("0:30 @ MAX");
     expect(label).toHaveAccessibleName("30 seconds at max effort");
     // The effort word itself ("ALL OUT") is plain visible text needing no

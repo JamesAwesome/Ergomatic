@@ -61,7 +61,7 @@ describe("article registry invariants", () => {
       "connect-the-monitor",
       "baselines",
       "picking-a-workout",
-      "pain-scale",
+      "effort-scale",
     ]);
   });
 });
@@ -110,11 +110,11 @@ describe("selectors", () => {
     );
     // wraps past the end back to the top — the end of the registry is now
     // connect-the-monitor (Phase 6I Task 6 appended the two new articles
-    // after pain-scale), so every OTHER article must be read for the walk
-    // starting from pain-scale to wrap all the way back to workout-types.
+    // after effort-scale), so every OTHER article must be read for the walk
+    // starting from effort-scale to wrap all the way back to workout-types.
     expect(
       nextUnreadSlug(
-        "pain-scale",
+        "effort-scale",
         new Set([
           "baselines",
           "picking-a-workout",
@@ -126,9 +126,9 @@ describe("selectors", () => {
     ).toStrictEqual("workout-types");
     // everything else read → nothing to offer
     const allButCurrent = new Set(
-      ARTICLES.filter((a) => a.slug !== "pain-scale").map((a) => a.slug),
+      ARTICLES.filter((a) => a.slug !== "effort-scale").map((a) => a.slug),
     );
-    expect(nextUnreadSlug("pain-scale", allButCurrent)).toBeNull();
+    expect(nextUnreadSlug("effort-scale", allButCurrent)).toBeNull();
   });
 });
 

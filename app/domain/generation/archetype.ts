@@ -1,5 +1,5 @@
 import { estimateMinutes, liveSteps } from "../expand.js";
-import { isEffortRef } from "../pace.js";
+import { isPaceWordRef } from "../pace.js";
 import type { Baselines, SplitRef, Step, WorkoutInput } from "../types.js";
 
 // The variety audit's classifier (design spec §5b, adversarial review
@@ -233,18 +233,18 @@ function pieceCount(steps: Step[]): number {
   return liveSteps(steps).filter((s) => s.k === "w").length;
 }
 
-// Fraction of a workout's live work steps that are EffortRef rather than
+// Fraction of a workout's live work steps that are PaceWordRef rather than
 // SplitRef ("effort share", the same term/definition `patterns.json`'s
-// book-cell `effortShare` column already uses per §6's legend: "fraction
+// book-cell `paceWordShare` column already uses per §6's legend: "fraction
 // prescribed by effort rather than split").
-function effortShare(steps: Step[]): number {
+function paceWordShare(steps: Step[]): number {
   const workSteps = liveSteps(steps).filter((s): s is WorkStep => s.k === "w");
   if (workSteps.length === 0) return 0;
-  const effortCount = workSteps.filter((s) => isEffortRef(s.ref)).length;
-  return effortCount / workSteps.length;
+  const paceWordCount = workSteps.filter((s) => isPaceWordRef(s.ref)).length;
+  return paceWordCount / workSteps.length;
 }
 
-// "Same offset band" applies to SplitRefs only (§5b) — an EffortRef has no
+// "Same offset band" applies to SplitRefs only (§5b) — an PaceWordRef has no
 // `.off` (adversarial M3: `types.ts`'s key-presence union carries no field
 // to band). Band width 4 s/500m, chosen off the one type header that DOES
 // carry a numeric offset calibration (`o2.ts:7-12`: steady 6k+8..+12 is a
@@ -262,7 +262,7 @@ function offsetBandKey(steps: Step[]): string | null {
   const workSteps = liveSteps(steps).filter((s): s is WorkStep => s.k === "w");
   const splitRefs = workSteps
     .map((s) => s.ref)
-    .filter((ref): ref is SplitRef => !isEffortRef(ref));
+    .filter((ref): ref is SplitRef => !isPaceWordRef(ref));
   if (splitRefs.length === 0) return null;
   const bands = splitRefs.map((ref) => {
     const band = Math.round(ref.off / OFFSET_BAND_WIDTH) * OFFSET_BAND_WIDTH;
@@ -271,12 +271,12 @@ function offsetBandKey(steps: Step[]): string | null {
   return [...new Set(bands)].sort().join(",");
 }
 
-// Effort-share bucket width 0.25 — coarse enough that a workout with one
+// PaceWord-share bucket width 0.25 — coarse enough that a workout with one
 // stray split-paced float among mostly-effort pieces still buckets with an
 // all-effort sibling (the AN cells M3 measured mix effort and split
 // liberally), fine enough that a majority-split workout never buckets with
 // a majority-effort one.
-function effortBucket(share: number): number {
+function paceWordBucket(share: number): number {
   return Math.round(share / 0.25) * 0.25;
 }
 
@@ -287,14 +287,14 @@ function effortBucket(share: number): number {
  * Key (§5b): same archetype + same piece count + **same authored build**
  * (`structureSignature`, the block review amendment) + total within 10% of
  * each other + a same-ness arm keyed on ref kind — same offset band for a
- * SplitRef-bearing workout (M3's fix: EffortRef workouts have no offset to
+ * SplitRef-bearing workout (M3's fix: PaceWordRef workouts have no offset to
  * band, so they never compare on this arm), same effort-share bucket for
- * an EffortRef-bearing workout instead (adversarial M3 / this task's
- * brief: "the EffortRef arm (effort share + archetype + duration)").
+ * an PaceWordRef-bearing workout instead (adversarial M3 / this task's
+ * brief: "the PaceWordRef arm (effort share + archetype + duration)").
  *
  * The ref-kind arm is an OR, not an AND (block review m3 — the previous
  * wording of this paragraph said "AND" and the code has always said `if
- * (!offsetMatch && !effortMatch) continue`): a workout carrying both ref
+ * (!offsetMatch && !paceWordMatch) continue`): a workout carrying both ref
  * kinds is a near-duplicate of another if it matches on EITHER arm, which
  * is the stricter reading and flags more pairs. A workout with only one
  * kind never collides with a workout that only has the other, even if
@@ -316,8 +316,10 @@ export function nearDuplicates(
       build: structureSignature(w.steps),
       total: minutes,
       offsetKey: offsetBandKey(w.steps),
-      effortKey:
-        effortShare(w.steps) > 0 ? effortBucket(effortShare(w.steps)) : null,
+      paceWordKey:
+        paceWordShare(w.steps) > 0
+          ? paceWordBucket(paceWordShare(w.steps))
+          : null,
     };
   });
 
@@ -337,11 +339,11 @@ export function nearDuplicates(
         a.offsetKey !== null && b.offsetKey !== null
           ? a.offsetKey === b.offsetKey
           : false;
-      const effortMatch =
-        a.effortKey !== null && b.effortKey !== null
-          ? a.effortKey === b.effortKey
+      const paceWordMatch =
+        a.paceWordKey !== null && b.paceWordKey !== null
+          ? a.paceWordKey === b.paceWordKey
           : false;
-      if (!offsetMatch && !effortMatch) continue;
+      if (!offsetMatch && !paceWordMatch) continue;
 
       pairs.push({
         a: a.title,

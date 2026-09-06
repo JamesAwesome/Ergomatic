@@ -2,14 +2,14 @@ import type { CSSProperties } from "react";
 
 /**
  * One labelled group of toggleable cells inside a sheet (FilterSheet.tsx's
- * TYPE/TIME/PAIN/LAST DONE/SOURCE groups, lifted out whole) — single vs.
+ * TYPE/TIME/EFFORT/LAST DONE/SOURCE groups, lifted out whole) — single vs.
  * multi-select is the CALLER's own reducer (`toggleType` replaces,
  * `toggleDuration` accumulates), this component only ever reports which
  * `value` was pressed.
  *
  * The column count (`filter-sheet-grid-N`) is derived from `cells.length`
  * rather than taken as a prop: every existing group's column count already
- * equals its own cell count (TYPE/TIME are 4-wide with 4 cells, PAIN is
+ * equals its own cell count (TYPE/TIME are 4-wide with 4 cells, EFFORT is
  * 5-wide with 5, LAST DONE/SOURCE are 2-wide with 2), so this stays a pure
  * function of what's passed rather than a second number the caller could
  * get out of sync with the array.

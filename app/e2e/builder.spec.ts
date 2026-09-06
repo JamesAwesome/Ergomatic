@@ -20,7 +20,7 @@ import { signInViaBackdoor } from "./helpers";
 // collapsed ~86px StepCard with inline EDIT/duplicate/delete, and only one
 // StepEditor is ever mounted at a time. SPM/REST/PACE-offset/REPEAT are all
 // "− value +" Stepper controls (src/builder/Stepper.tsx), not typable
-// fields, and EXPECTED PAIN/TYPE/DIFFICULTY are plain toggle buttons
+// fields, and EXPECTED EFFORT/TYPE are plain toggle buttons
 // (`aria-pressed`), not radios — see ClassificationCard.tsx.
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -86,10 +86,10 @@ test.describe("authoring loop", () => {
 
     const title = "Exit Criterion Row";
     await page.getByLabel("Title").fill(title);
-    // EXPECTED PAIN's chips are plain toggle buttons (aria-pressed), not
+    // EXPECTED EFFORT's chips are plain toggle buttons (aria-pressed), not
     // radios (ClassificationCard.tsx) — each carries its own
-    // `aria-label="Pain N"`.
-    await page.getByRole("button", { name: "Pain 3" }).click();
+    // `aria-label="Effort N"`.
+    await page.getByRole("button", { name: "Effort 3" }).click();
     // A fresh builder opens Row 1's editor immediately (Builder.tsx: nothing
     // to scan yet, only something to fill in) — no EDIT tap needed here.
     // The duration field is a masked numeric-pad clock field now
@@ -240,7 +240,7 @@ test.describe("authoring loop", () => {
 
     const originalTitle = "Edit Target Row";
     await page.getByLabel("Title").fill(originalTitle);
-    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
     // "1000" digits into the masked clock field renders as "10:00".
     await page.getByLabel("Row 1 duration", { exact: true }).fill("1000");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
@@ -280,7 +280,7 @@ test.describe("authoring loop", () => {
 
     const title = "Delete Me Row";
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("button", { name: "Pain 1" }).click();
+    await page.getByRole("button", { name: "Effort 1" }).click();
     // "500" digits into the masked clock field renders as "5:00".
     await page.getByLabel("Row 1 duration", { exact: true }).fill("500");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
@@ -342,7 +342,7 @@ test.describe("new controls this phase introduced", () => {
 
     const title = "Bare Duration Row";
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
     // "500" digits into the masked clock field renders as "5:00" (5
     // minutes) — there is no numeric "No." field anywhere on this screen to
     // fill in the first place.
@@ -371,7 +371,7 @@ test.describe("new controls this phase introduced", () => {
 
     const title = "Clock 45 Row";
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByRole("button", { name: "Effort 3" }).click();
     // "45" digits into the masked clock field renders as "0:45" (45
     // seconds) — a flow that only ever authors whole minutes would pass no
     // matter how badly the mask worked, so this is the one flow that
@@ -466,7 +466,7 @@ test.describe("new controls this phase introduced", () => {
 
       const title = "Draft Save Clears Row";
       await page.getByLabel("Title").fill(title);
-      await page.getByRole("button", { name: "Pain 2" }).click();
+      await page.getByRole("button", { name: "Effort 2" }).click();
       await page.getByLabel("Row 1 duration", { exact: true }).fill("500");
       await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
       await page.getByRole("button", { name: "Save to library" }).click();
@@ -503,11 +503,11 @@ test.describe("new controls this phase introduced", () => {
     await page.reload();
     await expect(page.locator("h1.screen-title")).toHaveText("Import");
 
-    // Four-field header — "title | TYPE | difficulty | pain", no leading
-    // legacy number (domain/bulk.ts's parseHeader accepts both shapes; this
-    // paste exercises the current one).
+    // Three-field header — "title | TYPE | effort" (Phase DE PR 1; the
+    // legacy four- and five-field forms still parse, this paste exercises
+    // the current one).
     const title = "Import Screen Row";
-    const text = [`${title} | AT | medium | 3`, "w 5 6k @20"].join("\n");
+    const text = [`${title} | AT | 3`, "w 5 6k @20"].join("\n");
     await page.getByLabel("Bulk import text").fill(text);
     await page.getByRole("button", { name: "Import", exact: true }).click();
 
@@ -548,7 +548,7 @@ test.describe("new controls this phase introduced", () => {
     await setBaselines(page);
     await page.goto("/library/new");
 
-    // Nothing is filled in: title and pain are both invalid, but toSteps
+    // Nothing is filled in: title and effort are both invalid, but toSteps
     // (builderState.ts) sets errors.title first, so Title is the field
     // handleSave's fieldRefs lookup focuses and scrolls into view — the
     // reported bug was that pressing Save did nothing visible when the
@@ -613,7 +613,7 @@ test.describe("new controls this phase introduced", () => {
 
     const title = "Clone Reps Row";
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
     // "100" digits into the masked clock field renders as "1:00".
     await page.getByLabel("Row 1 duration", { exact: true }).fill("100");
     const fasterButton = page.getByRole("button", {
@@ -900,7 +900,7 @@ test.describe("effort refs (Phase 5G)", () => {
 
     const title = "Effort Max Row";
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("button", { name: "Pain 5" }).click();
+    await page.getByRole("button", { name: "Effort 5" }).click();
     // "30" digits into the masked clock field renders as "0:30".
     await page.getByLabel("Row 1 duration", { exact: true }).fill("30");
     await page.getByRole("radio", { name: "Row 1 pace MAX" }).click();

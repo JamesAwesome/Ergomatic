@@ -27,7 +27,7 @@ const WORKOUT_TYPES_TITLE =
   "The four workout types, and how hard each should feel";
 const BASELINES_TITLE = "What a baseline is, and why every pace comes from one";
 const PICKING_A_WORKOUT_TITLE = "Picking a workout by how much it should hurt";
-const PAIN_SCALE_TITLE = "The pain scale, without a heart rate monitor";
+const EFFORT_SCALE_TITLE = "The effort scale, without a heart rate monitor";
 const YOUR_FIRST_ROW_TITLE = "Your first row";
 const CONNECT_THE_MONITOR_TITLE =
   "Connect the monitor, and it drives the piece";
@@ -88,7 +88,7 @@ test("News at rest: 7 UNREAD, three pinned rows, four latest rows, WHAT'S NEW sh
 
   // LATEST: connect-the-monitor sorts first (published 2026-08-08), then
   // the 2026-08-07 three in registry order — baselines, picking-a-workout,
-  // pain-scale (registry order wins the date tie; your-first-row left
+  // effort-scale (registry order wins the date tie; your-first-row left
   // LATEST for the pinned shelf, 2026-08-23).
   const latestRows = page.locator(".news-latest .news-row");
   await expect(latestRows).toHaveCount(4);
@@ -101,7 +101,7 @@ test("News at rest: 7 UNREAD, three pinned rows, four latest rows, WHAT'S NEW sh
     "href",
     "/news/picking-a-workout",
   );
-  await expect(latestRows.nth(3)).toHaveAttribute("href", "/news/pain-scale");
+  await expect(latestRows.nth(3)).toHaveAttribute("href", "/news/effort-scale");
 
   await expect(page.getByRole("heading", { name: "WHAT'S NEW" })).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
@@ -145,6 +145,29 @@ test("opening the baselines article marks it read, and the read survives BACK an
   await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
   await expect(baselinesRow).toHaveAttribute("data-read", "true");
   await expect(baselinesRow.locator(".news-row-meta")).toContainText("READ");
+});
+
+// Phase DE PR 2: the pain-scale article became effort-scale. The old path is
+// still live in release-note history and in shared links, so it redirects —
+// and the read it produces is the NEW slug's (migration 0024 moved the rows).
+test("/news/pain-scale redirects to the effort-scale article, and reading it marks effort-scale read", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `news-legacy-slug-${RUN_ID}@e2e.test`,
+    name: "Legacy Slug Reader",
+  });
+  await page.goto("/news/pain-scale");
+  await expect(page).toHaveURL(/\/news\/effort-scale$/);
+  await expect(page.locator(".reader-title")).toHaveText(
+    "The effort scale, without a heart rate monitor",
+  );
+  await page.getByRole("link", { name: "← BACK" }).click();
+  await expect(page).toHaveURL(/\/news$/);
+  await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
+  await expect(
+    page.locator('a.news-row[href="/news/effort-scale"]'),
+  ).toHaveAttribute("data-read", "true");
 });
 
 test("reader NEXT footer names the next unread article from workout-types", async ({
@@ -245,7 +268,7 @@ test("item 1 / round 4: opening an article from a scrolled News feed lands the r
   await page.goto("/news");
   await expect(page.locator(".news-unread-count")).toBeVisible();
 
-  // Scroll to (and open) `pain-scale` specifically — the LAST row of the
+  // Scroll to (and open) `effort-scale` specifically — the LAST row of the
   // LATEST section, i.e. the row nearest the bottom of the feed — rather
   // than a PINNED row near the top. A first version of this test scrolled
   // to reveal "ALL RELEASE NOTES" (the true bottom) and then clicked the
@@ -257,7 +280,7 @@ test("item 1 / round 4: opening an article from a scrolled News feed lands the r
   // own premise was wrong, not `News.tsx`. Clicking a row that's actually
   // near where the feed was scrolled to avoids manufacturing that second
   // scroll.
-  const painScaleRow = page.locator('a.news-row[href="/news/pain-scale"]');
+  const effortScaleRow = page.locator('a.news-row[href="/news/effort-scale"]');
   // A real Playwright scroll action (`scrollIntoViewIfNeeded`), not a raw
   // `page.evaluate(() => window.scrollTo(...))` — same idiom
   // `library.spec.ts`'s own scroll-restoration test uses. A synthetic JS
@@ -267,7 +290,7 @@ test("item 1 / round 4: opening an article from a scrolled News feed lands the r
   // write never landed at all when this test used that form), so
   // `News.tsx`'s own scroll listener — which the whole point of this test
   // is to exercise — would never fire in the first place.
-  await painScaleRow.scrollIntoViewIfNeeded();
+  await effortScaleRow.scrollIntoViewIfNeeded();
   await expect
     .poll(() => page.evaluate(() => window.scrollY))
     .toBeGreaterThan(0);
@@ -279,8 +302,8 @@ test("item 1 / round 4: opening an article from a scrolled News feed lands the r
   // the case the unmount cleanup has to cover (flush the CURRENT scrollY
   // synchronously on unmount) rather than relying on the throttled write
   // ever having landed on its own.
-  await painScaleRow.click();
-  await expect(page).toHaveURL(/\/news\/pain-scale$/);
+  await effortScaleRow.click();
+  await expect(page).toHaveURL(/\/news\/effort-scale$/);
   await page.locator(".reader-body").waitFor();
 
   // Round 4 (architectural): the reader is its own scroller now, not the
@@ -419,7 +442,7 @@ test("BACK-walks-the-stack round: from News's pinned your-first-row, NEXT-chaini
 
 // Crosslink round — field bug (James's 2026-08-09 recording, Chromium):
 // Today → START HERE step 3 → the picking-a-workout article → tapping the
-// IN-PROSE cross-link "pain from 1 to 5" → ✕ landed on NEWS, not Today.
+// IN-PROSE cross-link "effort from 1 to 5" → ✕ landed on NEWS, not Today.
 // Report 2, same day, same path one level deeper: ← BACK from that
 // cross-linked article jumped straight to Today instead of back to
 // picking-a-workout — the ui-notes round's replace-collapse fixed the
@@ -453,11 +476,11 @@ test("BACK-walks-the-stack round: an in-prose cross-link inside an article retra
   // James's exact path: the IN-PROSE cross-link, not NEXT.
   const crossLink = page
     .locator(".reader-body")
-    .getByRole("link", { name: "pain from 1 to 5" });
-  await expect(crossLink).toHaveAttribute("href", "/news/pain-scale");
+    .getByRole("link", { name: "effort from 1 to 5" });
+  await expect(crossLink).toHaveAttribute("href", "/news/effort-scale");
   await crossLink.click();
-  await expect(page).toHaveURL(/\/news\/pain-scale$/);
-  await expect(page.locator(".reader-title")).toHaveText(PAIN_SCALE_TITLE);
+  await expect(page).toHaveURL(/\/news\/effort-scale$/);
+  await expect(page.locator(".reader-title")).toHaveText(EFFORT_SCALE_TITLE);
 
   // (a) James's exact path, one level deeper than the field report: ← BACK
   // from the cross-linked article must land back on picking-a-workout —
@@ -480,9 +503,9 @@ test("BACK-walks-the-stack round: an in-prose cross-link inside an article retra
   await expect(page).toHaveURL(/\/news\/picking-a-workout$/);
   await page
     .locator(".reader-body")
-    .getByRole("link", { name: "pain from 1 to 5" })
+    .getByRole("link", { name: "effort from 1 to 5" })
     .click();
-  await expect(page).toHaveURL(/\/news\/pain-scale$/);
+  await expect(page).toHaveURL(/\/news\/effort-scale$/);
   const close = page.getByRole("link", { name: "Close" });
   await expect(close).toBeVisible();
   await expect(close).toHaveAttribute("href", "/news");
@@ -497,9 +520,9 @@ test("BACK-walks-the-stack round: an in-prose cross-link inside an article retra
   await expect(page).toHaveURL(/\/news\/picking-a-workout$/);
   await page
     .locator(".reader-body")
-    .getByRole("link", { name: "pain from 1 to 5" })
+    .getByRole("link", { name: "effort from 1 to 5" })
     .click();
-  await expect(page).toHaveURL(/\/news\/pain-scale$/);
+  await expect(page).toHaveURL(/\/news\/effort-scale$/);
 
   await page.goBack();
   await expect(page).toHaveURL(pickingAWorkoutUrl);
@@ -516,9 +539,9 @@ test("BACK-walks-the-stack round: an in-prose cross-link inside an article retra
   // hop unchanged.
   await page
     .locator(".reader-body")
-    .getByRole("link", { name: "pain from 1 to 5" })
+    .getByRole("link", { name: "effort from 1 to 5" })
     .click();
-  await expect(page).toHaveURL(/\/news\/pain-scale$/);
+  await expect(page).toHaveURL(/\/news\/effort-scale$/);
   await page.locator(".reader-next").click();
   await expect(page.locator(".reader-body")).toBeVisible();
   await expect(page.getByRole("link", { name: "Close" })).toHaveAttribute(
@@ -542,7 +565,7 @@ test("article titles used by this file exist in the registry", async ({
     WORKOUT_TYPES_TITLE,
     BASELINES_TITLE,
     PICKING_A_WORKOUT_TITLE,
-    PAIN_SCALE_TITLE,
+    EFFORT_SCALE_TITLE,
     YOUR_FIRST_ROW_TITLE,
     CONNECT_THE_MONITOR_TITLE,
   ]) {
