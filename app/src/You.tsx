@@ -21,11 +21,6 @@ const c2LinkProbeEnabled =
 const Concept2LinkProbe = c2LinkProbeEnabled
   ? lazy(() => import("./monitor/Concept2LinkProbe"))
   : null;
-const nfcGateMinusOneEnabled =
-  import.meta.env.VITE_ENABLE_NFC_GATE_MINUS_ONE === "1";
-const GateMinusOneProbe = nfcGateMinusOneEnabled
-  ? lazy(() => import("./monitor/nfc/GateMinusOneProbe"))
-  : null;
 
 function initials(name: string): string {
   return name
@@ -102,11 +97,6 @@ export default function You({
       {Concept2LinkProbe && (
         <Suspense fallback={null}>
           <Concept2LinkProbe />
-        </Suspense>
-      )}
-      {GateMinusOneProbe && (
-        <Suspense fallback={null}>
-          <GateMinusOneProbe />
         </Suspense>
       )}
       {/* Task 3 (Gate 0 rev 2/3, 2026-09-01): one quiet mono row, at the
