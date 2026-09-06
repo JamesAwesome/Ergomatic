@@ -41,6 +41,7 @@
 | `app/server/routes/data.ts` | integer bands for the five step keys and the four summary keys |
 | `app/src/log/storedSummary.ts` | client `StoredLogStep`/`StoredLog.machineSummary` narrow view gains the keys; `buildHeroes` builds the tier |
 | `app/src/session/logbookDerived.ts` (new) | `logbookWatts`, `logbookCalPerHour`, `sessionStrokeRate` |
+| `app/src/session/summaryModel.ts` | also `agreedTargetSpm`, `MachineSplitRow`, `machineSplitRows`, `machineSplitRowsFromRun` |
 | `app/src/session/summaryModel.ts` | `SummaryHeroes.machine` tier from a `MonitorRun`; `MachineSplitRow[]` for the table |
 | `app/src/session/MachineSummaryTable.tsx` (new) | the sideways-scrolling strip |
 | `app/src/session/PostWorkoutSummary.tsx` | render the tier and the strip |
@@ -170,7 +171,7 @@ Mutation: calories read at offset 10 → 'expected 162 to be 372'; restored."
 ```ts
 it("toIntervalActual keeps the 0x0038 split fields the logbook shows", () => {
   const raw = {
-    ...existingRawStatusFixture, // the file's existing RawPm5Status fixture
+    ...baseRaw(), // parse.test.ts's fully-populated RawPm5Status fixture (line ~603)
     splitIntervalNumber: 2,
     splitIntervalTimeSeconds: 313.5,
     splitIntervalDistanceMeters: 1200,
@@ -192,7 +193,7 @@ it("toIntervalActual keeps the 0x0038 split fields the logbook shows", () => {
 });
 ```
 
-(Replace `existingRawStatusFixture` with the fixture name actually present in `parse.test.ts` — `grep -n "RawPm5Status" app/domain/monitor/pm5/parse.test.ts` names it; if none exists, build one by spreading the return values of `parseGeneralStatus`, `parseAdditionalStatus1`, `parseAdditionalStatus2`, `parseSplitIntervalData`, `parseAdditionalSplitIntervalData` over the zero frames those tests already use.)
+(`baseRaw(overrides)` is the file's existing `RawPm5Status` builder; the `toIntervalActual` describe at ~line 787 is where this test goes.)
 
 - [ ] **Step 2: Run — expect FAIL** (`calories` undefined).
 
@@ -266,7 +267,7 @@ Mutation: calories dropped from toIntervalActual → 'expected undefined to be 7
 - `MachineSummaryDetail` gains `totalCalories?: number; avgWatts?: number; avgCalPerHour?: number; totalRestMeters?: number` (0x003A). Everything downstream (`appendSummaryObservations`, `LogSession`'s `machineSummary: {...summaryDetail}`) already spreads the detail, so the four keys reach `machine_summary` jsonb with no further change.
 - Driver: `activeRun` gains `additionalSummary: AdditionalSummary | null` and `additionalSummaryWaited: boolean`; the 0x003A subscribe handler calls `noteAdditionalSummary(bytes)`; `summaryObservationsEvent` spreads the four keys when present; `reconcileSummary`'s emit path arms one `HASH_SUBWINDOW_MS` wait if 0x003A is still null and no wait has been taken; if still absent when emitting, `log.record("summary-1-missing", …)`.
 
-- [ ] **Step 1: Failing driver test.** `driver.test.ts` already has a test that feeds a 0x0039 frame and asserts the `summary-observations` event's `detail` (grep `summary-observations` in the file for the nearest one; reuse its harness and fixture frames). Add beside it:
+- [ ] **Step 1: Failing driver test.** `driver.test.ts` ~10212 defines `FULL_SUMMARY` (the nine-field `detail` fixture) and ~10360 asserts the `summary-observations` event from it; reuse that harness (`g.events`) and add beside it:
 
 ```ts
 it("carries 0x003A's calories, watts, avg cal/hr and rest distance on the summary observations when it arrives after 0x0039", async () => {
@@ -334,7 +335,7 @@ export type MachineSummaryDetail = {
     additionalSummaryWaited: boolean;
 ```
 
-and initialise both (`null`, `false`) wherever `summaryInGrace: null` is initialised (grep `summaryInGrace: null` — every site).
+and initialise both (`null`, `false`) at both `summaryInGrace: null` sites (driver.ts ~6344 and ~6602).
 
 3. Replace the 0x003A subscription body:
 
@@ -446,7 +447,7 @@ it never comes. Mutation: calories swapped for watts → 'expected 162 to be 372
 - Modify: `app/server/stores/logs.ts` (`LogStep`)
 - Modify: `app/server/routes/data.ts` (`validateLogStepEntry`, `validateMachineSummary`)
 - Modify: `app/src/log/storedSummary.ts` (`StoredLogStep`, `StoredLog.machineSummary`)
-- Test: `app/src/session/logDraft.test.ts`, `app/server/routes/data.test.ts` (the file holding the 401/validation route tables — `grep -ln "avgHr must be an integer" app/server` names it)
+- Test: `app/src/session/logDraft.test.ts`, `app/server/routes/data.test.ts`
 
 **Interfaces:**
 - `LogStep` (client and server mirror) gains `machineCalories?: number; machineCalPerHour?: number; machineWatts?: number; machineDragFactor?: number; machineRestHr?: number | null`.
@@ -470,9 +471,9 @@ it("buildMonitorLogSteps copies the 0x0038 machine fields onto the step, and omi
 });
 ```
 
-(`makeRunWithActuals`/`baseActual`: use the file's existing helpers for a monitor run with a matching log seed — the file already builds one for the `actualSpm` tests; name them as they are named there.)
+(Use the file's `THREE_STEP_RUN`/`THREE_STEP_ACTUALS` fixtures at ~line 1223: spread the new fields onto `THREE_STEP_ACTUALS[0]` and leave `[1]` old-shape, `{ ...THREE_STEP_RUN, actuals }`.)
 
-`data.test.ts` — two new rows in the step-validation table the file already drives: `{ machineCalories: 73.5 }` → 400 `steps[0]: machineCalories must be an integer, 0..65535`; `{ machineRestHr: 300 }` → 400 `steps[0]: machineRestHr must be null or an integer, 20..254`; and a positive case: a step with all five keys is stored and read back unchanged (extend the file's existing POST-then-GET round-trip test).
+`server/routes/data.test.ts` — two new rows in the step-validation table the file already drives: `{ machineCalories: 73.5 }` → 400 `steps[0]: machineCalories must be an integer, 0..65535`; `{ machineRestHr: 300 }` → 400 `steps[0]: machineRestHr must be null or an integer, 20..254`; and a positive case: a step with all five keys is stored and read back unchanged (extend the file's existing POST-then-GET round-trip test).
 
 - [ ] **Step 2: Run — expect FAIL.**
 
@@ -831,7 +832,7 @@ it("shows the target rate only when every interval agrees", () => {
 });
 ```
 
-(`runWithSummary`, `baseDetail`, `manualStep`: the file's existing helpers — grep `summaryDetail` in `summaryModel.test.ts` for the fixture builder; add an `intervalsTargetSpm` knob to it if it has none: it sets `program.intervals[i].displaySpm`.)
+(`monitorRun(overrides: Partial<MonitorRun>)` at summaryModel.test.ts ~line 106 is the run builder and `exit7SummaryDetail` its `MachineSummaryDetail` fixture — use those names in place of `runWithSummary`/`baseDetail`; `interval(...)` at ~134 builds program intervals, so the target-rate cases pass `program` intervals whose `displaySpm` agree or disagree rather than an `intervalsTargetSpm` knob. The manual-door case follows the file's existing manual `buildSummaryModel` tests.)
 
 `storedSummary.test.ts`: the same three shapes from a `StoredLog` (machine row with `machineSummary.totalCalories`; old machine row without; manual row) asserting `buildStoredSummary(row).heroes.machine`.
 
@@ -1127,14 +1128,14 @@ export function machineSplitRows(steps: readonly LogStep[]): MachineSplitRow[] {
           ? logbookCalPerHour(s.machineCalories, seconds)
           : undefined,
       drag: s.machineDragFactor,
-      restMeters: s.restMeters,
+      restMeters: undefined,
     });
   });
   return out;
 }
 ```
 
-(`LogStep.restMeters` — check the interface: if per-step rest metres are not on `LogStep` today, `machineSplitRows` sets `restMeters: undefined` and the run-side builder below fills it from `IntervalActual.restDistanceMeters`; note it in the commit.)
+(`LogStep` carries NO per-step rest metres today — `storedSummary.ts` says so at its line ~248 — so `machineSplitRows` sets `restMeters: undefined` and the run-side builder below fills it from `IntervalActual.restDistanceMeters`; a stored row's REST column reads a dash until PR 2 decides whether rest metres join `LogStep`, and the plan says so in DEVIATIONS.)
 
 ```ts
 export function machineSplitRowsFromRun(run: MonitorRun): MachineSplitRow[] {
@@ -1241,8 +1242,8 @@ export default function MachineSummaryTable({ rows }: { rows: readonly MachineSp
 .machine-summary-scroller {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  margin: 0 calc(-1 * var(--screen-pad, 20px));
-  padding: 0 var(--screen-pad, 20px);
+  margin: 0 -20px;
+  padding: 0 20px;
 }
 .machine-summary {
   border-collapse: separate;
@@ -1274,7 +1275,7 @@ export default function MachineSummaryTable({ rows }: { rows: readonly MachineSp
 }
 ```
 
-(`--screen-pad`: if no such token exists, use the `.screen` padding value `20px` literally and say so in the commit.)
+(No `--screen-pad` token exists; `.screen` pads `20px` + the horizontal safe-area insets (index.css ~line 511). Use `margin: 0 -20px; padding: 0 20px;` and let the safe-area inset stay inside `.screen`.)
 
 - [ ] **Step 4: Run** the two test files, `PostWorkoutSummary.test.tsx`, `FromTheLog.test.tsx`, `pnpm typecheck`, `pnpm lint` — PASS.
 
@@ -1297,15 +1298,15 @@ git commit -m "LP PR1 T7: MACHINE SUMMARY strip — per-interval HR, watts, cal,
 
 **Interfaces:** the fake's 0x0038 frame carries `splitIntervalPowerWatts = round(2.80/(t/d)³)`, `splitIntervalAvgCalories = floor(300 + 4 × 0.8604 × W)` (the PM5's own relation, spec §1.1), `splitIntervalTotalCalories = round(avgCalories × t / 3600)`, `splitAvgDragFactor = 101`, `splitIntervalRestHeartRateBpm = HEARTRATE_NO_BELT` unchanged.
 
-- [ ] **Step 1: Failing test** (in `fake.test.ts`, using the file's existing split-frame harness — grep `splitIntervalTotalCalories` there for the assertion site that currently expects `0`; change it):
+- [ ] **Step 1: Failing test** (in `fake.test.ts`, using the file's existing `asSplits` capture + `decodeAsSplit` harness at ~line 1273/1679 — drive one finished interval of 1200 m in 313.5 s the way that test drives its split, then decode the captured frame):
 
 ```ts
 it("emits the PM5's own per-split relations, never zeros: watts from pace, cal/hr from watts, calories from cal/hr and time, drag 101", () => {
-  const frame = fakeSplitFrameFor({ elapsedSeconds: 313.5, distanceMeters: 1200 }); // the file's helper
-  expect(frame.asSplit.splitIntervalPowerWatts).toBe(157);
-  expect(frame.asSplit.splitIntervalAvgCalories).toBe(840); // floor(300 + 3.4416 × 157.03)
-  expect(frame.asSplit.splitIntervalTotalCalories).toBe(73); // round(840 × 313.5 / 3600)
-  expect(frame.asSplit.splitAvgDragFactor).toBe(101);
+  const split = decodeAsSplit(asSplits[0]!); // 1200 m in 313.5 s
+  expect(split.splitIntervalPowerWatts).toBe(157);
+  expect(split.splitIntervalAvgCalories).toBe(840); // floor(300 + 3.4416 × 157.03)
+  expect(split.splitIntervalTotalCalories).toBe(73); // round(840 × 313.5 / 3600)
+  expect(split.splitAvgDragFactor).toBe(101);
 });
 ```
 
@@ -1424,8 +1425,9 @@ Mutations: 0x003A calories read at offset 10 → <text>; split calories mapped f
 
 **Files:**
 - Modify: `app/e2e/design.spec.ts`
+- Read: `app/e2e/screenshots.spec.ts` ~3545 (the seed to copy)
 
-**Interfaces:** the existing machine-row seeding — `grep -n "MACHINE CONFIRMED" app/e2e/design.spec.ts` names the test that seeds a row with `machineWorkMeters`/`machineSummary` via the API; extend its seed with `machineSummary.totalCalories: 372, avgWatts: 162, avgCalPerHour: 858, totalRestMeters: 0` and steps carrying `machineCalories`/`machineDragFactor`, then assert.
+**Interfaces:** the existing machine-row seeding lives in `app/e2e/screenshots.spec.ts` (~line 3545, the `MACHINE CONFIRMED · WORK ONLY` group test) — copy its API seed into `design.spec.ts` and extend it with `machineSummary.totalCalories: 372, avgWatts: 162, avgCalPerHour: 858, totalRestMeters: 0` and steps carrying `machineCalories`/`machineDragFactor`, then assert.
 
 - [ ] **Step 1: Add, in that describe:**
 
