@@ -5,11 +5,29 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.39.2: git log v0.39.1..main --oneline at 343c3b61 — one merge,
+    // accounted for (RF15; no --merges):
+    //   #321 Phase KB — the tab bar hides while the keyboard is up; the
+    //     v0.39.1 fill it replaces never painted — item 1, and the
+    //     rewrite of v0.39.1's second item below (PM close ruling: the
+    //     correction lives on the old entry, the new item stays a
+    //     feature sentence).
+    // This notes-and-captures PR adds packaging, not another behavior.
+    version: "v0.39.2",
+    date: "2026-09-06",
+    items: [
+      "The tab bar now gets out of the way while you type, so the Library no longer shows through under it. It comes back as soon as the keyboard goes. To switch tabs while typing, close the keyboard first with the ✓ above it.",
+    ],
+  },
+  {
     // v0.39.1: git log v0.39.0..origin/main --oneline at 1cda41e7 —
     // four merges, each accounted for (RF15; no --merges):
     //   #315 moves the baseline editor and its links — item 1.
-    //   #317 paints the keyboard-accessory gap; it keeps the tabs
-    //     available, rather than hiding them — item 2.
+    //   #317 painted the keyboard-accessory gap — item 2 as shipped
+    //     claimed it worked and that the tabs stayed available; the fill
+    //     painted nothing on the phone and v0.39.2 hides the tabs instead,
+    //     so item 2 now says so (Phase KB, PM close 2026-09-06: a shipped
+    //     note is a live surface — strike the false half).
     //   #318 is repository design-gate guidance — no rower-facing item.
     //   #319 reorders target nudges and disables unsupported WEB Connect
     //     at every entry point — items 3 and 4. Native keeps its transport.
@@ -18,7 +36,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     date: "2026-09-06",
     items: [
       "Your 2K and 6K baselines are readable on You. Tap BASELINES to edit them, re-test or reset your setup. Set baselines links elsewhere now open that screen too.",
-      "The Library no longer shows through the gap below the tab bar while you type. The tabs stay available with the keyboard open.",
+      "The gap below the tab bar while you type is not fixed in this build. v0.39.2 closes it.",
       "Target nudges now put ▼ before ▲. Down makes the target split one second faster; up makes it one second slower.",
       "On the web, Connect stays disabled in browsers without Bluetooth support instead of opening an error screen. This applies to workouts and Just Row. Connect in the iPhone app stays available.",
     ],
