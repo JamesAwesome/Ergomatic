@@ -40,7 +40,7 @@ Main's [post-merge CI and deployment](https://github.com/JamesAwesome/Ergomatic/
 
 ## Task 1: Prepare one notes-and-captures PR
 
-**Files:** modify `app/src/news/content/releaseNotes.ts`, `app/e2e/releasePin.ts`, `app/e2e/news.spec.ts`, `app/e2e/screenshots.spec.ts`; retain justified updates under `docs/screenshots/`, especially `releases.png` and `news.png`. Include this plan in the same PR.
+**Files:** modify `app/src/news/content/releaseNotes.ts`, `app/e2e/releasePin.ts`, `app/e2e/news.spec.ts`, `app/e2e/screenshots.spec.ts`; retain justified updates under `docs/screenshots/`, `releases.png`, `releases-landscape.png`, `news-whats-new.png` and `news-whats-new-landscape.png`. Include this plan in the same PR.
 
 **Consumes:** the four-merge census above and existing note registry. **Produces:** a reviewed notes PR with v0.39.1 first in News and Releases, screenshots, and an up-to-date census.
 
@@ -64,7 +64,7 @@ Main's [post-merge CI and deployment](https://github.com/JamesAwesome/Ergomatic/
 
 - [x] Run the same scoped browser test again and require green. Run the existing news client suites with `pnpm test --project client src/news`; no new test mirroring the note strings is needed.
 - [x] Run `pnpm screenshots` twice from `app/`, saving the first run outside the repo before the second so run-to-run churn can be identified. Open every image selected for the PR. Refresh News/Releases for the new note and retain any actual UI change; restore date, generated-address and rasterizer noise by explicit path after inspection.
-- [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test --project unit --project client`, `pnpm build`, `pnpm dist:grep`, and `pnpm e2e --reporter=line`. CI also runs the aggregate coverage gate. Do not reuse old-head checks as the notes PR's result.
+- [x] Run `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test --project unit --project client`, `pnpm build`, `pnpm dist:grep`, and `pnpm e2e --reporter=line`. CI also runs the aggregate coverage gate. Do not reuse old-head checks as the notes PR's result.
 - [ ] Before committing, run `git rev-parse --show-toplevel` and confirm the release worktree. Commit the notes, pins, plan and selected captures together. After this real change is committed, prove the existing release gate rejects both a missing new entry (40 instead of 41) and a new entry placed below v0.39.0 (wrong first version), applying each mutation separately at a unique source anchor. Rebuild and run the scoped browser test for each, record the expected failure, then precisely reverse the mutation and obtain restored green. Push one PR. The visible review is the four note strings and rendered News/Releases captures. The release authorization is recorded above; merge and publish after the concrete notes PR and its gates are ready.
 
 ## Task 2: Merge notes and cut the release
@@ -82,7 +82,7 @@ git push origin v0.39.1
 bash scripts/version.sh
 ```
 
-- [ ] Record the derived VERSION, BUILD and DESCRIBE. From `app/`, run `pnpm ios:release`. This is the real upload command, not a dry run. It derives the Google iOS client ID, rejects the Concept2 probe flag, builds/syncs, checks the built bundle, archives, verifies the stamped version/build and uploads internally. Save its version/build and successful upload output as the release receipt.
+- [ ] Record the derived VERSION, BUILD and DESCRIBE. Use a fresh detached build worktree at the tag (`git worktree add --detach .claude/worktrees/testflight-v0391-build v0.39.1`), install dependencies at its root and in `app/`, and verify its hooks before relying on them. From that worktree's `app/`, run `pnpm ios:release`. The script stamps tracked native version fields, so this keeps those generated edits out of the main checkout. After the upload, inspect and restore only those generated version changes and remove the build worktree. This is the real upload command, not a dry run. It derives the Google iOS client ID, rejects the Concept2 probe flag, builds/syncs, checks the built bundle, archives, verifies the stamped version/build and uploads internally. Save its version/build and successful upload output as the release receipt.
 
 ## Task 3: Confirm delivery and smoke-check the installed build
 
@@ -100,3 +100,7 @@ bash scripts/version.sh
 The release worktree is `.claude/worktrees/testflight-ui-release`, branch `codex/testflight-ui-release`, based on `1cda41e7`. Its stack identity is `ergomatic-57467` (web 8367, Postgres 15367); no stack has been started during planning. Root and app dependencies are installed. The installed pre-commit hook rejected a deliberately unused TypeScript probe; that probe was precisely unstaged and removed. The proposed entry parsed as TypeScript, matched the existing note shape, and the planned version-test index transition covered all 41 positions. Execution was authorized in the next message. The four-merge census is unchanged. The served release-order gate failed first (expected 41 entries, received 40), then passed with the v0.39.1 entry present. The remaining checkboxes track release execution.
 
 Execution receipts before mutation probes: lint, typecheck, formatting, 7,230 unit/client tests (one existing skip), production build and all eight bundle exclusions passed. Screenshot runs passed 137/137 twice. The top-of-feed News capture did not show the release card, so the existing capture now also records that card in both orientations; Releases gains a landscape view scrolled to the current entry. All four retained views were opened and inspected. Fifty-nine unrelated regenerated captures were restored. The four-note draft is unchanged.
+
+Mutation receipts on committed notes: removing v0.39.1 failed with expected 41 / received 40; placing it below v0.39.0 failed with expected v0.39.1 / received v0.39.0. Each run rebuilt the compose web image and its distinct probe marker was found in the served `/usr/share/nginx/html/assets/` bundle. The source was precisely restored and matches its committed version.
+
+Final local browser gate after source restoration: 522 passed. Neither mutation marker remains in the served bundle. Existing native keyboard evidence remains the hardware-specific receipt; no physical iPhone is available to this host for the post-install smoke check, and App Store Connect sign-in has been requested for delivery verification.
