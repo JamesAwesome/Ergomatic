@@ -1,9 +1,11 @@
-# NF-PRODUCT-v5 — Scan NFC product walk (v5 · 2026-09-06 · awaiting PM readiness PASS)
+# NF-PRODUCT-v5 — Scan NFC product walk (v5 · 2026-09-06 · PM readiness: READY, should-fixes landed; awaiting James's go)
 
-**Status:** DRAFT v5. v1 (ten legs, 25 min), v2 (the five-leg cut), v3 and
-v4 were each judged NOT READY by the `product-manager` on 2026-09-06 (four
-entries in `.claude/agents/pm-ledger.md`, "Phase NF product walk
-readiness"). v5 answers v4's three: the summary's save label depends on
+**Status:** v5 — **PM readiness PASS (READY) on 2026-09-06**, with four
+should-fixes landed in this revision (leg 2 opens on the post-END PM5, the
+reader-start cap names the control-tag read, PR-body head and attributions).
+v1 (ten legs, 25 min), v2 (the five-leg cut), v3 and v4 were each judged NOT
+READY the same day (five entries in `.claude/agents/pm-ledger.md`, "Phase NF
+product walk readiness"). v5 answers v4's three: the summary's save label depends on
 whether James has an ACTIVE PLAN (both labels named; `Log against plan` is
 forbidden — it would write the walk's row into his real plan); leg 4 has
 NO discriminator between "iOS ended the reader" and "our pause-abort ended
@@ -129,8 +131,11 @@ on the product build.
   the keep-awake control). **System Haptics ON** (Settings → Sounds &
   Haptics), or the buzz observation cannot produce a NO.
 - PM5 on and on **Connect Device** at the start of legs 1, 3 (its final
-  scan) and 5; leg 2 leaves Connect Device and returns to it (a menu move,
-  never a power cycle). **Whether a PM5 resumes
+  scan) and 5. **Leg 2 opens on the post-END PM5:** leg 1's END terminates
+  the erg (`Terminate → Rearm → WaitToBegin`, `pm5-interface-notes.md`), so
+  the PM5 is NOT on Connect Device when leg 2 starts — James confirms that
+  on the monitor, leaves nothing, and returns to Connect Device only at the
+  step that says so (a menu move, never a power cycle). **Whether a PM5 resumes
   advertising after a disconnect is not established anywhere in this repo
   (INFERENCE: it does not), so every connect is preceded by an explicit
   "PM5: Menu → Connect Device" step** rather than assumed.
@@ -157,12 +162,12 @@ on the product build.
 - Physical interactions, EXTRACTED mechanically from the `(n)` marks in the
   table's "James does" column ONLY (the rule: sum every `(n)` in that
   column per block; prose columns carry literals like `(200)` that are not
-  marks — v3 re-added by eye and was off by one): **39** (A: 11, B: 20,
+  marks — v3 re-added by eye and was off by one): **37** (A: 11, B: 18,
   C: 8). Typing/paste by James: **0**.
 - Rowing: **one pull** (leg 1), then END. No piece is rowed to completion.
-- Reader starts: **at most 6** — leg 1: 1 (+1 retry, scoped below), leg 2:
-  1, leg 3: 2, leg 4: 1, leg 5: 0. A control-tag read is a seventh start and
-  only ever the last thing the walk does. Consent is consumed by reader
+- Reader starts: **at most 6, plus at most one control-tag read** — leg 1:
+  1 (+1 retry, scoped below), leg 2: 1, leg 3: 2, leg 4: 1, leg 5: 0. The
+  control-tag read is only ever the last thing the walk does. Consent is consumed by reader
   starts, not the clock (2026-09-05 ruling); the budget IS the consent, and
   an exhausted budget ends the walk without a re-invitation.
 - **The one retry (leg 1) covers exactly one case:** James reports he did
@@ -190,7 +195,7 @@ w 250m max
 | # | Block | Leg | James does | Observable (pass) | Fail / inconclusive |
 | --- | --- | --- | --- | --- | --- |
 | 1 | A | Primary target | Library → the walk workout (2); tap **Scan NFC** (1); hold the phone to the PM5 logo (1); at READY: the photo (1); one pull (1); tap END, then TAP AGAIN (2); the ONE summary screen shows: tap **Save** (no plan) or **Save without logging** (plan active) — NEVER `Log against plan` (1) → Today; Library → the walk workout again (2) | **Scan NFC** above **Connect**; NO device list; the header reads CONNECTING and then the exact PM5 name (a sequence, not one state); then `<PM5 name> · PROGRAMMED` with "Ready when you pull" (this is what the runsheet calls READY throughout); the PM5 shows the program; first frame live; END → the one summary → the save → Today. The buzz is a SUPPORTING signal only (iOS gives its own feedback on a tag read, INFERENCE); the discriminator is picker-free + the exact name | a picker sheet; a wrong name; `Unsupported NFC tag` (named STOP: the parser has never met the real tag on the product path); never READY; wrong program |
-| 2 | B | Not advertising | PM5: Menu, leave Connect Device (2); tap **Scan NFC** (1), hold to the tag (1); read the card; PM5: Menu → Connect Device (2); tap **Try again** (1); at READY tap **Cancel** (1) → detail | `Open Connect Device on this PM5, then try again.` with **Try again**, no picker, after the 10 s deadline; Try again → CONNECTING with NO second NFC sheet → READY. **PREMISE, INFERENCE, unestablished in this repo:** that leaving Connect Device stops the PM5 advertising within the 10 s deadline (`pm5-interface-notes.md` says a woken PM5 "stays awake for a few minutes"; the spec says only that it advertises WHILE on Connect Device). **Inconclusive branch:** if the scan CONNECTS instead (READY with no card), tap Cancel, record leg 2 INCONCLUSIVE (premise false), no retry, continue to leg 3 | picker; generic copy; a second sheet |
+| 2 | B | Not advertising | PM5 shows the post-END screen, not Connect Device — James confirms by eye (0); tap **Scan NFC** (1), hold to the tag (1); read the card; PM5: Menu → Connect Device (2); tap **Try again** (1); at READY tap **Cancel** (1) → detail | `Open Connect Device on this PM5, then try again.` with **Try again**, no picker, after the 10 s deadline; Try again → CONNECTING with NO second NFC sheet → READY. **PREMISE, INFERENCE, unestablished in this repo:** that leaving Connect Device stops the PM5 advertising within the 10 s deadline (`pm5-interface-notes.md` says a woken PM5 "stays awake for a few minutes"; the spec says only that it advertises WHILE on Connect Device). **Inconclusive branch:** if the scan CONNECTS instead (READY with no card), tap Cancel, record leg 2 INCONCLUSIVE (premise false), no retry, continue to leg 3 | picker; generic copy; a second sheet |
 | 3 | B | Re-arm (mandatory) | PM5: Menu → Connect Device (2); **Scan NFC** (1) → Cancel the sheet (1) → **Connect** (1) → cancel the picker (1) → the interstitial's failure screen shows: tap **Cancel** (1) → detail → PM5: Menu → Connect Device (2) → **Scan NFC** (1), hold to the tag (1); at READY tap **Cancel** (1) | one session; READY once; every button back after each cancel; the picker cancel lands on the failure screen (Try again / Row on the phone timer instead / View connection log / Cancel), never on a stuck screen | two sessions; a stuck busy state; Scan NFC missing after a cancel |
 | 4 | C | Background during a live reader (bounded feasibility experiment) | Tap **Scan NFC** (1); press the side button while the sheet is up (1); unlock (1) | quiet return, both buttons back, no late interstitial. **What this leg buys, and only this:** the PRODUCT build's handling of a reader that ends under a lock — the Gate -1 probe already observed the native ordering on this phone (`BACKGROUND-OBSERVATIONS.md`: iOS invalidated the reader, `userCancelled`, BEFORE the pause was delivered), but the product's JS path (quiet return, staged receipt discarded, no late interstitial) has never been on the phone. **There is NO discriminator between "iOS ended it" and "our pause-abort ended it":** both reach `invalidate()` and Core NFC reports every programmatic invalidation as Cancel (200) (the patch's own comment), the `ndef.ending` line is byte-identical for both, and `processUptimeMs` is uptime-since-boot with no mapping to a spoken "locked". The console still shows WHETHER an ending landed (vs a sheet that survived the lock and timed out at 60 s, a different line). Observational; any outcome is a recorded result. (There is no `console.*` in the JS NFC path.) | interstitial appears on resume |
 | 5 | C | Manual Connect unchanged | PM5: Menu → Connect Device (2); tap **Connect** (1); pick the PM5 (1); at READY tap **Cancel** (1) | today's picker; the same workout to READY | anything new |

@@ -5268,3 +5268,43 @@ the fourth consecutive gate where the fix, not the ground, was the defect.
   extracted mechanically" to RUNSHEET v2, which is v4's fix — the
   version-attribution sibling of v2's "a sentence citing a gate must match
   a check that gate ran".
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v5: READY)
+
+Five gates; the first four failed inside the previous fix. v5 closed all three
+v4 blockers and all five should-fixes with no code change, and re-running every
+rule over the FIXED steps found one clause.
+
+- **A PASS is what proves the rules are mechanical rather than attentional.**
+  Every v5 claim was settled by a command, not a reading: the save labels by
+  grepping the ternary AND its `plan` derivation (which turned out to key on
+  "any active plan", not "this workout is today's session" — so the
+  precondition's question was the right one); the counts by extracting `(n)`
+  from the named column with a script; `--json-output` by running `--help` on
+  the installed toolchain; "no `console.*` in the JS NFC path" by the grep;
+  every quoted copy string by `file:line`. Four gates of prose review found
+  four defects; one gate of commands found one.
+- **Run the state-machine walk on BOTH machines.** v2's rule ("check each step
+  against the screen the previous step leaves you on") was applied to the phone
+  exhaustively and to the PM5 not at all. Leg 1's END terminates the erg
+  (`Terminate → Rearm → WaitToBegin`, `pm5-interface-notes.md`), so leg 2's
+  first instruction — "PM5: Menu, leave Connect Device" — asks him to leave a
+  screen he is not on. The phone-side residue paragraph reads complete and
+  covers half the state.
+- **Redundant is not impossible, and that is the blocker line.** v2's
+  picker-cancel step had no button to press; v5's leg-2 step has a goal state
+  that is already true. Both are unperformable as written; only the first
+  stops a leg. Ask what the operator DOES when the instruction fails, not
+  whether it fails.
+- **Both halves of a "we cannot tell them apart" claim get sourced separately.**
+  Leg 4 needed the emitter to be identical (patch comment: "Core NFC reports
+  every programmatic invalidation with the Cancel code (200)") AND the ordering
+  to be unknowable (`BACKGROUND-OBSERVATIONS.md`: "a cancelled reader before
+  pause"). A leg stated as "no discriminator" is stronger evidence than one
+  claiming a discriminator, and cheaper to verify.
+- **Fold: 130 words / 5 bullets / longest 24 — PASS** (unchanged since v2).
+  Residues carried to the controller: the Record's head SHA went stale while
+  its v5 sentences were updated (a partial reconciliation), and the "James does
+  column" rule is attributed to v4 when it is v5's — the same
+  version-attribution class this ledger named at v4, recurring in the round
+  that fixed it.
