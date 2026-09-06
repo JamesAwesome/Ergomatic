@@ -75,6 +75,10 @@ import { startLink, type LinkOutcome } from "../adapters/linkFlow";
  * here purely to keep that equality; the probe's behaviour is unchanged and
  * it renders neither.
  */
+// The three Wave E auto-send keys (`autoSend`, `sendFailedAt`,
+// `sendFailedReason`) are declared below so `scripts/webauth-contract.test.ts`'s
+// key-set pin stays true; the probe renders none of them. No comments INSIDE
+// the braces — that pin's extractor reads the interface body verbatim.
 interface LinkStatus {
   available: boolean;
   linked?: boolean;
@@ -82,6 +86,9 @@ interface LinkStatus {
   c2Username?: string | null;
   logbookBaseUrl?: string;
   needsReauth?: boolean;
+  autoSend?: boolean;
+  sendFailedAt?: string | null;
+  sendFailedReason?: string | null;
 }
 
 /** `n/a` for the outcomes that never parsed a callback at all (a plugin

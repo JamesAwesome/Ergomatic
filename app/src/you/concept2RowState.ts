@@ -7,7 +7,12 @@ import type { Concept2Link, LinkReadFailure } from "../api/useConcept2Link";
  * the one place this departs from the card's own ordering (ruling 5).
  */
 export type RowState =
-  "NOT LINKED" | "LINKED ✓" | "RECONNECT NEEDED" | "COULDN'T READ" | null;
+  | "NOT LINKED"
+  | "LINKED ✓"
+  | "RECONNECT NEEDED"
+  | "SEND FAILED"
+  | "COULDN'T READ"
+  | null;
 
 export function rowState(
   link: Concept2Link | null,
@@ -27,6 +32,11 @@ export function rowState(
   // Cells 9, 10 — before `failed`, on purpose (ruling 5). R3: no other state
   // can hide a broken link.
   if (link.linked && link.needsReauth) return "RECONNECT NEEDED";
+  // Wave E auto-send §3.4 (A8): the fifth string. Server-sticky like
+  // `needsReauth`, so it too beats a transient read failure (ruling 5's
+  // reason: a read that FAILED cannot have cleared it), and sits below
+  // RECONNECT NEEDED because a dead grant is the bigger fact.
+  if (link.linked && link.sendFailedAt !== null) return "SEND FAILED";
   // Cells 6, 8: a retained AVAILABLE link, so the rower knows the feature
   // exists and the failure is worth telling them about.
   if (failed !== null) return "COULDN'T READ";

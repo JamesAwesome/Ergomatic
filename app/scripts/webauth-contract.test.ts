@@ -213,12 +213,15 @@ describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
     // as the reject-codes test above: without it, deleting a key from BOTH
     // files at once would keep the set equality green.
     expect(emitted).toStrictEqual([
+      "autoSend",
       "available",
       "c2UserId",
       "c2Username",
       "linked",
       "logbookBaseUrl",
       "needsReauth",
+      "sendFailedAt",
+      "sendFailedReason",
     ]);
     expect(linkStatusKeys(probe)).toStrictEqual(emitted);
   });

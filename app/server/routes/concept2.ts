@@ -250,6 +250,46 @@ export function createConcept2Router({
   now = () => new Date(),
 }: Concept2RouterDeps): Router {
   const router = Router();
+  // Wave E auto-send §3.3 (A10): the per-row send CLAIM. An automatic send
+  // fires right after a row saves, and the rower can tap Send on that row
+  // while it is in flight — two `POST /results/:logId` for one row, both
+  // reading the row before either writes, with no lock on `session_logs`.
+  // Concept2's own 409 dedup is a vendor heuristic, not our guard. Callers
+  // for one `userId:logId` chain here: a later caller waits for the earlier
+  // one's RESPONSE to finish, then runs the handler itself — and finds the
+  // row already carrying `c2_result_id`, so it takes the already-sent
+  // short-circuit and answers the same `resultId`. No response is captured
+  // or replayed; the stored row is the shared result. Scoped to THIS router
+  // instance (one process serves the API — `container_name` in compose makes
+  // `--scale` impossible; one instance per test app so route tests share no
+  // table).
+  //
+  // A MIDDLEWARE, not a wrapper around the handler: the handler keeps its
+  // seventeen exits and its indentation, and the claim reads one thing —
+  // the response's own `finish`/`close` — so a handler that THREW (Express 5
+  // routes the rejection to the error handler, which answers) or a client
+  // that hung up both release the key. The map entry is the CHAIN for the
+  // key (each caller's gate appended to the last), set synchronously before
+  // any await so a third caller queues behind the second, never beside it;
+  // it is deleted when the chain it holds settles.
+  const inflightSends = new Map<string, Promise<void>>();
+  const claimSend: RequestHandler = async (req, res, next) => {
+    const key = `${req.user!.id}:${String(req.params.logId)}`;
+    let release: () => void = () => undefined;
+    const mine = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const prior = inflightSends.get(key);
+    const chain = prior === undefined ? mine : prior.then(() => mine);
+    inflightSends.set(key, chain);
+    void chain.then(() => {
+      if (inflightSends.get(key) === chain) inflightSends.delete(key);
+    });
+    res.once("finish", release);
+    res.once("close", release);
+    if (prior !== undefined) await prior;
+    next();
+  };
 
   async function resolveCookieSession(
     req: Request,
@@ -669,7 +709,47 @@ export function createConcept2Router({
         // explicit form just spares it the argument.
         logbookBaseUrl: logbookBaseUrl,
         needsReauth: link.needsReauthAt !== null,
+        // Wave E auto-send §3.1: the sending mode and the sticky send-failed
+        // flag, read by the You row, the card's control and mode line, and
+        // the log form's post-save decision. `sendFailedAt` as an ISO string
+        // (JSON has no Date); `sendFailedReason` is the route's sub-reason
+        // verbatim (`no_weight` | `unreadable_weight` | `implausible_weight`
+        // | `no_gender`), the key the rower-facing sentence is chosen by.
+        autoSend: link.autoSend,
+        sendFailedAt: link.sendFailedAt?.toISOString() ?? null,
+        sendFailedReason: link.sendFailedReason,
       });
+    },
+  );
+
+  // Wave E auto-send §3.1: the ONE new write the router grows. Body
+  // `{ autoSend: boolean }` — anything else is 400 (absent, empty and a
+  // string "true" are three ways of not being a boolean, and A2's
+  // fail-closed rule wants none of them read as AUTOMATIC). 409 `unlinked`
+  // with no link row: the setting has no meaning without one (ruling 1). The
+  // send-failed flag is NOT writable here — only the send route sets it.
+  router.patch(
+    "/api/concept2/link",
+    requireUser,
+    refuseAmbiguousAuth,
+    async (req, res) => {
+      if (!availableFor(req.user!.email)) {
+        unavailableJson(res);
+        return;
+      }
+      const body = isRec(req.body) ? req.body : {};
+      if (typeof body.autoSend !== "boolean") {
+        res
+          .status(400)
+          .json({ error: "autoSend must be a boolean", field: "autoSend" });
+        return;
+      }
+      const updated = await store.setAutoSend(req.user!.id, body.autoSend);
+      if (!updated) {
+        res.status(409).json({ error: "unlinked" });
+        return;
+      }
+      res.status(204).end();
     },
   );
 
@@ -705,6 +785,7 @@ export function createConcept2Router({
     "/api/concept2/results/:logId",
     requireUser,
     refuseAmbiguousAuth,
+    claimSend,
     async (req, res) => {
       if (!availableFor(req.user!.email)) {
         unavailableJson(res);
@@ -770,6 +851,10 @@ export function createConcept2Router({
       // response. This comment used to cite that as the reason, which had
       // it backwards.)
       if (row.c2ResultId !== null && row.c2UserId === link.c2UserId) {
+        // Wave E auto-send §3.4: Concept2 has this row, so "sends are
+        // failing" is over — whatever set the flag. Unconditional and cheap
+        // (a no-op when nothing is set).
+        await store.clearSendFailed(userId);
         res.status(200).json({ resultId: row.c2ResultId });
         return;
       }
@@ -808,7 +893,10 @@ export function createConcept2Router({
       // `row.tz`) so `buildC2Payload`'s paired branch treats a freshly
       // persisted zone exactly like an already-stored one — same stable
       // `completedAt`-based date on every attempt from here on.
-      const mappingRow: SessionLogRow = { ...eligibilityRow, tz: effectiveTz };
+      const mappingRow: SessionLogRow = {
+        ...eligibilityRow,
+        tz: effectiveTz,
+      };
 
       // I4: the `c2UserId` for the weight-class read and for
       // `recordC2Result` must come from the LOCKED re-read inside
@@ -1161,6 +1249,13 @@ export function createConcept2Router({
         // one is decided from the ROW and cannot be repaired, this one is
         // decided from Concept2's own side and IS repairable — by designating
         // a class on a Concept2 result, or by fixing the profile weight.
+        // Wave E auto-send §3.4 (rulings 6, 7): the ONE outcome that sets
+        // the sticky flag — an ELIGIBLE send refused for want of a weight
+        // class, which is systematic (every row will fail the same way) and
+        // repairable by the rower. Stores the SUB-reason, the key the You
+        // screen's sentence is chosen by. `c2_error` deliberately does not
+        // set it (transient); `not_eligible` cannot reach here.
+        await store.setSendFailed(userId, resolved.reason);
         res
           .status(422)
           .json({ error: "no_weight_class", reason: resolved.reason });
@@ -1242,6 +1337,8 @@ export function createConcept2Router({
         // response is the one moment they exist, which is exactly the
         // moment a class we DERIVED can diverge from the rower's own
         // declaration.
+        // Wave E auto-send §3.4: the row is at Concept2; clear the flag.
+        await store.clearSendFailed(userId);
         res.status(200).json({
           resultId: postResult.resultId,
           weightClass: resolved.weightClass,
@@ -1270,6 +1367,9 @@ export function createConcept2Router({
           postResult.resultId,
           lockedLink.c2UserId,
         );
+        // Wave E auto-send §3.4: a duplicate means Concept2 HAS the row —
+        // the delta pass's F3, the exit "on success" enumeration missed.
+        await store.clearSendFailed(userId);
         res
           .status(409)
           .json({ error: "duplicate", c2ResultId: postResult.resultId });

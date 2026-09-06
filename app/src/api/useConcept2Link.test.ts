@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
-import { normalizeLink, LINK_UNAVAILABLE } from "./useConcept2Link";
+import {
+  normalizeLink,
+  LINK_UNAVAILABLE,
+  type Concept2Link,
+} from "./useConcept2Link";
 
 // `document.visibilityState` is replaced with `Object.defineProperty`, which
 // `vi.restoreAllMocks()` does NOT undo — the stub would leak to every later
@@ -53,6 +57,9 @@ describe("LINK_UNAVAILABLE (the flag-off answer, amendment 1h)", () => {
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 });
@@ -75,6 +82,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 
@@ -86,6 +96,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 
@@ -106,6 +119,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: "jamesawesome",
       needsReauth: true,
       logbookBaseUrl: "https://log-dev.concept2.com",
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 
@@ -129,6 +145,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 
@@ -183,6 +202,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     };
     expect(normalizeLink(null)).toStrictEqual(unavailable);
     expect(normalizeLink("nope")).toStrictEqual(unavailable);
@@ -362,7 +384,7 @@ describe("useConcept2Link: a newer read always wins (review F7)", () => {
     await waitFor(() => expect(releases).toHaveLength(1));
 
     // A second read starts while the first is still unanswered.
-    let second: Promise<void>;
+    let second: Promise<Concept2Link | null>;
     await act(async () => {
       second = result.current.reload();
       await Promise.resolve();
@@ -410,7 +432,7 @@ describe("useConcept2Link: a newer read always wins (review F7)", () => {
     const { result } = renderHook(() => useConcept2Link());
     await waitFor(() => expect(releases).toHaveLength(1));
 
-    let second: Promise<void>;
+    let second: Promise<Concept2Link | null>;
     await act(async () => {
       second = result.current.reload();
       await Promise.resolve();
@@ -553,7 +575,7 @@ describe("useConcept2Link: a newer read always wins (review F7)", () => {
     const { result } = renderHook(() => useConcept2Link());
     await waitFor(() => expect(ctl).toHaveLength(1));
 
-    let second: Promise<void>;
+    let second: Promise<Concept2Link | null>;
     await act(async () => {
       second = result.current.reload();
       await Promise.resolve();
@@ -646,5 +668,132 @@ describe("useConcept2Link re-reads when the document comes back (observation 19,
     document.dispatchEvent(new Event("visibilitychange"));
     await Promise.resolve();
     expect(api).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Wave E auto-send §3.1 (A2): the mode is fail-closed by construction — only a
+// literal `true` reads as AUTOMATIC — and the send-failed pair takes the same
+// ABSENT / EMPTY / VALUED treatment as the other optional strings.
+describe("normalizeLink — autoSend and the send-failed flag (Wave E auto-send)", () => {
+  const linked = {
+    available: true,
+    linked: true,
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+  };
+
+  it("reads a literal true as AUTOMATIC", () => {
+    expect(normalizeLink({ ...linked, autoSend: true }).autoSend).toBe(true);
+  });
+
+  it.each([
+    ["absent (a server that predates the column)", {}],
+    ['the string "true"', { autoSend: "true" }],
+    ["the number 1", { autoSend: 1 }],
+    ["false", { autoSend: false }],
+    ["null", { autoSend: null }],
+  ])(
+    "reads autoSend %s as MANUAL — only a literal true is automatic (A2)",
+    (_l, extra) => {
+      expect(normalizeLink({ ...linked, ...extra }).autoSend).toBe(false);
+    },
+  );
+
+  it("carries a valued send-failed instant and sub-reason verbatim", () => {
+    const link = normalizeLink({
+      ...linked,
+      sendFailedAt: "2026-09-05T12:00:00.000Z",
+      sendFailedReason: "no_weight",
+    });
+    expect(link.sendFailedAt).toBe("2026-09-05T12:00:00.000Z");
+    expect(link.sendFailedReason).toBe("no_weight");
+  });
+
+  it.each([
+    ["absent", {}],
+    ["empty strings", { sendFailedAt: "", sendFailedReason: "" }],
+    ["null", { sendFailedAt: null, sendFailedReason: null }],
+    ["non-strings", { sendFailedAt: 5, sendFailedReason: true }],
+  ])("reads a send-failed pair that is %s as NOT flagged", (_l, extra) => {
+    const link = normalizeLink({ ...linked, ...extra });
+    expect(link.sendFailedAt).toBeNull();
+    expect(link.sendFailedReason).toBeNull();
+  });
+
+  it("an unlinked or unavailable answer carries autoSend false and no flag, whatever the body says", () => {
+    expect(
+      normalizeLink({ available: true, linked: false, autoSend: true })
+        .autoSend,
+    ).toBe(false);
+    expect(
+      normalizeLink({ available: false, autoSend: true, sendFailedAt: "x" })
+        .sendFailedAt,
+    ).toBeNull();
+  });
+});
+
+describe("reload() resolves to what it applied (Wave E auto-send §3.3's fresh read)", () => {
+  // The log form's post-save decision reads the RESOLVED value, not
+  // `result.current.link` — a closure over state would see the mount-time
+  // link, and a mode flipped on /you/concept2 mid-form would be missed.
+  it("resolves to the normalized link on a 200", async () => {
+    let autoSend = false;
+    const api = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            available: true,
+            linked: true,
+            c2UserId: 1,
+            autoSend,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    await waitFor(() => expect(result.current.link).not.toBeNull());
+    expect(result.current.link?.autoSend).toBe(false);
+
+    autoSend = true;
+    let fresh: Concept2Link | null = null;
+    await act(async () => {
+      fresh = await result.current.reload();
+    });
+    expect(fresh).toMatchObject({ linked: true, autoSend: true });
+    expect(result.current.link?.autoSend).toBe(true);
+  });
+
+  it("resolves null on a failed read, and leaves the last good link in place", async () => {
+    let ok = true;
+    const api = vi.fn(async () =>
+      ok
+        ? new Response(
+            JSON.stringify({
+              available: true,
+              linked: true,
+              c2UserId: 1,
+              autoSend: true,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          )
+        : new Response("gone", { status: 502 }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { useConcept2Link } = await import("./useConcept2Link");
+    const { result } = renderHook(() => useConcept2Link());
+    await waitFor(() => expect(result.current.link).not.toBeNull());
+
+    ok = false;
+    let fresh: Concept2Link | null = LINK_UNAVAILABLE;
+    await act(async () => {
+      fresh = await result.current.reload();
+    });
+    expect(fresh).toBeNull();
+    expect(result.current.failed?.status).toBe(502);
+    expect(result.current.link?.autoSend).toBe(true);
   });
 });

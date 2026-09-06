@@ -1873,6 +1873,10 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
       c2Username: null,
       logbookBaseUrl: LOGBOOK_BASE_URL,
       needsReauth: false,
+      // Wave E auto-send §3.1: a fresh link is MANUAL with no failure flag.
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
     expect(JSON.stringify(res.body)).not.toContain(LINK_INPUT.accessToken);
     expect(JSON.stringify(res.body)).not.toContain(LINK_INPUT.refreshToken);
@@ -1924,6 +1928,78 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     const { app } = buildApp({ store });
     const res = await asA(request(app).get("/api/concept2/link"));
     expect(res.body.needsReauth).toBe(true);
+  });
+
+  // Wave E auto-send §3.1: the ONE new write, and the flag on the read.
+  it("PATCH { autoSend: true } -> 204, and the next GET reads autoSend true", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store });
+    const patch = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(patch.status).toBe(204);
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.autoSend).toBe(true);
+    const back = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: false }),
+    );
+    expect(back.status).toBe(204);
+    expect(
+      (await asA(request(app).get("/api/concept2/link"))).body.autoSend,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["a string", { autoSend: "true" }],
+    ["a number", { autoSend: 1 }],
+    ["absent", {}],
+    ["null", { autoSend: null }],
+  ])(
+    "PATCH with autoSend %s -> 400 field-named; the mode is unchanged (A2 fail-closed)",
+    async (_label, body) => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const { app } = buildApp({ store });
+      const res = await asA(
+        request(app).patch("/api/concept2/link").send(body),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body).toStrictEqual({
+        error: "autoSend must be a boolean",
+        field: "autoSend",
+      });
+      expect((await store.getLink(userA.id))?.autoSend).toBe(false);
+    },
+  );
+
+  it("PATCH with no link row -> 409 unlinked (the setting has no meaning without one)", async () => {
+    const { app } = buildApp({ store: makeFakeConcept2Store() });
+    const res = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "unlinked" });
+  });
+
+  it("PATCH while the surface is unavailable -> 403, same gate as every other write", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store, available: false });
+    const res = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("GET carries the send-failed flag as an ISO instant and the verbatim sub-reason", async () => {
+    const store = makeFakeConcept2Store(() => new Date("2026-09-05T12:00:00Z"));
+    await store.upsertLink(userA.id, freshLink());
+    await store.setSendFailed(userA.id, "unreadable_weight");
+    const { app } = buildApp({ store });
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.sendFailedAt).toBe("2026-09-05T12:00:00.000Z");
+    expect(res.body.sendFailedReason).toBe("unreadable_weight");
   });
 
   it("DELETE: unavailable -> 403", async () => {
@@ -2740,6 +2816,239 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(res.status).toBe(200);
     expect(res.body).toStrictEqual({ resultId: 999 });
     expect(client.postResult).not.toHaveBeenCalled();
+  });
+
+  // ── Wave E auto-send §3.4 (A11): the sticky send-failed flag, one row per
+  // route exit. `no_weight_class` is the ONLY setter; every exit that leaves
+  // the row at Concept2 clears it; `c2_error` and `not_eligible` touch nothing.
+  // Every assertion is a FRESH store read.
+  describe("the send-failed flag (Wave E auto-send A11)", () => {
+    async function flaggedStore() {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      await store.setSendFailed(userA.id, "no_weight");
+      expect((await store.getLink(userA.id))?.sendFailedAt).not.toBeNull();
+      return store;
+    }
+
+    it("no_weight_class SETS the flag with the sub-reason, and posts nothing", async () => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      vi.mocked(client.fetchResults).mockResolvedValue({ ok: true, rows: [] });
+      vi.mocked(client.fetchMe).mockResolvedValue({
+        ok: true,
+        c2UserId: 2211,
+        username: "jmorelli",
+        weight: null,
+        gender: "M",
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      const res = await asA(
+        request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+      );
+      expect(res.status).toBe(422);
+      const link = await store.getLink(userA.id);
+      expect(link?.sendFailedAt).not.toBeNull();
+      expect(link?.sendFailedReason).toBe("no_weight");
+      expect(client.postResult).not.toHaveBeenCalled();
+    });
+
+    it("a 200 post CLEARS a set flag", async () => {
+      const store = await flaggedStore();
+      const client = makeStubClient();
+      vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(200);
+      const link = await store.getLink(userA.id);
+      expect(link?.sendFailedAt).toBeNull();
+      expect(link?.sendFailedReason).toBeNull();
+    });
+
+    it("the already-sent short-circuit (200, no wire call) CLEARS a set flag", async () => {
+      const store = await flaggedStore();
+      const client = makeStubClient();
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId);
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(200);
+      expect(client.postResult).not.toHaveBeenCalled();
+      expect((await store.getLink(userA.id))?.sendFailedAt).toBeNull();
+    });
+
+    it("Concept2's 409 duplicate (the row is THERE) CLEARS a set flag — the exit 'on success' missed", async () => {
+      const store = await flaggedStore();
+      const client = makeStubClient();
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: false,
+        kind: "duplicate",
+        resultId: 777,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(409);
+      expect((await store.getLink(userA.id))?.sendFailedAt).toBeNull();
+    });
+
+    it("c2_error LEAVES the flag as it was — set stays set, clear stays clear (ruling 7)", async () => {
+      const store = await flaggedStore();
+      const client = makeStubClient();
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: false,
+        kind: "c2_error",
+        status: 500,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(502);
+      expect((await store.getLink(userA.id))?.sendFailedReason).toBe(
+        "no_weight",
+      );
+      // and on a CLEAR link, c2_error does not set it
+      const clean = makeFakeConcept2Store();
+      await clean.upsertLink(userA.id, freshLink());
+      const { app: app2, logs: logs2 } = buildApp({ store: clean, client });
+      const id2 = await seedEligibleLog(logs2, userA.id);
+      await asA(
+        request(app2)
+          .post(`/api/concept2/results/${id2}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect((await clean.getLink(userA.id))?.sendFailedAt).toBeNull();
+    });
+
+    it("not_eligible LEAVES the flag untouched (a manual row is not a link failure)", async () => {
+      const store = await flaggedStore();
+      const { app, logs } = buildApp({ store });
+      const id = await seedEligibleLog(logs, userA.id, { source: "manual" });
+      const res = await asA(
+        request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+      );
+      expect(res.status).toBe(422);
+      expect(res.body.error).toBe("not_eligible");
+      expect((await store.getLink(userA.id))?.sendFailedReason).toBe(
+        "no_weight",
+      );
+    });
+  });
+
+  // ── Wave E auto-send §3.3 (A10): the per-row in-flight claim. NOT a race
+  // (PR #269's lesson): request 2 is issued only after request 1 has ENTERED
+  // the wire call, and the wire call resolves only when the test says so.
+  describe("the in-flight send claim (Wave E auto-send A10)", () => {
+    function deferredPostResult() {
+      let resolve!: (v: unknown) => void;
+      let reject!: (e: unknown) => void;
+      let entered!: () => void;
+      const enteredOnce = new Promise<void>((r) => {
+        entered = r;
+      });
+      const answer = new Promise<unknown>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return {
+        enteredOnce,
+        resolve,
+        reject,
+        impl: vi.fn(() => {
+          entered();
+          return answer;
+        }),
+      };
+    }
+
+    it("two concurrent sends for ONE row reach Concept2 once, and both callers see the same resultId", async () => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      const d = deferredPostResult();
+      vi.mocked(client.postResult).mockImplementation(
+        d.impl as unknown as typeof client.postResult,
+      );
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+
+      // supertest's Test is LAZY — it fires only on `.then`/`.end` — so the
+      // concurrent requests are started eagerly with `.then(r => r)`; without
+      // that, `enteredOnce` can never resolve and the test times out.
+      const first = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await d.enteredOnce; // request 1 is INSIDE the wire call
+      const second = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      // Let request 2 reach the claim and chain before anything resolves.
+      await new Promise((r) => setTimeout(r, 20));
+      expect(d.impl).toHaveBeenCalledTimes(1);
+
+      d.resolve({ ok: true, resultId: 4242 });
+      const [r1, r2] = await Promise.all([first, second]);
+      expect(r1.status).toBe(200);
+      expect(r2.status).toBe(200);
+      expect(r1.body.resultId).toBe(4242);
+      expect(r2.body.resultId).toBe(4242);
+      expect(d.impl).toHaveBeenCalledTimes(1);
+    });
+
+    it("a send whose wire call THREW releases the claim: the next send for the same row reaches the wire", async () => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      const d = deferredPostResult();
+      vi.mocked(client.postResult).mockImplementation(
+        d.impl as unknown as typeof client.postResult,
+      );
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+
+      const first = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await d.enteredOnce;
+      d.reject(new Error("socket hang up"));
+      const r1 = await first;
+      expect(r1.status).toBeGreaterThanOrEqual(500);
+
+      vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 7 });
+      const r2 = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(r2.status).toBe(200);
+      expect(r2.body.resultId).toBe(7);
+      expect(client.postResult).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("resending after relinking to a DIFFERENT C2 account is allowed and overwrites the pair (plan deviation 5)", async () => {

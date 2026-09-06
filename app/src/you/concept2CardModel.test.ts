@@ -60,6 +60,9 @@ const LINKED: Concept2Link = {
   c2Username: "jamesawesome",
   needsReauth: false,
   logbookBaseUrl: "https://log-dev.concept2.com",
+  autoSend: false,
+  sendFailedAt: null,
+  sendFailedReason: null,
 };
 
 describe("identityLine (Gate 0 amendment 1c)", () => {

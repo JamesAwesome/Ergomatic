@@ -31,6 +31,21 @@ export interface Concept2Link {
    *  a hardcoded guess 404s the View-on-Concept2 link-out for the whole
    *  sandbox phase (plan observation 5). */
   logbookBaseUrl: string | null;
+  /** Wave E auto-send §3.1: the sending mode. `true` = AUTOMATIC (a finished
+   *  monitor row is sent the moment it saves); `false` = MANUAL (today's
+   *  per-row Send). Read as `raw.autoSend === true` — absent, unreadable,
+   *  `"true"`, `1` all read false (A2): the only way to be automatic is a
+   *  literal `true` from the server. */
+  autoSend: boolean;
+  /** The sticky "sends are failing" flag (rulings 6, 7): the ISO instant of
+   *  the last eligible send refused for want of a weight class, and its
+   *  SUB-reason (`no_weight` | `unreadable_weight` | `implausible_weight` |
+   *  `no_gender` — the key the You screen's sentence is chosen by). Both
+   *  null when the last send landed or Concept2 already had the row. Read by
+   *  the You row (`SEND FAILED`), the card's pill, and the screen's mode
+   *  line; never by the send block. */
+  sendFailedAt: string | null;
+  sendFailedReason: string | null;
 }
 
 /** The answer for "this deployment has no Concept2" — amendment 1h, which
@@ -47,6 +62,9 @@ export const LINK_UNAVAILABLE: Concept2Link = {
   c2Username: null,
   needsReauth: false,
   logbookBaseUrl: null,
+  autoSend: false,
+  sendFailedAt: null,
+  sendFailedReason: null,
 };
 
 export function normalizeLink(body: unknown): Concept2Link {
@@ -84,6 +102,20 @@ export function normalizeLink(body: unknown): Concept2Link {
       typeof raw.logbookBaseUrl === "string" && raw.logbookBaseUrl !== ""
         ? raw.logbookBaseUrl
         : null,
+    // Wave E auto-send: `=== true`, not truthiness — a server that predates
+    // the column sends no key and must read MANUAL, and a stray `"true"` or
+    // `1` must not put a rower on AUTOMATIC (A2, fail-closed by construction).
+    autoSend: raw.autoSend === true,
+    // ABSENT, EMPTY, VALUED — the same three-case treatment as the two
+    // strings above; an empty instant or reason is not a flag.
+    sendFailedAt:
+      typeof raw.sendFailedAt === "string" && raw.sendFailedAt !== ""
+        ? raw.sendFailedAt
+        : null,
+    sendFailedReason:
+      typeof raw.sendFailedReason === "string" && raw.sendFailedReason !== ""
+        ? raw.sendFailedReason
+        : null,
   };
 }
 
@@ -95,6 +127,30 @@ export function normalizeLink(body: unknown): Concept2Link {
  *  the read is the one hop that had no discriminator. */
 export interface LinkReadFailure {
   status: number | null;
+}
+
+/** ONE read of `GET /api/concept2/link`, parsed — the hook's own read, and
+ *  the read `log/concept2Send.ts`'s `autoSendAfterSave` takes after a 201
+ *  (Wave E auto-send §3.3: the decision is made on a FRESH answer, never on
+ *  a mount-time snapshot). `failed` carries the status the way the hook's
+ *  `failed` state does; `null` status means the request never completed.
+ *  Never throws. */
+export async function fetchLink(): Promise<
+  { link: Concept2Link } | { failed: LinkReadFailure }
+> {
+  try {
+    const res = await api("/api/concept2/link");
+    if (!res.ok) return { failed: { status: res.status } };
+    let body: unknown;
+    try {
+      body = (await res.json()) as unknown;
+    } catch {
+      return { failed: { status: res.status } };
+    }
+    return { link: normalizeLink(body) };
+  } catch {
+    return { failed: { status: null } };
+  }
 }
 
 /**
@@ -155,7 +211,12 @@ export interface LinkReadFailure {
 export function useConcept2Link(): {
   link: Concept2Link | null;
   failed: LinkReadFailure | null;
-  reload: () => Promise<void>;
+  /** Reads the link and applies it. RESOLVES to the link it applied, or
+   *  `null` when the read failed or a newer read superseded it — so a caller
+   *  that must decide on a FRESH answer (Wave E auto-send §3.3: the log form,
+   *  after a 201) awaits this and never acts on a null. Existing callers that
+   *  `void reload()` are unaffected. */
+  reload: () => Promise<Concept2Link | null>;
 } {
   const [link, setLink] = useState<Concept2Link | null>(null);
   const [failed, setFailed] = useState<LinkReadFailure | null>(null);
@@ -167,35 +228,21 @@ export function useConcept2Link(): {
    *  component. Nothing outside this hook can read or write it. */
   const generation = useRef(0);
 
-  const reload = useCallback(() => {
+  const reload = useCallback((): Promise<Concept2Link | null> => {
     const mine = ++generation.current;
-    const superseded = () => mine !== generation.current;
-    return api("/api/concept2/link")
-      .then(async (res) => {
-        if (superseded()) return;
-        if (!res.ok) {
-          setFailed({ status: res.status });
-          return;
-        }
-        let body: unknown;
-        try {
-          body = (await res.json()) as unknown;
-        } catch {
-          if (superseded()) return;
-          setFailed({ status: res.status });
-          return;
-        }
-        // Re-checked AFTER the body await as well as before it: `res.json()`
-        // settles on a later task, and a foreground burst can start a newer
-        // read inside that window.
-        if (superseded()) return;
-        setLink(normalizeLink(body));
-        setFailed(null);
-      })
-      .catch(() => {
-        if (superseded()) return;
-        setFailed({ status: null });
-      });
+    return fetchLink().then((result): Concept2Link | null => {
+      // Checked once the WHOLE read has settled — `fetchLink` awaits the
+      // body as well as the headers, and a foreground burst can start a
+      // newer read inside either window. A superseded read applies nothing.
+      if (mine !== generation.current) return null;
+      if ("failed" in result) {
+        setFailed(result.failed);
+        return null;
+      }
+      setLink(result.link);
+      setFailed(null);
+      return result.link;
+    });
   }, []);
 
   useEffect(() => {
