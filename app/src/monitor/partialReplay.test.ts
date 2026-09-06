@@ -469,6 +469,17 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
         // `0` is what this repo has observed a TIME-kind interval put on the
         // wire — correct for a 1:00 work interval.
         type: 0,
+        // Phase LP: seq 772's own raw 0x0038 (`00 00 00 19 00 00 f2 05 0a 00
+        // 81 02 d3 0c 63 00 65 01 00`), hand-decoded at the rev 1.30
+        // offsets: 8-9 `0a 00` = 10 cal; 10-11 `81 02` = 0x0281 = 641
+        // cal/hr (the PM5's own); 14-15 `63 00` = 99 W (the PM5's own —
+        // and round(2.80/(60/197)³) = 99 too, spec §1.1's identity);
+        // 16 `65` = drag 101; 5 `00` = no belt → rest HR null.
+        calories: 10,
+        calPerHour: 641,
+        watts: 99,
+        dragFactor: 101,
+        restHeartRateBpm: null,
       },
     ]);
     expect(measuredIntervalCount(out.run.actuals)).toBe(1);

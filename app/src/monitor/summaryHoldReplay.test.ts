@@ -820,6 +820,13 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
       workoutType: 1,
       recoveryHeartRateBpm: null,
       avgPaceSecondsPer500m: 143.1,
+      // Phase LP: seq 295's own raw 0x003A (`98 35 2c 11 00 6e 00 01 06 00
+      // 77 00 00 00 00 00 00 c7 02`), hand-decoded: 8-9 `06 00` = 6 cal;
+      // 10-11 `77 00` = 119 W; 12-14 = 0 m; 17-18 `c7 02` = 711 cal/hr.
+      totalCalories: 6,
+      avgWatts: 119,
+      avgCalPerHour: 711,
+      totalRestMeters: 0,
     });
     expect(fullRecord.verificationBytes).toBeDefined();
     expect(Array.from(fullRecord.verificationBytes!.slice(0, 8))).toStrictEqual(
@@ -959,6 +966,14 @@ describe("the summary hold's permanent gate, leg 2: user End (storage-spine desi
       workoutType: 1,
       recoveryHeartRateBpm: null,
       avgPaceSecondsPer500m: 283.3,
+      // Phase LP: seq 87's own raw 0x003A (`c8 35 10 09 00 0f 00 01 00 00
+      // 0f 00 00 00 00 00 00 60 01`), hand-decoded: 8-9 `00 00` = 0 cal —
+      // a GENUINE zero on a 15 m piece, stored as 0 and never as absent;
+      // 10-11 `0f 00` = 15 W; 12-14 = 0 m; 17-18 `60 01` = 352 cal/hr.
+      totalCalories: 0,
+      avgWatts: 15,
+      avgCalPerHour: 352,
+      totalRestMeters: 0,
     });
     expect(fullRecord.verificationBytes).toBeDefined();
     expect(Array.from(fullRecord.verificationBytes!.slice(0, 8))).toStrictEqual(

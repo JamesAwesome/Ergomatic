@@ -348,6 +348,14 @@ describe("the walk's own finish, replayed to the byte (storage-spine design spec
       workoutType: 8,
       recoveryHeartRateBpm: null,
       avgPaceSecondsPer500m: 138.7,
+      // Phase LP: seq 517's own raw 0x003A (`78 35 1c 09 01 fa 00 02 1c 00
+      // 83 00 00 00 00 00 00 ef 02`), hand-decoded: offsets 8-9 `1c 00` =
+      // 28 cal; 10-11 `83 00` = 131 W; 12-14 `00 00 00` = 0 m rest (r0);
+      // 17-18 `ef 02` = 0x02ef = 751 cal/hr.
+      totalCalories: 28,
+      avgWatts: 131,
+      avgCalPerHour: 751,
+      totalRestMeters: 0,
     });
 
     // The final interval is the REAL 0x0037's own shape (splitInterval

@@ -64,6 +64,14 @@ export function requireProgrammedMeasurements(run: MonitorRun): void {
     requireFiniteNumber(run.summaryDetail.workoutType);
     requireNullableFiniteNumber(run.summaryDetail.recoveryHeartRateBpm);
     requireFiniteNumber(run.summaryDetail.avgPaceSecondsPer500m);
+    if (run.summaryDetail.totalCalories !== undefined)
+      requireFiniteNumber(run.summaryDetail.totalCalories);
+    if (run.summaryDetail.avgWatts !== undefined)
+      requireFiniteNumber(run.summaryDetail.avgWatts);
+    if (run.summaryDetail.avgCalPerHour !== undefined)
+      requireFiniteNumber(run.summaryDetail.avgCalPerHour);
+    if (run.summaryDetail.totalRestMeters !== undefined)
+      requireFiniteNumber(run.summaryDetail.totalRestMeters);
   }
   if (run.verificationBytes !== undefined) {
     const bytes: unknown = run.verificationBytes;
