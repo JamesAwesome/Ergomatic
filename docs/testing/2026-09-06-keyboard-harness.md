@@ -1,187 +1,94 @@
-# The software-keyboard harness (2026-09-06)
+# The software-keyboard instruments (2026-09-06, rewritten for Phase KB)
 
-`.tabbar::after` (`app/src/index.css`) exists because of a quantity **no
-gate this repo owns can produce**: the band iOS paints behind its floating
-input-accessory bar with the software keyboard up. Playwright runs desktop
-Chromium with no keyboard, and jsdom has no layout at all, so the strip this
-fix covers cannot be rendered by any automated check we have. The e2e suite
-asserts the fill EXISTS, is anchored to the bar's bottom edge, carries the
-bar's surface and costs the document no height; that it actually covers the
-strip is verified here, by hand.
+Nothing this repo runs on Chromium can raise an iOS software keyboard, and
+jsdom has no layout at all, so what the phone shows between the tab bar and
+the keyboard cannot be rendered by any automated gate we own. Two
+instruments exist for it instead. Recurring failure 19: when the answer to
+"which instrument would catch this if it were wrong" is none, the instrument
+ships with the change — this file is that instrument's manual.
 
-Recurring failure 19 says that when the answer to "which instrument would
-catch this if it were wrong" is none, the instrument ships with the change.
-This file is that instrument: a recipe, not live code, because the harness
-needs a `vite` entry and an Xcode build that would otherwise have to earn
-their keep in CI for a check that runs by hand a few times a year.
+**This file's first version claimed the `.tabbar::after` fill was "verified
+here, by hand."** It was not: the harness code it recorded was the withdrawn
+hide-the-bar version and could not have rendered a fill, and the fill
+shipped in v0.39.1 having never been seen on a device. The readings below
+replace that version's table; the mechanism they show is written up in
+`docs/superpowers/research/2026-09-06-ios-keyboard-fixed-viewport.md`.
 
-It renders the **shipped** `TabBar` and the **shipped** stylesheet in the
-**real** Capacitor WKWebView. No auth and no API: that is the whole point —
-the defect lives in the shell, not in any screen's data.
+## 1. The probe page (no build; any WKWebView host)
 
-## What it measured, 2026-09-06 (iPhone 17 Pro simulator, iOS 26.5)
+`docs/testing/2026-09-06-keyboard-probe/index.html` is a static page: a
+search field, a long list, a fixed readout of `innerHeight`,
+`visualViewport.height`/`offsetTop`/`scale`, `scrollY` and the bar's
+`getBoundingClientRect`, and three fixed 44px bars across the bottom that
+each try to paint 140px below themselves a different way (`::after`; a box
+pushed below the anchor; a spread `box-shadow`). Whichever colour survives
+in the strip is a mechanism that works; none did.
 
-| Reading | Keyboard closed | Keyboard open |
-| --- | --- | --- |
-| `window.innerHeight` | 874 | 874 |
-| `visualViewport.height` | 874 | 498 |
-| `visualViewport.offsetTop` | 0 | 376 (after scrolling) |
-| tab bar `rect.bottom` | 874 | 498 |
-| where the keyboard really starts | — | ≈564 |
+1. `cd docs/testing/2026-09-06-keyboard-probe && python3 -m http.server 8901`
+2. `ipconfig getifaddr en0` for the Mac's LAN address.
+3. On the phone, same Wi-Fi, open `http://<that address>:8901/` in Safari
+   (or Chrome — same WebKit, different tray).
+4. Tap the field, then **scroll the list**. The clip only appears after a
+   scroll; on first focus the bar is behind the keyboard and there is
+   nothing on screen to look wrong.
+5. Screenshot. The readout rides just above the bars so it cannot scroll out
+   of shot.
 
-The last two rows are the finding: the bar is ALREADY flush with the bottom
-`visualViewport` reports, and the ~66px below it is iOS's floating
-input-accessory bar, which is excluded from that viewport while the page
-still paints behind it. Repositioning was tried against these numbers and
-moved nothing.
+### Readings, James's iPhone (dpr 3), 2026-09-06 — `captures/`
 
-**A withdrawn candidate, recorded so it is not re-proposed.** The first fix
-hid the tab bar whenever `innerHeight - visualViewport.height` passed a
-150px threshold. It was approved at Gate 0 and withdrawn at the branch
-review for two reasons. `visualViewport.height` is reported in CSS pixels,
-so a pinch-zoom shrinks it exactly the way a keyboard does — measured in
-Chromium at a 390x874 viewport, a 1.21x zoom produced a 151.7px delta and
-removed the whole main navigation with no keyboard anywhere (correctable by
-multiplying by `visualViewport.scale`, which the candidate did not read).
-And the tab bar is genuinely usable with the keyboard up — it sits ABOVE the
-accessory bar — so hiding it removed an affordance `e2e/builder.spec.ts`
-already tests ("typed content survives a tab-bar exit and return"). Painting
-the band needs no runtime state and has neither failure mode.
+| Capture | Host | State | `inner` | `vv.h` | `vv.top` | bar `top..bottom` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `safari-at-rest.png` | Safari | keyboard dismissed | 656 | 656 | 0 | 612..656 |
+| (video frame) | Safari | keyboard up, no scroll | 656 | 356 | 0 | 612..**656** |
+| `safari-scrolled.png` | Safari | keyboard up, scrolled | 656 | 356 | 300 | 312..**356** |
+| `chrome-scrolled.png` | Chrome | keyboard up, scrolled | 684 | 383 | 301 | 339..**383** |
+| `app-v0.39.1-portrait-scrolled.png` | the app | keyboard up, scrolled | 874 | 498 | — | 419..**498**; list visible 498..566 |
 
-## Running it
+The bar sits at `innerHeight` until a scroll, then at
+`visualViewport.height`, and paints nothing below that line. The keyboard
+frame (`inner − vv.h` ≈ 300) includes the accessory tray; the tray's band
+(≈ 356..428 in Safari) is inside the WebView, outside the visual viewport,
+and shows the document.
 
-1. `xcrun simctl boot "iPhone 17 Pro"` and `open -a Simulator`.
-2. Simulator menu: **I/O > Keyboard**, make sure *Connect Hardware Keyboard*
-   is UNCHECKED, or `focus()` raises no software keyboard and every capture
-   is a false pass.
-3. Write the two files below into `app/kbd-harness/`.
-4. `cd app && npx vite build --config kbd-harness/vite.config.ts`
-5. `npx cap sync ios`
-6. `cd ios/App && xcodebuild -project App.xcodeproj -scheme App \
-   -configuration Debug -destination "platform=iOS Simulator,id=<UDID>" \
-   -derivedDataPath /tmp/kbd-dd CODE_SIGNING_ALLOWED=NO build`
-7. `xcrun simctl install booted /tmp/kbd-dd/Build/Products/Debug-iphonesimulator/App.app`
-   then `xcrun simctl launch booted haus.waffle.ergomatic`
-8. `xcrun simctl io booted screenshot shot.png` after ~10s. The harness
-   focuses the field and scrolls on its own.
-9. `rm -rf app/kbd-harness app/dist/client app/ios/App/App/public` when
-   done. The third path matters: step 5's `cap sync` already copied the
-   harness bundle into the native project, and removing only the first two
-   leaves the app serving the harness until the next `ios:build`.
+## 2. The dev build on the phone (the plugin itself)
 
-## Three traps, all of which cost a capture here
+`@capacitor/keyboard` only acts inside the Capacitor shell, so the fix is
+checked on a real build. From the worktree's `app/`:
 
-- **`xcrun simctl io screenshot` always writes a portrait-shaped file**, even
-  in landscape. Do not test orientation by reading the PNG's dimensions —
-  rotate the image (`sips -r 90`) and look at it.
-- **Rotating the simulator from a script needs Accessibility permission**
-  for whatever runs `osascript`. Without it the menu click reports success
-  and does nothing.
-- **A JS syntax error in the harness is silent** — the page renders, nothing
-  runs, and the capture looks like a legitimate "no keyboard" frame. Parse
-  the built bundle before trusting a shot. Three landscape captures were
-  thrown away to a raw newline inside a string literal.
+1. `pnpm ios:build` (bundle + `cap sync` + version stamp; export
+   `GOOGLE_IOS_CLIENT_ID` or sign-in is silently dead — CLAUDE.md,
+   Commands), then `pnpm ios:open` and run on the paired iPhone; or
+   `pnpm ios:release` from a tag for TestFlight (`docs/RELEASING.md`).
+2. Library → tap search. Expected: the tab bar disappears as the keyboard
+   starts to rise (not after it settles), the ‹ › ✓ tray is present, the
+   list runs to the tray with nothing between. Dismiss with ✓: the bar is
+   back as the keyboard starts down. Nothing else on the screen moves.
+3. Readings, via Safari's Web Inspector attached to the device
+   (Develop → the phone → Ergomatic): `window.innerHeight` is UNCHANGED
+   with the keyboard up (`resize: none`), and
+   `document.querySelector(".tabbar")` is `null` while it is up.
+4. A numeric field (You → BASELINES, a split): the number pad with the ✓
+   in the tray — the tray restore is the only reason it is there.
 
-## `app/kbd-harness/vite.config.ts`
+## 3. The simulator, and why it is not listed above
 
-```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-export default defineConfig({
-  root: __dirname,
-  plugins: [react()],
-  build: { outDir: "../dist/client", emptyOutDir: true },
-});
-```
+The recipe this file used to carry — a `vite` harness entry, `cap sync`,
+`xcodebuild` to the simulator, `xcrun simctl io booted screenshot` — still
+works for a Capacitor build, because Capacitor lets `focus()` raise the
+keyboard without a tap. It is not the first instrument because two attempts
+on 2026-09-06 to raise the software keyboard for a **web** page in the
+simulator failed outright: a synthetic tap on the field focused it (blue
+ring, `focus=q`) but `visualViewport.height` stayed equal to `innerHeight`
+with *Connect Hardware Keyboard* unchecked, and I/O → Keyboard → Toggle
+Software Keyboard changed nothing. The phone answers in a minute; the
+simulator did not answer at all. If you do use it:
 
-## `app/kbd-harness/index.html`
-
-```html
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>keyboard harness</title>
-  </head>
-  <body><div id="root"></div><script type="module" src="/main.tsx"></script></body>
-</html>
-```
-
-## `app/kbd-harness/main.tsx`
-
-The harness below still mounts `TabBar` inside an `.app-shell`, which is all
-the fill needs. Drop the `useKeyboardOpen` import and its call if you paste
-it from this file's history.
-
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
-import "@fontsource/archivo/400.css";
-import "@fontsource/archivo/500.css";
-import "@fontsource/archivo/600.css";
-import "@fontsource/newsreader/500.css";
-import "@fontsource/ibm-plex-mono/400.css";
-import "@fontsource/ibm-plex-mono/500.css";
-import "@fontsource/ibm-plex-mono/600.css";
-import "../../src/theme/tokens.css";
-import "../../src/index.css";
-import TabBar from "../../src/shell/TabBar";
-import { useKeyboardOpen } from "../../src/shell/keyboardOpen";
-
-function Harness() {
-  // The SHIPPED hook and the SHIPPED TabBar, composed exactly as
-  // AppRoutes composes them.
-  const keyboardOpen = useKeyboardOpen();
-  return (
-    <div className="app-shell">
-      <main className="screen">
-        <h1 className="screen-title">Library</h1>
-        <div className="library-filter-bar">
-          <div className="library-search">
-            <input
-              id="q"
-              type="search"
-              className="library-search-input"
-              placeholder="SEARCH BY NAME"
-              aria-label="Search by name"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              enterKeyHint="search"
-            />
-          </div>
-        </div>
-        {Array.from({ length: 40 }, (_, i) => (
-          <a className="workout-row" href="#" key={i}>
-            <div className="workout-row-head">
-              <span className="workout-title">Workout {i + 1}</span>
-              <span className="workout-duration">2{i % 9}&prime;</span>
-            </div>
-            <p className="workout-summary">
-              4 &times; 1200m @ 6K+10 &middot; 1&prime; REST
-            </p>
-          </a>
-        ))}
-      </main>
-      {!keyboardOpen && <TabBar />}
-    </div>
-  );
-}
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <MemoryRouter initialEntries={["/library"]}>
-      <Harness />
-    </MemoryRouter>
-  </StrictMode>,
-);
-
-window.addEventListener("load", () => {
-  setTimeout(() => {
-    document.getElementById("q")!.focus();
-    setTimeout(() => window.scrollTo(0, 1400), 1500);
-  }, 500);
-});
-```
+- `xcrun simctl io screenshot` always writes a portrait-shaped PNG, even in
+  landscape — rotate the image (`sips -r 90`) before reading it.
+- Rotating from a script needs Accessibility permission for whatever runs
+  `osascript`; without it the menu click reports success and does nothing.
+- A JS syntax error in a harness page is silent — it renders and nothing
+  runs, and the capture looks like a legitimate no-keyboard frame.
+- `cap sync` copies the harness into `ios/App/App/public`; remove it (or run
+  `pnpm ios:build`) before the next real build, or the app serves the
+  harness.

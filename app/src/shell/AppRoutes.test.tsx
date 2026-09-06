@@ -9,6 +9,12 @@ import { saveRun } from "../session/run";
 vi.mock("../library/Library", () => ({
   default: () => <h1>Library</h1>,
 }));
+// Phase KB: the software keyboard is the second reason the tab bar can be
+// absent (the plugin's willShow/willHide, through the shell's store).
+const keyboardOpen = vi.hoisted(() => ({ value: false }));
+vi.mock("./keyboardOpen", () => ({
+  useKeyboardOpen: () => keyboardOpen.value,
+}));
 vi.mock("../today/Today", () => ({
   default: () => <h1>Today</h1>,
 }));
@@ -190,6 +196,28 @@ describe("AppRoutes", () => {
   // countdown and timer"). Countdown is mocked here (like every other
   // screen this file already mocks) purely to keep this an AppRoutes-level
   // routing/shell test, not a re-test of Countdown's own data-loading path.
+  it("hides the tab bar on /library while the software keyboard is up, and shows it again when it goes", async () => {
+    keyboardOpen.value = true;
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/library"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Library" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("navigation", { name: "Main" }),
+    ).not.toBeInTheDocument();
+    keyboardOpen.value = false;
+    rerender(
+      <MemoryRouter initialEntries={["/library"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+
   it("hides the tab bar on /session/countdown", async () => {
     render(
       <MemoryRouter initialEntries={["/session/countdown"]}>

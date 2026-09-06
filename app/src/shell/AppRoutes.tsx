@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { useKeyboardOpen } from "./keyboardOpen";
 import {
   Navigate,
   Route,
@@ -146,6 +147,7 @@ export default function AppRoutes({
   onSignedOut?: () => void;
 } = {}) {
   const location = useLocation();
+  const keyboardOpen = useKeyboardOpen();
   return (
     <div className="app-shell">
       <Routes>
@@ -278,7 +280,11 @@ export default function AppRoutes({
         )}
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Routes>
-      {!hidesTabBar(location.pathname) && <TabBar />}
+      {/* Two reasons the bar is absent, side by side: the route (above) and
+          the software keyboard (Phase KB — the plugin's willShow/willHide, so
+          the bar goes as the keyboard starts to rise and returns as it
+          starts to fall; what Ionic's own tab bar does). */}
+      {!hidesTabBar(location.pathname) && !keyboardOpen && <TabBar />}
     </div>
   );
 }

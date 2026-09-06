@@ -23,6 +23,9 @@ importers:
       '@capacitor/core':
         specifier: ^8.5.0
         version: 8.5.0
+      '@capacitor/keyboard':
+        specifier: ^8.0.5
+        version: 8.0.5(@capacitor/core@8.5.0)
       '@capgo/capacitor-social-login':
         specifier: ^8.4.4
         version: 8.4.4(@capacitor/core@8.5.0)
