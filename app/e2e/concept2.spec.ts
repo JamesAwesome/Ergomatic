@@ -55,6 +55,10 @@ interface LinkBody {
   c2Username?: string | null;
   needsReauth?: boolean;
   logbookBaseUrl?: string | null;
+  // Wave E auto-send §3.1.
+  autoSend?: boolean;
+  sendFailedAt?: string | null;
+  sendFailedReason?: string | null;
 }
 
 interface Answer {
@@ -89,6 +93,8 @@ class C2Fake {
   connect: Answer = { status: 200, body: {} };
   unlink: Answer = { status: 204 };
   send: Answer = { status: 200, body: {} };
+  /** `PATCH /api/concept2/link` — the sending-mode write (auto-send §3.2). */
+  patch: Answer = { status: 204 };
 
   /** Reads of `GET /api/concept2/link`. The POSITIVE readiness signal every
    *  negative assertion in this file waits on: "the card is absent" is only
@@ -100,6 +106,14 @@ class C2Fake {
   connectBodies: unknown[] = [];
   deletes = 0;
   sends = 0;
+  /** Every PATCH body and its Content-Type, verbatim off the wire. */
+  patches: unknown[] = [];
+  patchHeaders: string[] = [];
+  /** Every send's path, parsed body and Content-Type — the automatic send is
+   *  gated on what the route would RECEIVE, never on a count alone. */
+  sendPaths: string[] = [];
+  sendBodies: unknown[] = [];
+  sendHeaders: string[] = [];
 
   async install(page: Page): Promise<void> {
     await page.route(/\/api\/concept2\//, async (route: Route) => {
@@ -111,6 +125,10 @@ class C2Fake {
         if (method === "DELETE") {
           this.deletes += 1;
           answer = this.unlink;
+        } else if (method === "PATCH") {
+          this.patches.push(req.postDataJSON());
+          this.patchHeaders.push(req.headers()["content-type"] ?? "");
+          answer = this.patch;
         } else {
           this.linkReads += 1;
           answer = this.link;
@@ -120,6 +138,9 @@ class C2Fake {
         answer = this.connect;
       } else if (url.pathname.includes("/api/concept2/results/")) {
         this.sends += 1;
+        this.sendPaths.push(url.pathname);
+        this.sendBodies.push(req.postDataJSON());
+        this.sendHeaders.push(req.headers()["content-type"] ?? "");
         answer = this.send;
       } else {
         // The stubbed consent landing page: a document inside the app's own
@@ -429,7 +450,9 @@ test.describe("Concept2 link and send, in a real browser", () => {
     );
     await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
 
-    const unlink = page.getByRole("button", { name: "Unlink Concept2" });
+    // Wave E auto-send: Unlink is the control's OFF segment now (spec §3.2,
+    // RF23 — one affordance for one destructive act).
+    const unlink = page.getByRole("button", { name: "OFF" });
     await unlink.click();
     // ONE tap arms and fires nothing. The DELETE count is the assertion,
     // not the button's label: a card that changed its words while also
@@ -709,7 +732,7 @@ test.describe("Concept2 link and send, in a real browser", () => {
     fake.unlink = { status: 500, body: { error: "boom" } };
     await openConcept2Screen(page, fake);
 
-    await page.getByRole("button", { name: "Unlink Concept2" }).click();
+    await page.getByRole("button", { name: "OFF" }).click();
     await page.getByRole("button", { name: "Tap again to unlink" }).click();
     await expect.poll(() => fake.deletes).toBe(1);
 
@@ -729,9 +752,7 @@ test.describe("Concept2 link and send, in a real browser", () => {
     // The arm is SPENT on every exit, not only the happy one (invariant
     // I2): a live "Tap again to unlink" sitting under a REASON line is one
     // stray tap away from a DELETE the rower has not decided to repeat.
-    await expect(
-      page.getByRole("button", { name: "Unlink Concept2" }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "OFF" })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Tap again to unlink" }),
     ).toHaveCount(0);
@@ -931,5 +952,260 @@ test.describe("Concept2 row on You (Wave E PR A)", () => {
     await expect(page.locator("main.you-screen")).toBeVisible();
     await expect.poll(() => fake.linkReads).toBeGreaterThan(0);
     await expect(page.getByRole("link", { name: /CONCEPT2/ })).toHaveCount(0);
+  });
+});
+
+/**
+ * WAVE E AUTO-SEND (spec 2026-09-05; Gate 0 amendment 2026-09-05). The
+ * sending-mode control that replaced Unlink, the sticky SEND FAILED flag on
+ * the row and the card, and the automatic send itself — driven from the
+ * rower's own Save tap on the log form, so the gate starts upstream of the
+ * producer (RF24) and reads the wire body the send route would receive.
+ */
+test.describe("Concept2 auto-send, in a real browser", () => {
+  /** Same in-page-`fetch` idiom as `log.spec.ts`'s own `setBaselines` (e2e
+   *  helpers are copied across files here, not shared). The manual door
+   *  short-circuits to a "Set baselines" stub for a workout whose steps
+   *  resolve against a pace reference; the form under test needs them. */
+  async function setBaselines(page: Page): Promise<void> {
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k2Seconds: 105, k6Seconds: 115 }),
+      });
+      return { ok: res.ok, status: res.status, body: await res.text() };
+    });
+    if (!result.ok) {
+      throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+    }
+  }
+
+  /** Saves ONE row through the manual door's real form — HELD, Pain 3, Save —
+   *  and returns once Today has rendered. This is the producer every
+   *  automatic-send assertion below must start upstream of. */
+  async function saveThroughTheForm(page: Page): Promise<void> {
+    await setBaselines(page);
+    await page.goto("/library");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator("h1.workout-detail-title")).toBeVisible();
+    const workoutId = page.url().match(/\/library\/([^/]+)$/)?.[1];
+    expect(workoutId).toBeTruthy();
+    await page.goto(`/library/${workoutId!}/log`);
+    await expect(page.locator("h1.screen-title")).toBeVisible();
+    await page.getByRole("button", { name: "HELD" }).click();
+    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page).toHaveURL(/\/today$/);
+  }
+
+  const control = (page: Page) =>
+    page.getByRole("group", { name: "Sending mode" });
+
+  test("a fresh link is MANUAL: three aria-pressed buttons, Unlink gone, the mode line beneath", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "mode-manual");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    const group = control(page);
+    await expect(group.getByRole("button")).toHaveText([
+      "OFF",
+      "MANUAL",
+      "AUTOMATIC",
+    ]);
+    await expect(group.getByRole("button", { name: "MANUAL" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(
+      group.getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      page.getByText("Send each finished monitor row yourself, from the log."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Unlink Concept2" }),
+    ).toHaveCount(0);
+    // Every segment clears the house floor in the real column.
+    for (const name of ["OFF", "MANUAL", "AUTOMATIC"]) {
+      const box = await group.getByRole("button", { name }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test("AUTOMATIC PATCHes { autoSend: true } as JSON, then the control follows the RE-READ, not the tap", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "mode-auto");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    await expect(
+      control(page).getByRole("button", { name: "MANUAL" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // The server will say AUTOMATIC on the read that follows the write.
+    const readsBefore = fake.linkReads;
+    fake.linked({ autoSend: true });
+    await control(page).getByRole("button", { name: "AUTOMATIC" }).click();
+    await expect.poll(() => fake.patches.length).toBe(1);
+    expect(fake.patches[0]).toEqual({ autoSend: true });
+    expect(fake.patchHeaders[0]).toMatch(/^application\/json/);
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    await expect(
+      control(page).getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByText("Finished monitor rows are sent when you save them."),
+    ).toBeVisible();
+
+    // Back to MANUAL.
+    fake.linked();
+    await control(page).getByRole("button", { name: "MANUAL" }).click();
+    await expect.poll(() => fake.patches.length).toBe(2);
+    expect(fake.patches[1]).toEqual({ autoSend: false });
+    await expect(
+      control(page).getByRole("button", { name: "MANUAL" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("a refused PATCH shows the A7 line and leaves the pressed state on the server's value", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "mode-refused");
+    fake.linked();
+    fake.patch = { status: 500, body: { error: "boom" } };
+    await openConcept2Screen(page, fake);
+    await control(page).getByRole("button", { name: "AUTOMATIC" }).click();
+    await expect.poll(() => fake.patches.length).toBe(1);
+    await expect(
+      page.getByText("Couldn't change this. Try again."),
+    ).toBeVisible();
+    await expect(
+      control(page).getByRole("button", { name: "MANUAL" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      control(page).getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      control(page).getByRole("button", { name: "AUTOMATIC" }),
+    ).toBeEnabled();
+  });
+
+  test("armed OFF spans the control alone; the other segments are hidden until it disarms", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "mode-armed");
+    fake.linked({ autoSend: true });
+    await openConcept2Screen(page, fake);
+    const group = control(page);
+    const groupBox = await group.boundingBox();
+    await group.getByRole("button", { name: "OFF" }).click();
+    const armed = page.getByRole("button", { name: "Tap again to unlink" });
+    await expect(armed).toBeVisible();
+    await expect(armed).toHaveAttribute("aria-pressed", "true");
+    // Gate 0 §2a in a real engine: the CSS that hides the siblings and spans
+    // the armed segment is measured, not read (RF21).
+    await expect(group.getByRole("button", { name: "MANUAL" })).toBeHidden();
+    await expect(group.getByRole("button", { name: "AUTOMATIC" })).toBeHidden();
+    const armedBox = await armed.boundingBox();
+    expect(armedBox?.height).toBe(52);
+    // Spans the control's whole CONTENT width: the group's box less its two
+    // 1px borders (measured 2.016 at 390px; the tolerance is for subpixels).
+    expect(
+      Math.abs((armedBox?.width ?? 0) - ((groupBox?.width ?? -1) - 2)),
+    ).toBeLessThanOrEqual(1);
+    await expect(
+      page.getByText("DISARMS ON ITS OWN AFTER 4 SECONDS"),
+    ).toBeVisible();
+    expect(fake.deletes).toBe(0);
+    expect(fake.patches).toHaveLength(0);
+
+    // A tap on a sibling that is hidden cannot happen; the timer disarms.
+    await expect(group.getByRole("button", { name: "OFF" })).toBeVisible({
+      timeout: 6000,
+    });
+    await expect(
+      group.getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(fake.patches).toHaveLength(0);
+  });
+
+  test("SEND FAILED reads on the You row and the card's pill together; the screen names the reason and offers the profile", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "send-failed");
+    fake.linked({
+      autoSend: true,
+      sendFailedAt: "2026-09-05T12:00:00.000Z",
+      sendFailedReason: "no_weight",
+    });
+    await openYou(page);
+    const row = page.getByRole("link", { name: /CONCEPT2/ });
+    await expect(row.locator(".diag-row-state")).toHaveText("SEND FAILED");
+    await row.click();
+    await expect(page.locator(".c2-card-status")).toHaveText("SEND FAILED");
+    await expect(
+      page.getByText(
+        "Rows aren't being sent: Concept2 needs a weight class, and your Concept2 profile has no weight set.",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+    ).toBeVisible();
+    await expect(
+      control(page).getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // RECONNECT NEEDED wins over the flag on both surfaces (ruling 5's shape).
+    fake.linked({
+      needsReauth: true,
+      sendFailedAt: "2026-09-05T12:00:00.000Z",
+      sendFailedReason: "no_weight",
+    });
+    await page.getByRole("link", { name: /BACK/ }).click();
+    await expect(row.locator(".diag-row-state")).toHaveText("RECONNECT NEEDED");
+    await row.click();
+    await expect(page.locator(".c2-card-status")).toHaveText(
+      "RECONNECT NEEDED",
+    );
+    await expect(
+      page.getByText("Sends are paused until you reconnect."),
+    ).toBeVisible();
+  });
+
+  test("AUTOMATIC: saving a row through the log form fires ONE send to that row, JSON tz body, without holding Today", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "auto-save");
+    fake.linked({ autoSend: true });
+    fake.send = { status: 200, body: { resultId: 901 } };
+    await saveThroughTheForm(page);
+
+    await expect.poll(() => fake.sends).toBe(1);
+    expect(fake.sendBodies[0]).toMatchObject({ tz: expect.any(String) });
+    expect((fake.sendBodies[0] as { tz: string }).tz.length).toBeGreaterThan(0);
+    expect(fake.sendHeaders[0]).toMatch(/^application\/json/);
+
+    // The row the send named is the row the form just wrote: open the
+    // newest history row and compare ids.
+    const sentId = fake.sendPaths[0]!.match(/\/results\/([^/]+)$/)?.[1];
+    expect(sentId).toBeTruthy();
+    await page.goto("/today/log");
+    await page.locator(".today-log-row").first().click();
+    await expect(page).toHaveURL(new RegExp(`/today/log/${sentId!}$`));
+  });
+
+  test("MANUAL: the same save reads the link and sends nothing", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "manual-save");
+    fake.linked();
+    const readsBefore = fake.linkReads;
+    await saveThroughTheForm(page);
+    // The decision's own read is the positive signal the negative waits on.
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    expect(fake.sends).toBe(0);
   });
 });

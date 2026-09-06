@@ -6424,6 +6424,32 @@ test("you-concept2-linked", async ({ page }) => {
   });
 });
 
+test("you-concept2-send-failed", async ({ page }) => {
+  // Wave E auto-send §3.4, Gate 0 amendment 2026-09-05 §4b: the fifth row
+  // string, at its siblings' weight (`--ink-3`, ruled).
+  const fake: C2ShotFake = {
+    link: {
+      status: 200,
+      body: {
+        ...C2_SHOT_LINKED,
+        autoSend: true,
+        sendFailedAt: "2026-09-05T12:00:00.000Z",
+        sendFailedReason: "no_weight",
+      },
+    },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-send-failed@e2e.test");
+  await expect(
+    page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+  ).toHaveText("SEND FAILED");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-send-failed.png"),
+    fullPage: true,
+  });
+});
+
 test("you-concept2-reconnect", async ({ page }) => {
   // Cell 9: the pre-emptive warning the row exists for — the server's own
   // `needs_reauth_at`, on a surface the rower passes anyway, before they
@@ -6517,8 +6543,58 @@ test("concept2-screen-linked", async ({ page }) => {
     "Concept2 jamesawesome · Ergomatic screenshots-c2-screen-linked",
   );
   await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
+  // Wave E auto-send: the control where Unlink was, MANUAL pressed for a
+  // fresh link, the mode line beneath (Gate 0 amendment 2026-09-05 §1).
+  await expect(
+    page.getByRole("button", { name: "MANUAL", pressed: true }),
+  ).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "concept2-screen-linked.png"),
+  });
+});
+
+test("concept2-screen-automatic", async ({ page }) => {
+  // Gate 0 amendment 2026-09-05 §1, AUTOMATIC: the promise as the mode line.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: { ...C2_SHOT_LINKED, autoSend: true } },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2Screen(page, "screenshots-c2-screen-automatic@e2e.test");
+  await expect(
+    page.getByRole("button", { name: "AUTOMATIC", pressed: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Finished monitor rows are sent when you save them."),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-automatic.png"),
+  });
+});
+
+test("concept2-screen-send-failed", async ({ page }) => {
+  // Gate 0 amendment 2026-09-05 §4: the pill, the reason line in warn
+  // weight, the profile remedy — the card's half of the sticky flag.
+  const fake: C2ShotFake = {
+    link: {
+      status: 200,
+      body: {
+        ...C2_SHOT_LINKED,
+        autoSend: true,
+        sendFailedAt: "2026-09-05T12:00:00.000Z",
+        sendFailedReason: "no_weight",
+      },
+    },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2Screen(page, "screenshots-c2-screen-send-failed@e2e.test");
+  await expect(page.locator(".c2-card-status")).toHaveText("SEND FAILED");
+  await expect(
+    page.getByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-send-failed.png"),
   });
 });
 
@@ -6532,7 +6608,8 @@ test("concept2-screen-armed", async ({ page }) => {
   };
   await routeC2(page, fake);
   await openC2Screen(page, "screenshots-c2-screen-armed@e2e.test");
-  await page.getByRole("button", { name: "Unlink Concept2" }).click();
+  // Wave E auto-send: OFF is the unlink (Gate 0 amendment 2026-09-05 §2).
+  await page.getByRole("button", { name: "OFF" }).click();
   await expect(
     page.getByRole("button", { name: "Tap again to unlink" }),
   ).toBeVisible();
