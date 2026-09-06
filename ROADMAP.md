@@ -557,6 +557,44 @@ scrolled inside its overlay panel, Dark Mode, the half-blurred straddle)
 **Exit:** Gate 0 approved; e2e green, no web capture moved; DEVIATIONS row;
 rides the next tag (no release of its own).
 
+## Phase LP — Logbook parity: every number Concept2 shows, and the same number
+
+**Status:** OPENED 2026-09-06 (James: "show everything that Concept2's
+logbook shows, with the exception of weight class … be absolutely certain
+our numbers match Concept2's"). Spec
+`docs/superpowers/specs/2026-09-06-logbook-parity-design.md`; mockups
+`docs/design/logbook-parity/`. **TRIAD twice** (stored shape in PR 1, wire
+meaning in PR 2). **M.**
+
+**Goal:** a rower who opens the same piece in our app and in the Concept2
+logbook after an upload reads the same numbers — per split: watts, cal,
+cal/hr, HR, stroke rate; per session: avg stroke rate, target rate, avg
+power, calories, avg cal/hr, rest distance, drag factor.
+
+**Shape:** PR 1 keeps every 0x0038 field the decoder already reads
+(calories, cal/hr, watts, drag, work/rest HR) and adds 0x003A's total
+calories / watts / avg calories to the record; renders six hero tiles and a
+sideways-scrolling **MACHINE SUMMARY** table under today's INTERVALS table
+(layout B + B, chosen in the visual companion); old machine rows render
+`—`. PR 2 extends `buildC2Payload` to everything the logbook API accepts
+(splits/intervals with calories, HR, stroke rate, rests; result-level
+calories, drag, HR set; per-interval targets). Then one walk: the same piece
+photographed in both apps, every cell compared.
+
+**Absorbs:** the "Session calories" open item (0x003A is the honest total)
+and the SUMMARY half of the "say which number this is" design pass (its
+chart-axis items stay there).
+
+**Gates:** antagonist anchor pass on the spec; PM open on this slate, PM
+close on the walk, PM final gate on each PR; **Gate 0 on the phone** for PR
+1 (fresh and old machine rows, session door and log detail, both
+orientations, beside v0.39.2). Watts and cal/hr — the two figures Concept2
+derives — are pinned against James's real logbook row before the render is
+final.
+
+**Exit:** both PRs merged; the walk's side-by-side photographs committed
+with no unexplained cell; release note in rower words (spec §8).
+
 ## Wave A — The front door
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
