@@ -118,11 +118,16 @@ is left alone):
   backgrounds"_) makes the glyphs dark everywhere and §5's numbers
   unconditional. Gate 0 adds a Dark Mode capture to see it.
 - **`z-index: 30`** — above the tab bar (20) and the reader/releases
-  overlay (10); `.tabbar`'s own comment names those two.
+  overlay (10); it ties `.filter-sheet-backdrop` (30) and loses on DOM
+  order (the strip is `.app-shell`'s first child; sheets render inside
+  `<Routes>` after it), which is the right outcome — a modal scrim covers
+  the status-bar band. The full z census is 10/20/30/30 over exactly four
+  `position: fixed` rules; no `.tsx` sets a z-index and nothing portals
+  (anchor pass m4).
 - **Blur, not paint**: an opaque `--page` strip would also obscure, but the
   HIG's preferred form is the blurred view, and blur makes the colour
   choice forgiving on any screen whose top is not exactly `--page` (§4).
-  `color-mix` at 82% keeps the clock's black text on a near-page ground
+  The 82% tint keeps the clock's dark glyphs on a near-page ground
   (contrast §5).
 - **Nothing moves at rest.** No screen's padding changes; the strip sits
   over the padding every screen already has.
