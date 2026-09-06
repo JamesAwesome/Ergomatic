@@ -52,6 +52,8 @@
 
 import type {
   DiscoveredMonitor,
+  TargetedMonitorDiscoveryRequest,
+  TargetedScanTransport,
   Transport,
 } from "../../../domain/monitor/types.js";
 import type { AppLifecycleEvent } from "../../adapters/appLifecycle";
@@ -78,7 +80,7 @@ export interface ReplayResult {
 }
 
 export interface ReplayHandle {
-  transport: Transport;
+  transport: Transport & TargetedScanTransport;
   clock: ReplayClock;
   /** Plays the whole recording; resolves at end-of-log. */
   run(): Promise<ReplayResult>;
@@ -245,6 +247,21 @@ export function createReplayTransport(
     return scanEvent ? scanEvent.devices : [];
   }
 
+  // Phase NF: the recorded scan's devices, narrowed to the exact name. A
+  // recording that never saw the name is "not advertising" — by NAME only
+  // (this module never imports capacitorBle's error classes).
+  async function scanTarget(
+    request: TargetedMonitorDiscoveryRequest,
+  ): Promise<DiscoveredMonitor[]> {
+    const exact = (await scan()).filter((d) => d.name === request.exactName);
+    if (exact.length === 0) {
+      const err = new Error("no recorded device advertised the exact name");
+      err.name = "TargetMonitorNotAdvertisingError";
+      throw err;
+    }
+    return exact;
+  }
+
   async function connect(): Promise<void> {
     // Accepted whenever it comes (binding semantics) — never gated on the
     // walk's cursor.
@@ -254,8 +271,9 @@ export function createReplayTransport(
     // Caller-initiated; accepted whenever it comes, same as connect().
   }
 
-  const transport: Transport = {
+  const transport: Transport & TargetedScanTransport = {
     scan,
+    scanTarget,
     connect,
     write,
     subscribe,

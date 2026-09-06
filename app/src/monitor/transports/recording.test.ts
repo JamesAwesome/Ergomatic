@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type {
+  DiscoveredMonitor,
+  TargetedMonitorDiscoveryRequest,
+} from "../../../domain/monitor/types.js";
+import { hasTargetedScan } from "../../../domain/monitor/types.js";
 import type { Transport } from "../../../domain/monitor/types.js";
 import {
   RECORDING_FORMAT_TAG,
@@ -331,5 +336,40 @@ describe("createRecordingTransport: structural extensions pass through unchanged
     // callbacks) — if the spread had somehow won over the explicit method,
     // this would double-subscribe on `inner` instead.
     expect(inner.innerSubscriberCount("0031")).toBe(1);
+  });
+});
+
+describe("scanTarget stance (Phase NF)", () => {
+  const request = {
+    kind: "advertised-name" as const,
+    attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+    exactName: "PM5 1",
+  };
+  it("forwards scanTarget with the SAME request and signal, and records the devices as a scan event", async () => {
+    const signal = new AbortController().signal;
+    const scanTarget = vi.fn<
+      (
+        r: TargetedMonitorDiscoveryRequest,
+        s: AbortSignal,
+      ) => Promise<DiscoveredMonitor[]>
+    >(async () => [{ id: "dev-1", name: "PM5 1" }]);
+    const tap = createRecordingTransport({
+      ...stubInner().transport,
+      scanTarget,
+    } as Transport);
+    expect(hasTargetedScan(tap.transport)).toBe(true);
+    if (!hasTargetedScan(tap.transport)) throw new Error("unreachable");
+    await tap.transport.scanTarget(request, signal);
+    expect(scanTarget.mock.calls[0]![0]).toBe(request);
+    expect(scanTarget.mock.calls[0]![1]).toBe(signal);
+    expect(tap.lines().join("\n")).toContain("dev-1");
+    expect(tap.lines().join("\n")).not.toContain(request.attemptId);
+  });
+  it("omits scanTarget when the inner lacks it", () => {
+    expect(
+      hasTargetedScan(
+        createRecordingTransport(stubInner().transport).transport,
+      ),
+    ).toBe(false);
   });
 });

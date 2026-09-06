@@ -1,5 +1,9 @@
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
-import type { Transport } from "../../../domain/monitor/types.js";
+import {
+  hasTargetedScan,
+  type TargetedMonitorDiscoveryRequest,
+  type Transport,
+} from "../../../domain/monitor/types.js";
 // TYPE-ONLY (erased by `verbatimModuleSyntax`, so it adds nothing to this
 // module's runtime graph and nothing to the fold-away argument in
 // `transports/index.ts`). Imported rather than re-declared so the recorded
@@ -194,6 +198,21 @@ export function createRecordingTransport(
     // later keys win), so every one of them keeps exactly its own
     // recording behaviour.
     ...inner,
+    // Phase NF: a targeted scan records the same `scan` event a picker scan
+    // does — the observable is the devices found; the request itself (an
+    // attempt ID and the tag's name) is never written to a recording.
+    ...(hasTargetedScan(inner)
+      ? {
+          async scanTarget(
+            request: TargetedMonitorDiscoveryRequest,
+            signal: AbortSignal,
+          ) {
+            const devices = await inner.scanTarget(request, signal);
+            record({ kind: "scan", devices });
+            return devices;
+          },
+        }
+      : {}),
     async scan() {
       const devices = await inner.scan();
       record({ kind: "scan", devices });

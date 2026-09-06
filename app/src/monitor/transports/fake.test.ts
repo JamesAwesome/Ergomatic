@@ -3824,3 +3824,58 @@ describe("createFakeTransport: FakeBurst riders — loud pendingBurst overwrite 
     ]);
   });
 });
+
+describe("createFakeTransport: scanTarget (Phase NF)", () => {
+  const ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+  const req = (exactName: string) => ({
+    kind: "advertised-name" as const,
+    attemptId: ATTEMPT,
+    exactName,
+  });
+  it("resolves the scripted device when the exact name matches and records the request", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      deviceName: "PM5 432331249 Row",
+    });
+    const request = req("PM5 432331249 Row");
+    await expect(
+      fake.scanTarget(request, new AbortController().signal),
+    ).resolves.toStrictEqual([{ id: "fake-pm5", name: "PM5 432331249 Row" }]);
+    expect(fake.targetedRequests()).toStrictEqual([request]);
+  });
+  it("rejects by name when the exact name differs (a prefix is not enough)", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      deviceName: "PM5 432331249 Row",
+    });
+    await expect(
+      fake.scanTarget(req("PM5 432331249"), new AbortController().signal),
+    ).rejects.toMatchObject({
+      name: "TargetMonitorNotAdvertisingError",
+    });
+  });
+  it("honours the scripted failure kinds", async () => {
+    for (const [kind, name] of [
+      ["ambiguous", "TargetMonitorAmbiguousError"],
+      ["already-connected", "TargetAlreadyConnectedError"],
+      ["not-advertising", "TargetMonitorNotAdvertisingError"],
+    ] as const) {
+      const fake = createFakeTransport({
+        program: PROGRAM,
+        deviceName: "PM5 1",
+        targetedScan: kind,
+      });
+      await expect(
+        fake.scanTarget(req("PM5 1"), new AbortController().signal),
+      ).rejects.toMatchObject({ name });
+    }
+  });
+  it("rejects a pre-aborted signal as interrupted", async () => {
+    const fake = createFakeTransport({ program: PROGRAM, deviceName: "PM5 1" });
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      fake.scanTarget(req("PM5 1"), ac.signal),
+    ).rejects.toMatchObject({ name: "TargetScanInterruptedError" });
+  });
+});

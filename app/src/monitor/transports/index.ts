@@ -77,7 +77,11 @@
 // that property's own doc comment.
 
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
-import type { Transport } from "../../../domain/monitor/types.js";
+import {
+  hasTargetedScan,
+  type TargetedMonitorDiscoveryRequest,
+  type Transport,
+} from "../../../domain/monitor/types.js";
 // I1 fix (final-review): type-only — the stash callback below builds
 // `MonitorLogEntry` objects to keep the stash keys valid `exportLog()`
 // JSON; see that callback's own comment.
@@ -225,6 +229,17 @@ const AUTO_TICK_MS = 100;
 export function autoTicking(
   fake: Transport & { tick(ms: number): void },
 ): Transport {
+  // Phase NF: the injected fake carries `scanTarget`; the wrapper keeps it
+  // (conditionally, like every other decorator) so an e2e NFC flow reaches
+  // the fake's targeted arm through the SAME wrapped instance.
+  const targeted = hasTargetedScan(fake)
+    ? {
+        scanTarget: (
+          request: TargetedMonitorDiscoveryRequest,
+          signal: AbortSignal,
+        ) => fake.scanTarget(request, signal),
+      }
+    : {};
   const timer = setInterval(() => fake.tick(AUTO_TICK_MS), AUTO_TICK_MS);
   let stopped = false;
   function stop(): void {
@@ -233,6 +248,7 @@ export function autoTicking(
     clearInterval(timer);
   }
   return {
+    ...targeted,
     scan: () => fake.scan(),
     connect: (id) => fake.connect(id),
     write: (characteristicId, bytes) => fake.write(characteristicId, bytes),

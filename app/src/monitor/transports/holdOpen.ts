@@ -30,7 +30,11 @@
 // in the same session disconnects normally.
 
 import { LOGGED_WORKOUT_UUID } from "../../../domain/monitor/pm5/uuids.js";
-import type { Transport } from "../../../domain/monitor/types.js";
+import {
+  hasTargetedScan,
+  type TargetedMonitorDiscoveryRequest,
+  type Transport,
+} from "../../../domain/monitor/types.js";
 
 /** How long a caller-initiated `disconnect()` is held open once armed,
  *  before the real `inner.disconnect()` finally fires on its own — long
@@ -292,6 +296,21 @@ export function createHoldOpenTransport(
 
   const transport: Transport = {
     ...inner,
+    // Phase NF: the targeted capability is FORWARDED only when the inner
+    // has it and OMITTED otherwise, so `hasTargetedScan()` on the wrapped
+    // transport answers exactly what it would on the inner — a web
+    // transport stays incapable through every decorator (spec §5: no
+    // decorator may drop the method, and none may invent it).
+    ...(hasTargetedScan(inner)
+      ? {
+          async scanTarget(
+            request: TargetedMonitorDiscoveryRequest,
+            signal: AbortSignal,
+          ) {
+            return inner.scanTarget(request, signal);
+          },
+        }
+      : {}),
     async scan() {
       return inner.scan();
     },
