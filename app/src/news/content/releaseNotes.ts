@@ -5,6 +5,30 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.39.0: git log v0.38.1..main --oneline at 2472133a — four merges,
+    // every one accounted (RF15, no `--merges`; main is squash-merged):
+    //   #307 Wave E PR C — the Concept2 send carries the monitor's own
+    //     total; that surface stays DARK in production behind
+    //     C2_LINK_ENABLED and C2_ALLOWED_EMAILS (same reason v0.37.0 and
+    //     v0.38.0 skipped #290/#293/#298/#303): no item.
+    //   #308 Phase DE spec + ROADMAP — docs only: no item.
+    //   #309 Phase DE PR 1 — items 1 and 2 (the removed axis, the
+    //     re-sorted AT and TR blocks) and the discarded difficulty filter
+    //     named inside item 1, per the PM open gate's release-note ruling.
+    //   #310 Phase DE PR 2 — item 3 (the rename) and item 4 (the article).
+    // Installed pre-v0.39.0 builds keep working against this server for
+    // one tag cycle (the API answers with both PAIN and EFFORT); the
+    // compat comes out in Phase DE PR 3.
+    version: "v0.39.0",
+    date: "2026-09-05",
+    items: [
+      "One number for how hard a workout is. EASY / MEDIUM / HARD is gone from every row, filter and picker. If you had narrowed Today by difficulty, that filter is gone and Today may suggest more workouts than before; narrow by effort instead.",
+      "The AT and TR blocks of the Library are sorted by effort, so scrolling a type never steps back down. About forty workouts sit a few rows from where they were.",
+      "PAIN is now EFFORT. Same 1 to 5, same five words, one name, on the Log, the filter sheets, the Builder card and every row.",
+      "The pain scale article is now the effort scale. Your read of it carries over, and its old link still opens it.",
+    ],
+  },
+  {
     // v0.38.1: git log v0.38.0..main --oneline at f927ef4d — two merges,
     // both accounted (RF15, no `--merges`; main is squash-merged):
     //   #304 the Library search field no longer zooms the page — the item.
