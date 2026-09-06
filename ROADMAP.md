@@ -1141,6 +1141,13 @@ closed with zero Concept2 contact.
       redrawn card. Rulings (James, 2026-09-05): off = unlinked; silent;
       default manual; no backlog send. Spec:
       `docs/superpowers/specs/2026-09-05-concept2-auto-send-design.md`.
+      **Gate 0 APPROVED 2026-09-05** (amendment
+      `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-05-autosend.html`,
+      one fix on sight: armed OFF spans the control). **BUILT on
+      `wave-e-c2-autosend`, 2026-09-05** — spec rev 4 records the two
+      implementation departures (§3.3: the fresh read is one direct
+      `fetchLink()` after the 201, not a mounted hook; the in-flight claim is
+      a wait-then-rerun chain, not a stored response). Ticks at merge.
 - [ ] **Verification code: hide it, say "verified".** James, 2026-09-05: like
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that

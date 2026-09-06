@@ -1,5 +1,14 @@
 # Wave E follow-on — automatic Concept2 sends: OFF · MANUAL · AUTOMATIC
 
+**Rev 4 (2026-09-05, implementation).** Two mechanisms in §3.3 are recorded
+as BUILT rather than as first written, same invariants, cheaper shape: the
+fresh read is one direct `fetchLink()` (the hook's own read, exported) after
+the 201 instead of a `useConcept2Link()` mounted on every log door — no new
+`GET /link` on three doors that never read it; and the in-flight claim is a
+wait-then-rerun chain rather than a stored `{status, body}` — the second
+caller awaits the first's settlement and re-runs the handler, whose own
+already-sent short-circuit then answers it. Nothing a rower sees changes.
+
 **Rev 3 (2026-09-05).** Rev 1 took the full antagonist pass (TRIAD, phase-open
 anchor): eight falsified, one ruling to James (§3.4, "A"). Rev 2 took the DELTA
 pass on its four new mechanisms: eight more falsified, one ruling to James
@@ -219,12 +228,14 @@ automatic send 400s silently (delta F1). §4's gate reads the PARSED wire body.
   answer, swallowed, and does NOT set the failure flag (§3.4). Cost: one 422
   per non-monitor save for an AUTOMATIC rower.
 - **The decision waits for a fresh read, so it is never made on a stale or
-  pending link (A4).** The form mounts `useConcept2Link()` (a `GET /link` on
-  every log door — programmed, Just Row, timer, hand entry: four `useLogForm`
-  call sites, three of which had no such read before; named as a cost) and,
-  after the 201, calls the hook's reload once more and awaits it. A failed read
-  → no send. This converts an unobservable silence into a decision; the save's
-  own round trip means the extra read costs the rower nothing visible.
+  pending link (A4).** BUILT (rev 4): `useLogForm`'s 201 path calls
+  `autoSendAfterSave(logId)` (`log/concept2Send.ts`), which takes ONE
+  `fetchLink()` — the same parsing `useConcept2Link` uses, exported from it —
+  and decides on the result. Rev 3 mounted the hook on every log door for
+  this read (a `GET /link` on four doors, three of which never read it); the
+  direct read keeps the invariant — the decision is made on an answer fetched
+  AFTER the 201, and a failed read → no send — without the mount-time cost.
+  The save's own round trip means the read costs the rower nothing visible.
 - **Fire-and-forget; navigation is not held** (A5, HELD). The server writes the
   outcome onto the row (`c2_result_id`) or onto the link (the failure flag);
   the row's block and the You row read those on their next mount. No
@@ -232,18 +243,23 @@ automatic send 400s silently (delta F1). §4's gate reads the PARSED wire body.
 - **The in-process claim (F1) — and it is a refactor, not a line.** The send
   route's short-circuit covers a RETRY, not two sends in flight (both read the
   row before either writes; no lock on `session_logs`). Rev 1 leaned on
-  Concept2's dedup — a vendor heuristic. **Rule: `createConcept2Router` holds a
-  `Map<"userId:logId", Promise<{status, body}>>`; a second caller for a key
-  already present awaits the first's promise and answers with its result; the
-  entry clears in `finally`, including when the send THREW.** Keyed by user as
-  well as row (the 200 carries a weight class), scoped to the router instance
-  (one process in production — `container_name` in compose makes `--scale`
-  impossible, measured; one per test app so route tests do not share a table).
-  **The cost, said plainly (delta F7): the upload handler's exits — seventeen
-  `res.status(...)` calls over ~585 lines — become a returned `{status, body}`
-  the claim can store; the plan sizes that refactor as its own task.** Sharing
-  a failure between callers is correct in both directions: a manual tap that
-  joins a failing automatic send gets the 422 it can act on.
+  Concept2's dedup — a vendor heuristic. **Rule (as BUILT, rev 4):
+  `createConcept2Router` holds a `Map<"userId:logId", Promise<void>>`; a
+  second caller for a key already present AWAITS the first's settlement and
+  then RE-RUNS the handler against the row the first one wrote — the
+  already-sent short-circuit answers a 200 carrying the recorded result, a
+  first that failed leaves the second to try for itself; the entry clears in
+  `finally`, including when the send THREW.** Keyed by user as well as row,
+  scoped to the router instance (one process in production —
+  `container_name` in compose makes `--scale` impossible, measured; one per
+  test app so route tests do not share a table). Rev 3 stored a
+  `{status, body}` and answered the second caller with it, which meant
+  turning seventeen `res.status(...)` exits into returned values (delta F7);
+  the chain keeps the invariant that matters — two overlapping sends of one
+  row never both reach Concept2 — with no response capture and no exit
+  refactor. The one behavioural difference: a second caller behind a FAILED
+  first gets its own fresh attempt rather than a copy of the failure, which
+  is the manual tap's normal retry.
 - **No `trigger` field** (rev 2's diagnostic, withdrawn at the delta pass): a
   client-asserted arm label rides only on sends that ARRIVE, and both silent
   failure modes produce no request. The route stays blind to the arm by design

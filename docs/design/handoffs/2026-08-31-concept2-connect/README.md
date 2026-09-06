@@ -43,7 +43,9 @@ implementation.
 ## Overview
 
 Two surfaces that link a rower's Concept2 logbook account and send finished
-monitor rows to it, one row at a time, manually:
+monitor rows to it — one row at a time from the log, or, since the 2026-09-05
+auto-send amendment, automatically as each row saves when the rower has set
+AUTOMATIC (`amendment-2026-09-05-autosend.html`):
 
 1. **Concept2 card** — owns the link (OAuth via the system browser) and
    unlink. It asks the rower nothing (2026-09-03 ruling). **Moved
@@ -137,7 +139,10 @@ this file still quotes an older one, the amendment wins.
   PROVISIONAL until one logged-in glance names the page that carries the
   weight and weight-class fields.
 - **Weight class does not show on ANY card** (1a, 1c, 1d) — there is none
-  to show. Linked state is LINKED ✓, the identity line, helper, unlink.
+  to show. Linked state is LINKED ✓, the identity line, helper, unlink
+  (**CHANGED 2026-09-05:** the helper and the Unlink button are gone; the
+  OFF · MANUAL · AUTOMATIC control stands where Unlink was, with the mode
+  line beneath it — `amendment-2026-09-05-autosend.html` §1).
 - **Not linked → nothing on the log row.** The Concept2 block renders only
   when an account is linked. No pointer, no disabled control. The CONCEPT2
   row on You (opening the card's screen, since PR A) is the sole discovery
@@ -242,9 +247,15 @@ WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
   tappable) and the outcome arrives in `startLink`'s promise; on web
   `openExternalUrl` is `window.location.assign`, so the document unloads.
   See `amendment-2026-09-03.html` §1b for the rendered frame and its copy.
-- **1c Linked**: LINKED ✓ status; helper "Finished monitor rows can be sent from the log." (12px `#57544c`); hairline;
+- **1c Linked**: ~~LINKED ✓ status; helper "Finished monitor rows can be sent from the log." (12px `#57544c`); hairline;
   **Unlink Concept2** button (52px, outline `1px solid #b5341f`, text
-  `#b5341f` 16px 600). No weight class shown — as of 2026-09-03 none
+  `#b5341f` 16px 600).~~ **SUPERSEDED 2026-09-05 (auto-send, Gate 0
+  approved):** the helper contradicted AUTOMATIC and is replaced by the
+  mode line (_"Send each finished monitor row yourself, from the log."_ /
+  _"Finished monitor rows are sent when you save them."_, 12px `--ink-3`);
+  the Unlink button is replaced by the three-segment OFF · MANUAL ·
+  AUTOMATIC control (44px segments, pressed = `--ink` fill). The pill gains
+  SEND FAILED. `amendment-2026-09-05-autosend.html` §1, §4. No weight class shown — as of 2026-09-03 none
   exists to show, on this card or any other, and as of 2026-09-04 no card
   mentions one either. **Gate 0 amendment,
   callback pages: APPROVED 2026-09-02 and BUILT at PR1.75a — the shared
@@ -257,7 +268,11 @@ WAITING / CHECKING; `#1b1a17` 600 for LINKED ✓).
 - **1d Unlink armed confirm** (two-tap): first tap swaps in explainer
   "Unlink removes this app's access. Rows already sent stay on Concept2."
   and the button becomes filled `#b5341f` / `#fffdf7`, label "Tap again to
-  unlink". Auto-disarms after 4 s (footnote states this).
+  unlink". Auto-disarms after 4 s (footnote states this). **CHANGED
+  2026-09-05:** the first tap is the control's OFF segment; while armed it
+  spans the control at the old button's 52px, fill and copy, and the MANUAL
+  / AUTOMATIC segments are hidden until it disarms
+  (`amendment-2026-09-05-autosend.html` §2, ruled on sight).
 - **1e Link failed** (OAuth callback bounced): status NOT LINKED; sunken
   panel THE LINK DIDN'T FINISH: "The connection didn't complete. Nothing was linked." (the trailing "Your weight class pick is
   kept." is dropped 2026-09-03: there is no pick to keep) · **Try again**
