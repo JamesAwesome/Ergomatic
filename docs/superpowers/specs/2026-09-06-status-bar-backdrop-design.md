@@ -182,7 +182,7 @@ whose content scrolls INSIDE a fixed `-webkit-overflow-scrolling: touch`
 element rather than in the document — a different composition under the
 blur, and in Gate 0's set for that reason (M2).
 
-## 5. Gate 0 — rendered on the phone, before this is called done
+## 5. Gate 0 — rendered on the phone; APPROVED 2026-09-06 (James, build `a41f0f88` on Kaito: "Gate 0 approved")
 
 A Debug build of this branch on Kaito, installed with `devicectl` (the
 recipe in `docs/testing/2026-09-06-keyboard-harness.md` §2), and captures
@@ -261,7 +261,7 @@ strip on iOS is UNMEASURED (no primary source found either way) and Gate
 
 ## 8. Exit
 
-- Gate 0 approved on the seven captures in §5.
+- Gate 0 approved on the seven captures in §5 — done 2026-09-06.
 - Unit + client green; e2e green with the new assertion and its recorded
   mutation; no web capture moved (0px strip).
 - DEVIATIONS row present; ROADMAP ledger bullet at close.

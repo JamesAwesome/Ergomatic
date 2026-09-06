@@ -523,7 +523,8 @@ recorded in PR 2's body; release note in rower words (spec §6.6).
 
 ## Phase SB — A blurred strip behind the status bar
 
-**Status:** OPENED 2026-09-06 by James's capture of `← BACK` printed over
+**Status:** Gate 0 APPROVED 2026-09-06 on build `a41f0f88`; PR #323 in
+review. Opened the same day by James's capture of `← BACK` printed over
 the clock on a scrolled Detail screen (v0.39.2). Spec
 `docs/superpowers/specs/2026-09-06-status-bar-backdrop-design.md`. Not
 TRIAD; **not fast path by James's call** ("since there are a lot of
