@@ -482,23 +482,29 @@ no external dependency. Wave E PR C merged as #307. PR 2 mints migration
 `0024`; each DE PR body states its drizzle index checked against main at
 ready-time, per the agent briefing's second-merger-regenerates rule.
 
-## 5. PR 3 — drop compat (measured, not confirmed)
+## 5. PR 3 — drop compat (a date, ruled by James)
 
-**Trigger:** the tag carrying PR 1 and PR 2 has been deployed, and the
-prod app container shows **zero `compat.pain_write` lines over a
-container lifetime of at least seven days** — both facts from the same
-container, pasted in PR 3's body:
-`docker inspect --format '{{.State.StartedAt}}' <app>` (≥ 7 days ago)
-and `docker logs <app> 2>&1 | grep -c compat.pain_write` (`0`).
-`compose.yml` sets no log driver or retention and `deploy.sh` recreates
-the container on every code deploy, so `docker logs` only ever covers the
-current container: a deploy inside the window RESETS the clock, and the
-gate says so rather than pretending a fresh container's empty log is
-seven clean days. "Every device is updated" is
-not a thing anyone can know — TestFlight says nothing about a phone
-nobody opened — so the compat layer measures its own use instead. The
-tag cycle itself is not ceremony: without the dual field a stale build's
-log save 400s, which is the durability class Wave F just fixed.
+**Trigger: the Saturday after the v0.39.0 tag ships — 2026-09-12.** No
+measurement.
+
+Rev 2 gated this on zero `compat.pain_write` lines over a container
+lifetime of at least seven days. **James struck that on 2026-09-05
+("We have like five users let's just schedule the work for Saturday"),
+and he is right twice over.** First, the cohort is a household: five
+testers on TestFlight, all of whom update, so "is anyone still on the old
+build" is a question about five phones, not a population. Second, the
+instrument could not answer it anyway — `docker logs` covers only the
+CURRENT container, `deploy.sh` recreates the container on every code
+deploy, and this repo deploys on most merges to main, so a seven-day
+untouched container may never occur and the gate would have blocked PR 3
+indefinitely while reading green.
+
+The `compat.pain_write` line stays for the week as a cheap tripwire: if
+PR 3's author greps it on the prod host and finds hits, that is a reason
+to pause and ask who is still on an old build. It is evidence, not a
+gate. The tag cycle itself was never ceremony — without the dual field a
+stale build's log save 400s, which is the durability class Wave F just
+fixed — but one week is the whole of it.
 
 Then, one PR:
 

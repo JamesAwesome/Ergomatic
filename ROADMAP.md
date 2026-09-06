@@ -502,10 +502,14 @@ generation):
       screenshots are refreshed in the PR. (An earlier "waits for AUD-016"
       condition here was void: AUD-016 shipped as #239 and was struck in
       #240; `Ergomatic-wt-aud016` is a stale pre-#239 spec branch.)
-- [ ] **PR 3 — drop compat.** Trigger is a MEASUREMENT: zero
-      `compat.pain_write` lines in the prod server log for seven consecutive
-      days after the PR 1+2 tag deploys (command and output in the PR body).
-      Drop `workouts.difficulty` + its enum + `preferences.difficulties`
+- [ ] **PR 3 — drop compat. SCHEDULED: Saturday 2026-09-12** (James,
+      2026-09-05: "We have like five users let's just schedule the work for
+      Saturday"). The earlier zero-`compat.pain_write`-for-seven-days
+      MEASUREMENT is struck: the cohort is five household testers who all
+      update, and `docker logs` only covers the current container, which
+      every deploy recreates — so the gate was both overkill and
+      unsatisfiable. The log line survives the week as a tripwire to grep,
+      not a gate. Drop `workouts.difficulty` + its enum + `preferences.difficulties`
       and the derived write; drop `pain`/`difficulty`/`difficulties` from
       the API and the log line; delete the three localStorage fallbacks.
       Legacy bulk headers are kept on purpose. Own RELEASING.md floor row.
