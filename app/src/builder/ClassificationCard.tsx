@@ -1,5 +1,5 @@
 import type { WorkoutType } from "../../domain/types.js";
-import { PAIN_WORDS, TYPE_WORDS } from "./builderState";
+import { EFFORT_WORDS, TYPE_WORDS } from "./builderState";
 
 // Chip order per docs/design/README.md §Screens -> "2. Library" (amended
 // 2026-08-08: James's ordering decision — every left-to-right type row reads
@@ -24,7 +24,7 @@ const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   TR: "--type-tr",
 };
 
-const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
+const EFFORT_LEVELS = [1, 2, 3, 4, 5] as const;
 
 /** The classification card (docs/design/builder-redesign/README.md §3): one
  *  card holding TYPE and EXPECTED EFFORT so the two metadata pickers read as a
@@ -52,7 +52,7 @@ const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
  *
  *  Also, EFFORT drops the ink-stroke face graphics from the deleted
  *  EffortPicker.tsx — numerals only, with the current level's word
- *  (PAIN_WORDS) rendered opposite the group label instead.
+ *  (EFFORT_WORDS) rendered opposite the group label instead.
  *
  *  A third addition, mid-phase (James's request, not the original handoff):
  *  TYPE gets the same treatment as EFFORT — a short summary word (TYPE_WORDS)
@@ -75,7 +75,7 @@ export default function ClassificationCard({
   onTypeChange: (type: WorkoutType) => void;
   onPainChange: (effort: number) => void;
 }) {
-  const effortWord = effort !== null ? PAIN_WORDS[effort - 1] : undefined;
+  const effortWord = effort !== null ? EFFORT_WORDS[effort - 1] : undefined;
   const typeWord = TYPE_WORDS[type];
 
   return (
@@ -120,7 +120,7 @@ export default function ClassificationCard({
           )}
         </div>
         <div className="classification-chip-row">
-          {PAIN_LEVELS.map((level) => {
+          {EFFORT_LEVELS.map((level) => {
             const selected = effort === level;
             return (
               <button

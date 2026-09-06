@@ -11,10 +11,10 @@ import { clearLibraryScroll } from "./libraryScroll";
  *  list, which is the filter-BACK bug this file exists to fix. */
 export const LIBRARY_FILTERS_KEY = "ergomatic.libraryFilters";
 
-const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
+const EFFORT_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
 function isPainLevel(v: unknown): v is number {
-  return typeof v === "number" && PAIN_LEVELS.includes(v);
+  return typeof v === "number" && EFFORT_LEVELS.includes(v);
 }
 
 /** Strict shape check — a stored value that predates a future Filters

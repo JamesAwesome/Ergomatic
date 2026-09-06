@@ -1612,7 +1612,7 @@ test.describe("today screen (plan active, logs present)", () => {
   // BASELINES {k2Seconds:100, k6Seconds:120}). Rebase seed-math note
   // (2026-08-04): the 300-workout library has ZERO O2 entries above effort 3
   // (aerobic-base work is never authored that hard — see library.test.ts's
-  // own PAIN_BY_TYPE band), so a natural pool-of-one no longer exists the
+  // own EFFORT_BY_TYPE band), so a natural pool-of-one no longer exists the
   // way the old 35-starter library's "High Pressure"/"Jet Stream" pair once
   // provided one. Built here instead: one personal O2 / effort-4 workout
   // under the 60' cap, via bulk import — with zero global O2 entries at 4

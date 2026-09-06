@@ -147,6 +147,29 @@ test("opening the baselines article marks it read, and the read survives BACK an
   await expect(baselinesRow.locator(".news-row-meta")).toContainText("READ");
 });
 
+// Phase DE PR 2: the pain-scale article became effort-scale. The old path is
+// still live in release-note history and in shared links, so it redirects —
+// and the read it produces is the NEW slug's (migration 0024 moved the rows).
+test("/news/pain-scale redirects to the effort-scale article, and reading it marks effort-scale read", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `news-legacy-slug-${RUN_ID}@e2e.test`,
+    name: "Legacy Slug Reader",
+  });
+  await page.goto("/news/pain-scale");
+  await expect(page).toHaveURL(/\/news\/effort-scale$/);
+  await expect(page.locator(".reader-title")).toHaveText(
+    "The effort scale, without a heart rate monitor",
+  );
+  await page.getByRole("link", { name: "← BACK" }).click();
+  await expect(page).toHaveURL(/\/news$/);
+  await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
+  await expect(
+    page.locator('a.news-row[href="/news/effort-scale"]'),
+  ).toHaveAttribute("data-read", "true");
+});
+
 test("reader NEXT footer names the next unread article from workout-types", async ({
   page,
 }) => {

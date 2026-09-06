@@ -140,7 +140,7 @@ function timerElapsedSeconds(run: SessionRun): number | null {
   return actual === undefined ? null : actual.elapsedSeconds;
 }
 
-const PAIN_LEVELS = [1, 2, 3, 4, 5];
+const EFFORT_LEVELS = [1, 2, 3, 4, 5];
 
 export default function JustRowLog() {
   // A mount snapshot on purpose, like `LogSession`'s own doors: the record
@@ -522,7 +522,7 @@ function Reflection({
           <p className="summary-reflection-label">EFFORT</p>
         </div>
         <div className="summary-effort-row">
-          {PAIN_LEVELS.map((level) => (
+          {EFFORT_LEVELS.map((level) => (
             <button
               key={level}
               type="button"

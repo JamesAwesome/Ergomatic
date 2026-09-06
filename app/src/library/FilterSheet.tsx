@@ -12,7 +12,7 @@ import {
   type Filters,
 } from "./filters";
 
-const PAIN_LEVELS = [1, 2, 3, 4, 5];
+const EFFORT_LEVELS = [1, 2, 3, 4, 5];
 
 // The one h2 in this sheet — SheetShell points its own `aria-labelledby` at
 // this id rather than taking the title text itself, so it stays completely
@@ -144,7 +144,7 @@ export default function FilterSheet({
 
       <CellGrid
         label="EFFORT"
-        cells={PAIN_LEVELS.map((level) => ({
+        cells={EFFORT_LEVELS.map((level) => ({
           value: String(level),
           label: String(level),
           pressed: draft.effortLevels.includes(level),

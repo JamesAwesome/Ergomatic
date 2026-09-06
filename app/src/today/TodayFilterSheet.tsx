@@ -12,8 +12,8 @@ import type { FilterSet } from "./todayFilters";
 export type TodayFilterDraft = FilterSet;
 
 // EFFORT's five cells, matching Library's own 1-5 union (FilterSheet.tsx's
-// PAIN_LEVELS) — a local copy per the same duplication convention.
-const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
+// EFFORT_LEVELS) — a local copy per the same duplication convention.
+const EFFORT_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
 // The one h2 in this sheet — SheetShell points its own `aria-labelledby`
 // at this id, same pattern as Library's FilterSheet.tsx.
@@ -121,7 +121,7 @@ export default function TodayFilterSheet({
 
       <CellGrid
         label="EFFORT"
-        cells={PAIN_LEVELS.map((level) => ({
+        cells={EFFORT_LEVELS.map((level) => ({
           value: String(level),
           label: String(level),
           pressed: draft.effortLevels.includes(level),

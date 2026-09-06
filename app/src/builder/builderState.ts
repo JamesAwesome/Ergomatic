@@ -287,7 +287,7 @@ export function stepSubSummary(row: BuilderRow): string {
 // Indexed `effort - 1` (effort is 1..5, see toSteps' isInt(f.effort, 1, 5) check)
 // — the accordion redesign's effort control shows this word instead of (or
 // alongside) the bare 1..5 number.
-export const PAIN_WORDS: readonly string[] = [
+export const EFFORT_WORDS: readonly string[] = [
   "EASY BREATH",
   "COMFORTABLE",
   "WORKING",
@@ -295,12 +295,12 @@ export const PAIN_WORDS: readonly string[] = [
   "BRUTAL",
 ];
 
-// One-word (well, one-phrase) summary per WorkoutType, mirroring PAIN_WORDS
+// One-word (well, one-phrase) summary per WorkoutType, mirroring EFFORT_WORDS
 // above — the classification card's TYPE group shows this opposite its
 // label the same way EXPECTED EFFORT shows its level word. James's mid-run
 // addition to Phase 5G; words are his suggestion, reviewable/vetoable at the
 // PR, but centralized (rather than inlined in ClassificationCard.tsx) so a
-// future wording pass has one place to edit, same rationale as PAIN_WORDS.
+// future wording pass has one place to edit, same rationale as EFFORT_WORDS.
 //
 // Extracted to `src/components/typeWords.ts` (2026-08-08 round) once Today's
 // plan line needed the identical word for its own effective type — re-

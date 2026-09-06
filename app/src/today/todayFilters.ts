@@ -64,10 +64,10 @@ export const EMPTY_TODAY_FILTERS: TodayFilters = {
   byKey: {},
 };
 
-const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
+const EFFORT_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
 function isPainLevel(v: unknown): v is number {
-  return typeof v === "number" && PAIN_LEVELS.includes(v);
+  return typeof v === "number" && EFFORT_LEVELS.includes(v);
 }
 
 function isLastDone(v: unknown): v is "under21" | "over21" {

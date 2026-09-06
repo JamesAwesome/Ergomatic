@@ -126,7 +126,7 @@ describe("ClassificationCard", () => {
       }
     });
 
-    it("shows the selected level's word from PAIN_WORDS on the right of the label row (effort 3 -> WORKING)", () => {
+    it("shows the selected level's word from EFFORT_WORDS on the right of the label row (effort 3 -> WORKING)", () => {
       setup({ effort: 3 });
       expect(screen.getByText("WORKING")).toBeInTheDocument();
     });

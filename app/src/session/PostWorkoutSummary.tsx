@@ -32,12 +32,12 @@ const HELD_OPTIONS: { value: HeldResult; label: string }[] = [
   { value: "over", label: "OVER · SLOWER" },
 ];
 
-const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
+const EFFORT_LEVELS = [1, 2, 3, 4, 5] as const;
 
 /** §2D's ACTUAL EFFORT caption: `TAP TO RATE` unselected, else the row's own
  *  three-way read of the chosen level (1 -> easier, 2 -> as planned, 3-5 ->
  *  harder) — the design's own literal words, not a re-derivation of
- *  ClassificationCard.tsx's PAIN_WORDS (that card's own EXPECTED-effort
+ *  ClassificationCard.tsx's EFFORT_WORDS (that card's own EXPECTED-effort
  *  vocabulary answers a different question, "how hard did you expect this
  *  to be", not "how did the actual compare to the plan"). */
 function effortCaption(effort: number | null): string {
@@ -477,7 +477,7 @@ export function SummaryReflectionCard({
           )}
         </div>
         <div className="summary-effort-row">
-          {PAIN_LEVELS.map((level) => (
+          {EFFORT_LEVELS.map((level) => (
             <button
               key={level}
               type="button"
