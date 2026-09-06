@@ -1,5 +1,5 @@
-import { beforeEach, describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AppRoutes, { CompleteRedirect, hidesTabBar } from "./AppRoutes";
 import { buildDraft, saveDraft, startDraft } from "../session/draft";
@@ -504,6 +504,76 @@ describe("/session/complete redirect shim", () => {
 
       expect(await screen.findByText("TODAY SCREEN")).toBeVisible();
     });
+  });
+});
+
+// Gate 0, 2026-09-06 (James's device report: "you can see the library under
+// the footer"). The tab bar is hidden while the software keyboard is up,
+// because it cannot be moved out of the way — WebKit already anchors it to
+// the visual viewport's bottom, and iOS's floating input-accessory bar is
+// excluded from that viewport while the page still paints behind it. See
+// `keyboardOpen.ts` for the measurements.
+describe("the tab bar and the software keyboard", () => {
+  function installViewport(height: number) {
+    const listeners = new Set<() => void>();
+    const vv = {
+      height,
+      addEventListener: (_: string, cb: () => void) => listeners.add(cb),
+      removeEventListener: (_: string, cb: () => void) => listeners.delete(cb),
+    };
+    Object.defineProperty(window, "visualViewport", {
+      value: vv,
+      configurable: true,
+      writable: true,
+    });
+    return {
+      resizeTo(next: number) {
+        vv.height = next;
+        act(() => listeners.forEach((cb) => cb()));
+      },
+    };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, "visualViewport");
+  });
+
+  it("hides the bar when the keyboard opens and brings it back when it closes", () => {
+    // Independent literals, not the production threshold: 800 − 300 = 500
+    // of occlusion is unambiguously a keyboard, and 800 − 800 = 0 is
+    // unambiguously none.
+    window.innerHeight = 800;
+    const vp = installViewport(800);
+    render(
+      <MemoryRouter initialEntries={["/library"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeVisible();
+
+    vp.resizeTo(300);
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+
+    vp.resizeTo(800);
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+
+  it("leaves a route that never draws the bar alone", () => {
+    // The keyboard rule must not resurrect the bar on a route
+    // `hidesTabBar` already suppresses — two independent reasons to hide,
+    // and neither may cancel the other.
+    window.innerHeight = 800;
+    const vp = installViewport(800);
+    render(
+      <MemoryRouter initialEntries={["/session/run"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+    vp.resizeTo(300);
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+    vp.resizeTo(800);
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
   });
 });
 
