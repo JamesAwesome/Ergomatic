@@ -20,7 +20,10 @@ describe("capacitor.config Keyboard plugin", () => {
     expect(config.plugins?.Keyboard?.resize).toBe("native");
   });
 
-  it("paints the keyboard backdrop from the page's own body background", () => {
-    expect(config.plugins?.Keyboard?.autoBackdropColor).toBe("dom");
+  it("paints the keyboard backdrop with the tab bar's surface, not the page", () => {
+    // `auto` = the config's `backgroundColor`; `--surface` is #fffdf7
+    // (theme/tokens.css). Independent literals on both.
+    expect(config.plugins?.Keyboard?.autoBackdropColor).toBe("auto");
+    expect(config.backgroundColor).toBe("#fffdf7");
   });
 });
