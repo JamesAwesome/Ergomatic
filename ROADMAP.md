@@ -538,9 +538,13 @@ HIG (PRIMARY): "Obscure content under the status bar … Prefer using a
 scroll edge effect to place a blurred view behind the status bar."
 
 **One PR:** `.status-backdrop` (fixed, `height: env(safe-area-inset-top)`,
-`--page` at 82% through a 14px blur, `pointer-events: none`, z 30) rendered
-once in `AppRoutes`; an AppRoutes test (red first) and an e2e structural
-assertion with its mutation; a DEVIATIONS row.
+`rgba` for `--page` at 82% through a 14px blur — not `color-mix`, which is
+below the iOS 15.0 floor — `pointer-events: none`, z 30) rendered once in
+`AppRoutes`; `UIStatusBarStyleDarkContent` in Info.plist so the glyphs stay
+dark in Dark Mode; an AppRoutes test (red first) and two e2e tests, one
+driving a CDP-emulated inset (height = inset; a scrolled row under it);
+a DEVIATIONS row. Anchor pass RUN 2026-09-06: two BLOCKING (the
+`color-mix` floor; the falsely-ruled-out CDP gate), folded.
 
 **Gates:** antagonist anchor pass on the spec (the surface census in §4 is
 the target); PM open/close SKIPPED aloud (pure UI); **Gate 0 on Kaito** —

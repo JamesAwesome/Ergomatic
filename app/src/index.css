@@ -490,18 +490,31 @@ button:disabled {
    that padding scrolls away with the page. Apple's HIG: "Obscure content
    under the status bar … Prefer using a scroll edge effect to place a
    blurred view behind the status bar." This is that view. Its height IS the
-   inset, so it is 0px on the web and in landscape; `pointer-events: none`
-   keeps a status-bar tap reaching WKWebView's scroll-to-top and never eats
-   a tap on the page; z 30 sits above `.tabbar` (20) and `.overlay-screen`
-   (10). Nothing moves at rest — the strip covers padding every screen
-   already has. */
+   inset (UIKit's number, read by WebKit — 0px on the web and in landscape,
+   where two device captures show no status bar at all:
+   docs/design/findings/2026-09-02-timer-mode-landscape.png and the
+   2026-08-17 measurement recorded further down this file). `pointer-events:
+   none` so a 59px full-width strip at z 30 never swallows a tap meant for
+   content that scrolled under it — nothing to do with the status-bar
+   scroll-to-top gesture, which UIKit dispatches to the native scroll view
+   and no DOM property can reach. z 30 sits above `.tabbar` (20) and
+   `.overlay-screen` (10); it ties `.filter-sheet-backdrop` (30) and loses on
+   DOM order, which is right — a modal scrim covers this band. `rgba`, not
+   `color-mix(... var(--page) ...)`: the app's floor is iOS 15.0
+   (IPHONEOS_DEPLOYMENT_TARGET) and `color-mix` ships in 16.2; worse, a value
+   carrying `var()` that turns out unsupported is invalid at COMPUTED-value
+   time, so the whole `background` computes as `unset` and no fallback line
+   in the same block survives (CSS Variables L1 §3.1) — the strip would be an
+   untinted blur on 15.0–16.1. The literal is `--page` (#f4f1e8) at 82%.
+   Nothing moves at rest — the strip covers padding every screen already
+   has. */
 .status-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   height: env(safe-area-inset-top, 0px);
-  background: color-mix(in srgb, var(--page) 82%, transparent);
+  background: rgba(244, 241, 232, 0.82);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   pointer-events: none;

@@ -73,7 +73,7 @@ is left alone):
   left: 0;
   right: 0;
   height: env(safe-area-inset-top, 0px);
-  background: color-mix(in srgb, var(--page) 82%, transparent);
+  background: rgba(244, 241, 232, 0.82); /* --page #f4f1e8 at 82% — see below */
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   pointer-events: none;
@@ -85,10 +85,38 @@ is left alone):
   band on the phone and **0px on the web and in landscape** (iPhone reports
   no top inset in landscape — the housing is at the side; the landscape
   capture at Gate 0 confirms), where it is invisible by construction.
-- **`pointer-events: none`** — the HIG's "don't imply content behind it is
-  interactive" and its converse: a tap on the status bar must still reach
-  WKWebView's scroll-to-top, and the element must never eat a tap meant
-  for the page during a scroll.
+- **`pointer-events: none`** — a 59px full-width fixed strip at z 30 must
+  never swallow a tap meant for content that scrolled under it. (Anchor
+  pass m1 corrected rev 1's reason: the status-bar scroll-to-top gesture
+  is UIKit's, dispatched to the native `UIScrollView` — `scrollsToTop`
+  defaults `true`, Capacitor never sets it — and no DOM property can reach
+  it in either direction.)
+- **`rgba(244, 241, 232, 0.82)`, not `color-mix(... var(--page) ...)`**
+  (anchor pass B1, BLOCKING in rev 1): the app's floor is
+  `IPHONEOS_DEPLOYMENT_TARGET = 15.0` (`project.pbxproj`; `Package.swift`
+  `platforms: [.iOS(.v15)]`) and `color-mix()` ships in Safari/iOS **16.2**
+  (MDN browser-compat-data, `css/types/color.json`). Worse than "dropped":
+  a declaration carrying `var()` is invalid at COMPUTED-value time, so the
+  property computes as `unset` (CSS Custom Properties L1 §3.1 — PRIMARY:
+  _"the computed value is … as if the property's value had been specified
+  as the `unset` keyword"_), and a fallback `background:` line above it in
+  the same block is discarded with it. On 15.0–16.1 the strip would have
+  been an untinted 14px blur. The literal is the house idiom
+  (`rgba(27, 26, 23, 0.45)` on `.filter-sheet-backdrop`); the cost is that
+  the strip no longer follows the `--page` token, stated here.
+  `-webkit-backdrop-filter` has no floor problem (iOS 9+ prefixed;
+  unprefixed from 18.0 — WebKit "Features in Safari 18.0": _"you don't need
+  the prefix"_).
+- **`UIStatusBarStyle = UIStatusBarStyleDarkContent`** in `Info.plist`
+  (anchor pass M1): Capacitor ships `.default` — Apple: _"automatically
+  selects an appearance for the status bar and updates it dynamically to
+  maintain contrast with the content below it"_ — which under system Dark
+  Mode may draw WHITE glyphs; over this strip that would be 1.13:1. This
+  app is light-only (`grep -rn prefers-color-scheme src/` → nothing), so
+  the plist key Capacitor already reads (`setStatusBarDefaults()` maps it
+  to `.darkContent`: _"A dark status bar, intended for use on light
+  backgrounds"_) makes the glyphs dark everywhere and §5's numbers
+  unconditional. Gate 0 adds a Dark Mode capture to see it.
 - **`z-index: 30`** — above the tab bar (20) and the reader/releases
   overlay (10); `.tabbar`'s own comment names those two.
 - **Blur, not paint**: an opaque `--page` strip would also obscure, but the
@@ -107,7 +135,8 @@ is left alone):
 | Opaque `--page` strip, no blur | same, but a hard edge where scrolled content is cut; the HIG names the blurred form as preferred | HIG PRIMARY; untested here |
 | `@capacitor/status-bar` with `overlaysWebView: false` | the WebView starts below the status bar; every `env(safe-area-inset-top)` pad drops to 0 (11 rules re-checked); another plugin whose `load()` we have not read (Phase KB: a plugin's config surface is not its behaviour surface) | untested — not built |
 | Per-screen sticky headers | the BACK row becomes a sticky bar on each screen — a redesign of every screen's top, not a fix | untested — out of scope |
-| Leave it | the reported defect | measured (James's capture) |
+| Hide the status bar on the immersive screens (timer, countdown, connected) — the HIG's "consider temporarily hiding the status bar when displaying full-screen media"; `CAPBridgeViewController.setStatusBarVisible(_:)` exists | those screens do not scroll, so they never show the defect; hiding trades the clock for nothing here | untested — not built (anchor pass m5 asked for the row) |
+| Leave it | the reported defect | measured: `docs/testing/2026-09-06-status-bar-backdrop/before-v0.39.2-detail-scrolled-crop.jpg` (James) and `docs/testing/2026-09-06-keyboard-probe/captures/app-v0.39.1-portrait-scrolled.png` (the clock over a `--surface` card, the battery pill over the red `10'` on the RIGHT) |
 
 ## 3. What a rower sees
 
@@ -128,15 +157,25 @@ inherits `body { background: var(--page) }`. So the region under the
 status bar is `--page` on every screen at rest, and the strip's blurred
 `--page` matches it exactly.
 
-What the antagonist should attack in that method: it reads each rule's own
-declarations, so a screen whose FIRST CHILD is full-bleed and differently
-coloured (a dark hero at the very top of the connected surface, say) would
-pass the census and still put a dark edge under the strip when scrolled.
-Two facts narrow it: the non-scrolling screens (`.timer-screen`,
-`.countdown-screen`, `.connected-surface`, `.connected-interstitial` —
-`100dvh`, own scrollers inside) never move their top edge, so the strip
-sits over their own padding forever; and the blur is there precisely so a
-near-miss reads as glass, not a bar.
+**What the anchor pass established about that census (M3):** its RESULT is
+right — reproduced programmatically, and every route's root carries
+`.screen`'s inset padding (route-by-route walk of every `<main>`; the sole
+exception, `SignIn`, is never rendered by `AppRoutes` and cannot scroll).
+But it samples the REST state, where the strip is invisible by
+construction, and the design only acts when SCROLLED — where what passes
+under it is everything the screen contains, not its container. The
+committed capture `docs/testing/2026-09-06-keyboard-probe/captures/app-v0.39.1-portrait-scrolled.png`
+shows the real scrolled band: a `--surface` card (not `--page`) behind the
+clock, and the app's red `10'` under the battery pill on the RIGHT half.
+The blur is what turns those into glass; the census cannot say whether it
+does, and Gate 0 is where that is seen. The four `100dvh` screens
+(`.timer-screen`, `.countdown-screen`, `.connected-surface`,
+`.connected-interstitial`) never move their top edge, so the strip sits
+over their own padding forever. Six routes render `.overlay-screen`
+(Reader, Releases, FromTheLog, Concept2Screen, Diagnostics, MonitorLogs),
+whose content scrolls INSIDE a fixed `-webkit-overflow-scrolling: touch`
+element rather than in the document — a different composition under the
+blur, and in Gate 0's set for that reason (M2).
 
 ## 5. Gate 0 — rendered on the phone, before this is called done
 
@@ -147,18 +186,36 @@ beside v0.39.2's:
 1. **Detail, scrolled** so `← BACK` is under the clock — the reported
    frame (James's v0.39.2 capture is the before).
 2. **Library, scrolled** — a list under the strip, portrait.
-3. **Landscape, Detail scrolled** — expected: no strip (0px), status bar
-   hidden by iOS.
+3. **Landscape, Detail scrolled** — expected: no strip (0px). Not because
+   "iOS hides the status bar in landscape" as rev 1 said — Capacitor's
+   `prefersStatusBarHidden` returns `false` in every orientation — but
+   because two device captures in this repo show no status bar and a 0
+   top inset there (`docs/design/findings/2026-09-02-timer-mode-landscape.png`;
+   the 2026-08-17 measurement in `index.css`'s landscape notes). One
+   residual, SECONDARY (Apple Forums 798014): iOS 26 has reported a stale
+   20px landscape inset until a background/foreground — that would paint
+   a stray band, and this capture is where it would show.
 4. **A non-scrolling screen at rest** (timer or connected) — expected:
    pixel-identical to v0.39.2.
+5. **Releases (`/news/releases`), scrolled** — an `.overlay-screen`: its
+   list scrolls inside a fixed `-webkit-overflow-scrolling: touch` element
+   under the blur (M2 — no source either way on backdrop sampling there;
+   one capture settles it).
+6. **Phone in Dark Mode, Library scrolled** — the glyphs must be dark
+   (the plist key), not white over cream (M1).
+7. **The straddle** (m3): scroll until a text row sits half under the
+   strip's bottom edge. A constant blur with a hard edge is not Apple's
+   progressive scroll-edge effect; the half-blurred row is the cost, and
+   James should see it rather than read about it.
 
-**Colour pairings, computed:** the only text on the strip is iOS's own
-status bar (black, `#000000`) over the blurred ground, which at 82%
-`--page` (`#f4f1e8`) over `--page` is `#f4f1e8` at rest — **18.6:1**; over
-the darkest thing that scrolls under it, `--ink` text (`#1b1a17`) at 18%
-through the mix, the ground is no darker than
-`color-mix(#f4f1e8 82%, #1b1a17 18%)` ≈ `#ccc9c1` → **13.2:1**. Both far
-above AA 4.5:1; the blur only lightens further.
+**Colour pairings, computed (recomputed by the anchor pass):** the only
+text on the strip is iOS's own status bar — dark glyphs, now guaranteed by
+`UIStatusBarStyleDarkContent` — over the blurred ground: at rest 82%
+`#f4f1e8` over `#f4f1e8` is `#f4f1e8` → **18.6:1**; over the darkest thing
+that scrolls under it (`--ink` `#1b1a17` at 18% through the tint) the
+ground is `#cdcac2` → **12.8:1**. Both far above AA 4.5:1. Without the
+plist key, white glyphs on the same grounds would be 1.13:1 and 1.64:1 —
+the Dark Mode capture is there to show which we got.
 
 Present the captures, state the numbers, and stop. The gate is the
 approval, not the presentation.
@@ -167,11 +224,19 @@ approval, not the presentation.
 
 - `app/src/index.css`: the rule in §2.
 - `app/src/shell/AppRoutes.tsx`: the element.
-- `app/src/shell/AppRoutes.test.tsx`: renders the backdrop (red first).
-- `app/e2e/design.spec.ts`: a structural assertion — the backdrop exists,
-  is `position: fixed` at `top: 0`, `pointer-events: none`, z-index above
-  `.tabbar`'s; it CANNOT see the inset on Chromium (0px) and says so.
-  Mutation: drop `pointer-events: none` → the assertion names it.
+- `app/ios/App/App/Info.plist`: `UIStatusBarStyle` =
+  `UIStatusBarStyleDarkContent`.
+- `app/src/shell/AppRoutes.test.tsx`: renders the backdrop (red first:
+  "expected to have a length of 1 but got +0").
+- `app/e2e/design.spec.ts`, two tests: the shape (fixed, top 0,
+  `pointer-events: none`, z above `.tabbar`, `aria-hidden`, and the tint
+  literal — a dropped `background` shows here on Chromium), and the
+  geometry through CDP's `Emulation.setSafeAreaInsetsOverride` (rev 1
+  claimed Chromium could not see the inset; the suite already emulates it
+  at five sites — anchor pass B2): 0px with no inset, exactly 62px with
+  one, and a scrolled `.workout-row` overlapping the strip. Mutations:
+  `pointer-events` dropped → "Expected: none, Received: auto";
+  `height: 20px` hardcoded → recorded in the PR.
 - `docs/design/DEVIATIONS.md`: a row (the handoff has no status-bar strip).
 - `ROADMAP.md`: this phase's section; the ledger bullet at close.
 - No release note of its own: cosmetic, rides the next tag's "polish"
@@ -179,11 +244,15 @@ approval, not the presentation.
 
 ## 7. Instruments (RF19)
 
-The inset exists only on the device; Chromium reports 0. The e2e assertion
-pins the element's shape; Gate 0 is the only place the band itself is seen.
-Accepted: a future change that breaks the blur (a `transform` ancestor, a
-`z-index` reshuffle) is visible on the first scrolled screenshot a phone
-takes, and `pnpm screenshots` on the web cannot show it.
+The e2e tests pin the element's shape and — through a CDP-emulated inset —
+that its height is the inset and that scrolled content ends up under it.
+That proves the CSS reacts to an inset, not what iOS reports; Gate 0 is
+where the real band is seen. Accepted and named: a future change that
+breaks the blur (a `transform` ancestor, a `z-index` reshuffle) is visible
+on the first scrolled screenshot a phone takes, and `pnpm screenshots` on
+the web cannot show it; the scroll-performance cost of a `backdrop-filter`
+strip on iOS is UNMEASURED (no primary source found either way) and Gate
+0's scrolled captures are the only reading.
 
 ## 8. Exit
 

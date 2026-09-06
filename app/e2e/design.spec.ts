@@ -11124,11 +11124,15 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
 // pushed past the edge AND a bar floating above it both fail. Mutation
 // `.tabbar { bottom: -10px }` → "Expected: <= 853, Received: 862" (2026-09-06).
 // Phase SB (docs/superpowers/specs/2026-09-06-status-bar-backdrop-design.md).
-// The blurred band behind the status bar. Chromium reports no top inset, so
-// the strip is 0px tall here and this CANNOT see the band itself — Gate 0 on
-// the phone does. What it pins is the element's shape: present once, fixed
-// at the top, inert to taps, above the tab bar in z-order. Mutation: drop
-// `pointer-events: none` → "expected 'auto' to be 'none'".
+// The blurred band behind the status bar. Chromium reports no top inset on a
+// normal run, so the first test pins the element's shape (present once, fixed
+// at the top, inert to taps, above the tab bar, tinted); the second SIMULATES
+// an inset through CDP's `Emulation.setSafeAreaInsetsOverride` — the same
+// seam the connected-gutter tests use — and pins that the strip's height IS
+// the inset and that a scrolled row passes under it. That proves the CSS
+// reacts to an inset; what iOS reports is Gate 0's to see (anchor pass B2).
+// Mutations: drop `pointer-events: none` → "expected 'auto' to be 'none'";
+// hardcode `height: 20px` → "expected 20 to be 62".
 test.describe("the status-bar backdrop", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {
@@ -11160,6 +11164,49 @@ test.describe("the status-bar backdrop", () => {
     expect(shape.pointerEvents).toBe("none");
     expect(shape.z).toBeGreaterThan(shape.barZ);
     expect(shape.ariaHidden).toBe("true");
+    // The tint is a literal (not `color-mix`, which is below the iOS 15
+    // floor and would compute to `unset` through `var()`); a dropped or
+    // rewritten declaration shows here as anything but this rgba.
+    const tint = await page
+      .locator(".status-backdrop")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(tint).toBe("rgba(244, 241, 232, 0.82)");
+  });
+
+  test("is exactly the top inset tall, and a scrolled row passes under it", async ({
+    page,
+  }) => {
+    const strip = page.locator(".status-backdrop");
+    // No inset: no band. This is §8's "no web capture moved", pinned.
+    expect((await strip.boundingBox())!.height).toBe(0);
+    const client = await page.context().newCDPSession(page);
+    const INSET = 62; // an iPhone with the Dynamic Island, portrait
+    await client.send("Emulation.setSafeAreaInsetsOverride", {
+      insets: { top: INSET, left: 0, bottom: 0, right: 0 },
+    });
+    await page.evaluate(
+      () => new Promise((r) => requestAnimationFrame(() => r(null))),
+    );
+    const box = (await strip.boundingBox())!;
+    expect(box.y).toBe(0);
+    expect(box.height).toBe(INSET);
+    // Scroll a row up under the band and prove the two boxes overlap —
+    // the strip is what obscures it, not padding.
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await page.evaluate(
+      () => new Promise((r) => requestAnimationFrame(() => r(null))),
+    );
+    const rows = page.locator(".workout-row");
+    const n = await rows.count();
+    let overlapped = false;
+    for (let i = 0; i < n && !overlapped; i++) {
+      const r = await rows.nth(i).boundingBox();
+      if (r && r.y < INSET && r.y + r.height > 0) overlapped = true;
+    }
+    expect(overlapped).toBe(true);
+    await client.send("Emulation.setSafeAreaInsetsOverride", {
+      insets: { top: 0, left: 0, bottom: 0, right: 0 },
+    });
   });
 });
 

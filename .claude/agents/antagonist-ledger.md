@@ -8046,3 +8046,94 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   accessory swizzle takes on iOS 26's floating pill; whether iOS re-posts
   `willShow` on rotation with the keyboard up; whether `capacitor#6430`'s
   stale inset reproduces on this iOS.
+
+### 2026-09-06 — Phase SB status-bar backdrop spec, phase-open anchor (not TRIAD)
+
+- **"`color-mix(in srgb, var(--page) 82%, transparent)` degrades gracefully below
+  its support floor."** Believed because CSS drops invalid declarations and
+  earlier declarations survive. False twice over: the app's floor is
+  `IPHONEOS_DEPLOYMENT_TARGET = 15.0` and `color-mix` ships iOS 16.2, and because
+  the value contains `var()` it is invalid **at computed-value time**, not parse
+  time — CSS Variables L1 §3.1 makes the property compute as `unset`, so a
+  `background: rgba(...)` fallback line ABOVE it in the same block is discarded
+  with it. The strip becomes an untinted blur on 15.0–16.1.
+  **Technique: for any new CSS function, ask not only "is it supported" but
+  "does the declaration contain `var()`" — that one word moves the failure from
+  parse-time (fallbacks work) to computed-value time (fallbacks in the same block
+  do not), and only a `@supports` guard or a separate rule provides a floor.**
+  Corollary: `grep -rn "<the-function>" app/src` first — if it returns one hit,
+  yours, then no precedent has crossed that floor and the briefing's "name your
+  availability floor against IPHONEOS_DEPLOYMENT_TARGET" rule is live.
+- **"Chromium cannot see the safe-area inset, so the e2e gate can only pin the
+  element's shape."** Believed because `env(safe-area-inset-*)` is 0 on a normal
+  desktop run — which is true and irrelevant. False: `e2e/design.spec.ts` already
+  drives `Emulation.setSafeAreaInsetsOverride` via `newCDPSession` at FIVE call
+  sites, its own comment at that block says it was "verified empirically to move
+  `env(safe-area-inset-left)`", and `index.css` records a measurement taken with
+  `{top: 20}`. Height, and actual overlap with a scrolled row, were both gateable.
+  **Technique: when a spec says a gate CANNOT test something, grep the suite for
+  the capability before believing it — a limitation asserted about the road not
+  taken is RF30 in test clothing, and the receipt is usually in the same file.**
+- **"The surface census answers whether the strip sits over the right colour."**
+  Believed because the census was accurate and exhaustive — reproduced
+  programmatically and it is right. But it measured the REST state, where the
+  strip is invisible by construction (a blur of uniform `--page` over `--page` is
+  `--page`), and the design only acts when SCROLLED, where what passes under it is
+  everything the screen contains. **Technique: for a census, ask which state it
+  sampled and whether a wrong answer is distinguishable there. A census of
+  container backgrounds cannot speak to a scrolled overlay; the scrolled state is
+  reached by opening a committed device capture, not by grepping selectors** — and
+  one already existed in `docs/testing/`, showing a `--surface` card (not `--page`)
+  behind the glyphs and the app's own content colliding on the RIGHT half of the
+  band, which a left-anchored "what's at the top" reading misses entirely.
+- **"The status bar's text is black, so the contrast is 18.6:1."** The arithmetic
+  checks out (recomputed: 18.59:1 and 12.82:1) and the premise is not ours to make.
+  `CAPBridgeViewController.swift:14` ships `.default`, Info.plist set no
+  `UIStatusBarStyle`, and Apple defines `.default` as *"a style that automatically
+  selects an appearance … to maintain contrast with the content below it."* White
+  glyphs on the same grounds give 1.13:1 and 1.64:1. **Technique: for every
+  contrast pair, ask who CHOOSES each of the two colours. A ratio computed against
+  a foreground the OS picks at runtime is a ratio for one of the cases you can
+  ship** — and here the fix was a one-line plist key the vendor already reads
+  (`setStatusBarDefaults()` maps `UIStatusBarStyleDarkContent` → `.darkContent`).
+- **"`pointer-events: none` keeps the status-bar tap reaching scroll-to-top."**
+  False and it was a committed code comment. The gesture is UIKit dispatching against
+  the native `UIScrollView` (`scrollsToTop` defaults `true`; Capacitor never sets
+  it — zero grep hits in `@capacitor/ios@8.5.1`); no DOM property can affect it in
+  either direction. The same bullet cited the HIG's *"people may attempt to
+  interact with them and be unable to do so"* as justification, when that sentence
+  describes content behind the bar being INERT and `pointer-events: none` makes it
+  interactive again. **Technique: when a CSS property's stated rationale names a
+  NATIVE behaviour, find the layer that owns it before believing the property
+  reaches it — and check whether the quoted guidance is being cited for its
+  converse.**
+- **"iOS hides the status bar in landscape, so 0px is fine there."** Unsourced as
+  written, and Capacitor actively suppresses the UIKit default that would produce
+  it (`prefersStatusBarHidden` returns `false` unconditionally, every orientation).
+  The CONCLUSION survived anyway, on evidence the spec never cited: a raw iPhone 16
+  Pro landscape capture in `docs/design/findings/` with no status bar in it, and a
+  code comment recording James's 2026-08-17 device screenshot measuring the
+  landscape top inset at 0. **Technique: before attacking a platform premise from
+  vendor docs, `find docs -name "*.png"` for a device capture that just answers
+  it — this repo photographs more than it documents, and the picture outranks the
+  forum thread.**
+- **Attacked and HELD (the phase's VETTED GROUND):** no ancestor defeats
+  `position: fixed` (zero `contain`/`perspective`/`will-change`, three unrelated
+  `transform`s, `.app-shell`/`body` clean, both `:has()` rules set only
+  `padding-bottom`); the complete z census is 10/20/30/30 over exactly four
+  `position: fixed` rules with no `z-index` in any `.tsx` and no `createPortal`
+  anywhere, and the sheet scrim correctly wins its tie on DOM order;
+  `.overlay-screen` is not a backdrop root and keeps `.screen`'s inset by class
+  composition, so its scrolled content passes under a strip that stacks above it;
+  every route's root carries `.screen`'s `env(safe-area-inset-top)` padding
+  (route-by-route walk of every `<main>`), the sole exception being `SignIn`,
+  which `AppRoutes` never renders and which cannot scroll (`min-height: 90vh`,
+  centred); all five HIG quotes verified verbatim against the page's own JSON;
+  `-webkit-backdrop-filter` is safe at the 15.0 floor (iOS 9+ prefixed, unprefixed
+  from 18.0 per the WebKit 18.0 blog post); and the strip provably paints exactly
+  `--page` at rest. **Not established, all one device session away:** whether
+  `.default` goes white under Dark Mode (now moot: the plist key); whether
+  `backdrop-filter` samples correctly over `-webkit-overflow-scrolling: touch`
+  (`.overlay-screen`, six routes, now in Gate 0's capture set); and whether iOS
+  26's reported landscape-inset instability (Apple Forums 798014) paints a stray
+  20px band.
