@@ -5596,6 +5596,21 @@ Report: `.superpowers/sdd/2026-09-05-concept2-auto-send/final-review.md` (opus; 
 
 **Gates on `811496fb`:** typecheck clean; lint clean (pre-commit); browser suites `bash scripts/e2e.sh e2e/concept2.spec.ts e2e/design.spec.ts -g "Concept2\|concept2\|c2-card\|C2"` → 45 passed. Full `pnpm test --project unit --project client` on `4bfe26f3`: 247 files, 7,185 passed, 1 skipped; `--project integration`: 25 files, 383 passed; `pnpm build && pnpm dist:grep`: OK (the final commit touches CSS, two e2e specs and four comments only).
 
+## PM final gate and the merge of main — commits `e7a5f48c`, `5301af9e`
+
+PM gate (opus; report in the session scratchpad, ledger entry landed in `.claude/agents/pm-ledger.md`): **PASS WITH CONDITIONS.** Every §1 ruling verified at head in a six-row table; the parked `verified` row correctly parked; observations (a) already-sent clear on historical evidence and (b) one `GET /link` per save both ACCEPTED, (b) promoted to the fold.
+
+| condition | fix |
+| --- | --- |
+| C1 BLOCKING — main took `0024_pain_to_effort` (#310) after this branch minted `0024`; `git merge-tree` showed six conflicts incl. add/add on the snapshot | `git merge origin/main`: main's 0024 kept, ours deleted, `pnpm db:generate` → `0025_classy_red_ghost` (the same three statements; header carried over). Text conflicts kept both sides; Phase DE's renamed test helper and button adopted (`chooseHeldAndEffort`, `Effort 3`) |
+| C2 BLOCKING — "migration 0024 is additive, not a floor" would invert against main's forward-fix-only 0024 | renumbered in RELEASING, spec §3.1, this plan and the PR body; `grep 0024` over our files now hits only Phase DE's |
+| C3 — fold 214 words / longest 44 | the PM's replacement fold (five bullets), the per-save read named in it |
+| C4 — two unruled behaviours with no ROADMAP home | ROADMAP rows under the auto-send row: sticky past the fix; SEND FAILED reaches a MANUAL rower (frame owed) |
+| C5 — the already-sent clear's historical evidence | one clause on the comment naming the bound |
+| release | none for this PR; v0.39.0 is Phase DE's; the flag-flip walk is ONE trip with PR C's confirming send (ROADMAP) |
+
+**Gates re-run on the merged head `5301af9e`:** `pnpm lint` clean · `pnpm typecheck` clean · unit+client 249 files, 7,203 passed, 1 skipped · integration 25 files, 385 passed · `pnpm build && pnpm dist:grep` OK · Concept2 browser suites 45 passed · screenshots 16 passed (twelve run-stamp-only re-shots reverted). The first e2e boot failed: the worktree's stack volume had applied the superseded `0024_boring_black_panther`, so 0025 hit `check_for_column_name_collision` — `docker compose -p <stack> down -v`, then green. Production never applied ours.
+
 ## Task 7: the whole-branch gate, the PR, and STOP
 
 - [ ] `pnpm lint && pnpm typecheck && pnpm test --project unit --project client` on the final head; `pnpm test --project integration`; `pnpm build && pnpm dist:grep`; `pnpm e2e` (full) — record each result in the PR's Record block.

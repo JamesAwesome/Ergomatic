@@ -4814,3 +4814,47 @@ the `/api/today` ruling). v0.38.0 recommended.
 - **Fold: 122 words / 6 bullets / longest 20 — PASS.** Series: #228 274 ·
   #230 266 · #268 186 · door PR B 121 · SF PR1 246 · SF PR2 109 · DE PR1 209 ·
   **DE PR2 122.**
+
+## 2026-09-05 — Wave E auto-send final gate: check the MERGE, not just the branch
+
+- **A migration index is a claim about main, and main moved during the phase.**
+  The branch minted `0024` off `85a0de9c`; main took `0024_pain_to_effort` from
+  Phase DE PR 2 the same day. `git merge-tree --write-tree <head> origin/main`
+  is a ten-second read-only check that returns the whole conflict set, and it
+  belongs in every final gate on a branch carrying a stored shape. The tell is
+  not the number: it is that main's 0024 is a hand-written RENAME while the
+  branch's generated snapshot still describes the pre-rename schema, so a
+  hand-resolved journal ships a snapshot chain production contradicts.
+- **A numbered rollback claim inverts silently when the number is reused.**
+  The fold and `docs/RELEASING.md` both said "migration 0024 is additive, not a
+  rollback floor" — four lines from main's own 0024 row marked
+  FORWARD-FIX-ONLY. **Never let a PR body or a RELEASING row identify a
+  migration by index alone while the index is still unmerged**; renumber and
+  grep the digits, not the prose.
+- **A dispatch's release premise is a roadmap status line wearing a brief.**
+  This gate was briefed "the release has been HELD since PR B (#298); PR A
+  (#303) and PR C (#307) are also unreleased." `git merge-base --is-ancestor`
+  put #298 and #303 inside v0.38.0, whose notes comment accounts for both.
+  Verify a release-state claim against `merge-base` and `releaseNotes.ts`
+  before reasoning from it, even when it arrives in the task.
+- **A ruling that names one mode can be widened by its own spec.** James's
+  ruling 6 said failures "under AUTOMATIC" surface on the You row; §3.4
+  extended the flag to manual failures ("a manual failure means sends are
+  failing too"). Sound, but no Gate 0 frame drew MANUAL + SEND FAILED. **When
+  a spec generalises a ruling's scope, the design gate owes the frame for the
+  case the ruling did not name.**
+- **A sticky warning needs its clear path drawn, not just its set path.**
+  SEND FAILED clears only on the next successful send, so a rower who repairs
+  their Concept2 profile keeps the warning until they row again. Correct by
+  design, invisible in every capture, and the first thing a walk meets.
+- **Two owed live verifications on the same gate are one trip.** PR C owes a
+  confirming production send; auto-send owes one AUTOMATIC save. Both need the
+  same `C2_LINK_ENABLED` flip and the same erg. File the combined walk as the
+  FLAG-FLIP gate in ROADMAP, never as two PR-body lines (RF14).
+- **Fold: 214 words / 6 bullets / longest 44 — FAIL.** Series: door PR B 121 ·
+  SF PR1 246 · SF PR2 109 · **auto-send 214**. Same regression as SF PR1: two
+  pure-Record bullets (`Gates`, `Ceremony`) above the fold, both with fuller
+  versions already in the Record block. The #277 check caught the other half —
+  "which line would be false if the flag never flipped?" — and it was
+  `Nothing changes at save time`, falsified by the new per-save `GET /link`
+  that fires for every rower, cohort or not.

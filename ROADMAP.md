@@ -1151,6 +1151,22 @@ closed with zero Concept2 contact.
       implementation departures (§3.3: the fresh read is one direct
       `fetchLink()` after the 201, not a mounted hook; the in-flight claim is
       a wait-then-rerun chain, not a stored response). Ticks at merge.
+      **PM final gate PASSED WITH CONDITIONS (2026-09-05), all folded on the
+      branch:** main's `0024_pain_to_effort` landed first, so the migration
+      is `0025_classy_red_ghost`. Two behaviours the rulings did not name,
+      filed here rather than in the PR body (RF14): (i) **SEND FAILED is
+      sticky past the fix** — it clears only on the next send that leaves
+      the row at Concept2, so a rower who repairs their profile keeps the
+      warning until they row again (self-heals on the next AUTOMATIC save;
+      under MANUAL it waits for a tap); accepted, and the first thing the
+      walk will meet. (ii) **SEND FAILED reaches a MANUAL rower too** —
+      ruling 6 named AUTOMATIC, spec §3.4 widened it to any eligible
+      failure (the condition is account-level); sound, but no Gate 0 frame
+      drew MANUAL + SEND FAILED — owed at the next Concept2 design touch.
+      **The flag-flip gate is ONE trip:** the AUTOMATIC save this PR owes on
+      the phone and PR C's owed confirming send both need the same
+      `C2_LINK_ENABLED` flip on James's own account against log-dev; walk
+      them together, never as two PR-body lines.
 - [ ] **Verification code: hide it, say "verified".** James, 2026-09-05: like
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that
