@@ -37,6 +37,10 @@ export interface NfcScript {
   /** Optional: deliver the outcome only once this resolves, so a test can
    *  interleave an abort or a background transition first. */
   gate?: Promise<void>;
+  /** Optional: called the moment a session is requested (after the
+   *  `session-requested` trace entry), so a test can time an abort AFTER the
+   *  reader is live rather than racing the registration that precedes it. */
+  onStart?: () => void;
 }
 
 export interface ScriptedNfcReader extends NfcReader {
@@ -60,6 +64,7 @@ export function createScriptedNfcReader(script: NfcScript): ScriptedNfcReader {
       if (signal.aborted) throw new NfcAbortError();
       trace.record("session-requested");
       starts += 1;
+      script.onStart?.();
       let aborted = false;
       const onAbort = (): void => {
         aborted = true;

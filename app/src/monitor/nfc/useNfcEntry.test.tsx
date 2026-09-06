@@ -88,10 +88,15 @@ describe("useNfcEntry", () => {
     const gate = new Promise<void>((r) => {
       open = r;
     });
+    let started!: () => void;
+    const live = new Promise<void>((r) => {
+      started = r;
+    });
     setNfcScript({
       capability: "supported",
       outcome: { kind: "cancelled" },
       gate,
+      onStart: () => started(),
     });
     const { useNfcEntry } = await import("./useNfcEntry");
     const { result, unmount } = renderHook(() => useNfcEntry());
@@ -108,6 +113,9 @@ describe("useNfcEntry", () => {
       });
     });
     await waitFor(() => expect(result.current.busy).toBe(true));
+    // Unmount only once the reader is LIVE, or the abort lands on the
+    // pre-start check and records nothing (a real race, seen under load).
+    await live;
     unmount();
     open();
     await done;
