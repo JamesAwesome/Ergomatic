@@ -6016,6 +6016,48 @@ async function openJustRowLive(page: Page, email: string): Promise<void> {
   await expect(page.getByText("0:16")).toBeVisible({ timeout: 20_000 });
 }
 
+// Phase NF follow-on (Gate 0 §1, countable exit 5): the Just Row door with
+// Scan NFC above Connect, both orientations.
+async function captureJustRowNfc(
+  page: Page,
+  file: string,
+  email: string,
+): Promise<void> {
+  await injectJustRowShotFake(page);
+  await page.addInitScript(() => {
+    window.__nfcScript__ = {
+      capability: "supported",
+      outcome: { kind: "cancelled" },
+    };
+    Object.defineProperty(navigator, "bluetooth", {
+      value: {},
+      configurable: true,
+    });
+  });
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await page.goto("/justrow");
+  await expect(page.getByRole("button", { name: "Scan NFC" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, file) });
+}
+
+test("just-row-nfc", async ({ page }) => {
+  await captureJustRowNfc(
+    page,
+    "just-row-nfc.png",
+    "screenshots-justrow-nfc@e2e.test",
+  );
+});
+
+test("just-row-nfc-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await captureJustRowNfc(
+    page,
+    "just-row-nfc-landscape.png",
+    "screenshots-justrow-nfc-landscape@e2e.test",
+  );
+});
+
 test("justrow-door", async ({ page }) => {
   await injectJustRowShotFake(page);
   await signInViaBackdoor(page, {
