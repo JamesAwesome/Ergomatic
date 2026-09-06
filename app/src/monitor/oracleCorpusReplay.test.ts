@@ -74,8 +74,17 @@ import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { MonitorEvent } from "../../domain/monitor/types.js";
-import { parseEndOfWorkoutSummary } from "../../domain/monitor/pm5/parse.js";
-import { END_OF_WORKOUT_SUMMARY_UUID } from "../../domain/monitor/pm5/uuids.js";
+import {
+  parseAdditionalSplitIntervalData,
+  parseAdditionalSummary,
+  parseEndOfWorkoutSummary,
+} from "../../domain/monitor/pm5/parse.js";
+import {
+  ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+  END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
+} from "../../domain/monitor/pm5/uuids.js";
+import { logbookWatts } from "../session/logbookDerived";
 import { createEventLog } from "./eventLog";
 import {
   fromHexString,
@@ -820,4 +829,160 @@ describe("RC-9(b) — 0x0039's own end-of-workout totals against the sum of the 
         .distanceMeters,
     ).toBe(machine.meters);
   });
+});
+
+// ---------------------------------------------------------------------
+// Phase LP (spec 2026-09-06-logbook-parity §4.1) — identities that do NOT
+// share our arithmetic, over every committed capture that carries 0x003A.
+// RF11: an oracle that shares your definition is a mirror. These do not:
+//   (1) Σ of the RAW 0x0038 frames' Total Calories == the RAW 0x003A's Total
+//       Calories — two characteristics, both decoded straight off the
+//       capture bytes, never through the driver. Confirms offsets 8-9 of
+//       BOTH frames at once (a wrong offset on either side breaks the sum).
+//   (2) every actual the DRIVER emitted carries the calories/watts/drag/
+//       cal-hr the RAW frame with its split number carries — retention
+//       through `toIntervalActual`, checked against the wire, not a fixture.
+//   (3) the RAW per-split watts equal round(2.80/(t/d)³) from that split's
+//       own 0x0037 time and distance as the driver emitted them — the PM5's
+//       power against Concept2's published formula over the PM5's own
+//       time/distance (spec §1.2's derivation, on the wire's numbers).
+//   (4) the RAW 0x003A watts are within 1 W of the same derivation from
+//       0x0039's own work time/distance.
+// `menu-at-ready`, `pyramid`, `session-1-keystone` and `step-2` carry no
+// 0x003A frame (`grep -c '"rx".*ce06003a'` over each, 2026-09-06) and are
+// out of scope here, not skipped silently: the four older captures predate
+// the 0x003A subscription.
+// ---------------------------------------------------------------------
+describe("Phase LP — cross-characteristic identities: 0x0038 splits against 0x003A, and the wire's watts against Concept2's formula", () => {
+  // Fourth column: whether the driver emits at least one indexed actual.
+  // `smoke-terminated` and `end-on-interval-1` were ended before any
+  // boundary — their lone 0x0038 is the terminate's own partial, which is
+  // `boundary-out-of-run` by CSAFE-DEF footnote 12 and never an actual —
+  // so (2)/(3) have nothing to check there while (1) and (4) still hold.
+  const CARRYING_0X003A: [
+    string,
+    WorkoutProgram,
+    number | undefined,
+    boolean,
+  ][] = [
+    [RESTS_FINISHED, RESTS_FINISHED_PROGRAM, undefined, true],
+    [SMOKE_TERMINATED, SMOKE_TERMINATED_PROGRAM, undefined, false],
+    [BOUNDARIES_TERMINATED, BOUNDARIES_TERMINATED_PROGRAM, undefined, true],
+    [KEYSTONE, KEYSTONE_PROGRAM, undefined, true],
+    [REST_BOUNDARY, REST_BOUNDARY_PROGRAM, 250, true],
+    [END_ON_INTERVAL_1, REST_BOUNDARY_PROGRAM, 250, false],
+  ];
+
+  function rawFrames(capturePath: string, char: string): Uint8Array[] {
+    return loadCapture(capturePath)
+      .events.filter((e) => "dir" in e && e.dir === "rx" && e.char === char)
+      .map((e) => fromHexString((e as { hex: string }).hex));
+  }
+
+  it.each(CARRYING_0X003A)(
+    "%s: the raw 0x0038 calories sum to the raw 0x003A total, and the raw per-split watts are 2.80/(t/d)³ of the split's own time and distance",
+    async (capturePath, program, barrierTimeoutMs, expectActuals) => {
+      const summary1 = rawFrames(
+        capturePath,
+        END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      ).map(parseAdditionalSummary);
+      expect(summary1).toHaveLength(1);
+      const additional = summary1[0]!;
+      expect(additional).not.toBeNull();
+
+      const rawSplits = rawFrames(
+        capturePath,
+        ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+      ).map((bytes) => {
+        const decoded = parseAdditionalSplitIntervalData(bytes);
+        if ("error" in decoded) throw new Error("undecodable 0x0038 fixture");
+        return decoded;
+      });
+      expect(rawSplits.length).toBeGreaterThan(0);
+
+      // (1) two characteristics, both straight off the bytes.
+      const rawCalorieSum = rawSplits.reduce(
+        (n, f) => n + f.splitIntervalTotalCalories,
+        0,
+      );
+      expect(rawCalorieSum).toBe(additional!.totalCalories);
+
+      // (2) + (3): through the driver, against the raw frame with the same
+      // split number, and against Concept2's formula.
+      const outcome = await replayThroughDriver(
+        capturePath,
+        program,
+        barrierTimeoutMs,
+      );
+      const actuals = outcome.events
+        .filter((e) => e.kind === "intervalComplete")
+        .map(
+          (e) =>
+            (
+              e as {
+                actual: import("../../domain/monitor/types.js").IntervalActual;
+              }
+            ).actual,
+        )
+        .filter((a) => a.index !== null);
+      expect(actuals.length > 0).toBe(expectActuals);
+      for (const a of actuals) {
+        const raw = rawSplits.find(
+          (f) => f.splitIntervalNumber === (a.index as number) + 1,
+        );
+        expect(raw).toBeDefined();
+        expect(a.calories).toBe(raw!.splitIntervalTotalCalories);
+        expect(a.calPerHour).toBe(raw!.splitIntervalAvgCalories);
+        expect(a.watts).toBe(raw!.splitIntervalPowerWatts);
+        expect(a.dragFactor).toBe(raw!.splitAvgDragFactor);
+        expect(logbookWatts(a.elapsedSeconds, a.distanceMeters)).toBe(
+          raw!.splitIntervalPowerWatts,
+        );
+      }
+
+      // (4) the session's own watts against the same formula over 0x0039's
+      // own work time and distance.
+      expect(outcome.summaries).toHaveLength(1);
+      const s39 = outcome.summaries[0]!;
+      if (s39 === null) throw new Error("undecodable 0x0039 fixture");
+      const derived = logbookWatts(s39.elapsedSeconds, s39.meters);
+      expect(derived).toBeDefined();
+      expect(Math.abs(additional!.avgWatts - derived!)).toBeLessThanOrEqual(1);
+    },
+  );
+
+  it.each(CARRYING_0X003A)(
+    "%s: the driver's summary observations carry the raw 0x003A's four fields verbatim",
+    async (capturePath, program, barrierTimeoutMs) => {
+      const additional = parseAdditionalSummary(
+        rawFrames(capturePath, END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID)[0]!,
+      )!;
+      const outcome = await replayThroughDriver(
+        capturePath,
+        program,
+        barrierTimeoutMs,
+      );
+      const observations = outcome.events.filter(
+        (e) => e.kind === "summary-observations",
+      );
+      expect(observations).toHaveLength(1);
+      const detail = (
+        observations[0] as {
+          detail: {
+            totalCalories?: number;
+            avgWatts?: number;
+            avgCalPerHour?: number;
+            totalRestMeters?: number;
+          };
+        }
+      ).detail;
+      expect(detail.totalCalories).toBe(additional.totalCalories);
+      expect(detail.avgWatts).toBe(additional.avgWatts);
+      expect(detail.avgCalPerHour).toBe(additional.avgCalPerHour);
+      expect(detail.totalRestMeters).toBe(additional.totalRestDistanceMeters);
+      expect(
+        outcome.entries.filter((e) => e.kind === "summary-1-missing"),
+      ).toHaveLength(0);
+    },
+  );
 });
