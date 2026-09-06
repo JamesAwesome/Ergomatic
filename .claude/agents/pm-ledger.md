@@ -5103,3 +5103,56 @@ Ten legs cut to five; verdict on `docs/monitor/sessions/phase-nf-product-walk/RU
   "connects to exactly that PM5 and programs the workout" as fact while
   bullet 5 said "not yet proven on hardware", and the fold contradicted its
   own Record on whether the walk precedes merge (the spec says it does).
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v2: NOT READY)
+
+v2 adopted the whole v1 cut (five legs, three blocks, wired console, zero-scan
+dry run, INCONCLUSIVE-and-release). Everything that failed was in the two
+places the cut did not look: the build the walk installs, and the screen each
+step leaves the operator on.
+
+- **A build-identity discriminator is a claim about the ARTIFACT, and it is
+  settled by reading the produced `.app`.** v2 keyed its "you are on the old
+  probe" stop rule on `xcodebuild CURRENT_PROJECT_VERSION=9001`. A build at
+  this gate proved the produced plist still reads `789`: `Info.plist` holds
+  a literal, and an xcodebuild setting reaches the plist only through a
+  `$(VAR)` reference — which is why this repo carries `agvtool` at all. The
+  rule was inert AND its stop condition fired on the CORRECT build. RF12's
+  shape ("settled by producing the artifact") applied to install identity.
+- **A hand-rolled device build is diffed against `package.json`'s `ios:build`,
+  env by env.** Dropping `ios:build` to avoid its version stamp also dropped
+  `VITE_API_BASE`; `api.ts`'s `base = ""` then makes a NATIVE build fetch
+  relative to the WebView origin, so no library, no workout, no save — every
+  walk precondition unreachable. Any build command handed to James lists the
+  env `ios:build` supplies and says which it deliberately omits and why.
+- **Walk the state machine, not the copy.** v1's rule was "check a leg against
+  the teardown path". The general form: check each step against the screen the
+  PREVIOUS step leaves you on. v2 broke twice — cancelling the picker leaves
+  the interstitial's failure screen (no Scan NFC on it; detail is not
+  rendered while `connecting !== null`), and leg 1's END lands on the log
+  screen with no step back to the workout.
+- **A walk's own STATE RESIDUE changes what the next leg's first tap does.**
+  Leg 1 leaves an unretired `MonitorRun`, so leg 2's first press opens the
+  unsaved-workout guard panel, and "Connect anyway" destroys leg 1's row at
+  leg 2's `armed`. Enumerate the residue (unlogged run, unretired MonitorRun,
+  staged retire) leg by leg before approving a multi-leg card; a walk that
+  eats its own primary evidence is not a walk.
+- **Correction to my own v1 recommendation: the success haptic is NOT a
+  discriminating observable.** iOS emits its own feedback on a tag read, so a
+  buzz proves the SYSTEM read a tag, not that our parser accepted it. An
+  operator observable must be perceivable AND producible only by the code
+  under test; here that is the picker-free connect to the exact name (the
+  JS trace kinds reach no console on a product build — only the app's own
+  View connection log carries `parser-accepted`).
+- **A runsheet sentence that cites a gate must match a check that gate ran.**
+  v2's "DEBUG blocks are logging only, checked block by block at the PM
+  readiness gate" was attributed to v1's gate, which never opened the patch.
+  The claim is true (nine blocks: a trace class, a property, seven emit
+  calls) — it was checked at THIS gate. A citation to a gate is evidence and
+  gets RF16's bar.
+- **Fold: 130 words / 5 bullets / longest 24 — PASS**, the first since DE PR2.
+  Series: door PR B 121 · SF PR1 246 · SF PR2 109 · DE PR1 209 · DE PR2 122 ·
+  auto-send 214 · NF product v1 219 · **NF product v2 130**. The #277 check
+  passes because the disclaimer ("Not yet proven on the erg") sits bolded
+  INSIDE the opening line rather than in a later bullet — that placement is
+  the pattern to copy.

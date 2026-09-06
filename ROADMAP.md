@@ -2428,8 +2428,11 @@ trigger is the whole entry.
   never existed; and seven mutation rows read "not run" behind an "all
   bite" header (re-run, see MUTATIONS.md). PM readiness on runsheet v1:
   NOT READY (ten legs → five, three blocks, ≤ 15 min, ≤ 6 reader starts;
-  ledger entry "Phase NF product walk readiness"); v2 is written and
-  awaits its own PM pass. **Walk-verified countable exits** (spec): 2, 4,
+  ledger entry "Phase NF product walk readiness"); v2 NOT READY too
+  (inert build-identity rule and a build with no `VITE_API_BASE`, both
+  found by building; two steps unperformable from the screen the previous
+  step leaves; second ledger entry); v3 is written and awaits its own PM
+  pass. **Walk-verified countable exits** (spec): 2, 4,
   5, 6, 7 and 9 close only at the walk; the walk precedes merge. The
   branch is NOT pushed; James's word gates push, PR, walk and merge. Open
   number for James: the 1_000 ms collision window is paid on every NFC
