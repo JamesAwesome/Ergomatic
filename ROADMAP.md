@@ -2447,8 +2447,11 @@ trigger is the whole entry.
   so the not-advertising copy is desk-proven only; leg 4 decided: iOS ends a
   backgrounded reader with code 202 and the app's own pause abort still wins
   the race to a quiet return.** Next: James's merge approval of #316.
-  **Follow-on PR (one worktree, after merge; James's ruling 2026-09-06
-  "merge this then a new PR"):** (1) **Scan NFC on Just Row** — absent today
+  **Follow-on PR OPENED 2026-09-06** on `codex/phase-nf2-followon`: spec
+  `docs/superpowers/specs/2026-09-06-phase-nf-followon-design.md`, Gate 0
+  `docs/design/handoffs/2026-09-06-phase-nf-followon/gate0.html` (awaiting
+  James). **The five rows (one worktree, after merge; James's ruling
+  2026-09-06 "merge this then a new PR"):** (1) **Scan NFC on Just Row** — absent today
   by implementation choice (`JustRow.tsx` passes `nfcCapability="unsupported"`);
   James noticed at the erg; Gate 0 for the Just Row screen with the second
   primary; (2) the buttonless `Choosing your monitor` screen on the NFC path
