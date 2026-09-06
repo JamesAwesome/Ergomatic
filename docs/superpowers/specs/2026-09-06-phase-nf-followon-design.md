@@ -80,12 +80,16 @@ explained by existing behaviour and retired below.
    `handleCancel`. The picker-kind branch is unchanged.
 3. **Not-advertising copy** (Gate 0 §3): `TARGETED_FAILURE_COPY`'s
    `TargetMonitorNotAdvertisingError` detail becomes the approved line
-   (A: `Couldn't reach <name>. Check nothing else is connected to it, then try
-   again.`; the name is the request's exact name, so the copy is built, not a
-   literal — the tests pin the shape with an independent name). Try again
+   (James, 2026-09-06, option A with a LINE BREAK between the sentences:
+   `Couldn't reach <name>.` / `Check nothing else is connected to it, then try
+   again.` — rendered as two lines on the card, so `detail` carries a newline
+   and the card renders it as a break; the name is the request's exact name,
+   so the copy is built, not a literal — the tests pin the shape with an
+   independent name). Try again
    stays the targeted retry.
 4. **Tag-read failure copy** (Gate 0 §4): the patch's rejection message
-   becomes `Couldn't read the PM5 tag. Try again.` (Swift; the patch's own
+   becomes `Couldn't scan the monitor tag. Try again.` (James's wording,
+   2026-09-06; Swift; the patch's own
    XCTest pins the string; re-run the 31 native tests); `runNfcAttempt`'s
    `endingCopy` maps `NfcInvalidatedError` with cause `tagFailure` to the same
    line, and every other invalidation keeps `NFC scan stopped. Try again.`.
