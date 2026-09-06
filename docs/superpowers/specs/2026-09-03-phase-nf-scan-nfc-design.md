@@ -88,6 +88,55 @@ The checked-in Flipper capture does not prove this. It stops after the NDEF
 header; it proves compatible TNF/type-length/payload-length fields, not the
 literal type or payload bytes.
 
+## PM5 NFC availability (added 2026-09-06; no copy change, no Gate 0)
+
+**What and why.** On 2026-09-05 an iPhone NDEF reader session found no PM5 tag
+in two consecutive 60 s windows minutes after a successful tag read and BLE
+connect on the same erg, with the phone held at the spot; a PM5 battery pull
+preceded the next observed successful read. The cause is not identified and
+five alternatives remain live (PM5 RF-silent, PM5 NDEF-layer fault, phone Core
+NFC fault, PM5 asleep, suppression while BLE-connected); a control-tag bracket
+the next evening did not reproduce it. Full record:
+`docs/superpowers/research/2026-09-05-pm5-nfc-availability.md` (rev 2).
+This design had assumed the tag is always present. It is not a sticker: the
+PM5 emulates a Type 2 tag on its own controller (CC `E1 10 7C 0F`, non-NXP
+UID; `docs/monitor/nfc/README.md`), so an availability state on the PM5 side
+is possible, and Concept2's firmware notes describe NFC "wake-up behaviour"
+without saying when the tag is or is not offered. The product therefore
+designs for "no tag found" as an ordinary outcome rather than an anomaly.
+
+**Rules (binding on the product PR):**
+
+1. **No tag found is an expected outcome, not an error class.** The existing
+   `system reader timeout` state and its copy (`No NFC tag detected. Try
+   again.`, states table above) already handle it, returning to workout
+   detail where the manual `Connect` action remains. No new state, copy or
+   surface is added; no Gate 0 is triggered.
+2. **Do not attribute a cause.** Copy, logs, receipts and analytics record the
+   reader ending as observed (Core NFC code, duration) and never assert
+   "PM5 off", "phone fault" or "too far". One occurrence, five explanations,
+   no oracle that separates them in the field.
+3. **No rule may be conditioned on the PM5's power cycle or session history.**
+   The app cannot observe when the erg was last powered up or whether a prior
+   connect happened on this power cycle; any behaviour keyed on that would be
+   untestable and unimplementable.
+4. **Manual `Connect` staying present is not the rejected picker fallback.**
+   "Fallback to the picker on timeout" (Rejected approaches) means automatically
+   opening the device picker, which silently changes an exact-target intent;
+   it stays rejected. "Target timeouts never degrade to manual" (Failure and
+   concurrency contract) governs the BLE targeting stage after a successful
+   read. Neither is touched by a reader that found no tag: the user is back on
+   workout detail with the same two actions they started with.
+5. **Instrumentation.** Each attempt's receipt carries the reader ending code
+   and rf-active duration (already emitted by the diagnostic trace as
+   `ndef.ending` with `code`), so a future field pattern can be attributed
+   from data rather than from a single evening.
+
+**Consequence for Gate -1.** Criterion 9's remaining device-probe cases were
+cut as ship gates on 2026-09-06 (antagonist verdict; `REMAINING-PROOF.md`,
+"Ship decision"): they exercised probe-only stage holds, and the harm ceiling
+of any interference is exactly rule 1's recoverable return to workout detail.
+
 ## Gate -1 — real hardware truth before product implementation
 
 No product UI or connection behavior is implemented until a disposable native
@@ -1025,6 +1074,12 @@ Phase NF closes only when:
   0 and accepted. No compensating layout compression ships in this phase.
 
 ## Primary sources and inspected implementation
+
+- `docs/superpowers/research/2026-09-05-pm5-nfc-availability.md` (rev 2) —
+  PM5 NFC availability: observations (PRIMARY, our captures), Concept2 firmware
+  timeline "NFC wake-up behaviour" (PRIMARY, establishes wake-on-NFC only),
+  Concept2 troubleshooting battery reset (PRIMARY), forum "static data"
+  (SECONDARY), and the five live alternatives.
 
 - Concept2, _PM5 Bluetooth Smart Communications Interface Definition_, rev 1.30,
   pp. 6 and 35:

@@ -2427,8 +2427,8 @@ trigger is the whole entry.
   query-scenario diagnosis are DROPPED as ship gates (antagonist verdict,
   James's call, 2026-09-06):** probe-only constructs the spec's NO-GO list and
   countable exit never required. No further erg time for Gate -1; what remains
-  is desk-side (injected multi-tag/invalidation test, reader-ending copy). Owed
-  to the design spec: a "PM5 NFC availability" section
+  is desk-side (injected multi-tag/invalidation test, reader-ending copy). The
+  design spec's "PM5 NFC availability" section LANDED 2026-09-06
   (no-tag is an expected outcome; do not attribute a cause; no rule may be
   conditioned on the PM5's power cycle) — Gate 0 only if copy changes.
   James chose a
