@@ -1,7 +1,7 @@
 # NF-RECOVERY-v4 — control-tag bracket, then cases 2-4
 
-Status: PM PASS WITH CONDITIONS (rev 3, all five landed); awaiting James's
-**go**.
+Status: RAN 2026-09-06 — bracket CLEAN (see RECOVERY-WALK-V4-RESULT.md);
+cases 2-4 subsequently DROPPED as ship gates (REMAINING-PROOF.md, Ship decision).
 
 **v4's primary target is PM5 NFC availability.** Cases 2-4 run with the
 remaining budget only if the bracket is clean; otherwise they stay unrun

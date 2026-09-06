@@ -108,3 +108,10 @@ unless it records pages read + TLV, brackets the window, and is paired with a
 phone read of the control tag. RECOVERY-WALK-V4 rev 2 is rebuilt on that
 control-tag bracket; research note rev 2 carries the required wordings. Awaits
 PM readiness.
+
+**SCOPE CUT, 2026-09-06 (James, on the antagonist's verdict).** Cases 2-4 and
+the v5 query-scenario diagnosis are dropped as ship gates: probe-only
+constructs (grep-proven), never in the spec's NO-GO list or countable exit,
+harm ceiling a recoverable retry. Physical multi-tag dropped too — iOS refuses
+multiple tags itself. No further Gate -1 erg walks are planned. Remaining work
+is desk-side; see REMAINING-PROOF.md "Ship decision".

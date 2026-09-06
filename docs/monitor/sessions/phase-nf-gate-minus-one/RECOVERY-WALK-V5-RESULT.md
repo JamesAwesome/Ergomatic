@@ -49,7 +49,12 @@ and sent end-of-turn. Recorded as a standing rule (memory: nfc-walk-realtime-pre
    no-reuse rule); the controller relaunch also needs the prior console/evidence
    moved aside. Both are controller/helper ergonomics, not walk findings.
 
-## Next
+## Next (superseded 2026-09-06)
+
+Superseded the same day: cases 2-4 and this query-scenario diagnosis were cut
+as ship gates on the antagonist's verdict (REMAINING-PROOF.md, "Ship
+decision"). The paragraph below is retained as the record of what was planned.
+
 
 `NF-RECOVERY-v6` needs no new erg time yet: first diagnose the query-scenario
 zero-records/timeout at the desk (Flipper replica + jsdom), because if the

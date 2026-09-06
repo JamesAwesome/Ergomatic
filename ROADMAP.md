@@ -2421,8 +2421,14 @@ trigger is the whole entry.
   boundary. **Open finding, PM5 NFC availability:** cause of the no-tag windows
   not identified, five alternatives live
   ([research note](docs/superpowers/research/2026-09-05-pm5-nfc-availability.md));
-  `NF-RECOVERY-v4` (control-tag bracket, then cases 2-4) is PM-passed and
-  awaits James. Owed to the design spec: a "PM5 NFC availability" section
+  `NF-RECOVERY-v4`'s control-tag bracket ran CLEAN on 2026-09-06 (phone stack
+  live, PM5 read + full connect, Flipper raw read 42/42 pages after the
+  connect); the v3 no-tag condition did not reproduce. **Cases 2-4 and the
+  query-scenario diagnosis are DROPPED as ship gates (antagonist verdict,
+  James's call, 2026-09-06):** probe-only constructs the spec's NO-GO list and
+  countable exit never required. No further erg time for Gate -1; what remains
+  is desk-side (injected multi-tag/invalidation test, reader-ending copy). Owed
+  to the design spec: a "PM5 NFC availability" section
   (no-tag is an expected outcome; do not attribute a cause; no rule may be
   conditioned on the PM5's power cycle) — Gate 0 only if copy changes.
   James chose a

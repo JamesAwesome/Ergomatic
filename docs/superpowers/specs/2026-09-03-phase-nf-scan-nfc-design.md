@@ -119,7 +119,11 @@ probe on a real iPhone and PM5 proves all of the following:
    on every record and ending, rejects a delegate callback containing zero or
    multiple physical tags, and resolves stop only after that exact session can
    no longer emit.
-9. An injected-native lifecycle test and the device probe both cover attempt A
+9. An injected-native lifecycle test covers attempt A (the gate; countable exit
+   1 and the NO-GO list route drain/identity here — the device probe's
+   stop-during-connect result of 2026-09-06 corroborates and is on file, and its
+   remaining stage-hold cases were cut as ship gates the same day, see
+   `docs/monitor/sessions/phase-nf-gate-minus-one/REMAINING-PROOF.md`)
    stopping during connect/query/read, a process-live WebView reload, and an
    immediate attempt B. No retained or late A callback can settle, stop, or
    clear B.

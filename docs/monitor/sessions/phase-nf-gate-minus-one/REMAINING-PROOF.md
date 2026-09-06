@@ -19,9 +19,9 @@ coverage, not a new assembled GO receipt or a change to the approved design.
 | 4. Exact live name on fresh attempts | Present: 16:14:33.366Z, 16:18:35.712Z and 22:28:45.860Z each report exact decoded/live `PM5 432331249 Row` with a completed handoff. The second's background label does not make it background recovery proof. |
 | 5. Nonmodal targeted BLE connect | Present in those successful samples and v8's positive classifier result. |
 | 6. Signed native reader | Present: pinned app signature/entitlement/usage checks plus v8's generation-1 RF-active trace. Empty controller-owned signature fields in per-run exports are not evidence of missing entitlements. |
-| 7. Reader-ending semantics | Partial: actual sheet Cancel/userCancelled and no-tag/sessionTimeout receipts already exist in `PRE-REPAIR.md`. Forced generic invalidation from a positively observed multiple-tag producer is still missing. |
-| 8. Native identity, singleton guard and drain | Partial: native desk suites exist and one held-connect A was stopped. Physical multi-tag rejection and the complete prescribed ownership/drain matrix are not established. |
-| 9. Old A cannot interfere with B | Incomplete: stopped-stage connect/query/read, successful immediate B and process-live/native-live WebView reload proof remain incomplete. Earlier failed B attempts stay retained. |
+| 7. Reader-ending semantics | Cancel/userCancelled and no-tag/sessionTimeout receipts exist (`PRE-REPAIR.md`). Multiple tags in the field is an iOS-owned condition: the reader session refuses it and the app sees only the invalidation, so no physical multi-tag producer is required — handle the code with an injected test or collapse the copy per the spec's own rule. **Desk item.** |
+| 8. Native identity, singleton guard and drain | Native desk suites exist; NF-RECOVERY-v3 case 1 (stop-during-connect A → immediate B) completed on hardware 2026-09-05. Countable exit 1 routes identity/single-tag/drain to native-injected tests; physical multi-tag rejection is dropped (iOS-owned, see row 7). **Remaining: the injected multi-tag/invalidation test, desk.** |
+| 9. Old A cannot interfere with B | **Not a ship gate** (antagonist 2026-09-06, ledger "Remaining NFC walk necessity"): absent from the spec's NO-GO list and countable exit 1; the stage-hold cases 2-4 exist only in the disposable probe (grep-proven), the guard is attempt-ID keyed so 2/3 retest case 1, and the harm ceiling is a recoverable retry with manual Connect present. Case 1 result on file; cases 2-4 and the v5 query-scenario diagnosis DROPPED. |
 
 Desk reconciliation strictly serialized seven retained receipt files and
 deduplicated handoffs by attempt UTC. All three successful handoffs' redacted
@@ -33,44 +33,16 @@ Sources: approved spec `2026-09-03-phase-nf-scan-nfc-design.md`, Gate -1;
 proof plan Task 3 steps 4–8; `PRE-REPAIR.md`, `REPAIRED-NORMAL.md`,
 `BACKGROUND-OBSERVATIONS.md`, `SESSION-PAUSED.md`, and `NORMAL-TRACE-V8-RESULT.md`.
 
-## Next desk preparation
+## Ship decision, 2026-09-06 (James, on the antagonist's verdict)
 
-Prepare the existing **stop-during-connect A → immediate B** proof first.
-It targets the failed recovery whose missing RF-active/error observations
-motivated the diagnostic build. One held-connect A is already known reachable;
-the trace can now distinguish B's requested start, actual RF activation and
-native ending. Another standalone normal, sheet-cancel or no-tag timeout
-would not fill this gap.
-
-The signed recovery build now includes the trace and approved temporary native
-hold/release overlay; its 231-file manifest and signature were reverified on
-2026-09-04. After the recorded identity mismatch, setup v2 installed and independently
-verified it with explicit permission. A later read-only listing still matched
-0.23.0/789 and that installation URL. Setup v2 stopped before canary. The later no-install setup v3 passed actual
-phone controls, complete capture and same-process reload with zero NFC
-attempts and cleanup verified. See `ZERO-SCAN-SETUP-V3-RESULT.md`.
-
-The existing probe's held-stage handler uses export/reload/Start B. Simulator
-has proved the corrected Inspector's actual idle component reload; unattended
-execution through a physical NFC sheet is still unobserved. A bounded
-feasibility question belongs in the reviewed recovery run, never as an assumed
-working prerequisite. `RECOVERY-WALK-V1.md` groups the four related cases.
-
-Recover the retained overlay and the existing Inspector/control mechanism;
-prove the exact hold, drain, export, document replacement and Start B actions
-can be driven without operator console typing or app taps through a sheet.
-Use existing controls where they work. If they cannot execute the sequence,
-record the specific missing control before proposing a diagnostic change;
-do not start another general framework or invent a reader delay.
-
-Prepare the related connect/query/read/reload cases together where their
-controls can be proved, so the next invitation is a useful bounded recovery
-block rather than another unprepared one-scan handoff. Physical background
-and multi-tag legs still need explicitly feasible actions; previous failed
-Home swipes and two-object presentations are not approved prerequisites.
-
-The phone-preparation condition is now satisfied. The exact next hardware
-readiness and PM disposition are recorded in `RECOVERY-WALK-V1.md`.
-Any phone installation requires James's explicit permission for that install;
-scan consent is separate. The product design and implementation gate remain
-unchanged. Do not keep James waiting at the erg for this preparation.
+Read and connect are proven on hardware (rows 1-6). The recovery matrix's
+remaining cases and the v5 query-scenario bug were probe-only constructs that
+no shipping path reaches and that the spec's binding gates never required; they
+are dropped. Physical multi-tag was never achievable and never needed: iOS
+refuses multiple tags itself. **What remains before Scan-NFC can ship is all
+desk-side:** the injected multi-tag/invalidation test (rows 7-8), the
+reader-ending copy collapse if native cannot distinguish invalidation, and the
+"PM5 NFC availability" spec section (no-tag is an expected outcome; manual
+Connect stays present; no rule conditioned on the PM5's power cycle). No further
+erg time is planned for Gate -1. The DEBUG hold/release overlay and the
+diagnostic probe are retired with the phase's close-out.
