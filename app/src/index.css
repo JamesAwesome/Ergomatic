@@ -484,56 +484,6 @@ button:disabled {
   z-index: 20;
 }
 
-/* THE STRIP UNDER THE BAR (James's device report, 2026-09-06: "you can see
-   the library under the footer"; Gate 0 approved the same day). With the
-   software keyboard up, a band of page shows BELOW this bar and above the
-   keyboard. Measured on an iPhone 17 Pro simulator running the real shell
-   (docs/testing/2026-09-06-keyboard-harness.md):
-
-     window.innerHeight        874   (the keyboard never resizes the
-                                      layout viewport, so `bottom: 0` has
-                                      nothing to react to)
-     visualViewport.height     498
-     .tabbar rect.bottom       498   (ALREADY flush with that bottom —
-                                      WebKit anchors fixed elements to the
-                                      visual viewport, correctly)
-     keyboard actually starts  ~564
-
-   The ~66px difference is iOS's floating input-accessory bar (the ‹ › ✓
-   pill), which WebKit excludes from `visualViewport.height` while the page
-   still PAINTS behind it. So the bar is not misplaced and cannot be moved
-   down: it sits exactly where the only API that reports a bottom says the
-   bottom is. Repositioning it from `visualViewport` was tried on device and
-   moved nothing.
-
-   This paints the band instead. No height is needed and none is available
-   to the page: the fill simply runs further down than any accessory bar
-   goes, and with no keyboard up the whole of it is below the viewport
-   where nothing can see it. `position: absolute` inside a `position: fixed`
-   parent, so it is out of flow — the document's scroll height is unchanged
-   and no screen's layout moves.
-
-   REJECTED, and why it is worth knowing: hiding the tab bar while the
-   keyboard is up (the first candidate, approved at Gate 0 and then
-   withdrawn at the branch review). It needed `visualViewport` at runtime,
-   and `visualViewport.height` is in CSS pixels — so a pinch-zoom shrinks it
-   exactly the way a keyboard does, and a 1.21x zoom crossed the threshold
-   and removed the whole main navigation with no keyboard anywhere. It also
-   removed a working affordance: the bar IS tappable with the keyboard up
-   (it sits above the accessory bar), and `e2e/builder.spec.ts`'s
-   "typed content survives a tab-bar exit and return" is that exact flow. */
-.tabbar::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  /* Twice the ~66px accessory bar measured on device. Over-filling is free
-     — the excess is off-screen — and under-filling is the bug. */
-  height: 140px;
-  background: var(--surface);
-}
-
 .tab {
   flex: 1;
   min-height: var(--tap);
