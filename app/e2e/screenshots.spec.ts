@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { NEWEST_RELEASE_VERSION } from "./releasePin";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { signInViaBackdoor, stubBluetoothScanFailure } from "./helpers";
@@ -6833,6 +6834,82 @@ async function captureWorkoutDetailNfc(
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, file) });
   await cleanupByTitle(page, title);
 }
+
+function pm5NfcFixtureRecordsForShots(): {
+  tnf: number;
+  type: number[];
+  payload: number[];
+}[] {
+  const raw = JSON.parse(
+    readFileSync(
+      path.join(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../docs/monitor/nfc/pm5-tag-2026-09-04-iphone.json",
+      ),
+      "utf8",
+    ),
+  ) as { records: { tnf: number; type: number[]; payload: number[] }[] };
+  return raw.records.map((r) => ({
+    tnf: r.tnf,
+    type: r.type,
+    payload: r.payload,
+  }));
+}
+
+// Follow-on Gate 0 §2: the targeted-scan screen, held open by the fake's
+// `pending` mode (settles only on abort), in both orientations.
+async function captureConnectedLooking(
+  page: Page,
+  file: string,
+  email: string,
+): Promise<void> {
+  await page.addInitScript(
+    ({ records, name }) => {
+      window.__nfcScript__ = {
+        capability: "supported",
+        outcome: { kind: "records", records },
+      };
+      window.__pm5FakeScript__ = {
+        program: { intervals: [] },
+        deviceName: name,
+        targetedScan: "pending",
+      };
+      Object.defineProperty(navigator, "bluetooth", {
+        value: {},
+        configurable: true,
+      });
+    },
+    { records: pm5NfcFixtureRecordsForShots(), name: "PM5 432331249 Row" },
+  );
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await setBaselines(page);
+  await page.goto("/library");
+  await page.locator(".workout-row").first().click();
+  await page.locator(".workout-detail-title").waitFor();
+  await page.getByRole("button", { name: "Scan NFC" }).click();
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Looking for" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, file) });
+  await page.locator(".connected-interstitial-actions .button-l2").click();
+}
+
+test("connected-looking", async ({ page }) => {
+  await captureConnectedLooking(
+    page,
+    "connected-looking.png",
+    "screenshots-looking@e2e.test",
+  );
+});
+
+test("connected-looking-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await captureConnectedLooking(
+    page,
+    "connected-looking-landscape.png",
+    "screenshots-looking-landscape@e2e.test",
+  );
+});
 
 test("workout-detail-nfc", async ({ page }) => {
   await captureWorkoutDetailNfc(

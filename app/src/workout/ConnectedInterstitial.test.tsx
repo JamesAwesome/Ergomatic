@@ -1943,6 +1943,29 @@ describe("targeted failures (Phase NF)", () => {
     },
   );
 
+  it("picking on the NFC route names the target and offers Cancel; Cancel cancels the session and exits (follow-on Gate 0 §2)", async () => {
+    const { session: s, onExit } = renderTargeted({ phase: "picking" });
+    expect(screen.getByText("Looking for PM5 432331249 Row")).toHaveClass(
+      "connected-serif-line",
+    );
+    expect(screen.getByText("Keep the PM5 on and close by.")).toHaveClass(
+      "connected-body-line",
+    );
+    expect(screen.queryByText("Choosing your monitor")).toBeNull();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveClass("button-l2");
+    await userEvent.click(cancel);
+    expect(s.cancel).toHaveBeenCalledTimes(1);
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("picking on the PICKER route is unchanged: the backdrop, no Cancel", () => {
+    renderInterstitial({ phase: "picking" });
+    expect(screen.getByText("Choosing your monitor")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.queryByText(/Looking for/)).toBeNull();
+  });
+
   it("mounts with connect(request) — the SAME request object — and Try again repeats it", async () => {
     const { session: s } = renderTargeted({
       phase: "failed",

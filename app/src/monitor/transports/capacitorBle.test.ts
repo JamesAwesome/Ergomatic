@@ -1311,6 +1311,17 @@ describe("scanTarget (Phase NF)", () => {
     await expect(p).rejects.toMatchObject({
       name: "TargetScanInterruptedError",
     });
+    // Follow-on F5: a foreground Cancel (this abort) never arms the poison —
+    // the stop resolved, so the cleanup timer was unscheduled and the tail is
+    // released; the NEXT targeted scan reaches the radio normally.
+    vi.mocked(BleClient.stopLEScan).mockResolvedValue(undefined);
+    vi.mocked(BleClient.requestLEScan).mockClear();
+    const p2 = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    expect(BleClient.requestLEScan).toHaveBeenCalledTimes(1);
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    await advance(1_000);
+    await expect(p2).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
   });
 
   describe("trace kinds (review B3: every kind the transport records is asserted)", () => {

@@ -447,6 +447,33 @@ export default function ConnectedInterstitial({
     // for the duration of the chooser too, same as every other connected
     // state — the chooser is modal, and this is a monitor-flow screen like
     // the rest of them, not a moment to show tab navigation underneath.
+    // Phase NF follow-on (Gate 0 §2, James 2026-09-06): on the NFC route
+    // nothing is being chosen — the app is scanning for ONE exact name for
+    // up to 10 s (20 s with the cleanup bound), and the walk of 2026-09-06
+    // left a rower on this backdrop with no way out. The targeted variant
+    // names the target and carries the same Cancel every other card here
+    // has; `handleCancel` → `session.cancel()` aborts the scan
+    // synchronously (a targeted scan is live only in `picking`, where no
+    // driver exists — `useMonitorSession.ts`'s own precondition) and
+    // `onExit` returns to detail with both buttons.
+    if (request.kind === "advertised-name") {
+      return (
+        <main className="screen connected-interstitial">
+          <div className="connected-interstitial-body">
+            <p className="connected-status-label">CONNECT</p>
+            <p className="connected-serif-line">
+              Looking for {request.exactName}
+            </p>
+            <p className="connected-body-line">Keep the PM5 on and close by.</p>
+          </div>
+          <div className="action-stack connected-interstitial-actions">
+            <button type="button" className="button-l2" onClick={handleCancel}>
+              Cancel
+            </button>
+          </div>
+        </main>
+      );
+    }
     return (
       <main className="screen connected-interstitial">
         <div className="connected-interstitial-body">

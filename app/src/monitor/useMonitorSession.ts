@@ -1671,15 +1671,6 @@ function mapRadioFailure(err: unknown): ConnectedError {
 const TARGETED_FAILURE_COPY: Readonly<
   Record<string, { reason: ConnectedError["reason"]; detail: string }>
 > = {
-  // The detail for this one is BUILT from the request's exact name in
-  // `mapTargetedFailure` (follow-on Gate 0, James 2026-09-06: two sentences,
-  // a line break between them; the PM5 advertises whenever it is awake and
-  // not already connected, on any screen, so the old "Open Connect Device"
-  // instruction asked for something the rower does not need to do).
-  TargetMonitorNotAdvertisingError: {
-    reason: "target-not-advertising",
-    detail: "",
-  },
   TargetAlreadyConnectedError: {
     reason: "target-already-connected",
     detail: "End this PM5's current connection, then try again.",
@@ -1705,9 +1696,14 @@ const TARGETED_FAILURE_COPY: Readonly<
   },
 };
 
-/** The not-advertising card's two lines, separated by `\n` — the failure
- *  screen renders the first as its serif line and the rest as a body line. */
-export function notAdvertisingDetail(exactName: string): string {
+/** The not-advertising card's two lines, separated by `\n` — every failure
+ *  card that renders `detail` splits on it (the interstitial, Just Row).
+ *  Built from the request's exact name (follow-on Gate 0, James
+ *  2026-09-06: the PM5 advertises whenever it is awake and not already
+ *  connected, on any screen, so the old "Open Connect Device" instruction
+ *  asked for something the rower does not need to do). Not exported: no
+ *  test may import the string it exists to pin (RF21). */
+function notAdvertisingDetail(exactName: string): string {
   return `Couldn't reach ${exactName}.\nCheck nothing else is connected to it, then try again.`;
 }
 

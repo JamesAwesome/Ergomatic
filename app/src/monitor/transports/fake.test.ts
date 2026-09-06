@@ -3893,6 +3893,31 @@ describe("createFakeTransport: scanTarget (Phase NF)", () => {
     ).rejects.toMatchObject({ name: "TargetedRequestInvalidError" });
   });
 
+  it("pending: settles ONLY on abort, as TargetScanInterruptedError (the seam that holds the targeted-scan screen open)", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      deviceName: "PM5 1",
+      targetedScan: "pending",
+    });
+    const ac = new AbortController();
+    let settled = false;
+    const p = fake.scanTarget(req("PM5 1"), ac.signal);
+    void p.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(settled).toBe(false);
+    ac.abort();
+    await expect(p).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+  });
+
   it("rejects a pre-aborted signal as interrupted", async () => {
     const fake = createFakeTransport({ program: PROGRAM, deviceName: "PM5 1" });
     const ac = new AbortController();
