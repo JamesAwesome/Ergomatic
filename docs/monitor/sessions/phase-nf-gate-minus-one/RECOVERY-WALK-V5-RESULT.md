@@ -28,6 +28,15 @@ NF-FLIPPER-EMU-v2) and in jsdom against the probe's query-hold path.
 
 ## Operator/host issues this run (fix before v6)
 
+**Root cause James named (2026-09-06): not prepared enough in real time.** The
+locking followed dead time the controller created (two restarts, a resent step
+block), not just the phone's auto-lock. Before v6 the full host sequence
+(controller launch + `WebView loaded` + idle check) is rehearsed to green at the
+desk in a zero-scan dry run immediately before the invitation, so **go →
+present-tag has no host work in between**, and every case block is pre-written
+and sent end-of-turn. Recorded as a standing rule (memory: nfc-walk-realtime-prep).
+
+
 1. **The phone locked between the v4 bracket and case 2**, and iOS refused the
    app relaunch: `FBSOpenApplicationServiceError … device was not, or could
    not be, unlocked`. Readiness must include "keep the screen awake"; the
