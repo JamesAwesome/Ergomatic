@@ -875,7 +875,12 @@ export function createConcept2Router({
       if (row.c2ResultId !== null && row.c2UserId === link.c2UserId) {
         // Wave E auto-send §3.4: Concept2 has this row, so "sends are
         // failing" is over — whatever set the flag. Unconditional and cheap
-        // (a no-op when nothing is set).
+        // (a no-op when nothing is set). This clears on HISTORICAL evidence
+        // (the row may have landed weeks ago): accepted at the PM gate
+        // (2026-09-05) because the only producer is `Send again` on a row
+        // already carrying a result — a rower with a past success AND a
+        // broken weight class, the opposite of §3.4's motivating case — and
+        // the next failing send sets the flag again.
         await store.clearSendFailed(userId);
         res.status(200).json({ resultId: row.c2ResultId });
         return;
