@@ -102,7 +102,40 @@ explained by existing behaviour and retired below.
 
 ## State and lifetime
 
-No new session-scoped state. `useNfcEntry` owns per-attempt refs (abort
+No new session-scoped state. Two rows the antagonist's delta pass added
+(2026-09-06, F6 and F5):
+
+- **Just Row's handoff has NO mount lease.** On detail the staged-retire
+  receipt has two owners after a handoff: the interstitial's mount lease
+  (discard on a true unmount) and the session's `armed` keyed take. On Just
+  Row `onTarget` hands the request to the screen's own session, so after
+  the handoff the receipt's owners are the `armed` keyed take and
+  `cancel()`'s discard only; `teardown()` (a Just Row unmount mid-attempt)
+  leaves it staged. Harm ceiling: an in-memory receipt keyed to an attempt
+  ID no later attempt can present, dead at document teardown — the keyed
+  take (Phase NF F7) is what makes it harmless. Recorded, not fixed.
+- **Cancel during the targeted scan and the cleanup poison.** A foreground
+  Cancel aborts the scan; `settle()` then awaits `stopLEScan()` under the
+  same 10 s bound that, on expiry, arms the never-cleared poison. The
+  argument that a foreground Cancel cannot reach it: at abort time the app
+  is not suspended and `stopLEScan` is the next operation on the plugin's
+  serial queue, so it resolves well inside the bound; a Cancel during the
+  PREAMBLE (before `requestLEScan`) has `scanning === false` and schedules
+  no stop at all. Pinned by one transport assertion: after an abort with
+  the stop resolving, the next targeted scan reaches the radio (no
+  `ScanCleanupFailedError`). The background-abort residual in the ROADMAP
+  stands unchanged.
+- **Just Row's connecting card is unchanged on the NFC route** (antagonist
+  F7, decided deliberately): it reads `Connecting to monitor` / `Wake the
+  monitor if its screen is dark.` with Cancel, so the targeted scan is
+  cancellable there already but is not NAMED as it is on detail. Naming it
+  is a copy change on a screen Gate 0 did not draw — a ROADMAP row, not
+  this PR.
+- **Just Row's inline error line** (antagonist F4): the same `.baseline-error`
+  line workout detail renders, in the same position (between the hardware
+  pair and the next action); accent on page is recorded in-repo at 5.35:1
+  (`index.css`). A named Gate 0 delta: the element exists on detail's
+  approved screen and is reused, not invented. `useNfcEntry` owns per-attempt refs (abort
 controller, trace, busy/accepted flags) with the lifetimes WorkoutDetail's
 inline block has today — minted at the press, cleared in the attempt's
 `finally`, discarded on unmount; the staged-retire receipt is keyed by attempt
