@@ -2426,11 +2426,22 @@ trigger is the whole entry.
   connect); the v3 no-tag condition did not reproduce. **Cases 2-4 and the
   query-scenario diagnosis are DROPPED as ship gates (antagonist verdict,
   James's call, 2026-09-06):** probe-only constructs the spec's NO-GO list and
-  countable exit never required. No further erg time for Gate -1; what remains
-  is desk-side (injected multi-tag/invalidation test, reader-ending copy). The
+  countable exit never required. No further erg time for Gate -1. The
   design spec's "PM5 NFC availability" section LANDED 2026-09-06
   (no-tag is an expected outcome; do not attribute a cause; no rule may be
   conditioned on the PM5's power cycle) — Gate 0 only if copy changes.
+  **Injected multi-tag / invalidation tests LANDED 2026-09-06** in the
+  checked-in NFC patch (`NdefSessionEndingTests.swift`: zero/two tags and
+  several NDEF messages rejected before any connect, every Core NFC ending
+  code mapped with attempt identity, drained A cannot touch B; six
+  deciding-source mutations, record in `REMAINING-PROOF.md`). **DECISION
+  OWED (James): the reader-ending seam** — the plugin's ending reason is
+  computed from the Core NFC code alone, so the controller's own multi-tag
+  rejection reaches JS as `userCancelled` and the spec's "fail closed as
+  `Unsupported NFC tag`" is unreachable; spec section "Reader-ending seam"
+  carries the evidence and two options (A: the controller publishes its cause,
+  recommended; B: collapse to a quiet return). Product implementation is
+  scheduled only after that ruling.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

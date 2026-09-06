@@ -1506,12 +1506,12 @@ index 0000000000000000000000000000000000000000..be52faa1612f4b288e114f3964dd8560
 +        XCTAssertEqual(state.requestStop(attemptId: "attempt-a"), .alreadyDrained)
 +    }
 +}
-diff --git a/ios/Tests/NfcPluginTests/NfcDiagnosticTraceTests.swift b/ios/Tests/NfcPluginTests/NfcDiagnosticTraceTests.swift
+diff --git a/ios/Tests/NfcPluginTests/NdefSessionEndingTests.swift b/ios/Tests/NfcPluginTests/NdefSessionEndingTests.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..9d60c1b3220906a22196ec0bc10e1cebd6eaef44
+index 0000000000000000000000000000000000000000..40d98fd5ab8170b2416940cc1eddff5b53b2fa0b
 --- /dev/null
-+++ b/ios/Tests/NfcPluginTests/NfcDiagnosticTraceTests.swift
-@@ -0,0 +1,267 @@
++++ b/ios/Tests/NfcPluginTests/NdefSessionEndingTests.swift
+@@ -0,0 +1,275 @@
 +import Capacitor
 +import CoreNFC
 +import Foundation
@@ -1519,39 +1519,286 @@ index 0000000000000000000000000000000000000000..9d60c1b3220906a22196ec0bc10e1ceb
 +
 +@testable import NfcPlugin
 +
-+@objc(NfcDiagnosticFakeTag)
-+private final class NfcDiagnosticFakeTag: NSObject, NFCNDEFTag {
-+    static var supportsSecureCoding: Bool { true }
-+    var isAvailable: Bool { true }
-+    private let queryError: Error?
-+    private let readError: Error?
++/// Native-injected tests for the two Gate -1 criteria that no physical
++/// presentation can exercise deterministically: the controller's own
++/// single-tag count check on the delegate's tag array (criterion 8) and the
++/// reader-ending semantics the JS layer receives (criterion 7). iOS is not in
++/// the loop: the test plays Core NFC, delivering delegate callbacks to the
++/// production plugin over a no-radio session double and reading what the
++/// plugin publishes to its listeners.
++private func coreNfc(_ code: Int) -> NSError {
++    NSError(domain: NFCReaderError.errorDomain, code: code)
++}
 +
-+    required init?(coder: NSCoder) {
-+        queryError = nil
-+        readError = nil
-+        super.init()
-+    }
-+    init(queryError: Error? = nil, readError: Error? = nil) {
-+        self.queryError = queryError
-+        self.readError = readError
-+        super.init()
++private func ndefMessage() -> NFCNDEFMessage {
++    NFCNDEFMessage(records: [
++        NFCNDEFPayload(format: .nfcWellKnown, type: Data("T".utf8), identifier: Data(), payload: Data([0x02, 0x65, 0x6E]))
++    ])
++}
++
++final class NdefSessionEndingTests: XCTestCase {
++    private let oneTagMessage = "Present exactly one NFC tag."
++
++    private struct Ending: Equatable {
++        let attemptId: String?
++        let reason: String?
 +    }
 +
-+    func encode(with coder: NSCoder) {}
-+    func copy(with zone: NSZone? = nil) -> Any { self }
-+    func queryNDEFStatus(completionHandler: @escaping (NFCNDEFStatus, Int, Error?) -> Void) {
-+        completionHandler(.readWrite, 128, queryError)
++    private func recordEndings(_ plugin: NfcPlugin, into endings: @escaping (Ending) -> Void) {
++        listen(plugin, event: "nfcSessionEnd") { payload in
++            endings(Ending(
++                attemptId: payload["attemptId"] as? String,
++                reason: payload["reason"] as? String
++            ))
++        }
 +    }
-+    func readNDEF(completionHandler: @escaping (NFCNDEFMessage?, Error?) -> Void) {
-+        completionHandler(nil, readError)
++
++    // MARK: - Criterion 8: zero or multiple physical tags are rejected by us
++
++    func testTwoDetectedTagsAreRejectedBeforeAnyConnect() {
++        let plugin = NfcProbePlugin()
++        var events: [[String: Any]] = []
++        listen(plugin, event: "nfcEvent") { events.append($0) }
++        wait(for: [startNdef(plugin, attemptId: "A")], timeout: 1)
++        let session = plugin.sessions[0]
++
++        plugin.onSessionQueue {
++            plugin.readerSessionDidBecomeActive(session)
++            plugin.readerSession(session, didDetect: [NfcFakeNdefTag(), NfcFakeNdefTag()])
++        }
++        settleMainQueue()
++
++        XCTAssertEqual(session.invalidationMessages, [oneTagMessage])
++        XCTAssertEqual(session.connectCount, 0)
++        XCTAssertEqual(session.plainInvalidateCount, 0)
++        XCTAssertTrue(events.isEmpty)
 +    }
-+    func writeNDEF(_ ndefMessage: NFCNDEFMessage, completionHandler: @escaping (Error?) -> Void) {
-+        completionHandler(nil)
++
++    func testZeroDetectedTagsAreRejectedBeforeAnyConnect() {
++        let plugin = NfcProbePlugin()
++        var events: [[String: Any]] = []
++        listen(plugin, event: "nfcEvent") { events.append($0) }
++        wait(for: [startNdef(plugin, attemptId: "A")], timeout: 1)
++        let session = plugin.sessions[0]
++
++        plugin.onSessionQueue {
++            plugin.readerSession(session, didDetect: [])
++        }
++        settleMainQueue()
++
++        XCTAssertEqual(session.invalidationMessages, [oneTagMessage])
++        XCTAssertEqual(session.connectCount, 0)
++        XCTAssertTrue(events.isEmpty)
 +    }
-+    func writeLock(completionHandler: @escaping (Error?) -> Void) {
-+        completionHandler(nil)
++
++    func testMultipleNdefMessagesAreRejectedWhileOneIsPublished() {
++        let plugin = NfcProbePlugin()
++        var events: [[String: Any]] = []
++        listen(plugin, event: "nfcEvent") { events.append($0) }
++        wait(for: [startNdef(plugin, attemptId: "A")], timeout: 1)
++        let session = plugin.sessions[0]
++
++        plugin.onSessionQueue {
++            plugin.readerSession(session, didDetectNDEFs: [ndefMessage(), ndefMessage()])
++        }
++        settleMainQueue()
++        XCTAssertEqual(session.invalidationMessages, [oneTagMessage])
++        XCTAssertTrue(events.isEmpty)
++
++        // The rejection put A into drain, so a single message can no longer
++        // be attributed to it; start B and prove the one-message path publishes.
++        plugin.onSessionQueue {
++            plugin.readerSession(session, didInvalidateWithError: coreNfc(200))
++        }
++        wait(for: [startNdef(plugin, attemptId: "B")], timeout: 1)
++        let sessionB = plugin.sessions[1]
++        plugin.onSessionQueue {
++            plugin.readerSession(sessionB, didDetectNDEFs: [ndefMessage()])
++        }
++        settleMainQueue()
++
++        XCTAssertEqual(events.count, 1)
++        XCTAssertEqual(events.first?["attemptId"] as? String, "B")
++        XCTAssertEqual(events.first?["type"] as? String, "ndef")
++        XCTAssertTrue(sessionB.invalidationMessages.isEmpty)
++    }
++
++    func testRejectedAttemptDrainsAndCannotTouchItsSuccessor() {
++        let plugin = NfcProbePlugin()
++        var endings: [Ending] = []
++        var events: [[String: Any]] = []
++        recordEndings(plugin) { endings.append($0) }
++        listen(plugin, event: "nfcEvent") { events.append($0) }
++        wait(for: [startNdef(plugin, attemptId: "A")], timeout: 1)
++        let sessionA = plugin.sessions[0]
++
++        plugin.onSessionQueue {
++            plugin.readerSession(sessionA, didDetect: [NfcFakeNdefTag(), NfcFakeNdefTag()])
++        }
++        // Stop requested while A is already draining resolves only once iOS
++        // reports A's invalidation, never before.
++        let stop = stopNdef(plugin, attemptId: "A")
++        plugin.onSessionQueue {}
++        XCTAssertFalse(stop.isSettled())
++
++        plugin.onSessionQueue {
++            plugin.readerSession(sessionA, didInvalidateWithError: coreNfc(200))
++        }
++        wait(for: [stop.settled], timeout: 1)
++        settleMainQueue()
++        XCTAssertEqual(endings.map(\.attemptId), ["A"])
++
++        wait(for: [startNdef(plugin, attemptId: "B")], timeout: 1)
++        let sessionB = plugin.sessions[1]
++        XCTAssertEqual(plugin.sessions.count, 2)
++
++        // Late A callbacks of every kind: a single tag, a second ending.
++        plugin.onSessionQueue {
++            plugin.readerSession(sessionA, didDetect: [NfcFakeNdefTag()])
++            plugin.readerSession(sessionA, didInvalidateWithError: coreNfc(202))
++        }
++        settleMainQueue()
++        XCTAssertEqual(sessionA.connectCount, 0)
++        XCTAssertEqual(endings.map(\.attemptId), ["A"])
++        XCTAssertTrue(events.isEmpty)
++
++        // B is untouched: its single tag still connects and its ending is its own.
++        plugin.onSessionQueue {
++            plugin.readerSession(sessionB, didDetect: [NfcFakeNdefTag()])
++        }
++        XCTAssertEqual(sessionB.connectCount, 1)
++        XCTAssertTrue(sessionB.invalidationMessages.isEmpty)
++        plugin.onSessionQueue {
++            plugin.readerSession(sessionB, didInvalidateWithError: coreNfc(201))
++        }
++        settleMainQueue()
++        XCTAssertEqual(endings, [
++            Ending(attemptId: "A", reason: "userCancelled"),
++            Ending(attemptId: "B", reason: "sessionTimeout")
++        ])
++    }
++
++    // MARK: - Criterion 7: reader-ending semantics as the JS layer receives them
++
++    func testCoreNfcInvalidationCodesMapToEndingReasonsWithAttemptIdentity() {
++        // Independent literals from the CoreNFC SDK header (NFCError.h):
++        // 200 UserCanceled, 201 SessionTimeout, 202 SessionTerminatedUnexpectedly,
++        // 203 SystemIsBusy. Not derived from NFCReaderError so a remapped
++        // constant cannot retune the test with it.
++        let cases: [(code: Int, reason: String)] = [
++            (200, "userCancelled"),
++            (201, "sessionTimeout"),
++            (202, "invalidated"),
++            (203, "invalidated")
++        ]
++
++        for (code, reason) in cases {
++            let plugin = NfcProbePlugin()
++            var endings: [Ending] = []
++            recordEndings(plugin) { endings.append($0) }
++            let attemptId = "attempt-\(code)"
++            wait(for: [startNdef(plugin, attemptId: attemptId)], timeout: 1)
++            let session = plugin.sessions[0]
++
++            plugin.onSessionQueue {
++                plugin.readerSessionDidBecomeActive(session)
++                plugin.readerSession(session, didInvalidateWithError: coreNfc(code))
++            }
++            settleMainQueue()
++
++            XCTAssertEqual(endings, [Ending(attemptId: attemptId, reason: reason)], "code \(code)")
++            // The attempt is drained: a stop for it settles immediately.
++            wait(for: [stopNdef(plugin, attemptId: attemptId).settled], timeout: 1)
++        }
++    }
++
++    func testFirstNdefTagReadInvalidationEndsSilently() {
++        // 204 FirstNDEFTagRead: the session closed itself after a successful
++        // read. The plugin publishes no ending and no state change for it.
++        let plugin = NfcProbePlugin()
++        var endings: [Ending] = []
++        var stateChanges = 0
++        recordEndings(plugin) { endings.append($0) }
++        listen(plugin, event: "nfcStateChange") { _ in stateChanges += 1 }
++        wait(for: [startNdef(plugin, attemptId: "A")], timeout: 1)
++        let session = plugin.sessions[0]
++
++        plugin.onSessionQueue {
++            plugin.readerSession(session, didInvalidateWithError: coreNfc(204))
++        }
++        settleMainQueue()
++
++        XCTAssertTrue(endings.isEmpty)
++        XCTAssertEqual(stateChanges, 0)
++        wait(for: [stopNdef(plugin, attemptId: "A").settled], timeout: 1)
++        XCTAssertEqual(session.plainInvalidateCount, 0)
++    }
++
++    func testControllerForcedInvalidationEndsAsTheCodeCoreNfcDelivers() {
++        // A connect failure makes the controller invalidate with an on-sheet
++        // message. What the JS layer then receives is decided by the code iOS
++        // delivers in didInvalidateWithError, not by the message: programmatic
++        // invalidation reports 200 (our captures, normal-trace v7/v8), which
++        // the mapping publishes as userCancelled. This pins that seam as it
++        // is; the copy question it raises is recorded in the design spec.
++        let plugin = NfcProbePlugin()
++        var endings: [Ending] = []
++        recordEndings(plugin) { endings.append($0) }
++        wait(for: [startNdef(plugin, attemptId: "A")], timeout: 1)
++        let session = plugin.sessions[0]
++
++        plugin.onSessionQueue {
++            plugin.readerSession(session, didDetect: [NfcFakeNdefTag()])
++            session.finishConnect(coreNfc(100))
++        }
++        XCTAssertEqual(session.invalidationMessages.count, 1)
++        XCTAssertTrue(session.invalidationMessages.first?.hasPrefix("Failed to connect to the tag:") == true)
++
++        plugin.onSessionQueue {
++            plugin.readerSession(session, didInvalidateWithError: coreNfc(200))
++        }
++        settleMainQueue()
++        XCTAssertEqual(endings, [Ending(attemptId: "A", reason: "userCancelled")])
++    }
++
++    func testStopOfLiveAttemptInvalidatesOnceAndSettlesOnlyOnItsOwnEnding() {
++        let plugin = NfcProbePlugin()
++        var endings: [Ending] = []
++        recordEndings(plugin) { endings.append($0) }
++        wait(for: [startNdef(plugin, attemptId: "A")], timeout: 1)
++        let session = plugin.sessions[0]
++
++        let stop = stopNdef(plugin, attemptId: "A")
++        plugin.onSessionQueue {}
++        XCTAssertFalse(stop.isSettled())
++        XCTAssertEqual(session.plainInvalidateCount, 1)
++        XCTAssertTrue(session.invalidationMessages.isEmpty)
++
++        // A stop for a different attempt never settles A's stop.
++        wait(for: [stopNdef(plugin, attemptId: "other").settled], timeout: 1)
++        XCTAssertFalse(stop.isSettled())
++
++        plugin.onSessionQueue {
++            plugin.readerSession(session, didInvalidateWithError: coreNfc(200))
++        }
++        wait(for: [stop.settled], timeout: 1)
++        settleMainQueue()
++        XCTAssertEqual(endings, [Ending(attemptId: "A", reason: "userCancelled")])
++        XCTAssertEqual(session.plainInvalidateCount, 1)
 +    }
 +}
+diff --git a/ios/Tests/NfcPluginTests/NfcDiagnosticTraceTests.swift b/ios/Tests/NfcPluginTests/NfcDiagnosticTraceTests.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..0dd2ba8041d6098327efcdaca6a7d4ec2b743de7
+--- /dev/null
++++ b/ios/Tests/NfcPluginTests/NfcDiagnosticTraceTests.swift
+@@ -0,0 +1,164 @@
++import Capacitor
++import CoreNFC
++import Foundation
++import XCTest
++
++@testable import NfcPlugin
 +
 +final class NfcDiagnosticTraceTests: XCTestCase {
 +
@@ -1561,77 +1808,8 @@ index 0000000000000000000000000000000000000000..9d60c1b3220906a22196ec0bc10e1ceb
 +        func readerSession(_ session: NFCNDEFReaderSession, didDetectNDEFs messages: [NFCNDEFMessage]) {}
 +    }
 +
-+    private final class FakeSession: NFCNDEFReaderSession {
-+        private var connectCompletion: ((Error?) -> Void)?
-+
-+        override func begin() {}
-+
-+        override func invalidate() {}
-+
-+        override func invalidate(errorMessage: String) {}
-+
-+        override func connect(
-+            to tag: NFCNDEFTag,
-+            completionHandler: @escaping (Error?) -> Void
-+        ) {
-+            connectCompletion = completionHandler
-+        }
-+
-+        func finishConnect(_ error: Error?) {
-+            connectCompletion?(error)
-+        }
-+    }
-+
-+    private final class ProbePlugin: NfcPlugin {
-+        private(set) var sessions: [FakeSession] = []
-+        private var callbackQueue: DispatchQueue?
-+
-+        override func makeNdefReaderSession(
-+            delegate: NFCNDEFReaderSessionDelegate,
-+            queue: DispatchQueue,
-+            invalidateAfterFirstRead: Bool
-+        ) -> NFCNDEFReaderSession {
-+            callbackQueue = queue
-+            let session = FakeSession(
-+                delegate: delegate,
-+                queue: queue,
-+                invalidateAfterFirstRead: invalidateAfterFirstRead
-+            )
-+            sessions.append(session)
-+            return session
-+        }
-+
-+        func onSessionQueue(_ operation: @escaping () -> Void) {
-+            callbackQueue!.sync(execute: operation)
-+        }
-+    }
-+
-+    private func startNdef(
-+        _ plugin: ProbePlugin,
-+        attemptId: String,
-+        file: StaticString = #filePath,
-+        line: UInt = #line
-+    ) -> XCTestExpectation {
-+        let resolved = expectation(description: "start \(attemptId) resolves")
-+        let call = CAPPluginCall(
-+            callbackId: attemptId,
-+            methodName: "startScanning",
-+            options: [:],
-+            success: { _, _ in resolved.fulfill() },
-+            error: { error in XCTFail("unexpected start rejection: \(String(describing: error))", file: file, line: line) }
-+        )!
-+        plugin.scheduleStart(
-+            call: call,
-+            attemptId: attemptId,
-+            alertMessage: nil,
-+            invalidateAfterFirstRead: false,
-+            requestedKind: .ndef,
-+            pollingOptions: []
-+        )
-+        return resolved
-+    }
 +    func testNoRadioNdefSessionDoubleCanBeConstructedWithoutBeginning() {
-+        let session = FakeSession(
++        let session = NfcFakeNdefSession(
 +            delegate: ProbeDelegate(),
 +            queue: DispatchQueue(label: "NfcDiagnosticTraceTests"),
 +            invalidateAfterFirstRead: false
@@ -1641,7 +1819,7 @@ index 0000000000000000000000000000000000000000..9d60c1b3220906a22196ec0bc10e1ceb
 +
 +    func testActualNdefDelegateEmitsActivationAndConnectError() {
 +        var messages: [String] = []
-+        let plugin = ProbePlugin()
++        let plugin = NfcProbePlugin()
 +        plugin.diagnosticTrace = NfcDiagnosticTrace(now: { 11 }, sink: { messages.append($0) })
 +
 +        let resolved = startNdef(plugin, attemptId: "A")
@@ -1650,7 +1828,7 @@ index 0000000000000000000000000000000000000000..9d60c1b3220906a22196ec0bc10e1ceb
 +
 +        plugin.onSessionQueue {
 +            plugin.readerSessionDidBecomeActive(session)
-+            plugin.readerSession(session, didDetect: [NfcDiagnosticFakeTag()])
++            plugin.readerSession(session, didDetect: [NfcFakeNdefTag()])
 +            session.finishConnect(NSError(domain: NFCReaderError.errorDomain, code: 77))
 +        }
 +
@@ -1664,14 +1842,14 @@ index 0000000000000000000000000000000000000000..9d60c1b3220906a22196ec0bc10e1ceb
 +    }
 +
 +    func testActualNdefDelegateEmitsQueryAndReadErrors() {
-+        let cases: [(String, NfcDiagnosticFakeTag, Int)] = [
-+            ("query", NfcDiagnosticFakeTag(queryError: NSError(domain: NFCReaderError.errorDomain, code: 78)), 78),
-+            ("read", NfcDiagnosticFakeTag(readError: NSError(domain: NFCReaderError.errorDomain, code: 79)), 79)
++        let cases: [(String, NfcFakeNdefTag, Int)] = [
++            ("query", NfcFakeNdefTag(queryError: NSError(domain: NFCReaderError.errorDomain, code: 78)), 78),
++            ("read", NfcFakeNdefTag(readError: NSError(domain: NFCReaderError.errorDomain, code: 79)), 79)
 +        ]
 +
 +        for (operation, tag, code) in cases {
 +            var messages: [String] = []
-+            let plugin = ProbePlugin()
++            let plugin = NfcProbePlugin()
 +            plugin.diagnosticTrace = NfcDiagnosticTrace(now: { 11 }, sink: { messages.append($0) })
 +            let resolved = startNdef(plugin, attemptId: operation)
 +            wait(for: [resolved], timeout: 1)
@@ -1690,7 +1868,7 @@ index 0000000000000000000000000000000000000000..9d60c1b3220906a22196ec0bc10e1ceb
 +
 +    func testEndWithoutActivationIsLoggedAndLateADelegateCannotGainBAttribution() {
 +        var messages: [String] = []
-+        let plugin = ProbePlugin()
++        let plugin = NfcProbePlugin()
 +        plugin.diagnosticTrace = NfcDiagnosticTrace(now: { 12 }, sink: { messages.append($0) })
 +
 +        let first = startNdef(plugin, attemptId: "A")
@@ -1777,5 +1955,199 @@ index 0000000000000000000000000000000000000000..9d60c1b3220906a22196ec0bc10e1ceb
 +        XCTAssertTrue(message.contains("\"domainCategory\":\"core-nfc\""))
 +        XCTAssertTrue(message.contains("\"code\":200"))
 +        XCTAssertFalse(message.contains(NFCReaderError.errorDomain))
++    }
++}
+diff --git a/ios/Tests/NfcPluginTests/NfcPluginTestDoubles.swift b/ios/Tests/NfcPluginTests/NfcPluginTestDoubles.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..1f90da9c224281fb5054d117225cf6004466e647
+--- /dev/null
++++ b/ios/Tests/NfcPluginTests/NfcPluginTestDoubles.swift
+@@ -0,0 +1,188 @@
++import Capacitor
++import CoreNFC
++import Foundation
++import XCTest
++
++@testable import NfcPlugin
++
++/// A no-radio NDEF tag. Its completion handlers fire synchronously so a test
++/// can drive connect → query → read on the plugin's own session queue.
++@objc(NfcFakeNdefTag)
++final class NfcFakeNdefTag: NSObject, NFCNDEFTag {
++    static var supportsSecureCoding: Bool { true }
++    var isAvailable: Bool { true }
++    private let queryError: Error?
++    private let readError: Error?
++
++    required init?(coder: NSCoder) {
++        queryError = nil
++        readError = nil
++        super.init()
++    }
++
++    init(queryError: Error? = nil, readError: Error? = nil) {
++        self.queryError = queryError
++        self.readError = readError
++        super.init()
++    }
++
++    func encode(with coder: NSCoder) {}
++    func copy(with zone: NSZone? = nil) -> Any { self }
++    func queryNDEFStatus(completionHandler: @escaping (NFCNDEFStatus, Int, Error?) -> Void) {
++        completionHandler(.readWrite, 128, queryError)
++    }
++    func readNDEF(completionHandler: @escaping (NFCNDEFMessage?, Error?) -> Void) {
++        completionHandler(nil, readError)
++    }
++    func writeNDEF(_ ndefMessage: NFCNDEFMessage, completionHandler: @escaping (Error?) -> Void) {
++        completionHandler(nil)
++    }
++    func writeLock(completionHandler: @escaping (Error?) -> Void) {
++        completionHandler(nil)
++    }
++}
++
++/// A real `NFCNDEFReaderSession` subclass that never touches the radio. It
++/// records what the plugin asked of it; delivering delegate callbacks back into
++/// the plugin is the test's job (iOS is not in the loop).
++final class NfcFakeNdefSession: NFCNDEFReaderSession {
++    private(set) var connectCount = 0
++    private(set) var plainInvalidateCount = 0
++    private(set) var invalidationMessages: [String] = []
++    private var connectCompletion: ((Error?) -> Void)?
++
++    override func begin() {}
++
++    override func invalidate() {
++        plainInvalidateCount += 1
++    }
++
++    override func invalidate(errorMessage: String) {
++        invalidationMessages.append(errorMessage)
++    }
++
++    override func connect(
++        to tag: NFCNDEFTag,
++        completionHandler: @escaping (Error?) -> Void
++    ) {
++        connectCount += 1
++        connectCompletion = completionHandler
++    }
++
++    func finishConnect(_ error: Error?) {
++        connectCompletion?(error)
++    }
++}
++
++/// The production plugin with only its session factory replaced.
++final class NfcProbePlugin: NfcPlugin {
++    private(set) var sessions: [NfcFakeNdefSession] = []
++    private var callbackQueue: DispatchQueue?
++
++    override func makeNdefReaderSession(
++        delegate: NFCNDEFReaderSessionDelegate,
++        queue: DispatchQueue,
++        invalidateAfterFirstRead: Bool
++    ) -> NFCNDEFReaderSession {
++        callbackQueue = queue
++        let session = NfcFakeNdefSession(
++            delegate: delegate,
++            queue: queue,
++            invalidateAfterFirstRead: invalidateAfterFirstRead
++        )
++        sessions.append(session)
++        return session
++    }
++
++    /// Runs `operation` on the plugin's session queue, the queue Core NFC
++    /// would deliver delegate callbacks on, and returns when it has finished.
++    func onSessionQueue(_ operation: @escaping () -> Void) {
++        callbackQueue!.sync(execute: operation)
++    }
++}
++
++extension XCTestCase {
++    func startNdef(
++        _ plugin: NfcProbePlugin,
++        attemptId: String,
++        file: StaticString = #filePath,
++        line: UInt = #line
++    ) -> XCTestExpectation {
++        let resolved = expectation(description: "start \(attemptId) resolves")
++        let call = CAPPluginCall(
++            callbackId: attemptId,
++            methodName: "startScanning",
++            options: [:],
++            success: { _, _ in resolved.fulfill() },
++            error: { error in
++                XCTFail("unexpected start rejection: \(String(describing: error))", file: file, line: line)
++            }
++        )!
++        plugin.scheduleStart(
++            call: call,
++            attemptId: attemptId,
++            alertMessage: nil,
++            invalidateAfterFirstRead: false,
++            requestedKind: .ndef,
++            pollingOptions: []
++        )
++        return resolved
++    }
++
++    /// Issues `stopScanning` for `attemptId`. `settled` is fulfilled when the
++    /// call resolves; `isSettled()` reads the same fact without consuming the
++    /// expectation, so a test can assert "not yet" before waiting.
++    func stopNdef(
++        _ plugin: NfcPlugin,
++        attemptId: String,
++        file: StaticString = #filePath,
++        line: UInt = #line
++    ) -> (settled: XCTestExpectation, isSettled: () -> Bool) {
++        let settled = expectation(description: "stop \(attemptId) resolves")
++        final class Flag { var value = false }
++        let flag = Flag()
++        let call = CAPPluginCall(
++            callbackId: "stop-\(attemptId)",
++            methodName: "stopScanning",
++            options: ["attemptId": attemptId],
++            success: { _, _ in
++                flag.value = true
++                settled.fulfill()
++            },
++            error: { error in
++                XCTFail("unexpected stop rejection: \(String(describing: error))", file: file, line: line)
++            }
++        )!
++        plugin.stopScanning(call)
++        return (settled, { flag.value })
++    }
++
++    /// Subscribes to a plugin event the way the Capacitor bridge does, without
++    /// a bridge: the plugin's listener tables are created on demand and the
++    /// call's success handler receives every `notifyListeners` payload.
++    func listen(
++        _ plugin: NfcPlugin,
++        event: String,
++        receive: @escaping ([String: Any]) -> Void
++    ) {
++        if plugin.eventListeners == nil { plugin.eventListeners = NSMutableDictionary() }
++        if plugin.retainedEventArguments == nil { plugin.retainedEventArguments = NSMutableDictionary() }
++        let call = CAPPluginCall(
++            callbackId: "listen-\(event)-\(UUID().uuidString)",
++            methodName: "addListener",
++            options: ["eventName": event],
++            success: { result, _ in receive(result?.data ?? [:]) },
++            error: { error in XCTFail("listener rejected: \(String(describing: error))") }
++        )!
++        plugin.addListener(call)
++    }
++
++    /// The plugin publishes listener events with `DispatchQueue.main.async`.
++    /// Waiting on a main-queue turn enqueued after the delegate call proves
++    /// every event that call produced has been delivered (or never will be).
++    func settleMainQueue() {
++        let drained = expectation(description: "main queue drained")
++        DispatchQueue.main.async { drained.fulfill() }
++        wait(for: [drained], timeout: 1)
 +    }
 +}

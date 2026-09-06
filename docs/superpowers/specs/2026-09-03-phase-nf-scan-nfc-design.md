@@ -137,6 +137,76 @@ cut as ship gates on 2026-09-06 (antagonist verdict; `REMAINING-PROOF.md`,
 "Ship decision"): they exercised probe-only stage holds, and the harm ceiling
 of any interference is exactly rule 1's recoverable return to workout detail.
 
+## Reader-ending seam (found 2026-09-06; decision owed to James)
+
+**What and why.** Gate -1 criterion 7 asks the native receipts to distinguish
+user cancellation, the no-tag timeout and a forced generic invalidation, and
+the failure contract below promises that zero or multiple tags "fail closed as
+`Unsupported NFC tag`". Writing the native-injected test for criterion 8
+showed that the second promise cannot be kept by the plugin as patched, and
+that the third leg of criterion 7 was never producible on hardware. The test
+suite pins the seam as it is; the product decision is recorded here and stops
+until James rules.
+
+**Evidence.**
+
+- PRIMARY, CoreNFC SDK header `NFCError.h` (Xcode 26.6): the five session
+  invalidation codes are `UserCanceled = 200`, `SessionTimeout` (201),
+  `SessionTerminatedUnexpectedly` (202), `SystemIsBusy` (203),
+  `FirstNDEFTagRead` (204). `NFCReaderSession.h` documents
+  `invalidateSessionWithErrorMessage:` only as "Closes the reader session … The
+  specified error message and an error symbol will be displayed momentarily on
+  the action sheet"; it names no error code for the delegate.
+- PRIMARY, our captures (`NORMAL-TRACE-V8-RESULT.md`, v7 likewise): the ending
+  that follows the probe's own `stopScanning` (a programmatic `invalidate()`
+  after a successful read) carries Core NFC code 200, the same code a Cancel
+  tap produces (`PRE-REPAIR.md`, `sheet-cancel` → `userCancelled`).
+- PRIMARY, patched plugin source `NfcPlugin.swift` `nfcSessionEndReason`: the
+  `nfcSessionEnd` reason is computed from the Core NFC code alone
+  (200 → `userCancelled`, 201 → `sessionTimeout`, 204 → no event, anything
+  else → `invalidated`). The controller's own rejections (`didDetect` with
+  zero or several tags, `didDetectNDEFs` with several messages, connect / query
+  / read failures) call `invalidate(errorMessage:)` with an on-sheet message
+  and carry NO cause into the ending. Whatever code iOS then delivers, the JS
+  layer receives either `userCancelled` or `invalidated`, never "multiple
+  tags", so `Unsupported NFC tag` is unreachable for that case and a multi-tag
+  rejection is indistinguishable from the rower tapping Cancel.
+- INFERENCE: `invalidate(errorMessage:)` also delivers 200. The header is
+  silent; v5's generation-2 trace (`error → ending`, code 200, private under
+  R) came from a run where the probe also issued a stop, so it does not
+  separate the two. Nothing above depends on this inference.
+- PRIMARY, `PRE-REPAIR.md` and the receipt census (`grep '"action"'` over the
+  committed receipts): only `sheet-cancel` and `no-tag-timeout` endings were
+  ever produced on the device. Codes 202 and 203 originate in the system and
+  no operator action forces them, so the "forced generic invalidation" leg of
+  criterion 7 is provable only by injection. It now is:
+  `NdefSessionEndingTests.swift` in the checked-in patch drives every code
+  through the production delegate and asserts the published reason and
+  attempt identity (mutation record in `REMAINING-PROOF.md`).
+
+**Options (James rules; neither adds copy, so no Gate 0).**
+
+- **A, recommended — the controller says why it ended.** When the patched
+  controller itself invalidates with an error message it records the cause for
+  that attempt and publishes it on the ending:
+  `nfcSessionEnd { attemptId, reason: "invalidated", cause: "multipleTags" | "tagFailure" }`;
+  endings the controller did not force carry no `cause`. JS maps
+  `multipleTags` → `Unsupported NFC tag` (the failure contract line stands),
+  `tagFailure` and code 202/203 → `NFC scan stopped. Try again.`,
+  bare 200 → quiet return, 201 → `No NFC tag detected. Try again.`. This is
+  not an inferred distinction: the controller knows what it did. Cost: a few
+  lines in the patch plus one injected test; a new wire field, so the
+  antagonist takes a DELTA pass on it before the product PR.
+- **B — collapse.** Strike "fail closed as `Unsupported NFC tag`" from the
+  failure contract; a multi-tag or tag-failure rejection returns quietly to
+  workout detail, the momentary sheet message being the rower's only feedback,
+  and `reader invalidated` becomes reachable only through codes 202/203.
+
+Until the ruling, criterion 8's "rejects a delegate callback containing zero or
+multiple physical tags" is proven at the native seam (the sheet shows
+`Present exactly one NFC tag.` and no connect is attempted) and the states
+table is unchanged.
+
 ## Gate -1 — real hardware truth before product implementation
 
 No product UI or connection behavior is implemented until a disposable native

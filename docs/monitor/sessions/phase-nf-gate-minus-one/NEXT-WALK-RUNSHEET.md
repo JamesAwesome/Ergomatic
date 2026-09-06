@@ -115,3 +115,18 @@ constructs (grep-proven), never in the spec's NO-GO list or countable exit,
 harm ceiling a recoverable retry. Physical multi-tag presentation dropped too:
 the rejection is our controller's count check (crit 8), injected-testable. No further Gate -1 erg walks are planned. Remaining work
 is desk-side; see REMAINING-PROOF.md "Ship decision".
+
+**Desk close-out of the remaining Gate -1 items, 2026-09-06.** The
+native-injected multi-tag / invalidation tests are in the checked-in patch
+(`NdefSessionEndingTests.swift`, shared doubles in
+`NfcPluginTestDoubles.swift`; 28 native tests green, mutation record in
+REMAINING-PROOF.md rows 7-8). Writing them surfaced the reader-ending seam:
+the plugin's `nfcSessionEnd` reason comes from the Core NFC code alone, so the
+controller's own rejections (zero/several tags, connect/query/read failure)
+reach JS as `userCancelled` and can never render `Unsupported NFC tag`. The
+spec's new "Reader-ending seam" section holds the evidence and two options;
+James rules before product implementation is scheduled. No erg, no install, no
+scan was needed or used. The DEBUG hold/release overlay that the recovery
+probe used lives only in an uncommitted `node_modules` copy (diff kept aside);
+`pnpm patch-commit` for this change regenerates the package without it, which
+is the retirement REMAINING-PROOF names.
