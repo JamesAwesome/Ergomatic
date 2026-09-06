@@ -61,6 +61,19 @@ describe("autoSendAfterSave (Wave E auto-send §3.3)", () => {
     expect(body.tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
   });
 
+  it("AUTOMATIC under needsReauth still sends — the server is the authority and answers 409", async () => {
+    // The client checks only available/linked/autoSend (spec §3.3, F3); a
+    // dead grant is the route's 409 `needs_reauth`, swallowed here, and the
+    // card's mode line reads paused. Pinned so a client-side "helpful"
+    // guard cannot creep in and hide a server outcome.
+    const api = mockApi(
+      () => json({ ...LINKED_AUTO, needsReauth: true }),
+      () => json({ error: "needs_reauth" }, 409),
+    );
+    await expect(run("log-77")).resolves.toBeUndefined();
+    expect(sends(api)).toHaveLength(1);
+  });
+
   it("reads the link FRESH, once, before deciding", async () => {
     const api = mockApi(() => json(LINKED_AUTO));
     await run("log-77");

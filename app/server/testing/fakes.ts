@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { WeightClassFailure } from "../concept2/mapping.js";
 import { isFreeRow } from "../../domain/types.js";
 import type { SessionStore } from "../auth/sessions.js";
 import type { UserStore } from "../auth/users.js";
@@ -550,7 +551,10 @@ function makeFakeLogsStore(
     // store's `WHERE user_id = $userId` gives.
     async get(userId: string, id: string) {
       const rows = byUser.get(userId) ?? [];
-      const found = rows.find((r) => r.id === id);
+      // Case-insensitive, as Postgres compares `uuid` — the send route's
+      // claim folds its key for the same reason, and a fake that matched
+      // bytes would 404 the upper-cased spelling the real store finds.
+      const found = rows.find((r) => r.id.toLowerCase() === id.toLowerCase());
       if (!found) return null;
       const { seq: _seq, ...row } = found;
       return row;
@@ -772,7 +776,9 @@ function makeFakeLogsStore(
       c2UserId: number,
     ) {
       const rows = byUser.get(userId) ?? [];
-      const idx = rows.findIndex((r) => r.id === id);
+      const idx = rows.findIndex(
+        (r) => r.id.toLowerCase() === id.toLowerCase(),
+      );
       if (idx === -1) return false;
       rows[idx] = { ...rows[idx], c2ResultId, c2UserId };
       byUser.set(userId, rows);
@@ -1008,7 +1014,7 @@ export function makeFakeConcept2Store(
       return true;
     },
 
-    async setSendFailed(userId: string, reason: string) {
+    async setSendFailed(userId: string, reason: WeightClassFailure) {
       const existing = links.get(userId);
       if (!existing) return;
       links.set(userId, {

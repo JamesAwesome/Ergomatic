@@ -1344,6 +1344,11 @@ export function createConcept2Router({
           lockedLink.c2UserId,
         );
         if (!recorded) {
+          // Auto-send §3.4: the flag is NOT cleared on this exit although
+          // the row IS at Concept2 — the row vanished from our store
+          // (concurrent delete), so there is nothing the rower can re-send
+          // and nothing the flag would be warning about; the named recovery
+          // (re-send → 409 duplicate) clears it if the row still exists.
           res.status(502).json({ error: "c2_error" });
           return;
         }

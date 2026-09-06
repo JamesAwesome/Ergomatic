@@ -81,7 +81,14 @@ function handledCodes(source: string): string[] {
  *  a sentence. */
 function linkResponseKeys(routesSource: string): string[] {
   const start = routesSource.indexOf('router.get(\n    "/api/concept2/link"');
-  const end = routesSource.indexOf("router.delete(", start);
+  // The GET handler ends where the next registration begins — the PATCH
+  // (auto-send) sits between GET and DELETE now, so the window is the
+  // nearest of the two, never "everything until the DELETE".
+  const end = Math.min(
+    ...["router.patch(", "router.delete("]
+      .map((needle) => routesSource.indexOf(needle, start))
+      .filter((i) => i > start),
+  );
   const handler = routesSource.slice(start, end).replace(/\/\/[^\n]*/g, "");
   const keys = [...handler.matchAll(/res\.json\(\{([^{}]*)\}\)/g)].flatMap(
     (m) => matchAll(m[1]!, /(?:^|[{,])\s*([A-Za-z_$][\w$]*)\s*:/gm),
@@ -243,7 +250,7 @@ describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
     // read, AND a key the hook parses that the route never sends, each fail
     // here. No independent literal list on this one: the sibling test above
     // already pins the emitted set as a literal, and a second copy of the
-    // same six strings would go stale rather than add a check.
+    // same nine strings would go stale rather than add a check.
     expect(productLinkKeys(linkHook)).toStrictEqual(linkResponseKeys(routes));
   });
 

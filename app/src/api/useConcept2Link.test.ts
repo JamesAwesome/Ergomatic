@@ -39,7 +39,7 @@ afterEach(() => {
 });
 
 describe("LINK_UNAVAILABLE (the flag-off answer, amendment 1h)", () => {
-  it("is all six fields spelled out, so a corrupted one cannot pass silently", () => {
+  it("is all nine fields spelled out, so a corrupted one cannot pass silently", () => {
     // Review F2: `available` could be flipped to `true` with 27 tests green,
     // because every assertion about it was written as
     // `toStrictEqual(LINK_UNAVAILABLE)` — the symbol comparing to itself. A

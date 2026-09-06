@@ -1,4 +1,5 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
+import type { WeightClassFailure } from "../concept2/mapping.js";
 import type { Db } from "../db/index.js";
 import { concept2AuthAttempts, concept2Links } from "../db/schema.js";
 import { isUniqueViolation, pgConstraint } from "./errors.js";
@@ -222,7 +223,10 @@ export function createConcept2Store(db: Db) {
      *  stored verbatim so
      *  the You screen can choose the rower-facing sentence. Idempotent on a
      *  missing link (zero rows, no error). */
-    async setSendFailed(userId: string, reason: string): Promise<void> {
+    async setSendFailed(
+      userId: string,
+      reason: WeightClassFailure,
+    ): Promise<void> {
       await db
         .update(concept2Links)
         .set({

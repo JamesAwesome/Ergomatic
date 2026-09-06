@@ -178,7 +178,7 @@ not a redeploy.
 **Not a floor — migration 0024 (`concept2_links.auto_send` / `send_failed_*`,
 Wave E auto-send).** All three columns are defaulted or nullable, so a server
 older than it inserts and reads the link row unchanged; the one new write,
-`PATCH /api/concept2/link`, 404s on such a server and the card shows
-_"Couldn't change this. Try again."_ with the mode left on whatever the server
-holds. A rollback past it is a read-only outage on one control, never data
+`PATCH /api/concept2/link`, 404s on such a server and the card's own
+non-2xx branch shows _"Couldn't change this. Try again."_ with the mode left on
+whatever the server holds. A rollback past it is a read-only outage on one control, never data
 loss or a save failure.

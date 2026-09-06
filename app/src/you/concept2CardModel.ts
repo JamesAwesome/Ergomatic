@@ -1,5 +1,6 @@
 import type { LinkOutcome } from "../adapters/linkFlow";
 import type { Concept2Link } from "../api/useConcept2Link";
+import { linkedStatus, type LinkedStatus } from "./concept2RowState";
 
 /** Board 1e, verbatim and gate-approved. Every failure that is not
  *  specifically about the rower's own choice reads this line. */
@@ -172,11 +173,11 @@ export interface ModeLine {
   remedy: "profile" | null;
 }
 
-export const MODE_LINE_MANUAL =
+const MODE_LINE_MANUAL =
   "Send each finished monitor row yourself, from the log.";
-export const MODE_LINE_AUTOMATIC =
+const MODE_LINE_AUTOMATIC =
   "Finished monitor rows are sent when you save them.";
-export const MODE_LINE_PAUSED = "Sends are paused until you reconnect.";
+const MODE_LINE_PAUSED = "Sends are paused until you reconnect.";
 
 /** The block's three no-weight sentences re-hung on "Rows aren't being
  *  sent:" (Gate 0 §4a, the prefix ruled in) so they read as a status rather
@@ -198,31 +199,31 @@ function sendFailedLine(reason: string | null): string {
 }
 
 export function modeLine(link: Concept2Link): ModeLine {
-  if (link.needsReauth) {
-    return { text: MODE_LINE_PAUSED, warn: false, remedy: null };
+  // Switched on the SAME value the row and the pill read, so the three
+  // surfaces cannot order the sticky states differently. Total over the
+  // union, no `default`: a fourth linked status is a compile error here.
+  switch (linkedStatus(link)) {
+    case "RECONNECT NEEDED":
+      return { text: MODE_LINE_PAUSED, warn: false, remedy: null };
+    case "SEND FAILED":
+      return {
+        text: sendFailedLine(link.sendFailedReason),
+        warn: true,
+        remedy: "profile",
+      };
+    case "LINKED ✓":
+      return {
+        text: link.autoSend ? MODE_LINE_AUTOMATIC : MODE_LINE_MANUAL,
+        warn: false,
+        remedy: null,
+      };
   }
-  if (link.sendFailedAt !== null) {
-    return {
-      text: sendFailedLine(link.sendFailedReason),
-      warn: true,
-      remedy: "profile",
-    };
-  }
-  return {
-    text: link.autoSend ? MODE_LINE_AUTOMATIC : MODE_LINE_MANUAL,
-    warn: false,
-    remedy: null,
-  };
 }
 
-/** The card's status pill, LINKED states only — the same precedence as the
- *  You row's `rowState` (RECONNECT NEEDED > SEND FAILED > LINKED ✓), stated
- *  once here so the pill above the control and the row on You are one
- *  reading (spec §3.4, "the card's own status pill mirrors the row"). */
-export function linkedPill(
-  link: Concept2Link,
-): "RECONNECT NEEDED" | "SEND FAILED" | "LINKED ✓" {
-  if (link.needsReauth) return "RECONNECT NEEDED";
-  if (link.sendFailedAt !== null) return "SEND FAILED";
-  return "LINKED ✓";
+/** The card's status pill, LINKED states only — `linkedStatus` itself, named
+ *  for the card so the call site reads as the pill it draws. The precedence
+ *  is defined ONCE, in `concept2RowState.ts`, for the row, this pill and the
+ *  mode line (spec §3.4, "the card's own status pill mirrors the row"). */
+export function linkedPill(link: Concept2Link): LinkedStatus {
+  return linkedStatus(link);
 }

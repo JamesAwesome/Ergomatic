@@ -1104,7 +1104,16 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     await group.getByRole("button", { name: "OFF" }).click();
     const armed = page.getByRole("button", { name: "Tap again to unlink" });
     await expect(armed).toBeVisible();
-    await expect(armed).toHaveAttribute("aria-pressed", "true");
+    // A pending confirmation, not a toggle that is on: no pressed state.
+    await expect(armed).toHaveAttribute("aria-pressed", "false");
+    // Gate 0 §7's armed pairing, as independent literals: `--on-color`
+    // #fffdf7 on `--accent` #b5341f (5.94:1).
+    expect(await armed.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(255, 253, 247)",
+    );
+    expect(
+      await armed.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe("rgb(181, 52, 31)");
     // Gate 0 §2a in a real engine: the CSS that hides the siblings and spans
     // the armed segment is measured, not read (RF21).
     await expect(group.getByRole("button", { name: "MANUAL" })).toBeHidden();

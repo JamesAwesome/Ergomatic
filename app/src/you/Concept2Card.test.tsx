@@ -834,7 +834,7 @@ describe("the sending-mode control (Wave E auto-send §3.2)", () => {
     );
   });
 
-  it.each([
+  it.each<[string, Response | null]>([
     ["a refused PATCH (500)", new Response("nope", { status: 500 })],
     ["a thrown PATCH", null],
   ])(
@@ -933,6 +933,71 @@ describe("the sending-mode control (Wave E auto-send §3.2)", () => {
     expect(screen.queryByText("Couldn't change this. Try again.")).toBeNull();
   });
 
+  it("the mode line is the group's description, so moving by control hears what the mode does", async () => {
+    mount(LINKED);
+    await renderCard();
+    const group = await screen.findByRole("group", { name: "Sending mode" });
+    expect(group).toHaveAccessibleDescription(
+      "Send each finished monitor row yourself, from the log.",
+    );
+  });
+
+  it("a keyboard write keeps focus on the segment that was activated, across the disabled window", async () => {
+    // `disabled` during the PATCH drops focus to <body>; the control must
+    // put it back once enabled or Enter strands a keyboard user at the top
+    // of the document (task review I2).
+    const { api } = mountFollowing(LINKED);
+    await renderCard();
+    const automatic = await screen.findByRole("button", { name: "AUTOMATIC" });
+    automatic.focus();
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("button", { name: "AUTOMATIC", pressed: true });
+    await waitFor(() => expect(automatic).toBeEnabled());
+    expect(automatic).toHaveFocus();
+    expect(patches(api).map((p) => p.body)).toStrictEqual([{ autoSend: true }]);
+  });
+
+  it("the A7 line does not survive a relink the card learns of by RE-READ, without any Connect", async () => {
+    // The fix-round review's path: unlink here, relink elsewhere, come back
+    // (`pageshow` re-read). No `connect()` runs on this device, so a clear
+    // there would miss it; the control's state dies with the link because
+    // the component unmounts while unlinked.
+    let phase: "linked" | "unlinked" | "relinked" = "linked";
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PATCH")
+        return new Response("nope", { status: 500 });
+      if (init?.method === "DELETE") {
+        phase = "unlinked";
+        return new Response(null, { status: 204 });
+      }
+      return new Response(
+        JSON.stringify(
+          phase === "unlinked" ? { available: true, linked: false } : LINKED,
+        ),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "AUTOMATIC" }),
+    );
+    await screen.findByText("Couldn't change this. Try again.");
+    await userEvent.click(screen.getByRole("button", { name: "OFF" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
+    await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" });
+    // Relinked elsewhere; this document comes back in front of the rower.
+    phase = "relinked";
+    await act(async () => {
+      window.dispatchEvent(new Event("pageshow"));
+    });
+    expect(await screen.findByRole("button", { name: "MANUAL" })).toBeTruthy();
+    expect(screen.queryByText("Couldn't change this. Try again.")).toBeNull();
+  });
+
   it("arrows move focus only — no PATCH, no arm (F4)", async () => {
     const { api } = mount(LINKED);
     await renderCard();
@@ -945,6 +1010,9 @@ describe("the sending-mode control (Wave E auto-send §3.2)", () => {
     await userEvent.keyboard("{ArrowRight}");
     expect(off).toHaveFocus();
     await userEvent.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("button", { name: "AUTOMATIC" })).toHaveFocus();
+    // Up/Down are the page's (scrolling), not the control's (task review M4).
+    await userEvent.keyboard("{ArrowDown}");
     expect(screen.getByRole("button", { name: "AUTOMATIC" })).toHaveFocus();
     expect(patches(api)).toHaveLength(0);
     expect(
@@ -966,18 +1034,20 @@ describe("the sending-mode control (Wave E auto-send §3.2)", () => {
     expect(patches(api).map((p) => p.body)).toStrictEqual([{ autoSend: true }]);
   });
 
-  it("armed OFF is the ONLY segment, pressed, reading the danger copy; disarm returns the pressed state to the server's mode", async () => {
+  it("armed OFF is the ONLY segment, reading the danger copy and carrying NO pressed state; disarm returns the pressed segment to the server's mode", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mount({ ...LINKED, autoSend: true });
     await renderCard();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.click(await screen.findByRole("button", { name: "OFF" }));
     const armed = screen.getByRole("button", { name: "Tap again to unlink" });
-    expect(armed.getAttribute("aria-pressed")).toBe("true");
+    // A pending confirmation is not a toggle that is on: no pressed state on
+    // OFF, ever; its NAME is what changed (task review M6).
+    expect(armed.getAttribute("aria-pressed")).toBe("false");
     expect(armed.className).toContain("c2-card-mode-armed");
     // The pressed state has NOT committed: MANUAL/AUTOMATIC are unpressed
-    // (and hidden by CSS the fixture test measures), so a screen reader
-    // hears one pressed state — the one about to be committed.
+    // (and hidden by CSS the e2e test measures), so nothing reads pressed
+    // until the arm is spent or lapses.
     expect(
       screen
         .getByRole("button", { name: "MANUAL" })
@@ -1327,12 +1397,11 @@ describe("Concept2Card copy, pinned literal by literal (F4)", () => {
     expect(screen.getByText("OPENS CONCEPT2 IN YOUR BROWSER")).toBeTruthy();
     // James, 2026-09-04: "Stop talking about the weight class." 1a carried a
     // helper line saying where the class comes from; the card now says
-    // nothing about it at all. ENUMERATED over the class the line was drawn
-    // in, not queried by its old wording — a differently worded replacement
-    // reddens this too, and a `queryByText` of the withdrawn sentence would
-    // not. The unlinked card renders NO `.c2-card-helper` (that class still
-    // draws 1c's "Finished monitor rows can be sent from the log.").
-    expect(document.querySelectorAll(".c2-card-helper")).toHaveLength(0);
+    // nothing about it at all. Wave E auto-send then deleted the helper
+    // class outright (the linked card's line is `.c2-card-mode-line`, under
+    // the sending-mode control), so the ENUMERATION here is over THAT class:
+    // the unlinked card has no mode to describe and renders no mode line.
+    expect(document.querySelectorAll(".c2-card-mode-line")).toHaveLength(0);
   });
 
   it("1b opening: the status chip reads WAITING", async () => {

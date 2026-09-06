@@ -10462,14 +10462,15 @@ section:not(.news-pinned) .news-row:last-of-type {
    (Gate 0 §2a, ruled on sight: the segments' mono caps wrapped and sat
    off-centre). The sibling segments are hidden, not disabled — the pressed
    state has not committed, and a disarm brings them back reading the
-   server's mode. `[aria-pressed="true"]` is restated so the specificity of
-   the pressed rule above cannot win the fill back to `--ink`. */
+   server's mode. The armed OFF carries `aria-pressed="false"` (a pending
+   confirmation is not a toggle that is on), so the pressed rule above never
+   matches it; this rule is written at the same (0,2,0) specificity and
+   later, which is what wins the fill. */
 .c2-card-mode-is-armed {
   border-color: var(--accent);
 }
 
-.c2-card-mode-armed,
-.c2-card-mode-armed[aria-pressed="true"] {
+.c2-card-mode-btn.c2-card-mode-armed {
   grid-column: 1 / -1;
   min-height: 52px;
   background: var(--accent);

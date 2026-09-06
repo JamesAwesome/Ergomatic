@@ -67,7 +67,7 @@ function renderRow(accountId = "u1") {
   );
 }
 
-describe("rowState — the decision table, all eleven leaf cells (spec §5.1)", () => {
+describe("rowState — the decision table, all fifteen leaf cells (spec §5.1 + auto-send §3.4)", () => {
   // Written as INDEPENDENT literals against the table's own row numbers, so
   // a change to the derivation is caught by the cell it moves, not by a
   // symbol that moved with it (RF21).

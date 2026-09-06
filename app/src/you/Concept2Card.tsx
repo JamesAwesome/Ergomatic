@@ -7,7 +7,11 @@ import {
 } from "react";
 import { api } from "../api";
 import { startLink, type LinkOutcome } from "../adapters/linkFlow";
-import { useConcept2Link, type LinkReadFailure } from "../api/useConcept2Link";
+import {
+  useConcept2Link,
+  type Concept2Link,
+  type LinkReadFailure,
+} from "../api/useConcept2Link";
 import { openReadOnlyUrl } from "../adapters/externalBrowser";
 import { c2ProfileUrl } from "../log/concept2Send";
 import {
@@ -24,7 +28,8 @@ import {
  * `amendment-2026-09-03.html` states 1f-1j; amended again 2026-09-05 by
  * `amendment-2026-09-05-autosend.html`). The rower's only door to the
  * Concept2 link: connect, see which account is linked, choose the sending
- * mode (OFF · MANUAL · AUTOMATIC — OFF is the unlink), unlink.
+ * mode (OFF · MANUAL · AUTOMATIC — OFF is the unlink; `SendingModeControl`
+ * below), unlink.
  *
  * IT ASKS NOTHING. James, 2026-09-03: "I don't want that set in our app. I
  * want it to be set on Concept2's side." The weight class Concept2 needs on
@@ -93,6 +98,204 @@ function FailurePanel({ failure }: { failure: LinkFailure }) {
   );
 }
 
+/**
+ * Wave E auto-send §3.2 — OFF · MANUAL · AUTOMATIC, where `Unlink Concept2`
+ * was (RF23: OFF IS the unlink, so a second control would be two affordances
+ * for one destructive act). Three buttons in a labelled group, NOT a
+ * radiogroup (F4): the roving idiom commits on arrow, and here one arrow
+ * would arm the unlink or fire a PATCH. Left/Right move focus; commit stays
+ * on click / Enter / Space, the button's own.
+ *
+ * ITS OWN COMPONENT SO ITS STATE DIES WITH THE LINK. `modeBusy` and
+ * `modeFailed` (the A7 line, "Couldn't change this. Try again.") live here,
+ * and the card mounts this only while `link.linked`. The first build kept
+ * them in the card and cleared `modeFailed` at `connect()`; the fix-round
+ * review found two ways back to a linked card that never pass through
+ * `connect()` — the hook's `pageshow`/`visibilitychange` re-read and the
+ * read-failed panel's Retry — on which a failed write's sentence outlived an
+ * unlink and reappeared under a fresh link. Unmounting is the clear site
+ * that needs no enumeration of paths. Lifetime, stated: minted when the card
+ * first reads linked, dead the moment it reads unlinked; a same-account
+ * relink the card never saw as unlinked keeps it (the link, to this card,
+ * never changed). `armed` stays in the card: the tell column's hairline and
+ * disclosure read it too.
+ *
+ * `aria-pressed` means "this is the current mode" on MANUAL and AUTOMATIC
+ * and is `false` on OFF always — an armed OFF is a pending confirmation, not
+ * a toggle that is on, so it carries no pressed state; its name changing to
+ * "Tap again to unlink" is what a screen reader hears. The mode line is the
+ * group's description (`aria-describedby`) while it is rendered, so moving
+ * by control announces what MANUAL or AUTOMATIC does.
+ */
+function SendingModeControl({
+  link,
+  armed,
+  busy,
+  profileUrl,
+  onArm,
+  onUnlink,
+  disarm,
+  reload,
+}: {
+  link: Concept2Link;
+  armed: boolean;
+  busy: boolean;
+  profileUrl: string | null;
+  onArm: () => void;
+  onUnlink: () => void;
+  disarm: () => void;
+  reload: () => Promise<void>;
+}) {
+  const [modeBusy, setModeBusy] = useState(false);
+  const [modeFailed, setModeFailed] = useState(false);
+  const groupRef = useRef<HTMLDivElement | null>(null);
+  // The segment that had focus when a write started. `disabled` during the
+  // write drops focus to `<body>` (a disabled button cannot hold it), so the
+  // segment is re-focused once the control is enabled again — a keyboard
+  // user's Enter must not strand them at the top of the document.
+  const refocusRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (modeBusy || refocusRef.current === null) return;
+    refocusRef.current.focus();
+    refocusRef.current = null;
+  }, [modeBusy]);
+
+  const mode = modeLine(link);
+
+  // MANUAL and AUTOMATIC each PATCH the link and then RE-READ it (invariant
+  // I1 — the pressed segment is drawn from `link`, never from the tap). A
+  // refused or thrown write therefore leaves the pressed state on the
+  // SERVER's value by construction and adds the A7 line; the re-read runs
+  // in the `finally` so both outcomes converge on whatever the server
+  // holds. Tapping the segment that is ALREADY pressed writes nothing but
+  // does disarm, because any tap outside the armed OFF is a decision not to
+  // unlink (I2's "any other tap" disarmer, kept from the button this control
+  // replaces). A tap that reaches here also retires the last write's A7
+  // line; the OFF segment's first tap arms and does not (the line is hidden
+  // while armed and returns if the arm lapses — the write it reports is
+  // still the last one made).
+  async function setMode(autoSend: boolean): Promise<void> {
+    disarm();
+    setModeFailed(false);
+    if (link.autoSend === autoSend) return;
+    const active = document.activeElement;
+    refocusRef.current =
+      active instanceof HTMLButtonElement &&
+      groupRef.current !== null &&
+      groupRef.current.contains(active)
+        ? active
+        : null;
+    setModeBusy(true);
+    try {
+      const res = await api("/api/concept2/link", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoSend }),
+      });
+      if (!res.ok) setModeFailed(true);
+    } catch {
+      setModeFailed(true);
+    } finally {
+      await reload();
+      setModeBusy(false);
+    }
+  }
+
+  // Left/Right only — the axis the control is laid out on. Up/Down stay the
+  // page's, so a keyboard user can still scroll from inside the control.
+  // While armed the only visible segment is OFF (the other two are
+  // `display: none`), so arrows have nowhere to go and do nothing.
+  function moveFocus(e: KeyboardEvent<HTMLDivElement>): void {
+    const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (step === 0 || armed || groupRef.current === null) return;
+    const buttons = [
+      ...groupRef.current.querySelectorAll<HTMLButtonElement>("button"),
+    ];
+    const at = buttons.findIndex((b) => b === document.activeElement);
+    if (at === -1) return;
+    e.preventDefault();
+    buttons[(at + step + buttons.length) % buttons.length]?.focus();
+  }
+
+  const disabled = busy || modeBusy;
+  return (
+    <>
+      <div
+        ref={groupRef}
+        className={`c2-card-mode${armed ? " c2-card-mode-is-armed" : ""}`}
+        role="group"
+        aria-label="Sending mode"
+        aria-describedby={armed ? undefined : "c2-card-mode-line"}
+        onKeyDown={moveFocus}
+      >
+        {/* OFF keeps the two-tap arm the Unlink button had: while armed it
+            spans the control and reads "Tap again to unlink" in the danger
+            button's own typography (Gate 0 §2a, ruled on sight), and the
+            other two segments are hidden — the pressed state does not
+            commit until the second tap, and a disarm returns it to the
+            server's mode because that is all `link` ever held. */}
+        <button
+          type="button"
+          className={`c2-card-mode-btn${armed ? " c2-card-mode-armed" : ""}`}
+          aria-pressed={false}
+          disabled={disabled}
+          onClick={armed ? onUnlink : onArm}
+        >
+          {armed ? "Tap again to unlink" : "OFF"}
+        </button>
+        <button
+          type="button"
+          className="c2-card-mode-btn"
+          aria-pressed={!armed && !link.autoSend}
+          disabled={disabled}
+          onClick={() => void setMode(false)}
+        >
+          MANUAL
+        </button>
+        <button
+          type="button"
+          className="c2-card-mode-btn"
+          aria-pressed={!armed && link.autoSend}
+          disabled={disabled}
+          onClick={() => void setMode(true)}
+        >
+          AUTOMATIC
+        </button>
+      </div>
+      {armed ? (
+        <p className="c2-card-foot">DISARMS ON ITS OWN AFTER 4 SECONDS</p>
+      ) : (
+        <>
+          <p
+            id="c2-card-mode-line"
+            className={`c2-card-mode-line${mode.warn ? " c2-card-mode-line-warn" : ""}`}
+          >
+            {mode.text}
+          </p>
+          {/* The block's own remedy (Gate 0 §4a), built from the LIVE link
+              exactly as `log/Concept2SendBlock.tsx` builds it, and for the
+              same reason omitted when the origin is not readable: an empty
+              base would make a RELATIVE path. */}
+          {mode.remedy === "profile" && profileUrl !== null && (
+            <button
+              type="button"
+              className="c2-card-linkout"
+              onClick={() => void openReadOnlyUrl(profileUrl)}
+            >
+              OPEN CONCEPT2 PROFILE
+            </button>
+          )}
+          {modeFailed && (
+            <p className="c2-card-mode-error">
+              Couldn&apos;t change this. Try again.
+            </p>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 export default function Concept2Card({ email }: { email: string }) {
   const { link, failed, reload } = useConcept2Link();
   const [outcome, setOutcome] = useState<LinkOutcome | null>(null);
@@ -102,13 +305,6 @@ export default function Concept2Card({ email }: { email: string }) {
   );
   const [armed, setArmed] = useState(false);
   const disarmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Wave E auto-send §3.2 (A7): the sending-mode control is `disabled` while
-  // its PATCH is in flight, and a refused or thrown write shows one line.
-  // Neither is folded into `busy`: that flag disables Connect/RECONNECT and
-  // the arm, and a mode write must not grey the RECONNECT button above it.
-  const [modeBusy, setModeBusy] = useState(false);
-  const [modeFailed, setModeFailed] = useState(false);
-  const modeRef = useRef<HTMLDivElement | null>(null);
 
   const disarm = useCallback(() => {
     if (disarmRef.current !== null) {
@@ -175,11 +371,6 @@ export default function Concept2Card({ email }: { email: string }) {
   async function connect(): Promise<void> {
     setBusy(true);
     setOutcome(null);
-    // The A7 line ("Couldn't change this") was about the mode of the link
-    // this attempt replaces; without this clear it outlived an unlink and
-    // reappeared under a freshly linked account's control (harden lens 1
-    // F2 / lens 2 F4). This is the ONE clear site on the relink path.
-    setModeFailed(false);
     try {
       const result = await startLink();
       setOutcome(result);
@@ -203,11 +394,6 @@ export default function Concept2Card({ email }: { email: string }) {
       // operation that succeeded" is the defect being avoided).
       if (res.ok || res.status === 404) {
         setOutcome(null);
-        // `modeFailed` is NOT cleared here, deliberately: the mode block
-        // unmounts with the link, and every way back to a linked card runs
-        // through `connect()`, which clears it on entry. A clear here was
-        // measured redundant (its mutation stayed green — RF21), so the one
-        // site that owns the invariant is `connect()`.
         // Invariant I4 needs no clear site here any more: an earlier
         // revision reset a weight-class draft on unlink so a relink would
         // ask again. There is no draft, and nothing about the removed
@@ -234,60 +420,6 @@ export default function Concept2Card({ email }: { email: string }) {
       disarm();
       setBusy(false);
     }
-  }
-
-  // Wave E auto-send §3.2: MANUAL and AUTOMATIC each PATCH the link and
-  // then RE-READ it (invariant I1 — the pressed segment is drawn from `link`,
-  // never from the tap). A refused or thrown write therefore leaves the
-  // pressed state on the SERVER's value by construction and adds the A7
-  // line; the re-read runs in the `finally` so both outcomes converge on
-  // whatever the server holds. Tapping the segment that is ALREADY pressed
-  // writes nothing (there is nothing to change) but does disarm, because
-  // any tap outside the armed OFF is a decision not to unlink (I2's "any
-  // other tap" disarmer, kept from the button this control replaces).
-  async function setMode(autoSend: boolean): Promise<void> {
-    disarm();
-    // Any tap on the control retires the last write's failure line, the
-    // pressed segment included — the rower has acted since it was drawn.
-    setModeFailed(false);
-    if (link !== null && link.linked && link.autoSend === autoSend) return;
-    setModeBusy(true);
-    try {
-      const res = await api("/api/concept2/link", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ autoSend }),
-      });
-      if (!res.ok) setModeFailed(true);
-    } catch {
-      setModeFailed(true);
-    } finally {
-      await reload();
-      setModeBusy(false);
-    }
-  }
-
-  // Arrows move FOCUS only (spec §3.2, F4): this is three `aria-pressed`
-  // buttons and NOT a radiogroup, because the roving idiom commits on
-  // arrow, and here one arrow would arm the unlink or fire a PATCH. Commit
-  // stays on click / Enter / Space, which are the button's own.
-  // While armed the only visible segment is OFF (the other two are
-  // `display: none`), so arrows have nowhere to go and do nothing.
-  function moveFocus(e: KeyboardEvent<HTMLDivElement>): void {
-    const step =
-      e.key === "ArrowRight" || e.key === "ArrowDown"
-        ? 1
-        : e.key === "ArrowLeft" || e.key === "ArrowUp"
-          ? -1
-          : 0;
-    if (step === 0 || armed || modeRef.current === null) return;
-    const buttons = [
-      ...modeRef.current.querySelectorAll<HTMLButtonElement>("button"),
-    ];
-    const at = buttons.findIndex((b) => b === document.activeElement);
-    if (at === -1) return;
-    e.preventDefault();
-    buttons[(at + step + buttons.length) % buttons.length]?.focus();
   }
 
   // Amendment 1h: nothing renders while the surface is unavailable, or
@@ -377,7 +509,6 @@ export default function Concept2Card({ email }: { email: string }) {
     : opening
       ? "WAITING"
       : "NOT LINKED";
-  const mode = link.linked ? modeLine(link) : null;
   const profileUrl =
     link.linked && link.logbookBaseUrl !== null
       ? c2ProfileUrl(link.logbookBaseUrl)
@@ -591,93 +722,22 @@ export default function Concept2Card({ email }: { email: string }) {
             </>
           )}
 
-          {link.linked && mode !== null && (
+          {link.linked && (
             <>
               {/* Not while armed: 1d's hairline is above the warning, in the
                   tell column (F6). Two hairlines would be a rule the page
                   never draws. */}
               {!armed && <hr className="c2-card-hair" />}
-              {/* Wave E auto-send §3.2 — OFF · MANUAL · AUTOMATIC, where
-                  Unlink Concept2 was (RF23: OFF IS the unlink, so a second
-                  control would be two affordances for one destructive act).
-                  Three `aria-pressed` buttons, not a radiogroup (F4). OFF
-                  keeps the two-tap arm the button had: while armed it spans
-                  the control and reads "Tap again to unlink" in the danger
-                  button's own typography (Gate 0 §2a, ruled on sight), and
-                  the other two segments are hidden — the pressed state does
-                  not commit until the second tap, and a disarm returns it to
-                  the server's mode because that is all `link` ever held.
-                  `aria-pressed` while armed is on OFF alone, so a screen
-                  reader hears the state the rower is about to commit. */}
-              <div
-                ref={modeRef}
-                className={`c2-card-mode${armed ? " c2-card-mode-is-armed" : ""}`}
-                role="group"
-                aria-label="Sending mode"
-                onKeyDown={moveFocus}
-              >
-                <button
-                  type="button"
-                  className={`c2-card-mode-btn${armed ? " c2-card-mode-armed" : ""}`}
-                  aria-pressed={armed}
-                  disabled={busy || modeBusy}
-                  onClick={() => {
-                    if (armed) void unlink();
-                    else arm();
-                  }}
-                >
-                  {armed ? "Tap again to unlink" : "OFF"}
-                </button>
-                <button
-                  type="button"
-                  className="c2-card-mode-btn"
-                  aria-pressed={!armed && !link.autoSend}
-                  disabled={busy || modeBusy}
-                  onClick={() => void setMode(false)}
-                >
-                  MANUAL
-                </button>
-                <button
-                  type="button"
-                  className="c2-card-mode-btn"
-                  aria-pressed={!armed && link.autoSend}
-                  disabled={busy || modeBusy}
-                  onClick={() => void setMode(true)}
-                >
-                  AUTOMATIC
-                </button>
-              </div>
-              {armed ? (
-                <p className="c2-card-foot">
-                  DISARMS ON ITS OWN AFTER 4 SECONDS
-                </p>
-              ) : (
-                <>
-                  <p
-                    className={`c2-card-mode-line${mode.warn ? " c2-card-mode-line-warn" : ""}`}
-                  >
-                    {mode.text}
-                  </p>
-                  {/* The block's own remedy (Gate 0 §4a), built from the LIVE
-                      link exactly as `log/Concept2SendBlock.tsx` builds it,
-                      and for the same reason omitted when the origin is not
-                      readable: an empty base would make a RELATIVE path. */}
-                  {mode.remedy === "profile" && profileUrl !== null && (
-                    <button
-                      type="button"
-                      className="c2-card-linkout"
-                      onClick={() => void openReadOnlyUrl(profileUrl)}
-                    >
-                      OPEN CONCEPT2 PROFILE
-                    </button>
-                  )}
-                  {modeFailed && (
-                    <p className="c2-card-mode-error">
-                      Couldn&apos;t change this. Try again.
-                    </p>
-                  )}
-                </>
-              )}
+              <SendingModeControl
+                link={link}
+                armed={armed}
+                busy={busy}
+                profileUrl={profileUrl}
+                onArm={arm}
+                onUnlink={() => void unlink()}
+                disarm={disarm}
+                reload={reload}
+              />
             </>
           )}
 

@@ -52,7 +52,7 @@ export interface Concept2Link {
  *  renders NOTHING at all. It is also what a body we cannot read degrades
  *  to, so a corruption here does not fail loudly: flipping `available` to
  *  `true` would put the whole Concept2 card on a flag-off deployment, and
- *  the only consumer that can catch it is a test asserting all six fields
+ *  the only consumer that can catch it is a test asserting all nine fields
  *  as literals (review F2 — `useConcept2Link.test.ts`'s
  *  "LINK_UNAVAILABLE is the flag-off answer"). */
 export const LINK_UNAVAILABLE: Concept2Link = {

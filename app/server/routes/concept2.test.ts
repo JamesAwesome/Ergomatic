@@ -370,7 +370,8 @@ describe("concept2 router: auth guard", () => {
       expect(client.exchangeCode).not.toHaveBeenCalled();
     });
 
-    // The refusal is required on ALL FIVE JSON routes, and the three tests
+    // The refusal is required on ALL SIX JSON routes (auto-send added
+    // `PATCH /link`), and the three tests
     // above only reach two of them plus the callback: deleting
     // `refuseAmbiguousAuth` from `GET /link`, `DELETE /link` or
     // `POST /results/:logId` left every other assertion in this file green.
@@ -382,6 +383,7 @@ describe("concept2 router: auth guard", () => {
       ["post", "/api/concept2/connect"],
       ["post", "/api/concept2/exchange"],
       ["get", "/api/concept2/link"],
+      ["patch", "/api/concept2/link"],
       ["delete", "/api/concept2/link"],
       ["post", `/api/concept2/results/${NON_EXISTENT_UUID}`],
     ];
@@ -395,6 +397,7 @@ describe("concept2 router: auth guard", () => {
         const deleteSpy = vi.spyOn(store, "deleteLink");
         const upsertSpy = vi.spyOn(store, "upsertLink");
         const createSpy = vi.spyOn(store, "createAttempt");
+        const setAutoSendSpy = vi.spyOn(store, "setAutoSend");
         const recordSpy = vi.spyOn(logs, "recordC2Result");
         const agent = request(app) as unknown as Record<
           string,
@@ -406,11 +409,13 @@ describe("concept2 router: auth guard", () => {
             code: "c",
             state: "s",
             tz: "America/New_York",
+            autoSend: true,
           }),
         );
         expect(res.status).toBe(400);
         expect(res.body).toStrictEqual({ error: "ambiguous_auth" });
         expect(createSpy).not.toHaveBeenCalled();
+        expect(setAutoSendSpy).not.toHaveBeenCalled();
         expect(deleteSpy).not.toHaveBeenCalled();
         expect(upsertSpy).not.toHaveBeenCalled();
         expect(recordSpy).not.toHaveBeenCalled();
@@ -627,6 +632,29 @@ describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
     );
     expect(allowed.status).toBe(200);
     expect(createAttemptSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Auto-send's one new write takes the PER-USER gate (`availableFor`), like
+  // every other write; `available: false` alone cannot tell the two gates
+  // apart, so this row seeds the link and denies by ADDRESS.
+  it("PATCH /link: an off-list user gets 403 and the mode is unchanged; the on-list user flips it", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink({ c2UserId: 4477 }));
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const denied = await asB(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body).toStrictEqual({ error: "unavailable" });
+    expect((await store.getLink(userB.id))?.autoSend).toBe(false);
+
+    const allowed = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(allowed.status).toBe(204);
+    expect((await store.getLink(userA.id))?.autoSend).toBe(true);
   });
 
   it("exchange: an off-list user gets 403 before any attempt is peeked", async () => {
@@ -1960,6 +1988,10 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     async (_label, body) => {
       const store = makeFakeConcept2Store();
       await store.upsertLink(userA.id, freshLink());
+      // Seeded AUTOMATIC, not the default: from MANUAL the `absent` and
+      // `null` rows could not tell a held guard from a bypassed one that
+      // wrote `false` (task review F3).
+      await store.setAutoSend(userA.id, true);
       const { app } = buildApp({ store });
       const res = await asA(
         request(app).patch("/api/concept2/link").send(body),
@@ -1969,7 +2001,7 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
         error: "autoSend must be a boolean",
         field: "autoSend",
       });
-      expect((await store.getLink(userA.id))?.autoSend).toBe(false);
+      expect((await store.getLink(userA.id))?.autoSend).toBe(true);
     },
   );
 
@@ -1990,6 +2022,7 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
       request(app).patch("/api/concept2/link").send({ autoSend: true }),
     );
     expect(res.status).toBe(403);
+    expect((await store.getLink(userA.id))?.autoSend).toBe(false);
   });
 
   it("GET carries the send-failed flag as an ISO instant and the verbatim sub-reason", async () => {
@@ -2857,6 +2890,9 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       // sub-reason the send answered, carried by GET /link.
       const read = await asA(request(app).get("/api/concept2/link"));
       expect(read.status).toBe(200);
+      // The independent literal AND the round-trip: a mutation changing the
+      // sub-reason in both places still fails the literal.
+      expect(read.body.sendFailedReason).toBe("no_weight");
       expect(read.body.sendFailedReason).toBe(res.body.reason);
       expect(typeof read.body.sendFailedAt).toBe("string");
     });
@@ -3012,6 +3048,9 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
           .send({ tz: "America/New_York" }),
       ).then((r) => r);
       // Let request 2 reach the claim and chain before anything resolves.
+      // A fast-fail, not the gate: the timing-independent gate is the FINAL
+      // `toHaveBeenCalledTimes(1)` after both responses settle (M6 bites on
+      // that one).
       await new Promise((r) => setTimeout(r, 20));
       expect(d.impl).toHaveBeenCalledTimes(1);
 
@@ -3021,6 +3060,38 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       expect(r2.status).toBe(200);
       expect(r1.body.resultId).toBe(4242);
       expect(r2.body.resultId).toBe(4242);
+      expect(d.impl).toHaveBeenCalledTimes(1);
+    });
+
+    it("two spellings of one row's id take ONE claim: `UUID_RE` is /i and Postgres folds uuid case", async () => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      const d = deferredPostResult();
+      vi.mocked(client.postResult).mockImplementation(
+        d.impl as unknown as typeof client.postResult,
+      );
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      expect(id).not.toBe(id.toUpperCase());
+
+      const first = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await d.enteredOnce;
+      const second = asA(
+        request(app)
+          .post(`/api/concept2/results/${id.toUpperCase()}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await new Promise((r) => setTimeout(r, 20));
+      d.resolve({ ok: true, resultId: 4343 });
+      const [r1, r2] = await Promise.all([first, second]);
+      expect(r1.status).toBe(200);
+      expect(r2.status).toBe(200);
+      expect(r2.body.resultId).toBe(4343);
       expect(d.impl).toHaveBeenCalledTimes(1);
     });
 
