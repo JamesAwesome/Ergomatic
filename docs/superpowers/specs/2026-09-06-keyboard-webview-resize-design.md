@@ -88,11 +88,12 @@ on 8.5.0 — `npm view`, 2026-09-06) and declare, in `app/capacitor.config.ts`:
 import type { CapacitorConfig } from "@capacitor/cli";
 import { KeyboardResize } from "@capacitor/keyboard";
 // ...
+backgroundColor: "#fffdf7", // --surface
 plugins: {
   CapacitorHttp: { enabled: true },
   Keyboard: {
     resize: KeyboardResize.Native,
-    autoBackdropColor: "dom",
+    autoBackdropColor: "auto",
   },
 },
 ```
@@ -140,16 +141,25 @@ the keyboard frame's top, `innerHeight`, the fixed viewport and the visual
 viewport are one height, `bottom: 0` is the visible bottom, and there is no
 below-the-viewport band for the document to paint into.
 
-**`autoBackdropColor: 'dom'`** — PRIMARY (`Keyboard.m:131-155`,
-`definitions.d.ts:41-56`): on every keyboard-will-show the plugin reads
-`getComputedStyle(document.body).backgroundColor` and sets the UIWindow's
-background to it. Under `native` resize the shrunk WebView exposes that
-window inside the keyboard frame. `body { background: var(--page) }`
-(`index.css`, `body` rule), one light theme (`grep -rn
-'prefers-color-scheme' src/` is empty), so the window is a stable
-`rgb(244,241,232)`. It is never reset on hide (`forceBackdropColor` has no
-hide-side caller) — harmless while the WebView is the root view and covers
-it. `'off'` would leave UIKit's default (black) behind any gap.
+**`autoBackdropColor: 'auto'` + `backgroundColor: "#fffdf7"`** — PRIMARY
+(`Keyboard.m:131-143`, `definitions.d.ts:41-56`): on every
+keyboard-will-show the plugin sets the UIWindow's background to the
+Capacitor config's `backgroundColor`. Under `native` resize the shrunk
+WebView exposes that window inside the keyboard frame — the keyboard's
+rounded corners and, with the tray restored, the whole band behind the
+translucent pill, directly under the tab bar. **Gate 0 build A measured
+the alternative** (`'dom'`, which reads `body`'s `--page`): James, "the
+corner is the wrong color" — cream against the bar's `--surface`. So the
+window carries `--surface` (`theme/tokens.css`), the bar's own colour and
+the colour #317 was trying to paint there. Cost, stated: on the screens
+that hide the tab bar (session door, onboarding) the band reads as a
+surface-coloured strip against `--page`; Gate 0's session-door and
+onboarding captures show it. `backgroundColor` also sets the WKWebView's
+own background (`CAPBridgeViewController.swift:308-310`), visible only
+before the first paint. The window is never reset on hide
+(`forceBackdropColor` has no hide-side caller) — harmless while the WebView
+is the root view and covers it. `'off'` would leave UIKit's default behind
+any gap.
 
 ### Options, with every cost measured or marked
 
@@ -182,7 +192,7 @@ it. `'off'` would leave UIKit's default (black) behind any gap.
   at the app's expense (CLAUDE.md, native-first). Noted in DEVIATIONS.
 
 **Colour pairings.** No text is drawn on any new surface. The one new
-adjacency is UIKit's own tray over `--page`; the tab bar over `--surface`
+adjacency is UIKit's own tray over `--surface`; the tab bar over `--surface`
 with `--rule` above it is unchanged from v0.39.1. No contrast ratio changes,
 so none is restated here; Gate 0's captures show the pairing at real
 proportions.
@@ -314,7 +324,8 @@ result himself at Gate 0. All of it is on the branch at `d110ed30`:
   edge", two-sided. Mutation `.tabbar { bottom: -10px }` → "Expected: <= 853,
   Received: 862"; restored → passed (2026-09-06, stack `ergomatic-59194`).
 - `app/src/capacitorConfig.test.ts` (client project): asserts
-  `plugins.Keyboard.resize === "native"` and `autoBackdropColor === "dom"`
+  `plugins.Keyboard.resize === "native"`, `autoBackdropColor === "auto"`
+  and `backgroundColor === "#fffdf7"`
   against independent literals (never `KeyboardResize.Native` — RF21's
   first smell). Mutation `KeyboardResize.Native` → `.Body`: "expected
   'body' to be 'native'". Its comment says why gating one hop upstream of

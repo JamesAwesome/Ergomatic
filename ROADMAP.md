@@ -539,8 +539,10 @@ and clips them to it. Three fill mechanisms on the probe page stopped at
 one line (`barBottom 356 = visualViewport.height 356`, James's iPhone,
 2026-09-06). No CSS on the bar can reach the strip. The fix is
 `@capacitor/keyboard` with `resize: "native"` — the WebView itself
-shrinks to the keyboard's top — plus `autoBackdropColor: "dom"` so the
-tray sits over `--page`.
+shrinks to the keyboard's top — plus `autoBackdropColor: "auto"` with
+`backgroundColor: "#fffdf7"` so the keyboard's corners and the tray's band
+carry the bar's `--surface` (build A showed `--page` there: "the corner is
+the wrong color").
 
 **One PR:** the dependency and config; a boot-time adapter call that
 puts the keyboard's ‹ › ✓ tray back (the plugin's `load()` removes it

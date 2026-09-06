@@ -61,7 +61,7 @@ checked on a real build. From the worktree's `app/`:
    `pnpm ios:release` from a tag for TestFlight (`docs/RELEASING.md`).
 2. Library → tap search → scroll. Expected: the tab bar's bottom edge is
    the keyboard tray's top; no list between them; the band behind the
-   translucent tray is `--page`.
+   translucent tray is `--surface`, the bar's own colour.
 3. Readings, via Safari's Web Inspector attached to the device
    (Develop → the phone → Ergomatic): with the keyboard up,
    `window.innerHeight` (expected: the pre-keyboard value minus the keyboard
