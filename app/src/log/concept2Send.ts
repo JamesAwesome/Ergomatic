@@ -13,7 +13,7 @@ import type { StoredLog } from "./storedSummary";
  *  mid-form is honoured and a pending or failed read sends nothing. A
  *  failed read is a decision (no send), not a silence.
  *
- *  NO CLIENT ELIGIBILITY CHECK (F3): `isSendable` above reads a STORED row's
+ *  NO CLIENT ELIGIBILITY CHECK (F3): `isSendable` (below) reads a STORED row's
  *  nullable totals, and a form body has different fields — two of its
  *  clauses were inert against one. The server re-derives eligibility and is
  *  the authority; a `422 not_eligible` on a timer or hand-entered row is the

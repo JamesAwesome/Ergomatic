@@ -151,8 +151,11 @@ function SendingModeControl({
   const groupRef = useRef<HTMLDivElement | null>(null);
   // The segment that had focus when a write started. `disabled` during the
   // write drops focus to `<body>` (a disabled button cannot hold it), so the
-  // segment is re-focused once the control is enabled again — a keyboard
-  // user's Enter must not strand them at the top of the document.
+  // segment is re-focused once the write ends — a keyboard user's Enter must
+  // not strand them at the top of the document. If the card's own `busy`
+  // still disables the control at that moment (a concurrent Connect or
+  // unlink, which the control's own `disabled` mostly prevents), `.focus()`
+  // is a no-op and focus stays on `<body>` — accepted as vanishingly rare.
   const refocusRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (modeBusy || refocusRef.current === null) return;

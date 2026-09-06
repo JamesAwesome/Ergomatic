@@ -1141,6 +1141,34 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     expect(fake.patches).toHaveLength(0);
   });
 
+  test("the armed segment keeps its white-on-accent pairing while its own DELETE is in flight", async ({
+    page,
+  }) => {
+    // Whole-branch review B1: the disabled colour rule dimmed the armed
+    // confirmation label to `--ink-3` on `--accent` (1.25:1) for the whole
+    // unlink round trip once OFF stopped carrying `aria-pressed`. Measured
+    // here against a DELETE that never answers; red without the rule's
+    // `:not(.c2-card-mode-armed)` (Expected rgb(255, 253, 247), Received
+    // rgb(87, 84, 76)).
+    const fake = await signIn(page, "armed-disabled");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    await page.route(/\/api\/concept2\/link$/, async (route) => {
+      if (route.request().method() === "DELETE") return; // never answers
+      await route.fallback();
+    });
+    await control(page).getByRole("button", { name: "OFF" }).click();
+    const armed = page.getByRole("button", { name: "Tap again to unlink" });
+    await armed.click();
+    await expect(armed).toBeDisabled();
+    expect(await armed.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(255, 253, 247)",
+    );
+    expect(
+      await armed.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe("rgb(181, 52, 31)");
+  });
+
   test("SEND FAILED reads on the You row and the card's pill together; the screen names the reason and offers the profile", async ({
     page,
   }) => {
@@ -1204,6 +1232,10 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     await page.goto("/today/log");
     await page.locator(".today-log-row").first().click();
     await expect(page).toHaveURL(new RegExp(`/today/log/${sentId!}$`));
+    // Still ONE: the poll above passes the instant the count reaches 1, so a
+    // duplicate landing afterwards would be invisible to it; re-asserted
+    // after the navigation and detail load that followed (final review I2).
+    expect(fake.sends).toBe(1);
   });
 
   test("MANUAL: the same save reads the link and sends nothing", async ({

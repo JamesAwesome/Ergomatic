@@ -243,6 +243,9 @@ export function createConcept2Store(db: Db) {
      *  branch that says 200 missed the two an ErgData user produces). A no-op
      *  when nothing is set, so the route calls it unconditionally on those
      *  exits rather than reading first. */
+    // Does NOT bump `updatedAt`, unlike `setAutoSend`/`setSendFailed`: it
+    // runs on every at-Concept2 exit, mostly as a no-op (the `isNotNull`
+    // guard), and a row's update instant should mark a change of state.
     async clearSendFailed(userId: string): Promise<void> {
       await db
         .update(concept2Links)

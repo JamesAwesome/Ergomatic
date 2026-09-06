@@ -10413,10 +10413,15 @@ section:not(.news-pinned) .news-row:last-of-type {
    600, spanning the control — so `--accent` gains no new use. Disabled
    (a PATCH in flight, both round trips): the UNPRESSED segments drop to
    `--ink-3` on `--surface` 7.43:1; the PRESSED one KEEPS `--on-color` on
-   `--ink` 17.11:1. The disabled rule is scoped to `:not([aria-pressed=
-   "true"])` on purpose: it sits later in the sheet at equal specificity, so
-   an unscoped `color: var(--ink-3)` would win over the pressed fill and read
-   2.30:1 for the whole write (harden lens 2, finding 1). All ≥ 4.5. */
+   `--ink` 17.11:1; the ARMED OFF, disabled for its own DELETE's round trip,
+   KEEPS `--on-color` on `--accent` 5.94:1. The disabled colour rule is
+   therefore scoped `:not([aria-pressed="true"]):not(.c2-card-mode-armed)`,
+   and both exclusions are load-bearing: unscoped, it outranks the pressed
+   fill (2.30:1 — harden lens 2, finding 1), and without the armed exclusion
+   it dims the confirmation label to 1.25:1 on the accent fill for the whole
+   unlink (whole-branch review B1, after the armed OFF stopped carrying
+   `aria-pressed`). Both pairings are measured in a real engine
+   (`e2e/design.spec.ts`, `e2e/concept2.spec.ts`). All ≥ 4.5. */
 .c2-card-mode {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -10454,7 +10459,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   border-color: var(--rule-3);
 }
 
-.c2-card-mode-btn:disabled:not([aria-pressed="true"]) {
+.c2-card-mode-btn:disabled:not([aria-pressed="true"]):not(.c2-card-mode-armed) {
   color: var(--ink-3);
 }
 

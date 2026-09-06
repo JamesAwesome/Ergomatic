@@ -6599,9 +6599,11 @@ test("concept2-screen-send-failed", async ({ page }) => {
 });
 
 test("concept2-screen-armed", async ({ page }) => {
-  // 1d, on the screen it now lives on. Unlink keeps its tier, its size and
-  // its two-tap arm (spec §5.1 R8/R9): on a screen whose only job is this
-  // link, the destructive control being the loudest thing there is correct.
+  // 1d, on the screen it now lives on. The unlink is the mode control's OFF
+  // segment now (Wave E auto-send), and while armed it keeps the old
+  // button's tier, size and two-tap arm (spec §5.1 R8/R9): on a screen whose
+  // only job is this link, the destructive control being the loudest thing
+  // there is correct.
   const fake: C2ShotFake = {
     link: { status: 200, body: C2_SHOT_LINKED },
     send: { status: 200, body: {} },
