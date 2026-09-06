@@ -50,8 +50,9 @@ explained by existing behaviour and retired below.
    automatically dismissed." So the text IS rower-facing copy, rendered by
    iOS. The patch passes
    `"Failed to read NDEF message: \(readError.localizedDescription)"` and a
-   `cause: tagFailure`; the walk's gen-3 session shows code 102 on the read
-   (`NFCReaderTransceiveError`, `NFCError.h`), then the JS received
+   `cause: tagFailure`; the walk's gen-3 session shows code 102 on the read (a transceive-domain
+   code in `NFCError.h`, where 100 is `TagConnectionLost`; the exact constant
+   is not load-bearing here), then the JS received
    `{reason:"invalidated", cause:"tagFailure"}` and rendered
    `NFC scan stopped. Try again.`.
 
