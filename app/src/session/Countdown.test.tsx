@@ -226,7 +226,7 @@ describe("Countdown", () => {
     const run = loadRun();
     expect(run).not.toBeNull();
     // Heat Lightning's first phase is its effort work step, labelled with
-    // the effort WORD (domain/pace.ts's `effortWord`) — never a number.
+    // the effort WORD (domain/pace.ts's `paceWordLabel`) — never a number.
     expect(screen.getByText("ALL OUT")).toBeInTheDocument();
   });
 

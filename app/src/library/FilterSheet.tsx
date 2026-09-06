@@ -8,11 +8,11 @@ import {
   setLastDone,
   setSource,
   setDurationRange,
-  togglePainLevel,
+  toggleEffortLevel,
   type Filters,
 } from "./filters";
 
-const PAIN_LEVELS = [1, 2, 3, 4, 5];
+const EFFORT_LEVELS = [1, 2, 3, 4, 5];
 
 // The one h2 in this sheet — SheetShell points its own `aria-labelledby` at
 // this id rather than taking the title text itself, so it stays completely
@@ -32,7 +32,7 @@ const COUNT_ID = "filter-sheet-count";
 /**
  * The FILTER sheet (Task 4, ui-fix round — DESIGN.md's "Library, second
  * pass"): slides up over the list (not a route — Library.tsx never pushes
- * history for it), holding four filter groups (TIME, PAIN, LAST
+ * history for it), holding four filter groups (TIME, EFFORT, LAST
  * DONE, SOURCE) plus a live-counting L1 button. Operates entirely on a DRAFT
  * copy of Filters that the caller owns (`draft`/`onChangeDraft`) — nothing
  * here writes to the list's actually-applied filters directly. `onApply`
@@ -45,13 +45,13 @@ const COUNT_ID = "filter-sheet-count";
  * entirely"). Its chip row now lives above the list (Library.tsx, Task 2's
  * own work) — this sheet has no UI path to filter by type at all, by design.
  * Library's own convention for every group here is the same as
- * `durations`/`painLevels` — empty means no filter, and CLEAR ALL keeps
+ * `durations`/`effortLevels` — empty means no filter, and CLEAR ALL keeps
  * emptying to nothing (spec §1). DIFFICULTY left this sheet in Phase DE
  * PR 1 (the product has no difficulty any more).
  *
  * CLEAR vs. CLEAR ALL (fix round, whole-branch review finding B): this
  * sheet's own CLEAR button (`clearSheetFilters`) resets only the groups
- * rendered IN HERE — TIME/PAIN/LAST DONE/SOURCE — leaving
+ * rendered IN HERE — TIME/EFFORT/LAST DONE/SOURCE — leaving
  * `draft.types` exactly as the rower left it. Before this fix CLEAR called
  * the whole-library `clearFilters()`, silently emptying `types` too even
  * though the sheet shows no TYPE control and gives no indication that
@@ -143,14 +143,14 @@ export default function FilterSheet({
       />
 
       <CellGrid
-        label="PAIN"
-        cells={PAIN_LEVELS.map((level) => ({
+        label="EFFORT"
+        cells={EFFORT_LEVELS.map((level) => ({
           value: String(level),
           label: String(level),
-          pressed: draft.painLevels.includes(level),
+          pressed: draft.effortLevels.includes(level),
         }))}
         onToggle={(value) =>
-          onChangeDraft(togglePainLevel(draft, Number(value)))
+          onChangeDraft(toggleEffortLevel(draft, Number(value)))
         }
       />
 

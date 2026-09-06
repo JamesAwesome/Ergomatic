@@ -7,7 +7,7 @@ import {
   saveBuilderDraft,
   type BuilderDraft,
 } from "./builderDraft";
-import { adoptForm, newForm, newRow } from "./builderState";
+import { adoptForm, fromWorkout, newForm, newRow } from "./builderState";
 
 function draftOf(form = newForm(), baseline = newForm()): BuilderDraft {
   return {
@@ -33,7 +33,7 @@ describe("formFingerprint", () => {
     // form-level fields
     expect(formFingerprint({ ...base, title: "x" })).not.toBe(baseFp);
     expect(formFingerprint({ ...base, type: "AT" })).not.toBe(baseFp);
-    expect(formFingerprint({ ...base, pain: 3 })).not.toBe(baseFp);
+    expect(formFingerprint({ ...base, effort: 3 })).not.toBe(baseFp);
     expect(formFingerprint({ ...base, reps: 4 })).not.toBe(baseFp);
     // every enumerable row field except id — future-field guard: iterate
     // the row's own keys so a new BuilderRow field that the fingerprint
@@ -73,6 +73,58 @@ describe("save/load/clear round trip", () => {
     const back = loadBuilderDraft();
     expect(back?.form.title).toBe("Old draft");
     expect(back?.mode).toStrictEqual({ kind: "new" });
+  });
+
+  // Phase DE PR 2 (spec §4.2): a draft saved by a pre-PR-2 build carries
+  // `pain` on BOTH halves. Builder.tsx keeps or drops an edit-mode draft by
+  // fingerprinting `baseline` against a fresh fromWorkout(), so the baseline
+  // half is the one that decides — reconstruct both, and pin it on the
+  // fingerprint, not on the field.
+  it("restores a pre-PR-2 EDIT-mode draft whose form and baseline carry pain, with both fingerprints matching the effort-shaped originals", () => {
+    const workout = {
+      title: "Old edit",
+      type: "AT" as const,
+      effort: 3,
+      steps: [{ k: "r" as const, minutes: 10 }],
+    };
+    const baseline = fromWorkout(workout);
+    const form = { ...baseline, title: "Old edit, renamed" };
+    const legacy = JSON.parse(
+      JSON.stringify({
+        v: 1,
+        mode: { kind: "edit", workoutId: "w-1" },
+        form,
+        baseline,
+        savedAt: "2026-09-01T00:00:00.000Z",
+      }),
+    ) as { form: Record<string, unknown>; baseline: Record<string, unknown> };
+    for (const half of [legacy.form, legacy.baseline]) {
+      half.pain = half.effort;
+      delete half.effort;
+    }
+    localStorage.setItem(BUILDER_DRAFT_KEY, JSON.stringify(legacy));
+    const back = loadBuilderDraft()!;
+    expect(formFingerprint(back.baseline)).toBe(formFingerprint(baseline));
+    expect(formFingerprint(back.form)).toBe(formFingerprint(form));
+    expect(back.form).not.toHaveProperty("pain");
+    expect(back.baseline).not.toHaveProperty("pain");
+  });
+  it("a pre-PR-2 NEW-mode draft with pain: null restores effort: null; a draft carrying both keys keeps effort", () => {
+    const d = draftOf({ ...newForm(), title: "Half done" });
+    const legacy = JSON.parse(JSON.stringify(d)) as {
+      form: Record<string, unknown>;
+    };
+    legacy.form.pain = null;
+    delete legacy.form.effort;
+    localStorage.setItem(BUILDER_DRAFT_KEY, JSON.stringify(legacy));
+    expect(loadBuilderDraft()?.form.effort).toBeNull();
+    const both = JSON.parse(JSON.stringify(d)) as {
+      form: Record<string, unknown>;
+    };
+    both.form.pain = 2;
+    both.form.effort = 4;
+    localStorage.setItem(BUILDER_DRAFT_KEY, JSON.stringify(both));
+    expect(loadBuilderDraft()?.form.effort).toBe(4);
   });
 
   it("round-trips a draft and load returns the stored forms", () => {

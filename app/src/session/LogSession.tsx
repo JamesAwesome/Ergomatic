@@ -13,7 +13,7 @@ import { usePlan } from "../api/usePlan";
 import type { PlanData } from "../api/usePlan";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
-import { isEffortRef } from "../../domain/pace.js";
+import { isPaceWordRef } from "../../domain/pace.js";
 import { needsBaselines } from "../../domain/needsBaselines.js";
 import type {
   Baselines,
@@ -153,7 +153,7 @@ function lockedBaseline(
     if (
       step === undefined ||
       step.k !== "w" ||
-      isEffortRef(step.ref) ||
+      isPaceWordRef(step.ref) ||
       step.ref.base !== base
     ) {
       continue;
@@ -236,7 +236,7 @@ function manualLockedBaseline(
 ): number | null {
   const referenced = steps.some(
     (step) =>
-      step.k === "w" && !isEffortRef(step.ref) && step.ref.base === base,
+      step.k === "w" && !isPaceWordRef(step.ref) && step.ref.base === base,
   );
   return referenced
     ? base === "2k"
@@ -542,7 +542,7 @@ function recordPostSacrifice(status: number): void {
 
 // The part of the POST body that genuinely differs per door — where the
 // workout identity/steps come FROM (a frozen `SessionRun` vs a fetched
-// `LibraryWorkout`). `held`/`pain`/`notes` are NOT here: those are the
+// `LibraryWorkout`). `held`/`effort`/`notes` are NOT here: those are the
 // shared form state `useLogForm` itself owns and merges in below.
 export interface LogFormFields {
   workoutId: string | null;
@@ -656,7 +656,7 @@ export interface LogFormFields {
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
- *  ~45 lines of verbatim-duplicated behaviour (the held/pain/notes state
+ *  ~45 lines of verbatim-duplicated behaviour (the held/effort/notes state
  *  quintet, body assembly, and — the part that actually carries the app's
  *  rules — the `field === "workoutId"` 400-retry policy and the error
  *  string). This hook makes it structurally impossible for the two doors'
@@ -709,9 +709,9 @@ export interface LogFormFields {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useLogForm(onSaved: (logId: string | null) => void) {
   const [held, setHeld] = useState<HeldResult | null>(null);
-  const [pain, setPain] = useState<number | null>(null);
+  const [effort, setEffort] = useState<number | null>(null);
   // Post-workout-summary spec (2026-08-17), §3: `thumbs` joins the
-  // held/pain/notes quintet — clearable the same way (tap the selected
+  // held/effort/notes quintet — clearable the same way (tap the selected
   // option again to return to null), same reason as its siblings: it must
   // survive a failed save without forcing the rower to re-pick it.
   const [thumbs, setThumbs] = useState<Thumbs | null>(null);
@@ -725,8 +725,8 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
   ) {
     // Post-workout-summary spec (2026-08-17), §3: the reflection card is
     // now entirely optional (James's ruling) — Save is never gated on
-    // held/pain/thumbs being chosen (both save buttons' `disabled` prop
-    // now reads only `saving`). held/pain go on the wire as their raw
+    // held/effort/thumbs being chosen (both save buttons' `disabled` prop
+    // now reads only `saving`). held/effort go on the wire as their raw
     // state, null included; the server stores null the same way it already
     // does for `notes`/`deviceName`.
     setSaving(true);
@@ -734,7 +734,7 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
     const body: Record<string, unknown> = {
       ...fields,
       held,
-      pain,
+      effort,
       thumbs,
       notes: notes.trim().length > 0 ? notes : null,
     };
@@ -884,8 +884,8 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
   return {
     held,
     setHeld,
-    pain,
-    setPain,
+    effort,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -1291,8 +1291,8 @@ export function TimerSummary({
   const {
     held,
     setHeld,
-    pain,
-    setPain,
+    effort,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -1435,7 +1435,7 @@ export function TimerSummary({
       : (chosenType ??
         validWorkoutType(matchedDraft?.type) ??
         validWorkoutType(libraryWorkout?.type));
-  const expectedPain = libraryWorkout?.pain ?? null;
+  const expectedEffort = libraryWorkout?.effort ?? null;
   // TS narrowing from the `run === null` guard above doesn't survive into a
   // function DECLARED later in this component (the arrow function passed
   // to `submit`, below) — a separately-typed `const` alias is the standard
@@ -1554,11 +1554,11 @@ export function TimerSummary({
       model={model}
       pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
       hint={singleTargetHint(logSteps)}
-      expectedPain={expectedPain}
+      expectedEffort={expectedEffort}
       held={held}
       onHeld={setHeld}
-      pain={pain}
-      onPain={setPain}
+      effort={effort}
+      onEffort={setEffort}
       thumbs={thumbs}
       onThumbs={setThumbs}
       notes={notes}
@@ -1718,8 +1718,8 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   const {
     held,
     setHeld,
-    pain,
-    setPain,
+    effort,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -2028,11 +2028,11 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       // so this arrival gets the rule the connected door itself uses, and
       // shows no hint at all when the workout has no single target.
       hint={connectedNoRecord ? singleTargetHint(logSteps) : "BY FEEL"}
-      expectedPain={workout.pain}
+      expectedEffort={workout.effort}
       held={held}
       onHeld={setHeld}
-      pain={pain}
-      onPain={setPain}
+      effort={effort}
+      onEffort={setEffort}
       thumbs={thumbs}
       onThumbs={setThumbs}
       notes={notes}
@@ -2098,8 +2098,8 @@ export function ProgrammedMonitorSummary({
   const {
     held,
     setHeld,
-    pain,
-    setPain,
+    effort,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -2349,11 +2349,11 @@ export function ProgrammedMonitorSummary({
       model={model}
       pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
       hint={singleTargetHint(logSteps)}
-      expectedPain={workout?.pain ?? null}
+      expectedEffort={workout?.effort ?? null}
       held={held}
       onHeld={setHeld}
-      pain={pain}
-      onPain={setPain}
+      effort={effort}
+      onEffort={setEffort}
       thumbs={thumbs}
       onThumbs={setThumbs}
       notes={notes}

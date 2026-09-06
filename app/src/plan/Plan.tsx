@@ -479,7 +479,7 @@ function PlanView({
                   The prescribed title used to render uppercased in the
                   mono label voice, which made a real library workout —
                   "2K Test" has its own detail route and is classified
-                  AN/hard/pain 5 — read as a status badge instead of as a
+                  AN/hard/effort 5 — read as a status badge instead of as a
                   name. Every other surface in the app titles a workout at
                   --ink in sentence case (`.workout-row-title`,
                   `.today-log-title`); the plan row was the only one that

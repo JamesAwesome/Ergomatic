@@ -69,7 +69,7 @@ async function postLog(
     workoutTitle: string;
     workoutType: string;
     held?: "held" | "under" | "over" | null;
-    pain?: number | null;
+    effort?: number | null;
     avgSplitSeconds?: number | null;
     distanceMeters?: number | null;
     timeSeconds?: number | null;
@@ -142,7 +142,7 @@ async function postLog(
       body: JSON.stringify({
         workoutId: null,
         held: null,
-        pain: null,
+        effort: null,
         notes: null,
         steps: [{ label: "Work" }],
         advancesPlan: false,
@@ -172,7 +172,7 @@ async function postV0110Log(page: Page, title: string): Promise<void> {
         workoutTitle: t,
         workoutType: "AT",
         held: "held",
-        pain: 2,
+        effort: 2,
         notes: null,
         steps: [
           {
@@ -245,7 +245,7 @@ test("Today's LAST THREE heading is the ALL SESSIONS link, and the history list 
     workoutTitle: "Sea Fret",
     workoutType: "O2",
     held: "held",
-    pain: 2,
+    effort: 2,
     avgSplitSeconds: 124.5,
     distanceMeters: 5000,
   });
@@ -893,7 +893,7 @@ test("a connected arrival with no reading saves as no-reading and reads NO MONIT
   // spec 2026-09-02, ruling 5, shipped in #274 — `design.spec.ts`'s §2F
   // leg pins the same word).
   await page.getByRole("button", { name: "HELD" }).click();
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/today$/);
 
@@ -967,7 +967,7 @@ test.describe("§4 N1-N7: the navigation-flow burn list's own witnesses", () => 
         workoutTitle: `Session ${i}`,
         workoutType: i % 2 === 0 ? "AT" : "O2",
         held: "held",
-        pain: 2,
+        effort: 2,
       });
     }
 
@@ -1090,7 +1090,7 @@ test.describe("§4 N1-N7: the navigation-flow burn list's own witnesses", () => 
       workoutTitle: "N1 History Sibling",
       workoutType: "AT",
       held: "held",
-      pain: 2,
+      effort: 2,
     });
 
     // A real live session for a DIFFERENT workout, deliberately never
@@ -1500,7 +1500,7 @@ test("criterion 3: the PATCH round trip — skip everything at save, open from h
   await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 
-  // Save with everything skipped — no HELD/PAIN/THUMBS/NOTES chosen.
+  // Save with everything skipped — no HELD/EFFORT/THUMBS/NOTES chosen.
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/today$/);
 
@@ -1519,12 +1519,12 @@ test("criterion 3: the PATCH round trip — skip everything at save, open from h
   await addButton.click();
 
   await page.getByRole("button", { name: "HELD" }).click();
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByRole("button", { name: "↑ MORE LIKE THIS" }).click();
   await page.getByLabel("NOTES").fill("Answered after the fact.");
   await page.getByRole("button", { name: "Save" }).click();
 
-  await expect(page.getByText("HELD · PAIN 3/5 · LIKED")).toBeVisible();
+  await expect(page.getByText("HELD · EFFORT 3/5 · LIKED")).toBeVisible();
   await expect(page.getByText("Answered after the fact.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
 
@@ -1532,7 +1532,7 @@ test("criterion 3: the PATCH round trip — skip everything at save, open from h
   // come back from the server, not merely survive in memory.
   await page.reload();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
-  await expect(page.getByText("HELD · PAIN 3/5 · LIKED")).toBeVisible();
+  await expect(page.getByText("HELD · EFFORT 3/5 · LIKED")).toBeVisible();
   await expect(page.getByText("Answered after the fact.")).toBeVisible();
 
   // Clear ONE field via the UI (HELD, tapping the same selected chip a
@@ -1542,8 +1542,8 @@ test("criterion 3: the PATCH round trip — skip everything at save, open from h
   await page.getByRole("button", { name: "HELD" }).click();
   await page.getByRole("button", { name: "Save" }).click();
 
-  await expect(page.getByText("PAIN 3/5 · LIKED")).toBeVisible();
-  await expect(page.getByText("HELD · PAIN 3/5 · LIKED")).not.toBeVisible();
+  await expect(page.getByText("EFFORT 3/5 · LIKED")).toBeVisible();
+  await expect(page.getByText("HELD · EFFORT 3/5 · LIKED")).not.toBeVisible();
 });
 
 // Spec §7 criterion 4, verbatim: "advance a plan by saving, the done row
@@ -1876,7 +1876,7 @@ test.describe("the plan checkpoint's identity seam (POST -> join -> hook -> row)
         body: JSON.stringify({
           title: "2K Test",
           type: "AN",
-          pain: 5,
+          effort: 5,
           steps: [
             {
               k: "w",

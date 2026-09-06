@@ -360,11 +360,15 @@ because it holds no pain — `LogSession.tsx:712` is `useState`):
 | Key | Old field | New field |
 | --- | --- | --- |
 | Today per-type filters | `painLevels` | `effortLevels` |
-| Library filters | `painLevels` | `effortLevels` |
+| Library filters (sessionStorage, NOT localStorage) | `painLevels` | `effortLevels` — NO fallback read: the store dies at relaunch, so no native pre-PR-2 record can reach a new bundle; a same-session web bundle swap falls back to `EMPTY_FILTERS` whole by the parser's own design |
 | Builder draft (`builderDraft.ts:33`) | `pain` | `effort` |
 
-Each parser reads `effort*` first, falls back to `pain*` only when the
-`effort*` key is ABSENT, and writes only the new key. Strictness is
+Each localStorage parser reads `effort*` first, falls back to `pain*` only
+when the `effort*` key is ABSENT (a present `null` is malformed, not
+absent), and writes only the new key. The builder draft reconstructs BOTH
+`form` and `baseline`: `Builder.tsx` fingerprints `baseline` against a
+fresh `fromWorkout()`, and a missing `effort` there stringifies as `null`
+and would silently discard an edit-mode draft. Strictness is
 inherited from the host parser, not relaxed for the fallback: in
 `libraryFilters.ts` a present-but-malformed `effortLevels` (or a
 present-but-malformed `painLevels` when `effortLevels` is absent) nulls the
@@ -375,18 +379,19 @@ parser would otherwise have rejected.
 
 ### 4.3 API dual-field (the compat contract)
 
-Responses are bare row spreads — `res.json(rows.map(w => ({...w, ...})))`
-at `data.ts:1091`, `res.json(row)` at `:1153`, `:1182`, `:1341`,
-`res.status(201).json(row)` at `:1136`, plus the log routes — so the
-column rename alone would silently remove `pain` from nine sites. The
-contract:
+Responses are bare row spreads, so the column rename alone would silently
+remove `pain` from every site. The census is the command
+`grep -nE 'res\.(status\([0-9]+\)\.)?json\(' server/routes/data.ts`
+filtered to workout and log rows — NINE sites at PR 2's base (the log PATCH
+route has two exits, the empty-patch read and the update). The contract:
 
-- One **outbound adapter** applied at every one of those nine sites (the
-  plan enumerates them by line against PR 2's base). The ninth, and the
-  one an implementer following a list of single-row `res.json(row)` sites
-  misses, is the `/bulk` route's `created` ARRAY — a map over rows, not a
-  row. `effort` is the column; `pain` is copied from it. Both keys, same
-  value.
+- One **outbound adapter** (`withPainAlias`) applied at every one of the
+  nine sites, including the `/bulk` route's `created` ARRAY and both PATCH
+  exits. `effort` is the column; `pain` is copied from it. Both keys, same
+  value. **Article reads get the same two-sided treatment:** the migration
+  moves stored `pain-scale` rows to `effort-scale` for new clients, and the
+  three `/api/article-reads` routes alias `pain-scale` ↔ `effort-scale` for
+  installed old ones.
 - One **inbound adapter** applied before `validateWorkoutInput` (called
   from POST, PUT and `/bulk` with `req.body` directly) and before the log
   POST/PATCH validators. **It preserves key PRESENCE**, because
@@ -410,9 +415,12 @@ contract:
   client" is read back through the store as `difficulty: "easy"` — the
   body's word is ignored, the derived one wins, and the caller controls
   neither.
-- **The inbound adapter counts.** Every `pain`-keyed write emits one
-  structured server log line (`compat.pain_write`). That line is PR 3's
-  trigger (§5) and PR 3 deletes it.
+- **The inbound adapter counts.** Every request whose body CARRIED a `pain`
+  key emits one structured server log line (`compat.pain_write`), whether
+  or not that key's value won. That line is PR 3's trigger (§5) and PR 3
+  deletes it. The adapter passes a non-record body through untouched
+  (Express 5 leaves `req.body` undefined for bodiless/non-JSON requests;
+  the workouts routes' validator already answers those with 400).
 - The store layer speaks only `effort`.
 - Vetted: no current client ever sends both keys (`FromTheLog.tsx:217`'s
   `buildPatch` sends only changed keys; nothing spreads a fetched row into
@@ -464,17 +472,14 @@ contract:
   not injury. Sharp, sudden ...") rather than a disclaimer.
 - Tooling: `library-moves.ts`, both `SKILL.md`s, e2e seeds and helpers.
 
-### 4.5 Sequencing against AUD-016
+### 4.5 Sequencing
 
-`Ergomatic-wt-aud016` (branch `wave-f-aud016-spec`, no PR open) has
-rewritten `LogSession.tsx` (+229), `ConnectedSurface.tsx` (+68) and
-`WorkoutDetail.tsx` — files PR 2 renames through. **PR 2 does not open
-until AUD-016's PR has merged, or James rules it abandoned;** PR 2 then
-rebases and re-runs its grep. PR 1 can proceed now (its overlap with
-AUD-016 is nil: `git diff --stat origin/main...wave-f-aud016-spec` touches
-no filter, seed, builder or suggestion file). Wave E PR C (#307) touches
-only `concept2/*`. Neither in-flight branch mints a migration; main is at
-`0023`. Each DE PR body states its drizzle index checked against main at
+Rev 2 made PR 2 wait for "AUD-016's PR"; that condition was void. AUD-016
+shipped as the hand-off store in #239 (2026-08-31) and was struck in #240;
+`Ergomatic-wt-aud016` is a stale pre-#239 spec branch, and the PM gate read
+its old `LogSession.tsx` diff as in-flight work. PR 2 opens after PR 1 with
+no external dependency. Wave E PR C merged as #307. PR 2 mints migration
+`0024`; each DE PR body states its drizzle index checked against main at
 ready-time, per the agent briefing's second-merger-regenerates rule.
 
 ## 5. PR 3 — drop compat (measured, not confirmed)
@@ -520,10 +525,15 @@ compat layer to serve). PR 3 rides whatever tag follows its trigger.
 
 ## 6. Exit criteria
 
-1. `grep -rniE "difficult|\bpain\b" domain server src e2e --exclude='*.test.*' -l`
-   (in `app/`) returns only: release-note history and the PR 3 compat paths
-   (until PR 3). It returns 69 files at `f014c944`, so the gate is known to
-   go red. And `grep -rln "effort" domain src --exclude='*.test.*'` (51
+1. `grep -rni 'pain' domain server src e2e scripts --exclude='*.test.*' | grep -viE 'paint'`
+   (in `app/`) returns only: release-note history (`releaseNotes.ts`), the
+   named compat files (`server/routes/effortCompat.ts`, the adapter call
+   sites and comments in `server/routes/data.ts`), the legacy bulk-header
+   strings, and comments that name the removal. **Case-insensitive with NO
+   word boundary** — the PR 2 PM gate found `\bpain\b` blind to `setPain`,
+   `expectedPain` and `togglePainLevel` (≈55 lines in 14 files), so a word
+   boundary is the wrong instrument in a camelCase codebase. It returns 69
+   files at `f014c944`, so the gate is known to go red. And `grep -rln "effort" domain src --exclude='*.test.*'` (51
    files at `f014c944`) returns only files where every hit is the 1–5
    figure or `PaceWordRef`'s stored key and its comment — checked by
    `grep -rn` over that list with the pace-word family command from §2

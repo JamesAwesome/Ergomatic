@@ -86,7 +86,7 @@ describe("POST/GET /api/logs: endedBy round-trips through real Postgres, rejects
         workoutTitle: "Link Truth",
         workoutType: "AN",
         held: null,
-        pain: null,
+        effort: null,
         notes: null,
         steps: [{ label: "2000 m" }],
         source: "manual",
@@ -190,7 +190,7 @@ describe("POST/GET /api/logs: endedBy round-trips through real Postgres, rejects
         workoutTitle: "Pre-Task-4 Row",
         workoutType: "AN",
         held: null,
-        pain: null,
+        effort: null,
         notes: null,
         steps: [{ label: "2000 m" }],
         // `source` is the one post-v0.13 key this body carries: required

@@ -6,7 +6,7 @@ import TodayFilterSheet, { type TodayFilterDraft } from "./TodayFilterSheet";
 
 const EMPTY_DRAFT: TodayFilterDraft = {
   durationRange: { min: 0, max: 60 },
-  painLevels: [],
+  effortLevels: [],
   lastDone: null,
   source: null,
 };
@@ -76,11 +76,11 @@ function renderSheet(
 }
 
 describe("TodayFilterSheet", () => {
-  it("renders as a labelled dialog holding all four groups (TIME/PAIN/LAST DONE/SOURCE), and no TYPE or DIFFICULTY group", () => {
+  it("renders as a labelled dialog holding all four groups (TIME/EFFORT/LAST DONE/SOURCE), and no TYPE or DIFFICULTY group", () => {
     renderSheet();
     const dialog = screen.getByRole("dialog", { name: "Filter" });
     expect(dialog).toBeInTheDocument();
-    for (const label of ["TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(screen.getByText(label)).toBeVisible();
     }
     expect(screen.queryByText("DIFFICULTY")).not.toBeInTheDocument();
@@ -107,16 +107,19 @@ describe("TodayFilterSheet", () => {
   // hand-rolled chip groups had (fix round 2, M4).
   it("each group exposes an accessible name matching its own visible label", () => {
     renderSheet();
-    for (const label of ["TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(screen.getByRole("group", { name: label })).toBeInTheDocument();
     }
     expect(
       screen.queryByRole("group", { name: "DIFFICULTY" }),
     ).not.toBeInTheDocument();
     expect(
-      within(screen.getByRole("group", { name: "PAIN" })).getByRole("button", {
-        name: "3",
-      }),
+      within(screen.getByRole("group", { name: "EFFORT" })).getByRole(
+        "button",
+        {
+          name: "3",
+        },
+      ),
     ).toBeInTheDocument();
     expect(
       within(screen.getByRole("group", { name: "LAST DONE" })).getByRole(
@@ -136,7 +139,7 @@ describe("TodayFilterSheet", () => {
     renderSheet({
       draft: {
         durationRange: { min: 30, max: 120 },
-        painLevels: [2, 4],
+        effortLevels: [2, 4],
         lastDone: "under21",
         source: "global",
       },
@@ -186,18 +189,18 @@ describe("TodayFilterSheet", () => {
       await userEvent.click(screen.getByRole("button", { name: "3" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        painLevels: [3],
+        effortLevels: [3],
       });
     });
 
-    it("clicking an already-selected cell removes it (deselecting every pain level is allowed)", async () => {
+    it("clicking an already-selected cell removes it (deselecting every effort level is allowed)", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, painLevels: [2] },
+        draft: { ...EMPTY_DRAFT, effortLevels: [2] },
       });
       await userEvent.click(screen.getByRole("button", { name: "2" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        painLevels: [],
+        effortLevels: [],
       });
     });
   });
@@ -205,7 +208,7 @@ describe("TodayFilterSheet", () => {
   // Amendment (2026-08-04 PR #50 round): TIME unifies on the Library's own
   // bucket UNION — the old cap single-select ("exactly one always active")
   // is gone; clicking a cell now toggles it independently, same union
-  // semantics as DIFFICULTY/PAIN above.
+  // semantics as DIFFICULTY/EFFORT above.
   describe("TIME (a minutes range)", () => {
     it("stepping the upper thumb reports the new range in the draft, other groups untouched", () => {
       const { onChangeDraft } = renderSheet({
@@ -234,26 +237,26 @@ describe("TodayFilterSheet", () => {
     });
   });
 
-  describe("PAIN (multi-select union)", () => {
+  describe("EFFORT (multi-select union)", () => {
     it("clicking an unselected level adds it, sorted", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, painLevels: [4] },
+        draft: { ...EMPTY_DRAFT, effortLevels: [4] },
       });
       await userEvent.click(screen.getByRole("button", { name: "2" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        painLevels: [2, 4],
+        effortLevels: [2, 4],
       });
     });
 
     it("clicking an already-selected level removes it", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, painLevels: [2, 4] },
+        draft: { ...EMPTY_DRAFT, effortLevels: [2, 4] },
       });
       await userEvent.click(screen.getByRole("button", { name: "2" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        painLevels: [4],
+        effortLevels: [4],
       });
     });
   });

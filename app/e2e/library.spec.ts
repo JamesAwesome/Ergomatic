@@ -21,7 +21,7 @@ async function waitForLibraryLoaded(page: Page): Promise<void> {
   await expect(page.locator(".library-count")).toHaveText(/^\d+ WORKOUTS$/);
 }
 
-/** Opens the FILTER sheet — TIME/PAIN/LAST DONE/SOURCE all go
+/** Opens the FILTER sheet — TIME/EFFORT/LAST DONE/SOURCE all go
  *  through it (library-filter-unification round: TYPE left the sheet
  *  entirely for the chip row above it — see the type-chip-row tests below,
  *  which never call this). */
@@ -232,13 +232,13 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
     // BACK return remounted Library unfiltered — the filter row was gone
     // and the restored scroll position (measured against the shorter
     // filtered list) landed on the wrong rows.
-    // PAIN 1, 2, 3 (via the sheet) keeps a genuine subset of the library
-    // (per-workout pain values are spread 1–5, server/seed/library/index.ts)
+    // EFFORT 1, 2, 3 (via the sheet) keeps a genuine subset of the library
+    // (per-workout effort values are spread 1–5, server/seed/library/index.ts)
     // — narrowed enough, yet still several viewports deep, so "restored
     // against the filtered list" and "restored to the top" stay
     // unambiguously different outcomes. Task 4 (ui-fix round) replaces the
-    // old single PAIN ≤3 chip with a 1–5 multi-select, contiguous-collapsing
-    // to one "PAIN 1–3" token — reached through the sheet.
+    // old single EFFORT ≤3 chip with a 1–5 multi-select, contiguous-collapsing
+    // to one "EFFORT 1–3" token — reached through the sheet.
     const rows = page.locator(".workout-row");
     const fullCount = await rows.count();
     await openFilterSheet(page);
@@ -248,10 +248,10 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
     await dialog.getByRole("button", { name: "3", exact: true }).click();
     await applyFilterSheet(page);
 
-    const painToken = page.locator(".filter-token-label", {
-      hasText: "PAIN 1–3",
+    const effortToken = page.locator(".filter-token-label", {
+      hasText: "EFFORT 1–3",
     });
-    await expect(painToken).toBeVisible();
+    await expect(effortToken).toBeVisible();
     const filteredCount = await rows.count();
     expect(filteredCount).toBeGreaterThan(0);
     expect(filteredCount).toBeLessThan(fullCount);
@@ -277,7 +277,7 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
     // Filters survive the round trip: the token is back, count still the
     // filtered one — asserted BEFORE the scroll check because the restore
     // is only correct if it happened against this narrowed list.
-    await expect(painToken).toBeVisible();
+    await expect(effortToken).toBeVisible();
     await expect(rows).toHaveCount(filteredCount);
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
@@ -289,7 +289,7 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
     await page.getByRole("link", { name: "LIBRARY" }).click();
     await waitForLibraryLoaded(page);
     await expect(rows).toHaveCount(fullCount);
-    await expect(painToken).not.toBeVisible();
+    await expect(effortToken).not.toBeVisible();
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeLessThanOrEqual(50);
@@ -422,7 +422,7 @@ test.describe("SOURCE filter", () => {
     // `isGlobal: false`, the only kind SOURCE=custom should surface.
     await page.goto("/library/new");
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByRole("button", { name: "Effort 3" }).click();
     await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
     await page.getByRole("button", { name: "Save to library" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -450,18 +450,18 @@ test.describe("SOURCE filter", () => {
   });
 });
 
-test.describe("TYPE + PAIN composition (chip row union intersected with the sheet)", () => {
+test.describe("TYPE + EFFORT composition (chip row union intersected with the sheet)", () => {
   // Phase 8A PR B (James's ruling, 2026-08-22): the Library list SHOWS
   // the two tests now, so the independently-computed expected counts
   // below include every workout the API returns — no exclusion.
 
   // Library-filter-unification round, Task 3 (spec's own Testing section:
   // "an e2e picking two types from the chip row plus a difficulty in the
-  // sheet, surviving a BACK round trip" — PAIN since Phase DE PR 1) — and the review's own M-8 (the
+  // sheet, surviving a BACK round trip" — EFFORT since Phase DE PR 1) — and the review's own M-8 (the
   // chip row's selection lives directly in `filters`, not a sheet draft, so
   // nothing before this test pinned it surviving a BACK round trip at the
   // client-observable level).
-  test("two TYPE chips union, a sheet PAIN level intersects, and both survive a BACK round trip", async ({
+  test("two TYPE chips union, a sheet EFFORT level intersects, and both survive a BACK round trip", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -482,25 +482,25 @@ test.describe("TYPE + PAIN composition (chip row union intersected with the shee
       const workouts = (await res.json()) as Array<{
         title: string;
         type: string;
-        pain: number;
+        effort: number;
       }>;
       const real = workouts;
       const isUnionType = (w: { type: string }) =>
         w.type === "O2" || w.type === "AT";
       const total = real.length;
       const unionCount = real.filter(isUnionType).length;
-      const painCount = real.filter((w) => w.pain === 3).length;
+      const effortCount = real.filter((w) => w.effort === 3).length;
       const expected = real.filter(
-        (w) => isUnionType(w) && w.pain === 3,
+        (w) => isUnionType(w) && w.effort === 3,
       ).length;
-      return { total, unionCount, painCount, expected };
+      return { total, unionCount, effortCount, expected };
     });
     // A real, non-trivial intersection against the actual seeded library —
     // not a degenerate 0-or-all case a broken union/intersection predicate
     // could still pass under.
     expect(counts.expected).toBeGreaterThan(0);
     expect(counts.expected).toBeLessThan(counts.unionCount);
-    expect(counts.expected).toBeLessThan(counts.painCount);
+    expect(counts.expected).toBeLessThan(counts.effortCount);
     expect(counts.unionCount).toBeLessThan(counts.total);
 
     // Two chips from the row — a UNION (both types' rows show), never a
@@ -521,12 +521,12 @@ test.describe("TYPE + PAIN composition (chip row union intersected with the shee
       page.locator(".filter-token-label", { hasText: /^O2 · AT$/ }),
     ).toHaveCount(0);
 
-    // A PAIN level from the sheet intersects with the chip-row union —
+    // A EFFORT level from the sheet intersects with the chip-row union —
     // composed together, not either alone.
     await openFilterSheet(page);
     const dialog = page.getByRole("dialog");
     await dialog
-      .getByRole("group", { name: "PAIN" })
+      .getByRole("group", { name: "EFFORT" })
       .getByRole("button", { name: "3", exact: true })
       .click();
     // The sheet's own primary reads the constant name (library-filter-
@@ -541,12 +541,12 @@ test.describe("TYPE + PAIN composition (chip row union intersected with the shee
       `${counts.expected} OF ${counts.total} SHOWN`,
     );
     await expect(
-      page.locator(".filter-token-label", { hasText: "PAIN 3" }),
+      page.locator(".filter-token-label", { hasText: "EFFORT 3" }),
     ).toBeVisible();
 
     // BACK round trip: both the chip row's own TYPE selection (which lives
     // directly in `filters`, never a sheet draft) and the sheet's own
-    // PAIN selection survive — extending the existing filters-survive-
+    // EFFORT selection survive — extending the existing filters-survive-
     // BACK lock (`scroll restoration` describe above) to the chip row.
     const firstRow = rows.first();
     const title = await firstRow.locator(".workout-row-title").innerText();
@@ -556,7 +556,7 @@ test.describe("TYPE + PAIN composition (chip row union intersected with the shee
     await page.getByRole("link", { name: "← BACK" }).click();
 
     // The chip-row selection survives BACK as PRESSED CHIPS (its own
-    // persistence path), the sheet's pain level as a token — both halves,
+    // persistence path), the sheet's effort level as a token — both halves,
     // since only one of them is tokenized now.
     for (const code of ["O2", "AT"]) {
       await expect(
@@ -566,7 +566,7 @@ test.describe("TYPE + PAIN composition (chip row union intersected with the shee
       ).toHaveAttribute("aria-pressed", "true");
     }
     await expect(
-      page.locator(".filter-token-label", { hasText: "PAIN 3" }),
+      page.locator(".filter-token-label", { hasText: "EFFORT 3" }),
     ).toBeVisible();
     await expect(rows).toHaveCount(counts.expected);
     await expect(page.locator(".library-count")).toHaveText(

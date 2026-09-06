@@ -265,7 +265,7 @@ test.describe("Today onboarding — the fresh-user arc", () => {
     await expect(rows.first().locator(".summary-row-pace")).not.toBeEmpty();
 
     await page.getByRole("button", { name: "HELD" }).click();
-    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
     await leadSave.click();
 
     // -- THE POST-SAVE OFFER (PR B's loop, finally fed by a door): the

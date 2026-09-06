@@ -276,7 +276,7 @@ async function postLog(page: Page, body: LogBody): Promise<{ id: string }> {
       body: JSON.stringify({
         workoutId: null,
         held: null,
-        pain: null,
+        effort: null,
         notes: null,
         advancesPlan: false,
         ...b,

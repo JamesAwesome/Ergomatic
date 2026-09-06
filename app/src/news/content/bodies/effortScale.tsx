@@ -1,21 +1,20 @@
 import TypeBadge from "../../../components/TypeBadge";
 
-export function PainScaleBody() {
+export function EffortScaleBody() {
   return (
     <>
       <p>
-        You don't need a heart rate monitor to train well. The 1-to-5 pain scale
-        is calibrated to sensation you already have. Here is what each level
-        feels like from the seat.
+        You don't need a heart rate monitor to train well. The 1-to-5 effort
+        scale is calibrated to sensation you already have. Here is what each
+        level feels like from the seat.
       </p>
 
       <p>
-        One boundary before the numbers: everything below describes effort. It
-        is the discomfort a hard row is supposed to produce, and it fades within
-        the session or by the next day. Sharp, sudden, or joint-specific pain (a
-        rib, a wrist, your lower back on the drive) is not a high number on this
-        scale. It is a different signal entirely: stop, and let it settle before
-        you row again.
+        This scale is effort, not injury. Everything below describes the
+        discomfort a hard row is supposed to produce, and it fades within the
+        session or by the next day. Sharp, sudden, or joint-specific pain (a
+        rib, a wrist, your lower back on the drive) is a different signal
+        entirely: stop, and let it settle before you row again.
       </p>
 
       <p>

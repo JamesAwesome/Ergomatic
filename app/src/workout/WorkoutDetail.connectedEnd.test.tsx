@@ -95,7 +95,7 @@ const WORKOUT = {
   id: "w-conn",
   title: "Filling Low",
   type: "AT" as const,
-  pain: 3,
+  effort: 3,
   steps: [
     {
       k: "w" as const,

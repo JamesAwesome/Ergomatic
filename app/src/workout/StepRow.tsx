@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import {
-  effortSpoken,
-  effortWord,
-  isEffortRef,
+  paceWordSpoken,
+  paceWordLabel,
+  isPaceWordRef,
   refLabel,
   resolveSplit,
 } from "../../domain/pace.js";
@@ -76,11 +76,11 @@ export default function StepRow({
   // An effort ref is the one exception: its VISIBLE chip word ("MAX"/"MIN")
   // still drives `left` above, but the chip word is ambiguous spoken aloud
   // ("MIN" reads identically to "minutes") — domain/pace.ts's
-  // `effortSpoken` substitutes real effort language instead ("at max
+  // `paceWordSpoken` substitutes real effort language instead ("at max
   // effort" / "easy"), so the spoken and visible forms diverge here on
   // purpose.
-  const leftSpoken = isEffortRef(step.ref)
-    ? `${durationSpoken} ${effortSpoken(step.ref.effort)}`
+  const leftSpoken = isPaceWordRef(step.ref)
+    ? `${durationSpoken} ${paceWordSpoken(step.ref.effort)}`
     : `${durationSpoken} at ${pace}`;
 
   // Parallel visible/spoken sub-line parts — the rest duration is a
@@ -108,12 +108,14 @@ export default function StepRow({
         <span className="step-row-label" aria-label={leftSpoken}>
           {left}
         </span>
-        {isEffortRef(step.ref) ? (
+        {isPaceWordRef(step.ref) ? (
           // An effort word needs no baseline to resolve — "ALL OUT"/"EASY"
           // is the target, not a computed split, so it renders even when
           // baselines are unset (unlike the split branch's no-target
           // fallback below).
-          <span className="step-row-range">{effortWord(step.ref.effort)}</span>
+          <span className="step-row-range">
+            {paceWordLabel(step.ref.effort)}
+          </span>
         ) : baselines ? (
           // Ui-fix round, Item 1: the exact resolved split, not a
           // tolerance band — this display call site now shows only the
@@ -132,7 +134,7 @@ export default function StepRow({
           {subParts.join(" · ")}
         </p>
       )}
-      {baselines && !isEffortRef(step.ref) && (
+      {baselines && !isPaceWordRef(step.ref) && (
         <div className="step-row-nudges">
           {/* The arrows follow the NUMBER, not the effort (James,
               2026-08-16): ▲ raises the split (2:09 -> 2:10, slower), ▼

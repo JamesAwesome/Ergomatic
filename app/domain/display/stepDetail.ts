@@ -1,7 +1,7 @@
 import { phases, estimateMinutes, phaseSeconds } from "../expand.js";
 import { fmtDuration } from "../duration.js";
 import { fmtSplit } from "../format.js";
-import { isEffortRef } from "../pace.js";
+import { isPaceWordRef } from "../pace.js";
 import type { Baselines, PaceRef, Step } from "../types.js";
 
 /** Per-piece display rows for Today's suggestion card (spec §1/§2).
@@ -21,7 +21,7 @@ export interface PieceRow {
    *  Both layouts read this field now; the name is kept because
    *  `joinsRun` compares it. */
   refTextFull: string | null;
-  effortText: string | null;
+  paceWordText: string | null;
   restText: string | null;
   split: string | null;
   spm: number | null;
@@ -80,7 +80,7 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
       rows.push({
         duration: p.label,
         refTextFull: null,
-        effortText: null,
+        paceWordText: null,
         restText: null,
         split: null,
         spm: null,
@@ -100,7 +100,7 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
       rows.push({
         duration,
         refTextFull: null,
-        effortText: p.label.toUpperCase(),
+        paceWordText: p.label.toUpperCase(),
         restText: null,
         split: null,
         spm: p.spm ?? null,
@@ -114,7 +114,7 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
         duration,
         refTextFull:
           off === 0 ? `at ${ref.base} pace` : `at ${ref.base} ${fmtOff(off)}`,
-        effortText: null,
+        paceWordText: null,
         restText: null,
         // this branch only runs for targetKind "split" (the "effort" case
         // returned above), and expand.ts's resolveSplit path always sets
@@ -159,12 +159,12 @@ function rollRuns(rows: PieceRow[]): PieceRow[] {
 }
 
 function joinsRun(prev: PieceRow, row: PieceRow, isFinal: boolean): boolean {
-  const isWork = row.split !== null || row.effortText !== null;
+  const isWork = row.split !== null || row.paceWordText !== null;
   if (!isWork) return false; // test rows stay single
   const sameCore =
     prev.duration === row.duration &&
     prev.refTextFull === row.refTextFull &&
-    prev.effortText === row.effortText &&
+    prev.paceWordText === row.paceWordText &&
     prev.spm === row.spm &&
     prev.split === row.split &&
     prev.off === row.off;
@@ -281,7 +281,7 @@ function pieceToken(p: AuthPiece, bare: boolean): string {
 
 /** "6K+10" / "6K−4" / "6K" (zero) / "MAX" / "MIN", uppercase idiom. */
 function refToken(ref: PaceRef): string {
-  if (isEffortRef(ref)) return ref.effort.toUpperCase();
+  if (isPaceWordRef(ref)) return ref.effort.toUpperCase();
   const base = ref.base.toUpperCase();
   return ref.off === 0 ? base : `${base}${fmtOff(ref.off)}`;
 }
@@ -307,7 +307,7 @@ function offsetRange(pieces: AuthPiece[]): string {
     .map((p) => p.ref)
     .filter(
       (r): r is Extract<PaceRef, { base: string }> =>
-        r !== undefined && !isEffortRef(r),
+        r !== undefined && !isPaceWordRef(r),
     );
   const base = splitRefs[0].base.toUpperCase();
   const offs = splitRefs.map((r) => r.off);
@@ -372,14 +372,14 @@ export function structureLine(steps: Step[]): string {
       .map((p) => p.ref)
       .filter(
         (r): r is Extract<PaceRef, { base: string }> =>
-          r !== undefined && !isEffortRef(r),
+          r !== undefined && !isPaceWordRef(r),
       )
       .map((r) => r.base),
   );
   const anySplit = splitBases.size > 0;
   const singleFrame =
     splitBases.size === 1 &&
-    real.every((p) => p.ref !== undefined && !isEffortRef(p.ref));
+    real.every((p) => p.ref !== undefined && !isPaceWordRef(p.ref));
 
   const countForm = () => {
     const at =

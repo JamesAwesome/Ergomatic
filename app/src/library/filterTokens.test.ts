@@ -7,18 +7,18 @@ describe("filterTokens", () => {
     expect(filterTokens(EMPTY_FILTERS)).toStrictEqual([]);
   });
 
-  it("emits one token per active group, in TIME/PAIN/LAST DONE/SOURCE order regardless of set order — TYPE contributes none", () => {
+  it("emits one token per active group, in TIME/EFFORT/LAST DONE/SOURCE order regardless of set order — TYPE contributes none", () => {
     const f: Filters = {
       types: ["O2"],
       durationRange: { min: 45, max: 60 },
-      painLevels: [4, 5],
+      effortLevels: [4, 5],
       lastDone: "under21",
       source: "custom",
       query: "",
     };
     expect(filterTokens(f).map((t) => t.kind)).toStrictEqual([
       "duration",
-      "pain",
+      "effort",
       "lastDone",
       "source",
     ]);
@@ -42,7 +42,7 @@ describe("filterTokens", () => {
       const busy: Filters = {
         types: ["O2", "AT"],
         durationRange: { min: 0, max: 30 },
-        painLevels: [4],
+        effortLevels: [4],
         lastDone: "under21",
         source: "custom",
         query: "",
@@ -50,7 +50,7 @@ describe("filterTokens", () => {
       const tokens = filterTokens(busy);
       expect(tokens.map((t) => t.kind)).toStrictEqual([
         "duration",
-        "pain",
+        "effort",
         "lastDone",
         "source",
       ]);
@@ -102,30 +102,30 @@ describe("filterTokens", () => {
     });
   });
 
-  describe("pain collapse", () => {
-    it("a single level reads PAIN n", () => {
-      const f: Filters = { ...EMPTY_FILTERS, painLevels: [3] };
-      expect(filterTokens(f)[0].label).toBe("PAIN 3");
+  describe("effort collapse", () => {
+    it("a single level reads EFFORT n", () => {
+      const f: Filters = { ...EMPTY_FILTERS, effortLevels: [3] };
+      expect(filterTokens(f)[0].label).toBe("EFFORT 3");
     });
 
     it("a contiguous run collapses to a range", () => {
-      const f: Filters = { ...EMPTY_FILTERS, painLevels: [4, 5] };
-      expect(filterTokens(f)[0].label).toBe("PAIN 4–5");
+      const f: Filters = { ...EMPTY_FILTERS, effortLevels: [4, 5] };
+      expect(filterTokens(f)[0].label).toBe("EFFORT 4–5");
     });
 
     it("a longer contiguous run collapses the same way", () => {
-      const f: Filters = { ...EMPTY_FILTERS, painLevels: [1, 2, 3] };
-      expect(filterTokens(f)[0].label).toBe("PAIN 1–3");
+      const f: Filters = { ...EMPTY_FILTERS, effortLevels: [1, 2, 3] };
+      expect(filterTokens(f)[0].label).toBe("EFFORT 1–3");
     });
 
     it("a non-contiguous selection lists the levels", () => {
-      const f: Filters = { ...EMPTY_FILTERS, painLevels: [1, 4] };
-      expect(filterTokens(f)[0].label).toBe("PAIN 1, 4");
+      const f: Filters = { ...EMPTY_FILTERS, effortLevels: [1, 4] };
+      expect(filterTokens(f)[0].label).toBe("EFFORT 1, 4");
     });
 
     it("collapse is independent of insertion order", () => {
-      const f: Filters = { ...EMPTY_FILTERS, painLevels: [5, 4] };
-      expect(filterTokens(f)[0].label).toBe("PAIN 4–5");
+      const f: Filters = { ...EMPTY_FILTERS, effortLevels: [5, 4] };
+      expect(filterTokens(f)[0].label).toBe("EFFORT 4–5");
     });
   });
 
@@ -156,7 +156,7 @@ describe("filterTokens", () => {
       const busy: Filters = {
         types: ["AN"],
         durationRange: { min: 0, max: 30 },
-        painLevels: [4, 5],
+        effortLevels: [4, 5],
         lastDone: "under21",
         source: "custom",
         query: "",
@@ -172,10 +172,10 @@ describe("filterTokens", () => {
         durationRange: { min: 0, max: 120 },
       });
 
-      const painToken = tokens.find((t) => t.kind === "pain")!;
-      expect(painToken.clear(busy)).toStrictEqual({
+      const effortToken = tokens.find((t) => t.kind === "effort")!;
+      expect(effortToken.clear(busy)).toStrictEqual({
         ...busy,
-        painLevels: [],
+        effortLevels: [],
       });
 
       const lastDoneToken = tokens.find((t) => t.kind === "lastDone")!;
@@ -193,12 +193,12 @@ describe("filterTokens", () => {
 
     it("clear operates on whatever Filters it's given, not a value captured when the token was built", () => {
       // Was built on the TYPE token before it was retired, then on
-      // DIFFICULTY until Phase DE PR 1; PAIN carries the same subject (a
+      // DIFFICULTY until Phase DE PR 1; EFFORT carries the same subject (a
       // token handed a later, changed Filters still clears the right field).
-      const original: Filters = { ...EMPTY_FILTERS, painLevels: [1] };
+      const original: Filters = { ...EMPTY_FILTERS, effortLevels: [1] };
       const [token] = filterTokens(original);
       const later: Filters = { ...original, lastDone: "under21" };
-      expect(token.clear(later)).toStrictEqual({ ...later, painLevels: [] });
+      expect(token.clear(later)).toStrictEqual({ ...later, effortLevels: [] });
     });
   });
 });

@@ -67,7 +67,7 @@ const SPM: Record<WorkoutType, [number, number]> = {
   TR: [24, 28],
   AN: [26, 32],
 };
-const PAIN_BY_TYPE: Record<WorkoutType, [number, number]> = {
+const EFFORT_BY_TYPE: Record<WorkoutType, [number, number]> = {
   O2: [1, 3],
   AT: [2, 4],
   TR: [2, 5],
@@ -264,12 +264,12 @@ describe("LIBRARY_WORKOUTS", () => {
     }
   });
 
-  it("keeps pain inside each type's band", () => {
+  it("keeps effort inside each type's band", () => {
     for (const w of LIBRARY_WORKOUTS) {
-      const [tLo, tHi] = PAIN_BY_TYPE[w.type];
+      const [tLo, tHi] = EFFORT_BY_TYPE[w.type];
       expect(
-        w.pain >= tLo && w.pain <= tHi,
-        `${w.title}: ${w.type}/${w.pain}`,
+        w.effort >= tLo && w.effort <= tHi,
+        `${w.title}: ${w.type}/${w.effort}`,
       ).toBe(true);
     }
   });
@@ -288,13 +288,13 @@ describe("LIBRARY_WORKOUTS", () => {
   // block, so it is restated on the surviving figure rather than deleted
   // (PM open gate, 2026-09-05). AT and TR were stably re-sorted to satisfy
   // it — see the PR body for the rows that moved.
-  it("orders each type block by pain (never decreases within a type)", () => {
+  it("orders each type block by effort (never decreases within a type)", () => {
     for (const type of ["O2", "AT", "TR", "AN"] as const) {
       const block = LIBRARY_WORKOUTS.filter((w) => w.type === type);
       for (let i = 1; i < block.length; i++)
         expect(
-          block[i]!.pain >= block[i - 1]!.pain,
-          `${type}: ${block[i - 1]!.title} (${block[i - 1]!.pain}) -> ${block[i]!.title} (${block[i]!.pain})`,
+          block[i]!.effort >= block[i - 1]!.effort,
+          `${type}: ${block[i - 1]!.title} (${block[i - 1]!.effort}) -> ${block[i]!.title} (${block[i]!.effort})`,
         ).toBe(true);
     }
   });

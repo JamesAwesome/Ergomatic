@@ -15,7 +15,7 @@ import { UNBOUNDED_RANGE, isUnbounded } from "../../domain/duration.js";
 // retired the whole colour seam: the type token was the only token that
 // ever carried a `fill`, so `Token.fill` and `TokenRow`'s `fill` prop went
 // with it rather than lingering unused.
-export type TokenKind = "duration" | "pain" | "lastDone" | "source";
+export type TokenKind = "duration" | "effort" | "lastDone" | "source";
 
 export interface Token {
   kind: TokenKind;
@@ -23,16 +23,16 @@ export interface Token {
   clear(f: Filters): Filters;
 }
 
-function collapsePain(levels: number[]): string {
+function collapseEffort(levels: number[]): string {
   const sorted = [...levels].sort((a, b) => a - b);
   const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
-  if (!contiguous) return `PAIN ${sorted.join(", ")}`;
+  if (!contiguous) return `EFFORT ${sorted.join(", ")}`;
   const min = sorted[0];
   const max = sorted[sorted.length - 1];
-  return min === max ? `PAIN ${min}` : `PAIN ${min}–${max}`;
+  return min === max ? `EFFORT ${min}` : `EFFORT ${min}–${max}`;
 }
 
-/** Filters -> the active tokens row, in TYPE, TIME, PAIN, LAST DONE, SOURCE
+/** Filters -> the active tokens row, in TYPE, TIME, EFFORT, LAST DONE, SOURCE
  *  order. This is NOT "the sheet's own group order" — the sheet holds no
  *  TYPE control (TYPE is the chip row above it). The
  *  actual rule (library-filter-unification spec, "Token row order"): the
@@ -55,11 +55,11 @@ export function filterTokens(f: Filters): Token[] {
     });
   }
 
-  if (f.painLevels.length > 0) {
+  if (f.effortLevels.length > 0) {
     tokens.push({
-      kind: "pain",
-      label: collapsePain(f.painLevels),
-      clear: (current) => ({ ...current, painLevels: [] }),
+      kind: "effort",
+      label: collapseEffort(f.effortLevels),
+      clear: (current) => ({ ...current, effortLevels: [] }),
     });
   }
 

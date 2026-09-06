@@ -20,7 +20,7 @@ describe("todayFilterTokens", () => {
     const tokens = todayFilterTokens(
       {
         durationRange: CAP_60,
-        painLevels: [],
+        effortLevels: [],
         lastDone: null,
         source: null,
       },
@@ -34,7 +34,7 @@ describe("todayFilterTokens", () => {
     const tokens = todayFilterTokens(
       {
         durationRange: { min: 0, max: 60 },
-        painLevels: [],
+        effortLevels: [],
         lastDone: null,
         source: null,
       },
@@ -44,18 +44,18 @@ describe("todayFilterTokens", () => {
     expect(tokens).toStrictEqual([]);
   });
 
-  it("emits tokens in TIME/PAIN order regardless of which fields deviate", () => {
+  it("emits tokens in TIME/EFFORT order regardless of which fields deviate", () => {
     const tokens = todayFilterTokens(
       {
         durationRange: { min: 0, max: 30 },
-        painLevels: [2],
+        effortLevels: [2],
         lastDone: null,
         source: null,
       },
       DEFAULTS,
       vi.fn(),
     );
-    expect(tokens.map((t) => t.key)).toStrictEqual(["durations", "pain"]);
+    expect(tokens.map((t) => t.key)).toStrictEqual(["durations", "effort"]);
   });
 
   describe("duration (TIME) deviation — spec I-13's four cells", () => {
@@ -63,7 +63,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: { min: 0, max: 30 },
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
@@ -79,7 +79,7 @@ describe("todayFilterTokens", () => {
       const window = todayFilterTokens(
         {
           durationRange: { min: 25, max: 35 },
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
@@ -90,7 +90,7 @@ describe("todayFilterTokens", () => {
       const open = todayFilterTokens(
         {
           durationRange: { min: 60, max: 120 },
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
@@ -107,7 +107,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: UNBOUNDED,
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
@@ -121,7 +121,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: UNBOUNDED,
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
@@ -141,7 +141,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: { min: 0, max: 60 },
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
@@ -156,7 +156,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: { min: 0, max: 30 },
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
@@ -168,83 +168,83 @@ describe("todayFilterTokens", () => {
     });
   });
 
-  describe("pain deviation", () => {
-    it("emits no pain token when painLevels is empty", () => {
+  describe("effort deviation", () => {
+    it("emits no effort token when effortLevels is empty", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
         DEFAULTS,
         vi.fn(),
       );
-      expect(tokens.map((t) => t.key)).not.toContain("pain");
+      expect(tokens.map((t) => t.key)).not.toContain("effort");
     });
 
-    it("a single level reads PAIN n", () => {
+    it("a single level reads EFFORT n", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [3],
+          effortLevels: [3],
           lastDone: null,
           source: null,
         },
         DEFAULTS,
         vi.fn(),
       );
-      expect(tokens[0].label).toBe("PAIN 3");
+      expect(tokens[0].label).toBe("EFFORT 3");
     });
 
     it("a contiguous run collapses to a range, order-independent", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [5, 4],
+          effortLevels: [5, 4],
           lastDone: null,
           source: null,
         },
         DEFAULTS,
         vi.fn(),
       );
-      expect(tokens[0].label).toBe("PAIN 4–5");
+      expect(tokens[0].label).toBe("EFFORT 4–5");
     });
 
     it("a longer contiguous run collapses the same way", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [1, 2, 3],
+          effortLevels: [1, 2, 3],
           lastDone: null,
           source: null,
         },
         DEFAULTS,
         vi.fn(),
       );
-      expect(tokens[0].label).toBe("PAIN 1–3");
+      expect(tokens[0].label).toBe("EFFORT 1–3");
     });
 
     it("a non-contiguous selection lists the levels", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [1, 4],
+          effortLevels: [1, 4],
           lastDone: null,
           source: null,
         },
         DEFAULTS,
         vi.fn(),
       );
-      expect(tokens[0].label).toBe("PAIN 1, 4");
+      expect(tokens[0].label).toBe("EFFORT 1, 4");
     });
 
-    it("onClear fires onReset('pain')", () => {
+    it("onClear fires onReset('effort')", () => {
       const onReset = vi.fn();
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [2],
+          effortLevels: [2],
           lastDone: null,
           source: null,
         },
@@ -252,20 +252,20 @@ describe("todayFilterTokens", () => {
         onReset,
       );
       tokens[0].onClear();
-      expect(onReset).toHaveBeenCalledExactlyOnceWith("pain");
+      expect(onReset).toHaveBeenCalledExactlyOnceWith("effort");
     });
   });
 
   // Round 2 (2026-08-04): LAST DONE/SOURCE both default to null
   // unconditionally (no `defaults` comparison the way DIFFICULTY/TIME get)
-  // — "deviates" is simply "is not null", the same shape PAIN's own
+  // — "deviates" is simply "is not null", the same shape EFFORT's own
   // `length > 0` check already uses.
   describe("lastDone (LAST DONE) deviation", () => {
     it("emits no lastDone token when null (off)", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
@@ -279,7 +279,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [],
+          effortLevels: [],
           lastDone: "under21",
           source: null,
         },
@@ -295,7 +295,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [],
+          effortLevels: [],
           lastDone: "over21",
           source: null,
         },
@@ -310,7 +310,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [],
+          effortLevels: [],
           lastDone: "under21",
           source: null,
         },
@@ -327,7 +327,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: null,
         },
@@ -341,7 +341,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: "custom",
         },
@@ -357,7 +357,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: "global",
         },
@@ -372,7 +372,7 @@ describe("todayFilterTokens", () => {
       const tokens = todayFilterTokens(
         {
           durationRange: CAP_60,
-          painLevels: [],
+          effortLevels: [],
           lastDone: null,
           source: "custom",
         },
@@ -384,11 +384,11 @@ describe("todayFilterTokens", () => {
     });
   });
 
-  it("emits tokens in TIME/PAIN/LAST DONE/SOURCE order when all four deviate", () => {
+  it("emits tokens in TIME/EFFORT/LAST DONE/SOURCE order when all four deviate", () => {
     const tokens = todayFilterTokens(
       {
         durationRange: { min: 0, max: 30 },
-        painLevels: [2],
+        effortLevels: [2],
         lastDone: "under21",
         source: "custom",
       },
@@ -397,7 +397,7 @@ describe("todayFilterTokens", () => {
     );
     expect(tokens.map((t) => t.key)).toStrictEqual([
       "durations",
-      "pain",
+      "effort",
       "lastDone",
       "source",
     ]);
@@ -408,7 +408,7 @@ describe("todayFilterTokens", () => {
     const tokens = todayFilterTokens(
       {
         durationRange: { min: 0, max: 30 },
-        painLevels: [1, 2],
+        effortLevels: [1, 2],
         lastDone: "under21",
         source: "custom",
       },
@@ -417,11 +417,11 @@ describe("todayFilterTokens", () => {
     );
     expect(tokens).toHaveLength(4);
     tokens.find((t) => t.key === "durations")!.onClear();
-    tokens.find((t) => t.key === "pain")!.onClear();
+    tokens.find((t) => t.key === "effort")!.onClear();
     tokens.find((t) => t.key === "lastDone")!.onClear();
     tokens.find((t) => t.key === "source")!.onClear();
     expect(onReset).toHaveBeenNthCalledWith(1, "durations");
-    expect(onReset).toHaveBeenNthCalledWith(2, "pain");
+    expect(onReset).toHaveBeenNthCalledWith(2, "effort");
     expect(onReset).toHaveBeenNthCalledWith(3, "lastDone");
     expect(onReset).toHaveBeenNthCalledWith(4, "source");
   });

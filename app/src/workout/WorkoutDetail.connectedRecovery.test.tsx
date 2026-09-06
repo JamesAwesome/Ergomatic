@@ -68,7 +68,7 @@ const WORKOUT: LibraryWorkout = {
   id: "w-p2a-recovery",
   title: "P2a Recovery Row",
   type: "O2",
-  pain: 2,
+  effort: 2,
   steps: [
     {
       k: "w",
@@ -292,7 +292,7 @@ describe("WorkoutDetail -> real connected recovery -> LogSession (James's PR #23
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: "HELD" }));
-    await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Effort 2" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(apiFn).toHaveBeenCalled());

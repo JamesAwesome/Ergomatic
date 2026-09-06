@@ -145,7 +145,7 @@ describe("GET /api/logs: the list's SQL `partial` and the detail screen's predic
       workoutTitle: "Sea Fret",
       workoutType: "AT",
       held: null,
-      pain: null,
+      effort: null,
       notes: null,
       source: "pm5",
       deviceName: DEVICE,

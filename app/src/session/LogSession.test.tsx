@@ -121,7 +121,7 @@ function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
     id: "id-doldrums-fixture",
     title: hoarfrost.title,
     type,
-    pain: hoarfrost.pain,
+    effort: hoarfrost.effort,
     steps: started.steps,
     isGlobal: true,
     lastDoneDaysAgo: 2,
@@ -163,7 +163,7 @@ function buildOnboardingSessionFixture(): {
     id: "id-first6k-fixture",
     title: seed.title,
     type: seed.type,
-    pain: seed.pain,
+    effort: seed.effort,
     steps: started.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -246,7 +246,7 @@ function manualWorkoutFixture(id = "id-manual-fixture"): LibraryWorkout {
     id,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    pain: hoarfrost.pain,
+    effort: hoarfrost.effort,
     steps: [timeWork, distanceWork],
     isGlobal: true,
     lastDoneDaysAgo: 2,
@@ -421,7 +421,7 @@ function buildMonitorFixture(
     id: MONITOR_WORKOUT_ID,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    pain: hoarfrost.pain,
+    effort: hoarfrost.effort,
     steps: started.steps,
     isGlobal: true,
     lastDoneDaysAgo: 2,
@@ -442,7 +442,7 @@ function onboardingManualWorkoutFixture(
     id,
     title: seed.title,
     type: seed.type,
-    pain: seed.pain,
+    effort: seed.effort,
     steps: seed.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -570,9 +570,9 @@ afterEach(() => {
   vi.doUnmock("../monitor/handoffStore");
 });
 
-async function chooseHeldAndPain() {
+async function chooseHeldAndEffort() {
   await userEvent.click(screen.getByRole("button", { name: "HELD" }));
-  await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
+  await userEvent.click(screen.getByRole("button", { name: "Effort 2" }));
 }
 
 // The default (no active plan) save button — §2F: "No plan: Log against
@@ -639,13 +639,13 @@ describe("LogSession: prefill from a real completed run", () => {
     expect(within(rows[1]!).getByText("41:40")).toBeInTheDocument();
     expect(within(rows[1]!).getByText("2:05.0")).toBeInTheDocument();
 
-    // EXPECTED N/5 — Hoarfrost's own `pain` (2), sourced via useWorkouts by
+    // EXPECTED N/5 — Hoarfrost's own `effort` (2), sourced via useWorkouts by
     // run.workoutId, not the rower's own (still-unset) selection.
     expect(screen.getByText("EXPECTED 2/5")).toBeInTheDocument();
 
     // Nothing pre-selected; Save is enabled anyway — post-workout-summary
     // spec (2026-08-17), §3: the redesigned reflection card makes every
-    // answer optional, so Save is never gated on HELD/PAIN being chosen.
+    // answer optional, so Save is never gated on HELD/EFFORT being chosen.
     expect(screen.getByRole("button", { name: "HELD" })).toHaveAttribute(
       "aria-pressed",
       "false",
@@ -668,10 +668,10 @@ describe("LogSession: prefill from a real completed run", () => {
   });
 
   // Post-workout-summary spec (2026-08-17), §3 ruling: Save is never
-  // disabled by an empty reflection. Choosing HELD/PAIN is still fully
+  // disabled by an empty reflection. Choosing HELD/EFFORT is still fully
   // possible; it just no longer gates Save. Clicking the SELECTED option a
   // second time now CLEARS it (§2D: every reflection control clearable).
-  it("Save stays enabled throughout, whether or not Held and Pain are chosen, and each is independently clearable", async () => {
+  it("Save stays enabled throughout, whether or not Held and Effort are chosen, and each is independently clearable", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
@@ -683,12 +683,12 @@ describe("LogSession: prefill from a real completed run", () => {
       screen.getByRole("button", { name: "UNDER · FASTER" }),
     );
     expect(save).not.toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "Pain 3" }));
+    await userEvent.click(screen.getByRole("button", { name: "Effort 3" }));
     expect(save).not.toBeDisabled();
     expect(
       screen.getByRole("button", { name: "UNDER · FASTER" }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Pain 3" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Effort 3" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -700,8 +700,8 @@ describe("LogSession: prefill from a real completed run", () => {
     expect(
       screen.getByRole("button", { name: "UNDER · FASTER" }),
     ).toHaveAttribute("aria-pressed", "false");
-    await userEvent.click(screen.getByRole("button", { name: "Pain 3" }));
-    expect(screen.getByRole("button", { name: "Pain 3" })).toHaveAttribute(
+    await userEvent.click(screen.getByRole("button", { name: "Effort 3" }));
+    expect(screen.getByRole("button", { name: "Effort 3" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -1479,7 +1479,7 @@ describe("LogSession: workoutType sourcing", () => {
 });
 
 describe("LogSession: save", () => {
-  it("POSTs the built steps plus held/pain/notes, clears the draft and run, and navigates to /today", async () => {
+  it("POSTs the built steps plus held/effort/notes, clears the draft and run, and navigates to /today", async () => {
     const { run, workout } = buildSessionFixture();
     mockWorkouts([workout]);
     const apiFn = mockApi(() =>
@@ -1490,7 +1490,7 @@ describe("LogSession: save", () => {
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.type(screen.getByLabelText("NOTES"), "Felt strong.");
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
@@ -1507,7 +1507,7 @@ describe("LogSession: save", () => {
       workoutTitle: "Hoarfrost",
       workoutType: "O2",
       held: "held",
-      pain: 2,
+      effort: 2,
       notes: "Felt strong.",
       // Just Row unconnected spec (2026-09-02), exit criterion 3b: this
       // door closes a `SessionRun`, so its row's stored door is `timer`.
@@ -1561,7 +1561,7 @@ describe("LogSession: save", () => {
     expect("distanceMeters" in body).toBe(false);
   });
 
-  it("POSTs held/pain/thumbs as null when nothing is chosen (spec: reflection is optional)", async () => {
+  it("POSTs held/effort/thumbs as null when nothing is chosen (spec: reflection is optional)", async () => {
     const { run, workout } = buildSessionFixture();
     mockWorkouts([workout]);
     const apiFn = mockApi(() =>
@@ -1584,15 +1584,15 @@ describe("LogSession: save", () => {
     expect(body).toMatchObject({
       workoutId: run.workoutId,
       held: null,
-      pain: null,
+      effort: null,
       thumbs: null,
       notes: null,
     });
   });
 
   // §2D: HOW DID IT FEEL (thumbs up/down) is now a real control — its own
-  // wire shape, alongside held/pain/notes.
-  it("POSTs thumbs:'up'/'down' when chosen, clearable the same way as held/pain", async () => {
+  // wire shape, alongside held/effort/notes.
+  it("POSTs thumbs:'up'/'down' when chosen, clearable the same way as held/effort", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     const apiFn = mockApi(() =>
@@ -1663,7 +1663,7 @@ describe("LogSession: save", () => {
     );
     await renderLog();
     await screen.findByRole("heading", { name: "Wire Shape Fixture" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
@@ -1718,7 +1718,7 @@ describe("LogSession: save", () => {
     expect(rows).toHaveLength(1);
     expect(within(rows[0]!).getByText("2k test")).toBeInTheDocument();
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -1739,7 +1739,7 @@ describe("LogSession: save", () => {
     );
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
@@ -1756,7 +1756,7 @@ describe("LogSession: save", () => {
     );
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -1778,7 +1778,7 @@ describe("LogSession: save", () => {
     );
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -1797,7 +1797,7 @@ describe("LogSession: save", () => {
     });
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -1831,7 +1831,7 @@ describe("LogSession: save", () => {
     });
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -1868,7 +1868,7 @@ describe("LogSession: save", () => {
     });
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -1891,8 +1891,8 @@ describe("LogSession: save", () => {
       Promise.resolve(
         new Response(
           JSON.stringify({
-            error: "pain must be an integer 1..5 or null",
-            field: "pain",
+            error: "effort must be an integer 1..5 or null",
+            field: "effort",
           }),
           { status: 400 },
         ),
@@ -1900,7 +1900,7 @@ describe("LogSession: save", () => {
     );
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -2189,7 +2189,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     ).toBeInTheDocument();
   });
 
-  it("POSTs workoutId/title/type straight from the fetched workout plus held/pain/notes, and navigates to /today", async () => {
+  it("POSTs workoutId/title/type straight from the fetched workout plus held/effort/notes, and navigates to /today", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
@@ -2201,7 +2201,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.type(
       screen.getByLabelText("NOTES"),
       "Rowed it on the erg at home.",
@@ -2216,7 +2216,7 @@ describe("LogSession: the manual door (Task 3)", () => {
       workoutTitle: "Hoarfrost",
       workoutType: "O2",
       held: "held",
-      pain: 2,
+      effort: 2,
       notes: "Rowed it on the erg at home.",
     });
     expect(Array.isArray(body.steps)).toBe(true);
@@ -2241,7 +2241,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     );
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -2267,7 +2267,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     );
     await renderManualLogWithHistory(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -2306,7 +2306,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     );
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -2326,7 +2326,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     );
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -2343,7 +2343,7 @@ describe("LogSession: the manual door (Task 3)", () => {
       id: "id-test-only-manual",
       title: "2k Test Day",
       type: "AN",
-      pain: 4,
+      effort: 4,
       steps: [{ k: "test", label: "2k test" }],
       isGlobal: true,
       lastDoneDaysAgo: null,
@@ -2365,7 +2365,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(rows).toHaveLength(1);
     expect(within(rows[0]!).getByText("2k test")).toBeInTheDocument();
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -2398,7 +2398,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     });
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -2417,8 +2417,8 @@ describe("LogSession: the manual door (Task 3)", () => {
       Promise.resolve(
         new Response(
           JSON.stringify({
-            error: "pain must be an integer 1..5 or null",
-            field: "pain",
+            error: "effort must be an integer 1..5 or null",
+            field: "effort",
           }),
           { status: 400 },
         ),
@@ -2426,7 +2426,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     );
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -2444,7 +2444,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     );
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -2462,7 +2462,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     });
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -2476,7 +2476,7 @@ describe("LogSession: the manual door (Task 3)", () => {
       id: "id-manual-both-bases",
       title: "Manual Both Bases",
       type: "AT",
-      pain: 3,
+      effort: 3,
       steps: [
         {
           k: "w",
@@ -2556,7 +2556,7 @@ describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () 
 
     await renderManualLog(workout.id, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -3544,7 +3544,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -3599,7 +3599,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -3647,7 +3647,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -3669,7 +3669,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -3712,7 +3712,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -3737,7 +3737,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -3795,7 +3795,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -3832,7 +3832,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -3859,7 +3859,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -3898,7 +3898,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
@@ -3922,7 +3922,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -3956,7 +3956,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -3995,7 +3995,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -4028,7 +4028,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -4053,7 +4053,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -4082,7 +4082,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -4152,7 +4152,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     });
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -4256,7 +4256,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     });
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -4309,7 +4309,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     });
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -4369,7 +4369,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     });
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
@@ -4405,7 +4405,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -4424,7 +4424,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
@@ -4549,7 +4549,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
@@ -4634,7 +4634,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       id: "id-monitor-both-bases",
       title: "Monitor Both Bases",
       type: "AT",
-      pain: 3,
+      effort: 3,
       steps: started.steps,
       isGlobal: true,
       lastDoneDaysAgo: null,
@@ -4681,7 +4681,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       id: "id-monitor-2k-only",
       title: "Monitor 2K Only",
       type: "AT",
-      pain: 3,
+      effort: 3,
       steps: started.steps,
       isGlobal: true,
       lastDoneDaysAgo: null,
@@ -4713,7 +4713,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const lead = screen.getByRole("button", {
       name: "Log against plan · SESSION 4 OF 84",
     });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(lead);
     await screen.findByText("TODAY SCREEN");
 
@@ -4743,7 +4743,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(
       screen.getByRole("button", { name: "Save without logging" }),
     );
@@ -4780,7 +4780,7 @@ describe("LogSession: the close stamp on the wire (Wave E PR2 Task 6)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
@@ -4806,7 +4806,7 @@ describe("LogSession: the close stamp on the wire (Wave E PR2 Task 6)", () => {
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
@@ -5327,7 +5327,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
       screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
@@ -5361,7 +5361,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
       screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
@@ -5456,7 +5456,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     );
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(
       screen.getByRole("button", {
         name: "Log against plan · SESSION 4 OF 84",
@@ -5481,7 +5481,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     );
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(
       screen.getByRole("button", { name: "Save without logging" }),
     );
@@ -5570,7 +5570,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     });
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(
       screen.getByRole("button", { name: "Save without logging" }),
     );
@@ -5599,7 +5599,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     );
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(
       screen.getByRole("button", {
         name: "Log against plan · SESSION 4 OF 84",
@@ -5625,7 +5625,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     );
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(
       screen.getByRole("button", { name: "Save without logging" }),
     );
@@ -5655,7 +5655,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     expect(
       screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByText("TODAY SCREEN");
 
@@ -5684,7 +5684,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
       screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
@@ -5704,7 +5704,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     ).not.toBeInTheDocument();
   });
 
-  // The reflection quintet (held/pain/thumbs/notes) survives a failed save
+  // The reflection quintet (held/effort/thumbs/notes) survives a failed save
   // unchanged — proved elsewhere; here the concern is narrower: a failed
   // save must not reset which button LEADS (there is no state to reset —
   // button order is a pure render-time computation from plan/title/
@@ -5722,7 +5722,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     );
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(
       screen.getByRole("button", { name: "Save without logging" }),
     );
@@ -5785,7 +5785,7 @@ function buildK2TestSessionFixture(): {
     id: "id-2ktest-fixture",
     title: seed.title,
     type: seed.type,
-    pain: seed.pain,
+    effort: seed.effort,
     steps: started.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -5844,7 +5844,7 @@ function buildK2TestMonitorFixture(endedBy: MonitorRun["endedBy"]): {
     id: K2_MONITOR_WORKOUT_ID,
     title: seed.title,
     type: seed.type,
-    pain: seed.pain,
+    effort: seed.effort,
     steps: started.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -6012,7 +6012,7 @@ describe("LogSession: the post-test prompt (Phase BL PR B)", () => {
       id: "id-2ktest-manual",
       title: seed.title,
       type: seed.type,
-      pain: seed.pain,
+      effort: seed.effort,
       steps: seed.steps,
       isGlobal: true,
       lastDoneDaysAgo: null,
@@ -6170,7 +6170,7 @@ describe("LogSession: the claim race — R0 render, R1 committed during the old 
     expect(handoffStore.read()?.revision).toBe(1);
     expect(handoffStore.read()?.run.summaryTotals).toBeDefined();
 
-    await chooseHeldAndPain();
+    await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 

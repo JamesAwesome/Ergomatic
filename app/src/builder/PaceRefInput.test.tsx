@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Effort, PaceBase } from "../../domain/types.js";
+import type { PaceWord, PaceBase } from "../../domain/types.js";
 import PaceRefInput from "./PaceRefInput";
 
 function renderInput(
-  over: Partial<{ base: PaceBase; off: number; effort: Effort | null }> = {},
+  over: Partial<{ base: PaceBase; off: number; effort: PaceWord | null }> = {},
   onChange: (next: {
     base: PaceBase;
     off: number;
-    effort: Effort | null;
+    effort: PaceWord | null;
   }) => void = vi.fn(),
 ) {
   render(
@@ -25,7 +25,7 @@ function renderInput(
 }
 
 function setup(
-  over: Partial<{ base: PaceBase; off: number; effort: Effort | null }> = {},
+  over: Partial<{ base: PaceBase; off: number; effort: PaceWord | null }> = {},
 ) {
   const onChange = vi.fn();
   renderInput(over, onChange);
@@ -154,7 +154,7 @@ describe("PaceRefInput", () => {
     expect(screen.getByText("2k")).toBeInTheDocument();
   });
 
-  // Mirrors the deleted PainPicker.test.tsx's "roving tabIndex" / "arrow
+  // Mirrors the deleted EffortPicker.test.tsx's "roving tabIndex" / "arrow
   // key navigation" suites for this control's own radiogroup — now four
   // chips (2K/6K/MAX/MIN), so "wraps" and "moves forward/back" are distinct
   // transitions again (they collapsed into the same one back when there

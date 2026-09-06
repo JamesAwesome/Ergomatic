@@ -1,22 +1,22 @@
 import type {
   Baselines,
   PaceRef,
-  Effort,
-  EffortRef,
+  PaceWord,
+  PaceWordRef,
   SplitRef,
 } from "./types.js";
 
 const EFFORT_RE = /^(max|min)$/i;
 const REF_RE = /^(2k|6k)\s*([+-]\s*\d+(\.\d+)?)?$/i;
 
-export function isEffortRef(ref: PaceRef): ref is EffortRef {
+export function isPaceWordRef(ref: PaceRef): ref is PaceWordRef {
   return "effort" in ref;
 }
 
 export function parsePaceRef(input: string): PaceRef | null {
   const trimmed = input.trim();
   const effort = EFFORT_RE.exec(trimmed);
-  if (effort) return { effort: effort[1].toLowerCase() as Effort };
+  if (effort) return { effort: effort[1].toLowerCase() as PaceWord };
   const m = REF_RE.exec(trimmed);
   if (!m) return null;
   const base = m[1].toLowerCase() as SplitRef["base"];
@@ -29,31 +29,31 @@ export function resolveSplit(
   ref: PaceRef,
   nudge = 0,
 ): number {
-  if (!isEffortRef(ref)) {
+  if (!isPaceWordRef(ref)) {
     const base = ref.base === "2k" ? baselines.k2Seconds : baselines.k6Seconds;
     return base + ref.off + nudge;
   }
   throw new Error("resolveSplit requires a split ref");
 }
 
-export function effortWord(effort: Effort): "ALL OUT" | "EASY" {
+export function paceWordLabel(effort: PaceWord): "ALL OUT" | "EASY" {
   return effort === "max" ? "ALL OUT" : "EASY";
 }
 
-// Inverse of effortWord. Exists so a caller holding only a frozen "ALL
-// OUT"/"EASY" display word (not the original PaceRef/Effort it came from)
+// Inverse of paceWordLabel. Exists so a caller holding only a frozen "ALL
+// OUT"/"EASY" display word (not the original PaceRef/PaceWord it came from)
 // can still reach `refLabel`'s chip idiom ("MAX"/"MIN") — the session log
 // builder (`src/session/logDraft.ts`'s `buildLogSteps`) only ever sees an
 // `EnginePhase`'s frozen `label`, which for an effort phase already IS
-// `effortWord`'s own output, but needs the SAME step-text chip the manual
+// `paceWordLabel`'s own output, but needs the SAME step-text chip the manual
 // log door produces from a real ref for the same workout (Phase 6C Task 1
 // F1 review: the two doors disagreed — "0:30 @ ALL OUT" vs "0:30 @ MAX" for
-// Microburst's identical effort step). Bijective by construction (effortWord
-// is a total function over the two-element Effort type), so this never
-// needs a null/error case. Kept beside `effortWord` rather than duplicated
+// Microburst's identical effort step). Bijective by construction (paceWordLabel
+// is a total function over the two-element PaceWord type), so this never
+// needs a null/error case. Kept beside `paceWordLabel` rather than duplicated
 // as a private map at that call site, so the ALL OUT/EASY <-> MAX/MIN
 // vocabulary — the 5G rule's own domain — lives in exactly one file.
-export function effortFromWord(word: "ALL OUT" | "EASY"): Effort {
+export function paceWordFromLabel(word: "ALL OUT" | "EASY"): PaceWord {
   return word === "ALL OUT" ? "max" : "min";
 }
 
@@ -64,9 +64,9 @@ export function effortFromWord(word: "ALL OUT" | "EASY"): Effort {
 // spoken name substitute this instead. Includes its own leading "at" for
 // "max" (a noun phrase, "at max effort") but not for "min" (a plain adverb,
 // "30 seconds easy" — rowing's own idiom, not "at easy" or "at easy
-// effort"), so a caller can compose `${duration} ${effortSpoken(effort)}`
+// effort"), so a caller can compose `${duration} ${paceWordSpoken(effort)}`
 // uniformly without an effort-specific grammar branch of its own.
-export function effortSpoken(effort: Effort): "at max effort" | "easy" {
+export function paceWordSpoken(effort: PaceWord): "at max effort" | "easy" {
   return effort === "max" ? "at max effort" : "easy";
 }
 
@@ -91,7 +91,7 @@ export function estimationSplit(
   baselines: Baselines | null,
   ref: PaceRef,
 ): number | null {
-  if (!isEffortRef(ref)) {
+  if (!isPaceWordRef(ref)) {
     if (baselines === null) {
       throw new Error(
         "estimationSplit: a split ref has no baselines to resolve — callers must gate on needsBaselines() first",
@@ -104,7 +104,7 @@ export function estimationSplit(
 }
 
 export function refLabel(ref: PaceRef): string {
-  if (isEffortRef(ref)) return ref.effort === "max" ? "MAX" : "MIN";
+  if (isPaceWordRef(ref)) return ref.effort === "max" ? "MAX" : "MIN";
   if (ref.off === 0) return ref.base;
   const sign = ref.off < 0 ? "−" : "+";
   return `${ref.base} ${sign}${Math.abs(ref.off)}`;

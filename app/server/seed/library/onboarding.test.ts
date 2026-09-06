@@ -64,15 +64,15 @@ describe("ONBOARDING_LIBRARY_WORKOUTS", () => {
   // not sessions. A 2K test is an all-out anaerobic effort (AN/5);
   // a 6K test rides the anaerobic threshold (AT/4). The old
   // O2/easy/2 and AN/easy/2 rows undersold both.
-  it("the 2K Test is AN/pain 5; the 6K Test is AT/pain 4", () => {
+  it("the 2K Test is AN/effort 5; the 6K Test is AT/effort 4", () => {
     const k6 = ONBOARDING_LIBRARY_WORKOUTS.find(
       (w) => w.title === ONBOARDING_TITLES.k6,
     )!;
     const k2 = ONBOARDING_LIBRARY_WORKOUTS.find(
       (w) => w.title === ONBOARDING_TITLES.k2,
     )!;
-    expect(k2).toMatchObject({ type: "AN", pain: 5 });
-    expect(k6).toMatchObject({ type: "AT", pain: 4 });
+    expect(k2).toMatchObject({ type: "AN", effort: 5 });
+    expect(k6).toMatchObject({ type: "AT", effort: 4 });
   });
 
   it("needs no baselines to run (the whole point of the onboarding card)", () => {

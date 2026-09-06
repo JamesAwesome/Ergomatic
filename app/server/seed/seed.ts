@@ -36,14 +36,14 @@ export { LEGACY_TITLE_RENAMES };
 const contentEqual = (
   row: {
     type: string;
-    pain: number;
+    effort: number;
     sortOrder: number | null;
     steps: unknown;
   },
   w: LibraryEntry,
 ): boolean =>
   row.type === w.type &&
-  row.pain === w.pain &&
+  row.effort === w.effort &&
   row.sortOrder === w.sortOrder &&
   isDeepStrictEqual(row.steps, w.steps);
 

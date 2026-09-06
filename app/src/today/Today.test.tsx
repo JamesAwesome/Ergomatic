@@ -93,7 +93,7 @@ function libraryEntry(
     id,
     title: w.title,
     type: w.type,
-    pain: w.pain,
+    effort: w.effort,
     steps: w.steps,
     isGlobal: true,
     lastDoneDaysAgo,
@@ -116,7 +116,7 @@ function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
     id,
     title: w.title,
     type: w.type,
-    pain: w.pain,
+    effort: w.effort,
     steps: w.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -230,7 +230,7 @@ const LOGS: RecentLog[] = [
     workoutType: "AT",
     loggedAt: "2026-07-25T12:00:00.000Z",
     held: "held",
-    pain: 2,
+    effort: 2,
     thumbs: null,
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -259,7 +259,7 @@ const LOGS: RecentLog[] = [
     workoutType: "O2",
     loggedAt: "2026-07-20T12:00:00.000Z",
     held: "under",
-    pain: 1,
+    effort: 1,
     thumbs: "up",
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -281,7 +281,7 @@ const LOGS: RecentLog[] = [
     workoutType: "AN",
     loggedAt: "2026-07-10T12:00:00.000Z",
     held: "over",
-    pain: 4,
+    effort: 4,
     thumbs: null,
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -394,7 +394,7 @@ function cardLinkTo(id: string): HTMLElement | undefined {
     .find((a) => a.getAttribute("href") === `/library/${id}`);
 }
 
-// Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN moved off the screen and
+// Task 2 (2026-08-04 round): DIFFICULTY/TIME/EFFORT moved off the screen and
 // into TodayFilterSheet — every assertion that used to read a chip's
 // `aria-pressed` straight off the page now has to open the sheet first.
 async function openFilterSheet() {
@@ -677,27 +677,27 @@ describe("Today (overrides: init from preferences)", () => {
     },
   );
 
-  it("defaults every pain cell to off", async () => {
+  it("defaults every effort cell to off", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
-        within(painGroup).getByRole("button", { name: level }),
+        within(effortGroup).getByRole("button", { name: level }),
       ).toHaveAttribute("aria-pressed", "false");
     }
   });
 });
 
 describe("Today (overrides: stored record wins over preferences)", () => {
-  it("uses the stored durations/pain instead of the preference-derived default", async () => {
+  it("uses the stored durations/effort instead of the preference-derived default", async () => {
     // Phase SF PR1: the memory is per type and UNDATED — the plan's own
     // call today is AT, so the AT key is what this mount reads.
     seedFilters({
       AT: {
         durationRange: { min: 0, max: 30 },
-        painLevels: [4, 5],
+        effortLevels: [4, 5],
         lastDone: null,
         source: null,
       },
@@ -710,36 +710,36 @@ describe("Today (overrides: stored record wins over preferences)", () => {
       "aria-valuenow",
       "30",
     );
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
     for (const level of ["4", "5"]) {
       expect(
-        within(painGroup).getByRole("button", { name: level }),
+        within(effortGroup).getByRole("button", { name: level }),
       ).toHaveAttribute("aria-pressed", "true");
     }
     for (const level of ["1", "2", "3"]) {
       expect(
-        within(painGroup).getByRole("button", { name: level }),
+        within(effortGroup).getByRole("button", { name: level }),
       ).toHaveAttribute("aria-pressed", "false");
     }
-    // Every AT fixture workout is pain 2 (see the fixtures' own comment) —
-    // none match the stored 4–5 pain filter, so the fellback reason proves
-    // the STORED record drove suggest(), not the 60-min / pain-off
+    // Every AT fixture workout is effort 2 (see the fixtures' own comment) —
+    // none match the stored 4–5 effort filter, so the fellback reason proves
+    // the STORED record drove suggest(), not the 60-min / effort-off
     // preference default DEFAULT_PREFS would have produced.
     expect(screen.getByText(/Nothing fit your/)).toBeVisible();
   });
 });
 
-// Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline chip
+// Task 2 (2026-08-04 round): DIFFICULTY/TIME/EFFORT's three inline chip
 // groups are gone — narrowing now happens inside TodayFilterSheet against
 // a DRAFT, committed only by its own "Apply Filter" button (Revision,
 // mid-Round-2: the count that used to live in this button's own copy now
 // lives in a caption above it). A second,
-// richer AT pool (Occluded Front/Stationary Front both pain 2, Filling Low
-// pain 3 — a real library fixture, `fromWorkout`-style, per this repo's
-// realistic-fixtures convention) lets a PAIN filter narrow the pool to
+// richer AT pool (Occluded Front/Stationary Front both effort 2, Filling Low
+// effort 3 — a real library fixture, `fromWorkout`-style, per this repo's
+// realistic-fixtures convention) lets a EFFORT filter narrow the pool to
 // exactly one entry without tripping suggest.ts's fellBack rule (which
 // reverts to the full type-matched list whenever a filter would otherwise
-// leave zero matches — the two pain-2 fixtures alone would trigger it).
+// leave zero matches — the two effort-2 fixtures alone would trigger it).
 const FILLING_LOW = libraryEntry("Filling Low", "w-fillinglow-2", 5);
 
 describe("Today (FILTER sheet)", () => {
@@ -753,14 +753,14 @@ describe("Today (FILTER sheet)", () => {
     }
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("group", { name: "PAIN" }),
+      screen.queryByRole("group", { name: "EFFORT" }),
     ).not.toBeInTheDocument();
     const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
     expect(filterButton).toBeVisible();
     expect(filterButton).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("opens on FILTER ⌄ click, holding TIME/PAIN/LAST DONE/SOURCE seeded from the applied overrides", async () => {
+  it("opens on FILTER ⌄ click, holding TIME/EFFORT/LAST DONE/SOURCE seeded from the applied overrides", async () => {
     mockReady();
     await renderToday();
     const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
@@ -768,11 +768,11 @@ describe("Today (FILTER sheet)", () => {
 
     expect(filterButton).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("dialog", { name: "Filter" })).toBeVisible();
-    for (const label of ["TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(screen.getByText(label)).toBeVisible();
     }
     expect(screen.queryByText("DIFFICULTY")).not.toBeInTheDocument();
-    // Seeded from DEFAULT_PREFS (a 60-min cap's own [0, 60] range, no pain
+    // Seeded from DEFAULT_PREFS (a 60-min cap's own [0, 60] range, no effort
     // filter) — the same values the "init from preferences" describe pins.
     expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
       "aria-valuenow",
@@ -795,7 +795,7 @@ describe("Today (FILTER sheet)", () => {
 
   // Round 2 (2026-08-04): SOURCE=CUSTOM narrows the pool to personal
   // (non-global) entries only — a real, provable pick swap, mirroring the
-  // existing PAIN-filter integration test's own "a real title swap" style.
+  // existing EFFORT-filter integration test's own "a real title swap" style.
   it("applying SOURCE=CUSTOM narrows the pool to the personal fixture alone, swapping the recommendation", async () => {
     mockReady({ workouts: [ISOBAR, WARM_FRONT, PERSONAL_GRADIENT] });
     await renderToday();
@@ -914,13 +914,13 @@ describe("Today (FILTER sheet)", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // Same pick (the fellback pool is still the full AT list, sorted the
-    // same way — every fixture here is pain 2, none is a 5) — the REASON
+    // same way — every fixture here is effort 2, none is a 5) — the REASON
     // narrows to say nothing matched, and the change is now the SAVED record.
     expect(
       screen.getByRole("heading", { name: "Stationary Front" }),
     ).toBeVisible();
-    expect(screen.getByText(/Nothing fit your time\/pain/)).toBeVisible();
-    expect(storedFilters("AT")).toMatchObject({ painLevels: [5] });
+    expect(screen.getByText(/Nothing fit your time\/effort/)).toBeVisible();
+    expect(storedFilters("AT")).toMatchObject({ effortLevels: [5] });
 
     await openFilterSheet();
     expect(screen.getByRole("button", { name: "5" })).toHaveAttribute(
@@ -944,15 +944,15 @@ describe("Today (FILTER sheet)", () => {
     mockReady();
     await renderToday();
 
-    // First apply: PAIN 2 on (the fixtures' own level, so the pool is
+    // First apply: EFFORT 2 on (the fixtures' own level, so the pool is
     // unchanged). This is now the one and only saved record until something
     // else writes it.
     await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "2" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(storedFilters("AT")).toMatchObject({ painLevels: [2] });
+    expect(storedFilters("AT")).toMatchObject({ effortLevels: [2] });
 
-    // Reopen and edit the draft further — add PAIN 3 too — but never apply
+    // Reopen and edit the draft further — add EFFORT 3 too — but never apply
     // this second edit.
     await openFilterSheet();
     expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
@@ -970,9 +970,9 @@ describe("Today (FILTER sheet)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     // The saved record is still the FIRST apply's state — not the second
-    // draft ([2, 3]) and not `filterDefaults` (pain off, CLEAR ALL's own
+    // draft ([2, 3]) and not `filterDefaults` (effort off, CLEAR ALL's own
     // reset shape).
-    expect(storedFilters("AT")).toMatchObject({ painLevels: [2] });
+    expect(storedFilters("AT")).toMatchObject({ effortLevels: [2] });
 
     // Reopening confirms the sheet re-seeds from that same untouched
     // record too, not from the discarded second draft.
@@ -997,13 +997,13 @@ describe("Today (FILTER sheet)", () => {
     expect(filterButton).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("PAIN cells are a multi-select union inside the sheet, independent of DIFFICULTY/TIME", async () => {
+  it("EFFORT cells are a multi-select union inside the sheet, independent of DIFFICULTY/TIME", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    const cell1 = within(painGroup).getByRole("button", { name: "1" });
-    const cell2 = within(painGroup).getByRole("button", { name: "2" });
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    const cell1 = within(effortGroup).getByRole("button", { name: "1" });
+    const cell2 = within(effortGroup).getByRole("button", { name: "2" });
     expect(cell1).toHaveAttribute("aria-pressed", "false");
     expect(cell2).toHaveAttribute("aria-pressed", "false");
 
@@ -1026,7 +1026,7 @@ describe("Today (FILTER sheet)", () => {
   // Amendment (2026-08-04 PR #50 round): TIME unifies on the Library's own
   // bucket UNION — the old cap single-select is gone, so a cell toggles
   // independently and multiple can be active (or none) at once.
-  it("TIME is a range: stepping a thumb moves only that end of the draft, independent of PAIN", async () => {
+  it("TIME is a range: stepping a thumb moves only that end of the draft, independent of EFFORT", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
@@ -1062,16 +1062,16 @@ describe("Today (FILTER sheet)", () => {
       within(timeGroup).getByRole("slider", { name: "Shortest" }),
     ).toBeInTheDocument();
 
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    expect(screen.getByText("PAIN")).toBeVisible();
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    expect(screen.getByText("EFFORT")).toBeVisible();
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
-        within(painGroup).getByRole("button", { name: level }),
+        within(effortGroup).getByRole("button", { name: level }),
       ).toBeInTheDocument();
     }
   });
 
-  // A richer pool (see FILLING_LOW's own comment above) lets a PAIN filter
+  // A richer pool (see FILLING_LOW's own comment above) lets a EFFORT filter
   // narrow to exactly ONE entry without suggest.ts's fellBack rule
   // reverting it back to the full list — proves the live count caption AND
   // the singular copy AND that the card the count promised is the card
@@ -1083,12 +1083,12 @@ describe("Today (FILTER sheet)", () => {
       await renderToday();
       await openFilterSheet();
 
-      const painGroup = screen.getByRole("group", { name: "PAIN" });
+      const effortGroup = screen.getByRole("group", { name: "EFFORT" });
       await userEvent.click(
-        within(painGroup).getByRole("button", { name: "3" }),
+        within(effortGroup).getByRole("button", { name: "3" }),
       );
 
-      // Singular-aware caption copy — Filling Low (pain 3) is the sole
+      // Singular-aware caption copy — Filling Low (effort 3) is the sole
       // survivor. The button itself is the constant "Apply Filter"
       // regardless of count.
       expect(screen.getByText("1 OPTION")).toBeVisible();
@@ -1104,7 +1104,7 @@ describe("Today (FILTER sheet)", () => {
   });
 
   // Domain note (suggest.ts's own fellBack rule): narrowing difficulties/
-  // pain to a combination that matches nothing among the current TYPE
+  // effort to a combination that matches nothing among the current TYPE
   // never actually zeros the pool on its own — it falls back to the full
   // type-matched list instead (a real, if functionally inert, "nothing
   // fit your filters" state). The only way the pool genuinely reaches zero
@@ -1137,35 +1137,37 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     mockReady();
     await renderToday();
 
-    // Two deviations at once: TIME widened AND a PAIN filter set.
+    // Two deviations at once: TIME widened AND a EFFORT filter set.
     await openFilterSheet();
     fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
       key: "End",
     });
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    await userEvent.click(
+      within(effortGroup).getByRole("button", { name: "2" }),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
 
     expect(screen.getByText("ANY LENGTH")).toBeVisible();
-    expect(screen.getByText("PAIN 2")).toBeVisible();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
 
-    // Clearing PAIN's own token only resets painLevels — TIME's own
+    // Clearing EFFORT's own token only resets effortLevels — TIME's own
     // deviation (and its token) survives untouched.
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove PAIN 2 filter" }),
+      screen.getByRole("button", { name: "Remove EFFORT 2 filter" }),
     );
-    expect(screen.queryByText("PAIN 2")).not.toBeInTheDocument();
+    expect(screen.queryByText("EFFORT 2")).not.toBeInTheDocument();
     expect(screen.getByText("ANY LENGTH")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({
-      painLevels: [],
+      effortLevels: [],
     });
   });
 
-  it("clearing a PAIN token resets only painLevels, leaving a co-existing TIME deviation untouched", async () => {
+  it("clearing a EFFORT token resets only effortLevels, leaving a co-existing TIME deviation untouched", async () => {
     mockReady();
     await renderToday();
 
-    // PAIN 2 on (a PAIN deviation) and the Longest thumb at End (widens the
+    // EFFORT 2 on (a EFFORT deviation) and the Longest thumb at End (widens the
     // default [0, 60] to the unbounded range — a real TIME deviation, per
     // the Amendment's "unbounded vs. a narrower default IS a deviation"
     // rule).
@@ -1175,21 +1177,21 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
       key: "End",
     });
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("PAIN 2")).toBeVisible();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
     expect(screen.getByText("ANY LENGTH")).toBeVisible();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove PAIN 2 filter" }),
+      screen.getByRole("button", { name: "Remove EFFORT 2 filter" }),
     );
-    expect(screen.queryByText("PAIN 2")).not.toBeInTheDocument();
+    expect(screen.queryByText("EFFORT 2")).not.toBeInTheDocument();
     expect(screen.getByText("ANY LENGTH")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({
-      painLevels: [],
+      effortLevels: [],
       durationRange: { min: 0, max: 120 },
     });
   });
 
-  it("clearing a TIME (durations) token resets only durations, leaving a co-existing pain deviation untouched", async () => {
+  it("clearing a TIME (durations) token resets only durations, leaving a co-existing effort deviation untouched", async () => {
     mockReady();
     await renderToday();
 
@@ -1199,14 +1201,14 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
       key: "End",
     });
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("PAIN 2")).toBeVisible();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
     expect(screen.getByText("ANY LENGTH")).toBeVisible();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Remove ANY LENGTH filter" }),
     );
     expect(screen.queryByText("ANY LENGTH")).not.toBeInTheDocument();
-    expect(screen.getByText("PAIN 2")).toBeVisible();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({
       durationRange: { min: 0, max: 60 },
     });
@@ -1216,7 +1218,7 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
   // `source: null` — Today.tsx's `resetFilterGroup`'s own final `else`
   // branch (the LAST DONE branch is exercised by the SOURCE=CUSTOM
   // integration test's own "Remove 21D+ filter" step above).
-  it("clearing a SOURCE token resets only source, leaving a co-existing pain deviation untouched", async () => {
+  it("clearing a SOURCE token resets only source, leaving a co-existing effort deviation untouched", async () => {
     mockReady();
     await renderToday();
 
@@ -1227,14 +1229,14 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
       within(sourceGroup).getByRole("button", { name: "ERGOMATIC LIBRARY" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("PAIN 2")).toBeVisible();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
     expect(screen.getByText("ERGOMATIC LIBRARY")).toBeVisible();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Remove ERGOMATIC LIBRARY filter" }),
     );
     expect(screen.queryByText("ERGOMATIC LIBRARY")).not.toBeInTheDocument();
-    expect(screen.getByText("PAIN 2")).toBeVisible();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
     expect(storedFilters("AT")).toMatchObject({
       source: null,
     });
@@ -1248,8 +1250,10 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
       key: "End",
     });
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    await userEvent.click(
+      within(effortGroup).getByRole("button", { name: "2" }),
+    );
     // Round 2 (2026-08-04): push LAST DONE/SOURCE off-default too — CLEAR
     // ALL's own null/null reset (Today.tsx's clearAllFilters) has to cover
     // these two exactly like the pre-existing three.
@@ -1277,7 +1281,7 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     const saved = storedFilters("AT")!;
     // rangeForCap(DEFAULT_PREFS.timeCapMinutes) — [0, 60].
     expect(saved.durationRange).toStrictEqual({ min: 0, max: 60 });
-    expect(saved.painLevels).toStrictEqual([]);
+    expect(saved.effortLevels).toStrictEqual([]);
     expect(saved.lastDone).toBeNull();
     expect(saved.source).toBeNull();
 
@@ -1308,7 +1312,7 @@ describe("Today (overrides: persistence and invalidation)", () => {
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
-    // PAIN 1 on — Sea Fret's own level, so the pick is unchanged and only
+    // EFFORT 1 on — Sea Fret's own level, so the pick is unchanged and only
     // the memory is under test — applied via the sheet.
     await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "1" }));
@@ -1388,9 +1392,9 @@ describe("Today (type-swap chips)", () => {
     expect(
       screen.getByRole("slider", { name: "Shortest" }),
     ).toBeInTheDocument();
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
     expect(
-      within(painGroup).getByRole("button", { name: "1" }),
+      within(effortGroup).getByRole("button", { name: "1" }),
     ).toBeInTheDocument();
   });
 
@@ -1519,10 +1523,10 @@ describe("Today (type-swap chips)", () => {
     // inert/disabled (only the primary button itself disables, at a
     // genuinely empty count — see the "Today (FILTER sheet)" describe).
     await openFilterSheet();
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    const painCell = within(painGroup).getByRole("button", { name: "1" });
-    await userEvent.click(painCell);
-    expect(painCell).toHaveAttribute("aria-pressed", "true");
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    const effortCell = within(effortGroup).getByRole("button", { name: "1" });
+    await userEvent.click(effortCell);
+    expect(effortCell).toHaveAttribute("aria-pressed", "true");
   });
 
   // Pins suggest.ts's own pick-lookup fallback (suggest.ts:117-120,
@@ -1752,14 +1756,14 @@ describe("Today (type descriptor word)", () => {
 
 describe("Today (LAST THREE)", () => {
   // docs/design/README.md:185's row format, literally: date (not
-  // days-ago) · the plain word (not a glyph) · pain, e.g. "JUL 25 · HELD ·
+  // days-ago) · the plain word (not a glyph) · effort, e.g. "JUL 25 · HELD ·
   // 2/10" — "/5" here, not the handoff's literal "/10", because
   // docs/design/DEVIATIONS.md's first row already establishes Ergomatic's
-  // pain scale is 1-5 everywhere else in the app (PainBar, WorkoutDetail,
-  // Library's own 1-5 PAIN filter cells); matching the handoff's "/10"
+  // effort scale is 1-5 everywhere else in the app (EffortBar, WorkoutDetail,
+  // Library's own 1-5 EFFORT filter cells); matching the handoff's "/10"
   // verbatim would contradict that already-decided, already-documented
   // deviation.
-  it("renders title, calendar date, the held/under/over word, and pain /5 per log", async () => {
+  it("renders title, calendar date, the held/under/over word, and effort /5 per log", async () => {
     mockReady();
     await renderToday();
 
@@ -1790,7 +1794,7 @@ describe("Today (LAST THREE)", () => {
 
   // R-A (docs/superpowers/specs/2026-08-17-post-workout-summary-design.md):
   // the null-tolerant read that must ship before any code can write a null
-  // held/pain. Today.tsx used to do `log.held.toUpperCase()` unconditionally
+  // held/effort. Today.tsx used to do `log.held.toUpperCase()` unconditionally
   // with no error boundary in the app - a null `held` white-screened this
   // whole route. Locks in the exact byte-identical string for a full row
   // (not just per-segment regexes, which would pass even if the joiner or
@@ -1807,7 +1811,7 @@ describe("Today (LAST THREE)", () => {
     expect(within(row).getByText("JUL 25 · HELD · 2/5")).toBeVisible();
   });
 
-  it("renders without throwing and reads the date alone when held and pain are both null", async () => {
+  it("renders without throwing and reads the date alone when held and effort are both null", async () => {
     mockReady({
       logs: [
         {
@@ -1817,7 +1821,7 @@ describe("Today (LAST THREE)", () => {
           workoutType: "AT",
           loggedAt: "2026-07-25T12:00:00.000Z",
           held: null,
-          pain: null,
+          effort: null,
           thumbs: null,
           avgSplitSeconds: null,
           timeSeconds: null,
@@ -1844,7 +1848,7 @@ describe("Today (LAST THREE)", () => {
     expect(within(row).queryByText(/·/)).not.toBeInTheDocument();
   });
 
-  it("omits only the missing segment when held is null but pain is present", async () => {
+  it("omits only the missing segment when held is null but effort is present", async () => {
     mockReady({
       logs: [
         {
@@ -1854,7 +1858,7 @@ describe("Today (LAST THREE)", () => {
           workoutType: "AT",
           loggedAt: "2026-07-25T12:00:00.000Z",
           held: null,
-          pain: 2,
+          effort: 2,
           thumbs: null,
           avgSplitSeconds: null,
           timeSeconds: null,
@@ -3545,7 +3549,7 @@ describe("Today (piece region)", () => {
     expect(rows[0].querySelector(".today-piece-spm-line")?.textContent).toBe(
       "30 SPM",
     );
-    // Effort rows carry no offset at all — zero tint, same as before rolling.
+    // PaceWord rows carry no offset at all — zero tint, same as before rolling.
     expect(document.querySelector(".today-piece-peak")).toBeNull();
     expect(document.querySelector(".today-piece-more")).toBeNull();
     expect(document.querySelector(".today-piece-foot-count")).toBeNull();
@@ -4166,16 +4170,16 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
     await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "5" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("PAIN 5")).toBeVisible();
-    expect(storedFilters("AT")?.painLevels).toStrictEqual([5]);
+    expect(screen.getByText("EFFORT 5")).toBeVisible();
+    expect(storedFilters("AT")?.effortLevels).toStrictEqual([5]);
     expect(storedFilters("O2")).toBeUndefined();
 
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
-    expect(screen.queryByText("PAIN 5")).not.toBeInTheDocument();
+    expect(screen.queryByText("EFFORT 5")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "AT" }));
-    expect(screen.getByText("PAIN 5")).toBeVisible();
+    expect(screen.getByText("EFFORT 5")).toBeVisible();
     expect(storedFilters("O2")).toBeUndefined();
   });
 
@@ -4226,14 +4230,14 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
   });
 
   it("does not roll a type whose remembered filters match nothing (a fell-back pool is not a suggestion) — review F2", async () => {
-    // Under AT, remember PAIN 5 only: all three AT fixtures are pain 2, so
+    // Under AT, remember EFFORT 5 only: all three AT fixtures are effort 2, so
     // AT's pool falls back to the whole type. O2 stays a candidate. Draw 0
     // of [O2] -> O2; draw 1 would have been AT if AT were a candidate, so
     // script 1 and expect O2 anyway.
     seedFilters({
       AT: {
         durationRange: { min: 0, max: 60 },
-        painLevels: [5],
+        effortLevels: [5],
         lastDone: null,
         source: null,
       },
@@ -4254,7 +4258,7 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
     // chip lit, and STILL a record for today.
     const hardOnly: FilterSet = {
       durationRange: { min: 0, max: 60 },
-      painLevels: [5],
+      effortLevels: [5],
       lastDone: null,
       source: null,
     };
@@ -4388,22 +4392,22 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
     seedFilters({
       AT: {
         durationRange: { min: 0, max: 60 },
-        painLevels: [5],
+        effortLevels: [5],
         lastDone: null,
         source: null,
       },
       O2: {
         durationRange: { min: 0, max: 60 },
-        painLevels: [5],
+        effortLevels: [5],
         lastDone: null,
         source: null,
       },
     });
     mockReady();
     await renderToday();
-    expect(screen.getByText("PAIN 5")).toBeVisible();
+    expect(screen.getByText("EFFORT 5")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
-    expect(storedFilters("AT")?.painLevels).toStrictEqual([]);
-    expect(storedFilters("O2")?.painLevels).toStrictEqual([5]);
+    expect(storedFilters("AT")?.effortLevels).toStrictEqual([]);
+    expect(storedFilters("O2")?.effortLevels).toStrictEqual([5]);
   });
 });

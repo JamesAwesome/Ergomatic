@@ -15,7 +15,7 @@ import {
 // freestyle (no-plan) spot-check that the type chips genuinely don't
 // render without a plan to swap against. Task 3 (2026-08-04 round) re-routes
 // the filter interactions through the FILTER ⌄ sheet (`TodayFilterSheet.tsx`)
-// — DIFFICULTY/TIME/PAIN no longer render as inline chips on the screen
+// — DIFFICULTY/TIME/EFFORT no longer render as inline chips on the screen
 // itself, only inside the sheet the FILTER ⌄ chip opens — and adds the
 // sheet's own CLEAR-ALL-restores-defaults and backdrop-discard coverage.
 // Every test signs in as its own unique, workout-free email (session.spec.ts's
@@ -24,7 +24,7 @@ import {
 // accumulate stale rows or drift a suggestion's expected pick.
 
 /** Opens Today's FILTER sheet — every filter interaction below goes through
- *  it now that the old inline DIFFICULTY/TIME/PAIN chip rows are retired
+ *  it now that the old inline DIFFICULTY/TIME/EFFORT chip rows are retired
  *  (Task 3, 2026-08-04 round) — same idiom as library.spec.ts's own
  *  `openFilterSheet`. */
 function openFilterSheet(page: Page) {
@@ -231,7 +231,7 @@ async function startAndSkipCountdown(page: Page): Promise<void> {
  *  AN 60) are ALSO all never-done — and `stores/workouts.ts`'s own `list()` orders
  *  globals ahead of personal rows unconditionally, so a fresh personal
  *  fixture of the same type would otherwise never win the recency tie no
- *  matter what its own difficulty/pain/cap says. Logging every global of
+ *  matter what its own difficulty/effort/cap says. Logging every global of
  *  that type first makes a personal fixture imported right after this call
  *  the SOLE never-done entry of that type, and therefore its guaranteed top
  *  pick — the only way to make the filter chips' own effect deterministic
@@ -283,7 +283,7 @@ async function neutralizeGlobalRecency(
               workoutTitle: "neutralized for recency",
               workoutType: t,
               held: "held",
-              pain: 1,
+              effort: 1,
               notes: null,
               steps: [{ label: "Work" }],
               advancesPlan: false,
@@ -333,7 +333,7 @@ async function logOnce(page: Page, title: string): Promise<void> {
         workoutTitle: t,
         workoutType: match.type,
         held: "held",
-        pain: 1,
+        effort: 1,
         notes: null,
         steps: [{ label: "Work" }],
         advancesPlan: false,
@@ -374,7 +374,7 @@ async function postLogForWorkout(
         workoutTitle: t,
         workoutType: match.type,
         held: "held",
-        pain: 1,
+        effort: 1,
         notes: null,
         steps: [{ label: "Work" }],
         advancesPlan: false,
@@ -408,15 +408,15 @@ async function deleteLog(page: Page, id: string): Promise<void> {
 }
 
 test.describe("Today enhancements: visible filter chips", () => {
-  const highPainTitle = "Today Filters High Pain E2E";
-  const lowPainTitle = "Today Filters Low Pain E2E";
+  const highEffortTitle = "Today Filters High Effort E2E";
+  const lowEffortTitle = "Today Filters Low Effort E2E";
 
   test.afterEach(async ({ page }) => {
-    await cleanupByTitle(page, highPainTitle);
-    await cleanupByTitle(page, lowPainTitle);
+    await cleanupByTitle(page, highEffortTitle);
+    await cleanupByTitle(page, lowEffortTitle);
   });
 
-  test("tap PAIN cells 1+2 -> the suggestion card changes (a real title swap); reload -> cells and card unchanged", async ({
+  test("tap EFFORT cells 1+2 -> the suggestion card changes (a real title swap); reload -> cells and card unchanged", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -432,21 +432,21 @@ test.describe("Today enhancements: visible filter chips", () => {
     await neutralizeGlobalRecency(page, "O2");
     // Imported in this order deliberately: creation order is the tie-break
     // among the two (both never-done, same difficulty/cap) — the
-    // HIGH-pain one, created first, is the pre-filter pick; the LOW-pain
-    // one only surfaces once the 1+2 pain union excludes the high-pain one.
+    // HIGH-effort one, created first, is the pre-filter pick; the LOW-effort
+    // one only surfaces once the 1+2 effort union excludes the high-effort one.
     await importBulk(
       page,
-      [`${highPainTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
+      [`${highEffortTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
     );
     await importBulk(
       page,
-      [`${lowPainTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
+      [`${lowEffortTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
     );
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
     // Two never-done O2 fixtures tie; state the draw (see pinToday).
-    await pinToday(page, { title: highPainTitle });
+    await pinToday(page, { title: highEffortTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
     await expect(page.locator(".today-plan-line")).toContainText(
@@ -454,22 +454,22 @@ test.describe("Today enhancements: visible filter chips", () => {
     );
     await expect(page.locator(".today-plan-line")).toContainText("O2");
 
-    // Pre-filter: the high-pain fixture, created first, wins the
+    // Pre-filter: the high-effort fixture, created first, wins the
     // never-done tie.
-    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(highEffortTitle);
 
     // Task 3 (2026-08-04 round): the tap moves inside the FILTER sheet — the
-    // PAIN cells no longer render on the screen itself.
+    // EFFORT cells no longer render on the screen itself.
     await openFilterSheet(page);
     const dialog = page.getByRole("dialog");
-    const painGroup = dialog.getByRole("group", { name: "PAIN" });
-    const cell1 = painGroup.getByRole("button", { name: "1", exact: true });
-    const cell2 = painGroup.getByRole("button", { name: "2", exact: true });
+    const effortGroup = dialog.getByRole("group", { name: "EFFORT" });
+    const cell1 = effortGroup.getByRole("button", { name: "1", exact: true });
+    const cell2 = effortGroup.getByRole("button", { name: "2", exact: true });
     await expect(cell1).toHaveAttribute("aria-pressed", "false");
     await expect(cell2).toHaveAttribute("aria-pressed", "false");
-    // Union, not a single tap: [1] alone would still exclude the pain-2
-    // fixture along with the pain-5 one, so both cells have to go active
-    // before the low-pain fixture (pain 2) is the sole survivor.
+    // Union, not a single tap: [1] alone would still exclude the effort-2
+    // fixture along with the effort-5 one, so both cells have to go active
+    // before the low-effort fixture (effort 2) is the sole survivor.
     await cell1.click();
     await cell2.click();
     await expect(cell1).toHaveAttribute("aria-pressed", "true");
@@ -477,30 +477,30 @@ test.describe("Today enhancements: visible filter chips", () => {
     await applyFilterSheet(page);
 
     // A real, provable change: the recommendation itself swapped to the
-    // low-pain fixture now that the high-pain one is filtered out.
-    await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
+    // low-effort fixture now that the high-effort one is filtered out.
+    await expect(page.locator(".today-card-title")).toHaveText(lowEffortTitle);
 
     // Reload: the override persists (same day, same planKey/doneN) — the
     // card stays on the filtered pick, not back to the pre-filter default,
     // and re-opening the sheet shows the cells still pressed.
     await page.reload();
     await expect(page.locator(".today-card")).toBeVisible();
-    await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(lowEffortTitle);
     await openFilterSheet(page);
-    const painGroupAfterReload = page
+    const effortGroupAfterReload = page
       .getByRole("dialog")
-      .getByRole("group", { name: "PAIN" });
+      .getByRole("group", { name: "EFFORT" });
     await expect(
-      painGroupAfterReload.getByRole("button", { name: "1", exact: true }),
+      effortGroupAfterReload.getByRole("button", { name: "1", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(
-      painGroupAfterReload.getByRole("button", { name: "2", exact: true }),
+      effortGroupAfterReload.getByRole("button", { name: "2", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 });
 
 // Round 2 (2026-08-04): the LAST DONE/SOURCE groups join DIFFICULTY/TIME/
-// PAIN in the sheet, and the primary button's copy settled on the constant
+// EFFORT in the sheet, and the primary button's copy settled on the constant
 // "Apply Filter" (Revision, mid-round) with the live count moved to its own
 // caption. This single continuous flow covers three things at once, per
 // the round's own testing note: a real SOURCE=CUSTOM filter (the personal
@@ -535,7 +535,7 @@ test.describe("Today enhancements: SOURCE=CUSTOM and the keep-or-move guarantee"
       name: "Today Keep-Or-Move Tester",
     });
     await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
-    // Same neutralize idiom as the PAIN-filter test above: makes
+    // Same neutralize idiom as the EFFORT-filter test above: makes
     // `naturalWinnerTitle` the only never-done O2 entry in the WHOLE
     // library (globals included), so it's the deterministic pre-filter
     // pick regardless of either personal fixture's own creation order.
@@ -811,7 +811,7 @@ test.describe("Today enhancements: the type-swap loop", () => {
       page.getByRole("button", { name: "Log against plan · SESSION 1 OF 84" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "HELD" }).click();
-    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
     await page
       .getByRole("button", { name: "Log against plan · SESSION 1 OF 84" })
       .click();
@@ -907,7 +907,7 @@ test.describe("Today enhancements: the swap x outside-plan composition seam", ()
     ).toBeVisible();
 
     await page.getByRole("button", { name: "HELD" }).click();
-    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
     await page.getByRole("button", { name: "Save without logging" }).click();
 
     await expect(page).toHaveURL(/\/today$/);
@@ -957,14 +957,14 @@ test.describe("Today enhancements: freestyle spot-check", () => {
       0,
     );
     await expect(dialog.getByRole("group", { name: "TIME" })).toBeVisible();
-    await expect(dialog.getByRole("group", { name: "PAIN" })).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "EFFORT" })).toBeVisible();
     await expect(
       dialog.getByRole("group", { name: "LAST DONE" }),
     ).toBeVisible();
     await expect(dialog.getByRole("group", { name: "SOURCE" })).toBeVisible();
-    const painGroup = dialog.getByRole("group", { name: "PAIN" });
+    const effortGroup = dialog.getByRole("group", { name: "EFFORT" });
     await expect(
-      painGroup.getByRole("button", { name: "1", exact: true }),
+      effortGroup.getByRole("button", { name: "1", exact: true }),
     ).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -1174,7 +1174,7 @@ test.describe("Phase SF PR1: a logged session re-rolls the freestyle day", () =>
 // TYPE, undated — a deviation applied under one chip is absent under
 // another, back again under the first, and survives a reload.
 test.describe("Phase SF PR1: filters are remembered per type", () => {
-  test("a PAIN deviation under O2 is gone under AT, back under O2, and still there after a reload", async ({
+  test("a EFFORT deviation under O2 is gone under AT, back under O2, and still there after a reload", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -1199,11 +1199,11 @@ test.describe("Phase SF PR1: filters are remembered per type", () => {
     await openFilterSheet(page);
     await page
       .getByRole("dialog")
-      .getByRole("group", { name: "PAIN" })
+      .getByRole("group", { name: "EFFORT" })
       .getByRole("button", { name: "1", exact: true })
       .click();
     await applyFilterSheet(page);
-    const token = page.locator(".filter-token", { hasText: "PAIN 1" });
+    const token = page.locator(".filter-token", { hasText: "EFFORT 1" });
     await expect(token).toBeVisible();
 
     await page.getByRole("button", { name: "AT", exact: true }).click();
@@ -1222,7 +1222,7 @@ test.describe("Phase SF PR1: filters are remembered per type", () => {
 // Task 3 (2026-08-04 round): CLEAR ALL's own deliberate divergence from the
 // Library's CLEAR ALL (which empties every filter to nothing) — Today's
 // CLEAR ALL resets to the day's pref-derived DEFAULTS instead
-// (`filterDefaults` in Today.tsx: the account's own cap, no pain filter).
+// (`filterDefaults` in Today.tsx: the account's own cap, no effort filter).
 // Before Phase DE PR 1 the reason it could not just empty everything was
 // the DIFFICULTY group, whose empty set meant "match nothing"; that group
 // is gone, and the divergence stays because TIME's default is the cap, not
@@ -1231,12 +1231,12 @@ test.describe("Phase SF PR1: filters are remembered per type", () => {
 // ALL removes the tokens AND the card returns to the day's real, unfiltered
 // pick — never an empty-pool dead end.
 test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () => {
-  const highPainTitle = "Today Clear All High Pain E2E";
-  const lowPainTitle = "Today Clear All Low Pain E2E";
+  const highEffortTitle = "Today Clear All High Effort E2E";
+  const lowEffortTitle = "Today Clear All Low Effort E2E";
 
   test.afterEach(async ({ page }) => {
-    await cleanupByTitle(page, highPainTitle);
-    await cleanupByTitle(page, lowPainTitle);
+    await cleanupByTitle(page, highEffortTitle);
+    await cleanupByTitle(page, lowEffortTitle);
   });
 
   test("two groups off-default -> CLEAR ALL -> tokens gone and the card shows the unfiltered pick, not an empty pool", async ({
@@ -1247,26 +1247,26 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
       name: "Today Clear All Tester",
     });
     await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
-    // Same neutralize-then-import idiom as the PAIN-filter test above: makes
+    // Same neutralize-then-import idiom as the EFFORT-filter test above: makes
     // these two personal fixtures the only never-done O2 entries, so the
-    // unfiltered pick is deterministic (creation order: high-pain first).
+    // unfiltered pick is deterministic (creation order: high-effort first).
     await neutralizeGlobalRecency(page, "O2");
     await importBulk(
       page,
-      [`${highPainTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
+      [`${highEffortTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
     );
     await importBulk(
       page,
-      [`${lowPainTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
+      [`${lowEffortTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
     );
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
     // Two never-done O2 fixtures tie; state the draw (see pinToday).
-    await pinToday(page, { title: highPainTitle });
+    await pinToday(page, { title: highEffortTitle });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
-    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(highEffortTitle);
     // At rest, nothing deviates from the day's defaults — no tokens, no
     // CLEAR ALL.
     await expect(page.locator(".filter-token")).toHaveCount(0);
@@ -1276,19 +1276,19 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
 
     // Push two groups off-default: TIME (Longest to End — the unbounded
     // range, harmless to the pool but a real, provable deviation from the
-    // cap default) and PAIN (1+2, which excludes the high-pain fixture and
-    // narrows the pool to the low-pain one alone).
+    // cap default) and EFFORT (1+2, which excludes the high-effort fixture and
+    // narrows the pool to the low-effort one alone).
     await openFilterSheet(page);
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("slider", { name: "Longest" }).focus();
     await page.keyboard.press("End");
-    const painGroup = dialog.getByRole("group", { name: "PAIN" });
-    await painGroup.getByRole("button", { name: "1", exact: true }).click();
-    await painGroup.getByRole("button", { name: "2", exact: true }).click();
+    const effortGroup = dialog.getByRole("group", { name: "EFFORT" });
+    await effortGroup.getByRole("button", { name: "1", exact: true }).click();
+    await effortGroup.getByRole("button", { name: "2", exact: true }).click();
     await applyFilterSheet(page);
 
     await expect(page.locator(".filter-token")).toHaveCount(2);
-    await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(lowEffortTitle);
     const clearAll = page.getByRole("button", { name: "CLEAR ALL" });
     await expect(clearAll).toBeVisible();
 
@@ -1300,22 +1300,22 @@ test.describe("Today enhancements: CLEAR ALL restores the day's defaults", () =>
     // ...AND the card is back on the real, unfiltered pick — never an
     // empty-pool dead end (the Library's own CLEAR ALL, which empties
     // TYPE to nothing, would zero this exact pool if Today reused it).
-    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(highEffortTitle);
 
     // Re-opening confirms the draft itself reset too, not just the applied
     // record — every cell back to its default state (the Longest thumb
-    // back on the cap, every PAIN cell off).
+    // back on the cap, every EFFORT cell off).
     await openFilterSheet(page);
     const dialogAfterClear = page.getByRole("dialog");
     await expect(
       dialogAfterClear.getByRole("slider", { name: "Longest" }),
     ).toHaveAttribute("aria-valuenow", "60");
-    const painGroupAfterClear = dialogAfterClear.getByRole("group", {
-      name: "PAIN",
+    const effortGroupAfterClear = dialogAfterClear.getByRole("group", {
+      name: "EFFORT",
     });
     for (const level of ["1", "2", "3", "4", "5"]) {
       await expect(
-        painGroupAfterClear.getByRole("button", { name: level, exact: true }),
+        effortGroupAfterClear.getByRole("button", { name: level, exact: true }),
       ).toHaveAttribute("aria-pressed", "false");
     }
   });
@@ -1345,12 +1345,12 @@ test.describe("Today enhancements: sheet dismiss discards the draft", () => {
 
     await openFilterSheet(page);
     const dialog = page.getByRole("dialog");
-    const painCell3 = dialog
-      .getByRole("group", { name: "PAIN" })
+    const effortCell3 = dialog
+      .getByRole("group", { name: "EFFORT" })
       .getByRole("button", { name: "3", exact: true });
-    await expect(painCell3).toHaveAttribute("aria-pressed", "false");
-    await painCell3.click();
-    await expect(painCell3).toHaveAttribute("aria-pressed", "true");
+    await expect(effortCell3).toHaveAttribute("aria-pressed", "false");
+    await effortCell3.click();
+    await expect(effortCell3).toHaveAttribute("aria-pressed", "true");
 
     // The backdrop is the dialog's own parent (`.filter-sheet-backdrop`,
     // SheetShell.tsx) — clicked near the top, well clear of the bottom-
@@ -1361,16 +1361,16 @@ test.describe("Today enhancements: sheet dismiss discards the draft", () => {
       .click({ position: { x: 10, y: 10 } });
     await expect(page.getByRole("dialog")).not.toBeVisible();
 
-    // Discarded: no token rendered from the never-applied PAIN pick.
+    // Discarded: no token rendered from the never-applied EFFORT pick.
     await expect(page.locator(".filter-token")).toHaveCount(0);
 
-    // Re-opening starts fresh from the still-unapplied overrides — PAIN 3
+    // Re-opening starts fresh from the still-unapplied overrides — EFFORT 3
     // is inactive again, not left over from the discarded draft.
     await openFilterSheet(page);
     await expect(
       page
         .getByRole("dialog")
-        .getByRole("group", { name: "PAIN" })
+        .getByRole("group", { name: "EFFORT" })
         .getByRole("button", { name: "3", exact: true }),
     ).toHaveAttribute("aria-pressed", "false");
   });
@@ -1490,7 +1490,7 @@ async function advancePlanBy(page: Page, count: number): Promise<void> {
           workoutTitle: `Checkpoint Advance ${i + 1}`,
           workoutType: "O2",
           held: "held",
-          pain: 1,
+          effort: 1,
           notes: null,
           steps: [{ label: "Work" }],
           source: "manual",

@@ -27,7 +27,7 @@ test 2k
     expect(result.workouts[0]).toStrictEqual({
       title: "Ladder Day",
       type: "AT",
-      pain: 3,
+      effort: 3,
       steps: [
         { k: "reps", count: 4 },
         {
@@ -44,7 +44,7 @@ test 2k
     expect(result.workouts[1]).toStrictEqual({
       title: "Long Repeats",
       type: "O2",
-      pain: 2,
+      effort: 2,
       steps: [
         { k: "reps", count: 5 },
         {
@@ -161,7 +161,10 @@ wu 10`;
 w 10' 6k+4 @20`;
     const result = parseBulk(text);
     expect(result.errors).toStrictEqual([]);
-    expect(result.workouts[0]).toMatchObject({ title: "Ladder Day", pain: 3 });
+    expect(result.workouts[0]).toMatchObject({
+      title: "Ladder Day",
+      effort: 3,
+    });
   });
 
   it("reports a non-integer pain value in the header", () => {
@@ -454,7 +457,7 @@ describe("header (Phase DE PR 1: three-field canonical, legacy forms kept)", () 
     expect(r.workouts[0]).toMatchObject({
       title: "Scud Cloud",
       type: "AN",
-      pain: 3,
+      effort: 3,
     });
     expect(r.workouts[0]).not.toHaveProperty("difficulty");
   });
@@ -464,7 +467,7 @@ describe("header (Phase DE PR 1: three-field canonical, legacy forms kept)", () 
     expect(r.workouts[0]).toMatchObject({
       title: "Scud Cloud",
       type: "AN",
-      pain: 3,
+      effort: 3,
     });
   });
   it("accepts the legacy five-field header and ignores the number and the difficulty word", () => {
@@ -473,7 +476,7 @@ describe("header (Phase DE PR 1: three-field canonical, legacy forms kept)", () 
     expect(r.workouts[0]).toMatchObject({
       title: "Scud Cloud",
       type: "AN",
-      pain: 3,
+      effort: 3,
     });
   });
   it("rejects any other field count naming only the canonical form", () => {

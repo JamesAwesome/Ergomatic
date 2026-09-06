@@ -6,7 +6,7 @@ export interface LibraryWorkout {
   id: string;
   title: string;
   type: WorkoutType;
-  pain: number;
+  effort: number;
   steps: Step[];
   isGlobal: boolean;
   lastDoneDaysAgo: number | null;

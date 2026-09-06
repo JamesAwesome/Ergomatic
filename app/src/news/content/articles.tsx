@@ -2,7 +2,7 @@ import type { NewsArticle } from "./types";
 import { WorkoutTypesBody } from "./bodies/workoutTypes";
 import { BaselinesBody } from "./bodies/baselines";
 import { PickingAWorkoutBody } from "./bodies/pickingAWorkout";
-import { PainScaleBody } from "./bodies/painScale";
+import { EffortScaleBody } from "./bodies/effortScale";
 import { YourFirstRowBody } from "./bodies/yourFirstRow";
 import { ConnectTheMonitorBody } from "./bodies/connectTheMonitor";
 import { NotationBody } from "./bodies/notation";
@@ -23,7 +23,7 @@ import { NotationBody } from "./bodies/notation";
 // speed-reading estimate. Recount and update whenever a body's prose
 // changes (persona-review fix wave, 2026-08-07): workout-types 449 words
 // -> 3 min, baselines 451 words -> 3 min, picking-a-workout 286 words
-// -> 2 min, pain-scale 366 words -> 3 min. Phase 6I Task 6 (2026-08-08):
+// -> 2 min, effort-scale 366 words -> 3 min. Phase 6I Task 6 (2026-08-08):
 // your-first-row 216 words -> 2 min, connect-the-monitor 190 words -> 2
 // min — the design spec's own "~3 min" estimate for connect-the-monitor
 // (written before the prose existed) is superseded by this real count;
@@ -80,13 +80,13 @@ export const ARTICLES: NewsArticle[] = [
     body: <PickingAWorkoutBody />,
   },
   {
-    slug: "pain-scale",
-    title: "The pain scale, without a heart rate monitor",
+    slug: "effort-scale",
+    title: "The effort scale, without a heart rate monitor",
     minutes: 3,
     kind: "first-party",
     pinned: false,
     publishedAt: "2026-08-07",
-    body: <PainScaleBody />,
+    body: <EffortScaleBody />,
   },
   {
     // PINNED per James (2026-08-23): the START HERE block on Today, the
@@ -130,6 +130,13 @@ export const ARTICLES: NewsArticle[] = [
     body: <NotationBody />,
   },
 ];
+
+// Phase DE PR 2: old slugs that still reach the reader (release-note history,
+// shared links, an installed pre-PR-2 build's own links). Reader.tsx redirects
+// through this map; the server aliases the same pair for article reads.
+export const LEGACY_ARTICLE_SLUGS: Readonly<Record<string, string>> = {
+  "pain-scale": "effort-scale",
+};
 
 export function articleBySlug(slug: string): NewsArticle | undefined {
   return ARTICLES.find((a) => a.slug === slug);

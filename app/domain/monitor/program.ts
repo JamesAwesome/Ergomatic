@@ -285,7 +285,7 @@ function representableCentiseconds(raw: number): number | null {
  * `workoutComplete` fired, with no early termination
  * (`docs/monitor/pm5-interface-notes.md` §15 #9/§17 item 8, §18 #8).
  *
- * **Effort vs. split targets** (H8): a "split" work phase's `targetSplit`
+ * **PaceWord vs. split targets** (H8): a "split" work phase's `targetSplit`
  * is a real, user-chosen pace and is programmed as-is. An "effort" work
  * phase's `targetSplit`, when baselines were available, is ALSO a real
  * number on the input (an ESTIMATE, `domain/pace.ts`'s `estimationSplit`,

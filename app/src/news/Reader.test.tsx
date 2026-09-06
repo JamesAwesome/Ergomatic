@@ -32,7 +32,7 @@ vi.mock("../api/useArticleReads", () => ({
 // synthetic linked-kind fixture at "external-piece" (same slug/shape
 // News.test.tsx's own linked fixture uses).
 // Registry order (content/articles.tsx): workout-types, baselines,
-// picking-a-workout, pain-scale, your-first-row, connect-the-monitor — the
+// picking-a-workout, effort-scale, your-first-row, connect-the-monitor — the
 // same real order the multi-hop NEXT chain tests below walk.
 const WORKOUT_TYPES_TITLE =
   "The four workout types, and how hard each should feel";
@@ -104,6 +104,28 @@ function renderReaderWithState(pathname: string, state: unknown) {
 }
 
 describe("Reader", () => {
+  // Phase DE PR 2: the pain-scale article became effort-scale. The old path
+  // still reaches the reader from release-note history and shared links; it
+  // redirects, and the OLD slug is never the one marked read (the stored
+  // rows moved to effort-scale in migration 0024).
+  it("redirects /news/pain-scale to the effort-scale article and marks only effort-scale read", async () => {
+    const markRead = vi.fn();
+    mockUseArticleReads.mockReturnValue({
+      state: "ready",
+      readSlugs: new Set<string>(),
+      markRead,
+      markUnread: vi.fn(),
+    });
+    renderReader("/news/pain-scale");
+    expect(
+      await screen.findByRole("heading", {
+        name: "The effort scale, without a heart rate monitor",
+      }),
+    ).toBeInTheDocument();
+    expect(markRead).toHaveBeenCalledWith("effort-scale");
+    expect(markRead).not.toHaveBeenCalledWith("pain-scale");
+  });
+
   it("renders the title, the ERGOMATIC · N MIN meta, and a distinctive sentence from the article body", () => {
     mockUseArticleReads.mockReturnValue(readyState([]));
     renderReader("/news/baselines");
@@ -177,7 +199,7 @@ describe("Reader", () => {
       readyState([
         "workout-types",
         "picking-a-workout",
-        "pain-scale",
+        "effort-scale",
         "your-first-row",
         "connect-the-monitor",
         "reading-the-shorthand",
@@ -588,12 +610,12 @@ describe("Reader", () => {
     it("origin survives a NEXT + cross-link mix: entering via the same {trail, origin} shape ArticleLink's cross-link hop writes still resolves BACK to the hop just left and ✕ to the ORIGINAL origin, and a further NEXT keeps threading both", async () => {
       mockUseArticleReads.mockReturnValue(readyState([]));
       const user = userEvent.setup();
-      // Simulates arriving at pain-scale via ArticleLink's own cross-link
+      // Simulates arriving at effort-scale via ArticleLink's own cross-link
       // hop from picking-a-workout (itself entered from Today) — the exact
       // shape ArticleLink.tsx writes (`{ trail: [...trail, <article just
       // left>], origin }`), not a NEXT hop. Reader can't (and shouldn't)
       // tell the two doors apart — that's the point of the shared shape.
-      renderReaderWithState("/news/pain-scale", {
+      renderReaderWithState("/news/effort-scale", {
         trail: ["/today", "/news/picking-a-workout"],
         origin: "/today",
       });
@@ -613,7 +635,7 @@ describe("Reader", () => {
       ).toHaveAttribute("href", "/today");
       expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
         "href",
-        "/news/pain-scale",
+        "/news/effort-scale",
       );
     });
   });

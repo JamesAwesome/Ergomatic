@@ -8,7 +8,7 @@ import { isWorkoutType, type WorkoutType } from "../../domain/types.js";
  *  preserving across a context change.
  *
  *  Phase SF PR1 (spec §2.3): the five FILTER groups that used to ride this
- *  record (v3/v4: durations/painLevels/lastDone/source, plus difficulties
+ *  record (v3/v4: durations/effortLevels/lastDone/source, plus difficulties
  *  until Phase DE PR 1) moved
  *  to `todayFilters.ts`, which is UNDATED and keyed per type — filters are
  *  "set and forget" now, and a record that dies at midnight cannot carry

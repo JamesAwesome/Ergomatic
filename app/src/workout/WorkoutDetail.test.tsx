@@ -37,7 +37,7 @@ const WORKOUT: LibraryWorkout = {
   id: "w1",
   title: "Ladder Sets",
   type: "AT",
-  pain: 3,
+  effort: 3,
   steps: [
     {
       k: "w",
@@ -70,7 +70,7 @@ const WORKOUT_WITH_REPS: LibraryWorkout = {
   id: "w2",
   title: "Rep City",
   type: "AN",
-  pain: 4,
+  effort: 4,
   steps: [
     { k: "reps", count: 4 },
     {
@@ -91,7 +91,7 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
   id: "w3",
   title: "My Own Session",
   type: "O2",
-  pain: 2,
+  effort: 2,
   steps: [
     {
       k: "w",
@@ -113,9 +113,9 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
 // seed no longer carries either.
 const EFFORT_ONLY_WORKOUT: LibraryWorkout = {
   id: "w-effort",
-  title: "Effort Only Row",
+  title: "PaceWord Only Row",
   type: "O2",
-  pain: 2,
+  effort: 2,
   steps: [
     {
       k: "w",

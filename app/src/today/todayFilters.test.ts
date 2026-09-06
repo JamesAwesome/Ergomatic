@@ -14,14 +14,14 @@ import {
 
 const AT_SET: FilterSet = {
   durationRange: { min: 25, max: 60 },
-  painLevels: [1, 3, 5],
+  effortLevels: [1, 3, 5],
   lastDone: "under21",
   source: "custom",
 };
 
 const DEFAULTS: FilterSet = {
   durationRange: { min: 0, max: 60 },
-  painLevels: [],
+  effortLevels: [],
   lastDone: null,
   source: null,
 };
@@ -83,7 +83,7 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     expect(loadTodayFilters().byKey).toStrictEqual({ AT: AT_SET });
   });
 
-  it("clamps a tampered durationRange and de-dupes/sorts pain levels inside a set", () => {
+  it("clamps a tampered durationRange and de-dupes/sorts effort levels inside a set", () => {
     localStorage.setItem(
       TODAY_FILTERS_KEY,
       JSON.stringify({
@@ -92,7 +92,7 @@ describe("saveTodayFilters / loadTodayFilters", () => {
           O2: {
             ...AT_SET,
             durationRange: { min: 24.6, max: 500 },
-            painLevels: [5, 1, 5],
+            effortLevels: [5, 1, 5],
           },
         },
       }),
@@ -100,7 +100,7 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     expect(loadTodayFilters().byKey.O2).toStrictEqual({
       ...AT_SET,
       durationRange: { min: 25, max: 120 },
-      painLevels: [1, 5],
+      effortLevels: [1, 5],
     });
   });
 
@@ -150,6 +150,46 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     expect(loadTodayFilters().byKey).toStrictEqual({ AT: AT_SET });
   });
 
+  // Phase DE PR 2 (spec §4.2): every installed rower's record carries
+  // `painLevels`. It reads as `effortLevels` when the new key is ABSENT; a
+  // present `effortLevels` wins, and a present-but-null one is malformed.
+  it("reads a pre-PR-2 set's painLevels as effortLevels when effortLevels is absent, and writes only effortLevels", () => {
+    const { effortLevels: _drop, ...legacy } = AT_SET;
+    localStorage.setItem(
+      TODAY_FILTERS_KEY,
+      JSON.stringify({
+        v: 2,
+        byKey: { AT: { ...legacy, painLevels: [2, 4] } },
+      }),
+    );
+    const store = loadTodayFilters();
+    expect(store.byKey.AT).toStrictEqual({ ...legacy, effortLevels: [2, 4] });
+    saveTodayFilters(store);
+    const written = JSON.parse(localStorage.getItem(TODAY_FILTERS_KEY)!) as {
+      byKey: { AT: Record<string, unknown> };
+    };
+    expect(written.byKey.AT).not.toHaveProperty("painLevels");
+    expect(written.byKey.AT.effortLevels).toStrictEqual([2, 4]);
+  });
+  it("prefers effortLevels when both keys are present, and a present-but-null effortLevels fails the set even beside a valid painLevels", () => {
+    localStorage.setItem(
+      TODAY_FILTERS_KEY,
+      JSON.stringify({
+        v: 2,
+        byKey: { AT: { ...AT_SET, effortLevels: [1], painLevels: [5] } },
+      }),
+    );
+    expect(loadTodayFilters().byKey.AT?.effortLevels).toStrictEqual([1]);
+    localStorage.setItem(
+      TODAY_FILTERS_KEY,
+      JSON.stringify({
+        v: 2,
+        byKey: { AT: { ...AT_SET, effortLevels: null, painLevels: [5] } },
+      }),
+    );
+    expect(loadTodayFilters().byKey.AT).toBeUndefined();
+  });
+
   it("ignores unknown top-level fields (the revision-1 rollSuppressed flag James struck reads as nothing)", () => {
     localStorage.setItem(
       TODAY_FILTERS_KEY,
@@ -184,9 +224,9 @@ describe("saveTodayFilters / loadTodayFilters", () => {
         "a v1 field on a v2 record (durations, no durationRange)",
         { ...AT_SET, durationRange: undefined, durations: ["<30"] },
       ],
-      ["painLevels not an array", { ...AT_SET, painLevels: 3 }],
-      ["out-of-range pain level", { ...AT_SET, painLevels: [0] }],
-      ["non-integer pain level", { ...AT_SET, painLevels: [4.5] }],
+      ["effortLevels not an array", { ...AT_SET, effortLevels: 3 }],
+      ["out-of-range effort level", { ...AT_SET, effortLevels: [0] }],
+      ["non-integer effort level", { ...AT_SET, effortLevels: [4.5] }],
       ["lastDone wrong shape", { ...AT_SET, lastDone: 21 }],
       ["unknown lastDone", { ...AT_SET, lastDone: "recent" }],
       [

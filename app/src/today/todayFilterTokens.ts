@@ -22,23 +22,23 @@ function sameRange(a: DurationRange, b: DurationRange): boolean {
   return a.min === b.min && a.max === b.max;
 }
 
-/** Library's filterTokens.ts's own pain collapse, copied verbatim — this
+/** Library's filterTokens.ts's own effort collapse, copied verbatim — this
  *  repo's established per-file duplication convention for small display
- *  maps (unlike TIME's own collapse above, PAIN's shape never drifted
+ *  maps (unlike TIME's own collapse above, EFFORT's shape never drifted
  *  between the two screens the way TIME's cap-vs-bucket-union split did,
  *  so there's no equivalent pressure to genuinely share this one). */
-function collapsePain(levels: number[]): string {
+function collapseEffort(levels: number[]): string {
   const sorted = [...levels].sort((a, b) => a - b);
   const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
-  if (!contiguous) return `PAIN ${sorted.join(", ")}`;
+  if (!contiguous) return `EFFORT ${sorted.join(", ")}`;
   const min = sorted[0];
   const max = sorted[sorted.length - 1];
-  return min === max ? `PAIN ${min}` : `PAIN ${min}–${max}`;
+  return min === max ? `EFFORT ${min}` : `EFFORT ${min}–${max}`;
 }
 
 /**
  * Today's overrides -> the active tokens row, in the sheet's own group
- * order (TIME, PAIN, LAST DONE, SOURCE) — one token per group
+ * order (TIME, EFFORT, LAST DONE, SOURCE) — one token per group
  * that DEVIATES from `defaults`, never one per selected value (mirrors
  * Library's filterTokens.ts "the header count counts tokens" rule).
  * `onReset` fires with which group to reset; this module has no
@@ -49,12 +49,12 @@ function collapsePain(levels: number[]): string {
  * LAST DONE/SOURCE (Round 2, 2026-08-04) don't need a `defaults` comparison
  * the way TIME does — both default to `null` unconditionally (the
  * spec's own "no token until set" rule), so "deviates" is simply "is not
- * null", identical to PAIN's own `length > 0` check just below.
+ * null", identical to EFFORT's own `length > 0` check just below.
  */
 export function todayFilterTokens(
   overrides: FilterSet,
   defaults: TodayFilterDefaults,
-  onReset: (group: "durations" | "pain" | "lastDone" | "source") => void,
+  onReset: (group: "durations" | "effort" | "lastDone" | "source") => void,
 ): Token[] {
   const tokens: Token[] = [];
 
@@ -70,11 +70,11 @@ export function todayFilterTokens(
     });
   }
 
-  if (overrides.painLevels.length > 0) {
+  if (overrides.effortLevels.length > 0) {
     tokens.push({
-      key: "pain",
-      label: collapsePain(overrides.painLevels),
-      onClear: () => onReset("pain"),
+      key: "effort",
+      label: collapseEffort(overrides.effortLevels),
+      onClear: () => onReset("effort"),
     });
   }
 

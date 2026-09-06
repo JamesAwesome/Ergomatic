@@ -47,7 +47,7 @@ describe("News", () => {
       screen.getByText("Picking a workout by how much it should hurt"),
     ).toBeVisible();
     expect(
-      screen.getByText("The pain scale, without a heart rate monitor"),
+      screen.getByText("The effort scale, without a heart rate monitor"),
     ).toBeVisible();
     expect(screen.getByText("Your first row")).toBeVisible();
     expect(
@@ -99,7 +99,7 @@ describe("News", () => {
         "workout-types",
         "baselines",
         "picking-a-workout",
-        "pain-scale",
+        "effort-scale",
         "your-first-row",
         "connect-the-monitor",
         "reading-the-shorthand",
@@ -174,9 +174,9 @@ describe("News", () => {
     renderNews();
 
     const link = screen.getByRole("link", {
-      name: /The pain scale, without a heart rate monitor/,
+      name: /The effort scale, without a heart rate monitor/,
     });
-    expect(link).toHaveAttribute("href", "/news/pain-scale");
+    expect(link).toHaveAttribute("href", "/news/effort-scale");
   });
 });
 
