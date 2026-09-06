@@ -1811,6 +1811,10 @@ describe("the grid, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FILLING_LOW.program}
         phases={FILLING_LOW.phases}
         identity={FILLING_LOW.identity}

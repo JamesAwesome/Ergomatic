@@ -672,3 +672,56 @@ export interface Transport {
    *  producer of it. */
   onDisconnect(cb: (reason: string) => void): () => void;
 }
+
+/** Phase NF: opaque correlation for one hardware-entry attempt, minted with
+ *  `crypto.randomUUID()` at the shared entry owner. Not authentication;
+ *  compared only by exact equality. */
+export type ConnectionAttemptId = string;
+
+/** Phase NF: discovery narrowed to ONE live advertising name (the PM5 tag's
+ *  decoded name). Never a prefix, never a cached name. */
+export interface TargetedMonitorDiscoveryRequest {
+  kind: "advertised-name";
+  attemptId: ConnectionAttemptId;
+  exactName: string;
+}
+
+export type MonitorDiscoveryRequest =
+  | { kind: "picker"; attemptId: ConnectionAttemptId }
+  | TargetedMonitorDiscoveryRequest;
+
+/** Phase NF: the structural shape of the connection-attempt trace a
+ *  targeted scan may record into (the real type lives above the domain, in
+ *  `src/monitor/nfc/connectionAttemptTrace.ts`). Optional at every seam so
+ *  a caller without a trace records nothing; a transport never invents one. */
+export interface DiscoveryTrace {
+  record(kind: string, detail?: string): void;
+}
+
+/** Phase NF: a SEPARATE structural capability, deliberately not an option on
+ *  `scan()` — an omitted option would mean today's broad picker, turning a
+ *  dropped target into a privilege downgrade (spec, "Rejected approaches").
+ *  A transport without this method cannot serve an advertised-name request
+ *  and the session fails closed before any radio call. */
+export interface TargetedScanTransport {
+  scanTarget(
+    request: TargetedMonitorDiscoveryRequest,
+    signal: AbortSignal,
+    trace?: DiscoveryTrace,
+  ): Promise<DiscoveredMonitor[]>;
+}
+
+const UUID_V4 =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** A minted attempt ID is a UUID v4 string; anything else (empty, absent,
+ *  another shape) fails closed at every boundary that checks it. */
+export function isValidAttemptId(value: unknown): value is ConnectionAttemptId {
+  return typeof value === "string" && UUID_V4.test(value);
+}
+
+export function hasTargetedScan(
+  t: Transport,
+): t is Transport & TargetedScanTransport {
+  return typeof (t as Partial<TargetedScanTransport>).scanTarget === "function";
+}

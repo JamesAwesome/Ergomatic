@@ -640,8 +640,8 @@ export async function seedGlobalLibrary(db: Db): Promise<void> {
     const workouts = createWorkoutsStore(tx as unknown as Db);
 
     const globals = await workouts.listGlobals();
-    const expected = LIBRARY_WORKOUTS.map((w) => w.title).sort().join(" ");
-    const actual = globals.map((g) => g.title).sort().join(" ");
+    const expected = LIBRARY_WORKOUTS.map((w) => w.title).sort().join("");
+    const actual = globals.map((g) => g.title).sort().join("");
     if (actual === expected) return;
 
     if (globals.length > 0) await workouts.deleteGlobals();

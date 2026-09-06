@@ -56,6 +56,8 @@ vi.mock("@capacitor-community/bluetooth-le", () => ({
     setDisplayStrings: vi.fn(),
     requestDevice: vi.fn(),
     getConnectedDevices: vi.fn(),
+    requestLEScan: vi.fn(),
+    stopLEScan: vi.fn(),
     connect: vi.fn(),
     disconnect: vi.fn(),
     write: vi.fn(),
@@ -110,6 +112,8 @@ beforeEach(async () => {
   vi.mocked(BleClient.initialize).mockResolvedValue(undefined);
   vi.mocked(BleClient.isEnabled).mockResolvedValue(true);
   vi.mocked(BleClient.setDisplayStrings).mockResolvedValue(undefined);
+  vi.mocked(BleClient.requestLEScan).mockResolvedValue(undefined);
+  vi.mocked(BleClient.stopLEScan).mockResolvedValue(undefined);
   vi.mocked(BleClient.requestDevice).mockResolvedValue({
     deviceId: "d1",
     name: "PM5 431910706",
@@ -1056,5 +1060,540 @@ describe("createCapacitorBleTransport: 0x003F joins SERVICE_OF (storage-spine de
     expect(degraded).toHaveLength(1);
     expect(degraded[0]![0]).toBe(LOGGED_WORKOUT_UUID);
     expect(degraded[0]![1]).toContain("Service not found.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase NF (design spec 2026-09-03 §5): `scanTarget`, the operation tail
+// and the poison state. A mocked `BleClient` proves what is OURS — request
+// options, ordering, the exact-name comparison, dedup, the collision
+// window, the deadline, abort and cleanup ownership — never the radio.
+describe("scanTarget (Phase NF)", () => {
+  const ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+  const NAME = "PM5 432331249 Row";
+  const request = {
+    kind: "advertised-name" as const,
+    attemptId: ATTEMPT,
+    exactName: NAME,
+  };
+
+  let scanCallback: ((result: unknown) => void) | null = null;
+  beforeEach(() => {
+    scanCallback = null;
+    vi.mocked(BleClient.getConnectedDevices).mockResolvedValue([]);
+    vi.mocked(BleClient.requestLEScan).mockImplementation(async (_opts, cb) => {
+      scanCallback = cb as (result: unknown) => void;
+    });
+  });
+
+  /** A transport on a manual clock: `advance(ms)` moves the clock, fires
+   *  every timer that is now due in schedule order, then yields twice so
+   *  the settle chain (`stopLEScan().then(...)`) runs. */
+  function transportWithClock() {
+    let now = 0;
+    const timers: { at: number; fn: () => void; id: number }[] = [];
+    let nextId = 1;
+    const t = createCapacitorBleTransport({
+      setTimeout: ((fn: () => void, ms: number) => {
+        const id = nextId++;
+        timers.push({ at: now + ms, fn, id });
+        return id as unknown as ReturnType<typeof setTimeout>;
+      }) as typeof setTimeout,
+      clearTimeout: ((id: unknown) => {
+        const i = timers.findIndex((x) => x.id === id);
+        if (i >= 0) timers.splice(i, 1);
+      }) as typeof clearTimeout,
+    });
+    const advance = async (ms: number) => {
+      now += ms;
+      const due = timers.filter((x) => x.at <= now).sort((a, b) => a.at - b.at);
+      for (const timer of due) {
+        const i = timers.indexOf(timer);
+        if (i >= 0) timers.splice(i, 1);
+        timer.fn();
+      }
+      for (let i = 0; i < 25; i += 1) await Promise.resolve();
+    };
+    return { t, advance };
+  }
+
+  it("rejects a pre-aborted signal without any native call", async () => {
+    const { t } = transportWithClock();
+    const ac = new AbortController();
+    ac.abort();
+    await expect(t.scanTarget(request, ac.signal)).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+    expect(BleClient.initialize).not.toHaveBeenCalled();
+    expect(BleClient.requestLEScan).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid request (bad id, bad name, missing fields) before initialize", async () => {
+    const { t } = transportWithClock();
+    const signal = new AbortController().signal;
+    const bad: unknown[] = [
+      { ...request, attemptId: "" },
+      { ...request, attemptId: "nope" },
+      { ...request, exactName: "PM5" },
+      { ...request, exactName: "pm5 x" },
+      { ...request, exactName: "PM5 " + "x".repeat(28) },
+      { kind: "advertised-name", attemptId: ATTEMPT },
+      { kind: "picker", attemptId: ATTEMPT, exactName: NAME },
+      null,
+    ];
+    for (const value of bad) {
+      await expect(
+        t.scanTarget(value as typeof request, signal),
+      ).rejects.toMatchObject({ name: "TargetedRequestInvalidError" });
+    }
+    expect(BleClient.initialize).not.toHaveBeenCalled();
+  });
+
+  it("checks enabled after initialize and before the held-device query", async () => {
+    const { t } = transportWithClock();
+    const order: string[] = [];
+    vi.mocked(BleClient.initialize).mockImplementation(async () => {
+      order.push("initialize");
+    });
+    vi.mocked(BleClient.isEnabled).mockImplementation(async () => {
+      order.push("isEnabled");
+      return false;
+    });
+    vi.mocked(BleClient.getConnectedDevices).mockImplementation(async () => {
+      order.push("held");
+      return [];
+    });
+    await expect(
+      t.scanTarget(request, new AbortController().signal),
+    ).rejects.toMatchObject({ name: "BluetoothOffError" });
+    expect(order).toStrictEqual(["initialize", "isEnabled"]);
+    expect(BleClient.requestLEScan).not.toHaveBeenCalled();
+  });
+
+  it("fails closed with TargetAlreadyConnectedError on a held exact-name device and never selects it", async () => {
+    const { t } = transportWithClock();
+    vi.mocked(BleClient.getConnectedDevices).mockResolvedValue([
+      { deviceId: "held-1", name: "PM5 other" },
+      { deviceId: "held-2", name: NAME },
+    ]);
+    await expect(
+      t.scanTarget(request, new AbortController().signal),
+    ).rejects.toMatchObject({ name: "TargetAlreadyConnectedError" });
+    expect(BleClient.requestLEScan).not.toHaveBeenCalled();
+  });
+
+  it("ignores a held device whose cached name differs and scans", async () => {
+    const { t, advance } = transportWithClock();
+    vi.mocked(BleClient.getConnectedDevices).mockResolvedValue([
+      { deviceId: "held-1", name: "PM5 other" },
+    ]);
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    expect(BleClient.requestLEScan).toHaveBeenCalledWith(
+      { allowDuplicates: true },
+      expect.any(Function),
+    );
+    scanCallback!({
+      device: { deviceId: "d1", name: "cached" },
+      localName: NAME,
+    });
+    await advance(1_000);
+    await expect(p).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
+    expect(BleClient.stopLEScan).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts requestLEScan with no name or service filter", async () => {
+    const { t, advance } = transportWithClock();
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    const [opts] = vi.mocked(BleClient.requestLEScan).mock.calls[0]!;
+    expect(opts).toStrictEqual({ allowDuplicates: true });
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    await advance(1_000);
+    await p;
+  });
+
+  it("matches only ScanResult.localName, never device.name, and never a prefix", async () => {
+    const { t, advance } = transportWithClock();
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    scanCallback!({ device: { deviceId: "cached-only", name: NAME } });
+    scanCallback!({
+      device: { deviceId: "wrong", name: NAME },
+      localName: "PM5 other",
+    });
+    scanCallback!({ device: { deviceId: "longer" }, localName: `${NAME}er` });
+    scanCallback!({
+      device: { deviceId: "shorter" },
+      localName: NAME.slice(0, -1),
+    });
+    scanCallback!({
+      device: { deviceId: "d1", name: "stale" },
+      localName: NAME,
+    });
+    await advance(1_000);
+    await expect(p).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
+  });
+
+  it("deduplicates repeat callbacks from the same deviceId and drops malformed results", async () => {
+    const { t, advance } = transportWithClock();
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    scanCallback!(null);
+    scanCallback!("string");
+    scanCallback!({ device: null, localName: NAME });
+    scanCallback!({ device: { deviceId: "" }, localName: NAME });
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    await advance(1_000);
+    await expect(p).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
+  });
+
+  it("fails closed with TargetMonitorAmbiguousError when two distinct devices carry the exact name inside the window", async () => {
+    const { t, advance } = transportWithClock();
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    await advance(999);
+    scanCallback!({ device: { deviceId: "d2" }, localName: NAME });
+    await advance(1);
+    await expect(p).rejects.toMatchObject({
+      name: "TargetMonitorAmbiguousError",
+    });
+    expect(BleClient.stopLEScan).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles on the sole match exactly at the collision window boundary", async () => {
+    const { t, advance } = transportWithClock();
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    await advance(999);
+    expect(BleClient.stopLEScan).not.toHaveBeenCalled();
+    await advance(1);
+    await expect(p).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
+  });
+
+  it("times out to TargetMonitorNotAdvertisingError at 10_000 ms and stops the scan first", async () => {
+    const { t, advance } = transportWithClock();
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    await advance(9_999);
+    expect(BleClient.stopLEScan).not.toHaveBeenCalled();
+    await advance(1);
+    await expect(p).rejects.toMatchObject({
+      name: "TargetMonitorNotAdvertisingError",
+    });
+    expect(BleClient.stopLEScan).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts to TargetScanInterruptedError only after stopLEScan resolves", async () => {
+    const { t, advance } = transportWithClock();
+    let releaseStop!: () => void;
+    vi.mocked(BleClient.stopLEScan).mockImplementation(
+      () =>
+        new Promise<void>((r) => {
+          releaseStop = r;
+        }),
+    );
+    const ac = new AbortController();
+    const p = t.scanTarget(request, ac.signal);
+    await advance(0);
+    let settled = false;
+    void p.catch(() => {
+      settled = true;
+    });
+    ac.abort();
+    await advance(0);
+    expect(settled).toBe(false);
+    releaseStop();
+    await advance(0);
+    await expect(p).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+  });
+
+  describe("trace kinds (review B3: every kind the transport records is asserted)", () => {
+    function stubTrace() {
+      const kinds: [string, string | undefined][] = [];
+      return {
+        kinds,
+        trace: {
+          record: (kind: string, detail?: string) => {
+            kinds.push([kind, detail]);
+          },
+        },
+      };
+    }
+
+    it("a match records started, matched, then drain-settled; a malformed result records invalid-scan-result", async () => {
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(0);
+      scanCallback!(null);
+      scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+      await advance(1_000);
+      await p;
+      await advance(0);
+      expect(kinds).toStrictEqual([
+        ["ble-scan-started", undefined],
+        ["invalid-scan-result", undefined],
+        ["ble-scan-matched", undefined],
+        ["scan-drain-settled", undefined],
+      ]);
+    });
+
+    it("a timeout with the radio live records ble-scan-timed-out 'not advertising'", async () => {
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(0);
+      await advance(10_000);
+      await expect(p).rejects.toMatchObject({
+        name: "TargetMonitorNotAdvertisingError",
+      });
+      expect(kinds).toContainEqual(["ble-scan-timed-out", "not advertising"]);
+    });
+
+    it("a deadline expiry before the radio is live records ble-scan-timed-out 'preamble'", async () => {
+      vi.mocked(BleClient.getConnectedDevices).mockImplementation(
+        () => new Promise(() => undefined),
+      );
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(10_000);
+      await expect(p).rejects.toMatchObject({
+        name: "TargetScanInterruptedError",
+      });
+      expect(kinds).toContainEqual(["ble-scan-timed-out", "preamble"]);
+    });
+
+    it("a held exact-name device records held-device-conflict", async () => {
+      const { t } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      vi.mocked(BleClient.getConnectedDevices).mockResolvedValue([
+        { deviceId: "held-2", name: NAME },
+      ]);
+      await expect(
+        t.scanTarget(request, new AbortController().signal, trace),
+      ).rejects.toMatchObject({ name: "TargetAlreadyConnectedError" });
+      expect(kinds.map(([k]) => k)).toContain("held-device-conflict");
+    });
+
+    it("a stopLEScan rejection records ble-scan-cleanup-failed 'rejected'", async () => {
+      vi.mocked(BleClient.stopLEScan).mockRejectedValue(new Error("boom"));
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(0);
+      scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+      await advance(1_000);
+      await expect(p).rejects.toMatchObject({ name: "ScanCleanupFailedError" });
+      expect(kinds).toContainEqual(["ble-scan-cleanup-failed", "rejected"]);
+    });
+
+    it("a stopLEScan that never settles records ble-scan-cleanup-failed 'did not settle'", async () => {
+      vi.mocked(BleClient.stopLEScan).mockImplementation(
+        () => new Promise(() => undefined),
+      );
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(0);
+      scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+      await advance(1_000);
+      await advance(10_000);
+      await expect(p).rejects.toMatchObject({ name: "ScanCleanupFailedError" });
+      expect(kinds).toContainEqual([
+        "ble-scan-cleanup-failed",
+        "did not settle",
+      ]);
+    });
+  });
+
+  it("an abort while the held-device query is pending never starts the scan", async () => {
+    const { t, advance } = transportWithClock();
+    let releaseHeld!: (v: never[]) => void;
+    vi.mocked(BleClient.getConnectedDevices).mockImplementation(
+      () =>
+        new Promise((r) => {
+          releaseHeld = r;
+        }),
+    );
+    const ac = new AbortController();
+    const p = t.scanTarget(request, ac.signal);
+    await advance(0);
+    ac.abort();
+    releaseHeld([]);
+    await advance(0);
+    await expect(p).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+    expect(BleClient.requestLEScan).not.toHaveBeenCalled();
+  });
+
+  it("an abort after the match still returns interrupted, never the device", async () => {
+    const { t, advance } = transportWithClock();
+    const ac = new AbortController();
+    const p = t.scanTarget(request, ac.signal);
+    await advance(0);
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    ac.abort();
+    await advance(0);
+    await expect(p).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+  });
+
+  it("stopLEScan rejection outranks a match, poisons the tail, and blocks the next scan without a native call", async () => {
+    const { t, advance } = transportWithClock();
+    vi.mocked(BleClient.stopLEScan).mockRejectedValue(new Error("boom"));
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    await advance(1_000);
+    await expect(p).rejects.toMatchObject({ name: "ScanCleanupFailedError" });
+    vi.mocked(BleClient.requestLEScan).mockClear();
+    await expect(
+      t.scanTarget(request, new AbortController().signal),
+    ).rejects.toMatchObject({ name: "ScanCleanupFailedError" });
+    await expect(t.scan()).rejects.toMatchObject({
+      name: "ScanCleanupFailedError",
+    });
+    expect(BleClient.requestLEScan).not.toHaveBeenCalled();
+    expect(BleClient.requestDevice).not.toHaveBeenCalled();
+  });
+
+  it("a second targeted scan waits for the first one's drain (stopLEScan completion)", async () => {
+    const { t, advance } = transportWithClock();
+    let releaseStop!: () => void;
+    vi.mocked(BleClient.stopLEScan).mockImplementationOnce(
+      () =>
+        new Promise<void>((r) => {
+          releaseStop = r;
+        }),
+    );
+    const ac = new AbortController();
+    const first = t.scanTarget(request, ac.signal);
+    await advance(0);
+    ac.abort();
+    await advance(0);
+    const second = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    expect(BleClient.requestLEScan).toHaveBeenCalledTimes(1);
+    releaseStop();
+    await advance(0);
+    await expect(first).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+    await advance(0);
+    expect(BleClient.requestLEScan).toHaveBeenCalledTimes(2);
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    await advance(1_000);
+    await expect(second).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
+  });
+
+  it("F5: a preamble that never settles rejects as interrupted at the deadline and never starts the scan", async () => {
+    const { t, advance } = transportWithClock();
+    vi.mocked(BleClient.getConnectedDevices).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    const p = t.scanTarget(request, new AbortController().signal);
+    void p.catch(() => undefined);
+    await advance(9_999);
+    let settled = false;
+    p.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await advance(0);
+    expect(settled).toBe(false);
+    await advance(1);
+    await expect(p).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+    expect(BleClient.requestLEScan).not.toHaveBeenCalled();
+    expect(BleClient.stopLEScan).not.toHaveBeenCalled();
+  });
+
+  it("F6: a stopLEScan that never settles poisons the tail at the deadline and releases it, so the next scan rejects instead of hanging", async () => {
+    const { t, advance } = transportWithClock();
+    vi.mocked(BleClient.stopLEScan).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    const p = t.scanTarget(request, new AbortController().signal);
+    void p.catch(() => undefined);
+    await advance(0);
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    await advance(1_000);
+    await advance(9_999);
+    let settled = false;
+    p.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await advance(0);
+    expect(settled).toBe(false);
+    await advance(1);
+    await expect(p).rejects.toMatchObject({ name: "ScanCleanupFailedError" });
+    await expect(t.scan()).rejects.toMatchObject({
+      name: "ScanCleanupFailedError",
+    });
+    expect(BleClient.requestDevice).not.toHaveBeenCalled();
+  });
+
+  it("F6: a requestLEScan rejection does not call stopLEScan on a scan that never started", async () => {
+    const { t, advance } = transportWithClock();
+    vi.mocked(BleClient.requestLEScan).mockRejectedValue(new Error("no radio"));
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    await expect(p).rejects.toMatchObject({
+      name: "Error",
+      message: "no radio",
+    });
+    // The native scan may be live even when the start promise rejects, so
+    // cleanup still runs: this pins that a settle after a REJECTED start
+    // stops (defensively) rather than skipping — see the source comment.
+    expect(BleClient.stopLEScan).toHaveBeenCalledTimes(1);
+  });
+
+  it("a manual picker's outer timeout leaves the tail held until the raw picker promise settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const manualTransport = createCapacitorBleTransport();
+      let settlePicker!: (v: { deviceId: string; name: string }) => void;
+      vi.mocked(BleClient.requestDevice).mockImplementation(
+        () =>
+          new Promise((r) => {
+            settlePicker = r;
+          }),
+      );
+      const manual = manualTransport.scan();
+      // Handler attached BEFORE the timer fires so the expected rejection
+      // is never reported as unhandled in the window before `.rejects`.
+      void manual.catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(35_000);
+      await expect(manual).rejects.toMatchObject({ name: "ScanTimeoutError" });
+      const { t } = transportWithClock();
+      const targeted = t.scanTarget(request, new AbortController().signal);
+      void targeted.catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(BleClient.requestLEScan).not.toHaveBeenCalled();
+      settlePicker({ deviceId: "late", name: "PM5 late" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(BleClient.requestLEScan).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

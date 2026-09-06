@@ -60,6 +60,7 @@
 // this design makes does not hold in practice, only in this file's own
 // tests (which call a non-render method first).
 
+import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
 import {
   MONITOR_RUN_KEY,
   isMonitorRun,
@@ -330,6 +331,11 @@ const claims = new Map<string, { renderedRevision: number }>();
  *  `programDropped`, the confirm panel's own Cancel -- each of which
  *  emits `staged-retire-discarded`. */
 let stagedRetireSet: readonly { sessionKey: string; revision: number }[] = [];
+/** Phase NF (design spec 2026-09-03 §3): WHICH attempt staged the set.
+ *  Discard is compare-by-attempt-ID so a late cleanup from attempt A (an
+ *  aborted NFC read settling after the rower already pressed Connect)
+ *  cannot discard B's authorization. `null` whenever nothing is staged. */
+let stagedRetireAttempt: ConnectionAttemptId | null = null;
 
 /** Records the Connect guard's own authorization at stage time. See
  *  `stagedRetireSet`'s own doc comment above for the full discipline.
@@ -338,11 +344,13 @@ let stagedRetireSet: readonly { sessionKey: string; revision: number }[] = [];
  *  an empty slot) stays silent. */
 export function stageRetire(
   set: readonly { sessionKey: string; revision: number }[],
+  attemptId: ConnectionAttemptId,
 ): void {
   if (stagedRetireSet.length > 0) {
     emit({ kind: "stage-retire-replaced", discarded: stagedRetireSet });
   }
   stagedRetireSet = set;
+  stagedRetireAttempt = attemptId;
 }
 
 /** Consumes (returns AND clears) whatever is currently staged -- the
@@ -352,12 +360,24 @@ export function stageRetire(
  *  design. For the "this attempt died with something still staged" path,
  *  use `discardStagedRetire` below instead -- never this one, discarding
  *  its result. */
-export function takeStagedRetire(): readonly {
+export function takeStagedRetire(attemptId: ConnectionAttemptId): readonly {
   sessionKey: string;
   revision: number;
 }[] {
+  // Phase NF (antagonist delta pass F7, then hardening lens 2): a set
+  // staged by attempt A may authorize ONLY attempt A's armed retire.
+  // Phase NF creates a state that did not exist before — a rower back on
+  // workout detail with a set still staged after a quiet/inline NFC
+  // outcome — and JustRow's zero-argument `connect()` mints its own ID and
+  // never stages. A mismatched take is a PURE READ: it neither consumes
+  // nor destroys the set (lens 2: destroying it would let another
+  // attempt's armed event orphan A's authorization). Invariant, not
+  // mechanism: a staged set authorizes exactly one attempt ID's armed
+  // retire and nothing else.
+  if (stagedRetireAttempt !== attemptId) return [];
   const set = stagedRetireSet;
   stagedRetireSet = [];
+  stagedRetireAttempt = null;
   return set;
 }
 
@@ -371,11 +391,20 @@ export function takeStagedRetire(): readonly {
  *  silent discard is the overwhelmingly common case (nothing was ever
  *  staged in the first place), so only a genuine discard is worth a
  *  receipt. */
-export function discardStagedRetire(): void {
-  const set = takeStagedRetire();
+export function discardStagedRetire(attemptId: ConnectionAttemptId): void {
+  // Phase NF: compare-by-attempt-ID. A discard from an attempt that is not
+  // the one that staged the set is a no-op, silently — it is the ordinary
+  // late-cleanup case, not a fault.
+  if (stagedRetireAttempt !== attemptId) return;
+  const set = takeStagedRetire(attemptId);
   if (set.length > 0) {
     emit({ kind: "staged-retire-discarded", discarded: set });
   }
+}
+
+/** Test/diagnostic accessor: which attempt staged the current set. */
+export function stagedRetireAttemptId(): ConnectionAttemptId | null {
+  return stagedRetireAttempt;
 }
 
 /** §8: "Tracked durable state: per key, `durableRevision` ... and
@@ -950,6 +979,7 @@ export function resetForTests(): void {
   hydrated = false;
   durableMalformed = false;
   stagedRetireSet = [];
+  stagedRetireAttempt = null;
   // Reuses `setReceiptChannel(null)` rather than duplicating its
   // `() => undefined` default inline: a second, hand-written copy of that
   // arrow function is a distinct function OBJECT the coverage tool tracks
@@ -982,4 +1012,5 @@ export const handoffStore = {
   stageRetire,
   takeStagedRetire,
   discardStagedRetire,
+  stagedRetireAttemptId,
 };

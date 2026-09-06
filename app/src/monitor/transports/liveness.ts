@@ -240,6 +240,16 @@ export function withLiveness(
     // this file exists to add — this is pure ADDITION, not a behaviour
     // change to anything already documented here.
     ...inner,
+    // Phase NF: `scanTarget` rides this spread. The targeted capability is
+    // a structural extension exactly like `onCharacteristicDegraded`, so
+    // the spread forwards it by reference when the inner has it and
+    // leaves it absent when the inner does not (`hasTargetedScan()` on the
+    // wrapped transport answers exactly what it would on the inner). No
+    // explicit wrapper: an earlier draft added one and a mutation that
+    // deleted it changed nothing observable — the spread IS the stance,
+    // and `liveness.test.ts`/`adapters/monitorTransport.test.ts` pin it
+    // through the real wrap (delete `...inner` and three tests go red,
+    // measured 2026-09-06).
     async scan() {
       return inner.scan();
     },

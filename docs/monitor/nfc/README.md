@@ -12,14 +12,16 @@ the load-bearing lines).
 | File                             | Date       | Reader                 | Complete? | Notes                                                |
 | -------------------------------- | ---------- | ---------------------- | --------- | ---------------------------------------------------- |
 | `pm5-tag-2026-08-31-partial.nfc` | 2026-08-31 | Flipper Zero (v4 file) | **NO**    | 6 of 42 pages read; NDEF header only, payload absent |
+| `pm5-tag-2026-09-04-iphone.json` | 2026-09-04 | iPhone 17 Pro / iOS 26.6.1, patched Capgo 8.2.5 | **YES: NDEF records** | Three complete records from v8; six address bytes redacted |
 
 ### `pm5-tag-2026-08-31-partial.nfc` — what it does and does not contain
 
 The Flipper's own header says `Pages read: 6` against `Pages total: 42`;
 pages 6-41 are zero-filled placeholders, not tag contents. The file is worth
-keeping because the six pages it did read settle three things:
+keeping because the six pages it did read establish the following limits:
 
-1. **The first NDEF record IS the spec's `concept2.com:bleconnectinfo`.**
+1. **The first NDEF header is compatible with the spec’s external record;
+   its literal type is not captured.**
    Page 4 = `03 92 84 1B`, page 5 = `00 00 00 28`, decoded per the NFC Forum
    Type 2 Tag / NDEF specs:
 
@@ -32,9 +34,9 @@ keeping because the six pages it did read settle three things:
    | `00 00 00 28` | payload length 40 bytes (4-byte form, because SR=0)                                                      |
 
    ME=0 is consistent with the spec's second record (the Android Application
-   Record). Payload length 40 fits a 6-byte address + 1-byte address type +
-   a name field of up to 31 bytes with 2 bytes to spare — the spec's field
-   table, not this capture, says what those 2 bytes are.
+   Record). The header reports a 40-byte payload, but this partial capture
+   cannot establish its contents or padding. The Concept2 field table does
+   not explain that length either.
 
 2. **The type name, the BLE address and the advertised name are NOT in this
    file.** They would occupy pages 6 onward, and those pages were never read.
@@ -55,18 +57,26 @@ keeping because the six pages it did read settle three things:
 
 Identity: UID `5FC7DE6B4AEC07`, ATQA `00 44`, SAK `00`.
 
-## Owed: a complete read
+## Complete iPhone record capture
 
-Two ways to get the payload, in order of how much they teach:
+`pm5-tag-2026-09-04-iphone.json` preserves the three redacted native-shaped
+`tnf`, `type`, `id`, and `payload` arrays from the completed
+[normal-trace-v8-receipt.json](../sessions/phase-nf-gate-minus-one/normal-trace-v8-receipt.json).
+It is a complete NDEF message capture, not a Type 2 memory-page dump. Only the
+first six bytes of the PM5 record’s payload (the Bluetooth address) were zeroed
+by the receipt serializer; the other record bytes are retained.
 
-- **iPhone + any NDEF reader app.** Reads via Core NFC, which is precisely
-  the API Phase NF will use — a successful read discharges the "does iOS
-  Core NFC read this external record at all" half of the phase's first
-  unverified pair before any code exists. Save the record's type, payload
-  hex, and the advertised name the app shows.
-- **Flipper re-read.** Confirm the Flipper reports every page read before
-  saving; a partial read saves without complaint, which is how this file
-  happened.
+For this PM5 D/E, firmware 459.069, the external record has TNF 4 and literal
+`concept2.com:bleconnectinfo` type bytes. Its 40-byte payload contains address
+type 1 at offset 6, the 17-byte ASCII name `PM5 432331249 Row` at offsets 7–23,
+and sixteen zero bytes at offsets 24–39. Thus this observed payload’s name ends
+at the first zero, and all remaining bytes are zero. The live BLE `localName`
+matched that decoded name exactly; the targeted connection and disconnect
+completed. The other records are `android.com:pkg` and a well-known URI record.
 
-Either way, drop the dump beside this one with the date in the name and add a
-row to the table above.
+The successful attempts at 16:14:33.366Z, 16:18:35.712Z and 22:28:45.860Z on
+2026-09-04 have identical redacted record arrays. This establishes the observed
+boundary for this monitor and these runs; it does not generalize a padding
+rule to every PM5. See [REMAINING-PROOF.md](../sessions/phase-nf-gate-minus-one/REMAINING-PROOF.md)
+for the evidence still needed before product implementation. This dated fixture
+is available now; the final combined Gate -1 receipt remains incomplete.

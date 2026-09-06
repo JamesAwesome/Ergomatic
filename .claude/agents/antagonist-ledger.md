@@ -6975,6 +6975,263 @@ plan's own tools and never with the REPO's.
   ROADMAP.md` takes ten seconds and is the difference between "(b) is done" and
   "(b) is done in one of four places".
 
+### 2026-09-03 — Phase NF hardening
+
+- **Techniques:** For every claimed matching drain, trace identity through the
+  start argument, concrete native object, every async closure, event payload,
+  retained-event queue, and framework reset; construct A-stop/reload-B and
+  require late A to be mechanically rejectable. Treat an omitted option as a
+  privilege downgrade: use a distinct capability whose absence fails closed,
+  then mutate each production decorator to drop it. Attach a drain to the raw
+  native operation rather than a raced UI promise, and define ownership before
+  testing cleanup rejection. Test asynchronous listener setup before its handle
+  resolves, re-read platform state before starting, and exercise both StrictMode
+  replay and true unmount. Decode bridge inputs from `unknown` with absent,
+  empty, malformed, and valid cases. Prove transient UI with a paint boundary,
+  traverse the actual routed producer-to-consumer composition, and constrain
+  time/identity with independent literals rather than production-derived
+  expectations.
+- For a native serialization claim, trace every read and write of the shared
+  state to its dispatch context, then verify the framework's documented callback
+  affinity; a private queue does not prove confinement if delegates arrive on a
+  different one.
+- Run the exact proof from the resolved installed package root: follow the
+  dependency symlink, inspect SwiftPM target/source membership, and mutate the
+  manifest path to prove the binding is load-bearing. An `ios/` source child is
+  not the package root merely because it contains the tests.
+- A mocked callback shape is not the native contract. The probe's BLE mock put
+  `deviceId` at the result root while the installed `ScanResult` declaration
+  nests it under `device`, so its green ordering test could never connect on
+  iOS. Trace the installed adapter's callback through its declaration and
+  implementation, then make the fixture enter that exact boundary.
+- Trace diagnostic export through the native logger before trusting it as
+  evidence. In the installed Capacitor package, `native-bridge.js` forwards a
+  console call as one message, `Plugins/Console.swift` passes one argument to
+  `CAPLog.print`, and `CAPLog.swift` truncates each argument to 4068 characters.
+  A cumulative receipt has no such bound. Test reconstruction through that
+  truncation boundary and require every frame before accepting an export.
+  Frame counts alone did not suffice: removing four base64 characters kept
+  every index/end present, and fragments from different exports could mix.
+  Probe both corruptions; bind frames to one export and its declared length.
+- Trace operator controls against the native sheet lifecycle: ending labels
+  selectable only after NFC starts cannot arm a phone-run observation. The
+  live-reload control and successor start also need an accessible path while
+  that sheet covers the WebView.
+- Order instrumentation, signed installation, producer event, export
+  verification, reload, successor start, and stale release by dependency; the
+  first walk draft requested its DEBUG event before installing the overlay.
+- Demand positive evidence that the hostile state occurred: two nearby objects
+  do not prove two NDEF tags were detected, and a zero-only initialized counter
+  does not measure stale settlement. Name the independent observations instead
+  of turning an uninstrumented default into a hardware measurement.
+  A selected scenario plus a generic ending is also only operator intent, not
+  proof its native producer ran; inject that same ending through the wrong
+  producer before allowing the criterion to pass.
+
+### 2026-09-04 — Phase NF diagnostic activation repair
+
+- **Held:** positive activity can gate the post-NFC handoff without treating
+  foreground-inactive as background. Believed from the observed abort; settled
+  by tracing UIKit notification call sites, the native state comparison, and
+  asynchronous bridge delivery. Separate OS-reported readiness from an atomic
+  state lease; label contradictory synthetic snapshot/event orders as
+  conditional hardening unless their producer reachability is established.
+- **Held:** cancellation remains drainable when the attempt-owned JS waiter
+  is cancelled synchronously and excluded from native pending operations.
+  Technique: walk terminal transition through the drain's awaited set and
+  distinguish each continuation by its exact attempt identity.
+
+### 2026-09-04 — Phase NF bounded diagnostic capture delta
+
+- **Claim:** terminal-drain capture plus capture immediately before reload
+  protects failure evidence. **Why believed:** both teardown and document
+  destruction appeared covered. **Technique:** enumerate every awaited
+  operation on every exit path; live-A `reloadWebView` bypasses `drain` and
+  can stall before the final export. Capture before its first await, then
+  refresh immediately before destruction. Follow export failure through the
+  caller's final status write so ordinary cleanup completion cannot erase it.
+- **Held:** existing session keys and allowlisted native facts suffice without
+  new identity or persistence machinery. **Technique:** trace the concrete
+  session's delegate binding and originating connect/query/read callbacks,
+  including recoverable errors; distinguish captured closure identity from
+  the mutable current slot. Separate callback delivery, missing observation,
+  console emission, host retention, and causal explanation—each proves a
+  different thing.
+
+### 2026-09-04 — Phase NF normal-trace walk hardening
+
+- **Techniques:** Trace evidence from its producer through platform decoration
+  into the exact parser. Exercise raw log to decision with prefixed lines,
+  multiple exports and a truncated newest export; never fall back past newer
+  incomplete evidence.
+- Treat absence in an unframed diagnostic stream as inconclusive unless an
+  explicit same-session terminal summary exists. Bind freshness mechanically
+  with a new process, generation 1 only and exactly one receipt attempt.
+- Grep every writer before treating an initialized receipt field as evidence.
+  A `null` or zero that no selected scenario populates is unobserved, not proof
+  of a behavior.
+- Execute a runsheet's shell as one program, not adjacent command shapes. Probe
+  unset, empty, wrong and valid values; make preflight failure atomic; and trace
+  variables, pipelines and background jobs across every shell boundary.
+- Bind cleanup to application identity before acting. A bundle-scoped
+  replacement launch may yield the only PID eligible for termination; prove
+  that replacement absent afterward. Locking a phone is containment, not
+  process termination.
+- For a growing log with pre- and post-cleanup exports, freeze the producer
+  before selecting the authoritative newest envelope. Publish evidence only by
+  atomic rename after classification succeeds.
+- A receipt extractor is not an outcome gate. Drive absent, malformed and
+  valued diagnostics plus positive, negative and inconclusive receipts through
+  an independent classifier for generation, event order, record shape, device
+  name and BLE outcome.
+- When a CLI offers both log redirection and stdout streaming, establish which
+  file owns evidence for the exact option set. Reserve cleanup inside the same
+  absolute operator deadline, and compare the literal operator instruction to
+  the heart-rate and rowing contract it claims to satisfy.
+\n
+## PM5 NFC availability delta, 2026-09-05
+
+- **"The PM5 stopped emitting its NFC tag after the connect cycle."** Believed because two 63.1 s iPhone sessions ended Core NFC 201 with no tag and a battery pull fixed it. Unsupported as written: four rivals fit every committed observation (PM5 NDEF-layer fault, phone `nfcd` wedge, PM5 asleep, BLE suppression). **Technique: name the API LAYER of every reader before comparing them.** `nfcGateMinusOneProbe.ts` passes `iosSessionType: "ndef"`, so an NDEF session times out identically whether the tag is silent or merely un-NDEF-readable — a distinction only a raw page dump can make.
+- **"His separate phone NFC app also found nothing, so it is not the phone."** Same phone, same iOS Core NFC stack, same API family — RF11's mirror in reader form. **Technique: an oracle earns "independent" by naming what it does NOT share.** Two apps on one handset share the daemon; the actual control is a known-good tag read by that same phone, which was never taken.
+- **"The Flipper's 6-of-42 read was the same state beginning to bite."** Falsified by the file's own date: `pm5-tag-2026-08-31-partial.nfc`, commit `86e35ec6`, 2026-08-31 — five days before, and NF-FLIPPER-EMU-v1 read it at a desk. The note also cited `RECOVERY-CONNECTION-FINDINGS.md`, which mentions neither NFC nor the Flipper. **Technique: for any "earlier the same evening" claim, `git log -1 --format=%ai` the artifact.** Corpus facts here carry dates; prose does not.
+- **"'Improvements for NFC wake-up behaviour' shows NFC is firmware-managed, so firmware can leave the tag unresponsive."** The line is real and correctly quoted; the conclusion is not in it, and points the other way — wake-on-NFC means the RF side answers while the application firmware is NOT running. **Technique: ask what the cited sentence would still permit if the drawn conclusion were false.** The good evidence was in our own capture all along (`docs/monitor/nfc/README.md`: CC `E1 10 7C 0F` = 992-byte data area vs NTAG203's 144; GET_VERSION all zeros; UID byte 0 `0x5F`, not NXP's `0x04`, BCC0 `0xCE` verified).
+- **"A Flipper read at the spot proves the PM5 is emitting."** Cross-layer (raw pages vs NDEF) and time-shifted (after the window, not during). **Technique: for any oracle, state the QUANTITY it measures and WHEN.** Fixed by recording `Pages read: N of 42` and the page-4 TLV, bracketing before and after, and pairing with a control-tag phone read.
+- **Brittleness:** the v4 rev-1 adjudication was a heuristic wearing a protocol. False positive: an NDEF-layer PM5 fault scored "phone problem". False negative: the Flipper's own read of this emulated tag has already truncated once, so a Flipper miss scored "PM5 dark" may be the Flipper.
+
+## Remaining NFC walk necessity, 2026-09-06
+
+- CLAIM (REMAINING-PROOF.md): Gate -1 criterion 9's device-probe cases 2-4 (stop-during-query/read, webview-reload) and the v5 query-scenario zero-records bug must be proven on hardware before Scan-NFC ships. FALSE — cut as ship gates.
+- TECHNIQUE 1 (read the binding gate, not the body): the spec's NO-GO list (:138) omits crit 9, and countable exit 1 (:942) assigns "session identity, single-tag, drain" to native-INJECTED tests, putting only shape/bridge/discovery/reader on hardware. When a spec's gates and its descriptive body disagree, the gates govern — the recovery walk was never in the close-definition.
+- TECHNIQUE 2 (find the supported producer): cases 2-4 freeze A via a "temporary diagnostic overlay" on a "disposable" probe (:93,:887); no shipping path holds A at query/read, and the guard is attempt-ID-keyed not stage-keyed, so 2/3 retest case 1's guard. Reproduced-failure-without-a-producer = hardening debt (self-ledger). The user-reachable re-arm is covered by walk legs 7/9 + "late event after abort" tests.
+- TECHNIQUE 3 (name the harm ceiling): A and B are the same tag/PM5 and the workout is pre-selected, so even silent interference targets the right machine; worst case is a recoverable retry — no TRIAD harm. The availability finding independently makes manual Connect a mandatory always-present backstop, mooting auto-recovery.
+- The v5 `records:0` reproduces in jsdom against the probe's query-hold path (v5's own words): a PROBE defect, not a product defect. Diagnose only if the probe is reused.
+- CAVEAT CLOSED (controller grep, 2026-09-06, now PRIMARY not INFERENCE): `holdStage`, `gateMinusOneHoldStage`, `stop-during`, `releaseGateProgress`, `stageFor` occur ONLY in `GateMinusOneProbe.tsx`, `native/nfcGateMinusOneProbe.ts`, their test, and `gateMinusOneReceipt.ts`. No shipping surface references the hold, and no "Scan NFC" product surface exists in `app/src` yet. The stage-freeze is provably probe-only.
+
+## Phase NF product plan delta (lens 1 of /harden), 2026-09-06
+
+Four kill-shots, three of them from reading a vendored SDK header and a
+vendored plugin's CALL SITES rather than its declarations. Landed by the
+controller; the findings were applied as a fix round against committed code
+(the branch advanced four commits during the pass — see the process note).
+
+- **Claim: `App.getState().isActive` is a safe foreground READ even though
+  the matching EVENT is the wrong background signal.** Believed because the
+  code comment said so ("a transient `inactive` costs one quiet retry and
+  never a session") and cited the file header that convicted the event.
+  **Technique: read the plugin's shipped `definitions.d.ts` and notice that
+  `getState()` returns `AppState` — the exact payload type of
+  `appStateChange`.** There is no second quantity. Then the phase's OWN
+  device console settled reachability — `BACKGROUND-OBSERVATIONS.md`
+  records "Reader start after App.getState returned true. appStateChange
+  false." twice: the feature induces the state its own guard refused on.
+  Generalisation: **a READ of a quantity already convicted as an EVENT is the
+  same wrong axis; the read/listen distinction never fixes a wrong
+  quantity.** Second half: the guard's failure mapped to "quiet", so a 56 px
+  primary button would have done nothing at all — check what a guard's
+  refusal LOOKS LIKE, not only whether it refuses.
+- **Claim: a plugin event for this attempt is either records or garbage, and
+  garbage can be safely ignored while the read waits.** Believed because the
+  bridge validated the shape thoroughly and traced every rejection.
+  **Technique: grep the vendored Swift for every `notify(event:` call site
+  and read what each one publishes.** One publishes
+  `buildEvent(..., message: nil)` — a real event, correct attempt ID, no
+  `ndefMessage` — and deliberately does not invalidate, so no ending follows.
+  The JS classified it "invalid" and waited forever. Generalisation: **for
+  any handler that ignores a class of input, enumerate the PRODUCERS of that
+  class; "malformed" and "malformed but provably mine" need different
+  terminals.**
+- **Claim: a timeout constant named `TARGET_SCAN_DEADLINE_MS` bounds the
+  targeted scan.** Believed because a test pinned it at 9_999/10_000 with
+  independent literals — a good test, entered below the break. **Technique:
+  count the awaits BEFORE the timer is armed.** Five, every one through a
+  serial vendor queue the file's own comment says can block "forever if the
+  rower walks away". RF24 in constant form. Generalisation: **for any
+  deadline, ask what is already running when the timer starts; a deadline
+  armed after N unbounded awaits bounds nothing.** Same shape one layer
+  down: the cleanup `await stopLEScan()` gated the release of a module-level
+  FIFO, so a stuck cleanup would have silently removed Bluetooth for the
+  process with no error and no copy — strictly worse than the poison state it
+  was avoiding.
+- **Claim: "the spec's producer list for `multipleTags` is zero or several
+  tags, or several NDEF messages", tagged PRIMARY and covered by an injected
+  Swift test.** Believed because both branches exist in the patched plugin
+  and one has a passing test. **Technique: open the SDK header for the
+  delegate protocol itself.** `NFCNDEFReaderSession.h`: "A read-write
+  session does not trigger the -readerSession:didDetectNDEFs: method", and
+  implementing `didDetectTags:` "will change the session behavior into a
+  read-write session". The plugin implements both, so half the producer list
+  is unreachable and its test proves nothing about production.
+  Generalisation: **when a vendor protocol has two overlapping callbacks,
+  the header usually says which one wins — read it before writing a test
+  against either.**
+- **Technique worth keeping regardless of subject: `file` the document
+  before trusting any grep over it.** A raw `0x00` pasted into a prescribed
+  test block made the plan AND the committed `nfc.test.ts` report as `data`;
+  plain `grep` then returned nothing with rc=1 on every query, and
+  `git grep` degraded to "Binary file … matches". Every "grep finds nothing"
+  check over either file was vacuous, including the plan's own self-review.
+  The author's paste-test cannot catch it — the test passes either way.
+  Landed as `app/scripts/nul-check.sh`, part of `pnpm lint`.
+- **Attacked and HELD (Phase NF vetted ground, extended):** the patched NDEF
+  controller's `cause` lifetime — one entry per attempt, minted only on a
+  forced invalidation of a live owned session, consumed by that attempt's
+  own ending — survives a superseding start, a stop racing a rejection in
+  both orders, a same-ID reuse and a WebView reload, because minting requires
+  a state (`draining == key && ndefKey == key`) that only the consuming path
+  can leave, and everything is confined to one serial queue with
+  `dispatchPrecondition` on every access. Also held: the BLE operation
+  tail's identity (each call's own `release` closure, never a shared slot),
+  the manual drain attaching to the raw pipeline rather than the timeout
+  race, `targetedAbortRef`'s object-identity comparison, and the strict
+  parser's UTF-16-length-vs-bytes ordering. `BleClient`'s queue does not
+  deadlock on a rejection (`queue.js` chains through `.catch`); the hazard is
+  a PENDING call.
+- **Keyed take, not only keyed discard (F7).** A staged-retire set that the
+  armed handler consumed unkeyed was safe only by enumeration of callers;
+  Phase NF created the first state where a detail press leaves a set staged
+  with no interstitial, and JustRow's zero-argument `connect()` would have
+  consumed it. Invariants over mechanisms: a staged set authorizes exactly
+  one attempt ID's armed retire, and a never-cleared attempt ref can only
+  fail to match.
+- **Lens 2 of the same run (the prescribed code read as code, one Opus
+  dispatch) — techniques that paid, for the record:**
+  - **Build it and grep the OUTPUT, not the needle's intent.** Three
+    dist-grep needles were green while both plugin chunks shipped: a
+    `registerPlugin("X"` needle cannot match a minified `e(\`X\`` and a
+    header COMMENT is stripped before the grep ever runs. The only needle
+    that can go red is a string literal that survives minification — a
+    thrown message did. RF12, again.
+  - **Every option, flag and prop: what happens when the caller omits it?**
+    `busy = false` on the shared entry owner would have handed a forgetful
+    caller two live buttons mid-attempt; an optional `attemptId` check on
+    the picker branch let `""` reach the keyed take. Required props and one
+    validation at the entry, not per branch.
+  - **Compute the DISABLED state's contrast too.** The token comment's three
+    numbers recomputed exactly; the global `button:disabled` label colour
+    on the two fills was 2.38:1 and 2.42:1. A design gate that measures the
+    rest state measures half the control.
+  - **An `await` outside its `try` is a stranded `finally`.** Two
+    registrations (`registerAppLifecycleListener`) sat above their `try`;
+    a rejection would have left both hardware buttons disabled for the life
+    of the screen with no error. The "who would want this" question: a
+    plugin bridge on a phone that just denied a permission.
+  - **A closed vocabulary with unproduced members is a lie the reader
+    cannot see.** Eight of twenty-four trace kinds had zero producers; the
+    BLE half of every attempt was uninstrumented while `latest` read as
+    complete. Thread the instrument to where the events happen, or delete
+    the names.
+  - **Mismatch means READ, never destroy.** The keyed take's mismatch arm
+    cleared the set it was not authorized to consume — the exact orphaning
+    it existed to prevent, one attempt over.
+  - **Repeat the fallback, not the call.** A second `crypto.randomUUID()`
+    with no `getRandomValues` fallback re-shipped PR #258 round 4's P1 on
+    iOS 15.0-15.3, twenty lines from the comment that documents it. One
+    generator module now.
+- **Process note:** the branch advanced four commits DURING lens 1 and one
+  more during lens 2, so the findings landed as fix-round items against
+  committed code rather than as plan edits. Hardening a document while its
+  implementation races ahead costs the pass its leverage — the cheap half of
+  /harden is worth nothing after the paste.
 ## 2026-09-03 — Reattaching a connection without re-owning the old state (lens 1, single pass)
 
 - **“The logical record owns the actuals, so a fresh driver need not receive
@@ -7962,6 +8219,68 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   strictly fresher than the mounted hook it replaced; and the save-to-send seam
   gate genuinely starting at the Save tap and asserting request ORDER, not a
   call count.
+
+## Phase NF product walk, timed-protocol lens (lens 1 of /harden, delta), 2026-09-06
+
+James named the lens himself: attack a runsheet as a TIMED PROTOCOL between two
+machines that time out and a human waiting on a controller turn. Five PM gates
+had passed over the same document without a single duration in it.
+
+- **Build the TIMER TABLE the document does not have, before reading a word of
+  its logic.** Every clock, its value, what starts it, what clears it, and which
+  human hold or controller gap can let it expire. Sixteen rows here; the
+  document contained zero numbers, and three of the sixteen were walk-enders.
+  The row with no number at all — the CONTROLLER TURN — is the one that drives
+  the others, and it is invisible precisely because nobody thinks of their own
+  turn as a clock.
+- **A "no discriminator" claim is a NEGATIVE and gets the vendor header, not a
+  receipt.** The runsheet argued from our own device capture that a system
+  ending and our programmatic ending are byte-identical (both Cancel 200).
+  `NFCNDEFReaderSession.h` documents `SessionTerminatedUnexpectedly` (202,
+  `NFCError.h`) for exactly the case the leg stages — an app entering the
+  background — and our own patch maps 202 to a DIFFERENT reason and a different
+  user-visible string. **Technique: for any "we cannot tell X from Y", find the
+  vendor sentence that names X's producer; a receipt of a NEIGHBOURING gesture
+  cannot establish a negative about this one.** The receipt showed a swipe/popup;
+  the leg stages a lock.
+- **Follow a claimed-unreachable code all the way to the copy it renders.** The
+  spec said "codes 202 and 203 originate in the system and no operator action
+  forces them"; the header says backgrounding forces 202; the JS maps bare
+  `invalidated` to an inline error, not the quiet return the leg lists as PASS.
+  Three files agreed with each other and disagreed with the SDK.
+- **Ask which SCREEN each wait happens on, then grep that screen for the
+  protection you assumed.** `keepAwakeOn` has four callers, all mount effects,
+  none on the screen where the NFC read and both block boundaries live. The
+  precondition's "or the keep-awake control" named an operator control that does
+  not exist. **A precondition offering an alternative is a claim that the
+  alternative exists** — grep for it.
+- **A "10 s deadline" in an operator instruction is a WALL-CLOCK promise; read
+  the settle path for the second timer.** Every settle armed a second
+  `deadlineMs` cleanup bound on `stopLEScan()`, so the operator-visible wait is
+  up to 20 s. A constant's name bounds one thing; the operator experiences the
+  sum.
+- **A block boundary is a machine-state boundary. Tabulate BOTH machines at each
+  one and ask what decays.** The A→B gap left the PM5 awake-and-decaying
+  ("a few minutes", unmeasured) while the next leg's entire premise was measured
+  against it — a leg that would have PASSED by measuring the controller's turn
+  length, and could equally have fired the walk's most-likely stop rule from a
+  cause the controller created. **Cut blocks so that every block after the first
+  opens with an explicit action that RE-ESTABLISHES the state it needs** (here,
+  a PM5 menu press, which is also a wake), or the gap is load-bearing.
+- **Every human HOLD needs three sentences: hold until X, at most N, then Y.**
+  Five holds here had none. The physical tell that forces the question: while the
+  phone is held to the erg, its screen faces away — so the operator cannot see
+  the state change the leg asks him to observe, and the ONLY cue is the system
+  sheet's dismissal, which (read-write session,
+  `invalidateAfterFirstRead: false`) is produced by OUR invalidate, not by the
+  read.
+- **Attacked and HELD (Phase NF vetted ground, extended):** the lifecycle axis
+  (`pause`/`resume` via `didEnterBackgroundNotification`, not `appStateChange`),
+  so the sheet's own `willResignActive` does not abort the attempt; the sheet
+  dismissing BEFORE the parse/haptic/paint/handoff, so no hold is needed through
+  the BLE scan; Cancel-from-READY terminating the erg, which is why each leg
+  re-navigates to Connect Device; and no timer of any kind at READY on either
+  machine.
 
 ### 2026-09-06 — Phase KB keyboard/WebView-resize spec, phase-open anchor (not TRIAD)
 

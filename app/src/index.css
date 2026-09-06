@@ -231,7 +231,8 @@ button:disabled {
 .button-l3,
 .button-l4,
 .button-l4-armed,
-.button-connect {
+.button-connect,
+.button-nfc {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -297,6 +298,58 @@ button:disabled {
   background: var(--surface);
   border: 1px dashed var(--rule-3);
   color: var(--ink-3);
+}
+
+/* Scan NFC — Phase NF (design spec 2026-09-03, Gate 0): the OTHER hardware
+   primary, directly above Connect, same 56 px geometry and weight, its own
+   `--action-nfc` fern token. Rendered ONLY when native iOS reports NFC
+   support (no placeholder, no reserved height elsewhere). A screen-specific
+   one-off like `.button-connect`, not a numbered level. `:disabled` keeps
+   the full fill (a 60% fill would fall to ~2.6:1 against cream text —
+   below AA) and signals the live attempt with the cursor instead.
+   `.button-nfc-accepted` is the SAME fill carrying `✓ PM5 found` for one
+   committed paint before the interstitial replaces it. */
+.button-nfc {
+  min-height: 56px;
+  background: var(--action-nfc);
+  border: none;
+  color: var(--on-color);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.button-nfc:hover {
+  background: var(--action-nfc-hover);
+}
+
+/* Disabled = a live attempt. The label stays cream on the full fill —
+   `button:disabled`'s global `--ink-5` label would be 2.38:1 on fern and
+   2.42:1 on Connect's blue (measured, hardening lens 2), below AA. On iOS
+   the cursor is inert, so the visual "busy" signal is the sheet itself
+   (NFC) or the `✓ PM5 found` status; Connect is disabled only for the
+   duration of an NFC read the rower is already looking at. */
+.button-nfc:disabled,
+.button-nfc:disabled:hover {
+  background: var(--action-nfc);
+  color: var(--on-color);
+  cursor: progress;
+}
+
+/* Merge with #319 (2026-09-06): a DISABLED Connect now means "no Bluetooth
+   on this device" (main's dashed look, below); the BUSY state during a live
+   NFC read is marked `aria-busy` and keeps the full fill so the cream label
+   stays AA. */
+.button-connect[aria-busy="true"]:disabled,
+.button-connect[aria-busy="true"]:disabled:hover {
+  background: var(--action-connect);
+  border: none;
+  color: var(--on-color);
+  cursor: progress;
+}
+
+.button-nfc-accepted {
+  cursor: default;
 }
 
 /* 2 · secondary — surface fill, ink border/label, same type as L1. May
@@ -5755,6 +5808,13 @@ section:not(.news-pinned) .news-row:last-of-type {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* Phase NF (Gate 0): the two hardware primaries sit at the action stack's
+   own 12 px rhythm even though they share `.connect-block`'s 4 px caption
+   gap — 4 + 8 = 12, pinned by `e2e/design.spec.ts`. */
+.connect-block .button-nfc {
+  margin-bottom: 8px;
 }
 
 .connect-block-caption {

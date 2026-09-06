@@ -6767,6 +6767,91 @@ test("log-concept2-no-weight", async ({ page }) => {
   });
 });
 
+// Phase NF (design spec 2026-09-03, Gate 0 / countable exit 2): the shipped
+// Scan NFC layout in both orientations, with the scripted reader reporting
+// support. RF7: seeded with a real personal workout so the capture shows the
+// button above a populated screen, not a fallback.
+async function captureWorkoutDetailNfc(
+  page: Page,
+  file: string,
+  email: string,
+  landscape = false,
+): Promise<void> {
+  await page.addInitScript(() => {
+    window.__nfcScript__ = {
+      capability: "supported",
+      outcome: { kind: "cancelled" },
+    };
+    // #319 disables Connect when the host has no Web Bluetooth; the NFC
+    // capture depicts an NFC-capable PHONE, where Bluetooth exists, so the
+    // browser capability is made explicit (the same stub `helpers.ts` uses).
+    Object.defineProperty(navigator, "bluetooth", {
+      value: {},
+      configurable: true,
+    });
+  });
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await setBaselines(page);
+  // THE GATE 0 WORKOUT (review B5): the approved artifact drew the
+  // "Screenshot Personal Workout" above (20:00 @ 6k, then 0:30 @ MAX at
+  // 21 spm), and its fold claim ("Delete workout moves below the initial
+  // fold on a 390×844 personal-workout detail") was made against THAT
+  // screen. The first NFC capture used a one-row piece and could not
+  // evidence the claim either way (RF3/RF7). Same build sequence as the
+  // personal capture, so the two records agree on what they show.
+  const title = "Screenshot NFC Workout";
+  await page.goto("/library/new");
+  await page.getByLabel("Title").fill(title);
+  await page.getByRole("button", { name: "Effort 3" }).click();
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  await page.getByRole("button", { name: "DONE" }).click();
+  await page.getByRole("button", { name: "+ ADD STEP" }).click();
+  await page.getByLabel("Row 2 duration", { exact: true }).fill("30");
+  await page.getByRole("radio", { name: "Row 2 pace MAX" }).click();
+  const nfcRow2SpmUp = page.getByRole("button", {
+    name: "Row 2 stroke rate up",
+  });
+  await nfcRow2SpmUp.click();
+  await nfcRow2SpmUp.click();
+  await page.getByRole("button", { name: "Save to library" }).click();
+  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await page.locator(".workout-detail-title").waitFor();
+  await expect(page.getByText("ALL OUT")).toBeVisible();
+  const scanNfc = page.getByRole("button", { name: "Scan NFC" });
+  await expect(scanNfc).toBeVisible();
+  if (landscape) {
+    // Landscape keeps today's scrolling document column (spec: no
+    // landscape reflow), so the pair sits below the first fold there; the
+    // capture is of the two buttons, not of the fold. RF7: look at the PNG.
+    await scanNfc.scrollIntoViewIfNeeded();
+    await page
+      .getByRole("button", { name: "Connect" })
+      .scrollIntoViewIfNeeded();
+  }
+  // Portrait is captured UNSCROLLED on purpose: it is the initial fold the
+  // Gate 0 claim is about.
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, file) });
+  await cleanupByTitle(page, title);
+}
+
+test("workout-detail-nfc", async ({ page }) => {
+  await captureWorkoutDetailNfc(
+    page,
+    "workout-detail-nfc.png",
+    "screenshots-detail-nfc@e2e.test",
+  );
+});
+
+test("workout-detail-nfc-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await captureWorkoutDetailNfc(
+    page,
+    "workout-detail-nfc-landscape.png",
+    "screenshots-detail-nfc-landscape@e2e.test",
+    true,
+  );
+});
+
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 844, height: 390 },

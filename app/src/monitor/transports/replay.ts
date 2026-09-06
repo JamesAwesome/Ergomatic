@@ -52,6 +52,8 @@
 
 import type {
   DiscoveredMonitor,
+  TargetedMonitorDiscoveryRequest,
+  TargetedScanTransport,
   Transport,
 } from "../../../domain/monitor/types.js";
 import type { AppLifecycleEvent } from "../../adapters/appLifecycle";
@@ -78,7 +80,7 @@ export interface ReplayResult {
 }
 
 export interface ReplayHandle {
-  transport: Transport;
+  transport: Transport & TargetedScanTransport;
   clock: ReplayClock;
   /** Plays the whole recording; resolves at end-of-log. */
   run(): Promise<ReplayResult>;
@@ -245,6 +247,47 @@ export function createReplayTransport(
     return scanEvent ? scanEvent.devices : [];
   }
 
+  // Phase NF: the recorded scan's devices, narrowed to the exact name. A
+  // recording that never saw the name is "not advertising" — by NAME only
+  // (this module never imports capacitorBle's error classes).
+  async function scanTarget(
+    request: TargetedMonitorDiscoveryRequest,
+    signal: AbortSignal,
+  ): Promise<DiscoveredMonitor[]> {
+    const named = (name: string, message: string): Error => {
+      const err = new Error(message);
+      err.name = name;
+      return err;
+    };
+    if (signal.aborted) {
+      throw named("TargetScanInterruptedError", "aborted before replay");
+    }
+    // KNOWN LIMIT (whole-branch review SF1): a recording carries only the
+    // picker's `DiscoveredMonitor.name`, which on the Capacitor arm is the
+    // cached `CBPeripheral.name` — the field production is FORBIDDEN to
+    // match on. A replay therefore cannot exercise the live-`localName`
+    // rule; that rule is pinned in `capacitorBle.test.ts` ("matches only
+    // ScanResult.localName, never device.name, and never a prefix") and by
+    // mutations S2/T3-1. What the replay proves is the exact-equality and
+    // fail-closed-on-ambiguity shape over a real walk's device list.
+    const exact = (await scan()).filter((d) => d.name === request.exactName);
+    if (exact.length === 0) {
+      throw named(
+        "TargetMonitorNotAdvertisingError",
+        "no recorded device advertised the exact name",
+      );
+    }
+    if (exact.length > 1) {
+      // Production fails closed on a second distinct device; so does the
+      // replay (lens 2: the instrument must not be more permissive).
+      throw named(
+        "TargetMonitorAmbiguousError",
+        "more than one recorded device advertised the exact name",
+      );
+    }
+    return exact;
+  }
+
   async function connect(): Promise<void> {
     // Accepted whenever it comes (binding semantics) — never gated on the
     // walk's cursor.
@@ -254,8 +297,9 @@ export function createReplayTransport(
     // Caller-initiated; accepted whenever it comes, same as connect().
   }
 
-  const transport: Transport = {
+  const transport: Transport & TargetedScanTransport = {
     scan,
+    scanTarget,
     connect,
     write,
     subscribe,

@@ -292,6 +292,15 @@ export function createHoldOpenTransport(
 
   const transport: Transport = {
     ...inner,
+    // Phase NF: `scanTarget` rides this spread. The targeted capability is
+    // a structural extension exactly like `onCharacteristicDegraded`, so
+    // the spread forwards it by reference when the inner has it and
+    // leaves it absent when the inner does not (`hasTargetedScan()` on the
+    // wrapped transport answers exactly what it would on the inner). No
+    // explicit wrapper: an earlier draft added one and a mutation that
+    // deleted it changed nothing observable — the spread IS the stance,
+    // and `liveness.test.ts`/`holdOpen.test.ts` pin it through the real
+    // wrap (delete `...inner` and both go red).
     async scan() {
       return inner.scan();
     },

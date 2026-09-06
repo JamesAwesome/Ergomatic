@@ -166,12 +166,17 @@ import {
   SPLIT_INTERVAL_DATA_UUID,
   TRANSMIT_CHARACTERISTIC_UUID,
 } from "../../../domain/monitor/pm5/uuids.js";
-import type {
-  DiscoveredMonitor,
-  IntervalActual,
-  MonitorFrame,
-  Transport,
+import {
+  isValidAttemptId,
+  type DiscoveryTrace,
+  type DiscoveredMonitor,
+  type IntervalActual,
+  type MonitorFrame,
+  type TargetedMonitorDiscoveryRequest,
+  type TargetedScanTransport,
+  type Transport,
 } from "../../../domain/monitor/types.js";
+import { isValidPm5AdvertisingName } from "../../../domain/monitor/nfc.js";
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 
 /** One "tick" in the script's timeline: a full rowing/resting status
@@ -415,8 +420,16 @@ export interface FakeScript {
    *  calls `driver.program(p)` with a DIFFERENT `p` than the one given here
    *  fails loudly (byte mismatch), by design. */
   program: WorkoutProgram;
-  /** Advertised device name — `scan()`'s single result. */
+  /** Advertised device name — `scan()`'s single result, and the live
+   *  `localName` a targeted scan compares against. */
   deviceName?: string;
+  /** Phase NF: what `scanTarget()` does. Omitted: "match" when the request's
+   *  `exactName` equals `deviceName`, otherwise "not-advertising" — the
+   *  same exact-equality rule the Capacitor transport applies to the live
+   *  advertisement. The other kinds drive the interstitial's targeted
+   *  failure cards in tests and e2e. */
+  targetedScan?:
+    "match" | "not-advertising" | "ambiguous" | "already-connected";
   /**
    * The machine already has a workout loaded when this session starts.
    * Give it the loaded workout's interval count; `loadedIntervals()`
@@ -784,6 +797,11 @@ export interface FakeControls {
    * twice (`Set`, not an array).
    */
   subscriptionCount(): number;
+  /** Phase NF: every request `scanTarget()` received, in order — the
+   *  routed Scan-NFC test asserts the literal request the REAL pipeline
+   *  delivered here rather than constructing one itself (spec,
+   *  "Instrumentation and replay"). */
+  targetedRequests(): readonly TargetedMonitorDiscoveryRequest[];
 
   /**
    * Phase LL Task 2 (§2, mechanism 1). Models the PLUGIN'S OWN documented
@@ -1261,6 +1279,7 @@ function armedBundle(
 }
 
 export function createFakeTransport(script: FakeScript): Transport &
+  TargetedScanTransport &
   FakeControls & {
     /** Phase LL Task 2 (§2, mechanism 3) — the SAME structural `Transport`
      *  extension `capacitorBle.ts` carries (see that file's own doc
@@ -2616,11 +2635,55 @@ export function createFakeTransport(script: FakeScript): Transport &
     }
   }
 
+  const targetedRequests: TargetedMonitorDiscoveryRequest[] = [];
+
   return {
     scan(): Promise<DiscoveredMonitor[]> {
       return Promise.resolve([
         { id: "fake-pm5", name: script.deviceName ?? "PM5 (fake)" },
       ]);
+    },
+    scanTarget(
+      request: TargetedMonitorDiscoveryRequest,
+      signal: AbortSignal,
+      trace?: DiscoveryTrace,
+    ): Promise<DiscoveredMonitor[]> {
+      targetedRequests.push(request);
+      trace?.record("ble-scan-started");
+      const fail = (name: string): Promise<never> => {
+        const err = new Error(name);
+        err.name = name;
+        return Promise.reject(err);
+      };
+      // The same request validation the Capacitor transport performs, so
+      // every routed test and e2e run that enters through this seam has a
+      // reachable red path for an invalid request (lens 2).
+      if (
+        request.kind !== "advertised-name" ||
+        !isValidAttemptId(request.attemptId) ||
+        !isValidPm5AdvertisingName(request.exactName)
+      ) {
+        return fail("TargetedRequestInvalidError");
+      }
+      if (signal.aborted) return fail("TargetScanInterruptedError");
+      const deviceName = script.deviceName ?? "PM5 (fake)";
+      const kind =
+        script.targetedScan ??
+        (request.exactName === deviceName ? "match" : "not-advertising");
+      switch (kind) {
+        case "match":
+          trace?.record("ble-scan-matched");
+          return Promise.resolve([{ id: "fake-pm5", name: deviceName }]);
+        case "not-advertising":
+          return fail("TargetMonitorNotAdvertisingError");
+        case "ambiguous":
+          return fail("TargetMonitorAmbiguousError");
+        case "already-connected":
+          return fail("TargetAlreadyConnectedError");
+      }
+    },
+    targetedRequests(): readonly TargetedMonitorDiscoveryRequest[] {
+      return targetedRequests.slice();
     },
     connect(): Promise<void> {
       // Also gated on `delayWrites` (its own doc comment: "every

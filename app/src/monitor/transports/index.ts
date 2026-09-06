@@ -77,7 +77,12 @@
 // that property's own doc comment.
 
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
-import type { Transport } from "../../../domain/monitor/types.js";
+import {
+  hasTargetedScan,
+  type DiscoveryTrace,
+  type TargetedMonitorDiscoveryRequest,
+  type Transport,
+} from "../../../domain/monitor/types.js";
 // I1 fix (final-review): type-only — the stash callback below builds
 // `MonitorLogEntry` objects to keep the stash keys valid `exportLog()`
 // JSON; see that callback's own comment.
@@ -94,6 +99,9 @@ import type { FakeControls, FakeScript } from "./fake";
 // through the dynamic `import("./holdOpen")` below, ONE layer under the
 // SAME `fakeMonitorEnabled` gate as `recording.ts`.
 import type { HoldOpenControls } from "./holdOpen";
+// Phase NF: TYPE-ONLY, like every sibling above — the scripted NFC reader
+// is reached solely through `adapters/nfcReader.ts`'s fold-away gate.
+import type { NfcScript } from "../nfc/scriptedNfcReader";
 
 /** `FakeScript` plus one field that belongs to the INJECTION SEAM, not to
  *  `fake.ts`'s own hardware-modeling contract — which is why it is declared
@@ -118,6 +126,13 @@ declare global {
      *  every unit test, which injects through `MonitorSessionDeps
      *  .createTransport` instead) means "build the real transport". */
     __pm5FakeScript__?: InjectedFakeScript;
+    /** Phase NF: set by an e2e test's `page.addInitScript` (or a unit test),
+     *  never by product code — the NFC sibling of `__pm5FakeScript__`, read
+     *  by `adapters/nfcReader.ts` behind the SAME `fakeMonitorEnabled` gate,
+     *  so a real deploy's build folds the scripted reader away with the
+     *  fake. Declared here, beside its siblings, so e2e specs (which import
+     *  from `src/monitor/transports/index` types) see it. */
+    __nfcScript__?: NfcScript;
     /** Set by THIS file, the instant it builds a fake from
      *  `__pm5FakeScript__` above — never by product code, and never read by
      *  it either. `e2e/connected.spec.ts`'s own discovery: Chromium
@@ -225,6 +240,18 @@ const AUTO_TICK_MS = 100;
 export function autoTicking(
   fake: Transport & { tick(ms: number): void },
 ): Transport {
+  // Phase NF: the injected fake carries `scanTarget`; the wrapper keeps it
+  // (conditionally, like every other decorator) so an e2e NFC flow reaches
+  // the fake's targeted arm through the SAME wrapped instance.
+  const targeted = hasTargetedScan(fake)
+    ? {
+        scanTarget: (
+          request: TargetedMonitorDiscoveryRequest,
+          signal: AbortSignal,
+          trace?: DiscoveryTrace,
+        ) => fake.scanTarget(request, signal, trace),
+      }
+    : {};
   const timer = setInterval(() => fake.tick(AUTO_TICK_MS), AUTO_TICK_MS);
   let stopped = false;
   function stop(): void {
@@ -233,6 +260,7 @@ export function autoTicking(
     clearInterval(timer);
   }
   return {
+    ...targeted,
     scan: () => fake.scan(),
     connect: (id) => fake.connect(id),
     write: (characteristicId, bytes) => fake.write(characteristicId, bytes),

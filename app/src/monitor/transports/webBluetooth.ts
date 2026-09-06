@@ -13,6 +13,15 @@
 // its own mock correctly. "Compile-tested shapes" is this file's ceiling
 // for 7A; the genuine radio proof is the laptop session, post-merge.
 //
+// Phase NF `scanTarget` STANCE: NONE, BY DESIGN. Web Bluetooth's
+// `requestDevice` is a user-gesture picker and cannot scan for an exact
+// advertised name without one, and no browser reaches the NFC route that
+// would produce a targeted request (`adapters/nfcReader.ts`). The
+// production composition therefore reports no targeted capability on
+// this arm (`adapters/monitorTransport.test.ts`, web arm) and the session
+// fails closed before any radio call. `scripts/transport-census.sh`
+// checks this comment is present.
+//
 // TypeScript's own DOM lib does not ship Web Bluetooth types (verified:
 // no `Bluetooth`/`BluetoothDevice` declaration anywhere in
 // typescript/lib/lib.dom.d.ts) — rather than add an unpinned

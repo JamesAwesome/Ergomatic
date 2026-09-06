@@ -1,4 +1,5 @@
 import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
+import type { ComponentProps } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -16,6 +17,7 @@ import {
   resetForTests as resetHandoffStoreForTests,
   setReceiptChannel,
   stageRetire as stageRetireHandoffForTest,
+  stagedRetireAttemptId,
   takeStagedRetire as takeStagedRetireHandoff,
   type HandoffReceipt,
 } from "./handoffStore";
@@ -146,7 +148,12 @@ function connectAsTaskFiveWill(): void {
 function renderConnect() {
   render(
     <MemoryRouter>
-      <ConnectAction onProceed={connectAsTaskFiveWill} />
+      <ConnectAction
+        onProceed={connectAsTaskFiveWill}
+        nfcCapability="unsupported"
+        busy={false}
+        accepted={false}
+      />
     </MemoryRouter>,
   );
 }
@@ -314,7 +321,12 @@ describe("ConnectAction: the guard", () => {
     saveRun(unloggedSessionRun());
     const { container } = render(
       <MemoryRouter>
-        <ConnectAction onProceed={connectAsTaskFiveWill} />
+        <ConnectAction
+          onProceed={connectAsTaskFiveWill}
+          nfcCapability="unsupported"
+          busy={false}
+          accepted={false}
+        />
       </MemoryRouter>,
     );
 
@@ -444,7 +456,14 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
           <Routes>
             <Route
               path="/connect"
-              element={<ConnectAction onProceed={connectAsTaskFiveWill} />}
+              element={
+                <ConnectAction
+                  onProceed={connectAsTaskFiveWill}
+                  nfcCapability="unsupported"
+                  busy={false}
+                  accepted={false}
+                />
+              }
             />
             <Route path="/today" element={<h1>Today</h1>} />
           </Routes>
@@ -462,7 +481,9 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
       expect(view).toHaveFocus();
       await userEvent.click(view);
       expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
-      expect(takeStagedRetireHandoff()).toStrictEqual([]);
+      expect(
+        takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+      ).toStrictEqual([]);
       expect(currentUnretiredHandoff()).toStrictEqual(before);
       expect(loadRun()).toStrictEqual(timer);
     },
@@ -483,7 +504,7 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     // Staged, not retired: the record is untouched, on both tiers.
     expect(currentUnretiredHandoff()).toStrictEqual(before);
     expect(loadMonitorRun()).not.toBeNull();
-    const staged = takeStagedRetireHandoff();
+    const staged = takeStagedRetireHandoff(stagedRetireAttemptId() ?? "");
     expect(staged).toStrictEqual([
       { sessionKey: before!.sessionKey, revision: before!.revision },
     ]);
@@ -500,7 +521,9 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+    expect(
+      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+    ).toStrictEqual([]);
   });
 
   it("neither Connect anyway nor a direct proceed ever retires anything from this component — no retire receipt fires either way", async () => {
@@ -523,7 +546,7 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     // The staged set from the press above is still sitting in the store,
     // exactly where `useMonitorSession.ts`'s own "armed" handler expects
     // to find and consume it — nothing here already took it.
-    const staged = takeStagedRetireHandoff();
+    const staged = takeStagedRetireHandoff(stagedRetireAttemptId() ?? "");
     expect(staged.length).toBe(1);
     setReceiptChannel(null);
   });
@@ -550,9 +573,9 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     // `superseded: true` truthfully later, instead of trivially matching
     // whatever is current (see `handoffStore.stagedRetireSet`'s own doc
     // comment on why a fresh re-read at press time would defeat this).
-    expect(takeStagedRetireHandoff()).toStrictEqual([
-      { sessionKey: before!.sessionKey, revision: 0 },
-    ]);
+    expect(
+      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+    ).toStrictEqual([{ sessionKey: before!.sessionKey, revision: 0 }]);
   });
 
   it("nothing to protect: Connect stages an EMPTY set, clearing any stale set from an earlier, abandoned press", async () => {
@@ -560,14 +583,17 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     // since cancelled/abandoned) must not survive to authorize THIS
     // press's own eventual "armed" event (rev-3 antagonist: "a set
     // staged for attempt 1 must not authorize attempt 2's retire").
-    stageRetireHandoffForTest([
-      { sessionKey: "2020-01-01T00:00:00.000Z", revision: 7 },
-    ]);
+    stageRetireHandoffForTest(
+      [{ sessionKey: "2020-01-01T00:00:00.000Z", revision: 7 }],
+      "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+    );
     renderConnect();
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+    expect(
+      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+    ).toStrictEqual([]);
   });
 
   it("nothing staged (a SessionRun-only stage): the guard shows the confirm, but stages an empty set — no MonitorRun to protect", async () => {
@@ -582,6 +608,171 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
         /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
       ),
     ).toBeInTheDocument();
-    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+    expect(
+      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+    ).toStrictEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase NF (design spec 2026-09-03 §3, Gate 0): the component is now the
+// SHARED connection-entry owner — Scan NFC directly above Connect when native
+// reports support, one guard, one pending intent, one attempt ID.
+describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+
+  function renderEntry(
+    props: Partial<
+      Omit<ComponentProps<typeof ConnectAction>, "onProceed">
+    > = {},
+  ) {
+    const onProceed = vi.fn();
+    render(
+      <MemoryRouter>
+        <ConnectAction
+          onProceed={onProceed}
+          nfcCapability={props.nfcCapability ?? "unsupported"}
+          busy={props.busy ?? false}
+          accepted={props.accepted ?? false}
+        />
+      </MemoryRouter>,
+    );
+    return { onProceed };
+  }
+
+  it.each(["unknown", "unsupported"] as const)(
+    "renders Connect ALONE when capability is %s — no Scan NFC button, no placeholder element",
+    (nfcCapability) => {
+      const { container } = render(
+        <MemoryRouter>
+          <ConnectAction
+            onProceed={vi.fn()}
+            nfcCapability={nfcCapability}
+            busy={false}
+            accepted={false}
+          />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
+      expect(container.querySelector(".button-nfc")).toBeNull();
+      expect(container.querySelectorAll("button")).toHaveLength(1);
+    },
+  );
+
+  it("renders Scan NFC DIRECTLY ABOVE Connect when supported, both enabled", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ConnectAction
+          onProceed={vi.fn()}
+          nfcCapability="supported"
+          busy={false}
+          accepted={false}
+        />
+      </MemoryRouter>,
+    );
+    const buttons = Array.from(container.querySelectorAll("button"));
+    expect(buttons.map((b) => b.textContent)).toStrictEqual([
+      "Scan NFC",
+      "Connect",
+    ]);
+    expect(buttons[0]).toHaveClass("button-nfc");
+    expect(buttons[1]).toHaveClass("button-connect");
+    expect(buttons[0]).toBeEnabled();
+    expect(buttons[1]).toBeEnabled();
+  });
+
+  it("a Scan NFC press mints a v4 UUID, stages under it, and proceeds with an nfc intent", async () => {
+    const { onProceed } = renderEntry({ nfcCapability: "supported" });
+    await userEvent.click(screen.getByRole("button", { name: "Scan NFC" }));
+    expect(onProceed).toHaveBeenCalledTimes(1);
+    const intent = onProceed.mock.calls[0]![0] as {
+      kind: string;
+      attemptId: string;
+    };
+    expect(intent.kind).toBe("nfc");
+    expect(intent.attemptId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    // Staged under THAT id — the authorization the hook's armed handler
+    // will look for by key (review SF11: the title claimed it, the body
+    // never checked).
+    expect(stagedRetireAttemptId()).toBe(intent.attemptId);
+  });
+
+  it("a Connect press proceeds with a manual intent carrying its own fresh ID", async () => {
+    const { onProceed } = renderEntry({ nfcCapability: "supported" });
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(onProceed).toHaveBeenCalledTimes(2);
+    const [a, b] = onProceed.mock.calls.map(
+      (c) => c[0] as { kind: string; attemptId: string },
+    );
+    expect(a!.kind).toBe("manual");
+    expect(b!.kind).toBe("manual");
+    expect(a!.attemptId).not.toBe(b!.attemptId);
+  });
+
+  it("busy disables BOTH buttons and a press proceeds nothing", async () => {
+    const { onProceed } = renderEntry({
+      nfcCapability: "supported",
+      busy: true,
+    });
+    const nfc = screen.getByRole("button", { name: "Scan NFC" });
+    const connect = screen.getByRole("button", { name: "Connect" });
+    expect(nfc).toBeDisabled();
+    expect(connect).toBeDisabled();
+    await userEvent.click(nfc);
+    await userEvent.click(connect);
+    expect(onProceed).not.toHaveBeenCalled();
+  });
+
+  it("accepted swaps the Scan NFC slot for the `✓ PM5 found` status (aria-live), same fill class", () => {
+    render(
+      <MemoryRouter>
+        <ConnectAction
+          onProceed={vi.fn()}
+          nfcCapability="supported"
+          accepted
+          busy
+        />
+      </MemoryRouter>,
+    );
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("✓ PM5 found");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveClass("button-nfc");
+    expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
+  });
+
+  it("with an unlogged session on record, EITHER press stages the panel in place of BOTH buttons; Cancel restores both; Connect anyway resumes the SAME intent", async () => {
+    saveRun(unloggedSessionRun());
+    const { onProceed } = renderEntry({ nfcCapability: "supported" });
+    await userEvent.click(screen.getByRole("button", { name: "Scan NFC" }));
+    expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    expect(screen.getByText(/unsaved workout/)).toBeInTheDocument();
+    const stagedId = stagedRetireAttemptId();
+    expect(stagedId).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.getByRole("button", { name: "Scan NFC" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(stagedRetireAttemptId()).toBeNull();
+    expect(onProceed).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Scan NFC" }));
+    const resumedId = stagedRetireAttemptId();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect anyway" }),
+    );
+    expect(onProceed).toHaveBeenCalledTimes(1);
+    expect(onProceed.mock.calls[0]![0]).toStrictEqual({
+      kind: "nfc",
+      attemptId: resumedId,
+    });
   });
 });

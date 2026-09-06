@@ -360,3 +360,63 @@ describe("createReplayTransport: lifecycle events (Phase LM Task 4)", () => {
     expect(fired).toBe(true);
   });
 });
+
+describe("scanTarget (Phase NF)", () => {
+  const request = {
+    kind: "advertised-name" as const,
+    attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+    exactName: "PM5 2",
+  };
+  it("returns the recorded scan's devices narrowed to the exact name", async () => {
+    const recording = buildRecording([
+      {
+        t: 0,
+        kind: "scan",
+        devices: [
+          { id: "a", name: "PM5 1" },
+          { id: "b", name: "PM5 2" },
+        ],
+      },
+    ]);
+    const { transport } = createReplayTransport(recording);
+    await expect(
+      transport.scanTarget(request, new AbortController().signal),
+    ).resolves.toStrictEqual([{ id: "b", name: "PM5 2" }]);
+  });
+  it("fails closed by name when two recorded devices advertise the exact name, and on a pre-aborted signal", async () => {
+    const recording = buildRecording([
+      {
+        t: 0,
+        kind: "scan",
+        devices: [
+          { id: "a", name: "PM5 2" },
+          { id: "b", name: "PM5 2" },
+        ],
+      },
+    ]);
+    const { transport } = createReplayTransport(recording);
+    await expect(
+      transport.scanTarget(request, new AbortController().signal),
+    ).rejects.toMatchObject({ name: "TargetMonitorAmbiguousError" });
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      transport.scanTarget(request, ac.signal),
+    ).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+  });
+
+  it("rejects by name when no recorded device advertised the exact name", async () => {
+    const recording = buildRecording([
+      { t: 0, kind: "scan", devices: [{ id: "a", name: "PM5 1" }] },
+    ]);
+    const { transport } = createReplayTransport(recording);
+    await expect(
+      transport.scanTarget(
+        { ...request, exactName: "PM5 3" },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ name: "TargetMonitorNotAdvertisingError" });
+  });
+});

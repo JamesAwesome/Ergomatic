@@ -4508,6 +4508,192 @@ does not match these numbers._
   row, not a merge risk, and is filed with the discriminator that settles
   it (same rate with and without the branch's only `unit` file).
 
+## Walk-cost ruling, 2026-09-04
+
+James stopped an NFC walk promised at roughly ten minutes after reporting
+nearly three hours and repeated console typing. All future hardware walks
+require PM approval of the exact runsheet before requesting his readiness.
+Approval concerns demonstrated executability and total operator cost, not
+merely technical necessity. Today's endorsement is a policy ruling, not
+approval for another walk. The binding gate belongs in `CLAUDE.md`; do not
+duplicate its checklist here.
+
+## Phase NF one-attempt trace walk, 2026-09-04
+
+`NF-NORMAL-TRACE-v3` received PM PASS for one 8-minute normal NFC diagnostic
+attempt on the pinned build and photographed hardware, with zero
+rowing/captures, no retry, 11 physical actions, three one-word acknowledgements,
+and controller-owned automatic evidence. No broader NFC walk or implementation
+was approved.
+
+That PASS was retired when hardening found the v3/v4 controller path could fail
+open or leave cleanup/evidence ownership ambiguous. `NF-NORMAL-TRACE-v5` is a
+new approval target; it is not covered by the historical v3 verdict.
+
+`NF-NORMAL-TRACE-v5` at `5f1c716b` received PM PASS only for its one-attempt,
+eight-minute normal trace walk. Cleanup rehearsal remains a bounded pre-NFC
+experiment; any failure aborts without retry. James still separately chooses
+whether and when to run it.
+
+James agreed to start v5, but its 45-second `READY` timer expired across the
+operator turn boundary before the acknowledgement reached the controller. The
+walk aborted before installation with zero NFC attempts and no PM5 action. v5
+authorizes no retry; a replacement must remove that transport-timer defect and
+receive a new PM verdict.
+
+## NFC operator-readiness precedent, 2026-09-04
+
+Debugger-based UI inspection itself paused Ergomatic's main thread.
+A successful launch after detachment does not prove responsiveness or
+probe reachability. `NF-NORMAL-TRACE-v6` received PM PASS only for one
+untimed, zero-scan screen description; the normal sample remained
+NOT READY pending actual current-screen evidence. Do not promote that
+narrow observation verdict into permission for the hardware sample.
+
+## NFC grouped-walk ruling, 2026-09-04
+
+James explicitly replaced one-step chat exchanges with short instruction
+blocks. After he confirmed YOU and the enabled normal button on the installed
+build, `NF-NORMAL-TRACE-v7` received PM PASS for one normal sample: two blocks,
+one explicit scan-consent reply, eight minutes including setup/waiting, and
+no retry. Tap and tag presentation stay together; a live NFC sheet must not
+wait for another chat exchange. This does not close Gate -1 or approve
+product implementation.
+
+## NFC receipt-completion precedent, 2026-09-04
+
+V7's operator action report was mistaken for asynchronous completion, and
+host cleanup destroyed the opportunity to collect a receipt. The existing
+normal/Cancel drain emits distinct complete exports before and after cleanup;
+early host termination must wait for the latter. V8 also found a different
+installed build despite earlier successful verification: prior installation
+evidence is provenance, not current readiness.
+
+## NFC v8 readiness, 2026-09-04
+
+`NF-NORMAL-TRACE-v8` received PM PASS after restoring and independently
+verifying the pinned diagnostic and rehearsing wireless capture/cleanup
+without NFC. Its invitation is untimed and requests no setup; explicit
+scan consent starts the total eight-minute clock. One grouped physical
+block follows capture readiness. Conditional Cancel tests its previously
+unobserved reachability within that attempt, with no retry.
+
+## James's install-permission instruction, 2026-09-04
+
+“Install again. Also don't ever push an install without permission.”
+This authorizes that one reinstall and requires explicit permission for each
+future phone installation. It supersedes treating earlier preparation or
+install authorization as permission to reinstall later. PM readiness approval
+does not grant device-install permission; the binding rule is in `CLAUDE.md`.
+
+
+## Zero-scan recovery setup, 2026-09-04
+
+`NF-RECOVERY-SETUP-v1` received PM PASS for one explicitly authorized
+installation and idle Inspector-control experiment. The permission reply
+comes before one ordinary unlock, allowing the five-minute total clock to
+include all physical setup without timing the consent reply. The observed
+lockState fields did not establish current launchability. Locked launch
+ends the attempt; it grants neither another install nor an NFC scan.
+
+## Grouped recovery preparation, September 4–5, 2026
+
+`NF-RECOVERY-SETUP-v2` received PM PASS after the actual Simulator command,
+capture and four-pair sequence were rehearsed. Phone idle/capture proof
+still gates the erg invitation. Each recovery pair preserves B before an
+idle document reset and refreshes the PM5's Connect Device state. Two
+complete exports count as B's completion only when both belong to B:
+a delayed A export plus B's first export is insufficient.
+
+## Inspector route-proof limit, 2026-09-05
+
+The direct-component Simulator fixture bypassed You's lazy-loading boundary.
+Its success did not establish authenticated route readiness. Setup v2 also
+discarded the last DOM observation, so its phone failure cannot be assigned
+to the subsequently reproduced loading defect. V3 retains minimal safe
+observations and tests that unresolved phone path without another install.
+
+## Recovery walk readiness, 2026-09-05
+
+Actual setup-v3 PASS closed the phone-preparation gate for NF-RECOVERY-v1.
+PM approved its four-pair, eight-minute protocol. Fresh capture still runs
+the reviewed idle check before A within that same clock; prior route
+readiness does not survive relaunch by assumption. Scan consent remains
+separate.
+
+## Recovery v2 transport readiness, 2026-09-05
+
+`NF-RECOVERY-v2` received PM PASS WITH CONDITIONS: v1's protocol resumed
+verbatim under fresh consent, plus a read-only pre-invitation transport
+preflight, a preferred-not-required USB-C cable, and the operator's ready
+state moved into the invitation itself. Wired is not required: `transportType`
+was `localNetwork` in every record ever taken, so requiring it would gate a
+one-shot walk on an untested branch. The preflight proves the minute it runs
+in, not the walk; it exists to avoid sending James to the erg for nothing.
+Setup v3 is NOT repeated — the once-before-A idle command re-proves route,
+canary and document inside the clock, and a repeat setup guarantees the extra
+trip it is meant to avoid. New standing rule for these walks: **consent is
+consumed by reader starts, not by the clock.** A stop before the first reader
+start with zero NFC attempts earns one explicit re-invitation, never a silent
+retry; a second such stop releases him. James (SECONDARY) reports v1's phone
+was never told to be ready before its first listing — v1 put unlock after
+**Start** while the controller listed immediately. Ready state belongs in the
+invitation, superseding the 2026-09-04 "permission reply comes before one
+ordinary unlock" shape for any walk whose host talks to the phone on reply.
+
+## Flipper-emulated tag desk walk, 2026-09-05
+
+`NF-FLIPPER-EMU-v1` PASS WITH CONDITIONS. New standing point: **when a walk
+moves off the erg, re-derive which path produces the evidence.** V8's Cancel
+tap was a disclosed contingency because the PM5 completed the handoff; at the
+desk the PM5 is absent, the no-match path is expected, and Cancel becomes the
+only export — an unobserved action promoted to the critical path without
+anyone re-reading the outcome table. Also: a runsheet that inherits a v8
+protocol must re-run v8's exact-action-feasibility table against its OWN new
+physical actions (Flipper menu, phone-to-Flipper alignment were both
+SECONDARY and undemonstrated), and must permit repositioning inside one
+reader session so an antenna miss reads as INCONCLUSIVE, not NEGATIVE.
+RF26: one tag emulated identically never covers "arbitrary tag" or
+"two tags at once" — a Flipper emulates one.
+
+### Addendum, NF-FLIPPER-EMU-v2, 2026-09-05
+v1 was NEGATIVE for a mechanical cause (Flipper held a truncated 6/42-page
+read, all-zero data pages). v2 emulates a serial-verified replica synthesized
+FROM the fixture the comparison oracle uses — so a positive proves Flipper->Core
+NFC transport fidelity, not that the real PM5 tag's framing matches (RF11: the
+oracle now shares the target's source). Acceptable because the walk's purpose is
+host-tooling de-risk, not tag authenticity; PASS WITH CONDITIONS on that one
+relabel.
+
+## Recovery v3 delta pass, 2026-09-05
+
+`NF-RECOVERY-v3` = v2's PM-passed protocol verbatim with ONE change: the
+private Inspector helper's final/partial display guard now redacts the DOM
+side before comparing it to the redacted export (v2 case 1's
+`FinalDisplayMismatch` was a false negative — a real PM5's non-zero MAC bytes
+0-5 could never equal the export's zeroed ones). PM PASS on the delta. Re-run
+all four, do NOT accept case 1 from the v2 receipt: that verdict came from the
+broken helper, and the abort preceded post-drain adjudication. Standing watch,
+not a gate: the Python redaction is a hand-mirror of `redactNfcRecord` (TS);
+if that rule changes, the mirror must change with it or the guard mis-scores.
+
+## Recovery v4 bracket readiness, 2026-09-05
+
+`NF-RECOVERY-v4` PASS WITH CONDITIONS. The control-tag bracket earns its cap
+increase (ten reader starts / ten minutes) and a two-visit split is REFUSED on
+a structural ground, not cost: the no-tag event followed a connect cycle, so a
+bracket-only visit reads a rested PM5 and cannot reproduce the condition. New
+standing points: **a walk that grows a second evidence target names which one
+this visit decides** — v4 had acquired "why did the PM5 read fail" beside v1's
+"can an old attempt interfere with its successor" and said so only in a
+subclause. **An observation reply is not an acknowledgement reply**; the
+2026-09-04 grouped-walk ruling bans timing handshakes, so any bracket reply the
+controller could read off a receipt is cut, and the rest collapse into one
+message. **A limit inherited "verbatim" cannot be contradicted silently**: v4
+added the first photo of these walks while claiming v1 (which bans photos)
+stands unchanged. And RF13 again: the Flipper's `Pages read: N of 42` — the one
+observation separating "PM5 dark" from "NDEF-layer fault" — is evidenced only
+by a saved `.nfc` file, never by anyone seeing that screen.
 ## 2026-09-03 — Correct Resume: need before mechanism
 
 - **James accepted DEFER, not a cheaper reconnect.** After asking whether
@@ -4858,6 +5044,351 @@ the `/api/today` ruling). v0.38.0 recommended.
   "which line would be false if the flag never flipped?" — and it was
   `Nothing changes at save time`, falsified by the new per-save `GET /link`
   that fires for every rower, cohort or not.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v1: NOT READY)
+
+Ten legs cut to five; verdict on `docs/monitor/sessions/phase-nf-product-walk/RUNSHEET.md` v1.
+
+- **A leg that an argument elsewhere leaned on cannot be marked "stress leg,
+  skip if short of time".** The antagonist's 2026-09-06 necessity ruling cut
+  Gate -1's recovery cases 2-4 partly because "the user-reachable re-arm is
+  covered by walk legs 7/9". The runsheet then made both discretionary and
+  put leg 9 last. **At any walk gate, grep the ledgers for the leg numbers
+  the runsheet uses:** a leg cited as another decision's substitute evidence
+  is load-bearing, and demoting it silently un-makes that decision.
+- **A walk leg must be checked against the teardown path, not only the copy
+  path.** Leg 8 instructed "Cancel back to detail, then Scan NFC" to produce
+  `End this PM5's current connection` — but `cancel()` claims the driver and
+  tears the link down, so no product path leaves the app on detail holding a
+  PM5, and the error it was staging can never fire. The copy existed, the
+  mapping existed, the mutation bit; the ACTION was impossible. Read the
+  function that ends the state the leg needs to persist.
+- **Evidence a walk plans to collect must have a producer, checked in code.**
+  Three breaks in one runsheet: the leg-4 diagnostics export is `"[]"` because
+  the trace only enters the ring on a SUCCESSFUL GATT connect; the leg-3 trace
+  is reachable only by a triple-tap plus a clipboard Copy plus a paste by
+  James (banned); and the "Core NFC 201" abort condition is visible only in a
+  console behind a cable the runsheet listed as optional. Grep the trace
+  accessor for product consumers before naming it as evidence —
+  `latestConnectionAttemptTrace()` had none. (The export window now exists —
+  whole-branch review B3 landed it the same day — and the runsheet still
+  reads the console, because the window's only exit is a paste.)
+- **Hardware receipts retire a leg; the desk cannot.** Leg 6 (Cancel/timeout)
+  was already on file from this exact phone and patched plugin
+  (`PRE-REPAIR.md`, `sessionTimeout` and `userCancelled`), so it cost 60 s of
+  dead waiting and 2 of 10 consent-consuming reader starts to re-observe a
+  settled fact. Leg 1 was pinned by an e2e geometry assertion at the same
+  viewport. **Before approving a leg, ask which of three things settles it —
+  a prior HARDWARE receipt, a desk assertion, or only the erg.**
+- **Count reader starts leg by leg, not "one per leg".** v1's budget of 10 was
+  breached by its own table (legs 6 and 7 need two each; the control-tag
+  contingency needs another) before anyone touched a phone. Since consent is
+  consumed by reader starts (2026-09-05 ruling), the budget IS the consent,
+  and an exhausted budget mid-walk forces a re-invitation.
+- **The most likely failure needs the stop rule, not the least likely one.**
+  v1 aborted on a dark CONTROL tag (never observed) and said nothing about a
+  dark PM5 tag (observed, cause unknown, five live alternatives, spec's own
+  "PM5 NFC availability" section). v2 names INCONCLUSIVE-and-release (the
+  spec forbids conditioning a rule on a PM5 power cycle); improvisation at
+  the erg is what produced the 2026-09-04 walk-cost ruling.
+- **An operator observable must be perceivable by an operator.** Leg 2 asked
+  James to see `✓ PM5 found`, which lives two rAF turns (~33 ms, ~17 ms on
+  ProMotion) behind a dismissing system sheet. The spec's own leg said
+  "success haptic/check"; the runsheet kept the invisible half. A state whose
+  only witness is a test assertion is not a walk observable.
+- **Fold: 219 words / 6 bullets / longest 40 — FAIL.** Series: door PR B 121 ·
+  SF PR1 246 · SF PR2 109 · DE PR1 209 · DE PR2 122 · auto-send 214 ·
+  **NF product 219.** Same regression as SF PR1 and auto-send: a pure-Record
+  mechanism bullet above the fold. The #277 check bit too — line 1 asserted
+  "connects to exactly that PM5 and programs the workout" as fact while
+  bullet 5 said "not yet proven on hardware", and the fold contradicted its
+  own Record on whether the walk precedes merge (the spec says it does).
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v2: NOT READY)
+
+v2 adopted the whole v1 cut (five legs, three blocks, wired console, zero-scan
+dry run, INCONCLUSIVE-and-release). Everything that failed was in the two
+places the cut did not look: the build the walk installs, and the screen each
+step leaves the operator on.
+
+- **A build-identity discriminator is a claim about the ARTIFACT, and it is
+  settled by reading the produced `.app`.** v2 keyed its "you are on the old
+  probe" stop rule on `xcodebuild CURRENT_PROJECT_VERSION=9001`. A build at
+  this gate proved the produced plist still reads `789`: `Info.plist` holds
+  a literal, and an xcodebuild setting reaches the plist only through a
+  `$(VAR)` reference — which is why this repo carries `agvtool` at all. The
+  rule was inert AND its stop condition fired on the CORRECT build. RF12's
+  shape ("settled by producing the artifact") applied to install identity.
+- **A hand-rolled device build is diffed against `package.json`'s `ios:build`,
+  env by env.** Dropping `ios:build` to avoid its version stamp also dropped
+  `VITE_API_BASE`; `api.ts`'s `base = ""` then makes a NATIVE build fetch
+  relative to the WebView origin, so no library, no workout, no save — every
+  walk precondition unreachable. Any build command handed to James lists the
+  env `ios:build` supplies and says which it deliberately omits and why.
+- **Walk the state machine, not the copy.** v1's rule was "check a leg against
+  the teardown path". The general form: check each step against the screen the
+  PREVIOUS step leaves you on. v2 broke twice — cancelling the picker leaves
+  the interstitial's failure screen (no Scan NFC on it; detail is not
+  rendered while `connecting !== null`), and leg 1's END lands on the log
+  screen with no step back to the workout.
+- **A walk's own STATE RESIDUE changes what the next leg's first tap does.**
+  Leg 1 leaves an unretired `MonitorRun`, so leg 2's first press opens the
+  unsaved-workout guard panel, and "Connect anyway" destroys leg 1's row at
+  leg 2's `armed`. Enumerate the residue (unlogged run, unretired MonitorRun,
+  staged retire) leg by leg before approving a multi-leg card; a walk that
+  eats its own primary evidence is not a walk.
+- **Correction to my own v1 recommendation: the success haptic is NOT a
+  discriminating observable.** iOS emits its own feedback on a tag read, so a
+  buzz proves the SYSTEM read a tag, not that our parser accepted it. An
+  operator observable must be perceivable AND producible only by the code
+  under test; here that is the picker-free connect to the exact name (the
+  JS trace kinds reach no console on a product build — only the app's own
+  View connection log carries `parser-accepted`).
+- **A runsheet sentence that cites a gate must match a check that gate ran.**
+  v2's "DEBUG blocks are logging only, checked block by block at the PM
+  readiness gate" was attributed to v1's gate, which never opened the patch.
+  The claim is true (nine blocks: a trace class, a property, seven emit
+  calls) — it was checked at THIS gate. A citation to a gate is evidence and
+  gets RF16's bar.
+- **Fold: 130 words / 5 bullets / longest 24 — PASS**, the first since DE PR2.
+  Series: door PR B 121 · SF PR1 246 · SF PR2 109 · DE PR1 209 · DE PR2 122 ·
+  auto-send 214 · NF product v1 219 · **NF product v2 130**. The #277 check
+  passes because the disclaimer ("Not yet proven on the erg") sits bolded
+  INSIDE the opening line rather than in a later bullet — that placement is
+  the pattern to copy.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v3: NOT READY)
+
+v3 fixed every v2 finding and introduced two new ones INSIDE the fixes. All
+four blockers are in the fix work itself, not in the ground v2 cleared.
+
+- **A fix is a new claim and gets the gate the original claim got.** v2 said
+  "leg 1 leaves an unretired `MonitorRun`"; v3's fix — save the log — was
+  written without walking the save path, and prescribed a Save on a second
+  screen that does not exist (END navigates to ONE `PostWorkoutSummary` whose
+  save goes straight to `/today`). The rule v2 wrote ("check each step against
+  the screen the previous step leaves you on") has to be re-run over the
+  FIXED steps, not only the ones that were wrong.
+- **A restated discriminator is re-derived from the emitter, not from the
+  mechanism.** v3 correctly demoted the haptic and reached for the console
+  instead — then named a `cause` field that `NfcDiagnosticTrace.emit` never
+  writes (its keys are event/generation/processUptimeMs/operation/
+  domainCategory/code), on a path (`stopScanning` → plain `session.invalidate()`)
+  that supplies no cause at all. The patch's OWN comment killed it in one
+  line: "Core NFC reports every programmatic invalidation with the Cancel
+  code (200)." Read the emitter's field list before promising an operator a
+  field.
+- **A recount is a countable claim: extract the numbers, do not re-add them by
+  eye.** v3 "recounted" 38 (A 11, B 21, C 6); mechanically summing every `(n)`
+  in its own table gives 39 (A 11, B 20, C 8). This is v1's reader-start
+  breach recurring in the fix that answered it. Where per-block TIME estimates
+  are declared "INFERENCE from action counts", the counts are the budget —
+  and a budget summing exactly to the cap has no slack to absorb the error.
+- **Check the capture rule against the state the capture needs.** v3's one
+  photo targets READY "taken between blocks, never mid-leg" — READY exists
+  only mid-leg-1. RF7's family: the capture rule and the capture target have
+  to be satisfiable at the same instant.
+- **A build command with no ABSOLUTE directory is unverifiable, and the
+  evidence is in the git status.** v3's block says "from `app/`" while the
+  walk builds a WORKTREE head; the v2 gate's own build left the MAIN checkout
+  carrying exactly `app/ios/App/App/Info.plist` and
+  `app/ios/App/App.xcodeproj/project.pbxproj`. `git restore` and
+  `git status --short` are checkout-scoped, so in the wrong tree the cleanup
+  check passes while cleaning nothing. Also diff the block against the
+  operator's SHELL: `(cd x && y)` is a subshell in bash and a command
+  substitution in fish.
+- **Cheap positive technique, worth keeping:** verifying "`agvtool new-version
+  -all` touches exactly these two files" took two greps —
+  `INFOPLIST_FILE`/`CURRENT_PROJECT_VERSION` counts in the pbxproj plus
+  `find -name Info.plist` — and was then corroborated for free by the residue
+  a previous gate's build had left in `git status`. A build's file footprint
+  is a countable property, not a judgement.
+- **Fold: 130 words / 5 bullets / longest 24 — PASS** (body unchanged since
+  the v2 gate; #277, fold/Record merge-order agreement and the install-identity
+  line all pass). One should-fix: the Record's v1/v2 paragraph still carries
+  "28 counted interactions" and "the haptic as the operator observable" —
+  both superseded, the second withdrawn by this PM's own v2 entry. Replace a
+  superseded canonical figure; do not leave it standing under a "current is
+  v3" sentence.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v4: NOT READY)
+
+v4 cleared every v3 finding. All three blockers are again inside the fixes —
+the fourth consecutive gate where the fix, not the ground, was the defect.
+
+- **A copy instruction must name the label the OPERATOR'S account will
+  render, not the one the happy path renders.** v4's leg-1 fix prescribed
+  "tap **Save**"; `PostWorkoutSummary.tsx` reads
+  `plan === null ? "Save" : "Save without logging"`, and with a plan the
+  LEAD button is `Log against plan · SESSION n OF N` — which writes the
+  walk's row into the operator's real plan progress. Grep the ternary
+  around any literal a runsheet tells someone to tap, and ask which
+  ACCOUNT state selects it. Related: a walk that can mutate James's own
+  data needs a stop rule saying so.
+- **A timing discriminator needs an ANCHOR and a SEPARATION, and they are
+  different checks.** v4 named `processUptimeMs`, which the emitter really
+  does write — but a committed capture
+  (`phase-nf-gate-minus-one/normal-trace-v8-diagnostics.json`, 337,805,051)
+  shows it is uptime-since-boot, so comparing it to a spoken "locked"
+  crosses two clocks with no stated mapping. And the phase's OWN receipt
+  (`BACKGROUND-OBSERVATIONS.md`: "Native reader ending userCancelled"
+  arriving BEFORE the delivered pause) means a system invalidation and our
+  pause-abort emit the identical line at the identical instant. Existence
+  of the field (v3's finding) is the cheap half; that the field's values
+  can differ between the hypotheses is the half that decides the leg.
+- **Check BOTH directions of an inference the runsheet already flags in
+  one.** v4 tags "whether a PM5 resumes advertising after a disconnect" as
+  unestablished INFERENCE, and silently assumes the converse — that leaving
+  Connect Device STOPS advertising — as leg 2's entire NO-condition. The
+  repo argues the other way (`pm5-interface-notes.md` §Setup: advertising
+  starts on wake and "stays awake for a few minutes"; the spec says only
+  that it advertises WHILE on Connect Device). A leg whose failure state
+  cannot be staged is a leg whose inconclusive branch must be written.
+- **"Extracted mechanically" is a claim about a REPRODUCIBLE rule, not
+  about the answer.** v4's counts are right (11/20/8 = 39, re-extracted at
+  this gate) but re-running the stated rule over the table also catches the
+  literal `(200)` in leg 4's prose. Name the column the marks live in, or
+  the next recount diverges again.
+- **Cheap positive techniques worth keeping:** the whole state-machine walk
+  (END → `handleConnectedEnded` → `/library/:id/log?from=monitor` →
+  `LogSession` → one `PostWorkoutSummary` → `retireHandoff("save-success")`)
+  took six greps and settled the residue argument, the one-summary claim,
+  and the no-second-screen claim (`postTestOffer` returns null for a
+  non-global title) in one pass. And `update({ deviceName })` landing AFTER
+  the GATT connect while still in `pairing` is what makes the
+  "CONNECTING then the name" sequence observable real — worth checking
+  whenever a runsheet asks an operator to see a SEQUENCE rather than a
+  state.
+- **Fold: 130 words / 5 bullets / longest 24 — PASS.** Series: door PR B 121
+  · SF PR1 246 · SF PR2 109 · DE PR1 209 · DE PR2 122 · auto-send 214 ·
+  NF product v1 219 · v2 130 · v3 130 · **v4 130**. #277 and fold/Record
+  merge-order agree; both superseded figures the v3 gate named ("28
+  counted interactions", the haptic-as-observable) are replaced rather than
+  appended to. One residue: the Record attributes "39 interactions
+  extracted mechanically" to RUNSHEET v2, which is v4's fix — the
+  version-attribution sibling of v2's "a sentence citing a gate must match
+  a check that gate ran".
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v5: READY)
+
+Five gates; the first four failed inside the previous fix. v5 closed all three
+v4 blockers and all five should-fixes with no code change, and re-running every
+rule over the FIXED steps found one clause.
+
+- **A PASS is what proves the rules are mechanical rather than attentional.**
+  Every v5 claim was settled by a command, not a reading: the save labels by
+  grepping the ternary AND its `plan` derivation (which turned out to key on
+  "any active plan", not "this workout is today's session" — so the
+  precondition's question was the right one); the counts by extracting `(n)`
+  from the named column with a script; `--json-output` by running `--help` on
+  the installed toolchain; "no `console.*` in the JS NFC path" by the grep;
+  every quoted copy string by `file:line`. Four gates of prose review found
+  four defects; one gate of commands found one.
+- **Run the state-machine walk on BOTH machines.** v2's rule ("check each step
+  against the screen the previous step leaves you on") was applied to the phone
+  exhaustively and to the PM5 not at all. Leg 1's END terminates the erg
+  (`Terminate → Rearm → WaitToBegin`, `pm5-interface-notes.md`), so leg 2's
+  first instruction — "PM5: Menu, leave Connect Device" — asks him to leave a
+  screen he is not on. The phone-side residue paragraph reads complete and
+  covers half the state.
+- **Redundant is not impossible, and that is the blocker line.** v2's
+  picker-cancel step had no button to press; v5's leg-2 step has a goal state
+  that is already true. Both are unperformable as written; only the first
+  stops a leg. Ask what the operator DOES when the instruction fails, not
+  whether it fails.
+- **Both halves of a "we cannot tell them apart" claim get sourced separately.**
+  Leg 4 needed the emitter to be identical (patch comment: "Core NFC reports
+  every programmatic invalidation with the Cancel code (200)") AND the ordering
+  to be unknowable (`BACKGROUND-OBSERVATIONS.md`: "a cancelled reader before
+  pause"). A leg stated as "no discriminator" is stronger evidence than one
+  claiming a discriminator, and cheaper to verify.
+- **Fold: 130 words / 5 bullets / longest 24 — PASS** (unchanged since v2).
+  Residues carried to the controller: the Record's head SHA went stale while
+  its v5 sentences were updated (a partial reconciliation), and the "James does
+  column" rule is attributed to v4 when it is v5's — the same
+  version-attribution class this ledger named at v4, recurring in the round
+  that fixed it.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v7: NOT READY)
+
+Sixth gate. v7 is the timed-protocol hardening James asked for after v5's PASS;
+it is the strongest revision of the six, and the one blocker is again inside the
+fix — the fifth consecutive gate where that is true.
+
+- **A discriminator can be sound in ONE direction, and that is the sentence to
+  write.** v5 said leg 4 had no discriminator; v7 found a real one and stated it
+  as a bijection. `NFCNDEFReaderSession.h` documents 202 for backgrounding, and
+  our patch cannot produce 202 (every programmatic invalidate is Cancel-200), so
+  **202 ⇒ iOS ended it** holds absolutely. **200 ⇒ ours** does not: the phase's
+  own `BACKGROUND-OBSERVATIONS.md` records a Cancel-200 arriving BEFORE a
+  delivered pause, from a gesture whose "causal role was not identified". Before
+  writing "X = producer P", ask what ELSE emits X, and check the phase's own
+  receipts for a sighting; a one-way implication written as a mapping puts a
+  causal claim into the record that the evidence cannot carry.
+- **A blocker can be record-facing rather than operator-facing, and it still
+  blocks.** Leg 4's two outcomes are both PASS and neither changes what James
+  does — so the defect costs the walk nothing at the erg and costs it everything
+  afterwards, because producing that verdict IS the leg. When a leg's product is
+  a written conclusion, gate the conclusion as hard as the actions.
+- **Give every wait a ceiling AND a "then what", not just the one wait you were
+  asked about.** The lens that added "10-20 s is the test" to the leg with the
+  known slow path left the PRIMARY leg reading "under 10 s" with no ceiling —
+  on the same buttonless screen, with a 1 s collision window, a second
+  `stopLEScan()` cleanup bound armed at every settle, and a 10 s GATT bound
+  stacked underneath. A hold doctrine applied to the interesting leg and not to
+  the boring one is half a doctrine.
+- **A range in the table must be a range in the budget.** Extracting `(n)` from
+  the "James does" column gives 39 at the floor and 42 at the ceiling (one leg
+  carries a literal `(0-3)`); the budget sentence states 39 flat. The counts are
+  the time estimate, so a point value silently spends the slack the ceiling
+  needs. Third recount, third different failure: v3 mis-added, v4 mis-named the
+  column, v7 dropped the range.
+- **A D/H tag belongs to the VALUE, not the mechanism.** The timer table tagged
+  the reader-busy row `D`; the header documents the CONDITION (a live session)
+  and states no ~1 s grace. The operator rule built on it was conservative and
+  safe — only the tag claimed evidence it did not have.
+- **Cheap positive techniques worth keeping:** the whole 200/202 chain took four
+  greps and one `sed` — SDK header → `nfcSessionEndReason`'s switch →
+  `native/nfc.ts`'s mapping → `runNfcAttempt.ts`'s copy — and settled both
+  directions of the claim in one pass; and reading `DeviceManager.swift`'s
+  `stopScan()` proved the picker title does NOT change while devices populate,
+  which is what makes two separate operator instructions correct rather than
+  one of them stale.
+- **Fold: 133 words / 5 bullets / longest 26 — FAIL**, the first per-bullet
+  breach in this series. Series: door PR B 121 · SF PR1 246 · SF PR2 109 ·
+  DE PR1 209 · DE PR2 122 · auto-send 214 · NF v1 219 · v2 130 · v3 130 ·
+  v4 130 · v5 130 · **v7 133**. #277, fold/Record merge-order and the head SHA
+  all pass. **Version attribution failed for the third consecutive round** — the
+  Record names v7 three times and never names v6, which is a separate commit on
+  the branch. The rule has now been stated at v4, v5 and v7 without sticking:
+  when a round produces two commits, the Record names both or explicitly says
+  which one is gated.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v8: READY — delta)
+
+Seventh gate, first delta gate. Six named items, all six verified against the
+file and the PR body; a `git diff` proved nothing else moved, which is what made
+the gate cheap enough to be worth running at all. James closed the loop here
+("No more after this round").
+
+- **Scope a delta re-gate with a diff, not with trust.** `git diff <prev>..<head>`
+  over the three files took one command and turned "re-run nothing you already
+  settled" from a request into a checked fact. A delta gate whose scope is
+  asserted rather than shown is a full gate with the evidence omitted.
+- **A fix that DELETES the unsupported number beats one that re-tags it.** I
+  asked for row 2's `~1 s` to be tagged H; v8 removed the figure and replaced the
+  trigger with the condition the header actually documents ("a tap while the
+  previous session is still ending"), keeping "count to three" as a stated
+  conservative rule. Re-tagging preserves a fabricated value behind an honest
+  label; deleting it removes the thing a later reader would cite.
+- **Fixing one contradiction surfaces its neighbours for free.** Rewriting leg
+  4's observable column to be one-way also made it agree with its own FAIL
+  column, which had disagreed about outcome (d) since v7 and which no gate — mine
+  included — had caught. When a cell is rewritten, read the row.
+- **Verify a stated count rather than accepting it.** The controller reported the
+  fold at 126/24; my own extraction says 121/23. Both pass, so it changed
+  nothing here — but the number a gate records should be the one the gate
+  measured, or the series it feeds drifts by whoever last quoted it.
 
 ## 2026-09-06 — Phase KB close: a withdrawal grep is scoped to the wrong branch's withdrawals
 

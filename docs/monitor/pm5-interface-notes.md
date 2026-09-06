@@ -1173,6 +1173,11 @@ every flagged item either numbered here or explicitly excused — holds.)
 7. **Results destination:** append what you observe to §18 below, one
    entry per item number, dated. §18 is the only place these results live —
    this section (§17) stays a fixed runsheet across sessions, not a log.
+   **James, 2026-09-06 (SECONDARY, his own observation across many
+   sessions): the PM5 advertises whenever it is awake and not already
+   connected, on ANY screen — Connect Device is not required — and an NFC
+   tap wakes a sleeping PM5. The Phase NF walk confirmed the first half
+   (a targeted connect succeeded seconds after leaving Connect Device).**
 
 **The settle toggle (`settle-off` / `settle-on`), added by Phase 7A-fix-3
 Task 3.** Two REMOTE-only bridge commands (`curl -X POST

@@ -6,8 +6,10 @@ import type {
   MonitorDriver,
   MonitorEvent,
   MonitorFrame,
+  TargetedScanTransport,
   Transport,
 } from "./types.js";
+import { hasTargetedScan, isValidAttemptId } from "./types.js";
 
 // types.ts is declarations only (no runtime code) — these tests exist as a
 // regression guard: a sample value satisfying each exported shape, checked
@@ -238,5 +240,39 @@ describe("Transport / DiscoveredMonitor", () => {
     const nameless: DiscoveredMonitor = { id: "device-2" };
 
     expect([missingOnDisconnect, nameless]).toHaveLength(2);
+  });
+});
+
+describe("isValidAttemptId", () => {
+  it("accepts a v4 UUID and rejects everything else", () => {
+    expect(isValidAttemptId("2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f")).toBe(true);
+    expect(isValidAttemptId("")).toBe(false);
+    expect(isValidAttemptId(undefined)).toBe(false);
+    expect(isValidAttemptId("2f1c9d2e-8a3b-1c7d-9e1f-0a1b2c3d4e5f")).toBe(
+      false,
+    ); // v1
+    expect(isValidAttemptId("not-a-uuid")).toBe(false);
+  });
+});
+
+describe("hasTargetedScan", () => {
+  const base: Transport = {
+    scan: () => Promise.resolve([]),
+    connect: () => Promise.resolve(),
+    write: () => Promise.resolve(),
+    subscribe: () => () => undefined,
+    disconnect: () => Promise.resolve(),
+    onDisconnect: () => () => undefined,
+  };
+  it("is false without the method and true with it", () => {
+    expect(hasTargetedScan(base)).toBe(false);
+    const targeted: Transport & TargetedScanTransport = {
+      ...base,
+      scanTarget: () => Promise.resolve([]),
+    };
+    expect(hasTargetedScan(targeted)).toBe(true);
+    expect(
+      hasTargetedScan({ ...base, scanTarget: 1 } as unknown as Transport),
+    ).toBe(false);
   });
 });

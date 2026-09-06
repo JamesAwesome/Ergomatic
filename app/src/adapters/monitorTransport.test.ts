@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  DiscoveredMonitor,
+  TargetedMonitorDiscoveryRequest,
+} from "../../domain/monitor/types.js";
 import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
 import { SILENCE_THRESHOLD_MS } from "../monitor/transports/liveness";
 
@@ -299,5 +303,81 @@ describe("adapters/monitorTransport native arm", () => {
     expect(registered).toHaveLength(1);
     registered[0]!("0x0032", "boom");
     expect(received).toStrictEqual([["0x0032", "boom"]]);
+  });
+});
+
+describe("adapters/monitorTransport: targeted-scan capability through the production composition (Phase NF)", () => {
+  it("native arm: the SAME request object and AbortSignal reach the Capacitor scanTarget seam through withLiveness", async () => {
+    vi.doMock("../platform", () => ({ isNative: () => true }));
+    const scanTarget = vi.fn<
+      (
+        r: TargetedMonitorDiscoveryRequest,
+        s: AbortSignal,
+        t?: { record(kind: string, detail?: string): void },
+      ) => Promise<DiscoveredMonitor[]>
+    >(async () => [{ id: "dev-1", name: "PM5 1" }]);
+    const nativeTransport = {
+      scan: vi.fn(async () => [{ id: "dev-1", name: "PM5 1" }]),
+      scanTarget,
+      connect: vi.fn(),
+      write: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+      disconnect: vi.fn(),
+      onDisconnect: vi.fn(() => () => undefined),
+    };
+    vi.doMock("../monitor/transports/capacitorBle", () => ({
+      createCapacitorBleTransport: vi.fn(() => nativeTransport),
+    }));
+    vi.doMock("../monitor/transports/index", () => ({
+      resolveDefaultTransport: vi.fn(),
+    }));
+    const { defaultTransport } = await import("./monitorTransport");
+    const { hasTargetedScan } = await import("../../domain/monitor/types.js");
+    const transport = await defaultTransport(stubDeps());
+    const request = {
+      kind: "advertised-name" as const,
+      attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+      exactName: "PM5 1",
+    };
+    const signal = new AbortController().signal;
+    expect(transport !== null && hasTargetedScan(transport)).toBe(true);
+    if (transport === null || !hasTargetedScan(transport))
+      throw new Error("unreachable");
+    const trace = { record: vi.fn() };
+    await expect(
+      transport.scanTarget(request, signal, trace),
+    ).resolves.toStrictEqual([{ id: "dev-1", name: "PM5 1" }]);
+    expect(scanTarget.mock.calls[0]![0]).toBe(request);
+    expect(scanTarget.mock.calls[0]![1]).toBe(signal);
+    // The trace is the THIRD argument; a decorator that drops it silently
+    // kills every BLE diagnostic on the composed path (review B3).
+    expect(scanTarget.mock.calls[0]![2]).toBe(trace);
+    expect(nativeTransport.scan).not.toHaveBeenCalled();
+  });
+  it("web arm: the real Web Bluetooth transport has NO targeted capability, and no decorator invents one", async () => {
+    vi.doMock("../platform", () => ({ isNative: () => false }));
+    vi.doMock("../monitor/transports/capacitorBle", () => ({
+      createCapacitorBleTransport: vi.fn(),
+    }));
+    const { defaultTransport } = await import("./monitorTransport");
+    const { createWebBluetoothTransport } =
+      await import("../monitor/transports/webBluetooth");
+    const { withLiveness } = await import("../monitor/transports/liveness");
+    const { hasTargetedScan } = await import("../../domain/monitor/types.js");
+    Object.defineProperty(navigator, "bluetooth", {
+      value: {},
+      configurable: true,
+    });
+    try {
+      const web = withLiveness(createWebBluetoothTransport(), stubDeps());
+      expect(hasTargetedScan(web)).toBe(false);
+      // The PRODUCTION composition, not a hand-built one (review SF7): the
+      // web arm's default transport must come back without the capability.
+      const composed = await defaultTransport(stubDeps());
+      expect(composed).not.toBeNull();
+      expect(composed !== null && hasTargetedScan(composed)).toBe(false);
+    } finally {
+      delete (navigator as { bluetooth?: unknown }).bluetooth;
+    }
   });
 });

@@ -1,0 +1,66 @@
+{
+  "runsheet": "NF-NORMAL-TRACE-v7",
+  "controllerStartedAt": "2026-09-04T20:20:08.615Z",
+  "controllerFinishedAt": "2026-09-04T20:22:26.150Z",
+  "operatorStartedAt": "2026-09-04T20:18:44.334638+00:00",
+  "operatorElapsedMs": 221815,
+  "cleanupVerified": true,
+  "decision": {
+    "outcome": "inconclusive",
+    "reasons": [
+      "No receipt export found"
+    ]
+  },
+  "nativeDiagnostics": [
+    {
+      "event": "ndef.begin.initiated",
+      "generation": 1,
+      "processUptimeMs": 331458182
+    },
+    {
+      "event": "ndef.begin.returned",
+      "generation": 1,
+      "processUptimeMs": 331458182
+    },
+    {
+      "event": "ndef.rf.active",
+      "generation": 1,
+      "processUptimeMs": 331458331
+    },
+    {
+      "code": 200,
+      "domainCategory": "core-nfc",
+      "event": "ndef.ending",
+      "generation": 1,
+      "operation": "session-end",
+      "processUptimeMs": 331462554
+    }
+  ],
+  "nativeMethodSequence": [
+    "CapacitorNfc.isSupported",
+    "App.addListener",
+    "App.addListener",
+    "CapacitorNfc.addListener",
+    "CapacitorNfc.addListener",
+    "App.getState",
+    "CapacitorNfc.startScanning",
+    "CapacitorNfc.stopScanning",
+    "CapacitorNfc.removeListener",
+    "CapacitorNfc.removeListener",
+    "App.addListener",
+    "App.getState",
+    "App.removeListener",
+    "BluetoothLe.initialize",
+    "BluetoothLe.isEnabled",
+    "BluetoothLe.addListener",
+    "BluetoothLe.requestLEScan"
+  ],
+  "bleCallbacks": {
+    "bleCallbackObjects": 8602,
+    "withLocalName": 1935,
+    "exactPm5LocalName": 0,
+    "exactPm5DeviceName": 0
+  },
+  "receiptMarkerCount": 0,
+  "rawConsoleSha256": "c244e4eee2efc7e83ca3521435076e15e2ae3408a0f76e0807b8ae59d3027673"
+}

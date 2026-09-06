@@ -1,0 +1,25 @@
+[
+  {
+    "event": "ndef.begin.initiated",
+    "generation": 1,
+    "processUptimeMs": 337800283
+  },
+  {
+    "event": "ndef.begin.returned",
+    "generation": 1,
+    "processUptimeMs": 337800284
+  },
+  {
+    "event": "ndef.rf.active",
+    "generation": 1,
+    "processUptimeMs": 337800441
+  },
+  {
+    "code": 200,
+    "domainCategory": "core-nfc",
+    "event": "ndef.ending",
+    "generation": 1,
+    "operation": "session-end",
+    "processUptimeMs": 337805051
+  }
+]

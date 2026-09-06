@@ -1,0 +1,29 @@
+{
+  "startedAtUtc": "2026-09-05T00:59:50+00:00",
+  "finishedAtUtc": "2026-09-05T01:01:32.366Z",
+  "totalElapsedMs": 102366,
+  "startNote": "Conservative clock begins three seconds before first tool timestamp after Ready.",
+  "installationVerified": true,
+  "installedVersion": "0.23.0",
+  "installedBuild": "789",
+  "installationsPerformed": 0,
+  "idle": {
+    "stage": "idle-preflight-passed",
+    "sameVerifiedProcess": true,
+    "newDocument": true,
+    "captureCheckComplete": true,
+    "scanStarted": false
+  },
+  "captureCheck": {
+    "complete": true,
+    "lineCount": 4,
+    "maximumLineCharacters": 3127
+  },
+  "cleanupVerified": true,
+  "readerBeginCount": 0,
+  "startScanningLineCount": 0,
+  "receiptMarkerCount": 0,
+  "captureCanaryMarkerCount": 4,
+  "outcome": "pass",
+  "authorizationConsumed": true
+}

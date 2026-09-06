@@ -8,6 +8,11 @@
 // the clock built exactly as the task brief specifies (`testClock()`).
 
 import { describe, expect, it, vi } from "vitest";
+import type {
+  DiscoveredMonitor,
+  TargetedMonitorDiscoveryRequest,
+} from "../../../domain/monitor/types.js";
+import { hasTargetedScan } from "../../../domain/monitor/types.js";
 import { LOGGED_WORKOUT_UUID } from "../../../domain/monitor/pm5/uuids.js";
 import type { Transport } from "../../../domain/monitor/types.js";
 import { createHoldOpenTransport, HOLD_OPEN_MS } from "./holdOpen";
@@ -959,5 +964,51 @@ describe("createHoldOpenTransport: pass-through fidelity", () => {
     stub.notify(CHAR, new Uint8Array());
 
     expect(cb).toHaveBeenCalledTimes(1);
+  });
+});
+
+const HOLD_DEPS = {
+  now: () => 0,
+  schedule: () => () => undefined,
+  stash: () => undefined,
+};
+
+describe("scanTarget stance (Phase NF)", () => {
+  const request = {
+    kind: "advertised-name" as const,
+    attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+    exactName: "PM5 1",
+  };
+  it("forwards scanTarget with the SAME request object and signal when the inner has it", async () => {
+    const signal = new AbortController().signal;
+    const scanTarget = vi.fn<
+      (
+        r: TargetedMonitorDiscoveryRequest,
+        s: AbortSignal,
+        t?: { record(kind: string, detail?: string): void },
+      ) => Promise<DiscoveredMonitor[]>
+    >(async () => [{ id: "dev-1", name: "PM5 1" }]);
+    const wrapped = createHoldOpenTransport(
+      { ...stubTransport().transport, scanTarget } as Transport,
+      HOLD_DEPS,
+    ).transport;
+    expect(hasTargetedScan(wrapped)).toBe(true);
+    if (!hasTargetedScan(wrapped)) throw new Error("unreachable");
+    const trace = { record: vi.fn() };
+    await expect(
+      wrapped.scanTarget(request, signal, trace),
+    ).resolves.toStrictEqual([{ id: "dev-1", name: "PM5 1" }]);
+    expect(scanTarget.mock.calls[0]![0]).toBe(request);
+    expect(scanTarget.mock.calls[0]![1]).toBe(signal);
+    // The trace is the THIRD argument; a decorator that drops it silently
+    // kills every BLE diagnostic on the composed path (review B3).
+    expect(scanTarget.mock.calls[0]![2]).toBe(trace);
+  });
+  it("omits scanTarget when the inner lacks it — a web transport stays incapable", () => {
+    const wrapped = createHoldOpenTransport(
+      stubTransport().transport as Transport,
+      HOLD_DEPS,
+    ).transport;
+    expect(hasTargetedScan(wrapped)).toBe(false);
   });
 });

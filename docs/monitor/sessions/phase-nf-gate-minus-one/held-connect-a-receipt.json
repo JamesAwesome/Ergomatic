@@ -1,0 +1,47 @@
+{
+  "schema": "ergomatic/nfc-gate-minus-one/v1",
+  "capturedAtUtc": "2026-09-04T16:36:41.106Z",
+  "iphone": {
+    "model": "iPhone 17 Pro",
+    "iosVersion": "26.6.1"
+  },
+  "pm5": {
+    "model": "D/E",
+    "firmware": "459.069",
+    "advertisedNameShown": "PM4 4323311249 Row"
+  },
+  "signedEntitlement": [],
+  "usageDescription": "Scan a PM5 to connect and program your workout.",
+  "package": "@capgo/capacitor-nfc@8.2.5",
+  "attempts": [
+    {
+      "scenario": "stop-during-connect",
+      "atUtc": "2026-09-04T16:36:41.106Z",
+      "capabilityLatencyMs": 25.000000000014552,
+      "records": [],
+      "decodedName": null,
+      "liveLocalName": null,
+      "trailingPayloadBytes": [],
+      "firstMatchingAdvertisementMs": null,
+      "matchingAdvertisementIntervalsMs": [],
+      "matchingDeviceCount": 0,
+      "connected": false,
+      "disconnected": false,
+      "staleIdDroppedCount": 0,
+      "staleAttemptSettlementCount": null
+    }
+  ],
+  "readerEndings": [],
+  "criteria": {
+    "rawNdefShape": false,
+    "exactType": false,
+    "paddingRuleObserved": false,
+    "exactLocalNameBridge": false,
+    "pickerFreeBleConnect": false,
+    "signedReader": false,
+    "readerEndingSemanticsObserved": false,
+    "nativeIdentityAndDrain": false,
+    "staleACannotAffectB": false
+  },
+  "verdict": "NO-GO"
+}

@@ -192,6 +192,10 @@ function renderInterstitial(
   const onEnded = props.onEnded ?? vi.fn();
   const view = render(
     <ConnectedInterstitial
+      request={{
+        kind: "picker",
+        attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+      }}
       program={FIXTURE.program}
       phases={FIXTURE.phases}
       identity={FIXTURE.identity}
@@ -410,6 +414,10 @@ describe("state 5: programming", () => {
     );
     render(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={one}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1193,6 +1201,10 @@ describe("state 7: ready", () => {
     );
     first.rerender(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1244,6 +1256,10 @@ describe("RC-37 ([R5]): session.programDropped exits like Cancel, without callin
     mockUseMonitorSession.mockReturnValue(next);
     first.rerender(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1278,6 +1294,10 @@ describe("RC-37 ([R5]): session.programDropped exits like Cancel, without callin
     mockUseMonitorSession.mockReturnValue(next);
     first.rerender(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1485,6 +1505,10 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1563,6 +1587,10 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1658,6 +1686,10 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1734,6 +1766,10 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1771,6 +1807,10 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1788,5 +1828,167 @@ describe("the interstitial walk, fake-driven", () => {
         selector: ".connected-serif-line",
       }),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase NF (design spec 2026-09-03 §5): the five targeted failures render
+// their approved copy as the serif line, never the generic "End whatever is
+// showing…" sentence; two of them refuse an in-process retry; Try again
+// repeats the SAME request object (never the picker); and the mount lease
+// discards the staged receipt only on a genuine unmount.
+describe("targeted failures (Phase NF)", () => {
+  const TARGET_REQUEST = {
+    kind: "advertised-name" as const,
+    attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+    exactName: "PM5 432331249 Row",
+  };
+
+  function renderTargeted(
+    overrides: Partial<MonitorSession> = {},
+  ): ReturnType<typeof renderInterstitial> {
+    const current = session(overrides);
+    mockUseMonitorSession.mockReturnValue(current);
+    const onExit = vi.fn();
+    const onRowInstead = vi.fn();
+    const onEnded = vi.fn();
+    const view = render(
+      <ConnectedInterstitial
+        request={TARGET_REQUEST}
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={onExit}
+        onRowInstead={onRowInstead}
+        onEnded={onEnded}
+      />,
+    );
+    return { ...view, session: current, onExit, onRowInstead, onEnded };
+  }
+
+  it.each([
+    [
+      "target-not-advertising",
+      "Open Connect Device on this PM5, then try again.",
+      true,
+    ],
+    [
+      "target-already-connected",
+      "End this PM5's current connection, then try again.",
+      true,
+    ],
+    [
+      "target-ambiguous",
+      "More than one PM5 has this name. Use Connect.",
+      false,
+    ],
+    ["target-interrupted", "Connection interrupted. Try again.", true],
+    [
+      "scan-cleanup-failed",
+      "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
+      false,
+    ],
+  ] as const)(
+    "%s renders its detail as the serif line, no generic instruction, Try again enabled=%s",
+    (reason, detail, retry) => {
+      renderTargeted({
+        phase: "failed",
+        error: connectedError({ reason, detail }),
+      });
+      // The detail also appears in the DETAIL panel; the SERIF line is the
+      // one the rower reads first.
+      const lines = screen.getAllByText(detail);
+      expect(
+        lines.some((el) => el.classList.contains("connected-serif-line")),
+      ).toBe(true);
+      expect(
+        screen.queryByText(
+          "End whatever is showing on the monitor, then try again.",
+        ),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Try again" })).toHaveProperty(
+        "disabled",
+        !retry,
+      );
+    },
+  );
+
+  it("mounts with connect(request) — the SAME request object — and Try again repeats it", async () => {
+    const { session: s } = renderTargeted({
+      phase: "failed",
+      error: connectedError({
+        reason: "target-not-advertising",
+        detail: "Open Connect Device on this PM5, then try again.",
+      }),
+    });
+    expect(s.connect).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(s.connect).mock.calls[0]![0]).toBe(TARGET_REQUEST);
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(s.connect).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(s.connect).mock.calls[1]![0]).toBe(TARGET_REQUEST);
+  });
+
+  it("a picker request is passed through unchanged too (manual Connect is behaviourally unchanged)", () => {
+    const request = {
+      kind: "picker" as const,
+      attemptId: "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+    };
+    const current = session({ phase: "picking" });
+    mockUseMonitorSession.mockReturnValue(current);
+    render(
+      <ConnectedInterstitial
+        request={request}
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
+      />,
+    );
+    expect(vi.mocked(current.connect).mock.calls[0]![0]).toBe(request);
+  });
+
+  it("mount lease: a StrictMode double-invoke keeps the staged receipt; a genuine unmount discards it (compare-by-attempt-ID)", async () => {
+    const { StrictMode } = await import("react");
+    const store = await import("../monitor/handoffStore");
+    store.resetForTests();
+    store.stageRetire(
+      [{ sessionKey: "2020-01-01T00:00:00.000Z", revision: 1 }],
+      TARGET_REQUEST.attemptId,
+    );
+    const current = session({ phase: "picking" });
+    mockUseMonitorSession.mockReturnValue(current);
+    const view = render(
+      <StrictMode>
+        <ConnectedInterstitial
+          request={TARGET_REQUEST}
+          program={FIXTURE.program}
+          phases={FIXTURE.phases}
+          identity={FIXTURE.identity}
+          baselines={baselines}
+          nudgedCount={0}
+          onExit={vi.fn()}
+          onRowInstead={vi.fn()}
+          onEnded={vi.fn()}
+        />
+      </StrictMode>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // The rehearsal (setup → cleanup → setup) did not discard.
+    expect(store.stagedRetireAttemptId()).toBe(TARGET_REQUEST.attemptId);
+    view.unmount();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(store.stagedRetireAttemptId()).toBeNull();
   });
 });

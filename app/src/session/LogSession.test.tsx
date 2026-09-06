@@ -6525,12 +6525,19 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     const { default: ConnectAction } = await import("../monitor/ConnectAction");
     render(
       <MemoryRouter>
-        <ConnectAction onProceed={() => undefined} />
+        <ConnectAction
+          onProceed={() => undefined}
+          nfcCapability="unsupported"
+          busy={false}
+          accepted={false}
+        />
       </MemoryRouter>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    const staged = handoffStore.takeStagedRetire();
+    const staged = handoffStore.takeStagedRetire(
+      handoffStore.stagedRetireAttemptId() ?? "",
+    );
     expect(staged.length).toBe(1);
     handoffStore.retire(staged, "connect-guard-armed");
 

@@ -998,6 +998,81 @@ test.describe("workout detail screen", () => {
     // `.button-l1`.
     await expect(page.locator(".button-l1")).toHaveCount(0);
     await expect(page.locator(".button-primary")).toHaveCount(0);
+    // Phase NF (Gate 0): web has no NFC, so the Scan NFC control is ABSENT —
+    // no placeholder, no reserved height (the layout is exactly today's).
+    await expect(page.locator(".button-nfc")).toHaveCount(0);
+  });
+});
+
+// Phase NF (design spec 2026-09-03, Gate 0): with the scripted NFC reader
+// reporting support, Scan NFC renders DIRECTLY ABOVE Connect as the second
+// of two EQUAL 56 px hardware primaries, on its own `--action-nfc` fern
+// token (#49624f = rgb(73, 98, 79), cream text 6.57:1, page boundary
+// 5.92:1 — spec table). The spec deliberately supersedes the single-primary
+// rule the describe above pins for the NFC-absent layout.
+test.describe("workout detail screen (Scan NFC supported)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window.navigator, "bluetooth", {
+        value: { getAvailability: () => Promise.resolve(true) },
+        configurable: true,
+      });
+      window.__nfcScript__ = {
+        capability: "supported",
+        outcome: { kind: "cancelled" },
+      };
+    });
+    await signInViaBackdoor(page, {
+      email: "design-detail-nfc@e2e.test",
+      name: "Design Detail NFC Tester",
+    });
+    await page.goto("/library");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator(".workout-detail-title")).toBeVisible();
+  });
+
+  test("Scan NFC sits directly above Connect, both 56px, fern and blue fills, no stray L1/primary", async ({
+    page,
+  }) => {
+    const nfc = page.locator(".button-nfc");
+    const connect = page.locator(".button-connect");
+    await expect(nfc).toHaveCount(1);
+    await expect(nfc).toHaveText("Scan NFC");
+    await expect(connect).toHaveText("Connect");
+    const [nfcBox, connectBox] = await Promise.all([
+      nfc.evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect),
+      connect.evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect),
+    ]);
+    expect(nfcBox.height).toBe(56);
+    expect(connectBox.height).toBe(56);
+    expect(nfcBox.width).toBe(connectBox.width);
+    expect(nfcBox.bottom).toBeLessThanOrEqual(connectBox.top);
+    expect(connectBox.top - nfcBox.bottom).toBe(12); // the stack's own gap
+    expect(
+      await nfc.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe("rgb(73, 98, 79)");
+    // Absolute, not relative to Connect: both regressing together would
+    // pass a same-colour check (review SF13). `--surface` cream #fffdf7.
+    expect(await nfc.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(255, 253, 247)",
+    );
+    expect(await connect.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(255, 253, 247)",
+    );
+    await expect(page.locator(".button-l1")).toHaveCount(0);
+    await expect(page.locator(".button-primary")).toHaveCount(0);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target, with Scan NFC present", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations with Scan NFC present", async ({
+    page,
+  }) => {
+    await assertNoA11yViolations(page);
   });
 });
 

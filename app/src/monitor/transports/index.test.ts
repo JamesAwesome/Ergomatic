@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  DiscoveredMonitor,
+  TargetedMonitorDiscoveryRequest,
+  TargetedScanTransport,
+} from "../../../domain/monitor/types.js";
+import { hasTargetedScan } from "../../../domain/monitor/types.js";
 import { WORKOUTSTATE_WAITTOBEGIN } from "../../../domain/monitor/pm5/parse.js";
 import {
   GENERAL_STATUS_UUID,
@@ -577,6 +583,45 @@ describe("autoTicking", () => {
       wrapped.onDisconnect(onDisconnect);
       expect(() => fake.injectDisconnect()).not.toThrow();
       expect(onDisconnect).toHaveBeenCalledWith("stub: injected disconnect");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("autoTicking: scanTarget stance (Phase NF)", () => {
+  const request = {
+    kind: "advertised-name" as const,
+    attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+    exactName: "PM5 1",
+  };
+  it("keeps the fake's scanTarget with the SAME request and signal, and omits it when absent", async () => {
+    vi.useFakeTimers();
+    try {
+      const signal = new AbortController().signal;
+      const scanTarget = vi.fn<
+        (
+          r: TargetedMonitorDiscoveryRequest,
+          s: AbortSignal,
+          t?: { record(kind: string, detail?: string): void },
+        ) => Promise<DiscoveredMonitor[]>
+      >(async () => [{ id: "fake-pm5", name: "PM5 1" }]);
+      const fakeWithTarget: Transport &
+        TargetedScanTransport & { tick(ms: number): void } = {
+        ...stubFake(),
+        scanTarget,
+      };
+      const wrapped = autoTicking(fakeWithTarget);
+      expect(hasTargetedScan(wrapped)).toBe(true);
+      if (!hasTargetedScan(wrapped)) throw new Error("unreachable");
+      const trace = { record: vi.fn() };
+      await wrapped.scanTarget(request, signal, trace);
+      expect(scanTarget.mock.calls[0]![0]).toBe(request);
+      expect(scanTarget.mock.calls[0]![1]).toBe(signal);
+      // The trace is the THIRD argument; a decorator that drops it silently
+      // kills every BLE diagnostic on the composed path (review B3).
+      expect(scanTarget.mock.calls[0]![2]).toBe(trace);
+      expect(hasTargetedScan(autoTicking(stubFake()))).toBe(false);
     } finally {
       vi.useRealTimers();
     }

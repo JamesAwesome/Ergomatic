@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CDPSession, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
@@ -459,6 +462,48 @@ function buildNaturalFinishEvents(): (
 // count.
 const INTERSTITIAL_WRITE_DELAY_MS = 120;
 
+/** Phase NF: the canonical Gate -1 capture, read on the Node side and handed
+ *  to the page's scripted NFC reader (`window.__nfcScript__`, the sibling of
+ *  `__pm5FakeScript__`, behind the same build-time gate). */
+function pm5NfcFixtureRecords(): {
+  tnf: number;
+  type: number[];
+  payload: number[];
+}[] {
+  const raw = JSON.parse(
+    readFileSync(
+      path.join(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../docs/monitor/nfc/pm5-tag-2026-09-04-iphone.json",
+      ),
+      "utf8",
+    ),
+  ) as { records: { tnf: number; type: number[]; payload: number[] }[] };
+  return raw.records.map((r) => ({
+    tnf: r.tnf,
+    type: r.type,
+    payload: r.payload,
+  }));
+}
+
+async function injectNfcScript(
+  page: Page,
+  outcome:
+    | {
+        kind: "records";
+        records: { tnf: number; type: number[]; payload: number[] }[];
+      }
+    | { kind: "cancelled" }
+    | { kind: "timeout" },
+): Promise<void> {
+  await page.addInitScript(
+    (script) => {
+      window.__nfcScript__ = script;
+    },
+    { capability: "supported" as const, outcome },
+  );
+}
+
 async function injectFakeMonitor(
   page: Page,
   deviceName: string,
@@ -468,14 +513,18 @@ async function injectFakeMonitor(
   // shorter, boundary-free timeline of its own.
   events: (FakeStatusEventLike | FakeBoundaryEventLike)[] = buildStoryEvents(),
   program = FIXTURE_PROGRAM,
+  // Phase NF: drives the fake's targeted-scan failure kinds (spec §5 copy).
+  targetedScan?:
+    "match" | "not-advertising" | "ambiguous" | "already-connected",
 ): Promise<void> {
   await page.addInitScript(
-    ({ program, events, deviceName: name, delayWritesMs }) => {
+    ({ program, events, deviceName: name, delayWritesMs, targetedScan }) => {
       window.__pm5FakeScript__ = {
         program,
         events,
         deviceName: name,
         delayWritesMs,
+        ...(targetedScan ? { targetedScan } : {}),
       };
     },
     {
@@ -483,6 +532,7 @@ async function injectFakeMonitor(
       events,
       deviceName,
       delayWritesMs: INTERSTITIAL_WRITE_DELAY_MS,
+      targetedScan,
     },
   );
 }
@@ -2160,5 +2210,102 @@ test.describe("Phase CS Item A Task 3: the scrollable grid gets its own program 
     ).toHaveAttribute("aria-current", "page");
 
     await cleanupByTitle(page, title);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase NF (design spec 2026-09-03): Scan NFC through the shipped seams —
+// the scripted NFC reader and the fake PM5's targeted scan — against the
+// real compose stack. Web never has NFC; the seam exists so the REAL detail
+// screen, parser, hand-off, interstitial and session run over native-shaped
+// events in Chromium (RF24: the test starts upstream of every producer).
+test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  const NAME = "PM5 432331249 Row";
+
+  test("a valid PM5 tag: ✓ PM5 found, no picker, READY", async ({ page }) => {
+    const title = "NFC Valid Tag Walk";
+    await injectFakeMonitor(page, NAME);
+    await injectNfcScript(page, {
+      kind: "records",
+      records: pm5NfcFixtureRecords(),
+    });
+    await signInViaBackdoor(page, {
+      email: "nfc-valid@e2e.test",
+      name: "NFC Tester",
+    });
+    await setBaselines(page);
+    await importBulk(page, BULK_TEXT(title));
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+
+    const scanNfc = page.getByRole("button", { name: "Scan NFC" });
+    await expect(scanNfc).toBeVisible();
+    await scanNfc.click();
+    await expect(page.getByRole("status")).toHaveText("✓ PM5 found");
+    await expect(page.getByText("Choose your monitor")).toHaveCount(0);
+    await expect(
+      page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".connected-status-label")).toContainText(NAME);
+  });
+
+  test("an unsupported tag: inline copy, no interstitial, both buttons back", async ({
+    page,
+  }) => {
+    const title = "NFC Unsupported Tag Walk";
+    await injectFakeMonitor(page, NAME);
+    const records = pm5NfcFixtureRecords().slice(1);
+    await injectNfcScript(page, { kind: "records", records });
+    await signInViaBackdoor(page, {
+      email: "nfc-unsupported@e2e.test",
+      name: "NFC Tester",
+    });
+    await setBaselines(page);
+    await importBulk(page, BULK_TEXT(title));
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await page.getByRole("button", { name: "Scan NFC" }).click();
+    await expect(page.getByText("Unsupported NFC tag")).toBeVisible();
+    await expect(page.locator(".connected-interstitial")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Scan NFC" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Connect" })).toBeEnabled();
+  });
+
+  test("a PM5 that is not advertising: the approved copy, Try again, and Cancel back to detail with Connect", async ({
+    page,
+  }) => {
+    const title = "NFC Not Advertising Walk";
+    await injectFakeMonitor(
+      page,
+      NAME,
+      buildStoryEvents(),
+      FIXTURE_PROGRAM,
+      "not-advertising",
+    );
+    await injectNfcScript(page, {
+      kind: "records",
+      records: pm5NfcFixtureRecords(),
+    });
+    await signInViaBackdoor(page, {
+      email: "nfc-notadv@e2e.test",
+      name: "NFC Tester",
+    });
+    await setBaselines(page);
+    await importBulk(page, BULK_TEXT(title));
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await page.getByRole("button", { name: "Scan NFC" }).click();
+    await expect(
+      page.locator(".connected-serif-line", {
+        hasText: "Open Connect Device on this PM5, then try again.",
+      }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText("End whatever is showing on the monitor"),
+    ).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Try again" })).toBeEnabled();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Scan NFC" })).toBeVisible();
   });
 });

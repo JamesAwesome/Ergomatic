@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useWorkouts } from "../api/useWorkouts";
@@ -25,8 +26,33 @@ import {
   currentUnretired as currentUnretiredHandoff,
   retire as retireHandoff,
 } from "../monitor/handoffStore";
-import ConnectAction from "../monitor/ConnectAction";
+import ConnectAction, {
+  type ConnectionEntryIntent,
+} from "../monitor/ConnectAction";
+import { registerAppLifecycleListener } from "../adapters/appLifecycle";
+import { successHaptic } from "../adapters/haptics";
+import {
+  resolveNfcReader,
+  type NfcCapability,
+  type NfcReader,
+} from "../adapters/nfcReader";
+import { discardStagedRetire } from "../monitor/handoffStore";
+import {
+  createConnectionAttemptTrace,
+  type ConnectionAttemptTrace,
+  latestConnectionAttemptTrace,
+} from "../monitor/nfc/connectionAttemptTrace";
+import {
+  cacheNfcCapability,
+  readCachedNfcCapability,
+} from "../monitor/nfc/nfcCapabilityCache";
+import { paintBarrier } from "../monitor/nfc/paintBarrier";
+import { runNfcAttempt } from "../monitor/nfc/runNfcAttempt";
 import type { RunIdentity } from "../monitor/useMonitorSession";
+import type {
+  ConnectionAttemptId,
+  MonitorDiscoveryRequest,
+} from "../../domain/monitor/types.js";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { useStartWorkout } from "../session/useStartWorkout";
 import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
@@ -58,6 +84,65 @@ function useBluetoothStatus(): BluetoothStatus {
     };
   }, []);
   return status;
+}
+
+/** Phase NF: the NFC capability probe. `"unknown"` renders nothing (the
+ *  spec's absent layout), `"supported"` renders Scan NFC. A resolution is
+ *  cached for the PROCESS (never persisted); a rejection or a timeout keeps
+ *  `"unknown"`, records a distinct trace outcome, and is NOT cached, so the
+ *  next mount retries (hardening lens 1, F11: one hiccup at first mount must
+ *  not hide the button for the whole process). The 2_000 ms deadline is a
+ *  fail-closed bound, ~50x the measured `capabilityLatencyMs` of 41 ms
+ *  (`normal-trace-v8-receipt.json`). */
+type NfcCapabilityState = "unknown" | NfcCapability;
+const NFC_CAPABILITY_DEADLINE_MS = 2_000;
+
+function useNfcCapability(reader: NfcReader): NfcCapabilityState {
+  const [capability, setCapability] = useState<NfcCapabilityState>(
+    () => readCachedNfcCapability() ?? "unknown",
+  );
+  useEffect(() => {
+    if (readCachedNfcCapability() !== null) return;
+    let cancelled = false;
+    const trace = createConnectionAttemptTrace();
+    // The probe is not an attempt: it publishes ONLY while no attempt has
+    // completed in this process (the mount-time case, where a rejected or
+    // timed-out probe would otherwise reach no sink at all — whole-branch
+    // review B3), and never clobbers a real attempt's snapshot on a device
+    // whose probe is flaky (lens 2).
+    const publish = (): void => {
+      if (latestConnectionAttemptTrace() === null) trace.complete();
+    };
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      cancelled = true;
+      trace.record("capability-timed-out");
+      publish();
+    }, NFC_CAPABILITY_DEADLINE_MS);
+    reader.capability().then(
+      (result) => {
+        if (cancelled) return;
+        cancelled = true;
+        clearTimeout(timer);
+        cacheNfcCapability(result);
+        trace.record(result);
+        publish();
+        setCapability(result);
+      },
+      () => {
+        if (cancelled) return;
+        cancelled = true;
+        clearTimeout(timer);
+        trace.record("capability-failed");
+        publish();
+      },
+    );
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [reader]);
+  return capability;
 }
 
 export default function WorkoutDetail() {
@@ -177,6 +262,10 @@ function WorkoutDetailView({
     // widened the same way, and omits its "2K … · 6K …" line when null.
     baselines: Baselines | null;
     nudgedCount: number;
+    /** Phase NF: how the interstitial finds the monitor for THIS attempt. */
+    request: MonitorDiscoveryRequest;
+    /** Phase NF: the attempt's trace, when the NFC route produced one. */
+    trace?: ConnectionAttemptTrace;
   } | null>(null);
   // Lazy read-once, refreshed explicitly when the interstitial hands
   // control back (see `handleInterstitialExit`/`handleRowInstead` below) —
@@ -187,6 +276,23 @@ function WorkoutDetailView({
     loadLastDevice(),
   );
   const bluetoothStatus = useBluetoothStatus();
+  // Phase NF: one reader per mount (the platform conditional resolves once),
+  // the capability it reports, and the live attempt's abort owner. The
+  // abort owner is aborted on unmount and on foreground loss (`pause`),
+  // never on the ACTIVE/INACTIVE axis (hardening lens 1, F1).
+  const [nfcReader] = useState<NfcReader>(() => resolveNfcReader());
+  const nfcCapability = useNfcCapability(nfcReader);
+  const [entryBusy, setEntryBusy] = useState(false);
+  const [nfcAccepted, setNfcAccepted] = useState(false);
+  const nfcAbortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      nfcAbortRef.current?.abort();
+    };
+  }, []);
   // "Row on the phone timer instead"'s OWN saveDraft failure (below) — kept
   // separate from `useStartWorkout`'s own `startError` since this flow
   // never goes through the hook at all (Connect's own guard, not Start's,
@@ -234,7 +340,102 @@ function WorkoutDetailView({
   // union entirely: nothing has been sent to a monitor yet, so this is not
   // a `useMonitorSession` failure and does not deserve a phase transition
   // or a driver connection at all.
-  function handleConnectProceed() {
+  function handleConnectProceed(attemptId: ConnectionAttemptId) {
+    proceedWithRequest({ kind: "picker", attemptId });
+  }
+
+  // Phase NF (spec §4): the NFC intent. Runs the shared authorization
+  // (already cleared by `ConnectAction`'s guard), reads ONE tag, closes the
+  // reader, parses the PM5 target or shows `Unsupported NFC tag`, commits
+  // `✓ PM5 found` synchronously, crosses the one-paint barrier, then compiles
+  // exactly as manual Connect does and hands the advertised-name request to
+  // the interstitial. INVARIANT (lens 1, F7): every outcome except a target
+  // that reaches `setConnecting` discards this attempt's staged receipt by
+  // ID before returning to detail.
+  async function handleNfcProceed(attemptId: ConnectionAttemptId) {
+    setConnectError(null);
+    setEntryBusy(true);
+    const controller = new AbortController();
+    nfcAbortRef.current = controller;
+    const trace: ConnectionAttemptTrace = createConnectionAttemptTrace();
+    let unsubscribe: (() => void) | null = null;
+    let handedOff = false;
+    try {
+      // Inside the try (lens 2): a rejected registration must still run
+      // the finally below, or the buttons stay disabled for good.
+      try {
+        unsubscribe = await registerAppLifecycleListener((event) => {
+          if (event === "background") {
+            trace.record("foreground-abort");
+            controller.abort();
+          }
+        });
+      } catch {
+        trace.record("listener-registration-failed", "detail lifecycle");
+        throw new Error("lifecycle listener registration failed");
+      }
+      const outcome = await runNfcAttempt({
+        attemptId,
+        reader: nfcReader,
+        trace,
+        signal: controller.signal,
+        haptic: successHaptic,
+        paint: (signal) => paintBarrier(signal),
+        // Committed SYNCHRONOUSLY so the two frames the barrier counts come
+        // after the accepted state is on screen (lens 1, F10).
+        onAccepted: () => {
+          if (mountedRef.current) flushSync(() => setNfcAccepted(true));
+        },
+      });
+      if (!mountedRef.current) return;
+      if (outcome.kind === "target") {
+        handedOff = proceedWithRequest(
+          {
+            kind: "advertised-name",
+            attemptId,
+            exactName: outcome.target.advertisingName,
+          },
+          trace,
+        );
+      } else if (outcome.kind === "inline-error") {
+        setConnectError(outcome.copy);
+      }
+    } catch {
+      // Any throw out of the attempt (a listener that would not register,
+      // a seam that broke) is the approved "stopped" copy, never silence.
+      if (mountedRef.current) setConnectError("NFC scan stopped. Try again.");
+    } finally {
+      unsubscribe?.();
+      // A handed-off trace is completed by the SESSION at its own terminal
+      // (ring-prefix copy or targeted failure, `useMonitorSession.ts`);
+      // completing it here would publish a snapshot taken before the
+      // targeted scan ever ran (whole-branch review B3).
+      if (!handedOff) trace.complete();
+      if (nfcAbortRef.current === controller) nfcAbortRef.current = null;
+      if (!handedOff) discardStagedRetire(attemptId);
+      if (mountedRef.current) {
+        setNfcAccepted(false);
+        setEntryBusy(false);
+      }
+    }
+  }
+
+  function handleEntryProceed(intent: ConnectionEntryIntent) {
+    if (intent.kind === "nfc") {
+      void handleNfcProceed(intent.attemptId);
+      return;
+    }
+    handleConnectProceed(intent.attemptId);
+  }
+
+  /** Compiles THIS workout at its preview-nudged targets and mounts the
+   *  interstitial with `request`. Returns whether the handoff happened; a
+   *  `false` return has already shown its inline reason AND discarded the
+   *  attempt's staged receipt (spec §3: every pre-handoff terminal path). */
+  function proceedWithRequest(
+    request: MonitorDiscoveryRequest,
+    trace?: ConnectionAttemptTrace,
+  ): boolean {
     setConnectError(null);
     // Phase 6I: `needsBaselines` (domain/needsBaselines.ts) is the SAME
     // predicate every other coupled guard site shares — nudging never
@@ -254,14 +455,16 @@ function WorkoutDetailView({
       setConnectError(
         "Set your baselines first. Connect needs a target to program.",
       );
-      return;
+      discardStagedRetire(request.attemptId);
+      return false;
     }
     const draft = buildNudgedDraft(workout, nudges);
     const run = buildRun(draft, baselines, new Date());
     const compiled = compileProgram(run.phases);
     if ("code" in compiled) {
       setConnectError(compiled.message);
-      return;
+      discardStagedRetire(request.attemptId);
+      return false;
     }
     const nudgedCount = Object.values(nudges).filter((v) => v !== 0).length;
     // 7C Task 1: the log seed, built from the SAME `run.phases` `compiled`
@@ -276,7 +479,10 @@ function WorkoutDetailView({
       identity: { workoutId: workout.id, title: workout.title, logSeed },
       baselines,
       nudgedCount,
+      request,
+      ...(trace !== undefined ? { trace } : {}),
     });
+    return true;
   }
 
   // Cancel, from any interstitial state: lands back on Workout detail, and
@@ -371,6 +577,8 @@ function WorkoutDetailView({
         onExit={handleInterstitialExit}
         onRowInstead={handleRowInstead}
         onEnded={handleConnectedEnded}
+        request={connecting.request}
+        trace={connecting.trace}
       />
     );
   }
@@ -466,23 +674,29 @@ function WorkoutDetailView({
           children are this stack's own direct flex items, not a nested box
           breaking the 12px gap rhythm. */}
       <div className="action-stack workout-detail-actions">
-        {/* Fast-follow spec §4 (James's ruling 3, §2): Connect is the
-            screen's SINGLE primary now — L1 geometry, its own
-            `--action-connect` blue, FIRST in the stack, ahead of Start
-            Timer. Supersedes the old "second in the stack, after Start"
-            ordering (`ConnectAction.tsx`'s own doc comment carries the
-            history). `ConnectAction` still owns the trigger AND the staged
+        {/* Fast-follow spec §4 (James's ruling 3, §2): Connect holds L1
+            geometry, its own `--action-connect` blue, FIRST in the stack,
+            ahead of Start Timer. Supersedes the old "second in the stack,
+            after Start" ordering (`ConnectAction.tsx`'s own doc comment
+            carries the history). Phase NF (Gate 0, James's ruling 4) then
+            made it ONE OF TWO equal hardware primaries: on an NFC-capable
+            iPhone, `Scan NFC` sits directly above it at the same 56 px;
+            everywhere else Connect is still the single primary. Both live
+            inside `ConnectAction`, which owns the trigger AND the staged
             confirm guard end to end; this block adds only presentation
             around it: the caption and the Bluetooth-off/absent dashed
             treatment — both travel with it to its new position, unchanged. */}
         <ConnectBlock
           bluetoothStatus={bluetoothStatus}
           lastDevice={lastDevice}
-          onProceed={handleConnectProceed}
+          onProceed={handleEntryProceed}
+          nfcCapability={nfcCapability}
+          busy={entryBusy}
+          accepted={nfcAccepted}
         />
         {connectError && <p className="baseline-error">{connectError}</p>}
         {/* Start Timer — spec §4: renamed from "Start" and demoted from L1
-            to L2 now that Connect holds the screen's one L1 primary. Still
+            to L2 now that the hardware primaries hold L1. Still
             the SAME `handleStart`/`startBlocked`/`replaceStage` logic,
             unmoved and unmodified — only the copy and the class changed. */}
         {startBlocked ? (
@@ -591,10 +805,16 @@ function ConnectBlock({
   bluetoothStatus,
   lastDevice,
   onProceed,
+  nfcCapability,
+  busy,
+  accepted,
 }: {
   bluetoothStatus: BluetoothStatus;
   lastDevice: string | null;
-  onProceed: () => void;
+  onProceed: (intent: ConnectionEntryIntent) => void;
+  nfcCapability: NfcCapabilityState;
+  busy: boolean;
+  accepted: boolean;
 }) {
   const dashed = bluetoothStatus === "off" || bluetoothStatus === "absent";
   return (
@@ -603,7 +823,12 @@ function ConnectBlock({
         dashed ? "connect-block connect-block-dashed" : "connect-block"
       }
     >
-      <ConnectAction onProceed={onProceed} />
+      <ConnectAction
+        onProceed={onProceed}
+        nfcCapability={nfcCapability}
+        busy={busy}
+        accepted={accepted}
+      />
       {bluetoothStatus === "off" && (
         <p className="mono-status connect-block-caption">BLUETOOTH IS OFF</p>
       )}

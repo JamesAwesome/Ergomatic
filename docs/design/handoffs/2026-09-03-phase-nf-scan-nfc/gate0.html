@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ergomatic Phase NF — Scan NFC Gate 0</title>
+  </head>
+  <body>
+    <style>
+      :root {
+        --page: #f4f1e8;
+        --surface: #fffdf7;
+        --sunken: #efeade;
+        --ink: #1b1a17;
+        --ink-3: #57544c;
+        --rule: #d8d3c4;
+        --rule-3: #b9b3a5;
+        --accent: #b5341f;
+        --connect: #2a6275;
+        --nfc: #49624f;
+        --nfc-pressed: #3f5545;
+      }
+
+      .gate {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 24px;
+        box-sizing: border-box;
+        background: var(--page);
+        color: var(--ink);
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      .gate-head {
+        border-bottom: 1px solid var(--rule-3);
+        padding-bottom: 14px;
+        margin-bottom: 24px;
+      }
+      .gate-head h2 {
+        margin: 0 0 7px;
+        font:
+          500 30px/1.05 Georgia,
+          serif;
+      }
+      .gate-head p {
+        margin: 0;
+        color: var(--ink-3);
+        max-width: 68ch;
+      }
+      .comparison-title {
+        margin: 26px 0 12px;
+        font:
+          700 13px/1.2 "Courier New",
+          monospace;
+        color: var(--ink-3);
+      }
+      .comparison {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+        align-items: start;
+      }
+      .case {
+        min-width: 0;
+        padding: 14px;
+        border: 1px solid var(--rule);
+        background: var(--surface);
+      }
+      .case h3 {
+        margin: 0 0 3px;
+        font-size: 14px;
+      }
+      .case-note {
+        margin: 0 0 12px;
+        color: var(--ink-3);
+        font-size: 12px;
+      }
+      .framebox {
+        margin: 0 auto;
+        overflow: hidden;
+      }
+      .framebox.portrait {
+        width: 253.5px;
+        height: 548.6px;
+      }
+      .framebox.landscape {
+        width: 464.2px;
+        height: 214.5px;
+      }
+      .device {
+        position: relative;
+        overflow: hidden;
+        background: var(--page);
+        border: 1px solid #aaa496;
+        color: var(--ink);
+        transform-origin: top left;
+      }
+      .device.portrait {
+        width: 390px;
+        height: 844px;
+        transform: scale(0.65);
+      }
+      .device.landscape {
+        width: 844px;
+        height: 390px;
+        transform: scale(0.55);
+      }
+      .document {
+        width: 100%;
+        padding: 25px 20px 78px;
+        box-sizing: border-box;
+        background: var(--page);
+      }
+      .landscape .document {
+        width: 480px;
+        margin: 0 auto;
+        padding-top: 18px;
+        transform: translateY(-304px);
+      }
+      .back {
+        margin-bottom: 18px;
+        font:
+          700 12px/1 "Courier New",
+          monospace;
+        letter-spacing: 0.09em;
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 5px;
+      }
+      .type {
+        padding: 4px 7px;
+        background: var(--connect);
+        color: var(--surface);
+        font:
+          700 12px/1 "Courier New",
+          monospace;
+      }
+      .custom {
+        padding: 3px 6px;
+        border: 1px solid var(--rule-3);
+        color: var(--ink-3);
+        font:
+          700 11px/1 "Courier New",
+          monospace;
+        letter-spacing: 0.04em;
+      }
+      .easy {
+        color: var(--ink-3);
+        font:
+          12px/1 "Courier New",
+          monospace;
+      }
+      .workout-title {
+        margin: 7px 0 13px;
+        font:
+          500 33px/0.96 Georgia,
+          serif;
+      }
+      .facts {
+        color: var(--ink-3);
+        font:
+          12px/1.2 "Courier New",
+          monospace;
+        letter-spacing: 0.03em;
+      }
+      .preview {
+        margin: 16px 0;
+        padding: 11px 12px;
+        background: var(--sunken);
+        color: var(--ink-3);
+        font:
+          11px/1 "Courier New",
+          monospace;
+        letter-spacing: 0.06em;
+      }
+      .steps {
+        border-top: 1px solid var(--rule);
+        margin-bottom: 20px;
+      }
+      .step {
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      .step-main {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      .step-label {
+        font-size: 14px;
+      }
+      .target {
+        color: var(--accent);
+        font:
+          700 15px/1 "Courier New",
+          monospace;
+      }
+      .sub {
+        margin-top: 4px;
+        color: var(--ink-3);
+        font:
+          11px/1 "Courier New",
+          monospace;
+      }
+      .nudges {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .nudge {
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--rule-3);
+        display: grid;
+        place-items: center;
+        font-size: 17px;
+      }
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      .action {
+        width: 100%;
+        min-height: 52px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: 700;
+        background: var(--surface);
+        border: 1px solid var(--ink);
+        border-radius: 2px;
+      }
+      .action.primary {
+        min-height: 56px;
+        border: 0;
+        color: var(--surface);
+      }
+      .action.nfc {
+        background: var(--nfc);
+      }
+      .action.connect {
+        background: var(--connect);
+      }
+      .action.delete {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .rule {
+        border: 0;
+        border-top: 1px solid var(--rule);
+        width: 100%;
+        margin: 0;
+      }
+      .tabbar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 45px;
+        display: flex;
+        align-items: stretch;
+        background: var(--surface);
+        border-top: 1px solid var(--rule);
+        z-index: 4;
+      }
+      .tab {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--ink-3);
+        font:
+          10px/1 "Courier New",
+          monospace;
+        letter-spacing: 0.16em;
+      }
+      .tab.active {
+        color: var(--ink);
+        position: relative;
+      }
+      .tab.active::before {
+        content: "";
+        position: absolute;
+        top: 8px;
+        width: 16px;
+        height: 3px;
+        background: var(--accent);
+      }
+      .landscape .tabbar {
+        height: 44px;
+      }
+      .landscape .tab.active::before {
+        top: 5px;
+      }
+
+      .impact {
+        margin: 13px 0 0;
+        padding-left: 12px;
+        border-left: 3px solid var(--nfc);
+        color: var(--ink-3);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .states {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 12px;
+      }
+      .state {
+        padding: 14px;
+        background: var(--surface);
+        border: 1px solid var(--rule);
+      }
+      .state strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 13px;
+      }
+      .state-note {
+        margin: 8px 0 0;
+        color: var(--ink-3);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      .state-button {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 2px;
+        color: var(--surface);
+        background: var(--nfc);
+        font-weight: 700;
+      }
+      .state-button.found {
+        background: var(--nfc-pressed);
+      }
+      .message {
+        min-height: 48px;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        color: var(--ink);
+        border-left: 3px solid var(--nfc);
+        background: var(--sunken);
+        font-size: 13px;
+      }
+      .message.failure {
+        border-left-color: var(--accent);
+      }
+      .ios-reader {
+        min-height: 96px;
+        padding: 14px;
+        box-sizing: border-box;
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        gap: 11px;
+        align-items: center;
+        border-radius: 16px;
+        background: #f2f2f7;
+        box-shadow: 0 5px 18px rgba(27, 26, 23, 0.14);
+        color: #111111;
+      }
+      .ios-reader-icon {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: #ffffff;
+        color: var(--nfc);
+        font-size: 21px;
+        font-weight: 700;
+      }
+      .ios-reader-title {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+      .ios-reader-copy {
+        font-size: 12px;
+        line-height: 1.3;
+      }
+      .ios-reader-note {
+        margin: 8px 0 0;
+        color: var(--ink-3);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      .contrast {
+        margin-top: 18px;
+        padding: 13px 15px;
+        background: rgba(73, 98, 79, 0.08);
+        border: 1px solid rgba(73, 98, 79, 0.3);
+        color: var(--ink-3);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .contrast strong {
+        color: var(--ink);
+      }
+      @media (max-width: 920px) {
+        .landscape-comparison {
+          grid-template-columns: 1fr;
+        }
+        .states {
+          grid-template-columns: 1fr;
+        }
+        .portrait-comparison {
+          gap: 10px;
+        }
+        .portrait-comparison .case {
+          padding: 8px;
+        }
+        .portrait-comparison .framebox.portrait {
+          width: 214.5px;
+          height: 464.2px;
+        }
+        .portrait-comparison .device.portrait {
+          transform: scale(0.55);
+        }
+      }
+      @media (max-width: 540px) {
+        .case {
+          padding: 10px;
+        }
+        .framebox.landscape {
+          width: 379.8px;
+          height: 175.5px;
+        }
+        .device.landscape {
+          transform: scale(0.45);
+        }
+      }
+      @media (max-width: 470px) {
+        .portrait-comparison {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+
+    <div class="gate">
+      <div class="gate-head">
+        <h2>Workout detail · NFC Gate 0</h2>
+        <p>
+          One new route, in the existing Ergomatic hierarchy: muted fern above
+          the established PM5 blue. Both read as equal primary hardware actions.
+        </p>
+      </div>
+
+      <div class="comparison-title">Portrait · 390 × 844</div>
+      <div class="comparison portrait-comparison">
+        <div class="case">
+          <h3>Current / NFC unavailable</h3>
+          <p class="case-note">No empty slot or disabled NFC control.</p>
+          <div class="framebox portrait">
+            <div class="device portrait">
+              <div class="document">
+                <div class="back">← BACK</div>
+                <div class="meta">
+                  <span class="type">O2</span><span class="custom">CUSTOM</span
+                  ><span class="easy">EASY</span>
+                </div>
+                <div class="workout-title">
+                  Screenshot Personal<br />Workout
+                </div>
+                <div class="facts">21 MIN · PAIN 3/5 · NEVER DONE</div>
+                <div class="preview">PREVIEW · NUDGE ANY TARGET</div>
+                <div class="steps">
+                  <div class="step">
+                    <div class="step-main">
+                      <span class="step-label">20:00 @ 6k</span
+                      ><span class="target">2:02.0</span>
+                    </div>
+                    <div class="nudges">
+                      <span class="nudge">▲</span><span class="nudge">▼</span>
+                    </div>
+                  </div>
+                  <div class="step">
+                    <div class="step-main">
+                      <span class="step-label">0:30 @ MAX</span
+                      ><span class="target">ALL OUT</span>
+                    </div>
+                    <div class="sub">21 spm</div>
+                  </div>
+                </div>
+                <div class="actions">
+                  <div class="action primary connect">Connect</div>
+                  <div class="action">Start Timer</div>
+                  <div class="action">Log it after</div>
+                  <div class="action">Edit</div>
+                  <hr class="rule" />
+                  <div class="action delete">Delete workout</div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <span class="tab">TODAY</span><span class="tab">NEWS</span
+                ><span class="tab active">LIBRARY</span
+                ><span class="tab">PLAN</span><span class="tab">YOU</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="case">
+          <h3>Proposed / NFC available</h3>
+          <p class="case-note">
+            The only layout change is the inserted action.
+          </p>
+          <div class="framebox portrait">
+            <div class="device portrait">
+              <div class="document">
+                <div class="back">← BACK</div>
+                <div class="meta">
+                  <span class="type">O2</span><span class="custom">CUSTOM</span
+                  ><span class="easy">EASY</span>
+                </div>
+                <div class="workout-title">
+                  Screenshot Personal<br />Workout
+                </div>
+                <div class="facts">21 MIN · PAIN 3/5 · NEVER DONE</div>
+                <div class="preview">PREVIEW · NUDGE ANY TARGET</div>
+                <div class="steps">
+                  <div class="step">
+                    <div class="step-main">
+                      <span class="step-label">20:00 @ 6k</span
+                      ><span class="target">2:02.0</span>
+                    </div>
+                    <div class="nudges">
+                      <span class="nudge">▲</span><span class="nudge">▼</span>
+                    </div>
+                  </div>
+                  <div class="step">
+                    <div class="step-main">
+                      <span class="step-label">0:30 @ MAX</span
+                      ><span class="target">ALL OUT</span>
+                    </div>
+                    <div class="sub">21 spm</div>
+                  </div>
+                </div>
+                <div class="actions">
+                  <div class="action primary nfc">Scan NFC</div>
+                  <div class="action primary connect">Connect</div>
+                  <div class="action">Start Timer</div>
+                  <div class="action">Log it after</div>
+                  <div class="action">Edit</div>
+                  <hr class="rule" />
+                  <div class="action delete">Delete workout</div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <span class="tab">TODAY</span><span class="tab">NEWS</span
+                ><span class="tab active">LIBRARY</span
+                ><span class="tab">PLAN</span><span class="tab">YOU</span>
+              </div>
+            </div>
+          </div>
+          <p class="impact">
+            The extra 68px pushes the owner-only destructive action below the
+            initial fold. It remains available by normal vertical scroll; the
+            workout and happy-path actions stay visible.
+          </p>
+        </div>
+      </div>
+
+      <div class="comparison-title">
+        Landscape · 844 × 390 · action region after normal scroll
+      </div>
+      <div class="comparison landscape-comparison">
+        <div class="case">
+          <h3>Current / NFC unavailable</h3>
+          <p class="case-note">
+            The existing centered document column is unchanged.
+          </p>
+          <div class="framebox landscape">
+            <div class="device landscape">
+              <div class="document">
+                <div class="back">← BACK</div>
+                <div class="meta">
+                  <span class="type">O2</span><span class="custom">CUSTOM</span
+                  ><span class="easy">EASY</span>
+                </div>
+                <div class="workout-title">Screenshot Personal Workout</div>
+                <div class="facts">21 MIN · PAIN 3/5 · NEVER DONE</div>
+                <div class="preview">PREVIEW · NUDGE ANY TARGET</div>
+                <div class="steps">
+                  <div class="step">
+                    <div class="step-main">
+                      <span>20:00 @ 6k</span><span class="target">2:02.0</span>
+                    </div>
+                  </div>
+                  <div class="step">
+                    <div class="step-main">
+                      <span>0:30 @ MAX</span><span class="target">ALL OUT</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="actions">
+                  <div class="action primary connect">Connect</div>
+                  <div class="action">Start Timer</div>
+                  <div class="action">Log it after</div>
+                  <div class="action">Edit</div>
+                  <hr class="rule" />
+                  <div class="action delete">Delete workout</div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <span class="tab">TODAY</span><span class="tab">NEWS</span
+                ><span class="tab active">LIBRARY</span
+                ><span class="tab">PLAN</span><span class="tab">YOU</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="case">
+          <h3>Proposed / NFC available</h3>
+          <p class="case-note">
+            Same one-column scroll behavior, one action longer.
+          </p>
+          <div class="framebox landscape">
+            <div class="device landscape">
+              <div class="document">
+                <div class="back">← BACK</div>
+                <div class="meta">
+                  <span class="type">O2</span><span class="custom">CUSTOM</span
+                  ><span class="easy">EASY</span>
+                </div>
+                <div class="workout-title">Screenshot Personal Workout</div>
+                <div class="facts">21 MIN · PAIN 3/5 · NEVER DONE</div>
+                <div class="preview">PREVIEW · NUDGE ANY TARGET</div>
+                <div class="steps">
+                  <div class="step">
+                    <div class="step-main">
+                      <span>20:00 @ 6k</span><span class="target">2:02.0</span>
+                    </div>
+                  </div>
+                  <div class="step">
+                    <div class="step-main">
+                      <span>0:30 @ MAX</span><span class="target">ALL OUT</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="actions">
+                  <div class="action primary nfc">Scan NFC</div>
+                  <div class="action primary connect">Connect</div>
+                  <div class="action">Start Timer</div>
+                  <div class="action">Log it after</div>
+                  <div class="action">Edit</div>
+                  <hr class="rule" />
+                  <div class="action delete">Delete workout</div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <span class="tab">TODAY</span><span class="tab">NEWS</span
+                ><span class="tab active">LIBRARY</span
+                ><span class="tab">PLAN</span><span class="tab">YOU</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="comparison-title">Transient and failure states</div>
+      <div class="states">
+        <div class="state">
+          <strong>Ready</strong>
+          <div class="state-button">Scan NFC</div>
+        </div>
+        <div class="state">
+          <strong>Native iOS reader sheet</strong>
+          <div class="ios-reader">
+            <div class="ios-reader-icon">N</div>
+            <div>
+              <span class="ios-reader-title">Ready to Scan</span>
+              <div class="ios-reader-copy">Hold your iPhone near the PM5.</div>
+            </div>
+          </div>
+          <p class="ios-reader-note">
+            System chrome varies by iOS; Ergomatic owns only the prompt.
+          </p>
+        </div>
+        <div class="state">
+          <strong>Accepted, then automatic handoff</strong>
+          <div class="state-button found">✓&nbsp;&nbsp;PM5 found</div>
+          <p class="state-note">One committed paint · no duration timer</p>
+        </div>
+        <div class="state">
+          <strong>Rejected tag</strong>
+          <div class="message">Unsupported NFC tag</div>
+        </div>
+        <div class="state">
+          <strong>No tag before system timeout</strong>
+          <div class="message failure">No NFC tag detected. Try again.</div>
+        </div>
+        <div class="state">
+          <strong>Reader invalidated</strong>
+          <div class="message failure">NFC scan stopped. Try again.</div>
+        </div>
+        <div class="state">
+          <strong>Target is not advertising</strong>
+          <div class="message failure">
+            Open Connect Device on this PM5, then try again.
+          </div>
+          <p class="state-note">Try again stays exact · Cancel</p>
+        </div>
+        <div class="state">
+          <strong>Exact target is already held</strong>
+          <div class="message failure">
+            End this PM5's current connection, then try again.
+          </div>
+          <p class="state-note">Try again stays exact · Cancel</p>
+        </div>
+        <div class="state">
+          <strong>Duplicate exact target</strong>
+          <div class="message failure">
+            More than one PM5 has this name. Use Connect.
+          </div>
+          <p class="state-note">Cancel returns to workout detail</p>
+        </div>
+        <div class="state">
+          <strong>Target scan interrupted</strong>
+          <div class="message failure">Connection interrupted. Try again.</div>
+          <p class="state-note">Try again stays exact · Cancel</p>
+        </div>
+        <div class="state">
+          <strong>Bluetooth cleanup failed</strong>
+          <div class="message failure">
+            Bluetooth cleanup failed. Restart Ergomatic before trying again.
+          </div>
+          <p class="state-note">No in-process retry</p>
+        </div>
+      </div>
+
+      <div class="contrast">
+        <strong>Measured contrast:</strong> cream on fern
+        <code>#49624f</code> 6.57:1; fern against page 5.92:1; cream on PM5 blue
+        <code>#2a6275</code> 6.65:1; ink on surface 17.11:1; cream on pressed
+        fern <code>#3f5545</code> 7.95:1; ink on message sunken 14.50:1; danger
+        marker on sunken 5.03:1; iOS-sheet sample text 16.92:1; fern sample
+        glyph on white 6.68:1. Controls remain 56px high, above the 44px target
+        floor.
+      </div>
+    </div>
+  </body>
+</html>

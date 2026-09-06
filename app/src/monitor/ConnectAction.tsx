@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { canConnectMonitor } from "../adapters/bluetoothCapability";
 import { useNavigate } from "react-router-dom";
+import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
+import type { NfcCapability } from "../adapters/nfcReader";
 import { loadRun } from "../session/run";
 import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
+import { mintAttemptId } from "./nfc/attemptIdMint";
 import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
 import {
   currentUnretired as currentUnretiredHandoff,
@@ -30,7 +33,7 @@ import {
  * re-derived or moved.**
  *
  * **Fast-follow spec §4 amendment (unrelated "Task 5" — the fast-follow
- * plan's own Task 5, not 7B's above):** Connect is now the screen's SINGLE
+ * plan's own Task 5, not 7B's above):** Connect became the screen's L1
  * primary, FIRST in the stack, ahead of Start Timer — the handoff's old
  * "second in the stack, after Start" ordering above is superseded. The
  * trigger's own class also moved off `.button-l2` onto `.button-connect`
@@ -113,21 +116,69 @@ import {
  * two-button panel that has replaced its trigger cannot be left ambiguously
  * armed and so has never carried one. Cancel is the only way back.
  */
+/** Phase NF (design spec 2026-09-03 §3, "One connection-entry owner shares
+ *  the safety lock"): the hardware-entry group's ONE pending intent. A
+ *  press mints its ID and stages the guard's authorization under that ID
+ *  before either native sheet opens; Cancel discards only that attempt's
+ *  receipt; Connect anyway resumes the same intent and ID. */
+export type ConnectionEntryIntent = {
+  kind: "manual" | "nfc";
+  attemptId: ConnectionAttemptId;
+};
+
+export interface ConnectionEntryProps {
+  onProceed: (intent: ConnectionEntryIntent) => void;
+  /** `"unknown"` (the async probe has not resolved) and `"unsupported"`
+   *  render NO Scan NFC button — no placeholder, no reserved height. */
+  nfcCapability: NfcCapability | "unknown";
+  /** An attempt is live (an NFC read, or its handoff): both hardware
+   *  buttons are disabled until it settles (spec §3: only one entry
+   *  attempt may exist). REQUIRED, no default (lens 2): a caller that
+   *  forgets it must not get two live buttons during an attempt. */
+  busy: boolean;
+  /** Render `✓ PM5 found` in the Scan NFC slot for one committed paint. */
+  accepted: boolean;
+}
+
+/** THE SHARED CONNECTION-ENTRY OWNER (Phase NF generalised this component
+ *  in place rather than duplicating its guard: two local stages and two
+ *  independently staged retire receipts were exactly the shape the spec
+ *  rules out). Both hardware buttons live here, above one guard and one
+ *  pending intent. The file keeps its name and its history. */
 export default function ConnectAction({
   onProceed,
-}: {
-  onProceed: () => void;
-}) {
+  nfcCapability,
+  busy,
+  accepted,
+}: ConnectionEntryProps) {
   // One nullable union, not a boolean plus a reason — `WorkoutDetail`'s own
   // `replaceStage` comment explains the choice: either non-null value both
   // blocks the immediate `onProceed()` AND picks the panel's copy, so the
   // two can never disagree about which case triggered the stage.
   const [stage, setStage] = useState<ConnectGuardStage>(null);
+  // The pending intent: minted at the press, kept while the confirm panel
+  // is up so "Connect anyway" resumes the SAME kind and attempt ID.
+  const [pending, setPending] = useState<ConnectionEntryIntent | null>(null);
   const [unsavedCount, setUnsavedCount] = useState(0);
   const navigate = useNavigate();
+  // Phase NF: the confirm panel's Cancel discards ONLY this attempt's staged
+  // receipt (compare-by-attempt-ID), then returns both hardware buttons.
   function cancel() {
-    discardStagedRetireHandoff();
+    if (pending !== null) {
+      discardStagedRetireHandoff(pending.attemptId);
+    }
+    setPending(null);
     setStage(null);
+  }
+  // "Connect anyway" resumes the SAME intent; `stage` is only ever set
+  // together with `pending`, so a null here is unreachable and proceeds
+  // nothing rather than minting an ID `stageRetire` never saw (lens 2).
+  function proceedPending() {
+    if (pending === null) return;
+    const intent = pending;
+    setPending(null);
+    setStage(null);
+    onProceed(intent);
   }
 
   // Task 5 review fix round: stages the AUTHORIZATION in the STORE, not
@@ -141,7 +192,11 @@ export default function ConnectAction({
   // anything itself — "Connect anyway" below goes straight to
   // `onProceed`, the shape this component shipped with before the retire
   // briefly (and wrongly) lived here at press time.
-  function handleConnect() {
+  // `busy` guards through `disabled={busy}` on both buttons (below), which
+  // is what a tap actually meets; an extra early return here survived its
+  // own mutation (Task 10, S6) and was removed as decoration (RF21).
+  function handleEntry(kind: ConnectionEntryIntent["kind"]) {
+    const attemptId = mintAttemptId();
     const monitorEntry = currentUnretiredHandoff();
     const run = loadRun();
     setUnsavedCount(
@@ -157,13 +212,15 @@ export default function ConnectAction({
             },
           ]
         : [],
+      attemptId,
     );
     const staged = connectGuardStage(monitorEntry !== null);
     if (staged !== null) {
+      setPending({ kind, attemptId });
       setStage(staged);
       return;
     }
-    onProceed();
+    onProceed({ kind, attemptId });
   }
 
   if (stage === "unlogged")
@@ -172,7 +229,7 @@ export default function ConnectAction({
         count={unsavedCount}
         replacement="Connecting"
         replaceLabel="Connect anyway"
-        onReplace={onProceed}
+        onReplace={proceedPending}
         onCancel={cancel}
         onView={() => {
           cancel();
@@ -203,7 +260,11 @@ export default function ConnectAction({
               the connect attempt has actually succeeded. See this file's
               own header comment, "CORRECTED (Task 5 review fix round...",
               for why a retire at THIS press was wrong. */}
-          <button type="button" className="button-primary" onClick={onProceed}>
+          <button
+            type="button"
+            className="button-primary"
+            onClick={proceedPending}
+          >
             Connect anyway
           </button>
         </div>
@@ -213,16 +274,46 @@ export default function ConnectAction({
 
   // "Connect" — one word. Fast-follow spec §4: no longer L2 ("it must not
   // compete with Start" is the OLD handoff §1 ruling this supersedes) —
-  // Connect is now the screen's single primary, L1 geometry via its own
-  // `.button-connect` class and `--action-connect` token.
+  // Connect took L1 geometry via its own `.button-connect` class and
+  // `--action-connect` token. Phase NF's Gate 0 (James's ruling 4) then
+  // SUPERSEDED "single primary": on an NFC-capable iPhone there are two
+  // equal hardware primaries, Scan NFC above Connect; elsewhere Connect
+  // is still alone.
+  // Phase NF (Gate 0): Scan NFC sits DIRECTLY ABOVE Connect, equal weight,
+  // present only when native reports support. `accepted` swaps the NFC
+  // button for its `✓ PM5 found` state (a status, not a control) for one
+  // committed paint before the interstitial takes over.
   return (
-    <button
-      type="button"
-      className="button-connect"
-      disabled={!canConnectMonitor()}
-      onClick={handleConnect}
-    >
-      Connect
-    </button>
+    <>
+      {nfcCapability === "supported" &&
+        (accepted ? (
+          <div
+            className="button-nfc button-nfc-accepted"
+            role="status"
+            aria-live="polite"
+          >
+            ✓ PM5 found
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="button-nfc"
+            disabled={busy || !canConnectMonitor()}
+            aria-busy={busy}
+            onClick={() => handleEntry("nfc")}
+          >
+            Scan NFC
+          </button>
+        ))}
+      <button
+        type="button"
+        className="button-connect"
+        disabled={busy || !canConnectMonitor()}
+        aria-busy={busy}
+        onClick={() => handleEntry("manual")}
+      >
+        Connect
+      </button>
+    </>
   );
 }
