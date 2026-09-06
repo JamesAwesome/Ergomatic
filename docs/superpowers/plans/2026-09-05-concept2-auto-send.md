@@ -5573,6 +5573,27 @@ Not taken, with the reason: T2 F9 (the already-sent short-circuit clears the fla
 
 **Gates on `4bfe26f3`:** typecheck clean; lint clean; routes 163; contract 8; card + model + Row + hook + LogSession + autoSend + SendBlock 412 passed; browser suites `bash scripts/e2e.sh e2e/concept2.spec.ts e2e/design.spec.ts -g "Concept2\|concept2\|c2-card\|C2"` → 44 passed.
 
+## Whole-branch final review — commit `811496fb`
+
+Report: `.superpowers/sdd/2026-09-05-concept2-auto-send/final-review.md` (opus; base `be7afe2f`, head `4bfe26f3`). Verdict: approve with ONE blocking finding, two important, six minor. All seven §1 rulings and eleven §3.5 invariants verified at head with citations; both as-built departures described identically across spec, ROADMAP, design page, RELEASING and code; RF5/RF29 sweeps clean; captures opened.
+
+| finding | fix | gate |
+| --- | --- | --- |
+| **B1** — the review round set the armed OFF to `aria-pressed="false"`, so the disabled colour rule (scoped only `:not([aria-pressed="true"])`) dimmed the confirmation label to `--ink-3` on `--accent` = **1.25:1** for the whole unlink round trip — a harden fix undone by the review round, with `index.css`'s "All ≥ 4.5" now false | the rule also excludes `.c2-card-mode-armed`; the comment enumerates both disabled pairings | new e2e: hold the DELETE open, click the armed segment, read its computed colour/background — `rgb(255, 253, 247)` on `rgb(181, 52, 31)` |
+| I1 — harden F6 closed the 422→GET half of the flag seam only; nothing runs a SERVER-set flag into a rendered SEND FAILED | record only: the PR body says so (every client and e2e assertion hand-writes the wire body) | — |
+| I2 — `expect.poll(() => fake.sends).toBe(1)` passes the instant the count reaches 1 and cannot see a duplicate | the count is re-asserted after the history navigation that follows | itself |
+| Minors 1, 2, 3, 6 (comments: `isSendable` "above"→"below"; the armed capture's "Unlink keeps its tier"; `clearSendFailed`'s deliberate non-bump of `updatedAt`; the refocus effect's conditional outcome) | folded | — |
+| Minor 4 (this plan's M6 wording says "middleware list") | the noun is stale; the mutation is what it was — recorded here rather than rewriting a measured row | — |
+| Minor 5 (one `GET /link` per save for every rower, dark cohort included) | a PR Record line; the PM gate rules | — |
+
+**Mutation (measured, committed tree `811496fb`):**
+
+| # | mutation | failure |
+| --- | --- | --- |
+| M24 | drop `:not(.c2-card-mode-armed)` from the disabled colour rule | e2e `the armed segment keeps its white-on-accent pairing while its own DELETE is in flight` — `Expected: "rgb(255, 253, 247)" Received: "rgb(87, 84, 76)"` (stack rebuilt with the mutant, 1 failed) |
+
+**Gates on `811496fb`:** typecheck clean; lint clean (pre-commit); browser suites `bash scripts/e2e.sh e2e/concept2.spec.ts e2e/design.spec.ts -g "Concept2\|concept2\|c2-card\|C2"` → 45 passed. Full `pnpm test --project unit --project client` on `4bfe26f3`: 247 files, 7,185 passed, 1 skipped; `--project integration`: 25 files, 383 passed; `pnpm build && pnpm dist:grep`: OK (the final commit touches CSS, two e2e specs and four comments only).
+
 ## Task 7: the whole-branch gate, the PR, and STOP
 
 - [ ] `pnpm lint && pnpm typecheck && pnpm test --project unit --project client` on the final head; `pnpm test --project integration`; `pnpm build && pnpm dist:grep`; `pnpm e2e` (full) — record each result in the PR's Record block.
