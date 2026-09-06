@@ -1021,6 +1021,29 @@ often they recur.
     tested; the one you rule out in a clause is the one that needs the
     receipt.
 
+31. **A fix is a new claim and gets the gate the original claim got — and
+    a walk runsheet is a TIMED PROTOCOL between two machines (Phase NF,
+    2026-09-06).** The Scan NFC walk runsheet went through seven PM gates;
+    v1-v4 each failed on defects INSIDE the previous round's fix (a Save on
+    a screen that does not exist; a diagnostic field the emitter never
+    writes; a recount off by one; a plan-dependent button label), because
+    the fixed steps were never walked the way the original ones were. Then
+    James asked for "minimal gaps so the phone and PM5 don't time out, and
+    I'm not holding my phone up without understanding why", and one
+    timed-protocol pass found what five prose gates had not: the document
+    contained not one duration, the controller's own turn was the clock
+    that drove every other, and a "no discriminator" claim was false per
+    the vendor header. **Three checks, all mechanical:** (1) re-run the
+    state-machine walk over the FIXED steps — each step against the screen
+    the previous step leaves the operator on, on BOTH machines (leg 1's END
+    terminated the erg, so leg 2's "leave Connect Device" asked him to leave
+    a screen he was not on); (2) a runsheet carries a TIMER TABLE — every
+    clock, its value, what starts and clears it, and which human hold or
+    controller gap can expire it — and every hold reads "hold until X, at
+    most N, then Y"; (3) a count or a "we cannot tell X from Y" is settled
+    by a command or the vendor's sentence, never by re-reading. Cost of
+    skipping, measured: five gate rounds at roughly a PM dispatch each.
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;
