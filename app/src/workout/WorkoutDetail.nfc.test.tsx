@@ -274,7 +274,7 @@ describe("Scan NFC outcomes on detail (states table)", () => {
     [{ kind: "invalidated", cause: "multipleTags" }, "Unsupported NFC tag"],
     [
       { kind: "invalidated", cause: "tagFailure" },
-      "NFC scan stopped. Try again.",
+      "Couldn't scan the monitor tag. Try again.",
     ],
     [{ kind: "start-failed" }, "NFC scan stopped. Try again."],
   ] as const)("%o shows %s inline", async (outcome, copy) => {
