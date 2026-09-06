@@ -29,6 +29,7 @@ Copied from the spec; every task's requirements include this section.
 - The checked-in NFC patch is part of the safety mechanism; its `nfcSessionEnd` carries `cause: "multipleTags" | "tagFailure"` with `reason: "invalidated"` on controller-forced endings (spec "Reader-ending seam").
 - `pnpm build` + `pnpm dist:grep` prove the web bundle contains no NFC, haptics or scripted-reader code (string-literal needles, both directions).
 - All work in the worktree `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/phase-nf-nfc-design`, branch `codex/phase-nf-nfc-design`. Before every commit run `git rev-parse --show-toplevel` and require that path. No push, merge or release without James's word. Commit before every mutation probe; revert probes with `git checkout -- <file>` only after `git status` shows the file clean (RF22).
+- Lint rules the paste-test hit: `vitest/prefer-strict-equal` (write `toStrictEqual`, never `toEqual`) and TypeScript excess-property checks on object literals typed as `Transport` (build a `Transport & TargetedScanTransport` variable before passing it).
 - Test commands (from `app/`): `pnpm test --project unit`, `pnpm test --project client`; a single file: `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`; the native patch: `cd app/node_modules/@capgo/capacitor-nfc && xcodebuild -scheme CapgoCapacitorNfc -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' test`. Read both the `Test Files` and `Tests` summary lines.
 
 ---
@@ -196,8 +197,9 @@ git rm -q src/monitor/nfc/GateMinusOneProbe.tsx src/monitor/nfc/GateMinusOneProb
   src/native/nfcGateMinusOneProbe.ts \
   scripts/nfc-gate-console-receipt.ts scripts/nfc-gate-console-receipt.test.ts \
   scripts/nfc-normal-trace-controller.ts scripts/nfc-normal-trace-controller.test.ts
-git checkout main -- src/You.tsx src/vite-env.d.ts
-git diff --stat main -- src/You.tsx src/vite-env.d.ts   # expected: empty
+BASE=$(git merge-base main HEAD)   # NOT `main`: main has moved 27 commits past this branch's base (measured 2026-09-06, `git rev-list --count HEAD..main`), and main's You.tsx imports files this branch lacks
+git checkout "$BASE" -- src/You.tsx src/vite-env.d.ts
+git diff --stat "$BASE" -- src/You.tsx src/vite-env.d.ts   # expected: empty
 ```
 
 - [ ] **Step 2: Prove nothing references the probe**
@@ -288,17 +290,17 @@ function withPayload(payload: number[]): NfcRecord {
 
 describe("parsePm5NfcTarget", () => {
   it("decodes the canonical capture to the literal advertised name", () => {
-    expect(parsePm5NfcTarget(fixture)).toEqual({ advertisingName: FIXTURE_PM5_NAME });
+    expect(parsePm5NfcTarget(fixture)).toStrictEqual({ advertisingName: FIXTURE_PM5_NAME });
   });
 
   it("accepts the PM5 record when it is not first", () => {
-    expect(parsePm5NfcTarget([fixture[2]!, fixture[1]!, pm5])).toEqual({
+    expect(parsePm5NfcTarget([fixture[2]!, fixture[1]!, pm5])).toStrictEqual({
       advertisingName: FIXTURE_PM5_NAME,
     });
   });
 
   it("rejects an empty message", () => {
-    expect(parsePm5NfcTarget([])).toEqual({ code: "unsupported", reason: "no PM5 record" });
+    expect(parsePm5NfcTarget([])).toStrictEqual({ code: "unsupported", reason: "no PM5 record" });
   });
 
   it("rejects a wrong TNF with the right type bytes", () => {
@@ -312,7 +314,7 @@ describe("parsePm5NfcTarget", () => {
   });
 
   it("rejects two PM5 records even when identical", () => {
-    expect(parsePm5NfcTarget([pm5, pm5])).toEqual({
+    expect(parsePm5NfcTarget([pm5, pm5])).toStrictEqual({
       code: "unsupported",
       reason: "more than one PM5 record",
     });
@@ -361,11 +363,11 @@ describe("parsePm5NfcTarget", () => {
   it("ignores the address and address-type bytes after structural validation", () => {
     const payload = [...pm5.payload];
     payload[0] = 0xff; payload[5] = 0xff; payload[6] = 0x00;
-    expect(parsePm5NfcTarget([withPayload(payload)])).toEqual({ advertisingName: FIXTURE_PM5_NAME });
+    expect(parsePm5NfcTarget([withPayload(payload)])).toStrictEqual({ advertisingName: FIXTURE_PM5_NAME });
   });
 
   it("returns only the advertising name (no payload, address or type leaks)", () => {
-    expect(Object.keys(parsePm5NfcTarget(fixture))).toEqual(["advertisingName"]);
+    expect(Object.keys(parsePm5NfcTarget(fixture))).toStrictEqual(["advertisingName"]);
   });
 });
 
@@ -551,7 +553,12 @@ Add `app/domain/monitor/types.test.ts` cases (append to the existing file if one
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { hasTargetedScan, isValidAttemptId, type Transport } from "./types.js";
+import {
+  hasTargetedScan,
+  isValidAttemptId,
+  type TargetedScanTransport,
+  type Transport,
+} from "./types.js";
 
 describe("isValidAttemptId", () => {
   it("accepts a v4 UUID and rejects everything else", () => {
@@ -574,7 +581,11 @@ describe("hasTargetedScan", () => {
   };
   it("is false without the method and true with it", () => {
     expect(hasTargetedScan(base)).toBe(false);
-    expect(hasTargetedScan({ ...base, scanTarget: () => Promise.resolve([]) })).toBe(true);
+    const targeted: Transport & TargetedScanTransport = {
+      ...base,
+      scanTarget: () => Promise.resolve([]),
+    };
+    expect(hasTargetedScan(targeted)).toBe(true);
     expect(hasTargetedScan({ ...base, scanTarget: 1 } as unknown as Transport)).toBe(false);
   });
 });
@@ -586,7 +597,7 @@ describe("hasTargetedScan", () => {
 NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit domain/monitor/nfc.test.ts domain/monitor/types.test.ts
 ```
 
-Expected: PASS (17 + 2 tests). Then `pnpm typecheck && pnpm lint`.
+Expected: PASS. Measured on the paste-test (2026-09-06, this worktree): `Test Files 2 passed (2)`, `Tests 22 passed (22)`. Then `pnpm typecheck && pnpm lint`.
 
 - [ ] **Step 5: Mutation probe (commit first)**
 
@@ -697,7 +708,7 @@ describe("scanTarget (Phase NF)", () => {
     vi.mocked(BleClient.isEnabled).mockImplementation(async () => { order.push("isEnabled"); return false; });
     vi.mocked(BleClient.getConnectedDevices).mockImplementation(async () => { order.push("held"); return []; });
     await expect(t.scanTarget(request, new AbortController().signal)).rejects.toMatchObject({ name: "BluetoothOffError" });
-    expect(order).toEqual(["initialize", "isEnabled"]);
+    expect(order).toStrictEqual(["initialize", "isEnabled"]);
     expect(BleClient.requestLEScan).not.toHaveBeenCalled();
   });
 
@@ -719,7 +730,7 @@ describe("scanTarget (Phase NF)", () => {
     expect(BleClient.requestLEScan).toHaveBeenCalledWith({ allowDuplicates: true }, expect.any(Function));
     scanCallback!({ device: { deviceId: "d1", name: "cached" }, localName: NAME });
     await advance(1_000);
-    await expect(p).resolves.toEqual([{ id: "d1", name: NAME }]);
+    await expect(p).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
     expect(BleClient.stopLEScan).toHaveBeenCalledTimes(1);
   });
 
@@ -728,7 +739,7 @@ describe("scanTarget (Phase NF)", () => {
     const p = t.scanTarget(request, new AbortController().signal);
     await advance(0);
     const [opts] = vi.mocked(BleClient.requestLEScan).mock.calls[0]!;
-    expect(opts).toEqual({ allowDuplicates: true });
+    expect(opts).toStrictEqual({ allowDuplicates: true });
     expect(opts).not.toHaveProperty("name");
     expect(opts).not.toHaveProperty("services");
     expect(opts).not.toHaveProperty("namePrefix");
@@ -745,7 +756,7 @@ describe("scanTarget (Phase NF)", () => {
     scanCallback!({ device: { deviceId: "wrong", name: NAME }, localName: "PM5 other" });
     scanCallback!({ device: { deviceId: "d1", name: "stale" }, localName: NAME });
     await advance(1_000);
-    await expect(p).resolves.toEqual([{ id: "d1", name: NAME }]);
+    await expect(p).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
   });
 
   it("deduplicates repeat callbacks from the same deviceId and drops malformed results", async () => {
@@ -759,7 +770,7 @@ describe("scanTarget (Phase NF)", () => {
     scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
     scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
     await advance(1_000);
-    await expect(p).resolves.toEqual([{ id: "d1", name: NAME }]);
+    await expect(p).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
   });
 
   it("fails closed with TargetMonitorAmbiguousError when two distinct devices carry the exact name inside the window", async () => {
@@ -782,7 +793,7 @@ describe("scanTarget (Phase NF)", () => {
     await advance(999);
     expect(BleClient.stopLEScan).not.toHaveBeenCalled();
     await advance(1);
-    await expect(p).resolves.toEqual([{ id: "d1", name: NAME }]);
+    await expect(p).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
   });
 
   it("times out to TargetMonitorNotAdvertisingError at 10_000 ms and stops the scan first", async () => {
@@ -858,7 +869,7 @@ describe("scanTarget (Phase NF)", () => {
     expect(BleClient.requestLEScan).toHaveBeenCalledTimes(2);
     scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
     await advance(1_000);
-    await expect(second).resolves.toEqual([{ id: "d1", name: NAME }]);
+    await expect(second).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
   });
 
   it("a manual picker's outer timeout leaves the tail held until the raw picker promise settles", async () => {
@@ -1175,7 +1186,7 @@ describe("scanTarget (Phase NF)", () => {
   it("resolves the scripted device when the exact name matches, without opening scan()", async () => {
     const fake = createFakeTransport({ program, deviceName: "PM5 432331249 Row" });
     const found = await fake.scanTarget({ kind: "advertised-name", attemptId: ATTEMPT, exactName: "PM5 432331249 Row" }, new AbortController().signal);
-    expect(found).toEqual([{ id: expect.any(String), name: "PM5 432331249 Row" }]);
+    expect(found).toStrictEqual([{ id: expect.any(String), name: "PM5 432331249 Row" }]);
   });
   it("rejects by name when the exact name differs (prefix is not enough)", async () => {
     const fake = createFakeTransport({ program, deviceName: "PM5 432331249 Row" });
