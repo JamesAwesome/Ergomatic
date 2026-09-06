@@ -1762,3 +1762,117 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
     ).rejects.toThrow(/concept2_links_c2_user_id_unique/);
   });
 });
+
+// Phase DE PR 2 (spec §4.2, TRIAD): migration 0024 renames both `pain`
+// columns and their CHECKs and moves the pain-scale article's read rows to
+// effort-scale. Truncated-folder pattern (as 0008-0021 above): seed against
+// the real pre-0024 schema, run the full folder, assert what 0024 did.
+describe("migration 0024: pain → effort, and the article slug", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number; tag: string }[] };
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0024-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const e of journal.entries.filter((e) => e.idx <= 23)) {
+      const idx = String(e.idx).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${e.tag}.sql`),
+        path.join(tempDir, `${e.tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 23),
+      }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("renames both columns and CHECKs, keeps the 1..5 rule under the new name, and moves pain-scale reads to effort-scale without violating the (user_id, slug) key", async () => {
+    // Seeded against the PRE-0024 schema: the columns are still `pain`, and
+    // two rowers have read the pain-scale article — one of them (B) somehow
+    // also holds an effort-scale row, the case the UPDATE's NOT EXISTS
+    // guard and the trailing DELETE exist for.
+    const inserted = await db.execute<{ id: string }>(
+      sql`insert into "users" ("google_sub", "email", "name")
+          values ('pre-0024-a', 'a@0024.test', 'A'), ('pre-0024-b', 'b@0024.test', 'B')
+          returning "id"`,
+    );
+    const [a, b] = inserted.rows.map((r) => r.id) as [string, string];
+    await db.execute(
+      sql`insert into "article_reads" ("user_id", "slug") values
+          (${a}, 'pain-scale'), (${b}, 'pain-scale'), (${b}, 'effort-scale'), (${a}, 'baselines')`,
+    );
+    const before = await db.execute<{ column_name: string }>(
+      sql`select column_name from information_schema.columns
+          where table_name in ('workouts', 'session_logs') and column_name in ('pain', 'effort')`,
+    );
+    expect(before.rows.map((r) => r.column_name).sort()).toStrictEqual([
+      "pain",
+      "pain",
+    ]);
+
+    // The real, full folder — the boot-time migrate() that ships 0024.
+    await migrate(db, { migrationsFolder: "drizzle" });
+
+    const cols = await db.execute<{ table_name: string; column_name: string }>(
+      sql`select table_name, column_name from information_schema.columns
+          where table_name in ('workouts', 'session_logs') and column_name in ('pain', 'effort')
+          order by table_name`,
+    );
+    expect(
+      cols.rows.map((r) => `${r.table_name}.${r.column_name}`),
+    ).toStrictEqual(["session_logs.effort", "workouts.effort"]);
+    const checks = await db.execute<{ conname: string }>(
+      sql`select conname from pg_constraint
+          where conname in ('workouts_pain_check', 'workouts_effort_check', 'session_logs_pain_check', 'session_logs_effort_check')
+          order by conname`,
+    );
+    expect(checks.rows.map((r) => r.conname)).toStrictEqual([
+      "session_logs_effort_check",
+      "workouts_effort_check",
+    ]);
+    // The rule survived the rename: 6 is rejected by the renamed constraint
+    // (drizzle wraps the pg error; the constraint name rides on `cause`).
+    let caught: unknown;
+    try {
+      await db.execute(
+        sql`insert into "workouts" ("user_id", "title", "type", "difficulty", "effort", "source", "steps")
+            values (${a}, 'Too hard', 'AN', 'hard', 6, 'user', '[]'::jsonb)`,
+      );
+    } catch (e) {
+      caught = e;
+    }
+    const cause = (caught as { cause?: { constraint?: string } } | undefined)
+      ?.cause;
+    expect(cause?.constraint).toBe("workouts_effort_check");
+
+    const reads = await db.execute<{ user_id: string; slug: string }>(
+      sql`select user_id, slug from "article_reads" order by user_id, slug`,
+    );
+    const byUser = (id: string) =>
+      reads.rows.filter((r) => r.user_id === id).map((r) => r.slug);
+    expect(byUser(a)).toStrictEqual(["baselines", "effort-scale"]);
+    expect(byUser(b)).toStrictEqual(["effort-scale"]);
+    expect(reads.rows.some((r) => r.slug === "pain-scale")).toBe(false);
+  });
+});

@@ -382,11 +382,11 @@ parser would otherwise have rejected.
 Responses are bare row spreads, so the column rename alone would silently
 remove `pain` from every site. The census is the command
 `grep -nE 'res\.(status\([0-9]+\)\.)?json\(' server/routes/data.ts`
-filtered to workout and log rows — TEN sites at PR 2's base (the log PATCH
+filtered to workout and log rows — NINE sites at PR 2's base (the log PATCH
 route has two exits, the empty-patch read and the update). The contract:
 
 - One **outbound adapter** (`withPainAlias`) applied at every one of the
-  ten sites, including the `/bulk` route's `created` ARRAY and both PATCH
+  nine sites, including the `/bulk` route's `created` ARRAY and both PATCH
   exits. `effort` is the column; `pain` is copied from it. Both keys, same
   value. **Article reads get the same two-sided treatment:** the migration
   moves stored `pain-scale` rows to `effort-scale` for new clients, and the

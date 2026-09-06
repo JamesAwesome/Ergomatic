@@ -1364,7 +1364,7 @@ export function createDataRouter({
   // the identical idiom for the identical reason, before Phase WU removed
   // the setting) so a key that's ABSENT never touches its column, while a
   // key that's PRESENT-and-null clears it. Unknown keys (anything other
-  // than thumbs/held/pain/notes) are silently ignored, matching POST and
+  // than thumbs/held/effort/notes — or the compat `pain`) are silently ignored, matching POST and
   // `PUT /api/prefs` — a 400 on an unknown key would give this API two
   // personalities and break additive-only in the new-client/old-server
   // direction (spec §3, antagonist B6). An empty accepted-key set (an

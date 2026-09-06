@@ -484,7 +484,7 @@ generation):
       Reconciles the DEVIATIONS "Difficulty" row, the "picking a workout"
       article's false "easy and a 4" example, `library-moves.ts`, both
       skills' pasteable headers.
-- [ ] **PR 2 — rename pain → effort.** HAND-WRITTEN migration (drizzle has
+- [x] **PR 2 — rename pain → effort (#310).** HAND-WRITTEN migration (drizzle has
       never generated a RENAME here; its non-TTY fallback is DROP+ADD):
       column renames on `workouts` and `session_logs` plus an
       `article_reads.slug` UPDATE. NOT rollback-safe and `deploy.sh`'s

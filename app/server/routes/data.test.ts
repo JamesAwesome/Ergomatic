@@ -4491,7 +4491,7 @@ describe("Phase DE PR 2 dual-field compat", () => {
     source: "timer",
   });
 
-  it("serves both pain and effort on every workout and log response (ten sites, both PATCH exits)", async () => {
+  it("serves both pain and effort on every workout and log response (nine sites, both PATCH exits)", async () => {
     const app = appFor(makeStores());
     const created = await asA(request(app).post("/api/workouts")).send(
       validWorkoutBody({ effort: 4 }),
