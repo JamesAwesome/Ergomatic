@@ -581,16 +581,29 @@ sideways-scrolling **MACHINE SUMMARY** table under today's INTERVALS table
 calories, drag, HR set; per-interval targets). Then one walk: the same piece
 photographed in both apps, every cell compared.
 
-**Absorbs:** the "Session calories" open item (0x003A is the honest total)
-and the SUMMARY half of the "say which number this is" design pass (its
-chart-axis items stay there).
+**Closes:** the "Session calories" open item — settled at the desk on the
+committed corpus: per-split 0x0038 calories sum to 0x003A's Total Calories
+on 9 of 9 captures. **Does NOT absorb** the "say which number this is"
+design pass (rev 1 claimed its summary half; James's 2026-08-31 ruling was
+ONE gate for the whole thing) — LP adds six work-only tiles above the
+rest-inclusive chart, which that pass will have to reconcile.
+**Opens one row:** the PM5 sends 0x0038 per 5-minute auto-split for a Just
+Row (`walk-2026-08-31-justrow`, two frames) and the record stores
+`steps: []` for it — nowhere to keep them; LP renders a Just Row's tiles
+and no strip. A later phase gives those splits a home.
 
-**Gates:** antagonist anchor pass on the spec; PM open on this slate, PM
-close on the walk, PM final gate on each PR; **Gate 0 on the phone** for PR
-1 (fresh and old machine rows, session door and log detail, both
-orientations, beside v0.39.2). Watts and cal/hr — the two figures Concept2
-derives — are pinned against James's real logbook row before the render is
-final.
+**Gates:** antagonist anchor pass RUN 2026-09-06 (REVISE → rev 2: the
+0x003A rest-time field reads 0 on 9/9 captures and is struck; the wire's
+cal/hr is the PM5's own formula, not the logbook's; watts derive from
+time/distance, not the tenths pace; the photograph after our upload is a
+mirror for every uploaded field, so the PM5's own screens are the stored
+half's oracle); PM open RUN (PASS WITH CONDITIONS, build now — the driver
+discards these fields every session with no backfill); PM close on the
+walk; PM final gate on each PR; **Gate 0** = the composed artboard
+(`docs/design/logbook-parity/03-chosen-composed.html`) approved first, then
+the phone (fresh AND a real old machine row, both orientations, beside
+v0.39.2; the logbook-vs-PM5 watts/cal-hr choice on the option list with
+measured deltas). Spec approved by James 2026-09-06 "after fold ins".
 
 **Exit:** both PRs merged; the walk's side-by-side photographs committed
 with no unexplained cell; release note in rower words (spec §8).
@@ -1160,8 +1173,12 @@ closed with zero Concept2 contact.
       The
       per-interval `rest_time` gate is NOT answered this wave — RC-1 stored the
       session-level split only, `LogStep` carries no per-interval rest, so the
-      `intervals` array is out of scope and rides the auto-upload follow-on.
-- [ ] **PR B — the link-outs leave the app.** The read-only Concept2
+      `intervals` array is out of scope and rides the auto-upload follow-on
+      — **HANDED OVER 2026-09-06 to Phase LP PR 2** (`docs/superpowers/specs/2026-09-06-logbook-parity-design.md`
+      §5), which sends `intervals[]`/`splits[]` with calories, HR, stroke
+      rate and per-interval rest, result-level calories/drag/HR, and
+      targets; `buildC2Payload` stays Wave E's file, LP owns that edit.
+- [x] **PR B — the link-outs leave the app.** MERGED #298. The read-only Concept2
       link-outs (`View on Concept2 →`, `OPEN CONCEPT2 PROFILE`) drop the
       native `SFSafariViewController` sheet and its isolated cookie jar —
       the defect a 2026-09-03 walk found (a sent row opened Concept2's
@@ -1190,7 +1207,7 @@ closed with zero Concept2 contact.
       `docs/screenshots/`: `you-concept2-*` (You, doors group) and
       `concept2-screen-*` (the screen); each set covers unlinked, linked,
       reconnect/armed, read-failed and landscape.
-- [ ] **PR C — send the number the verification code was minted over.**
+- [x] **PR C — send the number the verification code was minted over.** MERGED #307.
       SETTLED 2026-09-05 by a live API test: posting the PM5's own code with
       distance 5706 (the monitor's 0x0039 total, already stored as
       `machine_work_meters`) verified; 5708 (our interval sum, `work_meters`,
@@ -1241,10 +1258,13 @@ closed with zero Concept2 contact.
       ruling 6 named AUTOMATIC, spec §3.4 widened it to any eligible
       failure (the condition is account-level); sound, but no Gate 0 frame
       drew MANUAL + SEND FAILED — owed at the next Concept2 design touch.
-      **The flag-flip gate is ONE trip:** the AUTOMATIC save this PR owes on
-      the phone and PR C's owed confirming send both need the same
-      `C2_LINK_ENABLED` flip on James's own account against log-dev; walk
-      them together, never as two PR-body lines.
+      **The flag-flip gate is ONE trip, now THREE verifications:** the
+      AUTOMATIC save this PR owes on the phone, PR C's owed confirming send,
+      and **Phase LP's parity photograph** (the logbook page beside our
+      screen after our upload, plus the PM5's own View Detail screens — spec
+      §4.2) all need the same `C2_LINK_ENABLED` flip on James's own account;
+      walk them together, never as separate PR-body lines. LP's exit is
+      blocked on this flip and says so.
 - [ ] **Verification code: hide it, say "verified".** James, 2026-09-05: like
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that
@@ -1760,7 +1780,7 @@ to lose the row has no move except to walk away.
 | **RC-14**                                  | The avg-pace verdict zero-fires on an ORDINARY finish (walk 2026-08-25, W-2). **Distinct from RC-13; do not fold.** Replay through the walk's own commit `c219ee0` DOES produce the verdict, eliminating the wire, the driver's response and ring eviction; **two survivors — it threw, or something outside the driver dropped the entry.** **James, 2026-08-31: do NOT hunt it; INSTRUMENT it** so the next occurrence names which survivor it was, instead of another silent zero. Per RF19, the instrument ships in the same change | `phase-rc.md`                |
 | **RC-38**                                  | Transcribe `OBJ_WORKOUTTYPE_T` — see Phase PROTO above. Pulled forward alone by James on 2026-08-31 while the rest of the sweep is held                                                                                                                                                                                                                                                                                                                       | `phase-rc.md`                |
 | **RC-11**                                  | The stroke-data reframe: three-way, not two. Owns RC-6's deferred `p: 0` half. Our series clock is a third quantity, and none of the three is C2's `time`                                                                                                                                                                                                                                                                                                      | `phase-rc.md`                |
-| **Session calories**                       | 0x0033's `totalCalories` is INTERVAL-scoped (it resets at every boundary) and the 0x0039 summary carries no calorie field, so an honest session CAL needs the register-fold discipline CR2 spec 1 built for distance, plus an honest ramping fake (today's emits a constant 0, so **nothing can go red**), plus a walk photo. **ZONE rides behind it** — it needs a strap and a max-HR source the app lacks. **Ownerless since 2026-08-15**                    | `phase-cr2.md`               |
+| **Session calories** — CLOSED by Phase LP 2026-09-06 (0x003A Total Calories is the honest total; per-split sum equals it on 9/9 committed captures) | 0x0033's `totalCalories` is INTERVAL-scoped (it resets at every boundary) and the 0x0039 summary carries no calorie field, so an honest session CAL needs the register-fold discipline CR2 spec 1 built for distance, plus an honest ramping fake (today's emits a constant 0, so **nothing can go red**), plus a walk photo. **ZONE rides behind it** — it needs a strap and a max-HR source the app lacks. **Ownerless since 2026-08-15**                    | `phase-cr2.md`               |
 | **Cross-pin the two distance derivations** | `sessionDistanceMeters` and `monitorDistanceMeters` are two derivations of one user-facing quantity, shipping on two screens with nothing comparing them                                                                                                                                                                                                                                                                                                       | `phase-cm.md`                |
 | **The fake's rest-distance lag**           | `restDistanceMeters` resets with no roughly three-frame lag, unlike the real wire                                                                                                                                                                                                                                                                                                                                                                              | `phase-cm.md`                |
 | **`MONITOR_SPM_MIN = 0`**                  | Re-parked at CR2's close, re-owned by LT spec 1                                                                                                                                                                                                                                                                                                                                                                                                                | `phase-cr2.md`               |

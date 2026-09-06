@@ -5439,3 +5439,92 @@ the gate cheap enough to be worth running at all. James closed the loop here
   mechanism bullets ("why the other option failed") above the fold, with
   fuller versions already in the Record. The fold owes the outcome and the
   cost; the road not taken is a Record item.
+
+### 2026-09-06 — Phase LP open gate (logbook parity): the walk was carrying arithmetic
+
+**Verdict:** PASS WITH CONDITIONS. Three blocking conditions before any
+implementation task, four before merge — all folded into spec rev 2 the same
+day; James approved "after fold ins".
+
+**The technique, and it is the durable part: a spec that defers a formula to a
+hardware walk is deferring a script.** LP §3.1 parked two figures — watts and
+cal/hr — as hypotheses "the walk settles it." Both were settleable in ten
+minutes at the desk from evidence already in the repo, and the spec's proposed
+method was wrong on both:
+
+- Watts `2.80/pace³` **from the displayed pace** reproduces 5 of 6 of James's
+  photographed logbook figures under `round` and 5 of 6 under `truncate` — no
+  rule reproduces all six, because the wire's pace is quantised to 0.1 s/500 m
+  and the logbook derives from full-precision `time`/`distance`.
+  `round(2.80 / (seconds/metres)³)` reproduces **6/6**.
+- Cal/hr: the spec ruled the derived option out on a measured 2-unit miss —
+  against the wrong formula (a forum `300 + 4×0.8604×W`). `floor(calories ×
+  3600 / seconds)` reproduces **6/6**. The spec's fallback (show the wire's
+  `splitIntervalAvgCalories`) would have shown a number that DISAGREES with
+  the logbook, which is the opposite of the phase's own promise. **RF30 with a
+  formula instead of a platform limit: the option you rule out in a clause is
+  the one that needs the receipt.**
+
+**Generalises:** before approving any walk that exists to settle a NUMBER, ask
+which of its questions is arithmetic over data already committed. The corpus at
+`docs/monitor/sessions/` carried 23 `0x0038` and 9 `0x003A` frames as raw hex;
+three short scripts answered four of the spec's open questions, including one
+it had assigned to the antagonist (`splitIntervalTotalCalories` is per-split,
+not cumulative — the per-split sum equals `0x003A`'s Total Calories exactly in
+**9 of 9** captures, which also closes the ROADMAP's "Session calories" row).
+
+**A zero on 9 of 9 captures is a finding, not a default.** `0x003A`'s Interval
+Rest Time reads `0` in every committed capture, including one whose Total Rest
+Distance in the SAME frame reads 274 m. The spec made it a stored column and a
+Concept2 wire field. An unobserved wire premise never ships as a hard gate, and
+it especially never ships onto a third party's permanent record.
+
+**"Absorbs another phase's design pass" is checkable against that pass's own
+ruling.** LP claimed the "summary half" of the "say which number this is" pass.
+That pass exists because James ruled (2026-08-31) to take its items together
+"**rather than approving a third of a screen at a time**" — so a half-absorption
+is the thing the ruling forbids, and LP's Gate 0 addressed none of its four
+bullets. Companion to the 2026-08-17 PW entry ("'Absorbs Phase X' is a claim to
+check against X's own text"): **when the absorbed thing is a design PASS, the
+text to check is the ruling that created it, not the bullet list.**
+
+**A design gate cannot approve a combination no artboard drew.** James chose
+"B + B" from two separate mockups. Composed, the six session numbers render
+twice — once as hero tiles, once as the table's bold ALL row — and a third
+mockup option existed specifically to avoid that. Neither mockup drew the pair.
+**When a gate offers options across two artboards, the chosen COMBINATION gets
+its own frame before Gate 0.**
+
+**Old-row emptiness is a countable claim.** LP's "wall of dashes" premise was
+wrong: three of six new tiles and three of six new columns populate from data
+already stored (`machineSummary`'s `avgStrokeRate`/`dragFactorAverage`,
+`avgHr`, `actualSpm`, `actualSeconds`/`actualMeters`, `restDistanceMeters`).
+James's dashes choice is CONFIRMED on that corrected picture. **Before ruling on
+an empty state, enumerate per field what the old row actually renders.**
+
+**Ordering, counted:** Wave A has read "Next in the slate" since 2026-09-04 and
+**six phases opened ahead of it** (DE, SF, NF, KB, SB, LP); 31 unchecked items
+stand. Ruled BUILD NOW anyway, on one argument the spec never made: the PM5
+sends these fields today, `parse.ts` decodes them, and `driver.ts` discards them
+every session, with no backfill possible. **The irreversible-loss clock is a
+build-now argument, and it is the one to look for when a phase jumps the slate.**
+I considered and REJECTED splitting retention into a fast PR 0 — at ~2-6 rows
+over a phase it does not buy a cycle — but the arithmetic flips if LP slips two
+weeks.
+
+**Mirror check on the exit evidence.** §4.3 photographed our screen beside the
+logbook after OUR OWN upload. For the DERIVED pair that is a real oracle
+(Concept2 recomputes independently); for every STORED field it is a mirror —
+we send 372, it shows 372. The independent oracle for the stored half is the
+PM5's own end-of-workout screens. **When a phase's proof is "compare us to them
+after we told them," sort the fields into the ones they recompute and the ones
+they echo, and find a second oracle for the echoes.**
+
+**Home and dependency.** LP PR 2 edits `buildC2Payload`, which is Wave E's, and
+Wave E's live text still said the `intervals` array is out of scope — one home
+per body of work, reconciled in the same commit. LP's exit walk needs
+`C2_LINK_ENABLED`, which Wave E still lists as owed pending Concept2's write
+approval: **a third owed live verification on the same flip.** One trip, filed
+as the flag-flip gate in ROADMAP (2026-09-05 ruling), never as a new phase walk.
+Stale rows found at this gate: Wave E PR B merged #298 and PR C merged #307,
+both still unchecked — ticked.
