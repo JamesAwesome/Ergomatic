@@ -92,6 +92,15 @@ standing rules live here so they cannot drift between dispatches.
   `.claude/agents/antagonist-ledger.md` is worth the two minutes: the same
   shapes recur.
 
+## Devices are James's, not the harness's (2026-09-06)
+
+- **Never install or launch a build on James's phone without asking first,
+  every time.** `xcrun devicectl device install` replaces the running app;
+  on 2026-09-06 an install pushed on an earlier approval interrupted a row
+  in progress. Build freely; before ANY install or launch, ask in one line
+  and wait for a yes for THAT install. One approval never covers the next.
+  Assume the phone may be at the erg.
+
 ## Environment
 
 - All commands run from `app/`. Node 26 is required:
