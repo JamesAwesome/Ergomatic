@@ -10273,12 +10273,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink);
 }
 
-.c2-card-helper {
-  margin: 0;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 .c2-card-foot {
   margin: 0;
   text-align: center;
@@ -10405,26 +10399,123 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-weight: 600;
 }
 
-/* Board 1c/1d. Accent's third canonical job, a destructive control
-   (docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md), so it needs no
-   dispensation — unlike the log row's link-out, which is recorded as a
-   DEVIATIONS row (this PR's Task 13). Outlined at rest, filled when armed:
-   index.css's own "4 · destructive" comment sets that vocabulary. */
-.c2-card-danger {
-  min-height: 52px;
+/* Wave E auto-send (spec 2026-09-05 §3.2; Gate 0 amendment 2026-09-05 §1,
+   §2, §7). The sending-mode control, OFF · MANUAL · AUTOMATIC, where the
+   `Unlink Concept2` button stood (`.c2-card-danger` and `-armed` were
+   deleted with it — RF5). Three `aria-pressed` buttons on one grid, one
+   hairline border shared, each segment the row's 44px and a third of the
+   act column (≥ 104px in portrait).
+
+   NO NEW TIER: the pressed segment is the primary button's fill (`--ink`,
+   `--on-color` on it 17.11:1) and the unpressed one its outline (`--ink` on
+   `--surface` 17.11:1). The armed OFF is the danger button's own fill moved
+   onto the segment — `--on-color` on `--accent` 5.94:1, 52px, 15px sans
+   600, spanning the control — so `--accent` gains no new use. Disabled
+   (a PATCH in flight): `--ink-3` on `--surface` 7.43:1. All ≥ 4.5. */
+.c2-card-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0;
+  border: 1px solid var(--ink);
+}
+
+.c2-card-mode-btn {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
   background: transparent;
-  border: 1px solid var(--accent);
+  border: 0;
+  border-left: 1px solid var(--ink);
   border-radius: 0;
-  color: var(--accent);
-  font-family: var(--font-sans);
-  font-size: 16px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+.c2-card-mode-btn:first-child {
+  border-left: 0;
+}
+
+.c2-card-mode-btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--on-color);
   font-weight: 600;
 }
 
-.c2-card-danger-armed {
-  background: var(--accent);
+.c2-card-mode-btn:disabled {
+  color: var(--ink-3);
+  border-color: var(--rule-3);
+}
+
+/* Armed OFF spans the control as today's full-width "Tap again to unlink"
+   (Gate 0 §2a, ruled on sight: the segments' mono caps wrapped and sat
+   off-centre). The sibling segments are hidden, not disabled — the pressed
+   state has not committed, and a disarm brings them back reading the
+   server's mode. `[aria-pressed="true"]` is restated so the specificity of
+   the pressed rule above cannot win the fill back to `--ink`. */
+.c2-card-mode-is-armed {
   border-color: var(--accent);
+}
+
+.c2-card-mode-armed,
+.c2-card-mode-armed[aria-pressed="true"] {
+  grid-column: 1 / -1;
+  min-height: 52px;
+  background: var(--accent);
   color: var(--on-color);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  border-left: 0;
+}
+
+.c2-card-mode-is-armed > .c2-card-mode-btn:not(.c2-card-mode-armed) {
+  display: none;
+}
+
+/* The line beneath the control (Gate 0 §1a, §3, §4a). `--ink-3` at rest,
+   `--ink` when it carries the send-failed reason — the same two steps the
+   card's helper and explain lines already use, no new colour. */
+.c2-card-mode-line {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.c2-card-mode-line-warn {
+  color: var(--ink);
+}
+
+/* A7: a refused or thrown PATCH. Plain `--ink` at the explain size — it is
+   a sentence, not a panel; the pressed segment already shows the truth. */
+.c2-card-mode-error {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* The block's remedy on the card (Gate 0 amendment 2026-09-05 §4a, drawn
+   in the frame's `.linkrow`): `--ink` on `--surface` 17.11:1 (§7's "remedy
+   link-out" row), mono caps at the row's 44px. NOT the block's own
+   `.c2-send-linkout` accent — §7 rules that `--accent` gains no new use
+   beyond the armed OFF, and DEVIATIONS' link-out row stays scoped to
+   Surface 2. */
+.c2-card-linkout {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-align: left;
 }
 
 /* Landscape: the two-column card interior, for the SEVEN frames the

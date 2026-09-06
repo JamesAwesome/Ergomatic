@@ -10524,7 +10524,12 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
     // census, and this one had already gone stale in the round that wrote it.
     const cases: [string, string, number][] = [
       ["c2-card-unlinked.html", ".c2-card-primary", 48],
-      ["c2-card-armed.html", ".c2-card-danger", 52],
+      // Wave E auto-send: the armed OFF segment spans the control at the
+      // danger button's 52px (Gate 0 amendment 2026-09-05 §2a); at rest each
+      // segment is the row's 44px — measured on the pressed one, which is
+      // the only segment a selector can name once.
+      ["c2-card-armed.html", ".c2-card-mode-armed", 52],
+      ["c2-card-linked.html", '.c2-card-mode-btn[aria-pressed="true"]', 44],
       ["c2-card-read-failed.html", ".c2-card-retry", 52],
     ];
     for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
@@ -10891,15 +10896,15 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
     await openYouLinked(page, "taps");
     for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
       await page.setViewportSize(vp);
-      await expect(
-        page.getByRole("button", { name: "Unlink Concept2" }),
-      ).toBeVisible();
+      // Wave E auto-send: the three-segment control where Unlink was; every
+      // segment is a tappable this sweep measures in the real column.
+      await expect(page.getByRole("button", { name: "OFF" })).toBeVisible();
       await assertTapTargets(page);
     }
     // And the ARMED state, whose control is a different element with
     // different text — a sweep of the resting card alone would never
     // measure it.
-    await page.getByRole("button", { name: "Unlink Concept2" }).click();
+    await page.getByRole("button", { name: "OFF" }).click();
     await expect(
       page.getByRole("button", { name: "Tap again to unlink" }),
     ).toBeVisible();
@@ -10953,7 +10958,8 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
         body: JSON.stringify(C2_LINKED),
       });
     });
-    await page.getByRole("button", { name: "Unlink Concept2" }).click();
+    // Wave E auto-send: the unlink is the control's OFF segment.
+    await page.getByRole("button", { name: "OFF" }).click();
     await page.getByRole("button", { name: "Tap again to unlink" }).click();
     const reason = page.locator(".c2-card-panel-reason");
     await expect(reason).toBeVisible();

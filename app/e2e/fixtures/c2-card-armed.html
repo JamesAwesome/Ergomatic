@@ -10,7 +10,11 @@
 <p class="c2-card-explain">Unlink removes this app's access. Rows already sent stay on Concept2.</p>
 </div>
 <div class="c2-card-act">
-<button type="button" class="c2-card-danger c2-card-danger-armed">Tap again to unlink</button>
+<div class="c2-card-mode c2-card-mode-is-armed" role="group" aria-label="Sending mode">
+<button type="button" class="c2-card-mode-btn c2-card-mode-armed" aria-pressed="true">Tap again to unlink</button>
+<button type="button" class="c2-card-mode-btn" aria-pressed="false">MANUAL</button>
+<button type="button" class="c2-card-mode-btn" aria-pressed="false">AUTOMATIC</button>
+</div>
 <p class="c2-card-foot">DISARMS ON ITS OWN AFTER 4 SECONDS</p>
 </div>
 </div>

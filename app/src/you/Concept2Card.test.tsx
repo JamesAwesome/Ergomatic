@@ -5,6 +5,7 @@ import {
   act,
   waitFor,
   fireEvent,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
@@ -178,9 +179,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
   it("does not delete on the first tap", async () => {
     const { api } = mount(LINKED);
     await renderCard();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
     expect(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     ).toBeTruthy();
@@ -192,9 +191,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
   it("deletes on the second tap", async () => {
     const { api } = mount(LINKED);
     await renderCard();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
@@ -217,7 +214,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     mount(LINKED);
     await renderCard();
     const unlink = await screen.findByRole("button", {
-      name: "Unlink Concept2",
+      name: "OFF",
     });
     vi.useFakeTimers();
     fireEvent.click(unlink);
@@ -235,9 +232,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(
-      screen.getByRole("button", { name: "Unlink Concept2" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "OFF" })).toBeTruthy();
   });
 
   it("says the link is unchanged when the DELETE is refused, instead of appearing to do nothing", async () => {
@@ -256,9 +251,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     vi.doMock("../api", () => ({ api }));
     vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
     await renderCard();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
@@ -286,17 +279,13 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     vi.doMock("../api", () => ({ api }));
     vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
     await renderCard();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
     await screen.findByText("Couldn't unlink. Your link is unchanged.");
     deleteOk = true;
-    await userEvent.click(
-      screen.getByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
@@ -338,9 +327,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
       await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
     );
     await screen.findByText("LINKED ✓");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
@@ -392,9 +379,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "RECONNECT CONCEPT2" }),
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
@@ -422,9 +407,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     vi.doMock("../api", () => ({ api }));
     vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
     await renderCard();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
@@ -435,9 +418,7 @@ describe("Concept2Card unlink (board 1d: two taps, 4 s auto-disarm)", () => {
     // The grant is genuinely still live and the card still says so; and the
     // arm is spent on this exit too, so no stray tap re-fires the DELETE.
     expect(screen.getByText("LINKED ✓")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Unlink Concept2" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "OFF" })).toBeTruthy();
   });
 });
 
@@ -699,6 +680,423 @@ describe("Concept2Card panel lines no type protects (Task 1 review F9)", () => {
   });
 });
 
+// Wave E auto-send, spec 2026-09-05 §3.2 and §3.4; Gate 0 amendment
+// 2026-09-05. The control that replaced `Unlink Concept2`: OFF arms the
+// unlink (tested above under "unlink"), MANUAL and AUTOMATIC each PATCH the
+// link and re-read it. Every PATCH assertion below reads the BODY the wire
+// would carry, not a call count — the delta pass's F1 was a send call that
+// did not typecheck behind a green count.
+describe("the sending-mode control (Wave E auto-send §3.2)", () => {
+  function patches(api: ReturnType<typeof vi.fn>) {
+    return api.mock.calls
+      .filter((c) => (c[1] as RequestInit | undefined)?.method === "PATCH")
+      .map((c) => ({
+        path: c[0] as string,
+        headers: (c[1] as RequestInit).headers,
+        body: JSON.parse(String((c[1] as RequestInit).body)) as unknown,
+      }));
+  }
+
+  /** A link mock whose GET answer FOLLOWS the last PATCH, the way the server
+   *  does — so the pressed segment after a tap is the re-read's answer, and
+   *  a test that saw it move has proved the re-read, not the tap. */
+  function mountFollowing(initial: typeof LINKED & { autoSend?: boolean }) {
+    let current: Record<string, unknown> = { ...initial };
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body)) as { autoSend: boolean };
+        current = { ...current, autoSend: body.autoSend };
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify(current), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    return { api };
+  }
+
+  it("renders three aria-pressed buttons in a labelled group, MANUAL pressed for a fresh link (A2: fail-closed)", async () => {
+    mount(LINKED);
+    await renderCard();
+    const group = await screen.findByRole("group", { name: "Sending mode" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toStrictEqual([
+      "OFF",
+      "MANUAL",
+      "AUTOMATIC",
+    ]);
+    expect(buttons.map((b) => b.getAttribute("aria-pressed"))).toStrictEqual([
+      "false",
+      "true",
+      "false",
+    ]);
+    // Never a radiogroup (F4): the roving idiom commits on arrow.
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Unlink Concept2" }),
+    ).toBeNull();
+  });
+
+  it("AUTOMATIC pressed when the server says autoSend, with the promise as its line", async () => {
+    mount({ ...LINKED, autoSend: true });
+    await renderCard();
+    expect(
+      await screen.findByRole("button", { name: "AUTOMATIC", pressed: true }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "MANUAL", pressed: false }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Finished monitor rows are sent when you save them."),
+    ).toBeTruthy();
+  });
+
+  it("tapping AUTOMATIC PATCHes { autoSend: true } as JSON, then re-reads and presses what the server holds", async () => {
+    const { api } = mountFollowing(LINKED);
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "AUTOMATIC" }),
+    );
+    await screen.findByRole("button", { name: "AUTOMATIC", pressed: true });
+    expect(patches(api)).toStrictEqual([
+      {
+        path: "/api/concept2/link",
+        headers: { "Content-Type": "application/json" },
+        body: { autoSend: true },
+      },
+    ]);
+    // Invariant I1: the pressed state came from a GET AFTER the PATCH.
+    const order = api.mock.calls.map(
+      (c) => (c[1] as RequestInit | undefined)?.method ?? "GET",
+    );
+    expect(order.indexOf("PATCH")).toBeLessThan(order.lastIndexOf("GET"));
+    expect(
+      screen.getByText("Finished monitor rows are sent when you save them."),
+    ).toBeTruthy();
+  });
+
+  it("tapping MANUAL from AUTOMATIC PATCHes { autoSend: false }", async () => {
+    const { api } = mountFollowing({ ...LINKED, autoSend: true });
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "MANUAL" }),
+    );
+    await screen.findByRole("button", { name: "MANUAL", pressed: true });
+    expect(patches(api).map((p) => p.body)).toStrictEqual([
+      { autoSend: false },
+    ]);
+  });
+
+  it("tapping the segment that is already pressed writes NOTHING", async () => {
+    const { api } = mountFollowing(LINKED);
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "MANUAL" }),
+    );
+    // Await something the tap could have produced before asserting it did
+    // not: the mount GET is the only call there should be.
+    await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
+    expect(patches(api)).toHaveLength(0);
+  });
+
+  it("disables the whole control while the PATCH is in flight, and re-enables after the re-read (A7)", async () => {
+    let release: (() => void) | null = null;
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        await new Promise<void>((r) => {
+          release = r;
+        });
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify({ ...LINKED, autoSend: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "MANUAL" }),
+    );
+    await waitFor(() => expect(release).not.toBeNull());
+    for (const name of ["OFF", "MANUAL", "AUTOMATIC"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
+    await act(async () => {
+      release?.();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "MANUAL" })).toBeEnabled(),
+    );
+  });
+
+  it.each([
+    ["a refused PATCH (500)", new Response("nope", { status: 500 })],
+    ["a thrown PATCH", null],
+  ])(
+    "%s shows the A7 line and leaves the pressed state on the SERVER's value",
+    async (_label, answer) => {
+      const api = vi.fn(async (_path: string, init?: RequestInit) => {
+        if (init?.method === "PATCH") {
+          if (answer === null) throw new Error("offline");
+          return answer;
+        }
+        return new Response(JSON.stringify(LINKED), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+      vi.doMock("../api", () => ({ api }));
+      vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+      await renderCard();
+      await userEvent.click(
+        await screen.findByRole("button", { name: "AUTOMATIC" }),
+      );
+      expect(
+        await screen.findByText("Couldn't change this. Try again."),
+      ).toBeTruthy();
+      // The server still says MANUAL, and so does the control.
+      expect(
+        screen.getByRole("button", { name: "MANUAL", pressed: true }),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "AUTOMATIC", pressed: false }),
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "AUTOMATIC" })).toBeEnabled();
+    },
+  );
+
+  it("the A7 line clears when the next write is attempted", async () => {
+    let fail = true;
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        return fail
+          ? new Response("nope", { status: 500 })
+          : new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify(LINKED), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "AUTOMATIC" }),
+    );
+    await screen.findByText("Couldn't change this. Try again.");
+    fail = false;
+    await userEvent.click(screen.getByRole("button", { name: "AUTOMATIC" }));
+    await waitFor(() =>
+      expect(screen.queryByText("Couldn't change this. Try again.")).toBeNull(),
+    );
+  });
+
+  it("arrows move focus only — no PATCH, no arm (F4)", async () => {
+    const { api } = mount(LINKED);
+    await renderCard();
+    const off = await screen.findByRole("button", { name: "OFF" });
+    off.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByRole("button", { name: "MANUAL" })).toHaveFocus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByRole("button", { name: "AUTOMATIC" })).toHaveFocus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(off).toHaveFocus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("button", { name: "AUTOMATIC" })).toHaveFocus();
+    expect(patches(api)).toHaveLength(0);
+    expect(
+      screen.queryByRole("button", { name: "Tap again to unlink" }),
+    ).toBeNull();
+    expect(
+      api.mock.calls.filter(
+        (c) => (c[1] as RequestInit | undefined)?.method === "DELETE",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("Enter and Space on AUTOMATIC commit, as a button's own keys do", async () => {
+    const { api } = mountFollowing(LINKED);
+    await renderCard();
+    (await screen.findByRole("button", { name: "AUTOMATIC" })).focus();
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("button", { name: "AUTOMATIC", pressed: true });
+    expect(patches(api).map((p) => p.body)).toStrictEqual([{ autoSend: true }]);
+  });
+
+  it("armed OFF is the ONLY segment, pressed, reading the danger copy; disarm returns the pressed state to the server's mode", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mount({ ...LINKED, autoSend: true });
+    await renderCard();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(await screen.findByRole("button", { name: "OFF" }));
+    const armed = screen.getByRole("button", { name: "Tap again to unlink" });
+    expect(armed.getAttribute("aria-pressed")).toBe("true");
+    expect(armed.className).toContain("c2-card-mode-armed");
+    // The pressed state has NOT committed: MANUAL/AUTOMATIC are unpressed
+    // (and hidden by CSS the fixture test measures), so a screen reader
+    // hears one pressed state — the one about to be committed.
+    expect(
+      screen
+        .getByRole("button", { name: "MANUAL" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByRole("button", { name: "AUTOMATIC" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(screen.getByText("DISARMS ON ITS OWN AFTER 4 SECONDS")).toBeTruthy();
+    expect(
+      screen.queryByText("Finished monitor rows are sent when you save them."),
+    ).toBeNull();
+    await act(async () => {
+      vi.advanceTimersByTime(4000);
+    });
+    expect(
+      await screen.findByRole("button", { name: "AUTOMATIC", pressed: true }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "OFF", pressed: false }),
+    ).toBeTruthy();
+  });
+
+  it("a tap on MANUAL while armed disarms and writes nothing (the mode is already MANUAL)", async () => {
+    const { api } = mount(LINKED);
+    await renderCard();
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
+    await screen.findByRole("button", { name: "Tap again to unlink" });
+    await userEvent.click(screen.getByRole("button", { name: "MANUAL" }));
+    expect(await screen.findByRole("button", { name: "OFF" })).toBeTruthy();
+    expect(patches(api)).toHaveLength(0);
+    expect(
+      api.mock.calls.filter(
+        (c) => (c[1] as RequestInit | undefined)?.method === "DELETE",
+      ),
+    ).toHaveLength(0);
+  });
+});
+
+describe("the mode line and pill under needsReauth and SEND FAILED (Wave E auto-send §3.4)", () => {
+  it("needsReauth: the line reads paused, never AUTOMATIC's promise, and the pill reads RECONNECT NEEDED", async () => {
+    mount({ ...LINKED, needsReauth: true, autoSend: true });
+    await renderCard();
+    expect(await screen.findByText("RECONNECT NEEDED")).toBeTruthy();
+    expect(
+      screen.getByText("Sends are paused until you reconnect."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Finished monitor rows are sent when you save them."),
+    ).toBeNull();
+    // The control is still there, AUTOMATIC still pressed — the mode is the
+    // rower's, only the sending is paused.
+    expect(
+      screen.getByRole("button", { name: "AUTOMATIC", pressed: true }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "RECONNECT CONCEPT2" }),
+    ).toBeTruthy();
+  });
+
+  it.each([
+    [
+      "no_weight",
+      "Rows aren't being sent: Concept2 needs a weight class, and your Concept2 profile has no weight set.",
+    ],
+    [
+      "unreadable_weight",
+      "Rows aren't being sent: Concept2 needs a weight class, and we couldn't read the weight on your Concept2 profile.",
+    ],
+    [
+      "implausible_weight",
+      "Rows aren't being sent: Concept2 needs a weight class, and we couldn't read the weight on your Concept2 profile.",
+    ],
+    [
+      "no_gender",
+      "Rows aren't being sent: Concept2 needs a weight class, and we couldn't work one out from your Concept2 profile.",
+    ],
+    [
+      "something_new",
+      "Rows aren't being sent: Concept2 needs a weight class, and we couldn't work one out from your Concept2 profile.",
+    ],
+  ])(
+    "SEND FAILED · %s: the pill, the reason line in warn weight, and the profile remedy",
+    async (reason, line) => {
+      mount({
+        ...LINKED,
+        autoSend: true,
+        sendFailedAt: "2026-09-05T12:00:00.000Z",
+        sendFailedReason: reason,
+      });
+      await renderCard();
+      expect(await screen.findByText("SEND FAILED")).toBeTruthy();
+      const p = screen.getByText(line);
+      expect(p.className).toContain("c2-card-mode-line-warn");
+      expect(
+        screen.getByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+      ).toBeTruthy();
+      expect(screen.queryByText("LINKED ✓")).toBeNull();
+    },
+  );
+
+  it("the remedy opens the LIVE link's profile in the read-only browser", async () => {
+    const openReadOnlyUrl = vi.fn();
+    vi.doMock("../adapters/externalBrowser", () => ({ openReadOnlyUrl }));
+    mount({
+      ...LINKED,
+      sendFailedAt: "2026-09-05T12:00:00.000Z",
+      sendFailedReason: "no_weight",
+    });
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+    );
+    expect(openReadOnlyUrl).toHaveBeenCalledTimes(1);
+    expect(String(openReadOnlyUrl.mock.calls[0]?.[0])).toMatch(
+      /^https:\/\/log-dev\.concept2\.com\//,
+    );
+    vi.doUnmock("../adapters/externalBrowser");
+  });
+
+  it("no remedy when the origin is unreadable — an empty base would build a RELATIVE path", async () => {
+    mount({
+      ...LINKED,
+      logbookBaseUrl: null,
+      sendFailedAt: "2026-09-05T12:00:00.000Z",
+      sendFailedReason: "no_weight",
+    });
+    await renderCard();
+    await screen.findByText("SEND FAILED");
+    expect(
+      screen.queryByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+    ).toBeNull();
+  });
+
+  it("needsReauth beats SEND FAILED on the pill and the line, as it does on the You row", async () => {
+    mount({
+      ...LINKED,
+      needsReauth: true,
+      sendFailedAt: "2026-09-05T12:00:00.000Z",
+      sendFailedReason: "no_weight",
+    });
+    await renderCard();
+    expect(await screen.findByText("RECONNECT NEEDED")).toBeTruthy();
+    expect(screen.queryByText("SEND FAILED")).toBeNull();
+    expect(
+      screen.getByText("Sends are paused until you reconnect."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+    ).toBeNull();
+  });
+});
+
 // FIX ROUND 2, F5 — the anti-drift claim, made TRUE rather than narrowed.
 // `e2e/design.spec.ts` measures committed fixtures, and the previous round
 // claimed the component "pins the same two class names so the fixture cannot
@@ -745,12 +1143,18 @@ describe("the e2e fixtures ARE this component's output (F5)", () => {
 
   it("c2-card-armed.html is what the armed card renders", async () => {
     const { container } = await renderTo(LINKED);
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
     await screen.findByRole("button", { name: "Tap again to unlink" });
     expect(norm(container.innerHTML)).toBe(
       norm(committed("c2-card-armed.html")),
+    );
+  });
+
+  it("c2-card-linked.html is what the linked card renders at rest (MANUAL)", async () => {
+    const { container } = await renderTo(LINKED);
+    await screen.findByRole("button", { name: "OFF" });
+    expect(norm(container.innerHTML)).toBe(
+      norm(committed("c2-card-linked.html")),
     );
   });
 
@@ -908,21 +1312,26 @@ describe("Concept2Card copy, pinned literal by literal (F4)", () => {
     expect(screen.getByText("WAITING")).toBeTruthy();
   });
 
-  it("1c linked: the helper that says where sending happens", async () => {
+  it("1c linked: the mode line beneath the control says where sending happens (Wave E auto-send §1a)", async () => {
     mount(LINKED);
     await renderCard();
     await screen.findByText("LINKED \u2713");
+    // The helper this line replaces ("Finished monitor rows can be sent from
+    // the log.") is gone: it contradicted AUTOMATIC (spec §3.2, F5).
     expect(
-      screen.getByText("Finished monitor rows can be sent from the log."),
+      screen.getByText(
+        "Send each finished monitor row yourself, from the log.",
+      ),
     ).toBeTruthy();
+    expect(
+      screen.queryByText("Finished monitor rows can be sent from the log."),
+    ).toBeNull();
   });
 
   it("1d armed: the warning and the auto-disarm footnote", async () => {
     mount(LINKED);
     await renderCard();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
     expect(
       screen.getByText(
         "Unlink removes this app's access. Rows already sent stay on Concept2.",
@@ -966,9 +1375,7 @@ describe("Concept2Card copy, pinned literal by literal (F4)", () => {
     vi.doMock("../api", () => ({ api }));
     vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
     await renderCard();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
@@ -1027,17 +1434,13 @@ describe("Concept2Card unlink failure does not latch (Gate 0 amendment 1j)", () 
     vi.doMock("../api", () => ({ api }));
     vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
     await renderCard();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
     await screen.findByText("REASON: THE SERVER ANSWERED 500");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Unlink Concept2" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "OFF" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to unlink" }),
     );
