@@ -160,9 +160,11 @@ vi.mock("../adapters/monitorTransport", () => ({
 }));
 
 function parsedBodies(fn: typeof apiFn): Record<string, unknown>[] {
-  return fn.mock.calls.map(([, init]) =>
-    JSON.parse((init as RequestInit).body as string),
-  );
+  // Only the log POSTs: since Wave E auto-send a 201 is followed by a
+  // body-less `GET /api/concept2/link`.
+  return fn.mock.calls
+    .filter(([path]) => path === "/api/logs")
+    .map(([, init]) => JSON.parse((init as RequestInit).body as string));
 }
 
 beforeEach(() => {

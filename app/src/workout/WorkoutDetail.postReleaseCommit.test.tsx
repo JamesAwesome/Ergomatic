@@ -695,7 +695,11 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     await waitFor(() => {
       expect(apiFn).toHaveBeenCalled();
     });
-    const [path, init] = apiFn.mock.calls.at(-1)!;
+    // The LAST log POST — since Wave E auto-send the very last call is the
+    // `GET /api/concept2/link` the 201 triggers.
+    const [path, init] = apiFn.mock.calls
+      .filter(([p]) => p === "/api/logs")
+      .at(-1)!;
     expect(path).toBe("/api/logs");
     const body = JSON.parse(String(init!.body)) as Record<string, unknown>;
     // The three fields that spread would have added, all absent: the late
@@ -951,7 +955,11 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     await waitFor(() => {
       expect(apiFn).toHaveBeenCalled();
     });
-    const [path, init] = apiFn.mock.calls.at(-1)!;
+    // The LAST log POST — since Wave E auto-send the very last call is the
+    // `GET /api/concept2/link` the 201 triggers.
+    const [path, init] = apiFn.mock.calls
+      .filter(([p]) => p === "/api/logs")
+      .at(-1)!;
     expect(path).toBe("/api/logs");
     const body = JSON.parse(String(init!.body)) as Record<string, unknown>;
     expect(body.machineWorkMeters).toBe(LATE_SUMMARY.meters);
@@ -1023,7 +1031,11 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     await waitFor(() => {
       expect(apiFn).toHaveBeenCalled();
     });
-    const [path, init] = apiFn.mock.calls.at(-1)!;
+    // The LAST log POST — since Wave E auto-send the very last call is the
+    // `GET /api/concept2/link` the 201 triggers.
+    const [path, init] = apiFn.mock.calls
+      .filter(([p]) => p === "/api/logs")
+      .at(-1)!;
     expect(path).toBe("/api/logs");
     const body = JSON.parse(String(init!.body)) as Record<string, unknown>;
     expect(body.machineWorkMeters).toBe(LATE_SUMMARY.meters);

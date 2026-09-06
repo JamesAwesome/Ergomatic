@@ -1,5 +1,48 @@
-import type { Concept2Link } from "../api/useConcept2Link";
+import { api } from "../api";
+import { fetchLink, type Concept2Link } from "../api/useConcept2Link";
 import type { StoredLog } from "./storedSummary";
+
+/** Wave E auto-send, spec 2026-09-05 §3.3 — "the Send button pressed for
+ *  you". Called by `useLogForm` (`session/LogSession.tsx`) after a 201,
+ *  AFTER `onSaved` has navigated: fire-and-forget, the row and the link
+ *  carry the outcome (a `c2_result_id` on the row, or the send-failed flag
+ *  on the link), and no client state is kept.
+ *
+ *  ONE FRESH READ decides (A4, delta F5): the link is read again here, not
+ *  taken from any mounted hook's state, so a mode flipped on `/you/concept2`
+ *  mid-form is honoured and a pending or failed read sends nothing. A
+ *  failed read is a decision (no send), not a silence.
+ *
+ *  NO CLIENT ELIGIBILITY CHECK (F3): `isSendable` above reads a STORED row's
+ *  nullable totals, and a form body has different fields — two of its
+ *  clauses were inert against one. The server re-derives eligibility and is
+ *  the authority; a `422 not_eligible` on a timer or hand-entered row is the
+ *  expected answer, swallowed here, and it does not set the failure flag
+ *  (§3.4). Cost: one 422 per non-monitor save for an AUTOMATIC rower.
+ *
+ *  THE CALL IS THE MANUAL SITE'S SHAPE VERBATIM (`Concept2SendBlock.tsx`'s
+ *  `post`): `api()` takes a `RequestInit`, and without the `Content-Type`
+ *  header `express.json()` skips the body and the route 400s on the
+ *  missing `tz` — silently, under AUTOMATIC (delta F1). Every gate on this
+ *  function reads the parsed wire body, not a call count. */
+export async function autoSendAfterSave(logId: string): Promise<void> {
+  const fresh = await fetchLink();
+  if ("failed" in fresh) return;
+  const { link } = fresh;
+  if (!link.available || !link.linked || !link.autoSend) return;
+  try {
+    await api(`/api/concept2/results/${logId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
+    });
+  } catch {
+    // Nothing to do and nowhere to say it: the row's block offers Send on
+    // its next mount, and a request that never left cannot set the flag.
+  }
+}
 
 /** Client mirror of `server/concept2/mapping.ts`'s `eligibilityFailure`
  *  (that function's four clauses, same order). The SERVER is authoritative

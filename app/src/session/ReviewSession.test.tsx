@@ -379,7 +379,11 @@ describe("selected recording recovery", () => {
       expect(
         await screen.findByRole("heading", { name: "Today" }),
       ).toBeVisible();
-      expect(api).toHaveBeenCalledTimes(1);
+      // Wave E auto-send: a 201 is followed by one `GET /api/concept2/link`
+      // (the automatic-send decision), so count the log POSTs, not the spy.
+      expect(
+        api.mock.calls.filter(([path]) => path === "/api/logs"),
+      ).toHaveLength(1);
       expect(api.mock.calls[0]![0]).toBe("/api/logs");
       const body = JSON.parse(api.mock.calls[0]![1].body);
       expect(body).not.toHaveProperty("advancesPlan");
@@ -867,7 +871,11 @@ describe("selected recording recovery", () => {
     expect(store.read()?.sessionKey).toBe(newer.startedAt);
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByRole("heading", { name: "Today" });
-    expect(api).toHaveBeenCalledTimes(2);
+    // Two log POSTs (the failed save and the retry); the auto-send link read
+    // after the 201 is not one of them.
+    expect(
+      api.mock.calls.filter(([path]) => path === "/api/logs"),
+    ).toHaveLength(2);
     expect(JSON.parse(api.mock.calls[1]![1].body)).toMatchObject({
       workoutTitle: "Stationary Front",
       source: "pm5",

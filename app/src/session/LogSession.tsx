@@ -64,6 +64,7 @@ import { clearSelectedTimer } from "./clearSelectedTimer";
 import ReadOnlyRecording from "./ReadOnlyRecording";
 import { requireFiniteRecording, validWorkoutType } from "./recoveryValidation";
 import { recordTestResult } from "../api/testHistory";
+import { autoSendAfterSave } from "../log/concept2Send";
 
 // Hand-off store design spec (rev 4), §8/§1: this route's own hydration
 // boundary. `monitorModeEntry`/`connectedArrivalWithNoRecord` below are both
@@ -871,6 +872,13 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
           logId = null;
         }
         onSaved(logId);
+        // Wave E auto-send §3.3: AFTER the door has navigated, and not
+        // awaited — the save is done, the rower is on Today, and whether
+        // Concept2 gets the row is the row's own business from here
+        // (`log/concept2Send.ts`'s `autoSendAfterSave` reads the link fresh
+        // and decides). A null id (an unreadable 201 body) sends nothing:
+        // there is no row to name.
+        if (logId !== null) void autoSendAfterSave(logId);
         return;
       }
       setSaveError("Couldn't save this session. Try again.");
