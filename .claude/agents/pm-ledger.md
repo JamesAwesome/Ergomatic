@@ -4858,3 +4858,53 @@ the `/api/today` ruling). v0.38.0 recommended.
   "which line would be false if the flag never flipped?" — and it was
   `Nothing changes at save time`, falsified by the new per-save `GET /link`
   that fires for every rower, cohort or not.
+
+## 2026-09-06 — Phase KB close: a withdrawal grep is scoped to the wrong branch's withdrawals
+
+- **The "withdrawn phrasings grepped out" criterion must name whose
+  withdrawal.** KB's exit grep was written against #317's phrasings ("flush
+  with the visual viewport", "verified here, by hand") and came back clean —
+  while a rev-1 sentence THIS BRANCH withdrew four commits later ("installs
+  the plugin for `resize: native` (the WebView shrinks to the keyboard's
+  top)") stood in shipped product code, in the file a future agent reads to
+  learn why the code exists, pointing at a config that now says the opposite.
+  **A branch that revises its own design withdraws two generations of
+  phrasing; the grep only ever sees the older one, because that is the one
+  the criterion was written for.** Fourth consecutive gate to catch a
+  criterion's INSTRUMENT rather than its subject (SF PR1's clause, SF PR2's
+  `(e2e)`, DE PR2's `\bpain\b`).
+- **A shipped note the next build REVERSES is the second instance of the
+  live-surface rule, and the reversal half is the tell.** v0.39.1 item 2 read
+  "The Library no longer shows through the gap … The tabs stay available with
+  the keyboard open" — half false on arrival, half deliberately undone four
+  hours later. Reaffirms the v0.17.0 ruling (strike the false half in the
+  same notes PR) and sharpens it: **grep `releaseNotes.ts` for the nouns of
+  the behaviour you are REVERSING, not only for a claim you are falsifying.**
+  The correction goes on the old entry; the new item stays a feature
+  sentence (SF close: inoculate with a feature, never a warning).
+- **"Same code path" strikes a Gate 0 item soundly only when the untested
+  case cannot fail DIFFERENTLY.** KB struck two. Landscape: upheld — the
+  change is one boolean with no orientation or geometry input, and the item
+  was owed to a FILL whose adequacy was geometric. The numeric keypad's tray:
+  not upheld — the tray was observed on a text keyboard, and the design
+  asserts the keypad's ✓ is the only dismiss, so the untested case is the one
+  where a failure changes class (a nuisance becomes a stuck keyboard on a
+  screen whose tab bar this PR removes). **Ask what the failure COSTS in the
+  untested case, not whether the line of code is the same.**
+- **A mutation recorded against a superseded assertion is not a recorded
+  mutation.** KB's config-test receipt bit rev 1's `toBe("native")`; rev 3
+  shipped `toBe("none")` plus an untested `autoBackdropColor` pin. When a
+  design revision rewrites an assertion, its mutation receipt expires with
+  it — re-run it or the criterion is ticked on evidence for a test that no
+  longer exists.
+- **A note correction owed to a PREVIOUS release has no natural owner.** KB's
+  spec said the new note "replaces v0.39.1's second item", which reads as
+  satisfied by writing the new item. Anything that edits an ALREADY-SHIPPED
+  entry goes in the phase's Exit or a ROADMAP row by name and line, or the
+  notes PR will write forward only (RF14).
+- **Fold: 214 words / 6 bullets / longest 47 — FAIL.** Series: #268 186 ·
+  door PR B 121 · SF PR1 246 · SF PR2 109 · DE PR1 209 · DE PR2 122 ·
+  auto-send 214 · **KB 214.** Third instance of one regression source:
+  mechanism bullets ("why the other option failed") above the fold, with
+  fuller versions already in the Record. The fold owes the outcome and the
+  cost; the road not taken is a Record item.

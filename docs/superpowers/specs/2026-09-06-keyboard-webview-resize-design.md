@@ -252,9 +252,19 @@ below is on the branch:
 - `docs/design/DEVIATIONS.md` row 66, `docs/testing/2026-09-06-keyboard-harness.md`,
   the research doc, this spec, `ROADMAP.md`, the ledger entry, and the
   v0.39.1 release plan's superseded "authoritative for #317" line.
-- Release note, rower words: _"The tab bar now gets out of the way while
-  you type, so the Library no longer shows through under it. It comes back
-  as soon as the keyboard goes."_ — replaces v0.39.1's second item.
+- Release notes — **the notes PR does two things** (PM close, 2026-09-06):
+  (1) the v0.39.2 item, rower words: _"The tab bar now gets out of the way
+  while you type, so the Library no longer shows through under it. It
+  comes back as soon as the keyboard goes. To switch tabs while typing,
+  close the keyboard first with the ✓ above it."_ (2) **rewrite v0.39.1's
+  second item in `app/src/news/content/releaseNotes.ts`** — it currently
+  reads "The Library no longer shows through the gap below the tab bar
+  while you type. The tabs stay available with the keyboard open": the
+  first sentence never became true and the second is what this PR
+  deliberately reverses. Replace with: _"The gap below the tab bar while
+  you type is not fixed in this build. v0.39.2 closes it."_ The
+  correction lives on the old entry; the new item stays a feature
+  sentence.
 
 ## 7. Instruments (RF19)
 
@@ -277,10 +287,23 @@ below is on the branch:
 - Gate 0 approved (§4).
 - Unit + client green; `pnpm e2e` green with the two fill tests gone and
   the bottom-edge test in; no web capture moved.
-- Both mutations recorded (config test; bottom-edge test).
+- Mutations recorded against the SHIPPED assertions (PM close condition
+  3): config `KeyboardResize.None` → `.Body` → "expected 'body' to be
+  'none'"; `autoBackdropColor: "dom"` added → "expected 'dom' to be
+  undefined"; bottom-edge `.tabbar { bottom: -10px }` → "Expected: <=
+  853, Received: 862"; adapter cancelled-guard dropped → "expected vi.fn()
+  to not be called at all, but actually been called 1 times"; store stale
+  value kept → "expected true to be false"; each restored → green.
 - The withdrawn phrasings grepped out of `app/src`, `docs/design`,
   `docs/testing`, `docs/superpowers`; each hit gone or quoted as the thing
   corrected.
-- PM close = the release call: tester-visible, on the first screen a
-  stranger types into — **TestFlight recommended** as v0.39.2 with the note
-  in §6; `git log v0.39.1..main --oneline` accounted for at the tag.
+- PM close (2026-09-06): PASS WITH CONDITIONS — **v0.39.2 (patch)
+  recommended**: a native plugin and a regenerated `Package.swift` are a
+  RELEASING trigger on their own, and v0.39.1's shipped note is false on
+  testers' phones until the notes PR rewrites it (§6). `git log
+  v0.39.1..main --oneline` accounted for at the tag (#316 NFC design, if
+  merged first, is docs-only: no rower-facing item). One device check
+  owed before merge: a numeric field on build D (Builder duration or a
+  baseline split) — tray present, ✓ dismisses, bar returns — because the
+  tray was observed on a TEXT keyboard and the design asserts the ✓ is the
+  keypad's only dismiss.

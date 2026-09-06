@@ -568,9 +568,18 @@ after dismiss, rotation) were struck as consequences of a resize D does
 not do (spec §4). Whole-branch review carries the delta pass on the two
 new mechanisms. PM close = the release call.
 
-**Exit:** Gate 0 approved; e2e green with no web capture moved; the
-withdrawn phrasings grepped out of `app/src`, `docs/design`,
-`docs/testing`; v0.39.2 recommended with the note in spec §6.
+**Exit:** Gate 0 approved (build D); e2e green with no web capture
+moved; the withdrawn phrasings — #317's AND this branch's own rev-1
+("resize: native", "shrinks to the keyboard's top") — grepped out of
+`app/src`, `app/e2e`, `docs/design`, `docs/testing`; one numeric-field
+check on the phone (tray + ✓ on the keypad); PM close PASS WITH
+CONDITIONS 2026-09-06, **v0.39.2 recommended**. **The notes PR does two
+things:** the v0.39.2 item (spec §6, with the dismiss-first clause) AND
+a rewrite of v0.39.1's second item in `app/src/news/content/releaseNotes.ts`,
+which claims a fix that never worked and a behaviour this phase reverses
+("The tabs stay available with the keyboard open") — replace with "The
+gap below the tab bar while you type is not fixed in this build. v0.39.2
+closes it." Then the ledger row.
 
 ## Wave A — The front door
 
