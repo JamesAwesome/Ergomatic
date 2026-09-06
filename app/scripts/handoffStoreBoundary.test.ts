@@ -647,7 +647,21 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
     //  - `useMonitorSession.ts: receiptChannelOwner` — an integer
     //    generation counter guarding receipt-channel ownership (its own
     //    doc comment). A `number`.
+    //  Phase NF (design spec 2026-09-03 §5 and "Instrumentation and
+    //  replay") adds three, none able to hold a run:
+    //  - `capacitorBle.ts: operationTail` — the module-level FIFO drain
+    //    shared by the manual picker and the targeted scan (a
+    //    `Promise<void>`), which must outlive an interstitial unmount and
+    //    a fresh transport instance by design.
+    //  - `capacitorBle.ts: poisoned` — the `stopLEScan()`-failed sentinel
+    //    (`ScanCleanupFailedError | null`), never cleared in-process.
+    //  - `nfc/connectionAttemptTrace.ts: latest` — the last COMPLETED
+    //    connection-attempt trace, a process-local diagnostic snapshot of
+    //    fixed-vocabulary entries (no run, no identity).
     expect(found).toStrictEqual([
+      "src/monitor/nfc/connectionAttemptTrace.ts: latest",
+      "src/monitor/transports/capacitorBle.ts: operationTail",
+      "src/monitor/transports/capacitorBle.ts: poisoned",
       "src/monitor/transports/capacitorBle.ts: initPromise",
       "src/monitor/useMonitorSession.ts: receiptChannelOwner",
     ]);

@@ -1,0 +1,113 @@
+// Phase NF: scripted NFC reader (dev harness). The instrument the design
+// spec's "Instrumentation and replay" §1 names: unit, integration and e2e
+// tests feed NATIVE-SHAPED record and session-ending events through the
+// production bridge, parser and detail coordinator, so the routed
+// Scan-NFC-to-`armed` proof starts upstream of every producer (RF24).
+// Reached only through `adapters/nfcReader.ts`'s fold-away gate; the
+// literal in this header is `scripts/dist-grep.sh`'s needle for proving
+// this file never ships.
+
+import type { NfcRecord } from "../../../domain/monitor/nfc.js";
+import {
+  NfcAbortError,
+  NfcCancelledError,
+  NfcInvalidatedError,
+  NfcStartError,
+  NfcTimeoutError,
+  type NfcCapability,
+  type NfcReadOptions,
+  type NfcReader,
+} from "../../adapters/nfcReader";
+import { decodeNfcEvent } from "./nfcBridge";
+
+export interface NfcScript {
+  capability: NfcCapability;
+  /** What the reader delivers for the attempt. `records` are delivered as
+   *  a native-shaped `nfcEvent` carrying the attempt ID and pass through
+   *  the production bridge, exactly like the plugin's own event. */
+  outcome:
+    | { kind: "records"; records: readonly NfcRecord[] }
+    | { kind: "cancelled" }
+    | { kind: "timeout" }
+    | { kind: "invalidated"; cause?: "multipleTags" | "tagFailure" }
+    | { kind: "start-failed" };
+  /** Optional: deliver the outcome only once this resolves, so a test can
+   *  interleave an abort or a background transition first. */
+  gate?: Promise<void>;
+}
+
+export interface ScriptedNfcReader extends NfcReader {
+  /** How many sessions were started. */
+  starts(): number;
+  /** Every attempt ID the reader was told to stop, in order. */
+  stops(): readonly string[];
+}
+
+export function createScriptedNfcReader(script: NfcScript): ScriptedNfcReader {
+  let starts = 0;
+  const stops: string[] = [];
+  return {
+    capability: () => Promise.resolve(script.capability),
+    async readOne({ attemptId, signal, trace }: NfcReadOptions) {
+      if (signal.aborted) throw new NfcAbortError();
+      trace.record("session-requested");
+      if (script.outcome.kind === "start-failed") {
+        trace.record("start-failed");
+        throw new NfcStartError("scripted start failure");
+      }
+      starts += 1;
+      let aborted = false;
+      const onAbort = (): void => {
+        aborted = true;
+        trace.record("abort-requested");
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      try {
+        if (script.gate) await script.gate;
+        if (aborted) throw new NfcAbortError();
+        const outcome = script.outcome;
+        switch (outcome.kind) {
+          case "records": {
+            // Native-shaped, through the production bridge — never handed
+            // to the parser directly.
+            const decoded = decodeNfcEvent(
+              {
+                attemptId,
+                type: "ndef",
+                tag: {
+                  ndefMessage: outcome.records.map((r) => ({
+                    tnf: r.tnf,
+                    type: [...r.type],
+                    id: [],
+                    payload: [...r.payload],
+                  })),
+                },
+              },
+              attemptId,
+            );
+            if ("error" in decoded) {
+              // Same terminal the native arm gives a malformed event that
+              // carries this attempt's ID (F3): a tag failure.
+              trace.record("invalid-native-event");
+              throw new NfcInvalidatedError("tagFailure");
+            }
+            trace.record("tag-event");
+            return decoded.records;
+          }
+          case "cancelled":
+            throw new NfcCancelledError();
+          case "timeout":
+            throw new NfcTimeoutError();
+          case "invalidated":
+            throw new NfcInvalidatedError(outcome.cause);
+        }
+      } finally {
+        signal.removeEventListener("abort", onAbort);
+        stops.push(attemptId);
+        trace.record("reader-settled");
+      }
+    },
+    starts: () => starts,
+    stops: () => stops.slice(),
+  };
+}

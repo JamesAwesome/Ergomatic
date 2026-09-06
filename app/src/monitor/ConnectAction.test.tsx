@@ -15,6 +15,7 @@ import {
   resetForTests as resetHandoffStoreForTests,
   setReceiptChannel,
   stageRetire as stageRetireHandoffForTest,
+  stagedRetireAttemptId,
   takeStagedRetire as takeStagedRetireHandoff,
   type HandoffReceipt,
 } from "./handoffStore";
@@ -418,7 +419,7 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     // Staged, not retired: the record is untouched, on both tiers.
     expect(currentUnretiredHandoff()).toStrictEqual(before);
     expect(loadMonitorRun()).not.toBeNull();
-    const staged = takeStagedRetireHandoff();
+    const staged = takeStagedRetireHandoff(stagedRetireAttemptId() ?? "");
     expect(staged).toStrictEqual([
       { sessionKey: before!.sessionKey, revision: before!.revision },
     ]);
@@ -435,7 +436,9 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+    expect(
+      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+    ).toStrictEqual([]);
   });
 
   it("neither Connect anyway nor a direct proceed ever retires anything from this component — no retire receipt fires either way", async () => {
@@ -458,7 +461,7 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     // The staged set from the press above is still sitting in the store,
     // exactly where `useMonitorSession.ts`'s own "armed" handler expects
     // to find and consume it — nothing here already took it.
-    const staged = takeStagedRetireHandoff();
+    const staged = takeStagedRetireHandoff(stagedRetireAttemptId() ?? "");
     expect(staged.length).toBe(1);
     setReceiptChannel(null);
   });
@@ -485,9 +488,9 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     // `superseded: true` truthfully later, instead of trivially matching
     // whatever is current (see `handoffStore.stagedRetireSet`'s own doc
     // comment on why a fresh re-read at press time would defeat this).
-    expect(takeStagedRetireHandoff()).toStrictEqual([
-      { sessionKey: before!.sessionKey, revision: 0 },
-    ]);
+    expect(
+      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+    ).toStrictEqual([{ sessionKey: before!.sessionKey, revision: 0 }]);
   });
 
   it("nothing to protect: Connect stages an EMPTY set, clearing any stale set from an earlier, abandoned press", async () => {
@@ -495,14 +498,17 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     // since cancelled/abandoned) must not survive to authorize THIS
     // press's own eventual "armed" event (rev-3 antagonist: "a set
     // staged for attempt 1 must not authorize attempt 2's retire").
-    stageRetireHandoffForTest([
-      { sessionKey: "2020-01-01T00:00:00.000Z", revision: 7 },
-    ]);
+    stageRetireHandoffForTest(
+      [{ sessionKey: "2020-01-01T00:00:00.000Z", revision: 7 }],
+      "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+    );
     renderConnect();
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+    expect(
+      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+    ).toStrictEqual([]);
   });
 
   it("nothing staged (a SessionRun-only stage): the guard shows the confirm, but stages an empty set — no MonitorRun to protect", async () => {
@@ -515,6 +521,8 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     expect(
       screen.getByText("You have an unlogged session. Connecting discards it."),
     ).toBeInTheDocument();
-    expect(takeStagedRetireHandoff()).toStrictEqual([]);
+    expect(
+      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+    ).toStrictEqual([]);
   });
 });

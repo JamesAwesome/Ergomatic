@@ -124,7 +124,15 @@ if [ ! -d "$DIST" ]; then
   exit 1
 fi
 
-NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "C2 link probe (dev harness)")
+# Phase NF adds three: `scripted NFC reader (dev harness)` is the header
+# literal of `src/monitor/nfc/scriptedNfcReader.ts` (reached only through
+# `adapters/nfcReader.ts`'s fold-away gate); `CapacitorNfc` is the
+# `registerPlugin('CapacitorNfc'` literal inside `@capgo/capacitor-nfc`'s
+# own JS, which only `src/native/nfc.ts` imports; `Haptics` is the same
+# shape for `@capacitor/haptics` (`src/native/haptics.ts`). Each proven
+# able to go red on 2026-09-06 by adding a static import to `src/main.tsx`
+# and watching this script FIND it, then reverting.
+NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "C2 link probe (dev harness)" "scripted NFC reader (dev harness)" "registerPlugin(\"CapacitorNfc\"" "registerPlugin(\"Haptics\"")
 FAILED=0
 
 for needle in "${NEEDLES[@]}"; do

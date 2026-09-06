@@ -27,6 +27,10 @@ import {
 } from "../monitor/handoffStore";
 import ConnectAction from "../monitor/ConnectAction";
 import type { RunIdentity } from "../monitor/useMonitorSession";
+import type {
+  ConnectionAttemptId,
+  MonitorDiscoveryRequest,
+} from "../../domain/monitor/types.js";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { useStartWorkout } from "../session/useStartWorkout";
 import BackLink from "../shell/BackLink";
@@ -176,6 +180,8 @@ function WorkoutDetailView({
     // widened the same way, and omits its "2K … · 6K …" line when null.
     baselines: Baselines | null;
     nudgedCount: number;
+    /** Phase NF: how the interstitial finds the monitor for THIS attempt. */
+    request: MonitorDiscoveryRequest;
   } | null>(null);
   // Lazy read-once, refreshed explicitly when the interstitial hands
   // control back (see `handleInterstitialExit`/`handleRowInstead` below) —
@@ -232,7 +238,7 @@ function WorkoutDetailView({
   // union entirely: nothing has been sent to a monitor yet, so this is not
   // a `useMonitorSession` failure and does not deserve a phase transition
   // or a driver connection at all.
-  function handleConnectProceed() {
+  function handleConnectProceed(attemptId: ConnectionAttemptId) {
     setConnectError(null);
     // Phase 6I: `needsBaselines` (domain/needsBaselines.ts) is the SAME
     // predicate every other coupled guard site shares — nudging never
@@ -274,6 +280,7 @@ function WorkoutDetailView({
       identity: { workoutId: workout.id, title: workout.title, logSeed },
       baselines,
       nudgedCount,
+      request: { kind: "picker", attemptId },
     });
   }
 
@@ -369,6 +376,7 @@ function WorkoutDetailView({
         onExit={handleInterstitialExit}
         onRowInstead={handleRowInstead}
         onEnded={handleConnectedEnded}
+        request={connecting.request}
       />
     );
   }
@@ -583,7 +591,7 @@ function ConnectBlock({
 }: {
   bluetoothStatus: BluetoothStatus;
   lastDevice: string | null;
-  onProceed: () => void;
+  onProceed: (attemptId: ConnectionAttemptId) => void;
 }) {
   const dashed = bluetoothStatus === "off" || bluetoothStatus === "absent";
   return (

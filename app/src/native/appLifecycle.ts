@@ -49,4 +49,5 @@ export async function registerNativeAppLifecycleListener(
     void resume.remove();
   };
 }
+
 /* v8 ignore stop */

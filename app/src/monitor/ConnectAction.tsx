@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
 import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
 import {
   currentUnretired as currentUnretiredHandoff,
@@ -109,16 +110,28 @@ import {
  * two-button panel that has replaced its trigger cannot be left ambiguously
  * armed and so has never carried one. Cancel is the only way back.
  */
+/** Phase NF: the press mints the attempt ID that keys the staged receipt
+ *  and travels, unchanged, through the interstitial into
+ *  `useMonitorSession.connect(request)`. Same generator the session id uses
+ *  (`crypto.randomUUID()` where present). */
+function mintAttemptId(): ConnectionAttemptId {
+  return crypto.randomUUID();
+}
+
 export default function ConnectAction({
   onProceed,
 }: {
-  onProceed: () => void;
+  onProceed: (attemptId: ConnectionAttemptId) => void;
 }) {
   // One nullable union, not a boolean plus a reason — `WorkoutDetail`'s own
   // `replaceStage` comment explains the choice: either non-null value both
   // blocks the immediate `onProceed()` AND picks the panel's copy, so the
   // two can never disagree about which case triggered the stage.
   const [stage, setStage] = useState<ConnectGuardStage>(null);
+  // The pending intent's attempt ID: minted at the press, kept while the
+  // confirm panel is up so "Connect anyway" resumes the SAME attempt.
+  const [pendingAttempt, setPendingAttempt] =
+    useState<ConnectionAttemptId | null>(null);
 
   // Task 5 review fix round: stages the AUTHORIZATION in the STORE, not
   // local state — `handoffStore.ts`'s own `stagedRetireSet` doc comment
@@ -132,6 +145,7 @@ export default function ConnectAction({
   // `onProceed`, the shape this component shipped with before the retire
   // briefly (and wrongly) lived here at press time.
   function handleConnect() {
+    const attemptId = mintAttemptId();
     const monitorEntry = currentUnretiredHandoff();
     stageRetireHandoff(
       monitorEntry !== null
@@ -142,13 +156,15 @@ export default function ConnectAction({
             },
           ]
         : [],
+      attemptId,
     );
     const staged = connectGuardStage(monitorEntry !== null);
     if (staged !== null) {
+      setPendingAttempt(attemptId);
       setStage(staged);
       return;
     }
-    onProceed();
+    onProceed(attemptId);
   }
 
   if (stage !== null) {
@@ -169,7 +185,10 @@ export default function ConnectAction({
             type="button"
             className="button-outline"
             onClick={() => {
-              discardStagedRetireHandoff();
+              if (pendingAttempt !== null) {
+                discardStagedRetireHandoff(pendingAttempt);
+              }
+              setPendingAttempt(null);
               setStage(null);
             }}
           >
@@ -182,7 +201,15 @@ export default function ConnectAction({
               the connect attempt has actually succeeded. See this file's
               own header comment, "CORRECTED (Task 5 review fix round...",
               for why a retire at THIS press was wrong. */}
-          <button type="button" className="button-primary" onClick={onProceed}>
+          <button
+            type="button"
+            className="button-primary"
+            onClick={() => {
+              const attemptId = pendingAttempt ?? mintAttemptId();
+              setPendingAttempt(null);
+              onProceed(attemptId);
+            }}
+          >
             Connect anyway
           </button>
         </div>

@@ -45,12 +45,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
-import type {
-  IntervalActual,
-  MonitorDriver,
-  MonitorEvent,
-  MonitorFrame,
-  Transport,
+import { isValidPm5AdvertisingName } from "../../domain/monitor/nfc.js";
+import {
+  hasTargetedScan,
+  isValidAttemptId,
+  type ConnectionAttemptId,
+  type DiscoveredMonitor,
+  type IntervalActual,
+  type MonitorDiscoveryRequest,
+  type MonitorDriver,
+  type MonitorEvent,
+  type MonitorFrame,
+  type Transport,
 } from "../../domain/monitor/types.js";
 import {
   createPm5Driver,
@@ -186,7 +192,16 @@ export interface ConnectedError {
     | "link-failed"
     | "transport-missing"
     | "scan-dismissed"
-    | "permission-denied";
+    | "permission-denied"
+    // Phase NF (design spec 2026-09-03 §5): the five TARGETED discovery
+    // failures. Lookup/cleanup failures, never machine refusals; each
+    // carries its approved copy in `detail` and none inherits the generic
+    // "End whatever is showing…" sentence.
+    | "target-not-advertising"
+    | "target-already-connected"
+    | "target-ambiguous"
+    | "target-interrupted"
+    | "scan-cleanup-failed";
   detail: string;
   raw?: string;
 }
@@ -973,7 +988,12 @@ export interface MonitorSession {
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
    *  header). */
-  connect(): Promise<void>;
+  /** Phase NF: `request` selects discovery. Omitted (every pre-NF caller,
+   *  JustRow included) means today's picker under a freshly minted attempt
+   *  ID; an `advertised-name` request runs the picker-free exact-name scan
+   *  through `TargetedScanTransport.scanTarget` and fails closed —
+   *  `transport-missing`, no radio call — when the transport lacks it. */
+  connect(request?: MonitorDiscoveryRequest): Promise<void>;
   program(p: WorkoutProgram, identity: RunIdentity): Promise<void>;
   /** Phase JR PR 2: arms for the machine's OWN free row, filing the record
    *  under a Just Row identity (`workoutId: null`, `mode: "justrow"`).
@@ -1626,6 +1646,56 @@ function mapRadioFailure(err: unknown): ConnectedError {
   };
 }
 
+/** Phase NF (design spec 2026-09-03 §5): the targeted failures travel by
+ *  NAME from `capacitorBle.ts` (and the fake/replay, which throw the same
+ *  names) and map here onto the approved copy — independent literals a
+ *  test pins one by one. An invalid request or a transport without the
+ *  capability is `transport-missing`: honest (no targeted transport) and
+ *  already-approved copy. Anything else falls through to the radio mapper. */
+const TARGETED_FAILURE_COPY: Readonly<
+  Record<string, { reason: ConnectedError["reason"]; detail: string }>
+> = {
+  TargetMonitorNotAdvertisingError: {
+    reason: "target-not-advertising",
+    detail: "Open Connect Device on this PM5, then try again.",
+  },
+  TargetAlreadyConnectedError: {
+    reason: "target-already-connected",
+    detail: "End this PM5's current connection, then try again.",
+  },
+  TargetMonitorAmbiguousError: {
+    reason: "target-ambiguous",
+    detail: "More than one PM5 has this name. Use Connect.",
+  },
+  TargetScanInterruptedError: {
+    reason: "target-interrupted",
+    detail: "Connection interrupted. Try again.",
+  },
+  ScanCleanupFailedError: {
+    reason: "scan-cleanup-failed",
+    detail: "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
+  },
+  TargetedRequestInvalidError: {
+    reason: "transport-missing",
+    detail: "This device has no Bluetooth transport.",
+  },
+};
+
+function mapTargetedFailure(err: unknown): ConnectedError {
+  const name = err instanceof Error ? err.name : "";
+  const raw = err instanceof Error ? err.message : String(err);
+  const hit = TARGETED_FAILURE_COPY[name];
+  if (hit !== undefined) return { ...hit, raw };
+  return mapRadioFailure(err);
+}
+
+/** Phase NF: mints a `ConnectionAttemptId` for a zero-argument `connect()`
+ *  (JustRow's callers). The detail screen mints its own at the press and
+ *  passes it in a request; both use the same generator as the session id. */
+function mintAttemptId(): ConnectionAttemptId {
+  return defaultSessionId();
+}
+
 /** The default for `MonitorSessionDeps.createSessionId` — see
  *  `mintSessionId`'s own doc comment (below, inside the hook) for what this
  *  id is for. `crypto.randomUUID()` when it exists; otherwise a UUIDv4
@@ -2117,6 +2187,20 @@ export function useMonitorSession(
   /** One `connect()` at a time — a second press while the monitor chooser is open
    *  must not open a second one. */
   const connectingRef = useRef(false);
+  /** Phase NF: the attempt ID of the CURRENT (or most recent) `connect()`.
+   *  Never cleared — a stale value can only fail to match a keyed
+   *  staged-retire set (UUID v4), never falsely match. Read by the armed
+   *  handler's keyed take and by the two keyed discards. */
+  const attemptIdRef = useRef<ConnectionAttemptId | null>(null);
+  /** Phase NF: the abort owner of an in-flight targeted scan, paired with
+   *  its attempt ID. Cleared ONLY by object-identity comparison in the
+   *  scan's own `finally`, so a late-settling attempt A can never clear
+   *  attempt B's controller. `cancel()`, `teardown()` and the background
+   *  transition abort it. */
+  const targetedAbortRef = useRef<{
+    attemptId: ConnectionAttemptId;
+    controller: AbortController;
+  } | null>(null);
   /** WHICH connect attempt owns the flow. Bumped at the top of every
    *  `connect()` and again by `cancel()`, so an attempt can ask whether it
    *  is still the current one after each of its awaits.
@@ -3633,7 +3717,10 @@ export function useMonitorSession(
         // revision never rejects) — a late burst from an unrelated, torn-
         // down hook racing the rower's own hesitation on the confirm panel
         // is exactly the case this protects.
-        const staged = takeStagedRetireHandoff();
+        // Phase NF: KEYED take — a set staged by another attempt (a
+        // detail press whose NFC read ended quietly, then JustRow's own
+        // zero-argument connect) authorizes nothing here.
+        const staged = takeStagedRetireHandoff(attemptIdRef.current ?? "");
         if (staged.length > 0) {
           retireHandoff(staged, "connect-guard-armed");
         }
@@ -3938,7 +4025,9 @@ export function useMonitorSession(
         // own "armed" event. `discardStagedRetireHandoff` (F-3/F-4,
         // re-review), not the bare `takeStagedRetireHandoff` the armed
         // handler uses — this path receipts a genuine discard.
-        discardStagedRetireHandoff();
+        if (attemptIdRef.current !== null) {
+          discardStagedRetireHandoff(attemptIdRef.current);
+        }
         update({ ...INITIAL_STATE, programDropped: true });
         return;
       }
@@ -4172,6 +4261,9 @@ export function useMonitorSession(
       // supersede itself. `cancel()` bumping and then calling `teardown`
       // bumps twice, which a counter does not care about.
       attemptRef.current += 1;
+      // Phase NF: an in-flight targeted scan is aborted synchronously here
+      // too — an unmount mid-scan must stop the radio, not only the driver.
+      targetedAbortRef.current?.controller.abort();
       // Resolved FIRST — every step below needs the same driver, and
       // clearing `driverRef` here (rather than after stash/unsubscribe, as
       // this used to) is a pure reordering: a re-entrant teardown
@@ -4652,479 +4744,544 @@ export function useMonitorSession(
     [update],
   );
 
-  const connect = useCallback(async (): Promise<void> => {
-    // Since cancel() claims driverRef SYNCHRONOUSLY before its awaits (the
-    // MEDIUM-9 deadlock fix), this guard alone does not cover an in-flight
-    // cancel: driverRef is already null while cancel's terminate is still
-    // on the wire. This comment used to end "Unreachable today only because
-    // onExit() unmounts the interstitial synchronously … if cancel ever
-    // stops unmounting, this guard needs a cancellingRef." `JustRowObserver`
-    // is that caller, and this is that ref: `attemptRef` (its own doc
-    // comment carries the full account). The guard below is now the
-    // FIRST of two — it stops a second press, and the `superseded()`
-    // checks after each await stop an abandoned attempt.
-    if (connectingRef.current || driverRef.current !== null) return;
-    connectingRef.current = true;
-    const attempt = (attemptRef.current += 1);
-    /** True once `cancel()` (or a later `connect()`) has moved on. A
-     *  superseded attempt must not write shared state, must not clear a
-     *  `connectingRef` it no longer owns, and disposes only of the
-     *  transport it built itself. */
-    const superseded = (): boolean => attemptRef.current !== attempt;
-    // Phase LL Task 2 review fix (task-1-report Minor, `useMonitorSession.
-    // ts:1665` at the time it was filed): `livenessRef.current` used to be
-    // set only after the `transport === null` check below, and never
-    // cleared — so a SECOND `connect()` that fails `transport-missing`
-    // (no transport ever resolved this attempt) left the PREVIOUS
-    // connection's liveness snapshot sitting in the ref, and `fail()`
-    // would attach it to a failure it has nothing to do with. Nulled here,
-    // at the very top of every attempt, before anything can fail — the
-    // same "a fresh connect() never inherits a stale PRIOR value" rule
-    // `capacitorBle.ts`'s own `pendingCallerDisconnects`/M-2 comment
-    // documents for its own per-attempt state. `frameSilence` resets the
-    // same way: a fresh attempt starts on a stream that has said nothing
-    // yet, never latched by whatever the last connection's watchdog saw.
-    livenessRef.current = null;
-    // §5.3: DEFENSIVE, and deliberately unlike `rowingStreakRef`, which does
-    // NOT clear here at all. **Reachable only because no surface offers
-    // Connect with a run still open.** Round 1 of this task's review
-    // corrected the reason first written here: `runRef.current` is NOT null
-    // by the time a fresh attempt begins — the only two sites that null it
-    // are the RC-37 exit and `cancel()`, and neither `fail()` nor the
-    // `disconnected` handler is one of them. A link lost mid-row therefore
-    // leaves an OPEN run and a HELD reading, and `endSession` has no phase
-    // guard that would stop a later close from reading it. What holds this
-    // off today is the call graph, not the state: the mid-row lost surface
-    // offers End, never Connect (`justrow/JustRow.tsx`'s own "Try again is
-    // honest here only because no row was under way"), and the
-    // interstitial's Try Again is pre-row only. **ROADMAP's R10 reconnect
-    // would arm exactly this, and then THIS CLEAR is what loses the
-    // metres** — a reconnect that resumes an open run must not run it.
-    // Carries no mutation because nothing can reach it (RF21).
-    lastRowingFrameRef.current = null;
-    partialMintRefusedRef.current.clear();
-    hysteresisCancelRef.current?.();
-    hysteresisCancelRef.current = null;
-    degradedUnsubRef.current = null;
-    lifecycleUnsubRef.current = null;
-    // NOTHING SESSION-IDENTITY-SHAPED HAPPENS HERE (review round 5, item 1,
-    // P1). Rounds 2-4 minted `sessionIdRef` and reset the latch guard at
-    // this line — an ATTEMPT boundary, which is not a session boundary. The
-    // log this hook is still holding belongs to whatever session last
-    // reached GATT, and it stays there through a `cancel()` on purpose; a
-    // second attempt cancelled before ITS GATT connect therefore left the
-    // hook holding the old session's log beside a brand-new id, and
-    // `stash()` filed a clone of that old trace into a fresh history slot,
-    // once per cancelled attempt. The mint now lives at the ONE line that
-    // replaces the log (`sessionRef.current = { ... }`, below the GATT
-    // connect), so identity and trace can only ever change together.
-    //
-    // THE PATCH BELOW IS NOT AN EXCEPTION TO THAT (merge of PR #259 into
-    // this branch). `deviceName` is PUBLISHED UI STATE, not session
-    // identity: it names the peripheral this attempt is about to talk to,
-    // it is read by callers deciding whether a driver is ready, and it is
-    // republished from the transport once this attempt has one. It carries
-    // no id, no log and no per-session counter, so clearing it here crosses
-    // no session boundary and the rule above stands without exception.
-    //
-    // `deviceName: null` joins this patch (review #2 on PR #259): a raw
-    // disconnect deliberately RETAINS the old name — the lost frames need
-    // it — but a FRESH ATTEMPT must not inherit it, because the name is
-    // the one driver-ready fact callers can see (`ConnectedInterstitial`'s
-    // own program effect keys on exactly it, and resets its dedupe on the
-    // null). Without this, a reconnect published `pairing` with the STALE
-    // name while `driverRef` was still null, and a caller arming on the
-    // name reached `beginFreeRow()` with no driver — `transport-missing`
-    // on a retry that should have worked. The same "a fresh connect()
-    // never inherits a stale PRIOR value" rule the block above documents
-    // for liveness and frameSilence; the name comes back at this attempt's
-    // own closing `update({ deviceName: device.name })` — the "Stays
-    // `pairing` on purpose" line at the end of the GATT block below — after
-    // the driver it vouches for exists. (The line number this used to cite
-    // was correct on main and is not here: the ring/session work above it
-    // moves it. Named rather than numbered for that reason.)
-    update({
-      phase: "picking",
-      error: null,
-      frameSilence: false,
-      deviceName: null,
-    });
-    // Awaited unconditionally — the platform-conditional default
-    // (`adapters/monitorTransport.ts`'s `defaultTransport`, ROADMAP CL item
-    // 2) returns a `Promise` on the native arm (its own dynamic
-    // `import("../monitor/transports/capacitorBle")`) and whenever the DEV
-    // fake-injection seam (`transports/index.ts`'s `resolveDefaultTransport`)
-    // is about to dynamic-`import()` `fake.ts`; every other path (a real
-    // `createWebBluetoothTransport()`, and every test's own synchronous
-    // `createTransport` override) resolves on the same tick, so `await`
-    // costs nothing observable there.
-    const transport = await (
-      depsRef.current.createTransport ??
-      (() => defaultTransport(livenessDepsRef.current))
-    )();
-    if (superseded()) {
-      // Cancelled while the transport was still resolving (the native and
-      // DEV arms both `await` a dynamic import here). Nothing was built
-      // beyond the transport itself, so hand it back and leave every shared
-      // ref to whoever owns them now.
-      if (transport !== null) bestEffort(transport.disconnect());
-      return;
-    }
-    if (transport === null) {
-      connectingRef.current = false;
-      fail({
-        reason: "transport-missing",
-        detail: "This device has no Bluetooth transport.",
-      });
-      return;
-    }
-    // Phase LL Task 1: captured whether or not scan/connect/program ever
-    // succeeds — `fail()` reads this optionally, so a failure at ANY later
-    // step (scan dismissed, a radio throw, a program rejection) still has
-    // whatever the decorator had already observed by then.
-    livenessRef.current = hasLivenessSnapshot(transport) ? transport : null;
-    try {
-      // The platform's chooser (browser chrome on web, the plugin's
-      // in-process sheet on iOS). One result or none either way — the app
-      // never sees a list (C2, as revised by phone-BLE §3).
-      const found = await transport.scan();
-      if (superseded()) {
-        bestEffort(transport.disconnect());
-        return;
-      }
-      const device = found[0];
-      if (device === undefined) {
-        fail({
-          reason: "scan-dismissed",
-          detail: "No monitor was picked.",
-        });
-        bestEffort(transport.disconnect());
-        return;
-      }
-      update({ phase: "pairing" });
-      await transport.connect(device.id);
-      // THE ONE THAT MATTERS. Everything below builds and registers: the
-      // log, the driver, its ten subscriptions, the lifecycle listener.
-      // A cancel that landed during the GATT connect must stop here, or
-      // all of it comes up behind a screen that already says otherwise.
-      if (superseded()) {
-        bestEffort(transport.disconnect());
-        return;
-      }
-      // Phase LL Task 1: the log's own `atMs` clock is the SAME `now` the
-      // liveness decorator uses (`livenessDepsRef.current.now`) — one
-      // clock, so a `liveness-silence`/`liveness-snapshot` entry's `atMs`
-      // and the `LivenessSnapshot.atMs` it carries read off the identical
-      // source, never two independent `Date.now()` calls that could drift
-      // a millisecond apart for no reason.
-      const log = (
-        depsRef.current.createLog ??
-        (() => createEventLog(undefined, livenessDepsRef.current.now))
-      )();
-      // THE LOGICAL SESSION BEGINS HERE, AND ONLY HERE (review round 5,
-      // item 1, P1). The link is up and the log exists, so this is the one
-      // moment a new connected session can be said to have started — and
-      // therefore the one place its identity may be minted. Every previous
-      // round minted at `connect()`'s entry instead, which is an ATTEMPT
-      // boundary: attempts that never got this far then paired a fresh id
-      // with the PREVIOUS session's log (which survives a cancel by design),
-      // and `stash()` cloned that log into a new history slot. One
-      // assignment, one object, no way to write half of it.
-      //
-      // §6's counters and their guard are FIELDS of that object rather than
-      // refs reset alongside it, so they cannot be reset by anything that
-      // is not a new session either — the last of the four aliasing
-      // surfaces rounds 1-4 were each closing one at a time.
-      const session: LogicalSession = {
-        id: mintSessionId(),
-        log,
-        latchCounted: false,
-        latches: 0,
-        resumes: 0,
+  const connect = useCallback(
+    async (request?: MonitorDiscoveryRequest): Promise<void> => {
+      // Since cancel() claims driverRef SYNCHRONOUSLY before its awaits (the
+      // MEDIUM-9 deadlock fix), this guard alone does not cover an in-flight
+      // cancel: driverRef is already null while cancel's terminate is still
+      // on the wire. This comment used to end "Unreachable today only because
+      // onExit() unmounts the interstitial synchronously … if cancel ever
+      // stops unmounting, this guard needs a cancellingRef." `JustRowObserver`
+      // is that caller, and this is that ref: `attemptRef` (its own doc
+      // comment carries the full account). The guard below is now the
+      // FIRST of two — it stops a second press, and the `superseded()`
+      // checks after each await stop an abandoned attempt.
+      if (connectingRef.current || driverRef.current !== null) return;
+      connectingRef.current = true;
+      const discovery: MonitorDiscoveryRequest = request ?? {
+        kind: "picker",
+        attemptId: mintAttemptId(),
       };
-      sessionRef.current = session;
-      // Task 1 (lost-monitor design spec): a fresh connection tracks no
-      // hidden window yet — clears whatever a PREVIOUS connection's own
-      // background/foreground pair (or an interrupted one that never saw
-      // its matching foreground) left behind.
-      framesWhileHiddenRef.current = null;
-      // §3: this session's own resume-edge instrument starts fresh too —
-      // same PER-SESSION lifetime as `framesWhileHiddenRef` immediately
-      // above. `resumeEdgeArmedRef`/`resumeStaleRunRef` ALSO get an
-      // additional per-RUN clear elsewhere (their own doc comments above
-      // have the full discipline — `program()`'s fresh-arm reset and the
-      // RC-37 programDropped/ready exit); this site only ever needs to
-      // cover the session-wide floor, since every one of those per-run
-      // sites already runs INSIDE a session this reset has already started
-      // fresh. §6's latch counters need no line here at all any more: they
-      // are born zero as fields of the session object built immediately
-      // above.
-      resumeEdgeArmedRef.current = null;
-      resumeStaleRunRef.current = null;
-      // Final whole-branch review, item 2: same per-session floor as
-      // `resumeEdgeArmedRef` immediately above — see its own doc comment.
-      preBackgroundFreezeKeyRef.current = null;
-      // §3 timing addendum: same per-session floor, silently — a fresh
-      // connection starts with no arrivals, no resume, no open window.
-      frameArrivalsRef.current = [];
-      lastResumeAtMsRef.current = null;
-      postResumeArrivalsRef.current = null;
-      // S6: once per ordinary product connect, straight into this session's
-      // own ring — see `requestStoragePersistence`'s own doc comment for the
-      // full reasoning.
-      if (depsRef.current.requestStoragePersistence !== false) {
-        requestStoragePersistence(log);
-      }
-      // Phase LL Task 3 (§3, F-6), "say so in the ring": the
-      // already-connected guard has no log to write to at `scan()` time
-      // (this session's log did not exist yet — it is created here, only
-      // once a device is actually found) — so its outcome is read back
-      // NOW, from the transport's own `describeLastScan()`, the instant a
-      // log exists. `null` only when the transport carries no such
-      // extension (every non-Capacitor transport), never for a real
-      // native connect that reached this line.
-      if (hasDescribeLastScan(transport)) {
-        const outcome = transport.describeLastScan();
-        if (outcome !== null) {
-          log.record("already-connected-guard", outcome);
-        }
-      }
-      const driver = createPm5Driver(transport, log, {
-        ...depsRef.current.driverOptions,
-        deviceName: device.name,
+      attemptIdRef.current = discovery.attemptId;
+      const attempt = (attemptRef.current += 1);
+      /** True once `cancel()` (or a later `connect()`) has moved on. A
+       *  superseded attempt must not write shared state, must not clear a
+       *  `connectingRef` it no longer owns, and disposes only of the
+       *  transport it built itself. */
+      const superseded = (): boolean => attemptRef.current !== attempt;
+      // Phase LL Task 2 review fix (task-1-report Minor, `useMonitorSession.
+      // ts:1665` at the time it was filed): `livenessRef.current` used to be
+      // set only after the `transport === null` check below, and never
+      // cleared — so a SECOND `connect()` that fails `transport-missing`
+      // (no transport ever resolved this attempt) left the PREVIOUS
+      // connection's liveness snapshot sitting in the ref, and `fail()`
+      // would attach it to a failure it has nothing to do with. Nulled here,
+      // at the very top of every attempt, before anything can fail — the
+      // same "a fresh connect() never inherits a stale PRIOR value" rule
+      // `capacitorBle.ts`'s own `pendingCallerDisconnects`/M-2 comment
+      // documents for its own per-attempt state. `frameSilence` resets the
+      // same way: a fresh attempt starts on a stream that has said nothing
+      // yet, never latched by whatever the last connection's watchdog saw.
+      livenessRef.current = null;
+      // §5.3: DEFENSIVE, and deliberately unlike `rowingStreakRef`, which does
+      // NOT clear here at all. **Reachable only because no surface offers
+      // Connect with a run still open.** Round 1 of this task's review
+      // corrected the reason first written here: `runRef.current` is NOT null
+      // by the time a fresh attempt begins — the only two sites that null it
+      // are the RC-37 exit and `cancel()`, and neither `fail()` nor the
+      // `disconnected` handler is one of them. A link lost mid-row therefore
+      // leaves an OPEN run and a HELD reading, and `endSession` has no phase
+      // guard that would stop a later close from reading it. What holds this
+      // off today is the call graph, not the state: the mid-row lost surface
+      // offers End, never Connect (`justrow/JustRow.tsx`'s own "Try again is
+      // honest here only because no row was under way"), and the
+      // interstitial's Try Again is pre-row only. **ROADMAP's R10 reconnect
+      // would arm exactly this, and then THIS CLEAR is what loses the
+      // metres** — a reconnect that resumes an open run must not run it.
+      // Carries no mutation because nothing can reach it (RF21).
+      lastRowingFrameRef.current = null;
+      partialMintRefusedRef.current.clear();
+      hysteresisCancelRef.current?.();
+      hysteresisCancelRef.current = null;
+      degradedUnsubRef.current = null;
+      lifecycleUnsubRef.current = null;
+      // NOTHING SESSION-IDENTITY-SHAPED HAPPENS HERE (review round 5, item 1,
+      // P1). Rounds 2-4 minted `sessionIdRef` and reset the latch guard at
+      // this line — an ATTEMPT boundary, which is not a session boundary. The
+      // log this hook is still holding belongs to whatever session last
+      // reached GATT, and it stays there through a `cancel()` on purpose; a
+      // second attempt cancelled before ITS GATT connect therefore left the
+      // hook holding the old session's log beside a brand-new id, and
+      // `stash()` filed a clone of that old trace into a fresh history slot,
+      // once per cancelled attempt. The mint now lives at the ONE line that
+      // replaces the log (`sessionRef.current = { ... }`, below the GATT
+      // connect), so identity and trace can only ever change together.
+      //
+      // THE PATCH BELOW IS NOT AN EXCEPTION TO THAT (merge of PR #259 into
+      // this branch). `deviceName` is PUBLISHED UI STATE, not session
+      // identity: it names the peripheral this attempt is about to talk to,
+      // it is read by callers deciding whether a driver is ready, and it is
+      // republished from the transport once this attempt has one. It carries
+      // no id, no log and no per-session counter, so clearing it here crosses
+      // no session boundary and the rule above stands without exception.
+      //
+      // `deviceName: null` joins this patch (review #2 on PR #259): a raw
+      // disconnect deliberately RETAINS the old name — the lost frames need
+      // it — but a FRESH ATTEMPT must not inherit it, because the name is
+      // the one driver-ready fact callers can see (`ConnectedInterstitial`'s
+      // own program effect keys on exactly it, and resets its dedupe on the
+      // null). Without this, a reconnect published `pairing` with the STALE
+      // name while `driverRef` was still null, and a caller arming on the
+      // name reached `beginFreeRow()` with no driver — `transport-missing`
+      // on a retry that should have worked. The same "a fresh connect()
+      // never inherits a stale PRIOR value" rule the block above documents
+      // for liveness and frameSilence; the name comes back at this attempt's
+      // own closing `update({ deviceName: device.name })` — the "Stays
+      // `pairing` on purpose" line at the end of the GATT block below — after
+      // the driver it vouches for exists. (The line number this used to cite
+      // was correct on main and is not here: the ring/session work above it
+      // moves it. Named rather than numbered for that reason.)
+      update({
+        phase: "picking",
+        error: null,
+        frameSilence: false,
+        deviceName: null,
       });
-      driverRef.current = driver;
-      unsubscribeRef.current = driver.events((event) =>
-        handleEvent(event, driver),
-      );
-      // Phase LL Task 2 mechanism 3 (§2): a STATUS-characteristic
-      // subscribe rejection degrades rather than ending the session — the
-      // CSAFE control characteristic's own rejection stays FATAL exactly
-      // as today, unchanged, via the existing `onDisconnect` path
-      // (`capacitorBle.ts`'s own `CRITICAL_CHARACTERISTICS`, the hang
-      // guard this task must not touch). The ring names the dead
-      // characteristic; the session and its driver never hear about it.
-      if (hasCharacteristicDegraded(transport)) {
-        degradedUnsubRef.current = transport.onCharacteristicDegraded(
-          (characteristicId, message) => {
-            log.record(
-              "characteristic-degraded",
-              `${characteristicId}: ${message}`,
-            );
-          },
-        );
+      // Awaited unconditionally — the platform-conditional default
+      // (`adapters/monitorTransport.ts`'s `defaultTransport`, ROADMAP CL item
+      // 2) returns a `Promise` on the native arm (its own dynamic
+      // `import("../monitor/transports/capacitorBle")`) and whenever the DEV
+      // fake-injection seam (`transports/index.ts`'s `resolveDefaultTransport`)
+      // is about to dynamic-`import()` `fake.ts`; every other path (a real
+      // `createWebBluetoothTransport()`, and every test's own synchronous
+      // `createTransport` override) resolves on the same tick, so `await`
+      // costs nothing observable there.
+      const transport = await (
+        depsRef.current.createTransport ??
+        (() => defaultTransport(livenessDepsRef.current))
+      )();
+      if (superseded()) {
+        // Cancelled while the transport was still resolving (the native and
+        // DEV arms both `await` a dynamic import here). Nothing was built
+        // beyond the transport itself, so hand it back and leave every shared
+        // ref to whoever owns them now.
+        if (transport !== null) bestEffort(transport.disconnect());
+        return;
       }
-      // Phase LL Task 2 mechanism 2 (§2, "iOS backgrounding"): Info.plist
-      // declares no `UIBackgroundModes`, so nothing in this hook runs
-      // while the app is actually suspended — the risk is entirely on
-      // RESUME, where the very next frame this session sees might follow
-      // an arbitrary real-world gap. `registerAppLifecycleListener` is the
-      // adapter-layer seam (`src/adapters/appLifecycle.ts`); the platform
-      // conditional lives there, never here.
-      //
-      // PHASE LM PR 1, FIX ROUND 2 (design spec `2026-08-26-lost-monitor-
-      // trigger-design.md`, Task 1). This handler used to latch
-      // `frameSilence: true` on EVERY foreground, unconditionally — and
-      // then read `framesWhileHidden`, the evidence that refutes it, three
-      // lines further down. It raised nine red banners in 288 s over a
-      // link that never dropped
-      // (`docs/monitor/sessions/walk-2026-08-26/`). It now MEASURES:
-      // `decideResumeLatch` (this file, above) reads the liveness snapshot
-      // we already hold and latches only when the gap since the last
-      // 0x0031 genuinely reached `SILENCE_THRESHOLD_MS`, or the watchdog
-      // has already declared silence. Alarm on the LEVEL (stream health),
-      // never on the EDGE (a lifecycle event) — the edge is only a prompt
-      // to re-measure.
-      //
-      // WHEN WE DO NOT LATCH, WE TOUCH NOTHING. Specifically: no
-      // `markSuspect()` (it does `stopTimer(); silent = true`, so with no
-      // latch and no further arrival to rearm, `onSilence` could never
-      // fire and a resume followed by genuine total silence would show
-      // NOTHING AT ALL), and no `hysteresisCancelRef` cancel (a retract
-      // window already counting down belongs to a silence this resume
-      // knows nothing about; cancelling it without re-latching would strand
-      // `frameSilence` at `true` with no timer left to clear it). Leaving
-      // the decorator's own pending timer alone is the fail-safe — the
-      // wall clock advances through suspension, so it matures on resume.
-      //
-      // When we DO latch, the clearing path is the same real one it has
-      // always been: `transport.markSuspect()` (guarded by
-      // `hasMarkSuspect`) sets the liveness decorator's OWN internal
-      // `silent` flag, so the very next healthy 0x0031 arrival takes the
-      // decorator's EXISTING recovery branch and calls `deps.onRecovery()`
-      // — the SAME `handleFrameRecovery`/`BANNER_RETRACT_HYSTERESIS_MS`
-      // path a real watchdog silence goes through. (That routing was
-      // itself an earlier review fix: calling `update({ frameSilence:
-      // true })` here while leaving the decorator's `silent` at `false`
-      // meant `noteStatusArrival`'s `if (silent)` branch never matched, so
-      // `frameSilence` never cleared again for the rest of the session.
-      // See `markSuspect`'s own doc comment in `liveness.ts`.)
-      //
-      // Minor 1: a fresh token for THIS attempt, checked (not read back off
-      // the ref) by the `.then()` below — see `lifecycleAttemptRef`'s own
-      // doc comment for the race this closes.
-      const lifecycleAttempt = { cancelled: false };
-      lifecycleAttemptRef.current = lifecycleAttempt;
-      const lifecycleResult = registerAppLifecycleListener((event) => {
-        if (event === "background") {
-          // Task 1 (lost-monitor design spec): opens a hidden window for
-          // `handleFrame`'s own counter to fill in — read back and
-          // cleared at the matching "foreground" below.
-          framesWhileHiddenRef.current = 0;
-          // Final whole-branch review, item 2: THE pre-background baseline,
-          // captured HERE — before any hidden frame can move
-          // `stateRef.current.frame` — rather than re-read at foreground
-          // time, when it would already be whatever arrived while hidden.
-          // See `preBackgroundFreezeKeyRef`'s own doc comment.
-          const preBackgroundFrame = stateRef.current.frame;
-          preBackgroundFreezeKeyRef.current =
-            preBackgroundFrame !== null ? freezeKey(preBackgroundFrame) : null;
-          return;
-        }
-        // Task 1: with "background" handled above, `AppLifecycleEvent`'s
-        // only other member is "foreground" — this check is now
-        // belt-and-braces against a badly-typed native bridge, not a
-        // reachable branch under the type as declared (same posture as
-        // this file's other known-redundant guards).
-        if (event !== "foreground") return;
-        // Snapshotted BEFORE anything below can move the decorator's own
-        // state — `markSuspect()` at the bottom of this handler sets
-        // `silent`, so reading after it would be reading our own write.
-        const snapshot = livenessRef.current?.snapshot() ?? null;
-        const { latch, gapMs } = decideResumeLatch(
-          snapshot,
-          SILENCE_THRESHOLD_MS,
-        );
-        // §6 (RC-29 latch counter): every "foreground" transition counts as
-        // a resume, latching or not; a latch additionally bumps its own
-        // counter. Both are read once, at teardown, by `stash()`'s own
-        // `latch-count` entry.
-        //
-        // Round 5, item 1: counted onto THIS listener's own captured
-        // `session`, not onto a ref holding whatever session is current —
-        // the same discipline the `log.record` calls below this line have
-        // always used. A listener that outlives its session (the native
-        // unsubscribe arriving late) can then only ever bump numbers nobody
-        // will read, instead of inflating a later session's resume rate.
-        session.resumes += 1;
-        if (latch) {
-          session.latches += 1;
-          hysteresisCancelRef.current?.();
-          hysteresisCancelRef.current = null;
-          update({ frameSilence: true });
-        }
-        // EXIT CRITERION 4 (design spec): every resume is recorded either
-        // way, with the number the decision was made from — and the
-        // wording ASSERTS NO CAUSE. The line this replaced read "resumed
-        // from background — stream treated as suspect", which claimed a
-        // cause nobody had checked and, on the walk that produced this
-        // fix, was untrue nine times out of nine. Three producers of a
-        // silence remain undistinguished; this entry reports what was
-        // MEASURED and what was DECIDED, nothing about why.
-        log.record(
-          "app-lifecycle",
-          `resume gap=${gapMs === null ? "unmeasured" : `${gapMs}ms`} ` +
-            `threshold=${SILENCE_THRESHOLD_MS}ms ` +
-            `silent=${snapshot === null ? "unmeasured" : snapshot.silent} ` +
-            `latched=${latch}`,
-        );
-        // Task 1 (lost-monitor design spec): what arrived while hidden
-        // and what the ready gate saw, read off state this hook already
-        // tracks — the frame count, the machine's own Active declaration
-        // on the last frame seen, and the ready-gate streak's own
-        // banked-distance evidence (`nextRowingStreak`, only ever
-        // written while `phase === "ready"`, so a resume during `"live"`
-        // reports the last window that phase was in `"ready"` for, if
-        // any). Records what was observed, never why the gate did or
-        // didn't open — three producers of the identical symptom are
-        // undistinguished here on purpose.
-        const framesWhileHidden = framesWhileHiddenRef.current ?? 0;
-        framesWhileHiddenRef.current = null;
-        const lastFrame = stateRef.current.frame;
-        const streak = rowingStreakRef.current;
-        const distanceIncreased = streak !== null && streak.frames > 1;
-        log.record(
-          "resume-frames",
-          `phase=${stateRef.current.phase} framesWhileHidden=${framesWhileHidden} ` +
-            `rowingActive=${lastFrame?.rowingActive ?? "unseen"} ` +
-            `distanceIncreased=${distanceIncreased}`,
-        );
-        // §3: arm the resume-edge instrument for the very next frame
-        // `handleFrame` sees, reusing the identical `gapMs`/
-        // `framesWhileHidden` readings `app-lifecycle`/`resume-frames` just
-        // recorded above — one measurement, two ring entries, never a
-        // second derivation. `lastFrame` (used only for the `resume-frames`
-        // entry's own `rowingActive` reading above) is whatever this hook
-        // has seen MOST RECENTLY, hidden frames included — final
-        // whole-branch review, item 2: that is NOT the same thing as the
-        // pre-background frame `resume-first-frame`'s own `stale` field
-        // needs to compare against (`handleFrame`'s unconditional
-        // `update({ frame })` fall-through means hidden frames keep moving
-        // `state.frame`), so `preBackgroundKey` below reads the dedicated
-        // `preBackgroundFreezeKeyRef` captured at the BACKGROUND edge
-        // instead of re-deriving from `lastFrame` here.
-        resumeEdgeArmedRef.current = {
-          gapMs,
-          preBackgroundKey: preBackgroundFreezeKeyRef.current,
-          framesWhileHidden,
-        };
-        // §3 timing addendum: armed at this SAME foreground edge, beside
-        // `resumeEdgeArmedRef` itself — see `lastResumeAtMsRef`'s and
-        // `postResumeArrivalsRef`'s own doc comments for why here (not the
-        // arm-consume site in `handleFrame`) is the mint site for both.
-        //
-        // A SECOND foreground edge before the first window closes must not
-        // silently discard it — mirrors `resumeStaleRunRef`'s own
-        // `endedBy=resumed` discipline (frame handler, above): record what
-        // the still-open window had collected BEFORE this edge reassigns
-        // it, never merge or lose it quietly.
-        if (postResumeArrivalsRef.current !== null) {
-          log.record(
-            "resume-first-frame",
-            `nextGapsMs=superseded frames=${postResumeArrivalsRef.current.length}`,
-          );
-        }
-        lastResumeAtMsRef.current = nowDate().getTime();
-        postResumeArrivalsRef.current = [];
-        // Only when we latched — see this handler's own header for why
-        // calling this on a non-latching resume would disarm the watchdog
-        // and leave a genuinely silent stream showing nothing at all.
-        if (latch && hasMarkSuspect(transport)) transport.markSuspect();
-      });
-      if (lifecycleResult instanceof Promise) {
-        void lifecycleResult.then((unsub) => {
-          if (lifecycleAttempt.cancelled) {
-            // `fail()`/`teardown()` already ran for this attempt before the
-            // native promise settled — the ref may already belong to a
-            // LATER attempt's own real listener. Unregister this one
-            // directly rather than writing it anywhere.
-            unsub();
+      if (transport === null) {
+        connectingRef.current = false;
+        fail({
+          reason: "transport-missing",
+          detail: "This device has no Bluetooth transport.",
+        });
+        return;
+      }
+      // Phase LL Task 1: captured whether or not scan/connect/program ever
+      // succeeds — `fail()` reads this optionally, so a failure at ANY later
+      // step (scan dismissed, a radio throw, a program rejection) still has
+      // whatever the decorator had already observed by then.
+      livenessRef.current = hasLivenessSnapshot(transport) ? transport : null;
+      try {
+        // The platform's chooser (browser chrome on web, the plugin's
+        // in-process sheet on iOS). One result or none either way — the app
+        // never sees a list (C2, as revised by phone-BLE §3).
+        let found: DiscoveredMonitor[];
+        if (discovery.kind === "advertised-name") {
+          // Phase NF (design spec 2026-09-03 §5): NO fallback from
+          // `scanTarget` to `scan()`. A transport without the capability
+          // fails closed before any picker or radio call.
+          // Runtime validation BEFORE any radio call (spec §5): a request
+          // that is not a minted UUID plus a PM5 advertising name is not a
+          // targeted request at all.
+          if (
+            !isValidAttemptId(discovery.attemptId) ||
+            !isValidPm5AdvertisingName(discovery.exactName) ||
+            !hasTargetedScan(transport)
+          ) {
+            connectingRef.current = false;
+            fail({
+              reason: "transport-missing",
+              detail: "This device has no Bluetooth transport.",
+            });
+            bestEffort(transport.disconnect());
             return;
           }
-          lifecycleUnsubRef.current = unsub;
+          const controller = new AbortController();
+          targetedAbortRef.current = {
+            attemptId: discovery.attemptId,
+            controller,
+          };
+          // The foreground lease for the SCAN (the session's own lifecycle
+          // listener is registered only after GATT connect, further down):
+          // a background transition aborts to the named interrupted state.
+          // Registration is async on native; awaited so the listener is
+          // live before the first radio call.
+          const scanLifecycle = await registerAppLifecycleListener((event) => {
+            if (event === "background") controller.abort();
+          });
+          try {
+            if (superseded()) throw new Error("superseded");
+            found = await transport.scanTarget(discovery, controller.signal);
+          } catch (err: unknown) {
+            if (superseded()) {
+              bestEffort(transport.disconnect());
+              return;
+            }
+            connectingRef.current = false;
+            fail(mapTargetedFailure(err));
+            bestEffort(transport.disconnect());
+            return;
+          } finally {
+            scanLifecycle();
+            // Object identity: a late attempt-A settle must not clear B's ref.
+            if (targetedAbortRef.current?.controller === controller) {
+              targetedAbortRef.current = null;
+            }
+          }
+        } else {
+          found = await transport.scan();
+        }
+        if (superseded()) {
+          bestEffort(transport.disconnect());
+          return;
+        }
+        const device = found[0];
+        if (device === undefined) {
+          fail({
+            reason: "scan-dismissed",
+            detail: "No monitor was picked.",
+          });
+          bestEffort(transport.disconnect());
+          return;
+        }
+        update({ phase: "pairing" });
+        await transport.connect(device.id);
+        // THE ONE THAT MATTERS. Everything below builds and registers: the
+        // log, the driver, its ten subscriptions, the lifecycle listener.
+        // A cancel that landed during the GATT connect must stop here, or
+        // all of it comes up behind a screen that already says otherwise.
+        if (superseded()) {
+          bestEffort(transport.disconnect());
+          return;
+        }
+        // Phase LL Task 1: the log's own `atMs` clock is the SAME `now` the
+        // liveness decorator uses (`livenessDepsRef.current.now`) — one
+        // clock, so a `liveness-silence`/`liveness-snapshot` entry's `atMs`
+        // and the `LivenessSnapshot.atMs` it carries read off the identical
+        // source, never two independent `Date.now()` calls that could drift
+        // a millisecond apart for no reason.
+        const log = (
+          depsRef.current.createLog ??
+          (() => createEventLog(undefined, livenessDepsRef.current.now))
+        )();
+        // THE LOGICAL SESSION BEGINS HERE, AND ONLY HERE (review round 5,
+        // item 1, P1). The link is up and the log exists, so this is the one
+        // moment a new connected session can be said to have started — and
+        // therefore the one place its identity may be minted. Every previous
+        // round minted at `connect()`'s entry instead, which is an ATTEMPT
+        // boundary: attempts that never got this far then paired a fresh id
+        // with the PREVIOUS session's log (which survives a cancel by design),
+        // and `stash()` cloned that log into a new history slot. One
+        // assignment, one object, no way to write half of it.
+        //
+        // §6's counters and their guard are FIELDS of that object rather than
+        // refs reset alongside it, so they cannot be reset by anything that
+        // is not a new session either — the last of the four aliasing
+        // surfaces rounds 1-4 were each closing one at a time.
+        const session: LogicalSession = {
+          id: mintSessionId(),
+          log,
+          latchCounted: false,
+          latches: 0,
+          resumes: 0,
+        };
+        sessionRef.current = session;
+        // Task 1 (lost-monitor design spec): a fresh connection tracks no
+        // hidden window yet — clears whatever a PREVIOUS connection's own
+        // background/foreground pair (or an interrupted one that never saw
+        // its matching foreground) left behind.
+        framesWhileHiddenRef.current = null;
+        // §3: this session's own resume-edge instrument starts fresh too —
+        // same PER-SESSION lifetime as `framesWhileHiddenRef` immediately
+        // above. `resumeEdgeArmedRef`/`resumeStaleRunRef` ALSO get an
+        // additional per-RUN clear elsewhere (their own doc comments above
+        // have the full discipline — `program()`'s fresh-arm reset and the
+        // RC-37 programDropped/ready exit); this site only ever needs to
+        // cover the session-wide floor, since every one of those per-run
+        // sites already runs INSIDE a session this reset has already started
+        // fresh. §6's latch counters need no line here at all any more: they
+        // are born zero as fields of the session object built immediately
+        // above.
+        resumeEdgeArmedRef.current = null;
+        resumeStaleRunRef.current = null;
+        // Final whole-branch review, item 2: same per-session floor as
+        // `resumeEdgeArmedRef` immediately above — see its own doc comment.
+        preBackgroundFreezeKeyRef.current = null;
+        // §3 timing addendum: same per-session floor, silently — a fresh
+        // connection starts with no arrivals, no resume, no open window.
+        frameArrivalsRef.current = [];
+        lastResumeAtMsRef.current = null;
+        postResumeArrivalsRef.current = null;
+        // S6: once per ordinary product connect, straight into this session's
+        // own ring — see `requestStoragePersistence`'s own doc comment for the
+        // full reasoning.
+        if (depsRef.current.requestStoragePersistence !== false) {
+          requestStoragePersistence(log);
+        }
+        // Phase LL Task 3 (§3, F-6), "say so in the ring": the
+        // already-connected guard has no log to write to at `scan()` time
+        // (this session's log did not exist yet — it is created here, only
+        // once a device is actually found) — so its outcome is read back
+        // NOW, from the transport's own `describeLastScan()`, the instant a
+        // log exists. `null` only when the transport carries no such
+        // extension (every non-Capacitor transport), never for a real
+        // native connect that reached this line.
+        if (hasDescribeLastScan(transport)) {
+          const outcome = transport.describeLastScan();
+          if (outcome !== null) {
+            log.record("already-connected-guard", outcome);
+          }
+        }
+        const driver = createPm5Driver(transport, log, {
+          ...depsRef.current.driverOptions,
+          deviceName: device.name,
         });
-      } else {
-        lifecycleUnsubRef.current = lifecycleResult;
-      }
-      // Stays `pairing` on purpose: connected is not programmed. The
-      // interstitial's state 4 is exactly this moment, and its next step is
-      // the caller's `program()` call, which owns the move to state 5.
-      update({ deviceName: device.name });
-    } catch (err) {
-      if (superseded()) {
-        // A throw from a radio nobody is waiting on any more is not this
-        // session's failure to report — the UI moved on at `cancel()`.
+        driverRef.current = driver;
+        unsubscribeRef.current = driver.events((event) =>
+          handleEvent(event, driver),
+        );
+        // Phase LL Task 2 mechanism 3 (§2): a STATUS-characteristic
+        // subscribe rejection degrades rather than ending the session — the
+        // CSAFE control characteristic's own rejection stays FATAL exactly
+        // as today, unchanged, via the existing `onDisconnect` path
+        // (`capacitorBle.ts`'s own `CRITICAL_CHARACTERISTICS`, the hang
+        // guard this task must not touch). The ring names the dead
+        // characteristic; the session and its driver never hear about it.
+        if (hasCharacteristicDegraded(transport)) {
+          degradedUnsubRef.current = transport.onCharacteristicDegraded(
+            (characteristicId, message) => {
+              log.record(
+                "characteristic-degraded",
+                `${characteristicId}: ${message}`,
+              );
+            },
+          );
+        }
+        // Phase LL Task 2 mechanism 2 (§2, "iOS backgrounding"): Info.plist
+        // declares no `UIBackgroundModes`, so nothing in this hook runs
+        // while the app is actually suspended — the risk is entirely on
+        // RESUME, where the very next frame this session sees might follow
+        // an arbitrary real-world gap. `registerAppLifecycleListener` is the
+        // adapter-layer seam (`src/adapters/appLifecycle.ts`); the platform
+        // conditional lives there, never here.
+        //
+        // PHASE LM PR 1, FIX ROUND 2 (design spec `2026-08-26-lost-monitor-
+        // trigger-design.md`, Task 1). This handler used to latch
+        // `frameSilence: true` on EVERY foreground, unconditionally — and
+        // then read `framesWhileHidden`, the evidence that refutes it, three
+        // lines further down. It raised nine red banners in 288 s over a
+        // link that never dropped
+        // (`docs/monitor/sessions/walk-2026-08-26/`). It now MEASURES:
+        // `decideResumeLatch` (this file, above) reads the liveness snapshot
+        // we already hold and latches only when the gap since the last
+        // 0x0031 genuinely reached `SILENCE_THRESHOLD_MS`, or the watchdog
+        // has already declared silence. Alarm on the LEVEL (stream health),
+        // never on the EDGE (a lifecycle event) — the edge is only a prompt
+        // to re-measure.
+        //
+        // WHEN WE DO NOT LATCH, WE TOUCH NOTHING. Specifically: no
+        // `markSuspect()` (it does `stopTimer(); silent = true`, so with no
+        // latch and no further arrival to rearm, `onSilence` could never
+        // fire and a resume followed by genuine total silence would show
+        // NOTHING AT ALL), and no `hysteresisCancelRef` cancel (a retract
+        // window already counting down belongs to a silence this resume
+        // knows nothing about; cancelling it without re-latching would strand
+        // `frameSilence` at `true` with no timer left to clear it). Leaving
+        // the decorator's own pending timer alone is the fail-safe — the
+        // wall clock advances through suspension, so it matures on resume.
+        //
+        // When we DO latch, the clearing path is the same real one it has
+        // always been: `transport.markSuspect()` (guarded by
+        // `hasMarkSuspect`) sets the liveness decorator's OWN internal
+        // `silent` flag, so the very next healthy 0x0031 arrival takes the
+        // decorator's EXISTING recovery branch and calls `deps.onRecovery()`
+        // — the SAME `handleFrameRecovery`/`BANNER_RETRACT_HYSTERESIS_MS`
+        // path a real watchdog silence goes through. (That routing was
+        // itself an earlier review fix: calling `update({ frameSilence:
+        // true })` here while leaving the decorator's `silent` at `false`
+        // meant `noteStatusArrival`'s `if (silent)` branch never matched, so
+        // `frameSilence` never cleared again for the rest of the session.
+        // See `markSuspect`'s own doc comment in `liveness.ts`.)
+        //
+        // Minor 1: a fresh token for THIS attempt, checked (not read back off
+        // the ref) by the `.then()` below — see `lifecycleAttemptRef`'s own
+        // doc comment for the race this closes.
+        const lifecycleAttempt = { cancelled: false };
+        lifecycleAttemptRef.current = lifecycleAttempt;
+        const lifecycleResult = registerAppLifecycleListener((event) => {
+          if (event === "background") {
+            // Task 1 (lost-monitor design spec): opens a hidden window for
+            // `handleFrame`'s own counter to fill in — read back and
+            // cleared at the matching "foreground" below.
+            framesWhileHiddenRef.current = 0;
+            // Final whole-branch review, item 2: THE pre-background baseline,
+            // captured HERE — before any hidden frame can move
+            // `stateRef.current.frame` — rather than re-read at foreground
+            // time, when it would already be whatever arrived while hidden.
+            // See `preBackgroundFreezeKeyRef`'s own doc comment.
+            const preBackgroundFrame = stateRef.current.frame;
+            preBackgroundFreezeKeyRef.current =
+              preBackgroundFrame !== null
+                ? freezeKey(preBackgroundFrame)
+                : null;
+            return;
+          }
+          // Task 1: with "background" handled above, `AppLifecycleEvent`'s
+          // only other member is "foreground" — this check is now
+          // belt-and-braces against a badly-typed native bridge, not a
+          // reachable branch under the type as declared (same posture as
+          // this file's other known-redundant guards).
+          if (event !== "foreground") return;
+          // Snapshotted BEFORE anything below can move the decorator's own
+          // state — `markSuspect()` at the bottom of this handler sets
+          // `silent`, so reading after it would be reading our own write.
+          const snapshot = livenessRef.current?.snapshot() ?? null;
+          const { latch, gapMs } = decideResumeLatch(
+            snapshot,
+            SILENCE_THRESHOLD_MS,
+          );
+          // §6 (RC-29 latch counter): every "foreground" transition counts as
+          // a resume, latching or not; a latch additionally bumps its own
+          // counter. Both are read once, at teardown, by `stash()`'s own
+          // `latch-count` entry.
+          //
+          // Round 5, item 1: counted onto THIS listener's own captured
+          // `session`, not onto a ref holding whatever session is current —
+          // the same discipline the `log.record` calls below this line have
+          // always used. A listener that outlives its session (the native
+          // unsubscribe arriving late) can then only ever bump numbers nobody
+          // will read, instead of inflating a later session's resume rate.
+          session.resumes += 1;
+          if (latch) {
+            session.latches += 1;
+            hysteresisCancelRef.current?.();
+            hysteresisCancelRef.current = null;
+            update({ frameSilence: true });
+          }
+          // EXIT CRITERION 4 (design spec): every resume is recorded either
+          // way, with the number the decision was made from — and the
+          // wording ASSERTS NO CAUSE. The line this replaced read "resumed
+          // from background — stream treated as suspect", which claimed a
+          // cause nobody had checked and, on the walk that produced this
+          // fix, was untrue nine times out of nine. Three producers of a
+          // silence remain undistinguished; this entry reports what was
+          // MEASURED and what was DECIDED, nothing about why.
+          log.record(
+            "app-lifecycle",
+            `resume gap=${gapMs === null ? "unmeasured" : `${gapMs}ms`} ` +
+              `threshold=${SILENCE_THRESHOLD_MS}ms ` +
+              `silent=${snapshot === null ? "unmeasured" : snapshot.silent} ` +
+              `latched=${latch}`,
+          );
+          // Task 1 (lost-monitor design spec): what arrived while hidden
+          // and what the ready gate saw, read off state this hook already
+          // tracks — the frame count, the machine's own Active declaration
+          // on the last frame seen, and the ready-gate streak's own
+          // banked-distance evidence (`nextRowingStreak`, only ever
+          // written while `phase === "ready"`, so a resume during `"live"`
+          // reports the last window that phase was in `"ready"` for, if
+          // any). Records what was observed, never why the gate did or
+          // didn't open — three producers of the identical symptom are
+          // undistinguished here on purpose.
+          const framesWhileHidden = framesWhileHiddenRef.current ?? 0;
+          framesWhileHiddenRef.current = null;
+          const lastFrame = stateRef.current.frame;
+          const streak = rowingStreakRef.current;
+          const distanceIncreased = streak !== null && streak.frames > 1;
+          log.record(
+            "resume-frames",
+            `phase=${stateRef.current.phase} framesWhileHidden=${framesWhileHidden} ` +
+              `rowingActive=${lastFrame?.rowingActive ?? "unseen"} ` +
+              `distanceIncreased=${distanceIncreased}`,
+          );
+          // §3: arm the resume-edge instrument for the very next frame
+          // `handleFrame` sees, reusing the identical `gapMs`/
+          // `framesWhileHidden` readings `app-lifecycle`/`resume-frames` just
+          // recorded above — one measurement, two ring entries, never a
+          // second derivation. `lastFrame` (used only for the `resume-frames`
+          // entry's own `rowingActive` reading above) is whatever this hook
+          // has seen MOST RECENTLY, hidden frames included — final
+          // whole-branch review, item 2: that is NOT the same thing as the
+          // pre-background frame `resume-first-frame`'s own `stale` field
+          // needs to compare against (`handleFrame`'s unconditional
+          // `update({ frame })` fall-through means hidden frames keep moving
+          // `state.frame`), so `preBackgroundKey` below reads the dedicated
+          // `preBackgroundFreezeKeyRef` captured at the BACKGROUND edge
+          // instead of re-deriving from `lastFrame` here.
+          resumeEdgeArmedRef.current = {
+            gapMs,
+            preBackgroundKey: preBackgroundFreezeKeyRef.current,
+            framesWhileHidden,
+          };
+          // §3 timing addendum: armed at this SAME foreground edge, beside
+          // `resumeEdgeArmedRef` itself — see `lastResumeAtMsRef`'s and
+          // `postResumeArrivalsRef`'s own doc comments for why here (not the
+          // arm-consume site in `handleFrame`) is the mint site for both.
+          //
+          // A SECOND foreground edge before the first window closes must not
+          // silently discard it — mirrors `resumeStaleRunRef`'s own
+          // `endedBy=resumed` discipline (frame handler, above): record what
+          // the still-open window had collected BEFORE this edge reassigns
+          // it, never merge or lose it quietly.
+          if (postResumeArrivalsRef.current !== null) {
+            log.record(
+              "resume-first-frame",
+              `nextGapsMs=superseded frames=${postResumeArrivalsRef.current.length}`,
+            );
+          }
+          lastResumeAtMsRef.current = nowDate().getTime();
+          postResumeArrivalsRef.current = [];
+          // Only when we latched — see this handler's own header for why
+          // calling this on a non-latching resume would disarm the watchdog
+          // and leave a genuinely silent stream showing nothing at all.
+          if (latch && hasMarkSuspect(transport)) transport.markSuspect();
+        });
+        if (lifecycleResult instanceof Promise) {
+          void lifecycleResult.then((unsub) => {
+            if (lifecycleAttempt.cancelled) {
+              // `fail()`/`teardown()` already ran for this attempt before the
+              // native promise settled — the ref may already belong to a
+              // LATER attempt's own real listener. Unregister this one
+              // directly rather than writing it anywhere.
+              unsub();
+              return;
+            }
+            lifecycleUnsubRef.current = unsub;
+          });
+        } else {
+          lifecycleUnsubRef.current = lifecycleResult;
+        }
+        // Stays `pairing` on purpose: connected is not programmed. The
+        // interstitial's state 4 is exactly this moment, and its next step is
+        // the caller's `program()` call, which owns the move to state 5.
+        update({ deviceName: device.name });
+      } catch (err) {
+        if (superseded()) {
+          // A throw from a radio nobody is waiting on any more is not this
+          // session's failure to report — the UI moved on at `cancel()`.
+          bestEffort(transport.disconnect());
+          return;
+        }
+        fail(mapRadioFailure(err));
         bestEffort(transport.disconnect());
-        return;
+      } finally {
+        // Ownership, not a reset: a superseded attempt must never release a
+        // claim a NEWER attempt is holding, or two connects run at once.
+        if (!superseded()) connectingRef.current = false;
       }
-      fail(mapRadioFailure(err));
-      bestEffort(transport.disconnect());
-    } finally {
-      // Ownership, not a reset: a superseded attempt must never release a
-      // claim a NEWER attempt is holding, or two connects run at once.
-      if (!superseded()) connectingRef.current = false;
-    }
-  }, [fail, handleEvent, update, mintSessionId, nowDate]);
+    },
+    [fail, handleEvent, update, mintSessionId, nowDate],
+  );
 
   /**
    * PHASE JR PR 2 — the free row's arm, and `program()`'s counterpart.
@@ -5539,6 +5696,9 @@ export function useMonitorSession(
     // press Connect again immediately.
     attemptRef.current += 1;
     connectingRef.current = false;
+    // Phase NF: Cancel from the interstitial mid targeted scan aborts the
+    // scan's signal; the transport awaits `stopLEScan()` before rejecting.
+    targetedAbortRef.current?.controller.abort();
     const driver = driverRef.current;
     // MEDIUM-9 (task-5 re-review), landed by the fix wave's H1: CLAIM the
     // ref synchronously, before the `await driver.terminate()` below
@@ -5674,7 +5834,9 @@ export function useMonitorSession(
     // at "armed" itself, so this is a no-op then too — the accepted loss
     // already happened, receipted with `"connect-guard-armed"`, before
     // this function ever runs.
-    discardStagedRetireHandoff();
+    if (attemptIdRef.current !== null) {
+      discardStagedRetireHandoff(attemptIdRef.current);
+    }
     update(INITIAL_STATE);
   }, [teardown, update]);
 

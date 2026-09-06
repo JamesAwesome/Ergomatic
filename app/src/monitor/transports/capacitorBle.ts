@@ -582,6 +582,9 @@ export function createCapacitorBleTransport(
       const poisonBefore = poisoned;
       if (poisonBefore !== null) throw poisonBefore;
       const { prior, release } = captureTail();
+      // `raceScanTimeout` below does NOT cover this wait: a held tail (a
+      // targeted scan whose cleanup is still draining) is bounded by THAT
+      // operation's own deadline, which poisons on expiry and releases.
       await prior;
       const poisonAfter = poisoned;
       if (poisonAfter !== null) {
@@ -708,11 +711,32 @@ export function createCapacitorBleTransport(
         if (windowTimer !== null) unschedule(windowTimer);
         // Every settle path awaits `stopLEScan()` before the caller hears
         // anything, so BleClient's serialized queue never carries a stale
-        // scan into the next operation.
+        // scan into the next operation. BOUNDED (antagonist delta pass
+        // F6): `stopLEScan()` goes through the same serial queue and can
+        // sit behind a modal picker sheet; an unbounded wait here would
+        // hold the module tail for the process with no error and no copy,
+        // strictly worse than the poison it exists to report. Expiry is a
+        // cleanup failure: the radio cannot be proven quiet.
         const stop = scanning ? BleClient.stopLEScan() : Promise.resolve();
+        let cleanupTimer: ReturnType<typeof setTimeout> | null = schedule(
+          () => {
+            cleanupTimer = null;
+            poisoned ??= new ScanCleanupFailedError(
+              "stopLEScan() did not settle within the deadline",
+            );
+            finish({ err: poisoned });
+          },
+          deadlineMs,
+        );
         stop.then(
-          () => finish(result),
+          () => {
+            if (cleanupTimer === null) return;
+            unschedule(cleanupTimer);
+            finish(result);
+          },
           (err: unknown) => {
+            if (cleanupTimer === null) return;
+            unschedule(cleanupTimer);
             poisoned = new ScanCleanupFailedError(
               err instanceof Error ? err.message : String(err),
             );
@@ -723,75 +747,100 @@ export function createCapacitorBleTransport(
       const onAbort = (): void =>
         settle({ err: new TargetScanInterruptedError() });
       signal.addEventListener("abort", onAbort, { once: true });
+      // THE DEADLINE BOUNDS THE ATTEMPT, not only the advertisement wait
+      // (antagonist delta pass F5): every call below goes through
+      // BleClient's serial queue, which the manual `scan()`'s own QUEUE
+      // INVARIANT comment says can wait "forever if the rower walks away"
+      // behind a modal picker. Armed at entry; before the radio is live an
+      // expiry is not "not advertising" — the scan never reached the radio.
+      deadlineTimer = schedule(
+        () =>
+          settle({
+            err: scanning
+              ? new TargetMonitorNotAdvertisingError()
+              : new TargetScanInterruptedError(),
+          }),
+        deadlineMs,
+      );
       const interruptedIfAborted = (): void => {
         if (signal.aborted) throw new TargetScanInterruptedError();
       };
-      try {
-        await prior;
+      // THE PREAMBLE RUNS DETACHED (antagonist delta pass F5, paste-test):
+      // every await below goes through BleClient's serial queue, which can
+      // hang; the caller awaits `outcome`, which the deadline settles
+      // regardless of where this chain is suspended. Once `settled`, every
+      // later step exits at the next check and nothing it does can reach
+      // the caller — `settle()` is a no-op after the first call.
+      const settledOrAborted = (): void => {
+        if (settled) throw new TargetScanInterruptedError();
         interruptedIfAborted();
-        const poisonAfter = poisoned;
-        if (poisonAfter !== null) throw poisonAfter;
-        await ensureInitialized();
-        interruptedIfAborted();
-        // `isEnabled` AFTER initialize (the manual path's own I2 rule) and
-        // BEFORE the held-device query.
-        if (!(await BleClient.isEnabled())) {
-          throw new BluetoothOffError("Bluetooth is powered off.");
-        }
-        interruptedIfAborted();
-        // The plugin drops already-connected peripherals from scan
-        // callbacks, so a held exact-name device would otherwise time out
-        // as "not advertising". Cached `name` is used ONLY to refuse —
-        // never to select: a held device is never returned from here.
-        const held = await BleClient.getConnectedDevices([
-          ROWING_SERVICE_UUID,
-          CONTROL_SERVICE_UUID,
-        ]);
-        interruptedIfAborted();
-        if (held.some((d) => d.name === request.exactName)) {
-          throw new TargetAlreadyConnectedError();
-        }
-        lastScanOutcome = "targeted scan by exact advertised name";
-        scanning = true;
-        // No `name` (the plugin filters cached `CBPeripheral.name`), no
-        // `services` (0x0030 is not advertised; CoreBluetooth ANDs the
-        // filters): scan broadly at the radio, settle only on the exact
-        // live `localName`.
-        await BleClient.requestLEScan(
-          { allowDuplicates: true },
-          (raw: unknown) => {
-            if (settled) return;
-            const result = decodeScanResult(raw);
-            if (result === null) return;
-            if (result.localName !== request.exactName) return;
-            if (seen.has(result.deviceId)) return;
-            seen.add(result.deviceId);
-            matches.push({ id: result.deviceId, name: request.exactName });
-            if (matches.length === 1) {
-              if (deadlineTimer !== null) unschedule(deadlineTimer);
-              deadlineTimer = null;
-              // Keep scanning for the collision window: a second DISTINCT
-              // device with the exact name fails closed.
-              windowTimer = schedule(
-                () => settle({ ok: [matches[0]!] }),
-                windowMs,
-              );
-            } else {
-              settle({ err: new TargetMonitorAmbiguousError() });
-            }
-          },
-        );
-        // A callback may already have fired while `requestLEScan` was
-        // resolving; only an empty, unsettled scan gets the deadline.
-        if (matches.length === 0 && !settled) {
-          deadlineTimer = schedule(
-            () => settle({ err: new TargetMonitorNotAdvertisingError() }),
-            deadlineMs,
+      };
+      void (async () => {
+        try {
+          await prior;
+          settledOrAborted();
+          const poisonAfter = poisoned;
+          if (poisonAfter !== null) throw poisonAfter;
+          await ensureInitialized();
+          settledOrAborted();
+          // `isEnabled` AFTER initialize (the manual path's own I2 rule) and
+          // BEFORE the held-device query.
+          if (!(await BleClient.isEnabled())) {
+            throw new BluetoothOffError("Bluetooth is powered off.");
+          }
+          settledOrAborted();
+          // The plugin drops already-connected peripherals from scan
+          // callbacks, so a held exact-name device would otherwise time out
+          // as "not advertising". Cached `name` is used ONLY to refuse —
+          // never to select: a held device is never returned from here.
+          const held = await BleClient.getConnectedDevices([
+            ROWING_SERVICE_UUID,
+            CONTROL_SERVICE_UUID,
+          ]);
+          settledOrAborted();
+          if (held.some((d) => d.name === request.exactName)) {
+            throw new TargetAlreadyConnectedError();
+          }
+          lastScanOutcome = "targeted scan by exact advertised name";
+          // No `name` (the plugin filters cached `CBPeripheral.name`), no
+          // `services` (0x0030 is not advertised; CoreBluetooth ANDs the
+          // filters): scan broadly at the radio, settle only on the exact
+          // live `localName`.
+          //
+          // From here the native scan MAY be live even if the promise below
+          // never resolves; a settle must therefore stop it (F6 + the early
+          // callback case).
+          scanning = true;
+          await BleClient.requestLEScan(
+            { allowDuplicates: true },
+            (raw: unknown) => {
+              if (settled) return;
+              const result = decodeScanResult(raw);
+              if (result === null) return;
+              if (result.localName !== request.exactName) return;
+              if (seen.has(result.deviceId)) return;
+              seen.add(result.deviceId);
+              matches.push({ id: result.deviceId, name: request.exactName });
+              if (matches.length === 1) {
+                if (deadlineTimer !== null) unschedule(deadlineTimer);
+                deadlineTimer = null;
+                // Keep scanning for the collision window: a second DISTINCT
+                // device with the exact name fails closed.
+                windowTimer = schedule(
+                  () => settle({ ok: [matches[0]!] }),
+                  windowMs,
+                );
+              } else {
+                settle({ err: new TargetMonitorAmbiguousError() });
+              }
+            },
           );
+        } catch (err: unknown) {
+          settle({
+            err: err instanceof Error ? err : new Error(String(err)),
+          });
         }
-      } catch (err: unknown) {
-        settle({ err: err instanceof Error ? err : new Error(String(err)) });
-      }
+      })();
       const result = await outcome;
       signal.removeEventListener("abort", onAbort);
       release();

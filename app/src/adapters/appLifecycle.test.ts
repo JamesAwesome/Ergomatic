@@ -17,6 +17,11 @@ function setVisibility(state: "visible" | "hidden"): void {
 }
 
 afterEach(() => {
+  // `vi.doMock` registrations outlive `resetModules`; a later test's own
+  // factory for the same path does not replace an earlier one (measured
+  // 2026-09-06, Phase NF's current-state read), so unmock explicitly.
+  vi.doUnmock("../native/appLifecycle");
+  vi.doUnmock("../platform");
   vi.resetModules();
   vi.restoreAllMocks();
   Object.defineProperty(document, "visibilityState", {

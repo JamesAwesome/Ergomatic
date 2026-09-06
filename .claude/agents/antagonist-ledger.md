@@ -7106,3 +7106,95 @@ plan's own tools and never with the REPO's.
 - TECHNIQUE 3 (name the harm ceiling): A and B are the same tag/PM5 and the workout is pre-selected, so even silent interference targets the right machine; worst case is a recoverable retry — no TRIAD harm. The availability finding independently makes manual Connect a mandatory always-present backstop, mooting auto-recovery.
 - The v5 `records:0` reproduces in jsdom against the probe's query-hold path (v5's own words): a PROBE defect, not a product defect. Diagnose only if the probe is reused.
 - CAVEAT CLOSED (controller grep, 2026-09-06, now PRIMARY not INFERENCE): `holdStage`, `gateMinusOneHoldStage`, `stop-during`, `releaseGateProgress`, `stageFor` occur ONLY in `GateMinusOneProbe.tsx`, `native/nfcGateMinusOneProbe.ts`, their test, and `gateMinusOneReceipt.ts`. No shipping surface references the hold, and no "Scan NFC" product surface exists in `app/src` yet. The stage-freeze is provably probe-only.
+
+## Phase NF product plan delta (lens 1 of /harden), 2026-09-06
+
+Four kill-shots, three of them from reading a vendored SDK header and a
+vendored plugin's CALL SITES rather than its declarations. Landed by the
+controller; the findings were applied as a fix round against committed code
+(the branch advanced four commits during the pass — see the process note).
+
+- **Claim: `App.getState().isActive` is a safe foreground READ even though
+  the matching EVENT is the wrong background signal.** Believed because the
+  code comment said so ("a transient `inactive` costs one quiet retry and
+  never a session") and cited the file header that convicted the event.
+  **Technique: read the plugin's shipped `definitions.d.ts` and notice that
+  `getState()` returns `AppState` — the exact payload type of
+  `appStateChange`.** There is no second quantity. Then the phase's OWN
+  device console settled reachability — `BACKGROUND-OBSERVATIONS.md`
+  records "Reader start after App.getState returned true. appStateChange
+  false." twice: the feature induces the state its own guard refused on.
+  Generalisation: **a READ of a quantity already convicted as an EVENT is the
+  same wrong axis; the read/listen distinction never fixes a wrong
+  quantity.** Second half: the guard's failure mapped to "quiet", so a 56 px
+  primary button would have done nothing at all — check what a guard's
+  refusal LOOKS LIKE, not only whether it refuses.
+- **Claim: a plugin event for this attempt is either records or garbage, and
+  garbage can be safely ignored while the read waits.** Believed because the
+  bridge validated the shape thoroughly and traced every rejection.
+  **Technique: grep the vendored Swift for every `notify(event:` call site
+  and read what each one publishes.** One publishes
+  `buildEvent(..., message: nil)` — a real event, correct attempt ID, no
+  `ndefMessage` — and deliberately does not invalidate, so no ending follows.
+  The JS classified it "invalid" and waited forever. Generalisation: **for
+  any handler that ignores a class of input, enumerate the PRODUCERS of that
+  class; "malformed" and "malformed but provably mine" need different
+  terminals.**
+- **Claim: a timeout constant named `TARGET_SCAN_DEADLINE_MS` bounds the
+  targeted scan.** Believed because a test pinned it at 9_999/10_000 with
+  independent literals — a good test, entered below the break. **Technique:
+  count the awaits BEFORE the timer is armed.** Five, every one through a
+  serial vendor queue the file's own comment says can block "forever if the
+  rower walks away". RF24 in constant form. Generalisation: **for any
+  deadline, ask what is already running when the timer starts; a deadline
+  armed after N unbounded awaits bounds nothing.** Same shape one layer
+  down: the cleanup `await stopLEScan()` gated the release of a module-level
+  FIFO, so a stuck cleanup would have silently removed Bluetooth for the
+  process with no error and no copy — strictly worse than the poison state it
+  was avoiding.
+- **Claim: "the spec's producer list for `multipleTags` is zero or several
+  tags, or several NDEF messages", tagged PRIMARY and covered by an injected
+  Swift test.** Believed because both branches exist in the patched plugin
+  and one has a passing test. **Technique: open the SDK header for the
+  delegate protocol itself.** `NFCNDEFReaderSession.h`: "A read-write
+  session does not trigger the -readerSession:didDetectNDEFs: method", and
+  implementing `didDetectTags:` "will change the session behavior into a
+  read-write session". The plugin implements both, so half the producer list
+  is unreachable and its test proves nothing about production.
+  Generalisation: **when a vendor protocol has two overlapping callbacks,
+  the header usually says which one wins — read it before writing a test
+  against either.**
+- **Technique worth keeping regardless of subject: `file` the document
+  before trusting any grep over it.** A raw `0x00` pasted into a prescribed
+  test block made the plan AND the committed `nfc.test.ts` report as `data`;
+  plain `grep` then returned nothing with rc=1 on every query, and
+  `git grep` degraded to "Binary file … matches". Every "grep finds nothing"
+  check over either file was vacuous, including the plan's own self-review.
+  The author's paste-test cannot catch it — the test passes either way.
+  Landed as `app/scripts/nul-check.sh`, part of `pnpm lint`.
+- **Attacked and HELD (Phase NF vetted ground, extended):** the patched NDEF
+  controller's `cause` lifetime — one entry per attempt, minted only on a
+  forced invalidation of a live owned session, consumed by that attempt's
+  own ending — survives a superseding start, a stop racing a rejection in
+  both orders, a same-ID reuse and a WebView reload, because minting requires
+  a state (`draining == key && ndefKey == key`) that only the consuming path
+  can leave, and everything is confined to one serial queue with
+  `dispatchPrecondition` on every access. Also held: the BLE operation
+  tail's identity (each call's own `release` closure, never a shared slot),
+  the manual drain attaching to the raw pipeline rather than the timeout
+  race, `targetedAbortRef`'s object-identity comparison, and the strict
+  parser's UTF-16-length-vs-bytes ordering. `BleClient`'s queue does not
+  deadlock on a rejection (`queue.js` chains through `.catch`); the hazard is
+  a PENDING call.
+- **Keyed take, not only keyed discard (F7).** A staged-retire set that the
+  armed handler consumed unkeyed was safe only by enumeration of callers;
+  Phase NF created the first state where a detail press leaves a set staged
+  with no interstitial, and JustRow's zero-argument `connect()` would have
+  consumed it. Invariants over mechanisms: a staged set authorizes exactly
+  one attempt ID's armed retire, and a never-cleared attempt ref can only
+  fail to match.
+- **Process note:** the branch advanced four commits DURING this pass, so
+  the findings landed as fix-round items against committed code rather than
+  as plan edits. Hardening a document while its implementation races ahead
+  costs the pass its leverage — the cheap half of /harden is worth nothing
+  after the paste.

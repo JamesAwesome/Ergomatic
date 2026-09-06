@@ -187,9 +187,19 @@ it ended a session and publishes it:
 nfcSessionEnd { attemptId, reason: "invalidated", cause: "multipleTags" | "tagFailure" }
 ```
 
-- `multipleTags`: the delegate delivered zero or several tags, or several NDEF
-  messages; the sheet shows `Present exactly one NFC tag.` and nothing was
-  connected. `tagFailure`: connect, query or read failed on the one tag.
+- `multipleTags`: the delegate delivered zero or several tags; the sheet shows
+  `Present exactly one NFC tag.` and nothing was connected. (Corrected
+  2026-09-06, hardening lens 1: the plugin implements `didDetectTags:`, so
+  every session is a read-write session and `didDetectNDEFs:` is never
+  called — `NFCNDEFReaderSession.h`, PRIMARY: _"A read-write session does not
+  trigger the -readerSession:didDetectNDEFs: method."_ The controller's
+  several-messages rejection and its injected test are unreachable defence in
+  depth, not a producer.) `tagFailure`: connect, query or read failed on the
+  one tag — INCLUDING the plugin's read-failure path that publishes a tag
+  event with no `ndefMessage` and does not invalidate (reachable because
+  Ergomatic sets `invalidateAfterFirstRead: false`); the JS reader settles
+  that event as `tagFailure` rather than waiting for an ending that never
+  comes (lens 1, F3).
 - Endings the controller did not force carry no `cause`, and their `reason`
   stays code-derived (200 `userCancelled`, 201 `sessionTimeout`, 204 silent,
   else `invalidated`). A `cause` always comes with `reason: "invalidated"`,
@@ -432,14 +442,23 @@ production web bundle imports native NFC code. Tests inject a scripted reader
 that replays native-shaped records and session endings.
 
 The adapter synchronously creates its terminal guard and requests abort,
-foreground-lifecycle, `nfcEvent`, and `nfcSessionEnd` subscriptions, then awaits
-all asynchronous handles before calling `startScanning`. Every handle that
-resolves after abort/unmount removes itself, and no native session starts. The
-existing lifecycle adapter gains a native current-state read. Immediately before
-native start, the reader re-reads that state and requires foreground; the
-subscription covers a transition after the read. A background state or event
-claims abort before awaiting stop. This closes both background-while-registration
-is-pending and already-backgrounded cases.
+`nfcEvent`, and `nfcSessionEnd` subscriptions, then awaits all asynchronous
+handles before calling `startScanning`. Every handle that resolves after
+abort/unmount removes itself, and no native session starts. **Withdrawn
+2026-09-06 (hardening lens 1, F1): the pre-start "native current-state read".**
+An earlier revision required the reader to re-read the app state immediately
+before native start and refuse on non-foreground. The only read the plugin
+offers is `App.getState().isActive`, which returns the payload of the
+`appStateChange` event this repo already convicted as the wrong axis (Phase
+LM); Gate -1's own console recorded `isActive` going false as a normal
+consequence of the NFC sheet appearing
+(`BACKGROUND-OBSERVATIONS.md`, "Reader start after App.getState returned
+true. appStateChange false."), so the guard would have refused a second tap
+taken while the previous sheet dismissed — silently, since the refusal mapped
+to the quiet return. Real backgrounding is handled on the correct axis: the
+detail screen holds the attempt's `AbortController` and aborts it on the
+`pause` event through `adapters/appLifecycle.ts`; an abort before native
+start prevents the start, an abort after it awaits the explicit stop.
 
 The reader uses `iosSessionType: "ndef"` and `invalidateAfterFirstRead: false`
 deliberately. A successful read does not reliably auto-invalidate, so Ergomatic

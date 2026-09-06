@@ -50,6 +50,7 @@ import {
   commit as commitHandoffForTest,
   read as readHandoffForTest,
   stageRetire as stageRetireForTest,
+  stagedRetireAttemptId as stagedRetireAttemptIdForTest,
   takeStagedRetire as takeStagedRetireForTest,
 } from "./handoffStore";
 import { buildMonitorLogSteps } from "../session/logDraft";
@@ -413,9 +414,17 @@ async function flush(): Promise<void> {
 
 type Session = ReturnType<typeof harness>["result"];
 
-async function connect(result: Session): Promise<void> {
+/** Phase NF: the attempt ID the staged-retire tests stage under and
+ *  connect with — the keyed take at `armed` consumes only a set staged by
+ *  THIS attempt. An independent literal, never derived from the hook. */
+const STAGED_ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+
+async function connect(
+  result: Session,
+  request?: Parameters<Session["current"]["connect"]>[0],
+): Promise<void> {
   await act(async () => {
-    await result.current.connect();
+    await result.current.connect(request);
   });
 }
 
@@ -3348,13 +3357,16 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // ran — the store, not a prop, is how that authorization survives to
     // reach the hook (see `handoffStore.ts`'s own `stagedRetireSet` doc
     // comment).
-    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+    stageRetireForTest(
+      [{ sessionKey: leftoverKey, revision: 0 }],
+      STAGED_ATTEMPT,
+    );
 
     const { result, fake } = harness({
       program: ONE_INTERVAL,
       events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
     });
-    await connect(result);
+    await connect(result, { kind: "picker", attemptId: STAGED_ATTEMPT });
 
     // MID-FLIGHT (pairing/programming, before "armed"): UNTOUCHED — the
     // regression the review caught destroyed this at "Connect anyway"
@@ -3366,7 +3378,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
 
     // ARMED HAS FIRED: retired, consumed, receipted.
     expect(currentUnretiredHandoffForTest()).toBeNull();
-    expect(takeStagedRetireForTest()).toStrictEqual([]);
+    expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toStrictEqual([]);
     const entries = JSON.parse(result.current.exportLog()) as {
       kind: string;
       detail: string;
@@ -3390,13 +3402,16 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     );
     expect(created.accepted).toBe(true);
     const createdRevision = created.accepted ? created.revision : -1;
-    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+    stageRetireForTest(
+      [{ sessionKey: leftoverKey, revision: 0 }],
+      STAGED_ATTEMPT,
+    );
 
     const { result, fake } = harness({
       program: ONE_INTERVAL,
       events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
     });
-    await connect(result);
+    await connect(result, { kind: "picker", attemptId: STAGED_ATTEMPT });
 
     // THE RACE: an unrelated, already-torn-down hook's own linger-window
     // burst lands WHILE this hook is still pairing/programming — after
@@ -3432,13 +3447,16 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
   it("cancel before armed DISCARDS the staged set — the record SURVIVES, both tiers (the reviewer's own probe, promoted to a permanent regression test)", async () => {
     const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
     commitHandoffForTest(leftoverKey, null, fakeLeftoverRun(leftoverKey));
-    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+    stageRetireForTest(
+      [{ sessionKey: leftoverKey, revision: 0 }],
+      STAGED_ATTEMPT,
+    );
 
     const { result } = harness({
       program: ONE_INTERVAL,
       events: [],
     });
-    await connect(result);
+    await connect(result, { kind: "picker", attemptId: STAGED_ATTEMPT });
     // Never reaches "armed" — Cancel fires from mid-flight, the exact
     // shape a real transport-missing/program failure or a rower's own
     // Cancel press produces (every interstitial state's own doc comment:
@@ -3458,7 +3476,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // LATER, unrelated Connect attempt's own "armed" must not inherit it
     // (rev-3 antagonist: "a set staged for attempt 1 must not authorize
     // attempt 2's retire").
-    expect(takeStagedRetireForTest()).toStrictEqual([]);
+    expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toStrictEqual([]);
     // F-4 (Task 5 re-review, 2026-08-30): the discard itself is receipted
     // ("the module receipts rarer things") — distinct from a `retire`
     // receipt, since nothing was actually removed from either tier here.
@@ -3486,13 +3504,16 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
   it("arm then Cancel: the accepted loss — both tiers null, the retire receipt already named 'connect-guard-armed' before Cancel ever ran", async () => {
     const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
     commitHandoffForTest(leftoverKey, null, fakeLeftoverRun(leftoverKey));
-    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }]);
+    stageRetireForTest(
+      [{ sessionKey: leftoverKey, revision: 0 }],
+      STAGED_ATTEMPT,
+    );
 
     const { result, fake } = harness({
       program: ONE_INTERVAL,
       events: [],
     });
-    await connect(result);
+    await connect(result, { kind: "picker", attemptId: STAGED_ATTEMPT });
     await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
     expect(result.current.phase).toBe("ready");
 
@@ -3533,7 +3554,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // would wrongly treat as fair game.
     const unrelatedKey = new Date(t0.getTime() - 7_200_000).toISOString();
     commitHandoffForTest(unrelatedKey, null, fakeLeftoverRun(unrelatedKey));
-    expect(takeStagedRetireForTest()).toStrictEqual([]); // nothing staged
+    expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toStrictEqual([]); // nothing staged
 
     const { result, fake } = harness({
       program: ONE_INTERVAL,
@@ -15032,5 +15053,284 @@ describe("Door PR B Task 3 (§5.3): the in-flight reading, banked at close", () 
     expect(written).toHaveLength(1);
     expect(written[0]?.detail).toBe("idx=0 m=100 s=30");
     expect(entries.filter((e) => e.kind === "partial-refused")).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase NF (design spec 2026-09-03 §5): targeted discovery through
+// `connect(request)`. The fake carries `scanTarget` (Task 4); a bare stub
+// without it proves the fail-closed path.
+describe("connect(request): advertised-name discovery (Phase NF)", () => {
+  const ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+  const OTHER_ATTEMPT = "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+  const targeted = (exactName = DEVICE_NAME) => ({
+    kind: "advertised-name" as const,
+    attemptId: ATTEMPT,
+    exactName,
+  });
+
+  it("calls scanTarget with the SAME request object, never scan(), and reaches pairing under the exact name", async () => {
+    const { result, fake, transport } = harness({ program: ONE_INTERVAL });
+    const request = targeted();
+    await connect(result, request);
+    expect(transport.scans).toBe(0);
+    expect(fake.targetedRequests()).toStrictEqual([request]);
+    expect(fake.targetedRequests()[0]).toBe(request);
+    expect(result.current.phase).toBe("pairing");
+    expect(result.current.deviceName).toBe(DEVICE_NAME);
+  });
+
+  it("a transport WITHOUT scanTarget fails closed as transport-missing before any picker or radio call", async () => {
+    const scan = vi.fn(async () => [{ id: "d", name: DEVICE_NAME }]);
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => stubRadio({ scan }),
+      }),
+    );
+    await connect(result, targeted());
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error?.reason).toBe("transport-missing");
+    expect(scan).not.toHaveBeenCalled();
+  });
+
+  it("an invalid request (exact name not a PM5 name, or a bad attempt ID) fails closed as transport-missing without touching the transport", async () => {
+    for (const bad of [
+      { ...targeted("PM5"), attemptId: ATTEMPT },
+      { ...targeted(), attemptId: "not-a-uuid" },
+    ]) {
+      const { result, fake, transport } = harness({ program: ONE_INTERVAL });
+      await connect(result, bad);
+      expect(result.current.error?.reason).toBe("transport-missing");
+      expect(fake.targetedRequests()).toStrictEqual([]);
+      expect(transport.scans).toBe(0);
+    }
+  });
+
+  it("maps each named targeted failure to its reason and the approved copy (independent literals)", async () => {
+    const cases: [string, string, string][] = [
+      [
+        "TargetMonitorNotAdvertisingError",
+        "target-not-advertising",
+        "Open Connect Device on this PM5, then try again.",
+      ],
+      [
+        "TargetAlreadyConnectedError",
+        "target-already-connected",
+        "End this PM5's current connection, then try again.",
+      ],
+      [
+        "TargetMonitorAmbiguousError",
+        "target-ambiguous",
+        "More than one PM5 has this name. Use Connect.",
+      ],
+      [
+        "TargetScanInterruptedError",
+        "target-interrupted",
+        "Connection interrupted. Try again.",
+      ],
+      [
+        "ScanCleanupFailedError",
+        "scan-cleanup-failed",
+        "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
+      ],
+      [
+        "TargetedRequestInvalidError",
+        "transport-missing",
+        "This device has no Bluetooth transport.",
+      ],
+    ];
+    for (const [name, reason, detail] of cases) {
+      const scanTarget = vi.fn(async () => {
+        const err = new Error(name);
+        err.name = name;
+        throw err;
+      });
+      const { result } = renderHook(() =>
+        useMonitorSession({
+          createTransport: () => ({ ...stubRadio({}), scanTarget }),
+        }),
+      );
+      await connect(result, targeted());
+      expect(result.current.phase).toBe("failed");
+      expect(result.current.error?.reason).toBe(reason);
+      expect(result.current.error?.detail).toBe(detail);
+    }
+  });
+
+  it("cancel() during a pending scanTarget aborts its signal, and the late settle installs nothing", async () => {
+    let seen: AbortSignal | null = null;
+    let release!: () => void;
+    const scanTarget = vi.fn(
+      (_r: unknown, signal: AbortSignal) =>
+        new Promise<DiscoveredMonitor[]>((_resolve, reject) => {
+          seen = signal;
+          release = () => {
+            const err = new Error("aborted");
+            err.name = "TargetScanInterruptedError";
+            reject(err);
+          };
+        }),
+    );
+    const connectSpy = vi.fn(async () => undefined);
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => ({
+          ...stubRadio({ connect: connectSpy }),
+          scanTarget,
+        }),
+      }),
+    );
+    const pending = act(async () => {
+      void result.current.connect(targeted());
+      await flush();
+    });
+    await pending;
+    expect(seen).not.toBeNull();
+    expect(seen!.aborted).toBe(false);
+    await act(async () => {
+      await result.current.cancel();
+    });
+    expect(seen!.aborted).toBe(true);
+    release();
+    await act(async () => {
+      await flush();
+    });
+    expect(result.current.phase).toBe("idle");
+    expect(connectSpy).not.toHaveBeenCalled();
+  });
+
+  it("unmount during a pending scanTarget aborts its signal", async () => {
+    let seen: AbortSignal | null = null;
+    const scanTarget = vi.fn(
+      (_r: unknown, signal: AbortSignal) =>
+        new Promise<DiscoveredMonitor[]>(() => {
+          seen = signal;
+        }),
+    );
+    const { result, unmount } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => ({ ...stubRadio({}), scanTarget }),
+      }),
+    );
+    await act(async () => {
+      void result.current.connect(targeted());
+      await flush();
+    });
+    expect(seen!.aborted).toBe(false);
+    unmount();
+    expect(seen!.aborted).toBe(true);
+  });
+
+  it("a late-settling attempt A cannot clear attempt B's abort controller", async () => {
+    const signals: AbortSignal[] = [];
+    const rejecters: (() => void)[] = [];
+    const scanTarget = vi.fn(
+      (_r: unknown, signal: AbortSignal) =>
+        new Promise<DiscoveredMonitor[]>((_resolve, reject) => {
+          signals.push(signal);
+          rejecters.push(() => {
+            const err = new Error("aborted");
+            err.name = "TargetScanInterruptedError";
+            reject(err);
+          });
+        }),
+    );
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => ({ ...stubRadio({}), scanTarget }),
+      }),
+    );
+    await act(async () => {
+      void result.current.connect(targeted());
+      await flush();
+    });
+    await act(async () => {
+      await result.current.cancel();
+    });
+    await act(async () => {
+      void result.current.connect({ ...targeted(), attemptId: OTHER_ATTEMPT });
+      await flush();
+    });
+    expect(signals).toHaveLength(2);
+    // A settles late, AFTER B started.
+    rejecters[0]!();
+    await act(async () => {
+      await flush();
+    });
+    expect(signals[1]!.aborted).toBe(false);
+    await act(async () => {
+      await result.current.cancel();
+    });
+    expect(signals[1]!.aborted).toBe(true);
+  });
+
+  it("a background transition during the targeted scan aborts it to target-interrupted", async () => {
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    let seen: AbortSignal | null = null;
+    const scanTarget = vi.fn(
+      (_r: unknown, signal: AbortSignal) =>
+        new Promise<DiscoveredMonitor[]>((_resolve, reject) => {
+          seen = signal;
+          signal.addEventListener("abort", () => {
+            const err = new Error("aborted");
+            err.name = "TargetScanInterruptedError";
+            reject(err);
+          });
+        }),
+    );
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => ({ ...stubRadio({}), scanTarget }),
+      }),
+    );
+    await act(async () => {
+      void result.current.connect(targeted());
+      await flush();
+    });
+    expect(lifecycleCb).toBeDefined();
+    await act(async () => {
+      lifecycleCb!("background");
+      await flush();
+    });
+    expect(seen!.aborted).toBe(true);
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error?.reason).toBe("target-interrupted");
+    vi.doUnmock("../adapters/appLifecycle");
+  });
+
+  it("a zero-argument connect() still uses scan() and never scanTarget", async () => {
+    const { result, fake, transport } = harness({ program: ONE_INTERVAL });
+    await connect(result);
+    expect(transport.scans).toBe(1);
+    expect(fake.targetedRequests()).toStrictEqual([]);
+  });
+
+  it("F7: a set staged under attempt A is NOT consumed by a zero-argument connect()'s armed event — it is discarded, and A's records are never retired", async () => {
+    const leftoverKey = "2020-01-01T00:00:00.000Z";
+    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }], ATTEMPT);
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+    expect(stagedRetireAttemptIdForTest()).toBeNull();
+    // The hook owns the store's receipt channel and mirrors every receipt
+    // into its own ring as `store-receipt:<kind>`.
+    const ring = result.current.exportLog();
+    expect(ring).toContain("store-receipt:staged-retire-discarded");
+    expect(ring).not.toContain("connect-guard-armed");
   });
 });

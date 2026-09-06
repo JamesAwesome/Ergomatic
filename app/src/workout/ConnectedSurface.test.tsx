@@ -2456,6 +2456,10 @@ describe("the connected walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}

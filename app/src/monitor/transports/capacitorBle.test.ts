@@ -1395,6 +1395,78 @@ describe("scanTarget (Phase NF)", () => {
     await expect(second).resolves.toStrictEqual([{ id: "d1", name: NAME }]);
   });
 
+  it("F5: a preamble that never settles rejects as interrupted at the deadline and never starts the scan", async () => {
+    const { t, advance } = transportWithClock();
+    vi.mocked(BleClient.getConnectedDevices).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    const p = t.scanTarget(request, new AbortController().signal);
+    void p.catch(() => undefined);
+    await advance(9_999);
+    let settled = false;
+    p.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await advance(0);
+    expect(settled).toBe(false);
+    await advance(1);
+    await expect(p).rejects.toMatchObject({
+      name: "TargetScanInterruptedError",
+    });
+    expect(BleClient.requestLEScan).not.toHaveBeenCalled();
+    expect(BleClient.stopLEScan).not.toHaveBeenCalled();
+  });
+
+  it("F6: a stopLEScan that never settles poisons the tail at the deadline and releases it, so the next scan rejects instead of hanging", async () => {
+    const { t, advance } = transportWithClock();
+    vi.mocked(BleClient.stopLEScan).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    const p = t.scanTarget(request, new AbortController().signal);
+    void p.catch(() => undefined);
+    await advance(0);
+    scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+    await advance(1_000);
+    await advance(9_999);
+    let settled = false;
+    p.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await advance(0);
+    expect(settled).toBe(false);
+    await advance(1);
+    await expect(p).rejects.toMatchObject({ name: "ScanCleanupFailedError" });
+    await expect(t.scan()).rejects.toMatchObject({
+      name: "ScanCleanupFailedError",
+    });
+    expect(BleClient.requestDevice).not.toHaveBeenCalled();
+  });
+
+  it("F6: a requestLEScan rejection does not call stopLEScan on a scan that never started", async () => {
+    const { t, advance } = transportWithClock();
+    vi.mocked(BleClient.requestLEScan).mockRejectedValue(new Error("no radio"));
+    const p = t.scanTarget(request, new AbortController().signal);
+    await advance(0);
+    await expect(p).rejects.toMatchObject({
+      name: "Error",
+      message: "no radio",
+    });
+    // The native scan may be live even when the start promise rejects, so
+    // cleanup still runs: this pins that a settle after a REJECTED start
+    // stops (defensively) rather than skipping — see the source comment.
+    expect(BleClient.stopLEScan).toHaveBeenCalledTimes(1);
+  });
+
   it("a manual picker's outer timeout leaves the tail held until the raw picker promise settles", async () => {
     vi.useFakeTimers();
     try {

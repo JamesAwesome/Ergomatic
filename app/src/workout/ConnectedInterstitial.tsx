@@ -21,6 +21,9 @@
 import { useEffect, useRef, useState } from "react";
 import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
+import type { MonitorDiscoveryRequest } from "../../domain/monitor/types.js";
+import { discardStagedRetire } from "../monitor/handoffStore";
+import { claimMountLease, onMountLeaseLost } from "../monitor/mountLease";
 import type { Baselines } from "../../domain/types.js";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import { deriveAxes } from "../monitor/connectedAxes";
@@ -89,6 +92,12 @@ const NOT_A_MACHINE_REFUSAL: Record<ConnectedError["reason"], boolean> = {
   "scan-dismissed": true,
   "permission-denied": true,
   disconnected: true,
+  // Phase NF: lookup/cleanup failures, never a machine refusal.
+  "target-not-advertising": true,
+  "target-already-connected": true,
+  "target-ambiguous": true,
+  "target-interrupted": true,
+  "scan-cleanup-failed": true,
   // The seven genuine machine statements share one serif line.
   nak: false,
   bad: false,
@@ -187,6 +196,11 @@ export interface ConnectedInterstitialProps {
    *  this screen, and therefore the hook, and therefore hangs up the radio;
    *  see `ConnectedSurface.tsx`'s header for that decision in full. */
   onEnded: () => void;
+  /** Phase NF: HOW to find the monitor — today's picker under the press's
+   *  attempt ID, or the exact advertised name an NFC tag decoded to. Passed
+   *  unchanged to `session.connect(request)` on mount AND on Try again, so
+   *  a targeted retry repeats the exact target and never opens the picker. */
+  request: MonitorDiscoveryRequest;
   /** Test-only injection point (`useMonitorSession`'s own `deps`
    *  parameter). Production callers omit this — see the file's header
    *  note on why a production `createTransport` is NOT threaded through
@@ -203,6 +217,7 @@ export default function ConnectedInterstitial({
   onExit,
   onRowInstead,
   onEnded,
+  request,
   deps,
 }: ConnectedInterstitialProps) {
   const session = useMonitorSession(deps);
@@ -291,7 +306,18 @@ export default function ConnectedInterstitial({
   // `connect()`; `program()` fires from the separate "pairing" phase
   // effect below, once a real device is found.
   useEffect(() => {
-    void session.connect();
+    // Phase NF (design spec §3, "React StrictMode rehearses effect setup →
+    // cleanup → setup"): the identity-bound MOUNT LEASE. A cleanup queues a
+    // microtask release for THIS attempt ID; a StrictMode replay reclaims
+    // it before the release commits; a genuine unmount commits it and
+    // discards the attempt's still-staged receipt (a no-op after `armed`
+    // consumed it, or after Cancel already discarded it).
+    const lease = claimMountLease(request.attemptId);
+    onMountLeaseLost(request.attemptId, () =>
+      discardStagedRetire(request.attemptId),
+    );
+    void session.connect(request);
+    return () => lease.release();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -341,8 +367,14 @@ export default function ConnectedInterstitial({
   // 2026-08-23 walk found the button dead there. `disconnected`-WITH-run
   // never reaches this JSX at all (the surface owns it, verified by the
   // routing test below), so this predicate never fires mid-row.
+  // Phase NF: two targeted failures say "Use Connect" / "Restart Ergomatic"
+  // and offer no in-process retry; Try again is disabled for them.
+  const retryRefused =
+    session.error?.reason === "target-ambiguous" ||
+    session.error?.reason === "scan-cleanup-failed";
   const canRetry =
-    session.phase === "failed" || session.phase === "disconnected";
+    (session.phase === "failed" || session.phase === "disconnected") &&
+    !retryRefused;
 
   function handleCancel(): void {
     void session.cancel();
@@ -394,7 +426,7 @@ export default function ConnectedInterstitial({
     // line — see the test file's own "the walk's dead button" section).
     programmedForDeviceRef.current = null;
     retryingRef.current = true;
-    void session.connect().finally(() => {
+    void session.connect(request).finally(() => {
       retryingRef.current = false;
     });
   }
