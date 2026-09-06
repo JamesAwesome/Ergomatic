@@ -5,7 +5,7 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    // v0.39.0: git log v0.38.1..main --oneline at 2472133a — four merges,
+    // v0.39.0: git log v0.38.1..main --oneline at d3ad7fb7 — six merges,
     // every one accounted (RF15, no `--merges`; main is squash-merged):
     //   #307 Wave E PR C — the Concept2 send carries the monitor's own
     //     total; that surface stays DARK in production behind
@@ -16,6 +16,13 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     //     re-sorted AT and TR blocks) and the discarded difficulty filter
     //     named inside item 1, per the PM open gate's release-note ruling.
     //   #310 Phase DE PR 2 — item 3 (the rename) and item 4 (the article).
+    //   #311 this notes PR — no behavior: no item.
+    //   #312 Wave E auto-send (OFF · MANUAL · AUTOMATIC Concept2 sends +
+    //     the SEND FAILED flag) — the same DARK surface as #307, behind
+    //     C2_ALLOWED_EMAILS; its one non-dark change is a `GET
+    //     /api/concept2/link` after every save, answered `{available:false}`
+    //     and rendered nowhere: no item. Notes for it ride the tag that
+    //     widens the cohort.
     // Installed pre-v0.39.0 builds keep working against this server for
     // one tag cycle (the API answers with both PAIN and EFFORT); the
     // compat comes out in Phase DE PR 3.
