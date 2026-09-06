@@ -196,6 +196,20 @@ describe("AppRoutes", () => {
   // countdown and timer"). Countdown is mocked here (like every other
   // screen this file already mocks) purely to keep this an AppRoutes-level
   // routing/shell test, not a re-test of Countdown's own data-loading path.
+  // Phase SB: the strip behind the status bar is one element, always
+  // present in the signed-in shell, inert to taps, and never announced.
+  it("renders the status-bar backdrop once, inert and hidden from assistive tech", async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/library"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("heading", { name: "Library" });
+    const strips = container.querySelectorAll(".status-backdrop");
+    expect(strips).toHaveLength(1);
+    expect(strips[0]).toHaveAttribute("aria-hidden", "true");
+  });
+
   it("hides the tab bar on /library while the software keyboard is up, and shows it again when it goes", async () => {
     keyboardOpen.value = true;
     const { rerender } = render(

@@ -484,6 +484,30 @@ button:disabled {
   z-index: 20;
 }
 
+/* THE BAND BEHIND THE STATUS BAR (Phase SB, James's capture of `← BACK`
+   under the clock, 2026-09-06). With `viewport-fit=cover` the page runs
+   under the status bar; every screen pads its own top by the inset, and
+   that padding scrolls away with the page. Apple's HIG: "Obscure content
+   under the status bar … Prefer using a scroll edge effect to place a
+   blurred view behind the status bar." This is that view. Its height IS the
+   inset, so it is 0px on the web and in landscape; `pointer-events: none`
+   keeps a status-bar tap reaching WKWebView's scroll-to-top and never eats
+   a tap on the page; z 30 sits above `.tabbar` (20) and `.overlay-screen`
+   (10). Nothing moves at rest — the strip covers padding every screen
+   already has. */
+.status-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: color-mix(in srgb, var(--page) 82%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+  z-index: 30;
+}
+
 .tab {
   flex: 1;
   min-height: var(--tap);

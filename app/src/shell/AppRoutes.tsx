@@ -150,6 +150,11 @@ export default function AppRoutes({
   const keyboardOpen = useKeyboardOpen();
   return (
     <div className="app-shell">
+      {/* Phase SB: the blurred band behind the status bar that scrolled
+          content passes under (Apple HIG: "Obscure content under the status
+          bar … prefer a blurred view"). 0px tall wherever there is no top
+          inset — the web, landscape — and inert to taps. */}
+      <div className="status-backdrop" aria-hidden="true" />
       <Routes>
         <Route path="/" element={<Navigate to="/today" replace />} />
         <Route path="/today" element={<Today />} />

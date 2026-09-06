@@ -521,6 +521,36 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 `effort: 3`, and a workout it creates carries a derived difficulty)
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
+## Phase SB — A blurred strip behind the status bar
+
+**Status:** OPENED 2026-09-06 by James's capture of `← BACK` printed over
+the clock on a scrolled Detail screen (v0.39.2). Spec
+`docs/superpowers/specs/2026-09-06-status-bar-backdrop-design.md`. Not
+TRIAD; **not fast path by James's call** ("since there are a lot of
+surfaces"). **S.**
+
+**Goal:** scrolled content passes under a blurred, page-coloured band the
+height of the status bar on every screen; nothing moves at rest.
+
+**Why it happens:** `viewport-fit=cover` + per-screen `padding-top:
+env(safe-area-inset-top)` — the padding scrolls away with the page. Apple
+HIG (PRIMARY): "Obscure content under the status bar … Prefer using a
+scroll edge effect to place a blurred view behind the status bar."
+
+**One PR:** `.status-backdrop` (fixed, `height: env(safe-area-inset-top)`,
+`--page` at 82% through a 14px blur, `pointer-events: none`, z 30) rendered
+once in `AppRoutes`; an AppRoutes test (red first) and an e2e structural
+assertion with its mutation; a DEVIATIONS row.
+
+**Gates:** antagonist anchor pass on the spec (the surface census in §4 is
+the target); PM open/close SKIPPED aloud (pure UI); **Gate 0 on Kaito** —
+Detail scrolled (the reported frame) beside v0.39.2, Library scrolled,
+landscape (expected 0px), one non-scrolling screen at rest (expected
+identical) — contrast stated as numbers (spec §5).
+
+**Exit:** Gate 0 approved; e2e green, no web capture moved; DEVIATIONS row;
+rides the next tag (no release of its own).
+
 ## Wave A — The front door
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that

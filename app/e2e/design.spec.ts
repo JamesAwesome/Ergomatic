@@ -11123,6 +11123,46 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
 // the viewport's bottom edge, both orientations. Two-sided on purpose: a bar
 // pushed past the edge AND a bar floating above it both fail. Mutation
 // `.tabbar { bottom: -10px }` → "Expected: <= 853, Received: 862" (2026-09-06).
+// Phase SB (docs/superpowers/specs/2026-09-06-status-bar-backdrop-design.md).
+// The blurred band behind the status bar. Chromium reports no top inset, so
+// the strip is 0px tall here and this CANNOT see the band itself — Gate 0 on
+// the phone does. What it pins is the element's shape: present once, fixed
+// at the top, inert to taps, above the tab bar in z-order. Mutation: drop
+// `pointer-events: none` → "expected 'auto' to be 'none'".
+test.describe("the status-bar backdrop", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-status-backdrop@e2e.test",
+      name: "Design Backdrop Tester",
+    });
+    await page.goto("/library");
+    await expect(page.locator(".tabbar")).toHaveCount(1);
+  });
+
+  test("is one fixed, tap-inert strip at the top, stacked above the tab bar", async ({
+    page,
+  }) => {
+    await expect(page.locator(".status-backdrop")).toHaveCount(1);
+    const shape = await page.locator(".status-backdrop").evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const bar = getComputedStyle(document.querySelector(".tabbar")!);
+      return {
+        position: cs.position,
+        top: cs.top,
+        pointerEvents: cs.pointerEvents,
+        z: Number(cs.zIndex),
+        barZ: Number(bar.zIndex),
+        ariaHidden: el.getAttribute("aria-hidden"),
+      };
+    });
+    expect(shape.position).toBe("fixed");
+    expect(shape.top).toBe("0px");
+    expect(shape.pointerEvents).toBe("none");
+    expect(shape.z).toBeGreaterThan(shape.barZ);
+    expect(shape.ariaHidden).toBe("true");
+  });
+});
+
 test.describe("the tab bar's bottom edge", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {
