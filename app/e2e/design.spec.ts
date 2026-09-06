@@ -7150,23 +7150,25 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  test("the interstitial's FAILED state (no Bluetooth transport): axe, the 44px floor and the ink-4 rule", async ({
+  test("the interstitial's FAILED state (scan failure): axe, the 44px floor and the ink-4 rule", async ({
     page,
   }) => {
     const title = "Design Connected Failed Workout";
-    // `screenshots.spec.ts`'s own `stubNoBluetooth`: removing
-    // `navigator.bluetooth` BEFORE the app loads reaches `failed` via
-    // `transport-missing` with no picker to hang on. Duplicated here for
-    // the same reason the other helpers in this file are.
+    // The browser supports Bluetooth, but scanning fails. An unsupported
+    // browser now keeps Connect disabled before this screen can mount.
     await page.addInitScript(() => {
       Object.defineProperty(window.navigator, "bluetooth", {
-        value: undefined,
+        value: {
+          requestDevice: async () => {
+            throw new Error("Test scan failed");
+          },
+        },
         configurable: true,
       });
     });
     await openConnected(page, title, "design-connected-failed@e2e.test");
     const failed = page.locator(".connected-serif-line", {
-      hasText: "This device has no Bluetooth transport.",
+      hasText: "The link to the monitor failed.",
     });
     await expect(failed).toBeVisible({ timeout: 10_000 });
     await sweep(page);

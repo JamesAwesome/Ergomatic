@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  delete window.__pm5FakeScript__;
   delete (navigator as { bluetooth?: unknown }).bluetooth;
 });
 
@@ -95,4 +97,40 @@ describe("adapters/bluetoothCapability web arm", () => {
     const result = await probeBluetoothStatus();
     expect(result).toBe("available");
   });
+});
+
+describe("monitor connection support before a press", () => {
+  it.each([
+    { native: true, bluetooth: undefined, expected: true },
+    { native: false, bluetooth: undefined, expected: false },
+    { native: false, bluetooth: {}, expected: true },
+  ])(
+    "native=$native, Web Bluetooth=$bluetooth allows Connect=$expected",
+    async ({ native, bluetooth, expected }) => {
+      vi.doMock("../platform", () => ({ isNative: () => native }));
+      Object.defineProperty(navigator, "bluetooth", {
+        value: bluetooth,
+        configurable: true,
+      });
+      const { canConnectMonitor } = await import("./bluetoothCapability");
+      expect(canConnectMonitor()).toBe(expected);
+    },
+  );
+
+  it.each([
+    { dev: true, fakeFlag: "", injected: true, expected: true },
+    { dev: false, fakeFlag: "1", injected: true, expected: true },
+    { dev: true, fakeFlag: "1", injected: false, expected: false },
+    { dev: false, fakeFlag: "", injected: true, expected: false },
+  ])(
+    "dev=$dev, fake flag=$fakeFlag, injected=$injected allows Connect=$expected",
+    async ({ dev, fakeFlag, injected, expected }) => {
+      vi.doMock("../platform", () => ({ isNative: () => false }));
+      vi.stubEnv("DEV", dev);
+      vi.stubEnv("VITE_ENABLE_FAKE_MONITOR", fakeFlag);
+      if (injected) window.__pm5FakeScript__ = { program: { intervals: [] } };
+      const { canConnectMonitor } = await import("./bluetoothCapability");
+      expect(canConnectMonitor()).toBe(expected);
+    },
+  );
 });

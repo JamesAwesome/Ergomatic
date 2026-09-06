@@ -472,6 +472,12 @@ async function rowToBurstHold(fake: Transport & FakeControls): Promise<void> {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  Object.defineProperty(navigator, "bluetooth", {
+    configurable: true,
+    value: {
+      requestDevice: vi.fn().mockRejectedValue(new Error("Test scan failed")),
+    },
+  });
   resetHandoffStore();
   fakeForTest = null;
   apiFn.mockClear();
@@ -479,6 +485,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  Reflect.deleteProperty(navigator, "bluetooth");
 });
 
 describe("§10 row 2 through the real destination seam: a producer update after release still reaches `commit`", () => {

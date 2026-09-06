@@ -252,6 +252,12 @@ vi.mock("../monitor/driver", async (importOriginal) => {
 
 beforeEach(() => {
   localStorage.clear();
+  Object.defineProperty(navigator, "bluetooth", {
+    configurable: true,
+    value: {
+      requestDevice: vi.fn().mockRejectedValue(new Error("Test scan failed")),
+    },
+  });
   fakeForTest = null;
   capturedDriverEventCb = null;
   apiFn.mockClear();
@@ -259,6 +265,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  Reflect.deleteProperty(navigator, "bluetooth");
 });
 
 /** Connect through the real ack-gated programming exchange, request the

@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
+import { canConnectMonitor } from "../adapters/bluetoothCapability";
 import { deriveAxes } from "./connectedAxes";
 import {
   useMonitorSession,
@@ -176,7 +177,12 @@ export default function JustRowObserver({
           </button>
         )}
         {state.kind === "offline" || state.kind === "failed" ? (
-          <button type="button" className="button-l1" onClick={connect}>
+          <button
+            type="button"
+            className="button-l1"
+            onClick={connect}
+            disabled={!canConnectMonitor()}
+          >
             Connect
           </button>
         ) : (

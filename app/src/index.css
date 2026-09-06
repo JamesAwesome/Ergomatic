@@ -292,6 +292,13 @@ button:disabled {
   background: var(--action-connect-hover);
 }
 
+.button-connect:disabled,
+.button-connect:disabled:hover {
+  background: var(--surface);
+  border: 1px dashed var(--rule-3);
+  color: var(--ink-3);
+}
+
 /* 2 · secondary — surface fill, ink border/label, same type as L1. May
    stack (Log it after / Edit); never shares a row with another action. */
 .button-l2 {

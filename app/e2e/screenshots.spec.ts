@@ -4544,15 +4544,9 @@ test("news-reader-close", async ({ page }) => {
 // the 151px landscape overflow (Cancel and "Row on the phone timer instead"
 // starting 132px behind the fixed tab bar) the review measured directly.
 //
-// The FAILED state is reached by removing `navigator.bluetooth` itself
-// BEFORE the app loads — never through a real
-// `navigator.bluetooth.requestDevice()` call: this environment's real
-// Chromium exposes the Web Bluetooth API even headless, and with no adapter
-// and no way to render/dismiss a chooser, `requestDevice()` HANGS rather
-// than rejecting (the identical hazard `session.spec.ts`'s own "Connect
-// anyway" comment documents, LOW-1). With `navigator.bluetooth` gone no
-// picker is ever opened, so there is nothing to hang on, and `failed` is
-// the one state HIGH-3's own measurement named by number.
+// The browser supports Bluetooth, but its requestDevice rejects before a
+// picker opens. Unsupported browsers keep Connect disabled; they cannot
+// serve as the failure-screen fixture.
 //
 // **Corrected by the fix wave (review H4).** This block used to go on to
 // say that states 4/5/7 (pairing/programming/ready) were "deliberately NOT
@@ -4576,10 +4570,14 @@ test("news-reader-close", async ({ page }) => {
 // `.connected-interstitial`/`.connected-interstitial-body` layout classes,
 // and this file's connected captures are the real-browser check that the
 // interstitial's height and centring hold up under real fonts.
-async function stubNoBluetooth(page: Page): Promise<void> {
+async function stubBluetoothScanFailure(page: Page): Promise<void> {
   await page.addInitScript(() => {
     Object.defineProperty(window.navigator, "bluetooth", {
-      value: undefined,
+      value: {
+        requestDevice: async () => {
+          throw new Error("Test scan failed");
+        },
+      },
       configurable: true,
     });
   });
@@ -4590,7 +4588,7 @@ async function openConnectedFailedState(
   title: string,
   email: string,
 ): Promise<void> {
-  await stubNoBluetooth(page);
+  await stubBluetoothScanFailure(page);
   await signInViaBackdoor(page, {
     email,
     name: "Screenshot Tester",
@@ -4607,7 +4605,7 @@ async function openConnectedFailedState(
   await page.getByRole("button", { name: "Connect" }).click();
   await expect(
     page.locator(".connected-serif-line", {
-      hasText: "This device has no Bluetooth transport.",
+      hasText: "The link to the monitor failed.",
     }),
   ).toBeVisible();
 }
@@ -4650,7 +4648,7 @@ test("connected-interstitial-failed-landscape", async ({ page }) => {
 // States 4/5/7 (pairing/programming/ready) could not be captured for real
 // when Task 5's screenshots above were taken — no seam existed to drive them
 // without a real radio, which is exactly why the comment above
-// `stubNoBluetooth` named `failed` as "the one state HIGH-3's own
+// `stubBluetoothScanFailure` named `failed` as "the one state HIGH-3's own
 // measurement named by number". Task 8's fake-injection seam
 // (`src/monitor/transports/index.ts`) removes that constraint: this compose
 // stack's `web` image is built with `VITE_ENABLE_FAKE_MONITOR=1`
@@ -5370,7 +5368,7 @@ test("log-monitor-landscape", async ({ page }) => {
 // Task 8's (`src/monitor/transports/index.ts`), the stack serves a
 // PRODUCTION bundle where such a seam cannot fire, and a real
 // `requestDevice()` hangs here rather than rejecting (the note above
-// `stubNoBluetooth`).
+// `stubBluetoothScanFailure`).
 //
 // So the markup comes from `src/workout/ConnectedSurface.screens.test.tsx`,
 // which renders the REAL component tree on the REAL "Filling Low" library
@@ -6756,3 +6754,49 @@ test("log-concept2-no-weight", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "log-concept2-no-weight.png"),
   });
 });
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+]) {
+  const orientation = viewport.width === 390 ? "portrait" : "landscape";
+  test(`unsupported-connect-${orientation}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "bluetooth", {
+        value: undefined,
+        configurable: true,
+      });
+    });
+    await signInViaBackdoor(page, {
+      email: `screenshots-unsupported-${orientation}@e2e.test`,
+      name: "Screenshot Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator(".workout-detail-title")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Connect", exact: true }),
+    ).toBeDisabled();
+    await expect(page.getByText("NO BLUETOOTH ON THIS DEVICE")).toBeVisible();
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `workout-detail-unsupported-${orientation}.png`,
+      ),
+      fullPage: true,
+    });
+    await page.goto("/justrow");
+    await expect(
+      page.getByRole("button", { name: "Connect", exact: true }),
+    ).toBeDisabled();
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `just-row-unsupported-${orientation}.png`,
+      ),
+      fullPage: true,
+    });
+  });
+}

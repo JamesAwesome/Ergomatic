@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import StepRow from "./StepRow";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
@@ -141,6 +143,48 @@ describe("StepRow durations (house clock format)", () => {
     expect(screen.getByText("2:04.0")).toBeInTheDocument();
     expect(screen.queryByText("2:06.0")).not.toBeInTheDocument();
     expect(screen.queryByText(/–/)).not.toBeInTheDocument();
+  });
+});
+
+describe("StepRow nudge controls", () => {
+  it("offers faster/down before slower/up in DOM and keyboard order, with the matching numeric deltas", async () => {
+    const pressureRidge = LIBRARY_WORKOUTS.find(
+      (workout) => workout.title === "Pressure Ridge",
+    );
+    if (!pressureRidge) {
+      throw new Error("fixture workout 'Pressure Ridge' not found");
+    }
+    const workStep = pressureRidge.steps.find((step) => step.k === "w");
+    if (!workStep || workStep.k !== "w") {
+      throw new Error("expected Pressure Ridge to contain a work step");
+    }
+    const onNudge = vi.fn();
+    const user = userEvent.setup();
+
+    renderStep(
+      <StepRow
+        step={workStep}
+        baselines={BASELINES}
+        nudge={0}
+        onNudge={onNudge}
+      />,
+    );
+
+    const buttons = screen.getAllByRole("button");
+    expect(
+      buttons.map((button) => button.getAttribute("aria-label")),
+    ).toStrictEqual(["Nudge faster", "Nudge slower"]);
+    expect(buttons[0]).toHaveTextContent("▼");
+    expect(buttons[1]).toHaveTextContent("▲");
+
+    await user.tab();
+    expect(buttons[0]).toHaveFocus();
+    await user.tab();
+    expect(buttons[1]).toHaveFocus();
+
+    await user.click(buttons[0]!);
+    await user.click(buttons[1]!);
+    expect(onNudge.mock.calls).toStrictEqual([[-1], [1]]);
   });
 });
 

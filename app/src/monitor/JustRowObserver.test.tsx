@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
@@ -147,6 +147,15 @@ function deps(transport: Transport | null): MonitorSessionDeps {
   };
 }
 
+beforeEach(() => {
+  Object.defineProperty(navigator, "bluetooth", {
+    configurable: true,
+    value: {
+      requestDevice: vi.fn().mockRejectedValue(new Error("Test scan failed")),
+    },
+  });
+});
+
 afterEach(() => {
   cleanup();
   delete window.__pm5Recording__;
@@ -158,9 +167,28 @@ afterEach(() => {
   if (originalStorageDescriptor) {
     Object.defineProperty(navigator, "storage", originalStorageDescriptor);
   }
+  Reflect.deleteProperty(navigator, "bluetooth");
 });
 
 describe("JustRowObserver", () => {
+  it("without monitor capability, Connect is disabled on first render and cannot open a session", async () => {
+    Reflect.deleteProperty(navigator, "bluetooth");
+    const transport = observeTransport();
+    const user = userEvent.setup();
+    render(<JustRowObserver deps={deps(transport)} />);
+
+    const button = screen.getByRole("button", { name: "Connect" });
+    expect(button).toBeDisabled();
+
+    await user.click(button);
+
+    expect(
+      screen.getByRole("heading", { name: "Not connected" }),
+    ).toBeInTheDocument();
+    expect(transport.scans).toBe(0);
+    expect(transport.connects).toBe(0);
+  });
+
   // THE REGRESSION THAT MATTERS. `scan()` reaches
   // `navigator.bluetooth.requestDevice()` on the real web arm, which is
   // transient-activation gated (Web Bluetooth "request Bluetooth devices"

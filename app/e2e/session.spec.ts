@@ -1415,33 +1415,11 @@ test.describe("Phase 7B Task 5: Connect over a real (not seeded) unlogged sessio
     await cleanupByTitle(page, title);
   });
 
-  // "Connect anyway proceeds" is deliberately NOT driven further than this
-  // in Playwright. Tried first, and reverted: this environment's real
-  // Chromium (unlike jsdom, which has no `navigator.bluetooth` at all) DOES
-  // expose the Web Bluetooth API, so the real `useMonitorSession`'s default
-  // transport genuinely calls `navigator.bluetooth.requestDevice(...)` —
-  // which, with no adapter and no user gesture able to dismiss a chooser
-  // that headless Chromium cannot render, HANGS rather than rejecting
-  // (observed directly: the click on "Connect anyway" itself never
-  // resolves, and the whole test times out tearing down the browser
-  // context). That is a genuine, useful finding about the real risk on a
-  // laptop with Bluetooth support but no adapter — worth a note for
-  // whoever builds Task 8's transport seam — but it makes this exact path
-  // actively unsafe to drive in CI without a fake transport this task does
-  // not wire into the production bundle (see ConnectedInterstitial.test.tsx's
-  // own header comment on why the fake-driven walk lives at the client
-  // level instead). The "Connect anyway proceeds" walk is fully covered
-  // there and in WorkoutDetail.test.tsx's own real-hook, real-jsdom
-  // "transport-missing" integration test — both deterministic, because
-  // jsdom simply has no `navigator.bluetooth` to hang on.
-  //
-  // LOW-1 (task-5 review): the blast radius is WIDER than "pressing Connect
-  // anyway" — `ConnectedInterstitial`'s own mount effect calls `connect()`
-  // UNCONDITIONALLY, so ANY future e2e test that so much as reaches the
-  // interstitial's mount (not only one that presses through the staged
-  // confirm) will hang in this same real-Chromium environment. Task 8's
-  // transport seam needs to land, or a test-safe injection point needs to
-  // exist, before any e2e spec drives PAST the Connect button itself.
+  // This walk stops at the staged confirm so it never opens Chromium's
+  // real Bluetooth chooser. WorkoutDetail.test.tsx exercises proceeding,
+  // failure and Cancel through the real transport/hook with a rejected
+  // requestDevice; connected.spec.ts drives successful sessions through
+  // the dev/e2e fake seam. Missing Bluetooth now disables the front door.
   test("Connect anyway is reachable and staged copy is exact — proceeding further belongs to the client-level suite (see comment above)", async ({
     page,
   }) => {
