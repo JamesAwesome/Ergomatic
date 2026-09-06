@@ -2441,9 +2441,23 @@ trigger is the whole entry.
   re-cut + leg 4 decided by ending code; v7 operator blocks in screen
   text); v7's gate found one record clause (200 attributes nothing, only
   202 ⇒ iOS); v8 READY at the delta gate (seventh entry). James closed the
-  review loop: "No more after this round."** Next: James's go, one
-  permitted install (`0.23.0/9001`, build block paste-tested), the walk
-  per RUNSHEET v8. **Walk-verified countable exits** (spec): 2, 4,
+  review loop: "No more after this round."** **WALKED 2026-09-06
+  (`docs/monitor/sessions/phase-nf-product-walk/RESULT.md`): legs 1, 3, 4, 5
+  PASS; leg 2 INCONCLUSIVE — a PM5 keeps advertising after a phone-side END,
+  so the not-advertising copy is desk-proven only; leg 4 decided: iOS ends a
+  backgrounded reader with code 202 and the app's own pause abort still wins
+  the race to a quiet return.** Next: James's merge approval of #316.
+  **Follow-on PR (one worktree, after merge; James's ruling 2026-09-06
+  "merge this then a new PR"):** (1) **Scan NFC on Just Row** — absent today
+  by implementation choice (`JustRow.tsx` passes `nfcCapability="unsupported"`);
+  James noticed at the erg; Gate 0 for the Just Row screen with the second
+  primary; (2) the buttonless `Choosing your monitor` screen on the NFC path
+  (filed below) gets a targeted-scan variant with Cancel, Gate 0; (3) the
+  NDEF read-error path (Core NFC code 102, tag lost mid-read) showed the
+  system's error text, not our `NFC scan stopped. Try again.` — trace and
+  fix; (4) Connect once began connecting with no list sheet (walk leg 3; not
+  reproduced in leg 5) — reproduce or retire. Spec fact to land with it:
+  the PM5 keeps advertising after a phone-side END. **Walk-verified countable exits** (spec): 2, 4,
   5, 6, 7 and 9 close only at the walk; the walk precedes merge. The
   branch is NOT pushed; James's word gates push, PR, walk and merge. Open
   number for James: the 1_000 ms collision window is paid on every NFC

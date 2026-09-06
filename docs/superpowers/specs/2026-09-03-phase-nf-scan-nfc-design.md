@@ -1075,6 +1075,13 @@ Retired from the walk, each with its substitute evidence:
   copy. The invariant is transport mutation T3-5 ("held device not refused",
   BIT) and its named test.
 
+**Walked 2026-09-06 (`docs/monitor/sessions/phase-nf-product-walk/RESULT.md`):
+legs 1, 3, 4, 5 PASS; leg 2 INCONCLUSIVE with its premise falsified — a PM5
+keeps advertising after a phone-side END (observed: a targeted connect
+succeeded 2-3 s after leaving Connect Device), so the not-advertising copy is
+desk-proven only. Leg 4 read code 202 on the console (iOS ended the reader on
+the lock) with a quiet return, because the app's `pause` abort settled first.**
+
 Keep the redacted NFC capture and connection log under `docs/monitor/sessions/`
 or `docs/monitor/nfc/` per the hardware-walk contract. Teardown the per-worktree
 stack after the walk.
