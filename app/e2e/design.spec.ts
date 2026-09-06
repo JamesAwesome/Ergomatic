@@ -11196,7 +11196,11 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
       if (baselines == null || c2 == null || diag == null)
         throw new Error("a door did not render");
       // BASELINES, then CONCEPT2, then DIAGNOSTICS — the y-adjacency also
-      // pins the ORDER, which presence assertions never would.
+      // pins the ORDER, which presence assertions never would. Probed
+      // (RF21) by swapping the two rows in You.tsx and REBUILDING the
+      // stack: this line fails, `Math.abs(...)` being the row height
+      // rather than 0. The rebuild is the point — the same swap against a
+      // stale image passed in 929ms (RF12).
       expect(
         Math.abs(c2.y - (baselines.y + baselines.height)),
       ).toBeLessThanOrEqual(1);
@@ -11227,6 +11231,8 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
     // both 0 (RF21's second smell), so overflow is asserted as GEOMETRY —
     // the state line starts after the label ends and finishes inside the
     // row — never as a scroll measurement that cannot go red. Probed by
+    // narrowing the viewport to 240: the line reaches the label and the
+    // first expect fails, "Expected: > 95.453125, Received: 95.453125". Probed by
     // narrowing the viewport to 240: the label and the line overlap and
     // this fails ("expected 105 to be greater than 116.6875").
     for (const vp of [{ width: 320, height: 844 }, PHONE_PORTRAIT]) {
