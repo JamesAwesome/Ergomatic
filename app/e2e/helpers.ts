@@ -1,5 +1,20 @@
 import type { Page } from "@playwright/test";
 
+/** Supported browser for warning and scan-failure flows. Register before
+ * navigation so Connect is enabled on its first render on every host. */
+export async function stubBluetoothScanFailure(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, "bluetooth", {
+      value: {
+        requestDevice: async () => {
+          throw new Error("Test scan failed");
+        },
+      },
+      configurable: true,
+    });
+  });
+}
+
 // Must match the TEST_AUTH_SECRET env var scripts/e2e.sh and
 // scripts/screenshots.sh pass to the compose stack — see
 // server/auth/testSignin.ts for the route this signs in through.

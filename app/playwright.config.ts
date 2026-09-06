@@ -11,6 +11,10 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: "html",
   use: {
+    // Web Bluetooth is exposed by macOS Chromium but absent in Linux CI.
+    // Start unsupported everywhere; connected scenarios explicitly inject
+    // the fake monitor or a supported browser with a rejected scan.
+    launchOptions: { args: ["--disable-blink-features=WebBluetooth"] },
     // Set by scripts/stack-env.sh (per-worktree compose scoping, Phase CL);
     // the fallback keeps a bare `playwright test` against a hand-started
     // legacy stack working.

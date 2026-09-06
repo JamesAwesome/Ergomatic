@@ -3,7 +3,7 @@ import { NEWEST_RELEASE_VERSION } from "./releasePin";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { signInViaBackdoor } from "./helpers";
+import { signInViaBackdoor, stubBluetoothScanFailure } from "./helpers";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 import type { Step, WorkoutType } from "../domain/types.js";
 import { compileProgram } from "../domain/monitor/program.js";
@@ -1180,6 +1180,7 @@ test("recovery-today-both-sources-and-warning-singular-plural", async ({
   page,
 }) => {
   const target = "Screenshot recovery warning target";
+  await stubBluetoothScanFailure(page);
   await signInViaBackdoor(page, {
     email: "screenshots-recovery-both@e2e.test",
     name: "Screenshot Tester",
@@ -1997,6 +1998,7 @@ async function cleanupByTitle(page: Page, title: string): Promise<void> {
 }
 
 test("workout-detail", async ({ page }) => {
+  await stubBluetoothScanFailure(page);
   await signInViaBackdoor(page, {
     email: "screenshots-detail@e2e.test",
     name: "Screenshot Tester",
@@ -2053,6 +2055,7 @@ test("workout-detail", async ({ page }) => {
 // pace) is enough — `needsBaselines()` reads true for it, and this
 // account never calls the baselines API.
 test("workout-detail-no-target", async ({ page }) => {
+  await stubBluetoothScanFailure(page);
   await signInViaBackdoor(page, {
     email: "screenshots-detail-no-target@e2e.test",
     name: "Screenshot No Target Tester",
@@ -4570,19 +4573,6 @@ test("news-reader-close", async ({ page }) => {
 // `.connected-interstitial`/`.connected-interstitial-body` layout classes,
 // and this file's connected captures are the real-browser check that the
 // interstitial's height and centring hold up under real fonts.
-async function stubBluetoothScanFailure(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    Object.defineProperty(window.navigator, "bluetooth", {
-      value: {
-        requestDevice: async () => {
-          throw new Error("Test scan failed");
-        },
-      },
-      configurable: true,
-    });
-  });
-}
-
 async function openConnectedFailedState(
   page: Page,
   title: string,

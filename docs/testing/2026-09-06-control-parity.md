@@ -81,19 +81,36 @@ separates radio-off from unsupported browsers. A phrase sweep retained only the 
 radio-off test wording and the explicitly superseded handoff quotation in
 `DEVIATIONS.md`.
 
+The first CI run exposed a host-dependent fixture assumption: local macOS
+Chromium supplied `navigator.bluetooth`, while Linux CI did not. Four
+existing warning tests timed out on the correctly disabled Connect button.
+The same default absence was reproduced locally with Chromium's
+`--disable-blink-features=WebBluetooth` launch argument; the landscape
+warning test failed on that disabled button before its fixture was fixed.
+Playwright now uses this default on every host. Supported warning and
+scan-failure scenarios explicitly register a shared rejecting
+`requestDevice` fixture before navigation; successful monitor stories keep
+their existing injected fake. A fresh Connect-press census found and fixed
+the screenshot warning sibling too. The two normal workout-detail captures
+explicitly retain their supported-browser state. Both review stages passed
+for this test-only correction, and the four warning tests passed with the
+formerly implicit browser API absent.
+
 
 Validation: `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, production
 `pnpm build` and `pnpm dist:grep` passed. `pnpm test --project unit
 --project client`: 252 files, 7,230 passed and one existing skip.
 `pnpm test --project integration`: 25 files, 385 passed.
-`pnpm e2e --reporter=line`: 522 passed. Client-only coverage reports 100%
+`pnpm e2e --reporter=line`: 522 passed again with host-independent default
+absence of Web Bluetooth. Client-only coverage reports 100%
 statements, branches, functions and lines for `bluetoothCapability.ts`,
 `ConnectAction.tsx`, `JustRowObserver.tsx` and `StepRow.tsx`; that scoped run
 is not a claim about the repository-wide coverage threshold.
 
-`pnpm screenshots`: 137 passed; the two unsupported-browser captures were
-then recaptured at viewport size (2 passed), scrolling the landscape workout
-so both the nudge arrows and Connect appear above the fixed tab bar.
+`pnpm screenshots`: 137 passed again with the explicit capability fixtures;
+all seven retained captures reproduced exactly. The unsupported-browser
+captures use viewport size, scrolling the landscape workout so both the
+nudge arrows and Connect appear above the fixed tab bar.
 Retained captures show `▼▲`, inactive dashed Connect on both normal doors
 in portrait and landscape, and the supported scan-failure fixture. The
 failure screen's cropped landscape body also exists in the parent capture;

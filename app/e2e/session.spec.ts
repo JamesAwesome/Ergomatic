@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { signInViaBackdoor } from "./helpers";
+import { signInViaBackdoor, stubBluetoothScanFailure } from "./helpers";
 
 // Phase 6B Task 4's own proof: a tiny bulk-imported workout driven all the
 // way through completion (flows.spec.ts's own Phase 6A/6B describe block
@@ -1377,6 +1377,7 @@ test.describe("Phase 7B Task 5: Connect over a real (not seeded) unlogged sessio
     page,
   }) => {
     const title = "Connect Guard Cancel";
+    await stubBluetoothScanFailure(page);
     await signInViaBackdoor(page, {
       email: "connect-guard-cancel@e2e.test",
       name: "Connect Guard Cancel Tester",
@@ -1424,6 +1425,7 @@ test.describe("Phase 7B Task 5: Connect over a real (not seeded) unlogged sessio
     page,
   }) => {
     const title = "Connect Guard Proceed";
+    await stubBluetoothScanFailure(page);
     await signInViaBackdoor(page, {
       email: "connect-guard-proceed@e2e.test",
       name: "Connect Guard Proceed Tester",

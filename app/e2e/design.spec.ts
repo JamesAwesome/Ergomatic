@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { signInViaBackdoor, stableBoundingBox } from "./helpers";
+import {
+  signInViaBackdoor,
+  stableBoundingBox,
+  stubBluetoothScanFailure,
+} from "./helpers";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 import type { Step, WorkoutType } from "../domain/types.js";
 import { compileProgram } from "../domain/monitor/program.js";
@@ -7156,16 +7160,7 @@ test.describe("connected screens (fake-driven)", () => {
     const title = "Design Connected Failed Workout";
     // The browser supports Bluetooth, but scanning fails. An unsupported
     // browser now keeps Connect disabled before this screen can mount.
-    await page.addInitScript(() => {
-      Object.defineProperty(window.navigator, "bluetooth", {
-        value: {
-          requestDevice: async () => {
-            throw new Error("Test scan failed");
-          },
-        },
-        configurable: true,
-      });
-    });
+    await stubBluetoothScanFailure(page);
     await openConnected(page, title, "design-connected-failed@e2e.test");
     const failed = page.locator(".connected-serif-line", {
       hasText: "The link to the monitor failed.",
@@ -10195,6 +10190,7 @@ test.describe("unlogged recovery render registrations", () => {
     page,
   }) => {
     const targetTitle = "Recovery warning target";
+    await stubBluetoothScanFailure(page);
     await signInViaBackdoor(page, {
       email: "design-unlogged-recovery-warning@e2e.test",
       name: "Recovery Warning Tester",
@@ -10276,6 +10272,7 @@ test.describe("unlogged recovery render registrations", () => {
     page,
   }) => {
     const targetTitle = "Recovery warning safe exit target";
+    await stubBluetoothScanFailure(page);
     await signInViaBackdoor(page, {
       email: "design-unlogged-recovery-safe-exit@e2e.test",
       name: "Recovery Safe Exit Tester",
