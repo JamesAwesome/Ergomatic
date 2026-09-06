@@ -13,7 +13,7 @@
 ## Global constraints
 
 - Candidate version: **v0.39.1**, a UI fixes patch following v0.39.0. Verify it is still available before tagging. Use the actual release date in the notes.
-- Planning is the current authorization. Prepare and review the notes PR before seeking approval to merge it and publish the release. The approval for #319 was specific to that PR.
+- James authorized execution of this complete release plan on 2026-09-06 ("Let’s do it"), including the notes PR, merge, tag and TestFlight upload. The approved draft notes below define the intended release content; complete the verification and rendered review before publishing.
 - All source and documentation edits stay in the release worktree. Main is PR-only; no merge commits. Do not hand-edit package or native version numbers.
 - Annotated tags are the version authority. Derive the final build number with `scripts/version.sh`; do not predict it before the notes merge.
 - The notes/capture change qualifies for the repository's fast path if its scope remains one product data file, tests and captures, with no domain/server, stored shape, auth, number meaning or device behavior change. Inline preparation; James reviews the PR. No PM or antagonist pass is needed for this release packaging.
@@ -40,14 +40,14 @@ Main's [post-merge CI and deployment](https://github.com/JamesAwesome/Ergomatic/
 
 ## Task 1: Prepare one notes-and-captures PR
 
-**Files:** modify `app/src/news/content/releaseNotes.ts`, `app/e2e/releasePin.ts`, `app/e2e/news.spec.ts`; retain justified updates under `docs/screenshots/`, especially `releases.png` and `news.png`. Include this plan in the same PR.
+**Files:** modify `app/src/news/content/releaseNotes.ts`, `app/e2e/releasePin.ts`, `app/e2e/news.spec.ts`, `app/e2e/screenshots.spec.ts`; retain justified updates under `docs/screenshots/`, especially `releases.png` and `news.png`. Include this plan in the same PR.
 
 **Consumes:** the four-merge census above and existing note registry. **Produces:** a reviewed notes PR with v0.39.1 first in News and Releases, screenshots, and an up-to-date census.
 
-- [ ] Recheck `git log v0.39.0..origin/main --oneline` and open PRs. Account for any intervening merge in the same census before preparing or approving a tag. Include the notes PR itself as packaging, with no separate item.
-- [ ] Change `NEWEST_RELEASE_VERSION` in `app/e2e/releasePin.ts` to `"v0.39.1"`. In the `/news/releases lists every version, newest first` test, change the count from 40 to 41, insert `await expect(versions.nth(1)).toContainText("v0.39.0");` after index 0, and increase every previous literal index 1–39 to 2–40. Keep every historical version assertion. The shared pin also drives the News and screenshot assertions; there is no second independent newest-version literal to update.
-- [ ] Before adding the note, run `pnpm e2e news.spec.ts --grep 'lists every version' --reporter=line` from `app/`. Expect failure because the served registry still has 40 releases and starts with v0.39.0. This command rebuilds the actual served stack.
-- [ ] Prepend this entry to `RELEASE_NOTES`, with a source comment accounting for #315, #317, #318 and #319 as above. Set `date` to the actual release day if it differs from this proposal. Keep shipped entries unchanged.
+- [x] Recheck `git log v0.39.0..origin/main --oneline` and open PRs. Account for any intervening merge in the same census before preparing or approving a tag. Include the notes PR itself as packaging, with no separate item.
+- [x] Change `NEWEST_RELEASE_VERSION` in `app/e2e/releasePin.ts` to `"v0.39.1"`. In the `/news/releases lists every version, newest first` test, change the count from 40 to 41, insert `await expect(versions.nth(1)).toContainText("v0.39.0");` after index 0, and increase every previous literal index 1–39 to 2–40. Keep every historical version assertion. The shared pin also drives the News and screenshot assertions; there is no second independent newest-version literal to update.
+- [x] Before adding the note, run `pnpm e2e news.spec.ts --grep 'lists every version' --reporter=line` from `app/`. Expect failure because the served registry still has 40 releases and starts with v0.39.0. This command rebuilds the actual served stack.
+- [x] Prepend this entry to `RELEASE_NOTES`, with a source comment accounting for #315, #317, #318 and #319 as above. Set `date` to the actual release day if it differs from this proposal. Keep shipped entries unchanged.
 
 ```ts
 {
@@ -62,10 +62,10 @@ Main's [post-merge CI and deployment](https://github.com/JamesAwesome/Ergomatic/
 },
 ```
 
-- [ ] Run the same scoped browser test again and require green. Run the existing news client suites with `pnpm test --project client src/news`; no new test mirroring the note strings is needed.
-- [ ] Run `pnpm screenshots` twice from `app/`, saving the first run outside the repo before the second so run-to-run churn can be identified. Open every image selected for the PR. Refresh News/Releases for the new note and retain any actual UI change; restore date, generated-address and rasterizer noise by explicit path after inspection.
+- [x] Run the same scoped browser test again and require green. Run the existing news client suites with `pnpm test --project client src/news`; no new test mirroring the note strings is needed.
+- [x] Run `pnpm screenshots` twice from `app/`, saving the first run outside the repo before the second so run-to-run churn can be identified. Open every image selected for the PR. Refresh News/Releases for the new note and retain any actual UI change; restore date, generated-address and rasterizer noise by explicit path after inspection.
 - [ ] Run `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test --project unit --project client`, `pnpm build`, `pnpm dist:grep`, and `pnpm e2e --reporter=line`. CI also runs the aggregate coverage gate. Do not reuse old-head checks as the notes PR's result.
-- [ ] Before committing, run `git rev-parse --show-toplevel` and confirm the release worktree. Commit the notes, pins, plan and selected captures together. After this real change is committed, prove the existing release gate rejects both a missing new entry (40 instead of 41) and a new entry placed below v0.39.0 (wrong first version), applying each mutation separately at a unique source anchor. Rebuild and run the scoped browser test for each, record the expected failure, then precisely reverse the mutation and obtain restored green. Push one PR. The visible review is the four note strings and rendered News/Releases captures. Obtain James's approval for this PR and release before merging or tagging.
+- [ ] Before committing, run `git rev-parse --show-toplevel` and confirm the release worktree. Commit the notes, pins, plan and selected captures together. After this real change is committed, prove the existing release gate rejects both a missing new entry (40 instead of 41) and a new entry placed below v0.39.0 (wrong first version), applying each mutation separately at a unique source anchor. Rebuild and run the scoped browser test for each, record the expected failure, then precisely reverse the mutation and obtain restored green. Push one PR. The visible review is the four note strings and rendered News/Releases captures. The release authorization is recorded above; merge and publish after the concrete notes PR and its gates are ready.
 
 ## Task 2: Merge notes and cut the release
 
@@ -97,4 +97,6 @@ bash scripts/version.sh
 
 ## Plan preparation record
 
-The release worktree is `.claude/worktrees/testflight-ui-release`, branch `codex/testflight-ui-release`, based on `1cda41e7`. Its stack identity is `ergomatic-57467` (web 8367, Postgres 15367); no stack has been started during planning. Root and app dependencies are installed. The installed pre-commit hook rejected a deliberately unused TypeScript probe; that probe was precisely unstaged and removed. The proposed entry parsed as TypeScript, matched the existing note shape, and the planned version-test index transition covered all 41 positions. Only this plan is being prepared now; the task checkboxes describe future release work.
+The release worktree is `.claude/worktrees/testflight-ui-release`, branch `codex/testflight-ui-release`, based on `1cda41e7`. Its stack identity is `ergomatic-57467` (web 8367, Postgres 15367); no stack has been started during planning. Root and app dependencies are installed. The installed pre-commit hook rejected a deliberately unused TypeScript probe; that probe was precisely unstaged and removed. The proposed entry parsed as TypeScript, matched the existing note shape, and the planned version-test index transition covered all 41 positions. Execution was authorized in the next message. The four-merge census is unchanged. The served release-order gate failed first (expected 41 entries, received 40), then passed with the v0.39.1 entry present. The remaining checkboxes track release execution.
+
+Execution receipts before mutation probes: lint, typecheck, formatting, 7,230 unit/client tests (one existing skip), production build and all eight bundle exclusions passed. Screenshot runs passed 137/137 twice. The top-of-feed News capture did not show the release card, so the existing capture now also records that card in both orientations; Releases gains a landscape view scrolled to the current entry. All four retained views were opened and inspected. Fifty-nine unrelated regenerated captures were restored. The four-note draft is unchanged.
