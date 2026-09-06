@@ -1905,7 +1905,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         <BackLink />
         <h1 className="screen-title">Log {workout.title}</h1>
         <span className="step-row-no-target">
-          <em>no target</em> <Link to="/you">Set baselines</Link>
+          <em>no target</em> <Link to="/you/baselines">Set baselines</Link>
         </span>
       </main>
     );

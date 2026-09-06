@@ -868,7 +868,7 @@ describe("Builder", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the no-target treatment with a link to /you when baselines are unset", async () => {
+  it("shows the no-target treatment with a link to /you/baselines when baselines are unset", async () => {
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
@@ -876,7 +876,7 @@ describe("Builder", () => {
     expect(screen.getByText("no target")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /set baselines/i }),
-    ).toHaveAttribute("href", "/you");
+    ).toHaveAttribute("href", "/you/baselines");
   });
 
   it("live-resolves a work row's typed duration and pace ref into the exact split", async () => {

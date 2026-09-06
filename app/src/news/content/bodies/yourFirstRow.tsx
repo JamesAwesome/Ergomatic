@@ -24,17 +24,18 @@ export function YourFirstRowBody() {
         then estimate the other distance too (a 2k runs about seven seconds per
         500m faster than a 6k), or you can leave that side unset and row the
         real test when you're ready. Decline the offer and nothing is lost: the
-        test is still recorded, and the baselines editor on You remains yours
-        for typing either number any time. The app uses both baselines
-        eventually: short, sharp workouts key off your 2k, longer ones off your
-        6k.
+        test is still recorded, and the baselines editor, behind BASELINES on
+        the You tab, remains yours for typing either number any time. The app
+        uses both baselines eventually: short, sharp workouts key off your 2k,
+        longer ones off your 6k.
       </p>
 
       <p>
         One honest warning: your first baseline will be a little wrong.
         Everyone's is. Row for a few weeks, notice workouts drifting easier than
-        their forecasts, and re-test from the You tab, where the 6k and the 2k
-        sit one tap from your baseline numbers. The library moves with you.
+        their forecasts, and re-test from BASELINES on the You tab, where the 6k
+        and the 2k sit right beside your baseline numbers. The library moves
+        with you.
       </p>
     </>
   );

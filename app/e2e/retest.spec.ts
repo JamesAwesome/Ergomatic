@@ -1,14 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
 
-// Phase BL PR B's You-screen re-test shortcut, reshaped by James's tester
-// feedback (2026-08-22), against the real stack: one tap from the
-// baseline fields lands on the designated test's DETAIL screen — the one
-// offering Connect / Start Timer / Log it after — never straight into the
-// timer, and BACK from there returns to You. Completing a test (started
-// from that detail screen, the only start the shortcut leads to now)
-// still lands in the post-save offer whose accepted numbers then appear
-// in the You editor.
+// Phase BL PR B's re-test shortcut, reshaped by James's tester feedback
+// (2026-08-22), against the real stack: one tap from the baseline fields
+// lands on the designated test's DETAIL screen — the one offering Connect
+// / Start Timer / Log it after — never straight into the timer, and BACK
+// from there returns to the screen the shortcut sits on. Completing a test
+// (started from that detail screen, the only start the shortcut leads to
+// now) still lands in the post-save offer whose accepted numbers then
+// appear in the editor. Both the shortcut and the editor moved from You to
+// `/you/baselines` at Gate 0, 2026-09-05.
 //
 // Titles are literal strings, matching every other e2e file's precedent
 // of not reaching into `domain/` from a Playwright spec.
@@ -16,14 +17,14 @@ const K6_TITLE = "6K Test";
 const K2_TITLE = "2K Test";
 
 test.describe("Phase BL: the You re-test shortcut", () => {
-  test("ROW THE 6K lands on the 6k test's detail — Connect / Start Timer / Log it after — and BACK returns to You", async ({
+  test("ROW THE 6K lands on the 6k test's detail — Connect / Start Timer / Log it after — and BACK returns to the baselines screen", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
       email: `retest-6k-${RUN_ID}@e2e.test`,
       name: "Retest Rower",
     });
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     await page.getByRole("link", { name: "ROW THE 6K" }).click();
 
     // The detail screen, not the timer (the feedback verbatim: "It should
@@ -42,10 +43,14 @@ test.describe("Phase BL: the You re-test shortcut", () => {
     // all-out vocabulary now, never the easy word the old min ref showed.
     await expect(page.locator(".step-row-range")).toHaveText("ALL OUT");
 
-    // Feedback item 2: BACK reads the carried from:"/you", not the
-    // /library fallback.
+    // Feedback item 2: BACK reads the carried from — the screen the
+    // shortcut is rendered on since the editor moved off You (Gate 0,
+    // 2026-09-05) — not the /library fallback.
     await page.getByRole("link", { name: "← BACK" }).click();
-    await expect(page).toHaveURL(/\/you$/);
+    await expect(page).toHaveURL(/\/you\/baselines$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Baselines" }),
+    ).toBeVisible();
   });
 
   test("RACE THE 2K reaches the 2k test's detail, and completing it from there lands in the post-test prompt", async ({
@@ -55,7 +60,7 @@ test.describe("Phase BL: the You re-test shortcut", () => {
       email: `retest-2k-${RUN_ID}@e2e.test`,
       name: "Retest Racer",
     });
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     await page.getByRole("link", { name: "RACE THE 2K" }).click();
     await expect(page.locator("h1.workout-detail-title")).toHaveText(K2_TITLE);
     await page.getByRole("button", { name: "Start Timer" }).click();
@@ -154,10 +159,10 @@ test.describe("Phase BL: the You re-test shortcut", () => {
     await page.getByRole("button", { name: "Set 6k estimate" }).click();
     await expect(page).toHaveURL(/\/today$/);
 
-    // The loop closes where the numbers live: the You editor now shows
+    // The loop closes where the numbers live: the editor now shows
     // EXACTLY the two values the prompt displayed — recompute by eye:
     // derived is measured + 7s, and both render at fmtSplit's tenth.
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue(
       measured,
     );
@@ -173,7 +178,7 @@ test.describe("Phase BL: the You re-test shortcut", () => {
       email: `retest-decline-${RUN_ID}@e2e.test`,
       name: "Retest Decliner",
     });
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     await page.getByRole("link", { name: "RACE THE 2K" }).click();
     await page.getByRole("button", { name: "Start Timer" }).click();
     await page.getByRole("button", { name: "SKIP ›" }).click();

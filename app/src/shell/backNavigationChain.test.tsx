@@ -125,15 +125,18 @@ describe("history-aware BACK: the full Today -> detail -> edit round trip", () =
 // James's tester feedback on the re-test shortcut (2026-08-22): "Make
 // sure back takes you to the You screen." Same real-AppRoutes wiring
 // proof as the Today chain above — RetestShortcut's own Link must carry
-// state={{from:"/you"}} and WorkoutDetail's BackLink must read it; a
-// dropped `from` collapses BACK to the /library fallback and fails here.
+// state={{from:"/you/baselines"}} and WorkoutDetail's BackLink must read
+// it; a dropped `from` collapses BACK to the /library fallback and fails
+// here. The origin is `/you/baselines` since the editor and this shortcut
+// moved off You (Gate 0, 2026-09-05); this round trip is also the one
+// place the new route is exercised through the REAL AppRoutes.
 // (The detail -> edit -> back -> detail leg is untestable for THIS origin
 // on purpose: the designated tests are GLOBAL rows, and OwnerActions
 // renders no Edit link for a workout the rower doesn't own — the
 // forwarding it would exercise is origin-value-agnostic and pinned by the
 // /today round trip above.)
-describe("history-aware BACK: the You re-test shortcut -> detail round trip", () => {
-  it("returns to the You screen after BACK from the designated test's detail", async () => {
+describe("history-aware BACK: the baselines re-test shortcut -> detail round trip", () => {
+  it("returns to the baselines screen after BACK from the designated test's detail", async () => {
     const seed = ONBOARDING_LIBRARY_WORKOUTS.find(
       (w) => w.title === "6K Test",
     )!;
@@ -151,7 +154,7 @@ describe("history-aware BACK: the You re-test shortcut -> detail round trip", ()
     ]);
     const { default: AppRoutes } = await import("./AppRoutes");
     render(
-      <MemoryRouter initialEntries={["/you"]}>
+      <MemoryRouter initialEntries={["/you/baselines"]}>
         <AppRoutes
           user={{ id: "u1", email: "rower@e2e.test", name: "Row Er" }}
           onSignedOut={() => {}}
@@ -159,16 +162,18 @@ describe("history-aware BACK: the You re-test shortcut -> detail round trip", ()
       </MemoryRouter>,
     );
 
-    // You -> detail, carrying state={from:"/you"} (RetestShortcut's Link).
+    // Baselines -> detail, carrying state={from:"/you/baselines"}
+    // (RetestShortcut's Link).
     await userEvent.click(screen.getByRole("link", { name: "ROW THE 6K" }));
     expect(
       await screen.findByRole("heading", { level: 1, name: "6K Test" }),
     ).toBeVisible();
 
-    // BACK reads the carried origin: You, never the /library fallback.
+    // BACK reads the carried origin: the baselines screen the shortcut is
+    // rendered on, never the /library fallback.
     await userEvent.click(screen.getByRole("link", { name: "← BACK" }));
     expect(
-      await screen.findByRole("button", { name: "Sign out" }),
+      await screen.findByRole("heading", { level: 1, name: "Baselines" }),
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Library" })).toBeNull();
   });

@@ -2362,7 +2362,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(screen.getByText("no target")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /set baselines/i }),
-    ).toHaveAttribute("href", "/you");
+    ).toHaveAttribute("href", "/you/baselines");
     // Nothing to save against — no form at all in this degraded state.
     expect(
       screen.queryByRole("button", { name: SAVE_BUTTON }),

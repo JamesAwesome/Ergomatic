@@ -275,7 +275,7 @@ export default function StepEditor({
             <span className="step-editor-target-value">{splitLabel}</span>
           ) : (
             <span className="step-editor-target-value step-editor-no-target">
-              <em>no target</em> <Link to="/you">Set baselines</Link>
+              <em>no target</em> <Link to="/you/baselines">Set baselines</Link>
             </span>
           )}
         </div>

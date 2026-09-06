@@ -2,7 +2,8 @@ import { useState } from "react";
 import { api } from "../api";
 
 /** Phase BL PR C — Reset baseline setup (spec rev 2's "Reset onboarding"
- *  ruling, James): a deliberate, staged-confirm action on You that clears
+ *  ruling, James): a deliberate, staged-confirm action on `/you/baselines`
+ *  (on You itself until Gate 0, 2026-09-05) that clears
  *  BOTH baseline numbers AND both stored sources (DELETE /api/baselines
  *  deletes the row whole), returning the account to the true no-baseline
  *  state — Today renders the three doors again. This is what makes the
@@ -12,8 +13,8 @@ import { api } from "../api";
  *  Staged confirm in the editor's own `.baseline-confirm` vocabulary
  *  (confirm line + Cancel/lead action pair) — destructive, so the copy
  *  says plainly what it does and nothing fires on the first tap.
- *  `onReset` lets You remount the editor so its draft re-seeds from the
- *  now-empty server state instead of showing stale committed numbers. */
+ *  `onReset` lets the screen remount the editor so its draft re-seeds from
+ *  the now-empty server state instead of showing stale committed numbers. */
 export default function ResetBaselineSetup({
   onReset,
 }: {
