@@ -169,6 +169,13 @@
       "when": 1788454715802,
       "tag": "0023_married_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788653269054,
+      "tag": "0024_boring_black_panther",
+      "breakpoints": true
     }
   ]
 }

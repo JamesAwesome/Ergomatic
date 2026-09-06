@@ -983,6 +983,15 @@ export function makeFakeConcept2Store(
         refreshToken: link.refreshToken,
         expiresAt: link.expiresAt,
         needsReauthAt: null,
+        // Mirrors the real store's two split rules (Wave E auto-send §3.1):
+        // the MODE survives a same-account reconnect and resets on an account
+        // switch; the FAILURE flag clears on every relink.
+        autoSend:
+          existing !== undefined && existing.c2UserId === link.c2UserId
+            ? existing.autoSend
+            : false,
+        sendFailedAt: null,
+        sendFailedReason: null,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       });
@@ -990,6 +999,34 @@ export function makeFakeConcept2Store(
 
     async deleteLink(userId: string) {
       links.delete(userId);
+    },
+
+    async setAutoSend(userId: string, autoSend: boolean) {
+      const existing = links.get(userId);
+      if (!existing) return false;
+      links.set(userId, { ...existing, autoSend, updatedAt: clock() });
+      return true;
+    },
+
+    async setSendFailed(userId: string, reason: string) {
+      const existing = links.get(userId);
+      if (!existing) return;
+      links.set(userId, {
+        ...existing,
+        sendFailedAt: clock(),
+        sendFailedReason: reason,
+        updatedAt: clock(),
+      });
+    },
+
+    async clearSendFailed(userId: string) {
+      const existing = links.get(userId);
+      if (!existing || existing.sendFailedAt === null) return;
+      links.set(userId, {
+        ...existing,
+        sendFailedAt: null,
+        sendFailedReason: null,
+      });
     },
 
     async withLinkLock(userId, fn) {

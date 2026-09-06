@@ -570,6 +570,24 @@ export const concept2Links = pgTable("concept2_links", {
   // Cleared by the callback's upsert on successful relink. Measured
   // grounds: docs/monitor/c2-crossconnect-2026-09/refresh-probe-2026-08-31.md.
   needsReauthAt: timestamp("needs_reauth_at", { withTimezone: true }),
+  // Wave E auto-send (spec 2026-09-05-concept2-auto-send-design §3.1). The
+  // rower's SENDING MODE: false = MANUAL (today's per-row Send), true =
+  // AUTOMATIC (a finished monitor row is sent the moment it saves). `NOT NULL
+  // DEFAULT false` is ruling 3 — a fresh link lands in MANUAL — and is also
+  // what makes every existing link MANUAL with no backfill. Reset to false by
+  // `upsertLink` when the conflict path lands a DIFFERENT `c2_user_id` (an
+  // account switch must not carry AUTOMATIC onto another Concept2 account);
+  // a reconnect of the same account keeps it.
+  autoSend: boolean("auto_send").notNull().default(false),
+  // The sticky "sends are failing" flag (rulings 6, 7). Set by the send
+  // route ONLY when an eligible send fails with `no_weight_class`; the reason
+  // column carries the route's SUB-reason (`no_weight` | `unreadable_weight`
+  // | `no_gender`), which is the key the rower-facing sentence is chosen by.
+  // Cleared on every outcome that leaves the row at Concept2 (200 post, 200
+  // already-sent short-circuit, 409 duplicate) and on every relink. `c2_error`
+  // never sets it: transient, and its rows keep their Send button.
+  sendFailedAt: timestamp("send_failed_at", { withTimezone: true }),
+  sendFailedReason: text("send_failed_reason"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
