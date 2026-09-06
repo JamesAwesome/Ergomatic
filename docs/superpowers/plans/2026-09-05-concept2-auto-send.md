@@ -1595,7 +1595,7 @@ index 7467542e..7c4bb8bd 100644
 
 **Interfaces produced:** GET `/api/concept2/link` linked shape gains `autoSend`, `sendFailedAt` (ISO string | null), `sendFailedReason`. New `PATCH /api/concept2/link` body `{ autoSend: boolean }` → 204; 400 `field: "autoSend"` on anything but a literal boolean; 409 `unlinked`; 403 when the surface is dark. Client `Concept2Link` gains the three fields (`autoSend: raw.autoSend === true` — A2 fail-closed; the strings absent/empty → null); `LINK_UNAVAILABLE` carries `false/null/null`; `reload()` resolves to the applied link or `null`; **`fetchLink()`** is exported (one read, parsed, never throws) and the hook's `reload` is built on it. `RowState` gains `"SEND FAILED"`, precedence `needsReauth` → `sendFailedAt !== null` → linked.
 
-**The claim, as BUILT (spec rev 4 §3.3):** `claimSend`, an Express middleware on the upload route. Map `userId:logId` → the CHAIN promise for that key; a caller appends its own gate (resolved on the response's `finish`/`close`) to the chain synchronously, then awaits the prior chain before `next()`. A later caller therefore runs the handler AFTER the earlier response finished and meets the row's `c2_result_id` → the already-sent 200. No response capture; the handler keeps its exits and indentation. A handler that throws is answered by Express 5's error path → `finish` → release. Rejected in favour of the wrapper the draft first had: that re-indented ~585 lines (a 1082-line diff for a 30-line mechanism).
+**The claim, as BUILT (spec rev 4 §3.3; corrected by the harden fix round, commit `cfb99c98`):** `claimSend(handler)`, a WRAPPER around the upload handler. Map `userId:logId` (id lower-cased — `UUID_RE` is `/i` and Postgres compares uuids case-insensitively) → the CHAIN promise for that key; a caller appends its own gate to the chain synchronously, awaits the prior chain, runs the handler, and releases in a `finally` on the handler's OWN settlement. A later caller therefore runs AFTER the earlier handler finished and meets the row's `c2_result_id` → the already-sent 200. No response capture; the handler keeps its exits and indentation (the wrapper is an argument, so the body's indentation is unchanged). A thrown handler rethrows: `router`'s `Layer.handleRequest` passes the rejection to `next(err)`, finalhandler answers 500 (measured, lens 1 item 4). **What this replaced, and why (both lenses, independently):** the commit `1ef395e0` shipped it as a middleware releasing on the response's `finish`/`close`; Express does not stop a handler when its client hangs up, `close` fires while the handler is still inside `postResult`, the key is freed, and a second caller runs beside the first — measured `wireCalls = 2` in a verbatim scratch copy. The rower's own client is that hang-up, routinely, since the automatic send is fire-and-forget from a screen already left. Cost of the fix: a waiting caller now waits for the first HANDLER, bounded by `server/concept2/client.ts`'s timeouts.
 
 **Flag sites (spec §3.4, ruling: `no_weight_class` only):** `setSendFailed(userId, resolved.reason)` immediately before the eligible `no_weight_class` 422; `clearSendFailed(userId)` before the already-sent 200, after the success 200's `recordC2Result`, and in the 409 duplicate branch. `c2_error`, `not_eligible`, `needs_reauth` never touch it.
 
@@ -2699,6 +2699,15 @@ index d0806f74..ea1e62b4 100644
 **Interfaces produced:** `modeLine(link): { text, warn, remedy }` and `linkedPill(link)` in the card model — the pill and the line read the You row's precedence (`needsReauth` → flag → mode). Copy per Gate 0 §1a/§3/§4a: MANUAL _"Send each finished monitor row yourself, from the log."_, AUTOMATIC _"Finished monitor rows are sent when you save them."_, paused _"Sends are paused until you reconnect."_, three failure lines on the _"Rows aren't being sent:"_ prefix (`implausible_weight` shares `unreadable_weight`'s; unknown shares `no_gender`'s). A7 line _"Couldn't change this. Try again."_
 
 **The control:** `role="group" aria-label="Sending mode"` holding three `<button aria-pressed>` — NOT a radiogroup (F4; arrows move focus only, via one `onKeyDown` on the group). OFF arms (existing two-tap, 4 s disarm, disclosure and foot kept); while armed OFF alone is pressed, reads _Tap again to unlink_, spans the control at 52 px (`.c2-card-mode-armed`), and the siblings are `display: none`. MANUAL/AUTOMATIC → `setMode(autoSend)`: disarm, no-op when already the server's mode, else PATCH with the JSON header and body, `modeFailed` on non-2xx/throw, and `reload()` in the `finally` (I1: pressed state is drawn from `link`, never the tap). `disabled={busy || modeBusy}` on all three. The helper _"Finished monitor rows can be sent from the log."_ and `.c2-card-helper`/`.c2-card-danger*` CSS are deleted (RF5).
+
+**Lifetime table (RF27) for the state this task mints — invariants, not mechanisms:**
+
+| state | mint | clear sites | survives |
+| --- | --- | --- | --- |
+| `armed` (the OFF arm) | first OFF tap | the second tap (unlink runs), the 4 s timer, ANY other tap on the control (`setMode` disarms first), unmount / route change (effect cleanup) | nothing — never a link change, never a screen change |
+| `modeBusy` | `setMode` past the same-mode return | `setMode`'s `finally`, after the re-read | one write; a component unmount mid-write discards it |
+| `modeFailed` (the A7 line) | a non-2xx or thrown PATCH | ANY tap on the control (`setMode` entry), `connect()` entry — the ONE site on the relink path (the unlink-path clear was measured redundant and removed, `a46cb712`) | an unlink alone (unobservable: the mode block is unmounted while unlinked); NOT a relink (tested, M20) |
+| `link` / `failed` (the hook) | mount read | every re-read (`pageshow`, `visibilitychange`, `reload()`) | a superseded read applies nothing (generation token) |
 
 **Layout departure (recorded on the design page §9):** the mode line sits in the ACT column beneath the control in both orientations; the page's landscape frame drew it in the tell column.
 
@@ -5506,6 +5515,31 @@ index 20115d16..5dcecf3b 100644
 </details>
 
 ---
+
+## Harden fix round — commits `cfb99c98` and `a46cb712`
+
+`/harden` ran both lenses in parallel on the plan as committed (`32d4b594`); reports in the session scratchpad (`harden-lens1.md`, `harden-lens2.md`). Lens 1 (antagonist delta on the two as-built mechanisms) and lens 2 (the code read as code) converged on ONE mechanism defect and five smaller ones; everything below changed a code block, a gate, or an expected value — bookkeeping findings (a stale helper comment, a RELEASING clause, a confirmed-clean RF5 sweep) were folded without a pass.
+
+| # | finding (lens) | fix | gate |
+| --- | --- | --- | --- |
+| F1 | the claim released on the response's `finish`/`close`, freeing the key while the handler still posted (1 + 2, PROVEN `wireCalls = 2`) | `claimSend` is a handler WRAPPER released in `finally`; key lower-cased | A10 abort leg: enter the wire call, `.abort()` request 1, issue request 2, assert one wire call BEFORE releasing — deterministic |
+| F2 | pressed segment `--ink-3` on `--ink` = 2.30:1 while disabled (2) | `:disabled` colour scoped `:not([aria-pressed="true"])`; comment states both pairings | `design.spec.ts` reads computed `color`/`background-color` of the pressed segment against a held PATCH |
+| F3 | a 201 body `{ id: "" }` sent to `/results/` (2) | `parsed.id !== ""` | `LogSession.test.tsx`: empty id → Today, zero `/api/concept2/` calls |
+| F4 | `modeFailed` outlived unlink + relink (1 + 2) | cleared at `connect()` entry and on any control tap | card test: fail a PATCH, unlink, relink, line gone |
+| F5 | `implausible_weight` missing from three enumerations of the column (2) | schema comment, store comment, spec §3.1 / §3.4 | — |
+| F6 | no test from a real 422 to the GET's `sendFailedReason` (2, RF24) | six lines in A11's `no_weight_class` test | the same test |
+| F7 | `reload()`'s widened return had no reader (1 + 2, RF29) | narrowed back to `Promise<void>`; two tests deleted; doc names `fetchLink` | typecheck |
+
+**Mutations (measured, committed tree `a46cb712`):**
+
+| # | mutation | failure |
+| --- | --- | --- |
+| M17 | `claimSend` releases BEFORE `await handler(req, res)` (the middleware's hole, re-created) | 2 failed: the concurrent test AND the abort leg — `expected "vi.fn()" to be called 1 times, but got 2 times` |
+| M18 | delete `:not([aria-pressed="true"])` from the disabled colour rule | e2e `the pressed mode segment keeps --on-color on --ink while its PATCH is in flight` — `Expected: "rgb(255, 253, 247)" Received: "rgb(87, 84, 76)"` (the pressed segment painted `--ink-3`; stack rebuilt with the mutant, 1 failed) |
+| M19 | `&& parsed.id !== ""` removed | `a 201 whose body carries an EMPTY id sends nothing…` — `expected [ [ '/api/concept2/link' ], …(1) ] to have a length of +0 but got 2` |
+| M20 | `setModeFailed(false)` removed from `connect()` | `the A7 line does not survive an unlink and relink…` — `expected <p class="c2-card-mode-error"></p> to be null`. (With the clear ALSO in `unlink()`, this probe stayed green — that site was redundant and is gone.) |
+
+**Gates on the fixed head:** `pnpm typecheck` clean; `pnpm lint` clean; routes 160 passed (159 + the abort leg); `webauth-contract` 8; card 65; hook 36; `LogSession` 195; `autoSend` 16; `Concept2SendBlock`, `Concept2Row` green. Browser suites: `bash scripts/e2e.sh e2e/concept2.spec.ts e2e/design.spec.ts -g "Concept2\|concept2\|c2-card\|C2"` → 44 passed (43 + the mid-PATCH contrast test).
 
 ## Task 7: the whole-branch gate, the PR, and STOP
 

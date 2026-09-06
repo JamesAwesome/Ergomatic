@@ -7853,3 +7853,60 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   branches; the account-switch path having a supported producer (`/connect` has
   no already-linked guard); the You row's fifth string breaking no existing test
   (no exhaustiveness assertion anywhere, verified by grep rather than assumed).
+
+### 2026-09-05 — Concept2 auto-send, /harden lens 1 on the plan as BUILT (delta)
+
+- **A serialisation guard released by the RESPONSE, protecting work done by the
+  HANDLER.** The spec said the claim "clears in a `finally`"; the built
+  middleware cleared it from `res.once("finish"/"close")`, and Express does not
+  stop a handler when its client hangs up — so a hung-up first caller freed the
+  key while it was still mid-wire-call, and both sends reached the vendor.
+  **Technique: for any guard held across async work, name the EVENT that
+  releases it and the WORK it is protecting, and ask whether one can end before
+  the other; if the release rides on a lifecycle the work does not own, copy the
+  guard verbatim into a scratch server and abort a request mid-handler.** The
+  probe is ten lines and answers in one run. Corollary: when the fix is "hold it
+  around the work instead", the middleware becomes a handler WRAPPER, which also
+  deletes every claim the design was making about the framework's event
+  semantics — the cheapest way to settle a vendor-hook question is to stop
+  depending on the hook.
+- **A response event pair where each member covers the other's blind spot, and
+  neither is safe alone.** Measured on Node 26 / express 5: a throw AFTER
+  headers fires `close` and never `finish`; a client abort fires `close` while
+  the handler runs on. **Technique: enumerate a framework event's firing cases
+  with a six-route probe app (normal, sync throw, async throw, throw after
+  headers, abort mid-handler, never respond) and print the ORDER — the ordering
+  is the finding, not the presence.**
+- **A concurrency gate that only ever runs well-behaved requests.** The
+  existing test was a real supertest run and its mutation bit, so it looked
+  like a gate on the invariant; it could not go red on the one case that
+  breaks it. **Technique: for a guard whose failure needs an ABNORMAL client,
+  check the test's client can produce one before believing the coverage —
+  supertest exposes superagent's `.abort()`, and the arranged sequence (enter
+  the wire call, abort, issue the second request, assert the wire count BEFORE
+  releasing) is deterministic where a `Promise.all` race is not.**
+- **A lifetime table that lists the STORED shapes and none of the session
+  state the same change minted.** RF27's table covered two columns; the three
+  new client flags were absent, and the one with no clear site (a failed-write
+  line) outlived an unlink-and-relink onto a card whose own comment claimed
+  "nothing about the removed account survives in this component".
+  **Technique: grep every `set<Name>` for each new piece of component state and
+  list the call sites; a piece of state whose only clear sites are "the start
+  of the next attempt" and "unmount" survives every state change in between —
+  and the comment nearest it is usually a claim you can now falsify.**
+- **A widened return type outliving the caller it was widened for.** A hook's
+  `reload()` was given a resolved value for a consumer a later revision
+  replaced; `grep` for the call sites showed none reads it, while its doc still
+  named the deleted caller. **Technique: when a revision replaces a consumer,
+  grep the PRODUCER's call sites for anyone reading its value — a return type
+  is dead code that typechecks, and its doc comment is the part that misleads.**
+- **Attacked and HELD:** the chain identity (third caller queues behind the
+  second — measured `maxConcurrentHandlers: 1` and a map that drains to 0);
+  write visibility for a caller that actually waits (single awaited `UPDATE`,
+  committed before `res.json`, fresh `SELECT` on the same pool); the deadlock
+  ceiling (every vendor call bounded, longest chain counted in the client's own
+  comment); the spec's `send_failed_*` clear sites matching the code's in both
+  directions (five writers enumerated by grep); the direct fresh read being
+  strictly fresher than the mounted hook it replaced; and the save-to-send seam
+  gate genuinely starting at the Save tap and asserting request ORDER, not a
+  call count.
