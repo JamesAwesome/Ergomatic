@@ -351,6 +351,7 @@ describe("scanTarget stance (Phase NF)", () => {
       (
         r: TargetedMonitorDiscoveryRequest,
         s: AbortSignal,
+        t?: { record(kind: string, detail?: string): void },
       ) => Promise<DiscoveredMonitor[]>
     >(async () => [{ id: "dev-1", name: "PM5 1" }]);
     const tap = createRecordingTransport({
@@ -359,9 +360,13 @@ describe("scanTarget stance (Phase NF)", () => {
     } as Transport);
     expect(hasTargetedScan(tap.transport)).toBe(true);
     if (!hasTargetedScan(tap.transport)) throw new Error("unreachable");
-    await tap.transport.scanTarget(request, signal);
+    const trace = { record: vi.fn() };
+    await tap.transport.scanTarget(request, signal, trace);
     expect(scanTarget.mock.calls[0]![0]).toBe(request);
     expect(scanTarget.mock.calls[0]![1]).toBe(signal);
+    // The trace is the THIRD argument; a decorator that drops it silently
+    // kills every BLE diagnostic on the composed path (review B3).
+    expect(scanTarget.mock.calls[0]![2]).toBe(trace);
     expect(tap.lines().join("\n")).toContain("dev-1");
     expect(tap.lines().join("\n")).not.toContain(request.attemptId);
   });

@@ -9,6 +9,13 @@ import {
 /**
  * THE PLATFORM-CONDITIONAL DEFAULT TRANSPORT (ROADMAP CL item 2).
  *
+ * Phase NF `scanTarget` STANCE: COMPOSES, NEVER INVENTS. This file builds
+ * no transport of its own — `withLiveness` forwards the inner's
+ * `scanTarget` when present and omits it otherwise — so the native arm
+ * carries the Capacitor transport's targeted capability and the web arm
+ * carries none (`monitorTransport.test.ts` pins both through THIS
+ * composition; `scripts/transport-census.sh` checks this stance exists).
+ *
  * `src/monitor/transports/index.ts`'s own header names the gap this file
  * closes: `resolveDefaultTransport` (that file) picks between the
  * DEV/e2e fake and `createWebBluetoothTransport`, but "choosing between

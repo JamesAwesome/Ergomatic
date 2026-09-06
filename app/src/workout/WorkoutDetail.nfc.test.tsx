@@ -17,9 +17,13 @@ import { setAttemptIdMintForTests } from "../monitor/nfc/attemptIdMint";
 import { resetNfcCapabilityCacheForTests } from "../monitor/nfc/nfcCapabilityCache";
 import { FIXTURE_PM5_NAME, loadPm5NfcFixture } from "../monitor/nfc/fixtures";
 import {
+  commit as commitHandoff,
+  currentUnretired as currentUnretiredHandoff,
   resetForTests as resetHandoffStoreForTests,
   stagedRetireAttemptId,
 } from "../monitor/handoffStore";
+import type { MonitorRun } from "../monitor/monitorRun";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { resetMountLeasesForTests } from "../monitor/mountLease";
 import {
   latestConnectionAttemptTrace,
@@ -57,22 +61,62 @@ const WORKOUT: LibraryWorkout = {
   isGlobal: false,
   lastDoneDaysAgo: null,
 };
+/** A REAL seeded library workout with reps and rests (RF3: the routed
+ *  proof must cross the seam on production-shaped data, not only the
+ *  one-step fixture above). Scud Cloud: 5 × 0:30 at 2k-3, 1:30 rest. */
+const LIBRARY_WORKOUT: LibraryWorkout = (() => {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === "Scud Cloud");
+  if (w === undefined) throw new Error("missing library fixture: Scud Cloud");
+  return {
+    id: "w2",
+    title: w.title,
+    type: w.type,
+    effort: w.effort,
+    steps: w.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+  };
+})();
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 const FIXED_ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
 const fixture = loadPm5NfcFixture().records;
 
 /** The program the fake will verify byte-for-byte: the same compile the
  *  detail screen performs at the press, computed independently here. */
-function expectedProgram() {
-  const run = buildRun(buildDraft(WORKOUT), BASELINES, new Date());
+function expectedProgram(workout: LibraryWorkout = WORKOUT) {
+  const run = buildRun(buildDraft(workout), BASELINES, new Date());
   const compiled = compileProgram(run.phases);
   if ("code" in compiled) throw new Error(compiled.message);
   return compiled;
 }
 
+/** An unretired hand-off entry from an earlier session, so the armed
+ *  event has something to retire under THIS attempt's staged receipt. */
+function seedLeftoverHandoff(): string {
+  const startedAt = "2026-09-05T06:00:00.000Z";
+  const run: MonitorRun = {
+    v: 2,
+    workoutId: "leftover-workout",
+    title: "Leftover",
+    program: expectedProgram(),
+    logSeed: { steps: [], paces: {} },
+    actuals: [],
+    deviceName: "PM5 leftover",
+    startedAt,
+    completedAt: "2026-09-05T06:10:00.000Z",
+    terminated: false,
+  };
+  const created = commitHandoff(startedAt, null, run);
+  if (!created.accepted) throw new Error("seed refused");
+  return startedAt;
+}
+
 function mockHooks() {
   vi.doMock("../api/useWorkouts", () => ({
-    useWorkouts: () => ({ state: "ready", workouts: [WORKOUT] }),
+    useWorkouts: () => ({
+      state: "ready",
+      workouts: [WORKOUT, LIBRARY_WORKOUT],
+    }),
   }));
   vi.doMock("../api/useBaselines", () => ({
     useBaselines: () => ({ state: "ready", baselines: BASELINES }),
@@ -92,10 +136,10 @@ function mockHooks() {
   }));
 }
 
-async function renderDetail() {
+async function renderDetail(id = "w1") {
   const { default: WorkoutDetail } = await import("./WorkoutDetail");
   return render(
-    <MemoryRouter initialEntries={["/library/w1"]}>
+    <MemoryRouter initialEntries={[`/library/${id}`]}>
       <Routes>
         <Route path="/library/:id" element={<WorkoutDetail />} />
       </Routes>
@@ -351,5 +395,69 @@ describe("THE ROUTED PROOF: Scan NFC click → native-shaped event → real pars
     const trace = latestConnectionAttemptTrace()?.map((e) => e.kind) ?? [];
     expect(trace).toContain("handoff-accepted");
     expect(trace).toContain("parser-accepted");
+    // Published by the SESSION at its terminal: the BLE kinds are in the
+    // snapshot, which a detail-side completion could never carry (B3).
+    expect(trace).toContain("ble-scan-matched");
+  });
+
+  it("the armed event RETIRES the leftover the press staged under the NFC attempt's ID (the store's own state, not a null read — review SF11)", async () => {
+    const leftoverKey = seedLeftoverHandoff();
+    expect(currentUnretiredHandoff()?.sessionKey).toBe(leftoverKey);
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+    });
+    setFakeScript({
+      program: expectedProgram(),
+      deviceName: FIXTURE_PM5_NAME,
+    });
+    await renderDetail();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    // The leftover raises the shared unsaved-workout warning first; the
+    // press's staged set and attempt ID survive "Connect anyway".
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Connect anyway" }),
+    );
+    // Staged under the NFC attempt, still unretired while the read and the
+    // targeted scan run: nothing before `armed` may touch it.
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+    expect(currentUnretiredHandoff()?.sessionKey).toBe(leftoverKey);
+    await waitFor(
+      () => expect(screen.getByText("Ready when you pull")).toBeInTheDocument(),
+      { timeout: 5_000 },
+    );
+    // ARMED: retired through the keyed take, and the staged set consumed.
+    expect(currentUnretiredHandoff()).toBeNull();
+    expect(stagedRetireAttemptId()).toBeNull();
+  });
+
+  it("crosses the same seam on a REAL library workout with reps and rests (Scud Cloud), programmed byte-for-byte", async () => {
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+    });
+    setFakeScript({
+      program: expectedProgram(LIBRARY_WORKOUT),
+      deviceName: FIXTURE_PM5_NAME,
+    });
+    await renderDetail("w2");
+    expect(await screen.findByText("Scud Cloud")).toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    await waitFor(
+      () => expect(screen.getByText("Ready when you pull")).toBeInTheDocument(),
+      { timeout: 5_000 },
+    );
+    expect(window.__pm5FakeControls__!.targetedRequests()).toStrictEqual([
+      {
+        kind: "advertised-name",
+        attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        exactName: "PM5 432331249 Row",
+      },
+    ]);
+    expect(screen.queryByText("Choose your monitor")).toBeNull();
   });
 });

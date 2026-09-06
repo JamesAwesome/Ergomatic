@@ -2346,10 +2346,11 @@ trigger is the whole entry.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
 - **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; HARDENED
-  DESIGN APPROVED 2026-09-03; V8 NORMAL TRACE PASSED ON
-  2026-09-04; BROADER GATE -1 WALK REMAINS PAUSED; PRODUCT IMPLEMENTATION
-  UNSCHEDULED.** Two targeted NFC/BLE connections succeeded;
-  recovery and multi-tag proof remain incomplete. Further walks require PM
+  DESIGN APPROVED 2026-09-03; GATE -1 COMPLETE 2026-09-06; PRODUCT
+  IMPLEMENTATION IN FLIGHT (scheduled by James 2026-09-06, ahead of Wave
+  A); PR awaiting James's word to push.** Gate -1 history: two targeted
+  NFC/BLE connections succeeded (v8 normal trace, 2026-09-04); recovery
+  cases 2-4 dropped as ship gates. Further walks require PM
   approval of the exact prepared runsheet before asking James to participate.
   Evidence and desk-only close-out:
   [`SESSION-PAUSED.md`](docs/monitor/sessions/phase-nf-gate-minus-one/SESSION-PAUSED.md).
@@ -2415,15 +2416,33 @@ trigger is the whole entry.
   keyed staged retire + mount lease, `connect(request)`, Scan NFC on detail
   with the routed click-to-`armed` proof); `/harden` lens 2 (18 findings)
   applied; the self-mutation sweep record is
-  `docs/monitor/sessions/phase-nf-product-walk/MUTATIONS.md` (all bite);
-  main merged (2a6ba780) and every gate green on the merged tree (unit 1965,
-  client 5393, e2e 521, captures 137). **Remaining before the PR is
-  presented:** whole-branch review verdict, built-app entitlement check,
-  PM readiness on the walk runsheet
-  (`docs/monitor/sessions/phase-nf-product-walk/RUNSHEET.md`, DRAFT). The
+  `docs/monitor/sessions/phase-nf-product-walk/MUTATIONS.md`;
+  main merged (2a6ba780). **Whole-branch review (2026-09-06) returned NOT
+  READY with six blocking items, all fixed in the same round:** the pinned
+  `domain/**` 100% coverage gate was RED (an untested overlong-name branch);
+  the attempt trace was published only on a successful connect (now every
+  terminal publishes and the failure screen's export window carries it); a
+  `cause` beside a non-`invalidated` reason failed OPEN to silence (now
+  cause-first); Gate 0's fold claim was filed under a one-row capture (now
+  a 4 × 2000 m personal workout); a comment cited a dist-grep needle that
+  never existed; and seven mutation rows read "not run" behind an "all
+  bite" header (re-run, see MUTATIONS.md). PM readiness on runsheet v1:
+  NOT READY (ten legs → five, three blocks, ≤ 15 min, ≤ 6 reader starts;
+  ledger entry "Phase NF product walk readiness"); v2 is written and
+  awaits its own PM pass. **Walk-verified countable exits** (spec): 2, 4,
+  5, 6, 7 and 9 close only at the walk; the walk precedes merge. The
   branch is NOT pushed; James's word gates push, PR, walk and merge. Open
   number for James: the 1_000 ms collision window is paid on every NFC
-  connect.
+  connect. **Owed observation (spec residual, review SF3):** backgrounding
+  during the targeted BLE scan may arm the never-cleared cleanup poison on
+  resume; no leg backgrounds during the BLE half; candidate fix "do not arm
+  the cleanup deadline on a background-caused abort" if ever seen.
+  **Dead-code rows (RF29):** `PaintBarrierAbortedError`,
+  `stagedRetireAttemptId()` and the transport's `targetDeadlineMs` /
+  `collisionWindowMs` options have test consumers only (seams, kept on
+  purpose); the NFC patch carries two unused symbols
+  (`NfcSessionCoordinator.async(_:)`, `tagAttemptId`) — remove them at the
+  next patch edit, which re-runs the Swift suite anyway.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

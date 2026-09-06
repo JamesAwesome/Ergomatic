@@ -131,6 +131,47 @@ describe("runNfcAttempt", () => {
     expect(reader.stops()).toStrictEqual([ATTEMPT]);
   });
 
+  it("records that arrive AFTER the signal aborted (reader resolved anyway) are quiet: no parse, no accepted state", async () => {
+    const ac = new AbortController();
+    const reader = createScriptedNfcReader({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+    });
+    const late: typeof reader = {
+      ...reader,
+      readOne: async (opts) => {
+        const records = await reader.readOne(opts);
+        ac.abort();
+        return records;
+      },
+    };
+    const { result, deps } = run(
+      { kind: "cancelled" },
+      { reader: late, signal: ac.signal },
+    );
+    await expect(result).resolves.toStrictEqual({ kind: "quiet" });
+    expect(deps.onAccepted).not.toHaveBeenCalled();
+    expect(deps.haptic).not.toHaveBeenCalled();
+  });
+
+  it("a signal that aborted while the paint barrier resolved normally is quiet: accepted was committed, nothing hands off", async () => {
+    const ac = new AbortController();
+    const { result, deps } = run(
+      { kind: "records", records: fixture },
+      {
+        signal: ac.signal,
+        paint: vi.fn(async () => {
+          ac.abort();
+        }),
+      },
+    );
+    await expect(result).resolves.toStrictEqual({ kind: "quiet" });
+    expect(deps.onAccepted).toHaveBeenCalledTimes(1);
+    expect(deps.trace.entries().map((e) => e.kind)).not.toContain(
+      "handoff-accepted",
+    );
+  });
+
   it("an abort at the paint barrier is quiet: accepted was committed, nothing hands off", async () => {
     const ac = new AbortController();
     const { result, deps } = run(

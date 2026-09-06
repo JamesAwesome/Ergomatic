@@ -712,6 +712,7 @@ describe("scanTarget stance (Phase NF)", () => {
       (
         r: TargetedMonitorDiscoveryRequest,
         s: AbortSignal,
+        t?: { record(kind: string, detail?: string): void },
       ) => Promise<DiscoveredMonitor[]>
     >(async () => [{ id: "dev-1", name: "PM5 1" }]);
     const wrapped = withLiveness(
@@ -720,11 +721,15 @@ describe("scanTarget stance (Phase NF)", () => {
     );
     expect(hasTargetedScan(wrapped)).toBe(true);
     if (!hasTargetedScan(wrapped)) throw new Error("unreachable");
-    await expect(wrapped.scanTarget(request, signal)).resolves.toStrictEqual([
-      { id: "dev-1", name: "PM5 1" },
-    ]);
+    const trace = { record: vi.fn() };
+    await expect(
+      wrapped.scanTarget(request, signal, trace),
+    ).resolves.toStrictEqual([{ id: "dev-1", name: "PM5 1" }]);
     expect(scanTarget.mock.calls[0]![0]).toBe(request);
     expect(scanTarget.mock.calls[0]![1]).toBe(signal);
+    // The trace is the THIRD argument; a decorator that drops it silently
+    // kills every BLE diagnostic on the composed path (review B3).
+    expect(scanTarget.mock.calls[0]![2]).toBe(trace);
   });
   it("omits scanTarget when the inner lacks it — a web transport stays incapable", () => {
     const wrapped = withLiveness(

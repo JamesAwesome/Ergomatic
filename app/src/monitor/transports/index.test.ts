@@ -603,6 +603,7 @@ describe("autoTicking: scanTarget stance (Phase NF)", () => {
         (
           r: TargetedMonitorDiscoveryRequest,
           s: AbortSignal,
+          t?: { record(kind: string, detail?: string): void },
         ) => Promise<DiscoveredMonitor[]>
       >(async () => [{ id: "fake-pm5", name: "PM5 1" }]);
       const fakeWithTarget: Transport &
@@ -613,9 +614,13 @@ describe("autoTicking: scanTarget stance (Phase NF)", () => {
       const wrapped = autoTicking(fakeWithTarget);
       expect(hasTargetedScan(wrapped)).toBe(true);
       if (!hasTargetedScan(wrapped)) throw new Error("unreachable");
-      await wrapped.scanTarget(request, signal);
+      const trace = { record: vi.fn() };
+      await wrapped.scanTarget(request, signal, trace);
       expect(scanTarget.mock.calls[0]![0]).toBe(request);
       expect(scanTarget.mock.calls[0]![1]).toBe(signal);
+      // The trace is the THIRD argument; a decorator that drops it silently
+      // kills every BLE diagnostic on the composed path (review B3).
+      expect(scanTarget.mock.calls[0]![2]).toBe(trace);
       expect(hasTargetedScan(autoTicking(stubFake()))).toBe(false);
     } finally {
       vi.useRealTimers();

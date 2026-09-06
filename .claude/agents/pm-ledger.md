@@ -5044,3 +5044,62 @@ the `/api/today` ruling). v0.38.0 recommended.
   "which line would be false if the flag never flipped?" — and it was
   `Nothing changes at save time`, falsified by the new per-save `GET /link`
   that fires for every rower, cohort or not.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v1: NOT READY)
+
+Ten legs cut to five; verdict on `docs/monitor/sessions/phase-nf-product-walk/RUNSHEET.md` v1.
+
+- **A leg that an argument elsewhere leaned on cannot be marked "stress leg,
+  skip if short of time".** The antagonist's 2026-09-06 necessity ruling cut
+  Gate -1's recovery cases 2-4 partly because "the user-reachable re-arm is
+  covered by walk legs 7/9". The runsheet then made both discretionary and
+  put leg 9 last. **At any walk gate, grep the ledgers for the leg numbers
+  the runsheet uses:** a leg cited as another decision's substitute evidence
+  is load-bearing, and demoting it silently un-makes that decision.
+- **A walk leg must be checked against the teardown path, not only the copy
+  path.** Leg 8 instructed "Cancel back to detail, then Scan NFC" to produce
+  `End this PM5's current connection` — but `cancel()` claims the driver and
+  tears the link down, so no product path leaves the app on detail holding a
+  PM5, and the error it was staging can never fire. The copy existed, the
+  mapping existed, the mutation bit; the ACTION was impossible. Read the
+  function that ends the state the leg needs to persist.
+- **Evidence a walk plans to collect must have a producer, checked in code.**
+  Three breaks in one runsheet: the leg-4 diagnostics export is `"[]"` because
+  the trace only enters the ring on a SUCCESSFUL GATT connect; the leg-3 trace
+  is reachable only by a triple-tap plus a clipboard Copy plus a paste by
+  James (banned); and the "Core NFC 201" abort condition is visible only in a
+  console behind a cable the runsheet listed as optional. Grep the trace
+  accessor for product consumers before naming it as evidence —
+  `latestConnectionAttemptTrace()` had none. (The export window now exists —
+  whole-branch review B3 landed it the same day — and the runsheet still
+  reads the console, because the window's only exit is a paste.)
+- **Hardware receipts retire a leg; the desk cannot.** Leg 6 (Cancel/timeout)
+  was already on file from this exact phone and patched plugin
+  (`PRE-REPAIR.md`, `sessionTimeout` and `userCancelled`), so it cost 60 s of
+  dead waiting and 2 of 10 consent-consuming reader starts to re-observe a
+  settled fact. Leg 1 was pinned by an e2e geometry assertion at the same
+  viewport. **Before approving a leg, ask which of three things settles it —
+  a prior HARDWARE receipt, a desk assertion, or only the erg.**
+- **Count reader starts leg by leg, not "one per leg".** v1's budget of 10 was
+  breached by its own table (legs 6 and 7 need two each; the control-tag
+  contingency needs another) before anyone touched a phone. Since consent is
+  consumed by reader starts (2026-09-05 ruling), the budget IS the consent,
+  and an exhausted budget mid-walk forces a re-invitation.
+- **The most likely failure needs the stop rule, not the least likely one.**
+  v1 aborted on a dark CONTROL tag (never observed) and said nothing about a
+  dark PM5 tag (observed, cause unknown, five live alternatives, spec's own
+  "PM5 NFC availability" section). v2 names INCONCLUSIVE-and-release (the
+  spec forbids conditioning a rule on a PM5 power cycle); improvisation at
+  the erg is what produced the 2026-09-04 walk-cost ruling.
+- **An operator observable must be perceivable by an operator.** Leg 2 asked
+  James to see `✓ PM5 found`, which lives two rAF turns (~33 ms, ~17 ms on
+  ProMotion) behind a dismissing system sheet. The spec's own leg said
+  "success haptic/check"; the runsheet kept the invisible half. A state whose
+  only witness is a test assertion is not a walk observable.
+- **Fold: 219 words / 6 bullets / longest 40 — FAIL.** Series: door PR B 121 ·
+  SF PR1 246 · SF PR2 109 · DE PR1 209 · DE PR2 122 · auto-send 214 ·
+  **NF product 219.** Same regression as SF PR1 and auto-send: a pure-Record
+  mechanism bullet above the fold. The #277 check bit too — line 1 asserted
+  "connects to exactly that PM5 and programs the workout" as fact while
+  bullet 5 said "not yet proven on hardware", and the fold contradicted its
+  own Record on whether the walk precedes merge (the spec says it does).

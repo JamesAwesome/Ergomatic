@@ -85,6 +85,21 @@ describe("parsePm5NfcTarget", () => {
     });
   });
 
+  it("rejects a 32-byte name that IS zero-terminated inside the 40 bytes (the overlong-name branch)", () => {
+    // 7 header bytes + "PM5 " + 28 chars (32 bytes) + one 0x00 = 40 bytes:
+    // terminated, so the no-terminator branch does not fire first.
+    const payload = [
+      ...pm5.payload.slice(0, 7),
+      ...Array.from("PM5 " + "B".repeat(28), (c) => c.charCodeAt(0)),
+      0x00,
+    ];
+    expect(payload).toHaveLength(40);
+    expect(parsePm5NfcTarget([withPayload(payload)])).toStrictEqual({
+      code: "unsupported",
+      reason: "name exceeds 31 bytes",
+    });
+  });
+
   it("rejects a non-zero byte after the terminator (bad padding)", () => {
     const payload = [...pm5.payload];
     payload[39] = 0x41;

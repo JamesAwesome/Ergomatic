@@ -262,6 +262,14 @@ export function createReplayTransport(
     if (signal.aborted) {
       throw named("TargetScanInterruptedError", "aborted before replay");
     }
+    // KNOWN LIMIT (whole-branch review SF1): a recording carries only the
+    // picker's `DiscoveredMonitor.name`, which on the Capacitor arm is the
+    // cached `CBPeripheral.name` — the field production is FORBIDDEN to
+    // match on. A replay therefore cannot exercise the live-`localName`
+    // rule; that rule is pinned in `capacitorBle.test.ts` ("matches only
+    // ScanResult.localName, never device.name, and never a prefix") and by
+    // mutations S2/T3-1. What the replay proves is the exact-equality and
+    // fail-closed-on-ambiguity shape over a real walk's device list.
     const exact = (await scan()).filter((d) => d.name === request.exactName);
     if (exact.length === 0) {
       throw named(

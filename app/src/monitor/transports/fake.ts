@@ -2659,6 +2659,7 @@ export function createFakeTransport(script: FakeScript): Transport &
       // every routed test and e2e run that enters through this seam has a
       // reachable red path for an invalid request (lens 2).
       if (
+        request.kind !== "advertised-name" ||
         !isValidAttemptId(request.attemptId) ||
         !isValidPm5AdvertisingName(request.exactName)
       ) {

@@ -3,8 +3,11 @@
 // the native-first policy (`keepAwake.ts`, `appLifecycle.ts`,
 // `monitorTransport.ts` all draw the same line). Native reaches
 // `src/native/nfc.ts` — the only importer of `@capgo/capacitor-nfc` — by
-// dynamic `import()` inside the branch, so the plugin never lands in the
-// web bundle (`scripts/dist-grep.sh`'s `CapacitorNfc` needle is the proof).
+// dynamic `import()` inside the branch. The plugin's chunk DOES ship in
+// `dist/` (Rollup emits it as a lazy chunk; `scripts/dist-grep.sh`'s header
+// says so and explains why no identifier needle can gate it) — what the
+// gate proves is that the SCRIPTED reader below folds away: its
+// `scripted start failure` literal is a dist-grep needle.
 //
 // Web and the simulator are `unsupported`: no button, no placeholder. The
 // ONE exception is the scripted reader behind the SAME build-time-foldable

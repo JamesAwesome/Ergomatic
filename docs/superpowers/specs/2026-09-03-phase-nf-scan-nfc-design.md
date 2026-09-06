@@ -769,7 +769,7 @@ point. Nothing changes first-rowing-frame run creation or terminal logging.
 | State                                                  | Owner and identity                                                       | Begins                                        | Every clear/transfer                                                                                                    | Teardown and re-arm                                                                                                                       |
 | ------------------------------------------------------ | ------------------------------------------------------------------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | NFC capability                                         | JS NFC adapter cache                                                     | first probe                                   | document/process reset                                                                                                  | unsupported surfaces never arm; a new document may probe again                                                                            |
-| connection attempt ID                                  | shared detail entry owner; UUID                                          | hardware-button press                         | pre-handoff terminal clears; accepted handoff transfers unchanged; session terminal clears                              | does not survive a document reset; old native events retain the old ID and cannot join a new attempt                                      |
+| connection attempt ID                                  | shared detail entry owner; UUID                                          | hardware-button press                         | pre-handoff terminal clears; accepted handoff transfers unchanged; the session holds it until the next `connect()` overwrites it (never cleared by a session terminal — a keyed take on a stale ID is a pure read, F7) | does not survive a document reset; old native events retain the old ID and cannot join a new attempt                                      |
 | pending entry intent                                   | shared detail guard; attempt ID                                          | hardware-button press                         | confirmation cancel clears; authorization transfers same ID                                                             | detail unmount clears; next press mints a new ID                                                                                          |
 | staged retire receipt and mount lease                  | handoff store; attempt ID plus existing session key/revision set         | safety check; lease at interstitial ownership | every pre-handoff terminal discards by ID; handoff transfers; `armed` consumes; explicit terminal/true unmount discards | StrictMode cleanup queues release and same-ID setup reclaims; module reset loses it safely; retry keeps the same ID                       |
 | native NFC generation                                  | patched plugin; attempt ID plus concrete session identity                | accepted native start                         | matching record/error then matching stop, invalidation, or superseding start                                            | survives process-live WebView reload only long enough to be drained; new start serializes behind it                                       |
@@ -835,10 +835,19 @@ wrong. Phase NF adds both:
    in-memory `ConnectionAttemptTrace` is created at the hardware press and
    injected through reader, detail, handoff, and session. On successful GATT it
    becomes the prefix of the existing monitor event log; before connection, the
-   interstitial diagnostics export reads it directly. A completed pre-handoff
-   attempt remains as the process-local latest snapshot through an explicit
-   diagnostic/test accessor until the next completed attempt replaces it.
-   Tests assert the production sink, not a mock callback.
+   session's `exportLog()` window (the failure screen's **View connection log**)
+   serialises the pending attempt's entries in the ring's own shape under the
+   same `nfc-attempt:` prefix, ahead of any ring a previous session left.
+   **Every attempt terminal publishes the trace** — a pre-handoff terminal on
+   detail, and on the session a targeted failure, a superseded attempt or the
+   ring-prefix copy — so the process-local latest snapshot is never a
+   pre-scan copy of a handed-off attempt (whole-branch review B3, 2026-09-06:
+   before this, only a successful connect ever published, and every failure
+   the instrument exists for discarded it). The capability probe is not an
+   attempt: it publishes only while no attempt has completed in this process,
+   so a rejected or timed-out probe reaches the sink on a fresh launch and
+   never clobbers a real attempt's snapshot. Tests assert the production sink,
+   not a mock callback.
 
 The trace records timestamps and fixed outcome kinds only: supported,
 unsupported, capability-failed, capability-timed-out, listener-registration-
@@ -1002,25 +1011,50 @@ tree must be clean.
 
 ### Native hardware walk
 
-After automated gates, a real iPhone and PM5 walk proves:
+After automated gates, a real iPhone and PM5 walk proves (runsheet
+`docs/monitor/sessions/phase-nf-product-walk/RUNSHEET.md`, v2 — the ten legs
+first written here were cut to five at the PM readiness gate on 2026-09-06;
+each retired leg names the evidence that settles it instead):
 
-1. button absent in web/simulator and present in the signed NFC-capable build;
-2. valid tag → success haptic/check → no Bluetooth picker → correct PM5 name;
-3. PM5 on **Connect Device** → connect, program, verified `armed`, first pull,
-   terminal logging;
-4. PM5 not advertising → approved targeted message, no general picker; opening
-   **Connect Device** then **Try again** connects without another NFC read;
-5. unsupported tag → approved inline copy and no BLE scan;
-6. NFC sheet cancel and the system reader timeout return safely;
-7. rapid scan/cancel/retry and NFC/manual alternation never create two sessions;
-8. an already-held exact-name PM5 fails closed; after ending that connection,
-   exact-target **Try again** succeeds. A different or array-first held PM5 does
-   not win, and two live exact-name matches fail closed;
-9. background/foreground, process-live WebView reload, and navigation during NFC
-   and targeted BLE leave no NFC listener, BLE scan callback, sheet, scan, or
-   late interstitial;
-10. manual **Connect** still opens its current picker and completes the same
-    workout.
+1. **Primary target:** the signed NFC-capable build shows **Scan NFC**; a valid
+   tag → success haptic → no Bluetooth picker → the exact PM5 name → with the
+   PM5 on **Connect Device**, connect, program, verified `armed`, first pull,
+   terminal logging (former legs 1, 2, 3; leg 1's geometry half is
+   `e2e/design.spec.ts`'s pinned pair, its device half is this leg's
+   precondition);
+2. **Not advertising:** PM5 off Connect Device → approved targeted message, no
+   general picker; opening **Connect Device** then **Try again** connects
+   without another NFC read (former leg 4);
+3. **Re-arm:** rapid NFC/manual alternation — Scan NFC, Cancel, Connect, cancel
+   the picker, Scan NFC (valid) — one session, READY once (former leg 7;
+   load-bearing: the antagonist's 2026-09-06 necessity ruling cut Gate -1's
+   recovery cases 2-4 partly on this leg's strength, so it is mandatory);
+4. **Background during a live reader:** side-button lock while the sheet is
+   up, unlock → quiet return, both buttons back, no late interstitial (former
+   leg 9; a bounded feasibility experiment — whether a lock during a live Core
+   NFC sheet delivers `pause` to the WebView is genuinely unknown, and an
+   unknown outcome is a recorded result, not a failure);
+5. **Manual Connect unchanged:** today's picker, the same workout to READY, no
+   rowing (former leg 10).
+
+Retired from the walk, each with its substitute evidence:
+
+- former leg 5 (unsupported tag via a Flipper NTAG text emulation): an
+  undemonstrated physical action (the PM ledger's Flipper precedent needed a
+  serial-verified replica); the rejection is `parsePm5NfcTarget` under
+  mutation S1, and `e2e/connected.spec.ts`'s "unsupported tag" flow through
+  the real screen;
+- former leg 6 (sheet Cancel and reader timeout): already observed on this
+  phone and this patched plugin — `PRE-REPAIR.md` records `sheet-cancel /
+  userCancelled` and `no-tag-timeout / sessionTimeout` — and the JS half
+  (ending → copy) is `runNfcAttempt.ts` under `WorkoutDetail.nfc.test.tsx`'s
+  states table;
+- former leg 8 (held exact-name PM5 fails closed): NOT PERFORMABLE on the
+  product build — every route back to detail (`cancel()`, navigation) tears
+  the link down, so no product path leaves the app on detail holding a PM5,
+  and another device holding it stops the PM5 advertising, which is leg 2's
+  copy. The invariant is transport mutation T3-5 ("held device not refused",
+  BIT) and its named test.
 
 Keep the redacted NFC capture and connection log under `docs/monitor/sessions/`
 or `docs/monitor/nfc/` per the hardware-walk contract. Teardown the per-worktree
@@ -1174,6 +1208,16 @@ Phase NF closes only when:
   drain, and WebView-reload tests before dependency acceptance.
 - **Delete workout** moving below the initial portrait fold was visible in Gate
   0 and accepted. No compensating layout compression ships in this phase.
+- **Backgrounding during the targeted BLE scan can poison the tail** (whole-
+  branch review SF3, 2026-09-06). A `pause` aborts the scan; the abort's
+  `stopLEScan()` and its 10 s cleanup deadline both ride the process, which iOS
+  may suspend; on resume the deadline and the plugin's reply race, and a
+  deadline win sets the never-cleared poison (`Restart Ergomatic`). The harm
+  ceiling is the poison's own copy on the next attempt; manual **Connect** on a
+  fresh launch is unaffected. Not walked (no leg backgrounds during the BLE
+  half); recorded here and in the ROADMAP NF block as owed observation, with
+  "do not arm the cleanup deadline on a background-caused abort" as the
+  candidate fix if it is ever seen.
 
 ## Primary sources and inspected implementation
 

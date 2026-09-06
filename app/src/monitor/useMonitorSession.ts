@@ -67,7 +67,11 @@ import {
   type DriverOptions,
   type ProgramRejectionReason,
 } from "./driver";
-import { createEventLog, type MonitorEventLog } from "./eventLog";
+import {
+  createEventLog,
+  type MonitorEventLog,
+  type MonitorLogEntry,
+} from "./eventLog";
 import type { LogSeed } from "../session/logDraft";
 import {
   appendSummaryObservations,
@@ -1687,9 +1691,12 @@ const TARGETED_FAILURE_COPY: Readonly<
     reason: "scan-cleanup-failed",
     detail: "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
   },
+  // Unreachable from any product path (the detail screen mints the ID and
+  // the parser produced the name), kept fail-closed. Approved "stopped"
+  // copy rather than a false claim about the transport (review NIT).
   TargetedRequestInvalidError: {
-    reason: "transport-missing",
-    detail: "This device has no Bluetooth transport.",
+    reason: "target-interrupted",
+    detail: "Connection interrupted. Try again.",
   },
 };
 
@@ -2195,6 +2202,14 @@ export function useMonitorSession(
    *  staged-retire set (UUID v4), never falsely match. Read by the armed
    *  handler's keyed take and by the two keyed discards. */
   const attemptIdRef = useRef<ConnectionAttemptId | null>(null);
+  /** Phase NF (whole-branch review B3): the trace of the CURRENT attempt
+   *  until it has been copied into a session ring — the export window's
+   *  source for every attempt that never reaches GATT connect (a target
+   *  timeout, ambiguity, a held device, a cleanup failure), which is
+   *  exactly the set the instrument was built for. Set at `connect()`
+   *  entry (`null` for a manual attempt, so a stale NFC trace can never
+   *  shadow a picker attempt's export), cleared by the ring-prefix copy. */
+  const attemptTraceRef = useRef<ConnectionAttemptTrace | null>(null);
   /** Phase NF: the abort owner of an in-flight targeted scan, paired with
    *  its attempt ID. Cleared ONLY by object-identity comparison in the
    *  scan's own `finally`, so a late-settling attempt A can never clear
@@ -4783,6 +4798,7 @@ export function useMonitorSession(
         return;
       }
       attemptIdRef.current = discovery.attemptId;
+      attemptTraceRef.current = trace ?? null;
       const attempt = (attemptRef.current += 1);
       /** True once `cancel()` (or a later `connect()`) has moved on. A
        *  superseded attempt must not write shared state, must not clear a
@@ -4943,7 +4959,7 @@ export function useMonitorSession(
                 if (event === "background") controller.abort();
               });
             } catch (err: unknown) {
-              trace?.record("listener-registration-failed");
+              trace?.record("listener-registration-failed", "scan lifecycle");
               throw err;
             }
             if (superseded()) throw new Error("superseded");
@@ -4953,6 +4969,11 @@ export function useMonitorSession(
               trace,
             );
           } catch (err: unknown) {
+            // Every targeted terminal PUBLISHES the trace (whole-branch
+            // review B3): the snapshot accessor and the export window
+            // above both read a completed attempt, and before this the
+            // only path that completed one was a successful connect.
+            trace?.complete();
             if (superseded()) {
               bestEffort(transport.disconnect());
               return;
@@ -5015,6 +5036,8 @@ export function useMonitorSession(
               entry.detail ?? `seq ${entry.seq}`,
             );
           }
+          trace.complete();
+          if (attemptTraceRef.current === trace) attemptTraceRef.current = null;
         }
         // THE LOGICAL SESSION BEGINS HERE, AND ONLY HERE (review round 5,
         // item 1, P1). The link is up and the log exists, so this is the one
@@ -5741,6 +5764,12 @@ export function useMonitorSession(
     // Phase NF: the targeted scan's abort lives in `teardown()` (called
     // below), which every cancel path reaches; a second abort here survived
     // its own mutation (Task 10, S12) and was removed as decoration.
+    // PRECONDITION THAT MAKES IT SYNCHRONOUS (whole-branch review SF9): a
+    // targeted scan is live only in `picking`, where `driverRef` is null
+    // and `armed` is false, so `teardown()` reaches its abort with nothing
+    // to await first. If a phase with a live scan ever holds a driver, the
+    // abort would sit behind `await driver.terminate()` below and this
+    // needs its own synchronous abort back.
     const driver = driverRef.current;
     // MEDIUM-9 (task-5 re-review), landed by the fix wave's H1: CLAIM the
     // ref synchronously, before the `await driver.terminate()` below
@@ -5886,7 +5915,26 @@ export function useMonitorSession(
    *  identity, so a component can hold it across renders without the sheet
    *  re-reading a log it deliberately snapshots once. */
   const exportLog = useCallback((): string => {
-    return sessionRef.current?.log.exportLog() ?? "[]";
+    const log = sessionRef.current?.log;
+    // Phase NF (whole-branch review B3): an attempt that never reached a
+    // session ring exports its own trace, in the ring's entry shape and
+    // under the same `nfc-attempt:` prefix the ring copy uses, AHEAD of
+    // whatever ring the previous session left (a cancel keeps its log on
+    // purpose). Without this, the failure screen's View connection log read
+    // `[]` for every targeted failure — the one case it exists for.
+    const pending = attemptTraceRef.current;
+    const prefix: MonitorLogEntry[] =
+      pending === null
+        ? []
+        : pending.entries().map((entry) => ({
+            seq: entry.seq,
+            atMs: entry.atMs,
+            kind: `nfc-attempt:${entry.kind}`,
+            detail: entry.detail ?? `seq ${entry.seq}`,
+          }));
+    if (log === undefined) return JSON.stringify(prefix);
+    if (prefix.length === 0) return log.exportLog();
+    return JSON.stringify([...prefix, ...log.entries()]);
   }, []);
 
   // Teardown on unmount: the listener goes, the radio goes, no driver is

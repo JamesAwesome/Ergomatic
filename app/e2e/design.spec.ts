@@ -1047,8 +1047,13 @@ test.describe("workout detail screen (Scan NFC supported)", () => {
     expect(
       await nfc.evaluate((el) => getComputedStyle(el).backgroundColor),
     ).toBe("rgb(73, 98, 79)");
+    // Absolute, not relative to Connect: both regressing together would
+    // pass a same-colour check (review SF13). `--surface` cream #fffdf7.
     expect(await nfc.evaluate((el) => getComputedStyle(el).color)).toBe(
-      await connect.evaluate((el) => getComputedStyle(el).color),
+      "rgb(255, 253, 247)",
+    );
+    expect(await connect.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(255, 253, 247)",
     );
     await expect(page.locator(".button-l1")).toHaveCount(0);
     await expect(page.locator(".button-primary")).toHaveCount(0);

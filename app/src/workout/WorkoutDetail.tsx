@@ -40,6 +40,7 @@ import { discardStagedRetire } from "../monitor/handoffStore";
 import {
   createConnectionAttemptTrace,
   type ConnectionAttemptTrace,
+  latestConnectionAttemptTrace,
 } from "../monitor/nfc/connectionAttemptTrace";
 import {
   cacheNfcCapability,
@@ -104,13 +105,19 @@ function useNfcCapability(reader: NfcReader): NfcCapabilityState {
     if (readCachedNfcCapability() !== null) return;
     let cancelled = false;
     const trace = createConnectionAttemptTrace();
-    // The probe records but never `complete()`s: it is not an attempt, and
-    // publishing it would clobber the last attempt's snapshot on a device
+    // The probe is not an attempt: it publishes ONLY while no attempt has
+    // completed in this process (the mount-time case, where a rejected or
+    // timed-out probe would otherwise reach no sink at all — whole-branch
+    // review B3), and never clobbers a real attempt's snapshot on a device
     // whose probe is flaky (lens 2).
+    const publish = (): void => {
+      if (latestConnectionAttemptTrace() === null) trace.complete();
+    };
     const timer = setTimeout(() => {
       if (cancelled) return;
       cancelled = true;
       trace.record("capability-timed-out");
+      publish();
     }, NFC_CAPABILITY_DEADLINE_MS);
     reader.capability().then(
       (result) => {
@@ -119,6 +126,7 @@ function useNfcCapability(reader: NfcReader): NfcCapabilityState {
         clearTimeout(timer);
         cacheNfcCapability(result);
         trace.record(result);
+        publish();
         setCapability(result);
       },
       () => {
@@ -126,6 +134,7 @@ function useNfcCapability(reader: NfcReader): NfcCapabilityState {
         cancelled = true;
         clearTimeout(timer);
         trace.record("capability-failed");
+        publish();
       },
     );
     return () => {
@@ -362,7 +371,7 @@ function WorkoutDetailView({
           }
         });
       } catch {
-        trace.record("listener-registration-failed");
+        trace.record("listener-registration-failed", "detail lifecycle");
         throw new Error("lifecycle listener registration failed");
       }
       const outcome = await runNfcAttempt({
@@ -397,7 +406,11 @@ function WorkoutDetailView({
       if (mountedRef.current) setConnectError("NFC scan stopped. Try again.");
     } finally {
       unsubscribe?.();
-      trace.complete();
+      // A handed-off trace is completed by the SESSION at its own terminal
+      // (ring-prefix copy or targeted failure, `useMonitorSession.ts`);
+      // completing it here would publish a snapshot taken before the
+      // targeted scan ever ran (whole-branch review B3).
+      if (!handedOff) trace.complete();
       if (nfcAbortRef.current === controller) nfcAbortRef.current = null;
       if (!handedOff) discardStagedRetire(attemptId);
       if (mountedRef.current) {
@@ -661,12 +674,15 @@ function WorkoutDetailView({
           children are this stack's own direct flex items, not a nested box
           breaking the 12px gap rhythm. */}
       <div className="action-stack workout-detail-actions">
-        {/* Fast-follow spec §4 (James's ruling 3, §2): Connect is the
-            screen's SINGLE primary now — L1 geometry, its own
-            `--action-connect` blue, FIRST in the stack, ahead of Start
-            Timer. Supersedes the old "second in the stack, after Start"
-            ordering (`ConnectAction.tsx`'s own doc comment carries the
-            history). `ConnectAction` still owns the trigger AND the staged
+        {/* Fast-follow spec §4 (James's ruling 3, §2): Connect holds L1
+            geometry, its own `--action-connect` blue, FIRST in the stack,
+            ahead of Start Timer. Supersedes the old "second in the stack,
+            after Start" ordering (`ConnectAction.tsx`'s own doc comment
+            carries the history). Phase NF (Gate 0, James's ruling 4) then
+            made it ONE OF TWO equal hardware primaries: on an NFC-capable
+            iPhone, `Scan NFC` sits directly above it at the same 56 px;
+            everywhere else Connect is still the single primary. Both live
+            inside `ConnectAction`, which owns the trigger AND the staged
             confirm guard end to end; this block adds only presentation
             around it: the caption and the Bluetooth-off/absent dashed
             treatment — both travel with it to its new position, unchanged. */}
@@ -680,7 +696,7 @@ function WorkoutDetailView({
         />
         {connectError && <p className="baseline-error">{connectError}</p>}
         {/* Start Timer — spec §4: renamed from "Start" and demoted from L1
-            to L2 now that Connect holds the screen's one L1 primary. Still
+            to L2 now that the hardware primaries hold L1. Still
             the SAME `handleStart`/`startBlocked`/`replaceStage` logic,
             unmoved and unmodified — only the copy and the class changed. */}
         {startBlocked ? (

@@ -690,11 +690,6 @@ export type MonitorDiscoveryRequest =
   | { kind: "picker"; attemptId: ConnectionAttemptId }
   | TargetedMonitorDiscoveryRequest;
 
-/** Phase NF: a SEPARATE structural capability, deliberately not an option on
- *  `scan()` — an omitted option would mean today's broad picker, turning a
- *  dropped target into a privilege downgrade (spec, "Rejected approaches").
- *  A transport without this method cannot serve an advertised-name request
- *  and the session fails closed before any radio call. */
 /** Phase NF: the structural shape of the connection-attempt trace a
  *  targeted scan may record into (the real type lives above the domain, in
  *  `src/monitor/nfc/connectionAttemptTrace.ts`). Optional at every seam so
@@ -703,6 +698,11 @@ export interface DiscoveryTrace {
   record(kind: string, detail?: string): void;
 }
 
+/** Phase NF: a SEPARATE structural capability, deliberately not an option on
+ *  `scan()` — an omitted option would mean today's broad picker, turning a
+ *  dropped target into a privilege downgrade (spec, "Rejected approaches").
+ *  A transport without this method cannot serve an advertised-name request
+ *  and the session fails closed before any radio call. */
 export interface TargetedScanTransport {
   scanTarget(
     request: TargetedMonitorDiscoveryRequest,

@@ -83,6 +83,15 @@ export function createNativeNfcReader(): NfcReader {
       };
       signal.addEventListener("abort", onAbort, { once: true });
 
+      // A listener that will not register (a permission just denied, a
+      // plugin that failed to load) is the "operator taps and nothing
+      // happens" case; it is traced under its own kind before the throw
+      // (whole-branch review SF10), so the sink can tell it from a start
+      // failure.
+      const registrationFailed = (eventName: string, err: unknown): never => {
+        trace.record("listener-registration-failed", eventName);
+        throw err instanceof Error ? err : new Error(String(err));
+      };
       try {
         const eventHandle = await CapacitorNfc.addListener(
           "nfcEvent",
@@ -110,7 +119,7 @@ export function createNativeNfcReader(): NfcReader {
             trace.record("tag-event");
             finish(null, decoded.records);
           },
-        );
+        ).catch((err: unknown) => registrationFailed("nfcEvent", err));
         removers.push(() => eventHandle.remove());
         if (signal.aborted) throw new NfcAbortError();
 
@@ -142,12 +151,21 @@ export function createNativeNfcReader(): NfcReader {
               v.cause === "multipleTags" || v.cause === "tagFailure"
                 ? v.cause
                 : undefined;
-            if (v.reason === "userCancelled") finish(new NfcCancelledError());
+            // A cause is checked FIRST (whole-branch review B4): the
+            // controller publishes one only on an ending it forced, and a
+            // forced ending is never the rower's own Cancel or a timeout
+            // whatever code rides beside it. Reading `reason` first would
+            // let `{reason: "userCancelled", cause: "multipleTags"}` fail
+            // OPEN into the quiet return — the exact collapse the
+            // reader-ending seam exists to prevent.
+            if (cause !== undefined) finish(new NfcInvalidatedError(cause));
+            else if (v.reason === "userCancelled")
+              finish(new NfcCancelledError());
             else if (v.reason === "sessionTimeout")
               finish(new NfcTimeoutError());
-            else finish(new NfcInvalidatedError(cause));
+            else finish(new NfcInvalidatedError(undefined));
           },
-        );
+        ).catch((err: unknown) => registrationFailed("nfcSessionEnd", err));
         removers.push(() => endHandle.remove());
         if (signal.aborted) throw new NfcAbortError();
 

@@ -1313,6 +1313,106 @@ describe("scanTarget (Phase NF)", () => {
     });
   });
 
+  describe("trace kinds (review B3: every kind the transport records is asserted)", () => {
+    function stubTrace() {
+      const kinds: [string, string | undefined][] = [];
+      return {
+        kinds,
+        trace: {
+          record: (kind: string, detail?: string) => {
+            kinds.push([kind, detail]);
+          },
+        },
+      };
+    }
+
+    it("a match records started, matched, then drain-settled; a malformed result records invalid-scan-result", async () => {
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(0);
+      scanCallback!(null);
+      scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+      await advance(1_000);
+      await p;
+      await advance(0);
+      expect(kinds).toStrictEqual([
+        ["ble-scan-started", undefined],
+        ["invalid-scan-result", undefined],
+        ["ble-scan-matched", undefined],
+        ["scan-drain-settled", undefined],
+      ]);
+    });
+
+    it("a timeout with the radio live records ble-scan-timed-out 'not advertising'", async () => {
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(0);
+      await advance(10_000);
+      await expect(p).rejects.toMatchObject({
+        name: "TargetMonitorNotAdvertisingError",
+      });
+      expect(kinds).toContainEqual(["ble-scan-timed-out", "not advertising"]);
+    });
+
+    it("a deadline expiry before the radio is live records ble-scan-timed-out 'preamble'", async () => {
+      vi.mocked(BleClient.getConnectedDevices).mockImplementation(
+        () => new Promise(() => undefined),
+      );
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(10_000);
+      await expect(p).rejects.toMatchObject({
+        name: "TargetScanInterruptedError",
+      });
+      expect(kinds).toContainEqual(["ble-scan-timed-out", "preamble"]);
+    });
+
+    it("a held exact-name device records held-device-conflict", async () => {
+      const { t } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      vi.mocked(BleClient.getConnectedDevices).mockResolvedValue([
+        { deviceId: "held-2", name: NAME },
+      ]);
+      await expect(
+        t.scanTarget(request, new AbortController().signal, trace),
+      ).rejects.toMatchObject({ name: "TargetAlreadyConnectedError" });
+      expect(kinds.map(([k]) => k)).toContain("held-device-conflict");
+    });
+
+    it("a stopLEScan rejection records ble-scan-cleanup-failed 'rejected'", async () => {
+      vi.mocked(BleClient.stopLEScan).mockRejectedValue(new Error("boom"));
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(0);
+      scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+      await advance(1_000);
+      await expect(p).rejects.toMatchObject({ name: "ScanCleanupFailedError" });
+      expect(kinds).toContainEqual(["ble-scan-cleanup-failed", "rejected"]);
+    });
+
+    it("a stopLEScan that never settles records ble-scan-cleanup-failed 'did not settle'", async () => {
+      vi.mocked(BleClient.stopLEScan).mockImplementation(
+        () => new Promise(() => undefined),
+      );
+      const { t, advance } = transportWithClock();
+      const { trace, kinds } = stubTrace();
+      const p = t.scanTarget(request, new AbortController().signal, trace);
+      await advance(0);
+      scanCallback!({ device: { deviceId: "d1" }, localName: NAME });
+      await advance(1_000);
+      await advance(10_000);
+      await expect(p).rejects.toMatchObject({ name: "ScanCleanupFailedError" });
+      expect(kinds).toContainEqual([
+        "ble-scan-cleanup-failed",
+        "did not settle",
+      ]);
+    });
+  });
+
   it("an abort while the held-device query is pending never starts the scan", async () => {
     const { t, advance } = transportWithClock();
     let releaseHeld!: (v: never[]) => void;

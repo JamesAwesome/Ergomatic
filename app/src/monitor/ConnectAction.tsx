@@ -32,7 +32,7 @@ import {
  * re-derived or moved.**
  *
  * **Fast-follow spec §4 amendment (unrelated "Task 5" — the fast-follow
- * plan's own Task 5, not 7B's above):** Connect is now the screen's SINGLE
+ * plan's own Task 5, not 7B's above):** Connect became the screen's L1
  * primary, FIRST in the stack, ahead of Start Timer — the handoff's old
  * "second in the stack, after Start" ordering above is superseded. The
  * trigger's own class also moved off `.button-l2` onto `.button-connect`
@@ -273,8 +273,11 @@ export default function ConnectAction({
 
   // "Connect" — one word. Fast-follow spec §4: no longer L2 ("it must not
   // compete with Start" is the OLD handoff §1 ruling this supersedes) —
-  // Connect is now the screen's single primary, L1 geometry via its own
-  // `.button-connect` class and `--action-connect` token.
+  // Connect took L1 geometry via its own `.button-connect` class and
+  // `--action-connect` token. Phase NF's Gate 0 (James's ruling 4) then
+  // SUPERSEDED "single primary": on an NFC-capable iPhone there are two
+  // equal hardware primaries, Scan NFC above Connect; elsewhere Connect
+  // is still alone.
   // Phase NF (Gate 0): Scan NFC sits DIRECTLY ABOVE Connect, equal weight,
   // present only when native reports support. `accepted` swaps the NFC
   // button for its `✓ PM5 found` state (a status, not a control) for one

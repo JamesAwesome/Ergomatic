@@ -313,6 +313,7 @@ describe("adapters/monitorTransport: targeted-scan capability through the produc
       (
         r: TargetedMonitorDiscoveryRequest,
         s: AbortSignal,
+        t?: { record(kind: string, detail?: string): void },
       ) => Promise<DiscoveredMonitor[]>
     >(async () => [{ id: "dev-1", name: "PM5 1" }]);
     const nativeTransport = {
@@ -342,11 +343,15 @@ describe("adapters/monitorTransport: targeted-scan capability through the produc
     expect(transport !== null && hasTargetedScan(transport)).toBe(true);
     if (transport === null || !hasTargetedScan(transport))
       throw new Error("unreachable");
-    await expect(transport.scanTarget(request, signal)).resolves.toStrictEqual([
-      { id: "dev-1", name: "PM5 1" },
-    ]);
+    const trace = { record: vi.fn() };
+    await expect(
+      transport.scanTarget(request, signal, trace),
+    ).resolves.toStrictEqual([{ id: "dev-1", name: "PM5 1" }]);
     expect(scanTarget.mock.calls[0]![0]).toBe(request);
     expect(scanTarget.mock.calls[0]![1]).toBe(signal);
+    // The trace is the THIRD argument; a decorator that drops it silently
+    // kills every BLE diagnostic on the composed path (review B3).
+    expect(scanTarget.mock.calls[0]![2]).toBe(trace);
     expect(nativeTransport.scan).not.toHaveBeenCalled();
   });
   it("web arm: the real Web Bluetooth transport has NO targeted capability, and no decorator invents one", async () => {
@@ -366,7 +371,11 @@ describe("adapters/monitorTransport: targeted-scan capability through the produc
     try {
       const web = withLiveness(createWebBluetoothTransport(), stubDeps());
       expect(hasTargetedScan(web)).toBe(false);
-      void defaultTransport;
+      // The PRODUCTION composition, not a hand-built one (review SF7): the
+      // web arm's default transport must come back without the capability.
+      const composed = await defaultTransport(stubDeps());
+      expect(composed).not.toBeNull();
+      expect(composed !== null && hasTargetedScan(composed)).toBe(false);
     } finally {
       delete (navigator as { bluetooth?: unknown }).bluetooth;
     }

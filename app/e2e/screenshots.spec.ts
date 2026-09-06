@@ -6766,12 +6766,25 @@ async function captureWorkoutDetailNfc(
   });
   await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
   await setBaselines(page);
+  // A production-shaped PERSONAL workout (RF3; review B5 found the first
+  // capture was a one-row piece too thin to evidence Gate 0's fold claim):
+  // 4 × 2000 m at 2K with rest, built the way the personal-workout capture
+  // above builds its own — one row, then a distance row, duplicated twice.
   const title = "Screenshot NFC Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(title);
   await page.getByRole("button", { name: "Effort 3" }).click();
+  await page.getByRole("radio", { name: "Row 1 duration unit meters" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
+  const nfcRow1RestUp = page.getByRole("button", { name: "Row 1 rest up" });
+  for (let i = 0; i < 6; i++) {
+    await nfcRow1RestUp.click();
+  }
   await page.getByRole("button", { name: "DONE" }).click();
+  for (let i = 0; i < 3; i++) {
+    await page.getByRole("button", { name: "Duplicate Step 1" }).click();
+  }
   await page.getByRole("button", { name: "Save to library" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+$/);
   await page.locator(".workout-detail-title").waitFor();

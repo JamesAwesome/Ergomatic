@@ -15135,8 +15135,8 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
       ],
       [
         "TargetedRequestInvalidError",
-        "transport-missing",
-        "This device has no Bluetooth transport.",
+        "target-interrupted",
+        "Connection interrupted. Try again.",
       ],
     ];
     for (const [name, reason, detail] of cases) {
@@ -15334,6 +15334,65 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     expect(result.current.phase).toBe("failed");
     expect(result.current.error?.reason).toBe("transport-missing");
     expect(scan).not.toHaveBeenCalled();
+  });
+
+  it("a targeted FAILURE publishes the trace and the export window carries it under the nfc-attempt prefix, BLE kinds included (review B3)", async () => {
+    const {
+      createConnectionAttemptTrace,
+      latestConnectionAttemptTrace,
+      resetConnectionAttemptTraceForTests,
+    } = await import("./nfc/connectionAttemptTrace");
+    resetConnectionAttemptTraceForTests();
+    const trace = createConnectionAttemptTrace(() => 0);
+    trace.record("tag-event");
+    const scanTarget = vi.fn(
+      async (
+        _r: unknown,
+        _s: AbortSignal,
+        t?: { record(kind: string, detail?: string): void },
+      ) => {
+        t?.record("ble-scan-started");
+        t?.record("ble-scan-timed-out", "not advertising");
+        const err = new Error("nobody");
+        err.name = "TargetMonitorNotAdvertisingError";
+        throw err;
+      },
+    );
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => ({ ...stubRadio({}), scanTarget }),
+      }),
+    );
+    expect(latestConnectionAttemptTrace()).toBeNull();
+    await act(async () => {
+      await result.current.connect(targeted(), trace);
+    });
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error?.reason).toBe("target-not-advertising");
+    // Published at the terminal, not only on success.
+    expect(latestConnectionAttemptTrace()?.map((e) => e.kind)).toStrictEqual([
+      "tag-event",
+      "ble-scan-started",
+      "ble-scan-timed-out",
+    ]);
+    // The failure screen's View connection log reads THIS, never "[]".
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(exported.map((e) => [e.kind, e.detail])).toStrictEqual([
+      ["nfc-attempt:tag-event", "seq 0"],
+      ["nfc-attempt:ble-scan-started", "seq 1"],
+      ["nfc-attempt:ble-scan-timed-out", "not advertising"],
+    ]);
+    // A manual connect() on the same hook exports its own ring and never the
+    // stale NFC trace ahead of it.
+    await connect(result);
+    const manual = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+    }[];
+    expect(manual.length).toBeGreaterThan(0);
+    expect(manual.some((e) => e.kind.startsWith("nfc-attempt:"))).toBe(false);
   });
 
   it("the attempt trace is copied as the prefix of the session ring at GATT connect", async () => {

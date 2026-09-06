@@ -162,6 +162,19 @@ describe("createNativeNfcReader", () => {
         "NfcInvalidatedError",
         undefined,
       ],
+      // A cause beside a non-`invalidated` reason FAILS CLOSED as the
+      // invalidation it names (spec Validation contract; review B4): a
+      // forced ending is never the rower's Cancel or a timeout.
+      [
+        { reason: "userCancelled", cause: "multipleTags" },
+        "NfcInvalidatedError",
+        "multipleTags",
+      ],
+      [
+        { reason: "sessionTimeout", cause: "tagFailure" },
+        "NfcInvalidatedError",
+        "tagFailure",
+      ],
     ];
     for (const [payload, name, cause] of cases) {
       registrations = [];
@@ -188,6 +201,50 @@ describe("createNativeNfcReader", () => {
     expect(trace.entries().map((e) => e.kind)).toContain(
       "invalid-native-event",
     );
+  });
+
+  it("a listener that will not register is traced under listener-registration-failed naming the event, and nothing starts", async () => {
+    mocks.addListener.mockImplementationOnce(async () => {
+      throw new Error("permission denied");
+    });
+    const { result, trace } = start();
+    await expect(result).rejects.toMatchObject({
+      message: "permission denied",
+    });
+    expect(mocks.startScanning).not.toHaveBeenCalled();
+    expect(
+      trace
+        .entries()
+        .filter((e) => e.kind === "listener-registration-failed")
+        .map((e) => e.detail),
+    ).toStrictEqual(["nfcEvent"]);
+  });
+
+  it("the read does NOT settle until stopScanning resolves (the JS half of stop-before-BLE)", async () => {
+    let releaseStop!: () => void;
+    mocks.stopScanning.mockImplementation(
+      () =>
+        new Promise<void>((r) => {
+          releaseStop = r;
+        }),
+    );
+    const { result } = start();
+    await settle();
+    let settled = false;
+    void result.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    fire("nfcEvent", nativeRecords());
+    await settle();
+    expect(mocks.stopScanning).toHaveBeenCalledTimes(1);
+    expect(settled).toBe(false);
+    releaseStop();
+    await expect(result).resolves.toHaveLength(3);
   });
 
   it("a rejected stopScanning is recorded as reader-stop-failed, never swallowed silently", async () => {

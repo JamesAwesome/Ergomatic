@@ -679,6 +679,10 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
     expect(intent.attemptId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
+    // Staged under THAT id — the authorization the hook's armed handler
+    // will look for by key (review SF11: the title claimed it, the body
+    // never checked).
+    expect(stagedRetireAttemptId()).toBe(intent.attemptId);
   });
 
   it("a Connect press proceeds with a manual intent carrying its own fresh ID", async () => {

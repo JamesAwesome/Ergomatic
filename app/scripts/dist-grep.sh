@@ -10,7 +10,7 @@
 # record/replay stage A) — because a single gate that only ever grows is
 # easier to trust than several that might drift apart.
 #
-# EIGHT needles, eight different reasons — and every needle is a STRING
+# NINE needles, nine different reasons — and every needle is a STRING
 # LITERAL from the source, deliberately never a function/variable
 # identifier: `vite build` minifies the production bundle, which renames
 # every identifier it can (verified empirically this task — grepping for

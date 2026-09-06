@@ -117,8 +117,17 @@ Regenerating anywhere else produces a 90-file diff that means nothing.
    lexically and reports `v0.9.0` as the newest tag when the real head is
    `v0.26.0`. **Do not add `--merges`** — main is squash-merged and has no merge
    commits, so it returns empty.
-3. `git tag -a vX.Y.Z -m "<one-line summary>" && git push origin vX.Y.Z`
-4. `cd app && pnpm ios:release`
+3. **If the range touches `app/patches/@capgo__capacitor-nfc@8.2.5.patch`
+   or bumps `@capgo/capacitor-nfc`, run the patch's own Swift tests first**
+   — nothing in CI compiles that Swift (Phase NF review SF8). From `app/`:
+   `pnpm patch @capgo/capacitor-nfc@8.2.5 --edit-dir <scratch>` to unpack
+   the patched package, then in `<scratch>/ios`
+   `xcodebuild -scheme CapgoCapacitorNfc -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' test`
+   (31 tests green on 2026-09-06, `docs/monitor/sessions/phase-nf-gate-minus-one/REMAINING-PROOF.md`).
+   Discard the scratch dir; do NOT `pnpm patch-commit` unless the patch
+   itself is meant to change.
+4. `git tag -a vX.Y.Z -m "<one-line summary>" && git push origin vX.Y.Z`
+5. `cd app && pnpm ios:release`
 
 That's the whole thing (first proven on v0.10.0, 2026-08-17). The script
 (`scripts/ios-release.sh`) refuses to run unless HEAD is exactly the
