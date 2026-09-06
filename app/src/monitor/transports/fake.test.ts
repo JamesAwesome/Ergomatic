@@ -3881,6 +3881,16 @@ describe("createFakeTransport: scanTarget (Phase NF)", () => {
     await expect(
       fake.scanTarget(req("pm5 1"), new AbortController().signal),
     ).rejects.toMatchObject({ name: "TargetedRequestInvalidError" });
+    // The kind clause too (review SF2): a picker-shaped request cannot
+    // reach the targeted operation through the instrument either.
+    await expect(
+      fake.scanTarget(
+        { ...req("PM5 1"), kind: "picker" } as unknown as ReturnType<
+          typeof req
+        >,
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ name: "TargetedRequestInvalidError" });
   });
 
   it("rejects a pre-aborted signal as interrupted", async () => {

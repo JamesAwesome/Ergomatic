@@ -208,6 +208,18 @@ describe("Scan NFC presence (spec ruling 3)", () => {
     expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
   });
 
+  it("a probe that REJECTS keeps the button absent and reaches the sink as capability-failed on a fresh process (review B3)", async () => {
+    setNfcScript({ capability: "rejects", outcome: { kind: "cancelled" } });
+    await renderDetail();
+    await screen.findByRole("button", { name: "Connect" });
+    await waitFor(() =>
+      expect(latestConnectionAttemptTrace()?.map((e) => e.kind)).toStrictEqual([
+        "capability-failed",
+      ]),
+    );
+    expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
+  });
+
   it("is PRESENT, directly above Connect, when the reader reports supported", async () => {
     setNfcScript({ capability: "supported", outcome: { kind: "cancelled" } });
     const { container } = await renderDetail();

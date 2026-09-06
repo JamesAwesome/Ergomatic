@@ -21,7 +21,9 @@ import {
 import { decodeNfcEvent } from "./nfcBridge";
 
 export interface NfcScript {
-  capability: NfcCapability;
+  /** `"rejects"` makes the probe itself fail (a plugin that will not
+   *  load), the `capability-failed` path. */
+  capability: NfcCapability | "rejects";
   /** What the reader delivers for the attempt. `records` are delivered as
    *  a native-shaped `nfcEvent` carrying the attempt ID and pass through
    *  the production bridge, exactly like the plugin's own event. */
@@ -47,7 +49,10 @@ export function createScriptedNfcReader(script: NfcScript): ScriptedNfcReader {
   let starts = 0;
   const stops: string[] = [];
   return {
-    capability: () => Promise.resolve(script.capability),
+    capability: () =>
+      script.capability === "rejects"
+        ? Promise.reject(new Error("scripted capability rejection"))
+        : Promise.resolve(script.capability),
     async readOne({ attemptId, signal, trace }: NfcReadOptions) {
       if (signal.aborted) throw new NfcAbortError();
       trace.record("session-requested");
