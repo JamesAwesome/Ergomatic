@@ -5,6 +5,7 @@ import ConnectAction, {
 } from "../monitor/ConnectAction";
 import type { MonitorDiscoveryRequest } from "../../domain/monitor/types.js";
 import { mintAttemptId } from "../monitor/nfc/attemptIdMint";
+import type { ConnectionAttemptTrace } from "../monitor/nfc/connectionAttemptTrace";
 import { useNfcEntry } from "../monitor/nfc/useNfcEntry";
 import {
   connectGuardStage,
@@ -81,14 +82,19 @@ export default function JustRow() {
   // target goes (its own session) and where an inline outcome renders.
   const nfc = useNfcEntry();
   const [inlineError, setInlineError] = useState<string | null>(null);
-  const lastRequestRef = useRef<MonitorDiscoveryRequest | null>(null);
+  const lastRequestRef = useRef<{
+    request: MonitorDiscoveryRequest;
+    trace?: ConnectionAttemptTrace;
+  } | null>(null);
   const handleProceed = useCallback(
     (intent: ConnectionEntryIntent) => {
       setInlineError(null);
       if (intent.kind === "nfc") {
         void nfc.run(intent.attemptId, {
           onTarget: (request, trace) => {
-            lastRequestRef.current = request;
+            // Kept WITH its trace: a retry records into the same trace, as
+            // the interstitial's does (whole-branch review, should-fix 3).
+            lastRequestRef.current = { request, trace };
             setStarted(true);
             void session.connect(request, trace);
             return true;
@@ -101,19 +107,18 @@ export default function JustRow() {
         kind: "picker",
         attemptId: intent.attemptId,
       };
-      lastRequestRef.current = request;
+      lastRequestRef.current = { request };
       setStarted(true);
       void session.connect(request);
     },
     [nfc, session],
   );
   const retryConnect = useCallback(() => {
-    const request: MonitorDiscoveryRequest = lastRequestRef.current ?? {
-      kind: "picker",
-      attemptId: mintAttemptId(),
+    const last = lastRequestRef.current ?? {
+      request: { kind: "picker" as const, attemptId: mintAttemptId() },
     };
-    lastRequestRef.current = request;
-    void session.connect(request);
+    lastRequestRef.current = last;
+    void session.connect(last.request, last.trace);
   }, [session]);
 
   // AXES, NEVER `session.phase`. `connectedAxes.ts` exists so that no

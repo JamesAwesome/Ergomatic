@@ -6069,8 +6069,11 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin: 0;
 }
 
-.connected-detail-line {
+.connected-detail-line:not(.connected-detail-raw) {
   white-space: pre-line; /* a two-line detail (follow-on Gate 0) keeps its break */
+}
+
+.connected-detail-line {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-2);

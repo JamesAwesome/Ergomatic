@@ -2477,14 +2477,11 @@ trigger is the whole entry.
   during the targeted BLE scan may arm the never-cleared cleanup poison on
   resume; no leg backgrounds during the BLE half; candidate fix "do not arm
   the cleanup deadline on a background-caused abort" if ever seen.
-  **Product defect found by the walk hardening (RF14, filed here, not
-  fixed in the PR):** on the NFC route the interstitial passes through
-  `picking` and renders `CONNECT / Choosing your monitor` with NO buttons for
-  the whole targeted scan (~1-2 s normally, 10-20 s when the PM5 is not
-  advertising) — copy written as a backdrop for the picker sheet, on a path
-  with no chooser and no Cancel. Fix after the walk: a targeted-scan
-  variant of that screen (`Looking for <name>…`, with Cancel), Gate 0 for
-  the copy.
+  **Product defect found by the walk hardening (RF14), FIXED in the
+  follow-on PR:** on the NFC route the interstitial passed through
+  `picking` rendering `CONNECT / Choosing your monitor` with NO buttons for
+  the whole targeted scan; it now reads `Looking for <name>` with Cancel
+  (follow-on Gate 0 §2).
   **Dead-code rows (RF29):** `PaintBarrierAbortedError`,
   `stagedRetireAttemptId()` and the transport's `targetDeadlineMs` /
   `collisionWindowMs` options have test consumers only (seams, kept on
@@ -2498,9 +2495,10 @@ trigger is the whole entry.
   record confirms `PM5 found`, then silently discovers that exact advertised
   name and reuses the existing connect → program → `armed` path; no second app
   tap and no Bluetooth picker. Unsupported records say `Unsupported NFC tag`.
-  A target that is not advertising says
-  `Open Connect Device on this PM5, then try again.` and never falls back to a
-  general picker. **The PM5 still must be on Connect Device**: NFC is a lookup
+  A target the scan cannot find says `Couldn't reach <name>.` /
+  `Check nothing else is connected to it, then try again.` (follow-on, after
+  James's erg fact: the PM5 advertises whenever awake and unconnected, on any
+  screen) and never falls back to a general picker. NFC is a lookup
   shortcut, not pairing. CoreBluetooth's opaque id makes the tag's MAC unusable;
   exact live `ScanResult.localName` matching is the bridge. **Gate -1 comes
   before product implementation:** a complete read on James's real PM5 must

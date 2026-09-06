@@ -994,7 +994,7 @@ export interface MonitorSession {
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
    *  header). */
-  /** Phase NF: `request` selects discovery. Omitted (every pre-NF caller,
+  /** Phase NF: `request` selects discovery. Omitted (pre-NF callers;
    *  JustRow included) means today's picker under a freshly minted attempt
    *  ID; an `advertised-name` request runs the picker-free exact-name scan
    *  through `TargetedScanTransport.scanTarget` and fails closed —

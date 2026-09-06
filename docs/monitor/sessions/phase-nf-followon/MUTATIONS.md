@@ -1,7 +1,7 @@
 # Phase NF follow-on — self-mutation record (2026-09-06)
 
 One mutation per new assertion, deciding source only, on a clean committed
-tree (`scratchpad/mutate-followon.py`; every anchor asserted to one hit, M6
+tree (`mutate-followon.py` beside this file; every anchor asserted to one hit, M6
 re-anchored after Prettier reformatted its button and re-run). Native: the
 patch's rejection message mutated to `"Failed to read the tag"` → 2 of 31
 Swift tests fail (`NdefSessionEndingTests.swift` pins the exact line);

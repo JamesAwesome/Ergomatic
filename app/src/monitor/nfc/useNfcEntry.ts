@@ -116,7 +116,7 @@ export interface NfcAttemptSinks {
   ): boolean;
   /** Where an inline outcome renders (the states table's inline copies, or
    *  the approved "stopped" line for a seam that broke). */
-  onInlineError(copy: NfcInlineCopy | "NFC scan stopped. Try again."): void;
+  onInlineError(copy: NfcInlineCopy): void;
 }
 
 export interface NfcEntry {
