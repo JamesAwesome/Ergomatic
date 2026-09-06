@@ -184,6 +184,7 @@ the afternoon, each installed with `xcrun devicectl device install app`:
 | B `d110ed30` | + tray restore | built, not installed (superseded by C) |
 | C `f8befbf6` | + `--surface` backdrop | recording: the bar gone during the keyboard's rise, pops ~0.5 s later, drops behind it on dismiss — "Very unsettling" |
 | **D `92c20bcf`** | **`none`, hide on events, tray restored** | **"That's perfect"** |
+| E `085fddb4` | the merge head (D minus the backdrop config) | You → BASELINES, 6K split, numeric keypad: tray with ✓ present, no bar, no return key on the pad — "All good" (`captures/app-085fddb4-baselines-numeric-keypad.png`) |
 
 **What the rev-1 gate list still owed, and its disposition under D:**
 
@@ -192,8 +193,11 @@ the afternoon, each installed with `xcrun devicectl device install app`:
   not separately captured.
 - Builder, Baselines, onboarding, session door — the bar's presence is one
   boolean in `AppRoutes`; screens that already hide the bar by route are
-  unaffected. The numeric keypad's ✓ (tray restore) is the same code as C,
-  where the tray was present.
+  unaffected. The numeric keypad's ✓: the PM close did NOT accept
+  "same code as C" (the tray had only been seen on a text keyboard, and a
+  failure here changes class — a keypad with no exit on a screen whose bar
+  this PR removes). **Measured on E:** the tray and ✓ are on the number
+  pad.
 - `innerHeight` = 498 vs 566, the pad after dismiss, rotate-with-keyboard-up,
   the `vh` screen — **all struck**: they were consequences of resizing the
   WebView, and D does not.
@@ -306,4 +310,4 @@ below is on the branch:
   owed before merge: a numeric field on build D (Builder duration or a
   baseline split) — tray present, ✓ dismisses, bar returns — because the
   tray was observed on a TEXT keyboard and the design asserts the ✓ is the
-  keypad's only dismiss.
+  keypad's only dismiss. **Done on E, 2026-09-06: "All good."**
