@@ -8219,3 +8219,65 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   strictly fresher than the mounted hook it replaced; and the save-to-send seam
   gate genuinely starting at the Save tap and asserting request ORDER, not a
   call count.
+
+## Phase NF product walk, timed-protocol lens (lens 1 of /harden, delta), 2026-09-06
+
+James named the lens himself: attack a runsheet as a TIMED PROTOCOL between two
+machines that time out and a human waiting on a controller turn. Five PM gates
+had passed over the same document without a single duration in it.
+
+- **Build the TIMER TABLE the document does not have, before reading a word of
+  its logic.** Every clock, its value, what starts it, what clears it, and which
+  human hold or controller gap can let it expire. Sixteen rows here; the
+  document contained zero numbers, and three of the sixteen were walk-enders.
+  The row with no number at all — the CONTROLLER TURN — is the one that drives
+  the others, and it is invisible precisely because nobody thinks of their own
+  turn as a clock.
+- **A "no discriminator" claim is a NEGATIVE and gets the vendor header, not a
+  receipt.** The runsheet argued from our own device capture that a system
+  ending and our programmatic ending are byte-identical (both Cancel 200).
+  `NFCNDEFReaderSession.h` documents `SessionTerminatedUnexpectedly` (202,
+  `NFCError.h`) for exactly the case the leg stages — an app entering the
+  background — and our own patch maps 202 to a DIFFERENT reason and a different
+  user-visible string. **Technique: for any "we cannot tell X from Y", find the
+  vendor sentence that names X's producer; a receipt of a NEIGHBOURING gesture
+  cannot establish a negative about this one.** The receipt showed a swipe/popup;
+  the leg stages a lock.
+- **Follow a claimed-unreachable code all the way to the copy it renders.** The
+  spec said "codes 202 and 203 originate in the system and no operator action
+  forces them"; the header says backgrounding forces 202; the JS maps bare
+  `invalidated` to an inline error, not the quiet return the leg lists as PASS.
+  Three files agreed with each other and disagreed with the SDK.
+- **Ask which SCREEN each wait happens on, then grep that screen for the
+  protection you assumed.** `keepAwakeOn` has four callers, all mount effects,
+  none on the screen where the NFC read and both block boundaries live. The
+  precondition's "or the keep-awake control" named an operator control that does
+  not exist. **A precondition offering an alternative is a claim that the
+  alternative exists** — grep for it.
+- **A "10 s deadline" in an operator instruction is a WALL-CLOCK promise; read
+  the settle path for the second timer.** Every settle armed a second
+  `deadlineMs` cleanup bound on `stopLEScan()`, so the operator-visible wait is
+  up to 20 s. A constant's name bounds one thing; the operator experiences the
+  sum.
+- **A block boundary is a machine-state boundary. Tabulate BOTH machines at each
+  one and ask what decays.** The A→B gap left the PM5 awake-and-decaying
+  ("a few minutes", unmeasured) while the next leg's entire premise was measured
+  against it — a leg that would have PASSED by measuring the controller's turn
+  length, and could equally have fired the walk's most-likely stop rule from a
+  cause the controller created. **Cut blocks so that every block after the first
+  opens with an explicit action that RE-ESTABLISHES the state it needs** (here,
+  a PM5 menu press, which is also a wake), or the gap is load-bearing.
+- **Every human HOLD needs three sentences: hold until X, at most N, then Y.**
+  Five holds here had none. The physical tell that forces the question: while the
+  phone is held to the erg, its screen faces away — so the operator cannot see
+  the state change the leg asks him to observe, and the ONLY cue is the system
+  sheet's dismissal, which (read-write session,
+  `invalidateAfterFirstRead: false`) is produced by OUR invalidate, not by the
+  read.
+- **Attacked and HELD (Phase NF vetted ground, extended):** the lifecycle axis
+  (`pause`/`resume` via `didEnterBackgroundNotification`, not `appStateChange`),
+  so the sheet's own `willResignActive` does not abort the attempt; the sheet
+  dismissing BEFORE the parse/haptic/paint/handoff, so no hold is needed through
+  the BLE scan; Cancel-from-READY terminating the erg, which is why each leg
+  re-navigates to Connect Device; and no timer of any kind at READY on either
+  machine.

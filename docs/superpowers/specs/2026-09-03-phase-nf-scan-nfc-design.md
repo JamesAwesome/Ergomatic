@@ -176,9 +176,19 @@ unchanged, so no Gate 0.
   on this inference; the injected test drives both 200 and 202.
 - PRIMARY, `PRE-REPAIR.md` and the receipt census (`grep '"action"'` over the
   committed receipts): only `sheet-cancel` and `no-tag-timeout` endings were
-  ever produced on the device. Codes 202 and 203 originate in the system and
-  no operator action forces them, so the "forced generic invalidation" leg of
-  criterion 7 is provable only by injection, and now is.
+  ever produced on the device. Code 203 originates in the system with no
+  operator action forcing it. **Code 202 is forced by ONE operator action —
+  backgrounding the app while a reader is live** (PRIMARY,
+  `NFCNDEFReaderSession.h`: the session "will return
+  NFCReaderSessionInvalidationErrorSessionTerminatedUnexpectedly when the
+  client application enters the background state"; correction landed
+  2026-09-06 from the walk's timed-protocol hardening, which had inherited
+  the earlier sentence "no operator action forces them"). The product walk's
+  leg 4 stages exactly that and reads 200 vs 202 on the console as its
+  verdict; the JS maps a bare `invalidated` to `NFC scan stopped. Try again.`,
+  which is therefore a correct outcome of a lock, beside the quiet return.
+  The "forced generic invalidation" leg of criterion 7 remains provable by
+  injection, and now is.
 
 **Rule (binding on the product PR).** The patched NDEF controller records why
 it ended a session and publishes it:

@@ -2445,6 +2445,14 @@ trigger is the whole entry.
   during the targeted BLE scan may arm the never-cleared cleanup poison on
   resume; no leg backgrounds during the BLE half; candidate fix "do not arm
   the cleanup deadline on a background-caused abort" if ever seen.
+  **Product defect found by the walk hardening (RF14, filed here, not
+  fixed in the PR):** on the NFC route the interstitial passes through
+  `picking` and renders `CONNECT / Choosing your monitor` with NO buttons for
+  the whole targeted scan (~1-2 s normally, 10-20 s when the PM5 is not
+  advertising) — copy written as a backdrop for the picker sheet, on a path
+  with no chooser and no Cancel. Fix after the walk: a targeted-scan
+  variant of that screen (`Looking for <name>…`, with Cancel), Gate 0 for
+  the copy.
   **Dead-code rows (RF29):** `PaintBarrierAbortedError`,
   `stagedRetireAttemptId()` and the transport's `targetDeadlineMs` /
   `collisionWindowMs` options have test consumers only (seams, kept on
