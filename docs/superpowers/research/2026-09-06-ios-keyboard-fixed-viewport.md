@@ -8,14 +8,14 @@ work, and what owns the fix?
 
 **Answer in one paragraph.** iOS WebKit does not shrink the *fixed-position*
 viewport when the keyboard appears; it shrinks only the *visual* viewport.
-A `bottom: 0` fixed element therefore stays anchored behind the keyboard
-until a scroll, at which point WebKit re-anchors it to the visual viewport
-and **clips the whole fixed layer to that viewport**. UIKit's keyboard frame
-includes the input-accessory tray, so the visual viewport ends at the
-tray's top, while the WebView keeps painting the *document* layer down to
-the keyboard proper — that ~70px is the strip. Nothing a fixed element
-paints below the visual viewport's bottom reaches the screen, so no CSS
-hung off the tab bar can fill it. The fix is to shrink the WebView itself
+A `bottom: 0` fixed element therefore stays behind the keyboard until a
+scroll; after that scroll it is drawn at the visual viewport's bottom and
+**nothing it paints below that line is visible** (observed on three
+independent fill mechanisms; the mechanism behind the observation is
+INFERENCE — §1.1). The band between that line and the keyboard proper
+(≈505..566 CSS in the app capture, holding the ‹ › ✓ pill) is inside the
+WebView, outside the visual viewport, and shows the document — that is the
+strip. No CSS hung off the tab bar can fill it. The fix is to shrink the WebView itself
 (`@capacitor/keyboard`, `resize: 'native'`), which makes the fixed viewport
 and the visual viewport the same thing.
 
@@ -41,6 +41,18 @@ unrelated hit (line 1666). RF18 discharged.
   viewport as well as the ICB … position: fixed elements are still fully
   visible."_ No WebKit engineer speaks in the thread; the claim is a
   Chrome engineer's description of iOS, corroborated by §2 below.
+- **INFERENCE, and the search that failed to source it (anchor pass m1,
+  2026-09-06).** "WebKit re-anchors fixed elements to the visual viewport
+  after a scroll and clips the fixed layer to it" is OUR sentence. #7475
+  says fixed elements are *scrolled out of view*, not re-anchored;
+  WebKit's `computeLayoutViewportRect` (`WebPageProxyIOS.mm`) feeds the
+  unobscured rect into the layout viewport's size only behind
+  `interactive-widget=resizes-content` (WebKit bug 259770, unshipped on
+  iOS) and into its origin always; nothing in WebKit source, bugzilla or
+  the CSS Viewport spec describes clipping a fixed layer. The
+  OBSERVATION stands on its own — three fills, one line, page visible
+  below it in `safari-scrolled.png` — and the design depends on the
+  observation only.
 - **SECONDARY.** Rahul Kumar, _"Mobile Safari, position: fixed and the
   virtual keyboard — an erroneous combination"_
   ([Medium](https://medium.com/@im_rahul/safari-and-position-fixed-978122be5f29)):
@@ -95,10 +107,17 @@ unrelated hit (line 1666). RF18 discharged.
   keyboard is about to show."_ Default `'off'`. Under `resize: 'native'`
   the shrunk WebView exposes the window behind it inside the keyboard
   frame; this is what the translucent tray then sits over.
-- **PRIMARY.** `Keyboard.m:370-392` — `setAccessoryBarVisible(false)`
-  swizzles `-inputAccessoryView` on `WKContentView` to return `nil`. It
-  removes the tray, and with it the ✓ that dismisses the keyboard. Not
-  adopted (spec §3).
+- **PRIMARY (anchor pass B1, 2026-09-06).** `Keyboard.m:187`, inside
+  `load()`: `self.hideFormAccessoryBar = YES;` — unconditional, no config
+  key, present in 6.0.3, 7.0.3 and 8.0.0 too (three tarballs diffed). The
+  setter (`:373-393`) swizzles `-inputAccessoryView` on `WKContentView` to
+  return `nil`, so INSTALLING the plugin removes the ‹ › ✓ tray from every
+  field. `load()` runs at launch: `capacitor.config.json`'s
+  `packageClassList` → `CapacitorBridge.init` → `registerPlugins()` →
+  `loadPlugin` → `load()`. `setAccessoryBarVisible({isVisible:false})`
+  (`:420-427`) is therefore a no-op (the setter's equality guard rejects a
+  second `YES`); `{isVisible:true}` is the only call that does anything,
+  and it restores the tray. Spec §2 makes that call at boot.
 - **PRIMARY.** [capacitorjs.com/docs/apis/keyboard](https://capacitorjs.com/docs/apis/keyboard),
   `KeyboardResize.Native`: _"The whole native Web View will be resized when
   the keyboard shows/hides. This affects the `vh` relative unit."_ The
@@ -128,9 +147,11 @@ What the rows say:
   overflowing the bar; a 184px box pushed 140px below the anchor, of
   which only the top 44px painted; a spread `box-shadow`) all stopped at
   this one line regardless of their own geometry. A clip at one absolute
-  line is a viewport clip, not a per-element one. Pixel scan of the
+  line is a viewport-level stop, not a per-element one. Pixel scan of the
   scrolled capture for the three fill colours: 0 red, 17 green, 23 blue
-  (antialiasing noise; a 140px band would be tens of thousands).
+  (antialiasing noise; a 140px band would be tens of thousands) — and,
+  because a translucent pill overlays the band and could tint a fill, the
+  capture was also LOOKED at: the band is cream and shows `row 12`.
 - **The strip is document, not fixed:** Safari's keyboard frame is
   `656 − 356 = 300`; the keyboard proper starts at WebView y≈428, so the
   tray occupies ≈356..428. That band is outside the visual viewport, still
@@ -138,12 +159,20 @@ What the rows say:
   layer cannot. Same arithmetic in Chrome (`684 − 383 = 301`), whose taller
   autofill tray makes three rows of list visible through it.
 - **The app's own capture** (`app-v0.39.1-portrait-scrolled.png`, from
-  James, the TestFlight build): tab bar box 419..498 = 44px tabs + 34px
-  `env(safe-area-inset-bottom)`, library visible 498..566, tray 566..581,
-  keyboard from 581. Bar bottom 498 = the visual viewport's; the shipped
+  James, the TestFlight build), **per-column pixel scan** (anchor pass B2
+  corrected this doc's first, single-column reading, which put the tray at
+  566..581): tab bar box 419..498 = 44px tabs + 34px
+  `env(safe-area-inset-bottom)`; list content paints from **500**; the
+  ‹ › ✓ pill occupies ≈**505..556** (a card's chip is visible at 500,
+  above it); the keyboard proper from **566**. There is no boundary at
+  581. So the keyboard frame UIKit reported is either `874 − 498 = 376`
+  (tray included) or `874 − 566 = 308` (tray excluded) — the spec's Gate
+  0 measures which. Bar bottom 498 = the visual viewport's; the shipped
   `.tabbar::after` (present in the served bundle — `pnpm build` then
   `grep -o "\.tabbar:after{[^}]*}" dist/client/assets/*.css` returns the
-  rule) contributes zero painted pixels.
+  rule) contributes zero painted pixels. The deleted #317 comment's "the
+  ~66px difference is iOS's floating input-accessory bar" had this band's
+  SIZE right.
 
 ## 3. What this falsifies in the repo
 
@@ -167,7 +196,25 @@ What the rows say:
   frame no longer touches the screen bottom (INFERENCE: it should, and the
   bar would drop its 34px pad under the keyboard). Settled by the Gate 0
   captures in spec §4.
-- The exact tray height under `resize: 'native'` — i.e. whether the shrunk
-  WebView ends at the tray's top (566 in the app capture) or the keyboard's
-  (581). §1.1's SECONDARY source and §2's arithmetic both say the frame
-  includes the tray, so the WebView should end at 566. Gate 0 settles it.
+- Whether UIKit's keyboard frame includes the tray — i.e. whether the
+  shrunk WebView ends at the tray's top (`innerHeight` 498 in the app's
+  geometry) or the keyboard's (566, under which the pill would overlap the
+  tab bar). §1.1's SECONDARY source says included; Apple's reference for
+  `keyboardFrameEndUserInfoKey` says only _"a CGRect for identifying the
+  frame rectangle of the keyboard (in the screen's coordinate space)"_;
+  the plugin's own `"Ignoring QuickType Bar"` branch (`Keyboard.m:250-254`)
+  implies an accessory-only frame can be reported. Gate 0 settles it, with
+  both expected values written down first (spec §4 item 3).
+- Whether the accessory-view swizzle takes on iOS 26's floating pill (if
+  `WKContentView` no longer overrides `-inputAccessoryView`, the swizzle
+  lands on `UIResponder` process-wide — the pill goes either way, or not at
+  all). Build A at Gate 0.
+- Whether iOS re-posts `keyboardWillShow` on rotation with the keyboard up.
+  The plugin observes no `WillChangeFrame` (`Keyboard.m:191-194`), removes
+  the WebView's own observers (`:196-199`), re-applies the frame only when
+  the height CHANGES (`:308-310`), and the WKWebView is the view
+  controller's root view (`CAPBridgeViewController.swift:46`), so a
+  relayout can un-shrink it silently. Gate 0 item 5.
+- Whether `ionic-team/capacitor#6430` (safe-area insets not re-evaluated
+  after a resize; pad gone after the keyboard closes) reproduces on this
+  iOS. Gate 0 item 4.

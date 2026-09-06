@@ -542,18 +542,28 @@ one line (`barBottom 356 = visualViewport.height 356`, James's iPhone,
 shrinks to the keyboard's top — plus `autoBackdropColor: "dom"` so the
 tray sits over `--page`.
 
-**One PR:** the dependency and config; `.tabbar::after` and its two e2e
-tests deleted; a config test that can go red; DEVIATIONS row 66, the
-keyboard-harness doc and the `index.css` comment reconciled (all three
-carry the falsified "already flush with the visual viewport" premise); the
-probe page and four device captures committed under
-`docs/testing/2026-09-06-keyboard-probe/`.
+**One PR:** the dependency and config; a boot-time adapter call that
+puts the keyboard's ‹ › ✓ tray back (the plugin's `load()` removes it
+app-wide, and on the numeric keypad that ✓ is the only dismiss — anchor
+pass B1); `.tabbar::after` and its two e2e tests deleted, the one
+fill-independent invariant kept as its own test; a config test that can
+go red; DEVIATIONS row 66, the keyboard-harness doc and the `index.css`
+comment reconciled (all three carried the falsified "already flush with
+the visual viewport" premise); the probe page and four device captures
+committed under `docs/testing/2026-09-06-keyboard-probe/`.
 
-**Gates:** antagonist anchor pass on the spec via `/harden`; PM at open
-SKIPPED (one bug, James-opened); **Gate 0 is the dev build on James's
-phone** — Library, Builder, Baselines, session door, both orientations,
-beside v0.39.1, with `innerHeight`, the bar's `rect.bottom` and the
-safe-area pad stated as numbers (spec §4). PM close = the release call.
+**Gates:** antagonist anchor pass RUN 2026-09-06 (`/harden` lens 1: two
+BLOCKING, four MAJOR, folded; lens 2 skipped aloud — the one prescribed
+block was typecheck-matrixed and mutated by lens 1 itself); PM at open
+SKIPPED (one bug, James-opened); **Gate 0 is two dev builds on James's
+phone** — A (tray removed, the plugin's own state) for one split-input
+capture, B (tray restored) for Library, Builder, Baselines, the
+onboarding baseline door and the session door, both orientations, beside
+v0.39.1, with BOTH `innerHeight` hypotheses written down first (498 =
+frame includes the tray = correct; 566 = it does not = the pill covers
+the bar), the pad read after the keyboard CLOSES (34, not just 0 while
+shrunk), and a rotate-with-keyboard-up transition (spec §4). PM close =
+the release call.
 
 **Exit:** Gate 0 approved; e2e green with no web capture moved; the
 withdrawn phrasings grepped out of `app/src`, `docs/design`,

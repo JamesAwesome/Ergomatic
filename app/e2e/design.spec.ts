@@ -11122,7 +11122,7 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
 // the deleted suite carried: with no keyboard, the bar's box ends exactly at
 // the viewport's bottom edge, both orientations. Two-sided on purpose: a bar
 // pushed past the edge AND a bar floating above it both fail. Mutation
-// `.tabbar { bottom: -10px }` → "expected 884 to be less than or equal to 875".
+// `.tabbar { bottom: -10px }` → "Expected: <= 853, Received: 862" (2026-09-06).
 test.describe("the tab bar's bottom edge", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {
