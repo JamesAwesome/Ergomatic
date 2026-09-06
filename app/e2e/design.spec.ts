@@ -11115,6 +11115,89 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
   });
 });
 
+// The band under the tab bar (James's device report, 2026-09-06; Gate 0
+// approved the same day). With the iOS keyboard up, a strip of page paints
+// below the fixed bar — WebKit excludes the floating input-accessory bar
+// from `visualViewport.height` but still paints behind it. `.tabbar::after`
+// fills that strip.
+//
+// WHAT THIS CAN AND CANNOT PROVE, stated so nobody reads it as more (RF26).
+// Chromium has no software keyboard, so the strip never appears here and NO
+// gate in this repo can render the defect. This asserts the FILL EXISTS,
+// is anchored below the bar, carries the bar's own surface, and costs the
+// document no height. That the fill actually covers the strip on iOS was
+// verified by hand on device, both orientations, and is recorded in
+// `docs/testing/2026-09-06-keyboard-harness.md` — not here.
+test.describe("the tab bar's fill below the fold", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-tabbar-fill@e2e.test",
+      name: "Design Fill Tester",
+    });
+    await page.goto("/library");
+    await expect(page.locator(".tabbar")).toHaveCount(1);
+  });
+
+  test("paints the bar's own surface below itself, anchored to its bottom edge", async ({
+    page,
+  }) => {
+    const fill = await page.locator(".tabbar").evaluate((el) => {
+      const after = getComputedStyle(el, "::after");
+      return {
+        content: after.content,
+        position: after.position,
+        top: after.top,
+        height: after.height,
+        background: after.backgroundColor,
+        barBackground: getComputedStyle(el).backgroundColor,
+        barHeight: el.getBoundingClientRect().height,
+        barBorderTop: parseFloat(getComputedStyle(el).borderTopWidth),
+      };
+    });
+    // A fill that is not there at all reports `content: "none"`.
+    expect(fill.content).not.toBe("none");
+    expect(fill.position).toBe("absolute");
+    // `top: 100%` on an absolutely-positioned child resolves against the
+    // containing block's PADDING box, so the expected offset is the bar's
+    // border-box height less its own 1px top rule — the fill starts exactly
+    // at the bar's bottom edge, with no seam and no overlap.
+    expect(parseFloat(fill.top)).toBeCloseTo(
+      fill.barHeight - fill.barBorderTop,
+      1,
+    );
+    // Deeper than the ~66px accessory bar measured on device, by an
+    // INDEPENDENT literal — not the CSS's own 140 (RF21's first smell).
+    expect(parseFloat(fill.height)).toBeGreaterThan(100);
+    // The same surface the bar itself paints, or the seam would show.
+    expect(fill.background).toBe(fill.barBackground);
+  });
+
+  test("adds nothing to the bar's own height, in both orientations", async ({
+    page,
+  }) => {
+    // The fill is out of flow, so the bar is exactly as tall as its tabs.
+    // An earlier version of this test measured the DOCUMENT's scroll height
+    // instead and could not go red at all: the fill lives inside a
+    // `position: fixed` parent, which never contributes document height
+    // however the fill itself is positioned (RF21 — the mutation that was
+    // supposed to bite, `position: static`, left it green). What a static
+    // fill DOES do is make the bar 140px taller, pushing the tabs off the
+    // bottom of the screen, and that is what this measures.
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      const bar = await stableBoundingBox(page.locator(".tabbar"));
+      if (bar == null) throw new Error("the tab bar did not render");
+      // INDEPENDENT literals: the bar is one 44px tap row plus padding, and
+      // the fill is 140px deep, so anything at or over 100 means the fill
+      // joined the flow.
+      expect(bar.height).toBeGreaterThanOrEqual(44);
+      expect(bar.height).toBeLessThan(100);
+      // And its bottom edge is still the viewport's, not pushed past it.
+      expect(bar.y + bar.height).toBeLessThanOrEqual(vp.height + 1);
+    }
+  });
+});
+
 test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
   const C2_UNLINKED = {
     available: true,
