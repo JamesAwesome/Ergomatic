@@ -124,8 +124,10 @@ REMAINING-PROOF.md rows 7-8). Writing them surfaced the reader-ending seam:
 the plugin's `nfcSessionEnd` reason comes from the Core NFC code alone, so the
 controller's own rejections (zero/several tags, connect/query/read failure)
 reach JS as `userCancelled` and can never render `Unsupported NFC tag`. The
-spec's new "Reader-ending seam" section holds the evidence and two options;
-James rules before product implementation is scheduled. No erg, no install, no
+spec's new "Reader-ending seam" section holds the evidence; James ruled for
+option A the same day and it is in the patch: the controller publishes
+`cause: multipleTags | tagFailure` on endings it forced. Product implementation
+is scheduled. No erg, no install, no
 scan was needed or used. The DEBUG hold/release overlay that the recovery
 probe used lives only in an uncommitted `node_modules` copy (diff kept aside);
 `pnpm patch-commit` for this change regenerates the package without it, which

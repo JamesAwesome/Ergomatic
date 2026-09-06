@@ -2434,14 +2434,16 @@ trigger is the whole entry.
   checked-in NFC patch (`NdefSessionEndingTests.swift`: zero/two tags and
   several NDEF messages rejected before any connect, every Core NFC ending
   code mapped with attempt identity, drained A cannot touch B; six
-  deciding-source mutations, record in `REMAINING-PROOF.md`). **DECISION
-  OWED (James): the reader-ending seam** — the plugin's ending reason is
-  computed from the Core NFC code alone, so the controller's own multi-tag
-  rejection reaches JS as `userCancelled` and the spec's "fail closed as
-  `Unsupported NFC tag`" is unreachable; spec section "Reader-ending seam"
-  carries the evidence and two options (A: the controller publishes its cause,
-  recommended; B: collapse to a quiet return). Product implementation is
-  scheduled only after that ruling.
+  deciding-source mutations, record in `REMAINING-PROOF.md`). **Reader-ending
+  seam RULED and LANDED 2026-09-06 (James: option A):** the plugin's ending
+  reason came from the Core NFC code alone, so the controller's own multi-tag
+  rejection reached JS as `userCancelled`; the patched controller now publishes
+  `cause: multipleTags | tagFailure` on endings it forced (spec section
+  "Reader-ending seam" has the evidence, rule and lifetime; four more
+  mutations bite). No copy changed. **Gate -1 is complete; James scheduled
+  product implementation 2026-09-06** — next is the product-PR plan
+  (writing-plans, then `/harden`, whose antagonist lens takes the DELTA on the
+  new `cause` wire field).
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.

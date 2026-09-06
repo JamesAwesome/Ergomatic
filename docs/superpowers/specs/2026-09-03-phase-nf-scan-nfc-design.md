@@ -137,16 +137,19 @@ cut as ship gates on 2026-09-06 (antagonist verdict; `REMAINING-PROOF.md`,
 "Ship decision"): they exercised probe-only stage holds, and the harm ceiling
 of any interference is exactly rule 1's recoverable return to workout detail.
 
-## Reader-ending seam (found 2026-09-06; decision owed to James)
+## Reader-ending seam (found 2026-09-06; ruled the same day: option A)
 
 **What and why.** Gate -1 criterion 7 asks the native receipts to distinguish
 user cancellation, the no-tag timeout and a forced generic invalidation, and
 the failure contract below promises that zero or multiple tags "fail closed as
 `Unsupported NFC tag`". Writing the native-injected test for criterion 8
-showed that the second promise cannot be kept by the plugin as patched, and
-that the third leg of criterion 7 was never producible on hardware. The test
-suite pins the seam as it is; the product decision is recorded here and stops
-until James rules.
+showed that the second promise could not be kept by the plugin as first
+patched, and that the third leg of criterion 7 was never producible on
+hardware. James ruled for option A the same day: **the controller says why it
+ended a session**, so the JS layer never infers a rejection from a code that
+also means Cancel. Implemented in the checked-in patch with injected tests
+(record in `REMAINING-PROOF.md`); the spec's states table and copy are
+unchanged, so no Gate 0.
 
 **Evidence.**
 
@@ -161,51 +164,53 @@ until James rules.
   that follows the probe's own `stopScanning` (a programmatic `invalidate()`
   after a successful read) carries Core NFC code 200, the same code a Cancel
   tap produces (`PRE-REPAIR.md`, `sheet-cancel` → `userCancelled`).
-- PRIMARY, patched plugin source `NfcPlugin.swift` `nfcSessionEndReason`: the
-  `nfcSessionEnd` reason is computed from the Core NFC code alone
+- PRIMARY, the plugin as first patched (`nfcSessionEndReason`): the
+  `nfcSessionEnd` reason was computed from the Core NFC code alone
   (200 → `userCancelled`, 201 → `sessionTimeout`, 204 → no event, anything
-  else → `invalidated`). The controller's own rejections (`didDetect` with
-  zero or several tags, `didDetectNDEFs` with several messages, connect / query
-  / read failures) call `invalidate(errorMessage:)` with an on-sheet message
-  and carry NO cause into the ending. Whatever code iOS then delivers, the JS
-  layer receives either `userCancelled` or `invalidated`, never "multiple
-  tags", so `Unsupported NFC tag` is unreachable for that case and a multi-tag
-  rejection is indistinguishable from the rower tapping Cancel.
+  else → `invalidated`), and the controller's own rejections carried no cause,
+  so a multi-tag rejection was indistinguishable from Cancel at the JS seam.
 - INFERENCE: `invalidate(errorMessage:)` also delivers 200. The header is
   silent; v5's generation-2 trace (`error → ending`, code 200, private under
   R) came from a run where the probe also issued a stop, so it does not
-  separate the two. Nothing above depends on this inference.
+  separate the two. The rule below holds for every code, so nothing depends
+  on this inference; the injected test drives both 200 and 202.
 - PRIMARY, `PRE-REPAIR.md` and the receipt census (`grep '"action"'` over the
   committed receipts): only `sheet-cancel` and `no-tag-timeout` endings were
   ever produced on the device. Codes 202 and 203 originate in the system and
   no operator action forces them, so the "forced generic invalidation" leg of
-  criterion 7 is provable only by injection. It now is:
-  `NdefSessionEndingTests.swift` in the checked-in patch drives every code
-  through the production delegate and asserts the published reason and
-  attempt identity (mutation record in `REMAINING-PROOF.md`).
+  criterion 7 is provable only by injection, and now is.
 
-**Options (James rules; neither adds copy, so no Gate 0).**
+**Rule (binding on the product PR).** The patched NDEF controller records why
+it ended a session and publishes it:
 
-- **A, recommended — the controller says why it ended.** When the patched
-  controller itself invalidates with an error message it records the cause for
-  that attempt and publishes it on the ending:
-  `nfcSessionEnd { attemptId, reason: "invalidated", cause: "multipleTags" | "tagFailure" }`;
-  endings the controller did not force carry no `cause`. JS maps
-  `multipleTags` → `Unsupported NFC tag` (the failure contract line stands),
-  `tagFailure` and code 202/203 → `NFC scan stopped. Try again.`,
-  bare 200 → quiet return, 201 → `No NFC tag detected. Try again.`. This is
-  not an inferred distinction: the controller knows what it did. Cost: a few
-  lines in the patch plus one injected test; a new wire field, so the
-  antagonist takes a DELTA pass on it before the product PR.
-- **B — collapse.** Strike "fail closed as `Unsupported NFC tag`" from the
-  failure contract; a multi-tag or tag-failure rejection returns quietly to
-  workout detail, the momentary sheet message being the rower's only feedback,
-  and `reader invalidated` becomes reachable only through codes 202/203.
+```
+nfcSessionEnd { attemptId, reason: "invalidated", cause: "multipleTags" | "tagFailure" }
+```
 
-Until the ruling, criterion 8's "rejects a delegate callback containing zero or
-multiple physical tags" is proven at the native seam (the sheet shows
-`Present exactly one NFC tag.` and no connect is attempted) and the states
-table is unchanged.
+- `multipleTags`: the delegate delivered zero or several tags, or several NDEF
+  messages; the sheet shows `Present exactly one NFC tag.` and nothing was
+  connected. `tagFailure`: connect, query or read failed on the one tag.
+- Endings the controller did not force carry no `cause`, and their `reason`
+  stays code-derived (200 `userCancelled`, 201 `sessionTimeout`, 204 silent,
+  else `invalidated`). A `cause` always comes with `reason: "invalidated"`,
+  whatever code Core NFC delivered.
+- JS maps: `cause: multipleTags` → `Unsupported NFC tag` (the failure contract
+  line stands as written); `cause: tagFailure` and bare `invalidated` (202/203)
+  → `NFC scan stopped. Try again.`; bare `userCancelled` → quiet return; bare
+  `sessionTimeout` → `No NFC tag detected. Try again.`. This is not an inferred
+  distinction: the controller knows what it did.
+- Scope: the NDEF reader session only. The plugin's `NFCTagReaderSession`
+  path keeps its released behaviour; Ergomatic never starts it
+  (`iosSessionType: "ndef"`).
+
+**Lifetime of the cause.** One entry per attempt ID in a session-queue-only
+dictionary. Minted when the controller invalidates a LIVE owned session with a
+message (never on a plain stop, never on a session it no longer owns).
+Consumed by that attempt's own `didInvalidateWithError`, the only reader, and
+removed there whether or not an ending is published. A superseding start,
+WebView reload or relaunch cannot alias it: a new attempt with the same ID
+starts only after the old one drained, which consumed the entry (injected
+test `testForcedCauseIsConsumedByItsOwnEndingAndCannotReachAReusedAttemptId`).
 
 ## Gate -1 — real hardware truth before product implementation
 
@@ -234,6 +239,9 @@ probe on a real iPhone and PM5 proves all of the following:
 7. On-device receipts distinguish user cancellation, the system no-tag timeout,
    and a forced generic invalidation. If the released plugin collapses those
    native endings, the product copy collapses with it rather than guessing.
+   (Resolved 2026-09-06, "Reader-ending seam": cancel and timeout proven on
+   device; generic invalidation is system-originated and proven by injection;
+   the controller's own rejections publish a `cause` so no copy collapses.)
 8. The patched native session controller echoes the caller's opaque attempt ID
    on every record and ending, rejects a delegate callback containing zero or
    multiple physical tags, and resolves stop only after that exact session can
@@ -856,7 +864,10 @@ composition tests; adjacent mirrors are not accepted as seam proof.
   empty/overlong/control-character/non-PM5 name, and absent/null/non-array or
   fractional/negative/oversized byte values at the raw bridge boundary.
 - NFC adapter: listener-before-start ordering, start rejection, record success,
-  user cancellation, system timeout, generic invalidation, abort, duplicate
+  user cancellation, system timeout, generic invalidation, the two published
+  causes (`multipleTags` → `Unsupported NFC tag`, `tagFailure` → the
+  invalidated copy) and a cause arriving with a non-`invalidated` reason
+  (fails closed as invalidated), abort, duplicate
   event, late event after abort, explicit stop, foreground loss, shutdown drain,
   and a new start blocked until the prior session ends. Abort/background while
   any asynchronous NFC or lifecycle handle is pending must self-remove the late
@@ -864,7 +875,9 @@ composition tests; adjacent mirrors are not accepted as seam proof.
   does the same.
 - Patched native NFC controller: attempt ID round-trip on every event, exact
   session/generation checks at each delegate and connect/query/read closure,
-  zero/multiple-tag rejection, identity-bound invalidation, stop completion, A
+  zero/multiple-tag rejection with its published cause, tag-failure cause,
+  cause consumed by its own ending and absent from every unforced ending,
+  identity-bound invalidation, stop completion, A
   late completion after stop followed by B, and process-live WebView reload
   between A and B. These are native-injected tests, not JS mocks of the desired
   event order.
