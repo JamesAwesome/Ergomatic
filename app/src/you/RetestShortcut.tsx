@@ -17,8 +17,11 @@ import { useWorkouts } from "../api/useWorkouts";
  *  so BACK returns HERE, not the /library fallback ("Make sure back takes
  *  you to the You screen") — the same origin idiom every other entry Link
  *  uses. The target moved with this component when the baseline editor left
- *  You for `/you/baselines` (Gate 0, 2026-09-05); "here" is still whichever
- *  screen the shortcut is rendered on.
+ *  You for `/you/baselines` (Gate 0, 2026-09-05). It is a hardcoded
+ *  literal, not a reading of the current location: BACK returns to
+ *  `/you/baselines` from wherever this renders, which is right only because
+ *  `BaselinesScreen.tsx` is its one mount site. A second mount site has to
+ *  change this line or accept sending the rower somewhere they were not.
  *
  *  Identity: the designated GLOBAL rows only (`ONBOARDING_TITLES` +
  *  `isGlobal`, domain/onboarding.ts's own rule). A missing row hides its

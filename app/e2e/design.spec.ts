@@ -11137,16 +11137,21 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
         body: JSON.stringify(C2_UNLINKED),
       });
     });
-    // Exactly ONE side set: the widest state line the BASELINES row can
-    // ever draw (`2K 1:52.0 · 6K —` is shorter, `NOT SET` shorter still,
-    // and a split is fixed-width — `baselineDraft.ts` clamps it to
-    // 60..240s, six mono characters). The no-overlap test below is about
-    // that worst case, so the fixture has to produce it.
+    // BOTH sides set: that is the WIDEST state line the row can draw, and
+    // it is also the only one a set-up rower ever sees. An earlier version
+    // of this fixture seeded one side — `2K 1:52.0 · 6K —`, which is 40px
+    // SHORTER — while its own comment called that the worst case, so the
+    // no-overlap test below measured a line with room to spare and could
+    // not have caught the real one (found at review). A split is
+    // fixed-width whichever way it is set: the SERVER clamps a stored
+    // split to 60..240s (`server/routes/data.ts`'s MIN_SPLIT_SECONDS /
+    // MAX_SPLIT_SECONDS, 400 on anything outside), so every split is six
+    // mono characters and this line is the longest string that can appear.
     const seeded = await page.evaluate(async () => {
       const res = await fetch("/api/baselines", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ k2Seconds: 112.0 }),
+        body: JSON.stringify({ k2Seconds: 112.0, k6Seconds: 122.0 }),
       });
       return res.ok;
     });
@@ -11231,15 +11236,13 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
     // both 0 (RF21's second smell), so overflow is asserted as GEOMETRY —
     // the state line starts after the label ends and finishes inside the
     // row — never as a scroll measurement that cannot go red. Probed by
-    // narrowing the viewport to 240: the line reaches the label and the
-    // first expect fails, "Expected: > 95.453125, Received: 95.453125". Probed by
-    // narrowing the viewport to 240: the label and the line overlap and
-    // this fails ("expected 105 to be greater than 116.6875").
+    // narrowing the viewport to 240 with the widest line in place: the line
+    // reaches the label and the first expect fails.
     for (const vp of [{ width: 320, height: 844 }, PHONE_PORTRAIT]) {
       await page.setViewportSize(vp);
       const row = page.getByRole("link", { name: /BASELINES/ });
       const state = row.locator(".diag-row-state");
-      await expect(state).toHaveText("2K 1:52.0 · 6K —");
+      await expect(state).toHaveText("2K 1:52.0 · 6K 2:02.0");
       const rowBox = await stableBoundingBox(row);
       const labelBox = await stableBoundingBox(row.locator("span").first());
       const stateBox = await stableBoundingBox(state);

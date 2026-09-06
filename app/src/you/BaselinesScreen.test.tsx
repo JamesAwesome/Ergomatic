@@ -103,6 +103,18 @@ describe("BaselinesScreen — the three controls that left You", () => {
     ).toBe(true);
   });
 
+  // The one class the review's keyboard-occlusion concern turns on
+  // (`BaselinesScreen.tsx`'s own comment): pinned so a later tidy-up that
+  // "makes it match its sibling doors" has to argue with a red test.
+  it("is a plain .screen, never the fixed .overlay-screen its read-only siblings use", async () => {
+    stubApi({ k2Seconds: 118, k6Seconds: 127 });
+    const { container } = renderScreen();
+    await screen.findByRole("textbox", { name: "2k split" });
+    const main = container.querySelector("main");
+    expect(main).toHaveClass("screen");
+    expect(main).not.toHaveClass("overlay-screen");
+  });
+
   it("BACK falls back to You when nothing said where the rower came from", async () => {
     stubApi({ k2Seconds: null, k6Seconds: null });
     renderScreen();

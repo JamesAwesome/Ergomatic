@@ -135,8 +135,9 @@ export function CompleteRedirect() {
 }
 
 // `user`/`onSignedOut` are optional so tests can render <AppRoutes /> without
-// a signed-in user. /you composes the account block with the staged baseline
-// editor (You.tsx). App.tsx supplies both once useMe() resolves to "in".
+// a signed-in user. /you is the account block plus the doors group
+// (You.tsx); the baseline editor moved behind one of them, to
+// /you/baselines. App.tsx supplies both once useMe() resolves to "in".
 export default function AppRoutes({
   user,
   onSignedOut,

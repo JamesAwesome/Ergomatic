@@ -44,7 +44,7 @@ describe("BaselinesRow", () => {
     expect(await screen.findByText("2K 1:52.3 · 6K 2:05.0")).toBeVisible();
   });
 
-  it("opens /you/baselines, and says where BACK came from", async () => {
+  it("opens /you/baselines", async () => {
     renderRow();
     const row = await screen.findByRole("link", { name: /BASELINES/ });
     expect(row).toHaveAttribute("href", "/you/baselines");

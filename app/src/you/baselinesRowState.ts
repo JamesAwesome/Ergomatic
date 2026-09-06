@@ -21,11 +21,14 @@ import type { BaselinesState } from "../api/useBaselines";
  *  word rather than two dashes on purpose: `2K — · 6K —` reads as a broken
  *  row, not an empty one.
  *
- *  Width is bounded by construction: `baselineDraft.ts` clamps a stored
- *  split to MIN_SPLIT..MAX_SPLIT (60..240s), so every split is six mono
+ *  Width is bounded by construction: the SERVER clamps a stored split to
+ *  60..240s and 400s anything outside it (`server/routes/data.ts`'s
+ *  MIN_SPLIT_SECONDS / MAX_SPLIT_SECONDS), so every split is six mono
  *  characters and the longest line this can return is
  *  `2K 1:52.3 · 6K 2:05.0` (171px at 320 CSS px, measured at Gate 0 —
- *  nothing here can wrap or clip). */
+ *  nothing here can wrap or clip). `baselineDraft.ts` carries the same two
+ *  numbers, but that is the EDITOR's own draft clamp: it bounds what this
+ *  client will send, never what the row can be asked to render. */
 export function baselinesRowState(state: BaselinesState): string | null {
   if (state.state === "loading") return null;
   if (state.state === "error") return "COULDN'T READ";

@@ -21,10 +21,12 @@ import { api } from "./api";
 // case that wants a card sets `c2Link.body` first.
 //
 // EVERY OTHER PATH IS DELEGATED TO GLOBAL `fetch`, which is what the real
-// `api()` does. That is not tidiness: this file's baseline-reset test
-// stubs `fetch` and counts `/api/baselines` GETs through it, so a factory
-// that answered everything itself would silently break it (the editor
-// would never load and its `2k split` field would never be found).
+// `api()` does. That is not tidiness: this file's BASELINES-row test stubs
+// `fetch` and answers `/api/baselines` through it, so a factory that
+// answered everything itself would silently break it (the row's read would
+// never resolve and its state line would never render). The baseline-reset
+// test this note used to cite moved to `you/BaselinesScreen.test.tsx` with
+// the editor it drives.
 //
 // `vi.hoisted` because `vi.mock`'s factory is hoisted above ordinary
 // declarations: a plain `const` referenced inside it throws "Cannot access

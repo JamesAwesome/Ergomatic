@@ -6258,12 +6258,15 @@ test("justrow-history-chip", async ({ page }) => {
 // status word and one sentence, which is what `Concept2SendBlock.test.tsx`
 // already pins. Decided: no capture.
 //
-// FULL-PAGE ON THE YOU CAPTURES, unlike the rest of this file. You is
-// taller than a phone viewport once BASELINES, the retest shortcut, Reset
-// baseline setup and the card are all on it, and the card is the LAST thing
-// above DIAGNOSTICS — a viewport capture cuts it off. The Gate 0 question
-// these images exist to answer is specifically about the card's position
-// relative to RESET BASELINE SETUP, so both must be in one frame.
+// FULL-PAGE ON THE YOU CAPTURES, unlike the rest of this file. Written when
+// You carried the baselines section, the retest shortcut, Reset baseline
+// setup AND the Concept2 card, which together ran past a phone viewport and
+// cut the card off. Every one of those has since left You — the card to
+// `/you/concept2` (Wave E PR A), the other three to `/you/baselines` (Gate
+// 0, 2026-09-05) — so the height that forced this no longer exists. Kept
+// because a full-page capture of a screen shorter than the viewport is the
+// same image, and changing it would churn six committed captures for
+// nothing.
 const C2_SHOT_LINKED = {
   available: true,
   linked: true,
@@ -6361,14 +6364,16 @@ async function openC2LogDetail(page: Page, title: string): Promise<void> {
 }
 
 /** Baselines set, so the You captures show a real screen rather than the
- *  no-baselines fallback — and so RESET BASELINE SETUP has real numbers
- *  above it, which is the comparison the Gate 0 question needs. */
+ *  no-baselines fallback. Written when RESET BASELINE SETUP sat on You and
+ *  needed real numbers above it; since Gate 0 (2026-09-05) what the seeding
+ *  buys is the BASELINES row's own state line reading two splits instead of
+ *  NOT SET. */
 async function openC2You(page: Page, email: string): Promise<void> {
   await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
   await setBaselines(page);
   await page.goto("/you");
   // PR A: the sentinel is You's own container plus a control always on it,
-  // never a feature row's class (two `.diag-row`s now — strict mode).
+  // never a feature row's class (three `.diag-row`s now — strict mode).
   await expect(page.locator("main.you-screen")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 }

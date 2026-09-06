@@ -62,7 +62,12 @@ describe("article body components", () => {
   // PM final gate C4 (Phase BL PR C): the closing paragraph used to
   // instruct "enter your average split under You" — the pre-BL manual
   // chore. It now describes the post-save OFFER doing the writing, with
-  // the You editor kept as the hand-typed path.
+  // the editor kept as the hand-typed path. Gate 0 (2026-09-05) moved that
+  // editor behind You's BASELINES row, and the prose says so; this
+  // assertion pins the OFFER and the hand-typed escape hatch, not where
+  // the editor lives, so it neither knew nor cared — which is why the
+  // sentence went stale under a green test and had to be caught by
+  // reading it.
   it("BaselinesBody's closing paragraph says the app OFFERS the measured split post-save, and keeps the You editor as the hand-typed path (C4)", () => {
     render(<BaselinesBody />);
     expect(

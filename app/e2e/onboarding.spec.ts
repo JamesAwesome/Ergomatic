@@ -583,7 +583,7 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
     ).toBeVisible();
   });
 
-  test("Reset baseline setup: a set pair, staged confirm on You, and the doors render again — with the server pair truly gone", async ({
+  test("Reset baseline setup: a set pair, staged confirm on the baselines screen, and the doors render again — with the server pair truly gone", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -646,5 +646,57 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
     await expect(
       page.getByRole("link", { name: /Row to find my baseline/ }),
     ).toBeVisible();
+  });
+});
+
+// RF24, added at the branch review: the BASELINES row on You READS what the
+// baseline editor WRITES, and every other gate on that row entered the pipe
+// BELOW the write — each one seeds through a raw `PUT /api/baselines` and
+// then loads You fresh, so none of them could have gone red if the row
+// rendered stale numbers after a real edit. This one test starts upstream of
+// the producer (the editor's own Apply, driven through the UI) and asserts
+// downstream of the consumer (the row's own text), which is the only shape
+// that covers the seam.
+//
+// It is not hypothetical bookkeeping: the row and the screen are flat
+// siblings today, so You unmounts and refetches on every return — but that
+// is an argument about the route table, not a gate, and a later nested route
+// with an <Outlet/> would break it with every other check still green.
+test.describe("the baselines seam: what the editor writes, the You row reads", () => {
+  test("editing a split on /you/baselines changes the numbers the BASELINES row shows on the way back", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: `baselines-seam-${RUN_ID}@e2e.test`,
+      name: "Seam Rower",
+    });
+    await setBaselines(page, { k2Seconds: 112, k6Seconds: 122 });
+
+    // The row states the stored pair.
+    await page.goto("/you");
+    const row = page.getByRole("link", { name: /BASELINES/ });
+    await expect(row.locator(".diag-row-state")).toHaveText(
+      "2K 1:52.0 · 6K 2:02.0",
+    );
+
+    // Through the door, and edit for real — typed into the field and
+    // committed with Apply, never a raw PUT. Digits fill right to left, so
+    // "1530" -> 1:53.0.
+    await row.click();
+    await expect(page).toHaveURL(/\/you\/baselines$/);
+    const k2 = page.getByRole("textbox", { name: "2k split" });
+    await k2.click();
+    await k2.pressSequentially("1530");
+    await page.getByRole("button", { name: "Apply baselines" }).click();
+    await expect(
+      page.getByRole("button", { name: "Apply baselines" }),
+    ).toHaveCount(0);
+
+    // BACK the way a rower leaves, and the row states the NEW pair.
+    await page.getByRole("link", { name: "← BACK" }).click();
+    await expect(page).toHaveURL(/\/you$/);
+    await expect(
+      page.getByRole("link", { name: /BASELINES/ }).locator(".diag-row-state"),
+    ).toHaveText("2K 1:53.0 · 6K 2:02.0");
   });
 });

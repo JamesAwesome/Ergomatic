@@ -1,14 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
 
-// Phase BL PR B's You-screen re-test shortcut, reshaped by James's tester
-// feedback (2026-08-22), against the real stack: one tap from the
-// baseline fields lands on the designated test's DETAIL screen — the one
-// offering Connect / Start Timer / Log it after — never straight into the
-// timer, and BACK from there returns to You. Completing a test (started
-// from that detail screen, the only start the shortcut leads to now)
-// still lands in the post-save offer whose accepted numbers then appear
-// in the You editor.
+// Phase BL PR B's re-test shortcut, reshaped by James's tester feedback
+// (2026-08-22), against the real stack: one tap from the baseline fields
+// lands on the designated test's DETAIL screen — the one offering Connect
+// / Start Timer / Log it after — never straight into the timer, and BACK
+// from there returns to the screen the shortcut sits on. Completing a test
+// (started from that detail screen, the only start the shortcut leads to
+// now) still lands in the post-save offer whose accepted numbers then
+// appear in the editor. Both the shortcut and the editor moved from You to
+// `/you/baselines` at Gate 0, 2026-09-05.
 //
 // Titles are literal strings, matching every other e2e file's precedent
 // of not reaching into `domain/` from a Playwright spec.
@@ -158,7 +159,7 @@ test.describe("Phase BL: the You re-test shortcut", () => {
     await page.getByRole("button", { name: "Set 6k estimate" }).click();
     await expect(page).toHaveURL(/\/today$/);
 
-    // The loop closes where the numbers live: the You editor now shows
+    // The loop closes where the numbers live: the editor now shows
     // EXACTLY the two values the prompt displayed — recompute by eye:
     // derived is measured + 7s, and both render at fmtSplit's tenth.
     await page.goto("/you/baselines");

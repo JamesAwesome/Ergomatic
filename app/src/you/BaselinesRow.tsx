@@ -20,6 +20,15 @@ import { baselinesRowState } from "./baselinesRowState";
  * a half-typed draft.
  *
  * `baselinesRowState` (./baselinesRowState.ts) is the decision table.
+ *
+ * `state={{ from: "/you" }}` is carried for the same reason the two rows
+ * below it carry it, and it is currently UNOBSERVABLE (found at review):
+ * `BaselinesScreen` passes the identical value as its BackLink fallback, so
+ * deleting this prop changes nothing and no test can see it. It stays as
+ * the group's shared idiom — the fallback is the screen's answer for a cold
+ * load or a typed URL, this is the row's answer for its own tap, and they
+ * agree by coincidence rather than by design. If either ever moves, this is
+ * the one that keeps a tap from You landing back on You.
  */
 export default function BaselinesRow() {
   const state = useBaselines();
