@@ -3901,6 +3901,10 @@ test.describe("you screen", () => {
       email: "design-you@e2e.test",
       name: "Design You Tester",
     });
+    // The BASELINE-FIELD tests below open `/you/baselines` themselves: the
+    // editor moved there (Gate 0, 2026-09-05) and this describe's own
+    // sweeps (tap targets, axe, the email wrap) are about You itself, which
+    // still lives here.
     await page.goto("/you");
   });
 
@@ -3917,6 +3921,7 @@ test.describe("you screen", () => {
   test("body background and a baseline field's value ink match the token palette", async ({
     page,
   }) => {
+    await page.goto("/you/baselines");
     const bodyBg = await page.evaluate(
       () => getComputedStyle(document.body).backgroundColor,
     );
@@ -3940,6 +3945,7 @@ test.describe("you screen", () => {
   test("an unset baseline's placeholder renders in the dim ink, not the accent a saved value gets", async ({
     page,
   }) => {
+    await page.goto("/you/baselines");
     const field = page.locator(".baseline-input").first();
     await expect(field).toHaveValue("");
     await expect(field).toHaveAttribute("placeholder", "2:25.0");
@@ -3955,9 +3961,10 @@ test.describe("you screen", () => {
   // The unified control, on the surface that had no steppers at all — and
   // the tap-target/axe sweeps above only ever see it in its unset state,
   // so this drives it into the materialised one and re-sweeps.
-  test("the steppers reached the You editor: the first tap materialises the seed exactly, and the sweeps still pass with a value in the field", async ({
+  test("the steppers reached the baselines editor: the first tap materialises the seed exactly, and the sweeps still pass with a value in the field", async ({
     page,
   }) => {
+    await page.goto("/you/baselines");
     const field = page.locator(".baseline-input").first();
     await expect(field).toHaveValue("");
 
@@ -3976,6 +3983,7 @@ test.describe("you screen", () => {
   test("a dead-end stepper at MIN_SPLIT is aria-disabled and dimmed, and still passes the tap-target and axe sweeps", async ({
     page,
   }) => {
+    await page.goto("/you/baselines");
     const field = page.locator(".baseline-input").first();
     const faster = page.getByRole("button", { name: "2k faster" });
     // 1:00.0 from an empty field: one tap materialises 2:25.0, then 170
@@ -4029,7 +4037,7 @@ test.describe("you screen with the derivation offer visible (task review round, 
     if (!result.ok) {
       throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
     }
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     await page
       .getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" })
       .waitFor();
@@ -4156,7 +4164,7 @@ test.describe("you screen with the derivation offer visible (6k-target mirror, r
     if (!result.ok) {
       throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
     }
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     await page
       .getByRole("button", { name: "ESTIMATE FROM 2K (+7s)" })
       .waitFor();
@@ -6226,11 +6234,14 @@ test.describe("iOS input zoom guard", () => {
   // reproduce the zoom itself, so this asserts the mechanism: every
   // input/textarea on every screen computes to >=16px. The signed-in
   // builder + import screens carry the typed fields, the Library its search
-  // field; You is stepper-only but swept anyway in case that changes.
+  // field, and the baselines screen the two split fields. The sweep entry
+  // FOLLOWED those fields off You (Gate 0, 2026-09-05): You itself now has
+  // no input at all, so leaving it pointed there would have swept a screen
+  // with nothing to find — a green check that could never go red (RF21).
   for (const [name, path] of [
     ["builder", "/library/new"],
     ["import", "/library/import"],
-    ["you", "/you"],
+    ["baselines", "/you/baselines"],
     // Phase SF PR3 added SEARCH BY NAME to the Library at 12px and this
     // sweep never looked there (device report, 2026-09-05: the Library
     // zoomed on focus — the same defect the guard exists for).
@@ -11104,7 +11115,7 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
   });
 });
 
-test.describe("You carrying the CONCEPT2 row (Wave E PR A)", () => {
+test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
   const C2_UNLINKED = {
     available: true,
     linked: false,
@@ -11126,8 +11137,23 @@ test.describe("You carrying the CONCEPT2 row (Wave E PR A)", () => {
         body: JSON.stringify(C2_UNLINKED),
       });
     });
+    // Exactly ONE side set: the widest state line the BASELINES row can
+    // ever draw (`2K 1:52.0 · 6K —` is shorter, `NOT SET` shorter still,
+    // and a split is fixed-width — `baselineDraft.ts` clamps it to
+    // 60..240s, six mono characters). The no-overlap test below is about
+    // that worst case, so the fixture has to produce it.
+    const seeded = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k2Seconds: 112.0 }),
+      });
+      return res.ok;
+    });
+    if (!seeded) throw new Error("baseline setup failed");
     await page.goto("/you");
     await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /BASELINES/ })).toBeVisible();
   });
 
   test("every tappable on a You carrying the row clears 44x44, in both orientations", async ({
@@ -11145,7 +11171,7 @@ test.describe("You carrying the CONCEPT2 row (Wave E PR A)", () => {
     await assertNoA11yViolations(page);
   });
 
-  test("the two doors read as ONE group: DIAGNOSTICS starts where CONCEPT2 ends, in both orientations (R7)", async ({
+  test("the three doors read as ONE group: each starts where the one above ends, in both orientations (R7)", async ({
     page,
   }) => {
     // Invariant R7 (spec §5.1): exactly one auto top margin separates the
@@ -11158,14 +11184,24 @@ test.describe("You carrying the CONCEPT2 row (Wave E PR A)", () => {
     // hairline.
     for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
       await page.setViewportSize(vp);
+      const baselines = await stableBoundingBox(
+        page.getByRole("link", { name: /BASELINES/ }),
+      );
       const c2 = await stableBoundingBox(
         page.getByRole("link", { name: /CONCEPT2/ }),
       );
       const diag = await stableBoundingBox(
         page.getByRole("link", { name: /DIAGNOSTICS/ }),
       );
-      if (c2 == null || diag == null) throw new Error("a door did not render");
+      if (baselines == null || c2 == null || diag == null)
+        throw new Error("a door did not render");
+      // BASELINES, then CONCEPT2, then DIAGNOSTICS — the y-adjacency also
+      // pins the ORDER, which presence assertions never would.
+      expect(
+        Math.abs(c2.y - (baselines.y + baselines.height)),
+      ).toBeLessThanOrEqual(1);
       expect(Math.abs(diag.y - (c2.y + c2.height))).toBeLessThanOrEqual(1);
+      expect(baselines.height).toBeGreaterThanOrEqual(44);
       expect(c2.height).toBeGreaterThanOrEqual(44);
       expect(diag.height).toBeGreaterThanOrEqual(44);
       // R7's OTHER half: the ONE auto margin pins the group to the FOOT.
@@ -11181,6 +11217,34 @@ test.describe("You carrying the CONCEPT2 row (Wave E PR A)", () => {
       expect(main.y + main.height - (diag.y + diag.height)).toBeLessThanOrEqual(
         21,
       );
+    }
+  });
+
+  test("the widest BASELINES state line clears its own label, down to a 320px screen", async ({
+    page,
+  }) => {
+    // `.diag-row-state` is a SPAN: its own `scrollWidth`/`clientWidth` are
+    // both 0 (RF21's second smell), so overflow is asserted as GEOMETRY —
+    // the state line starts after the label ends and finishes inside the
+    // row — never as a scroll measurement that cannot go red. Probed by
+    // narrowing the viewport to 240: the label and the line overlap and
+    // this fails ("expected 105 to be greater than 116.6875").
+    for (const vp of [{ width: 320, height: 844 }, PHONE_PORTRAIT]) {
+      await page.setViewportSize(vp);
+      const row = page.getByRole("link", { name: /BASELINES/ });
+      const state = row.locator(".diag-row-state");
+      await expect(state).toHaveText("2K 1:52.0 · 6K —");
+      const rowBox = await stableBoundingBox(row);
+      const labelBox = await stableBoundingBox(row.locator("span").first());
+      const stateBox = await stableBoundingBox(state);
+      if (rowBox == null || labelBox == null || stateBox == null)
+        throw new Error("the BASELINES row did not render");
+      expect(stateBox.x).toBeGreaterThan(labelBox.x + labelBox.width);
+      expect(stateBox.x + stateBox.width).toBeLessThanOrEqual(
+        rowBox.x + rowBox.width,
+      );
+      // One line, not two: a wrapped state line doubles the row's height.
+      expect(stateBox.height).toBeLessThan(30);
     }
   });
 

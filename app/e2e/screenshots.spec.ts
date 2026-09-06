@@ -894,7 +894,7 @@ test("you-reset-armed", async ({ page }) => {
       body: JSON.stringify({ k2Seconds: 118, k6Seconds: 127 }),
     });
   });
-  await page.goto("/you");
+  await page.goto("/you/baselines");
   await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue(
     "1:58.0",
   );
@@ -2377,14 +2377,17 @@ test("you", async ({ page }) => {
     email: "screenshots-you@e2e.test",
     name: "Screenshot Tester",
   });
+  // A SET pair, because the row's NUMBERS are what You says about baselines
+  // now (Gate 0, 2026-09-05) — an unseeded account captures `BASELINES  NOT
+  // SET`, which is the empty state recurring failure #7 is about. The editor
+  // and the shortcut moved to `/you/baselines`, captured by "you-staged" and
+  // the three "you-derive-offer" shots below.
+  await setBaselines(page);
   await page.goto("/you");
-  // Same "LOADING…" race as /library — wait for the baseline card's real
-  // content before capturing. Phase BL PR B (links to each test's detail
-  // screen since James's 2026-08-22 feedback): the re-test shortcut below
-  // the card rides the separate workouts fetch, so wait for it too or
-  // the capture races it out of frame.
-  await page.locator(".baseline-input").first().waitFor();
-  await page.getByRole("link", { name: "RACE THE 2K" }).waitFor();
+  // Same "LOADING…" race as /library: the row's state line is ABSENT until
+  // its read lands, so waiting on the numbers themselves is what keeps this
+  // from capturing a bare label and chevron.
+  await page.getByText("2K 1:52.0 · 6K 2:02.0").waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
   });
@@ -2399,7 +2402,7 @@ test("post-test-prompt", async ({ page }) => {
     email: "screenshots-post-test-prompt@e2e.test",
     name: "Screenshot Tester",
   });
-  await page.goto("/you");
+  await page.goto("/you/baselines");
   // The shortcut navigates to the detail screen now (James's 2026-08-22
   // feedback); the start the prompt needs happens there.
   await page.getByRole("link", { name: "RACE THE 2K" }).click();
@@ -2429,7 +2432,7 @@ test("you-staged", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  await page.goto("/you");
+  await page.goto("/you/baselines");
   await page.locator(".baseline-input").first().waitFor();
   // Type into the 2k field (Option T) to dirty the draft without touching
   // `committed` — this is the whole point of the staged editor: nothing
@@ -2458,7 +2461,7 @@ test("you-derive-offer", async ({ page }) => {
     email: "screenshots-you-derive-offer@e2e.test",
     name: "Screenshot Tester",
   });
-  await page.goto("/you");
+  await page.goto("/you/baselines");
   await page.locator(".baseline-input").first().waitFor();
   const offer6k = page.getByRole("textbox", { name: "6k split" });
   await offer6k.click();
@@ -2482,7 +2485,7 @@ test("you-derive-offer-accepted", async ({ page }) => {
     email: "screenshots-you-derive-offer-accepted@e2e.test",
     name: "Screenshot Tester",
   });
-  await page.goto("/you");
+  await page.goto("/you/baselines");
   await page.locator(".baseline-input").first().waitFor();
   const accepted6k = page.getByRole("textbox", { name: "6k split" });
   await accepted6k.click();
@@ -2507,7 +2510,7 @@ test("you-derive-offer-6k", async ({ page }) => {
     email: "screenshots-you-derive-offer-6k@e2e.test",
     name: "Screenshot Tester",
   });
-  await page.goto("/you");
+  await page.goto("/you/baselines");
   await page.locator(".baseline-input").first().waitFor();
   const mirror2k = page.getByRole("textbox", { name: "2k split" });
   await mirror2k.click();

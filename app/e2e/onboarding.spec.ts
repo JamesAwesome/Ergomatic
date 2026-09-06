@@ -383,7 +383,7 @@ test.describe("the derivation offer is reachable through the real editor flow (t
       await route.continue();
     });
 
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     await page.locator(".baseline-input").first().waitFor();
     // Option T: touch the 6k side by TYPING into its field — digits fill
     // right to left, "230" -> 2:30 = 150s.
@@ -426,7 +426,7 @@ test.describe("the derivation offer is reachable through the real editor flow (t
     // caught HERE, not by a type. Runs LAST in this test because accepting
     // the offer sets BOTH baselines, which removes the doors card the
     // assertions above depend on.
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     await page.locator(".baseline-input").first().waitFor();
     putBody = null;
     await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
@@ -594,7 +594,7 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
     await page.goto("/today");
     await expect(page.locator(".doorscard")).toHaveCount(0);
 
-    await page.goto("/you");
+    await page.goto("/you/baselines");
     await page.getByRole("button", { name: "Reset baseline setup" }).click();
     // Staged: the destructive copy renders, nothing has fired yet.
     await expect(
