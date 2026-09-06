@@ -48,8 +48,12 @@ Seven starts against a budget of six: two were James's own, outside the script
 2. **Not advertising — INCONCLUSIVE, premise false.** After leg 1's END the
    PM5 was off Connect Device, yet the targeted scan found it and connected
    in 2-3 s (`Choosing your monitor` with no buttons for 2-3 s, then READY).
-   **New fact for the spec: a PM5 keeps advertising after a phone-side END,
-   at least for the ~3 min between legs.** The
+   **New fact for the spec, stated by James at the erg: the PM5 advertises
+   whenever it is awake and not already connected, on ANY screen — Connect
+   Device is not a precondition — and an NFC tap wakes a sleeping PM5.** So
+   the leg's premise was never stageable, and the approved copy `Open
+   Connect Device on this PM5` asks for something the rower does not need
+   to do (follow-on PR, Gate 0). The
    `Open Connect Device on this PM5, then try again.` path stays proven at
    the desk only (`e2e/connected.spec.ts`).
 3. **Re-arm — PASS.** Scan NFC → sheet Cancel (quiet), Connect, cancel,

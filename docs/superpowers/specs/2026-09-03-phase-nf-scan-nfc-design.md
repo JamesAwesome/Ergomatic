@@ -1082,6 +1082,17 @@ succeeded 2-3 s after leaving Connect Device), so the not-advertising copy is
 desk-proven only. Leg 4 read code 202 on the console (iOS ended the reader on
 the lock) with a quiet return, because the app's `pause` abort settled first.**
 
+**PM5 advertising, corrected by James at the erg (2026-09-06, SECONDARY —
+his own observation across many sessions): the PM5 advertises whenever it is
+awake and not already connected, on ANY screen, not only on Connect Device;
+and an NFC tap wakes a sleeping PM5.** This overturns this spec's premise
+"the PM5 advertises while on Connect Device" and makes the approved copy
+`Open Connect Device on this PM5, then try again.` an instruction the rower
+does not need: the only real not-advertising states are "asleep" (which the
+NFC tap itself cures) and "already connected to something else". The copy
+change is Gate 0 work for the follow-on PR (ROADMAP NF block); nothing in the
+targeted-scan mechanism depends on the premise.
+
 Keep the redacted NFC capture and connection log under `docs/monitor/sessions/`
 or `docs/monitor/nfc/` per the hardware-walk contract. Teardown the per-worktree
 stack after the walk.

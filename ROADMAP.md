@@ -2456,8 +2456,11 @@ trigger is the whole entry.
   NDEF read-error path (Core NFC code 102, tag lost mid-read) showed the
   system's error text, not our `NFC scan stopped. Try again.` — trace and
   fix; (4) Connect once began connecting with no list sheet (walk leg 3; not
-  reproduced in leg 5) — reproduce or retire. Spec fact to land with it:
-  the PM5 keeps advertising after a phone-side END. **Walk-verified countable exits** (spec): 2, 4,
+  reproduced in leg 5) — reproduce or retire; (5) **the not-advertising copy is wrong about the
+  PM5** (James, 2026-09-06: it advertises whenever awake and not already
+  connected, on any screen, and an NFC tap wakes it) — `Open Connect Device
+  on this PM5, then try again.` becomes copy about a sleeping or
+  already-connected PM5, Gate 0. Spec fact landed in the walk section. **Walk-verified countable exits** (spec): 2, 4,
   5, 6, 7 and 9 close only at the walk; the walk precedes merge. The
   branch is NOT pushed; James's word gates push, PR, walk and merge. Open
   number for James: the 1_000 ms collision window is paid on every NFC
