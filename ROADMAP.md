@@ -1131,6 +1131,50 @@ closed with zero Concept2 contact.
       server ships. Not required to settle which number is authoritative (the
       5706/5707 API test did); required only to confirm production behaves as
       log-dev did.
+- [ ] **Auto-send — OFF · MANUAL · AUTOMATIC.** A per-rower sending mode:
+      OFF is the unlinked state, MANUAL is today's per-row Send, AUTOMATIC
+      sends an eligible finished monitor row the moment it saves, silently —
+      the Send button pressed for you, outcome on the row's block. One
+      boolean on the link row (`auto_send`, default false: a fresh link lands
+      in MANUAL), one `PATCH /api/concept2/link`, the control replaces the
+      card's Unlink button (OFF arms the two-tap unlink). Client-side after
+      the save (`useLogForm`'s 201 path), same route as the button. **TRIAD**
+      (stored shape + a number leaving on a trigger nobody tapped): full
+      antagonist on the spec, PM gate on the PR, and a **Gate 0** for the
+      redrawn card. Rulings (James, 2026-09-05): off = unlinked; silent;
+      default manual; no backlog send. Spec:
+      `docs/superpowers/specs/2026-09-05-concept2-auto-send-design.md`.
+      **Gate 0 APPROVED 2026-09-05** (amendment
+      `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-05-autosend.html`,
+      one fix on sight: armed OFF spans the control). **BUILT on
+      `wave-e-c2-autosend`, 2026-09-05** — spec rev 4 records the two
+      implementation departures (§3.3: the fresh read is one direct
+      `fetchLink()` after the 201, not a mounted hook; the in-flight claim is
+      a wait-then-rerun chain, not a stored response). Ticks at merge.
+      **PM final gate PASSED WITH CONDITIONS (2026-09-05), all folded on the
+      branch:** main's `0024_pain_to_effort` landed first, so the migration
+      is `0025_classy_red_ghost`. Two behaviours the rulings did not name,
+      filed here rather than in the PR body (RF14): (i) **SEND FAILED is
+      sticky past the fix** — it clears only on the next send that leaves
+      the row at Concept2, so a rower who repairs their profile keeps the
+      warning until they row again (self-heals on the next AUTOMATIC save;
+      under MANUAL it waits for a tap); accepted, and the first thing the
+      walk will meet. (ii) **SEND FAILED reaches a MANUAL rower too** —
+      ruling 6 named AUTOMATIC, spec §3.4 widened it to any eligible
+      failure (the condition is account-level); sound, but no Gate 0 frame
+      drew MANUAL + SEND FAILED — owed at the next Concept2 design touch.
+      **The flag-flip gate is ONE trip:** the AUTOMATIC save this PR owes on
+      the phone and PR C's owed confirming send both need the same
+      `C2_LINK_ENABLED` flip on James's own account against log-dev; walk
+      them together, never as two PR-body lines.
+- [ ] **Verification code: hide it, say "verified".** James, 2026-09-05: like
+      Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
+      16-digit code by default; once Concept2 has accepted the code for that
+      row, show "verified"; a debug reveal shows the raw code when needed.
+      **PARKED until the confirming send proves PR C's codes verify on new
+      rows** (the row above). Needs a way to learn `verified` from Concept2
+      (re-read the result, or our own send carrying the code once the
+      byte→code transform is known — PR C spec §8).
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our

@@ -7757,3 +7757,208 @@ revision 0 → 1. Eleven findings, two of which changed the design.
   request in the contract test.** **Technique: a census of `res.json` sites is
   the grep, and the contract test is checked against the grep's output, not
   the plan's list.**
+### 2026-09-05 — Concept2 auto-send spec, phase-open anchor (TRIAD: stored shape + a number leaving on an untapped trigger)
+
+- **"An automatic send that races a manual tap cannot create two rows."** The
+  already-sent short-circuit reads a row fetched before any wire call, and the
+  route holds no lock on `session_logs` — `withLinkLock` locks the LINK row,
+  for tokens, and the C2 post happens outside it. Two overlapping requests both
+  read `c2_result_id = null` and both reach the vendor; only the VENDOR's dedup
+  covers it. **Technique: for any "our guard prevents X" claim, find what the
+  guard is compared against and WHEN it is read — a check against a value
+  fetched before the mutating call covers sequential callers and never
+  concurrent ones.** And the corollary that made it matter: the race was
+  reachable by ordinary use, because the surface shows a live Send button for
+  the whole duration of the send it is racing.
+- **A four-clause predicate with two inert clauses, because the caller's shape
+  uses `undefined` where the predicate checks `null`.** `isSendable` is typed
+  `Pick<StoredLog>` (`number | null`) and the spec fed it `LogFormFields`
+  (`workSeconds?: number`). **Technique: run the predicate against BOTH shapes
+  and print both answers** — `true` for the form shape with absent totals,
+  `false` for the stored shape with null totals, one `node
+  --experimental-strip-types -e` away. The absent/empty/valued rule this ledger
+  carries for vendor STRINGS applies to our own optional keys crossing a seam.
+- **Reusing an ARIA idiom by name instead of by handler.** "Reuse the
+  `PaceRefInput` radiogroup (RF8)" — but `selectByIndex` focuses AND commits,
+  because in a radiogroup selection IS commitment. Copied onto a control whose
+  third position ARMS AN UNLINK, one arrow key arms a destructive action and
+  every arrow across the other two fires a write. **Technique: before reusing a
+  keyboard idiom, read the arrow handler and ask whether the new control's
+  members all commit on selection; if one of them is a DOOR rather than a
+  value, the radio role is wrong, not just the copy.** (Count check too: the
+  repo has four hand-rolled radiogroups, so "not a fourth" would be a fifth.)
+- **Transcribing an invariant's PRICE from a spec that measured it for a
+  different change.** Walk-fixes R6 priced "four fixtures regenerate" for
+  removing the card's head — a change touching every state. This change renders
+  only when LINKED, and exactly ONE of the four fixtures is a linked state; the
+  card's commonest state has no fixture at all, so the real price is one
+  regeneration plus two NEW fixtures and new design.spec rows. **Technique:
+  when a spec spends a named invariant, re-derive the price against the
+  PREDICATE the new markup renders on, and open the fixtures — a price is a
+  measurement of one change, never a property of the invariant.** The same pass
+  found the neighbouring invariant (R8, "no new tier, no new accent") spent
+  silently.
+- **A response key set pinned by a CONTRACT SCRIPT the spec never read.**
+  Adding one field to `GET /api/concept2/link` needs four coordinated edits, not
+  two: `scripts/webauth-contract.test.ts` holds the route's parsed key list
+  `toStrictEqual` a hardcoded six-string literal AND two hand copies — the
+  product hook and the DEV PROBE (`Concept2LinkProbe.tsx`), which the spec
+  never mentions. **Technique: for any wire-shape change, grep `scripts/` and
+  the test tree for the FIELD NAMES of its siblings, not for the new field —
+  the gate that will go red names the neighbours.**
+- **"Relink resets" was true of one relink path and false of the other.**
+  `DELETE /link` deletes the row, but `upsertLink` is `ON CONFLICT DO UPDATE`
+  and never touches the new column — so RECONNECT keeps the mode (fine) and an
+  ACCOUNT SWITCH keeps it too, pointing an automatic send at a different
+  Concept2 account with no tap. **Technique: for any "X resets on Y" claim
+  about a stored column, enumerate every WRITER of the row and read each one's
+  SET clause; an upsert's set clause is the list of things that reset, and
+  everything else survives.**
+- **A citation that says the opposite, in the same clause.** The does-it-exist
+  answer cited our own logbook spec as recording "an observed ErgData post";
+  that document says *"not an observed ErgData post … remains open"* and labels
+  itself INFERENCE. **Technique: RF16's second corollary in its cheapest form —
+  open the cited section and read the sentence containing the word the claim
+  leans on ("observed"); a section reference is not a quotation.**
+- **Counting SURFACES, not states, for a silent-by-design feature.** The spec
+  called an automatic failure "one tap away". `git grep c2ResultId -- src/`
+  minus tests returns two files, one of which is a type — so the log detail
+  block is the ONLY surface in the client that can render a row's sent state,
+  and of the send route's six outcomes exactly ONE (`needs_reauth`) has a
+  proactive surface, by accident of a server flag set for another reason.
+  **Technique: for any feature whose value is that the rower stops looking,
+  tabulate every failure outcome against the surfaces reachable WITHOUT the
+  action the feature removed; the answer is a number, and the number is what
+  the PM rules on.** The case that made it a defect was systematic, not
+  per-row: a rower with no Concept2 weight declaration fails EVERY row,
+  identically, forever, silently.
+- **Attacked and HELD** (this phase's VETTED GROUND): the one save seam (one
+  client POST producer, one server insert, four doors); fire-and-forget
+  surviving navigation (`src/api.ts` creates no AbortController and reaches
+  `fetch` with no await on web); the block re-reading the row fresh on mount;
+  `raw.autoSend === true` fail-closed; `ADD COLUMN NOT NULL DEFAULT false`
+  being rollback-safe — **measured, via drizzle's `.toSQL()` emitting an
+  explicit column list rather than `SELECT *`, so an old image is blind to the
+  new column**; exactly one unlink affordance; `upsertLink` not writing the new
+  column; the 409-duplicate rendering as `ALREADY THERE` rather than a failure;
+  and the e2e seam being buildable upstream of the producer via
+  `connected.spec.ts`'s `MonitorRun`-seeding idiom.
+- **Standing axis, applied:** every mechanism here is deterministic except
+  Concept2's dedup (the vendor's heuristic, on a key whose `date` granularity
+  our own document marks "Unknown") — and A4's silence, which is a correctly
+  fail-closed check whose FREQUENCY no instrument this repo owns can observe.
+  **Technique: when a design's correct behaviour is to do nothing, ask which
+  instrument records that it chose to do nothing; if none does, the diagnostic
+  is part of the change** (the `rowingActive` pattern), because the first field
+  report will otherwise be undiagnosable.
+
+### 2026-09-05 — Concept2 auto-send spec rev 2, DELTA pass (four new mechanisms)
+
+- **A prescribed client call that does not typecheck, whose two prescribed
+  gates could not have caught it if it did.** `api(path, init: RequestInit)`
+  cannot take `body: { tz, trigger }`, and the "fix" an implementer reaches for
+  (`JSON.stringify` without the sibling's `Content-Type` header) makes
+  `express.json()` skip, `tz` absent, and every automatic send 400 — silently,
+  because 400 is not a flag-setting code. **Technique: paste-test a prescribed
+  call against the ADAPTER'S SIGNATURE and against the sibling call site, then
+  ask what each gate observes — a unit gate asserting a mocked client's
+  arguments and an e2e fake that answers regardless of body are both blind to
+  serialisation. One gate must see the parsed wire body.**
+- **A stored CODE is not the key the copy is chosen by.** "The screen reuses the
+  block's strings for that code" — but the block's three no-weight sentences are
+  selected by a SUB-reason the column does not store, so every rower would get
+  the one sentence that is not actionable. **Technique: before reusing a
+  renderer from a stored value, open the function and read its PARAMETERS; a
+  response parser keyed on `(status, body)` is not a code→copy map, and the
+  difference is a stored-shape decision.**
+- **"Cleared on success" enumerated from the branch that says 200.** Two exits
+  leave the row carrying a result id without reaching it: the already-sent
+  short-circuit and the vendor's own 409 duplicate. **Technique: for any
+  sticky flag cleared "on success", enumerate the route's exits that mean
+  success IN THE WORLD (the row is at the vendor), not the branch that names
+  it — and look for the outcome an ordinary third-party integration produces
+  (here, a rower who also runs ErgData).**
+- **The flag's other clearer, found by reading what the same statement already
+  does.** The relink upsert clears `needs_reauth_at`, so preserving a failure
+  flag across a same-account reconnect flips the row from RECONNECT NEEDED
+  straight to SEND FAILED for a failure the replaced grant caused. **Technique:
+  when a rule says "X survives Y", read Y's full SET clause and ask what Y
+  means about the evidence X represents.**
+- **A diagnostic that cannot observe the failure it is justified by.** A
+  `trigger` field on the send body was justified as making "automatic isn't
+  working" diagnosable — but both silent-failure modes produce no request at
+  all. **Technique: for any instrument, state what it prints in the FAILING
+  case, not the working one; if the failure's signature is the absence of the
+  event the instrument rides on, the instrument is decoration.** Corollary:
+  never scope a STORED write by a client-asserted body field when the server
+  holds the same fact in a column.
+- **A conditional upsert is settleable in five minutes, both halves.** Drizzle
+  `.toSQL()` (run with `node --input-type=module -e` from `app/`, so
+  `node_modules` resolves) proves EXPRESSIBILITY without a database; piping the
+  emitted statement into a scratch `postgres:18.4` proves SEMANTICS for both
+  branches. **Technique: expressibility and semantics are two questions and each
+  has a cheap separate answer — never settle either by reading the ORM's docs.**
+- **`container_name` in compose is a structural proof of single-process.** A
+  fixed container name makes `docker compose up --scale` impossible, which is
+  stronger evidence for a per-process claim than "we only run one".
+- **Attacked and HELD:** per-process as the whole surface; F7's SQL in both
+  branches; the account-switch path having a supported producer (`/connect` has
+  no already-linked guard); the You row's fifth string breaking no existing test
+  (no exhaustiveness assertion anywhere, verified by grep rather than assumed).
+
+### 2026-09-05 — Concept2 auto-send, /harden lens 1 on the plan as BUILT (delta)
+
+- **A serialisation guard released by the RESPONSE, protecting work done by the
+  HANDLER.** The spec said the claim "clears in a `finally`"; the built
+  middleware cleared it from `res.once("finish"/"close")`, and Express does not
+  stop a handler when its client hangs up — so a hung-up first caller freed the
+  key while it was still mid-wire-call, and both sends reached the vendor.
+  **Technique: for any guard held across async work, name the EVENT that
+  releases it and the WORK it is protecting, and ask whether one can end before
+  the other; if the release rides on a lifecycle the work does not own, copy the
+  guard verbatim into a scratch server and abort a request mid-handler.** The
+  probe is ten lines and answers in one run. Corollary: when the fix is "hold it
+  around the work instead", the middleware becomes a handler WRAPPER, which also
+  deletes every claim the design was making about the framework's event
+  semantics — the cheapest way to settle a vendor-hook question is to stop
+  depending on the hook.
+- **A response event pair where each member covers the other's blind spot, and
+  neither is safe alone.** Measured on Node 26 / express 5: a throw AFTER
+  headers fires `close` and never `finish`; a client abort fires `close` while
+  the handler runs on. **Technique: enumerate a framework event's firing cases
+  with a six-route probe app (normal, sync throw, async throw, throw after
+  headers, abort mid-handler, never respond) and print the ORDER — the ordering
+  is the finding, not the presence.**
+- **A concurrency gate that only ever runs well-behaved requests.** The
+  existing test was a real supertest run and its mutation bit, so it looked
+  like a gate on the invariant; it could not go red on the one case that
+  breaks it. **Technique: for a guard whose failure needs an ABNORMAL client,
+  check the test's client can produce one before believing the coverage —
+  supertest exposes superagent's `.abort()`, and the arranged sequence (enter
+  the wire call, abort, issue the second request, assert the wire count BEFORE
+  releasing) is deterministic where a `Promise.all` race is not.**
+- **A lifetime table that lists the STORED shapes and none of the session
+  state the same change minted.** RF27's table covered two columns; the three
+  new client flags were absent, and the one with no clear site (a failed-write
+  line) outlived an unlink-and-relink onto a card whose own comment claimed
+  "nothing about the removed account survives in this component".
+  **Technique: grep every `set<Name>` for each new piece of component state and
+  list the call sites; a piece of state whose only clear sites are "the start
+  of the next attempt" and "unmount" survives every state change in between —
+  and the comment nearest it is usually a claim you can now falsify.**
+- **A widened return type outliving the caller it was widened for.** A hook's
+  `reload()` was given a resolved value for a consumer a later revision
+  replaced; `grep` for the call sites showed none reads it, while its doc still
+  named the deleted caller. **Technique: when a revision replaces a consumer,
+  grep the PRODUCER's call sites for anyone reading its value — a return type
+  is dead code that typechecks, and its doc comment is the part that misleads.**
+- **Attacked and HELD:** the chain identity (third caller queues behind the
+  second — measured `maxConcurrentHandlers: 1` and a map that drains to 0);
+  write visibility for a caller that actually waits (single awaited `UPDATE`,
+  committed before `res.json`, fresh `SELECT` on the same pool); the deadlock
+  ceiling (every vendor call bounded, longest chain counted in the client's own
+  comment); the spec's `send_failed_*` clear sites matching the code's in both
+  directions (five writers enumerated by grep); the direct fresh read being
+  strictly fresher than the mounted hook it replaced; and the save-to-send seam
+  gate genuinely starting at the Save tap and asserting request ORDER, not a
+  call count.

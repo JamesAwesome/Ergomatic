@@ -1,4 +1,5 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
+import type { WeightClassFailure } from "../concept2/mapping.js";
 import type { Db } from "../db/index.js";
 import { concept2AuthAttempts, concept2Links } from "../db/schema.js";
 import { isUniqueViolation, pgConstraint } from "./errors.js";
@@ -38,6 +39,14 @@ export interface Concept2Link {
   refreshToken: string;
   expiresAt: Date;
   needsReauthAt: Date | null;
+  /** Wave E auto-send §3.1: the sending mode. false = MANUAL, true =
+   *  AUTOMATIC. Required on the row (NOT NULL DEFAULT false). */
+  autoSend: boolean;
+  /** The sticky "sends are failing" flag (rulings 6, 7): when the last
+   *  eligible send failed with `no_weight_class`, and its SUB-reason. Both
+   *  null when the last send landed (or Concept2 already had the row). */
+  sendFailedAt: Date | null;
+  sendFailedReason: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -167,6 +176,20 @@ export function createConcept2Store(db: Db) {
               refreshToken: link.refreshToken,
               expiresAt: link.expiresAt,
               needsReauthAt: null,
+              // Wave E auto-send §3.1, two rules split on purpose (the delta
+              // pass's F4): the MODE survives a reconnect of the SAME Concept2
+              // account and resets to MANUAL when a DIFFERENT account lands —
+              // AUTOMATIC must never carry onto a Concept2 account the rower
+              // did not choose it for. `excluded` is Postgres's name for the
+              // row that would have been inserted; the CASE compares the
+              // stored account to the incoming one.
+              autoSend: sql`CASE WHEN ${concept2Links.c2UserId} = excluded.c2_user_id THEN ${concept2Links.autoSend} ELSE false END`,
+              // ...while the FAILURE flag clears on EVERY relink, same-account
+              // or not, because a relink replaces the grant the failure was
+              // evidence about — this same statement already clears
+              // `needsReauthAt` for the identical reason.
+              sendFailedAt: null,
+              sendFailedReason: null,
               updatedAt: sql`now()`,
             },
           });
@@ -179,6 +202,60 @@ export function createConcept2Store(db: Db) {
         }
         throw err;
       }
+    },
+
+    /** Wave E auto-send §3.1: `PATCH /api/concept2/link { autoSend }`. Returns
+     *  false when there is no link row to update — the route answers 409
+     *  `unlinked` for that, because the setting has no meaning without a link
+     *  (ruling 1). */
+    async setAutoSend(userId: string, autoSend: boolean): Promise<boolean> {
+      const rows = await db
+        .update(concept2Links)
+        .set({ autoSend, updatedAt: sql`now()` })
+        .where(eq(concept2Links.userId, userId))
+        .returning({ userId: concept2Links.userId });
+      return rows.length === 1;
+    },
+
+    /** Wave E auto-send §3.4: the send route's one write on an eligible send
+     *  that failed with `no_weight_class`. `reason` is the route's SUB-reason
+     *  (`no_weight` | `unreadable_weight` | `implausible_weight` | `no_gender`),
+     *  stored verbatim so
+     *  the You screen can choose the rower-facing sentence. Idempotent on a
+     *  missing link (zero rows, no error). */
+    async setSendFailed(
+      userId: string,
+      reason: WeightClassFailure,
+    ): Promise<void> {
+      await db
+        .update(concept2Links)
+        .set({
+          sendFailedAt: sql`now()`,
+          sendFailedReason: reason,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(concept2Links.userId, userId));
+    },
+
+    /** Wave E auto-send §3.4: cleared on EVERY outcome that leaves the row at
+     *  Concept2 — the 200 post, the 200 already-sent short-circuit, and the
+     *  409 duplicate (the delta pass's F3: "on success" enumerated from the
+     *  branch that says 200 missed the two an ErgData user produces). A no-op
+     *  when nothing is set, so the route calls it unconditionally on those
+     *  exits rather than reading first. */
+    // Does NOT bump `updatedAt`, unlike `setAutoSend`/`setSendFailed`: it
+    // runs on every at-Concept2 exit, mostly as a no-op (the `isNotNull`
+    // guard), and a row's update instant should mark a change of state.
+    async clearSendFailed(userId: string): Promise<void> {
+      await db
+        .update(concept2Links)
+        .set({ sendFailedAt: null, sendFailedReason: null })
+        .where(
+          and(
+            eq(concept2Links.userId, userId),
+            isNotNull(concept2Links.sendFailedAt),
+          ),
+        );
     },
 
     // User-initiated unlink ONLY (schema.ts's own comment on

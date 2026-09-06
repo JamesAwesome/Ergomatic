@@ -163,6 +163,96 @@ describe("concept2 store against real Postgres", () => {
     });
   });
 
+  // Wave E auto-send §3.1 (spec 2026-09-05-concept2-auto-send-design): the
+  // sending mode and the sticky send-failed flag, and the two SPLIT rules on
+  // the upsert conflict path. The delta antagonist pass measured both branches
+  // of the CASE on a scratch Postgres; these pin them in CI.
+  describe("auto_send / send_failed_* (Wave E auto-send)", () => {
+    it("a fresh link lands in MANUAL: auto_send false, no failure flag (ruling 3)", async () => {
+      const store = createConcept2Store(db);
+      await store.upsertLink(userA, link({ c2UserId: 10 }));
+      const row = await store.getLink(userA);
+      expect(row).toMatchObject({
+        autoSend: false,
+        sendFailedAt: null,
+        sendFailedReason: null,
+      });
+    });
+
+    it("setAutoSend flips the column and returns true; returns false with no link row", async () => {
+      const store = createConcept2Store(db);
+      expect(await store.setAutoSend(userB, true)).toBe(false);
+      await store.upsertLink(userA, link({ c2UserId: 11 }));
+      expect(await store.setAutoSend(userA, true)).toBe(true);
+      expect((await store.getLink(userA))?.autoSend).toBe(true);
+      expect(await store.setAutoSend(userA, false)).toBe(true);
+      expect((await store.getLink(userA))?.autoSend).toBe(false);
+    });
+
+    it("a reconnect of the SAME Concept2 account keeps AUTOMATIC (the CASE's THEN branch)", async () => {
+      const store = createConcept2Store(db);
+      await store.upsertLink(userA, link({ c2UserId: 12 }));
+      await store.setAutoSend(userA, true);
+      await store.upsertLink(
+        userA,
+        link({ c2UserId: 12, accessToken: "at-2", refreshToken: "rt-2" }),
+      );
+      const row = await store.getLink(userA);
+      expect(row?.autoSend).toBe(true);
+      expect(row?.accessToken).toBe("at-2");
+    });
+
+    it("a relink to a DIFFERENT Concept2 account resets to MANUAL (the CASE's ELSE branch; F7)", async () => {
+      const store = createConcept2Store(db);
+      await store.upsertLink(userA, link({ c2UserId: 13 }));
+      await store.setAutoSend(userA, true);
+      await store.upsertLink(userA, link({ c2UserId: 14 }));
+      const row = await store.getLink(userA);
+      expect(row?.c2UserId).toBe(14);
+      expect(row?.autoSend).toBe(false);
+    });
+
+    it("setSendFailed stores the instant and the SUB-reason; clearSendFailed nulls both", async () => {
+      const store = createConcept2Store(db);
+      await store.upsertLink(userA, link({ c2UserId: 15 }));
+      await store.setSendFailed(userA, "no_weight");
+      const flagged = await store.getLink(userA);
+      expect(flagged?.sendFailedAt).not.toBeNull();
+      expect(flagged?.sendFailedReason).toBe("no_weight");
+      await store.clearSendFailed(userA);
+      const cleared = await store.getLink(userA);
+      expect(cleared?.sendFailedAt).toBeNull();
+      expect(cleared?.sendFailedReason).toBeNull();
+    });
+
+    it("EVERY relink clears the failure flag — same account or not (delta F4)", async () => {
+      const store = createConcept2Store(db);
+      await store.upsertLink(userA, link({ c2UserId: 16 }));
+      await store.setSendFailed(userA, "no_gender");
+      // same account
+      await store.upsertLink(
+        userA,
+        link({ c2UserId: 16, accessToken: "at-3" }),
+      );
+      expect((await store.getLink(userA))?.sendFailedAt).toBeNull();
+      // flag again, then a different account
+      await store.setSendFailed(userA, "unreadable_weight");
+      await store.upsertLink(userA, link({ c2UserId: 17 }));
+      const row = await store.getLink(userA);
+      expect(row?.sendFailedAt).toBeNull();
+      expect(row?.sendFailedReason).toBeNull();
+    });
+
+    it("setSendFailed / clearSendFailed on a user with no link are no-ops, not errors", async () => {
+      const store = createConcept2Store(db);
+      await expect(
+        store.setSendFailed(userB, "no_weight"),
+      ).resolves.toBeUndefined();
+      await expect(store.clearSendFailed(userB)).resolves.toBeUndefined();
+      expect(await store.getLink(userB)).toBeNull();
+    });
+  });
+
   describe("withLinkLock", () => {
     it("'store' writes the token pair + expiresAt and bumps updatedAt atomically", async () => {
       const store = createConcept2Store(db);

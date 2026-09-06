@@ -39,7 +39,7 @@ afterEach(() => {
 });
 
 describe("LINK_UNAVAILABLE (the flag-off answer, amendment 1h)", () => {
-  it("is all six fields spelled out, so a corrupted one cannot pass silently", () => {
+  it("is all nine fields spelled out, so a corrupted one cannot pass silently", () => {
     // Review F2: `available` could be flipped to `true` with 27 tests green,
     // because every assertion about it was written as
     // `toStrictEqual(LINK_UNAVAILABLE)` — the symbol comparing to itself. A
@@ -53,6 +53,9 @@ describe("LINK_UNAVAILABLE (the flag-off answer, amendment 1h)", () => {
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 });
@@ -75,6 +78,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 
@@ -86,6 +92,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 
@@ -106,6 +115,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: "jamesawesome",
       needsReauth: true,
       logbookBaseUrl: "https://log-dev.concept2.com",
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 
@@ -129,6 +141,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
   });
 
@@ -183,6 +198,9 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       c2Username: null,
       needsReauth: false,
       logbookBaseUrl: null,
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     };
     expect(normalizeLink(null)).toStrictEqual(unavailable);
     expect(normalizeLink("nope")).toStrictEqual(unavailable);
@@ -646,5 +664,68 @@ describe("useConcept2Link re-reads when the document comes back (observation 19,
     document.dispatchEvent(new Event("visibilitychange"));
     await Promise.resolve();
     expect(api).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Wave E auto-send §3.1 (A2): the mode is fail-closed by construction — only a
+// literal `true` reads as AUTOMATIC — and the send-failed pair takes the same
+// ABSENT / EMPTY / VALUED treatment as the other optional strings.
+describe("normalizeLink — autoSend and the send-failed flag (Wave E auto-send)", () => {
+  const linked = {
+    available: true,
+    linked: true,
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+  };
+
+  it("reads a literal true as AUTOMATIC", () => {
+    expect(normalizeLink({ ...linked, autoSend: true }).autoSend).toBe(true);
+  });
+
+  it.each([
+    ["absent (a server that predates the column)", {}],
+    ['the string "true"', { autoSend: "true" }],
+    ["the number 1", { autoSend: 1 }],
+    ["false", { autoSend: false }],
+    ["null", { autoSend: null }],
+  ])(
+    "reads autoSend %s as MANUAL — only a literal true is automatic (A2)",
+    (_l, extra) => {
+      expect(normalizeLink({ ...linked, ...extra }).autoSend).toBe(false);
+    },
+  );
+
+  it("carries a valued send-failed instant and sub-reason verbatim", () => {
+    const link = normalizeLink({
+      ...linked,
+      sendFailedAt: "2026-09-05T12:00:00.000Z",
+      sendFailedReason: "no_weight",
+    });
+    expect(link.sendFailedAt).toBe("2026-09-05T12:00:00.000Z");
+    expect(link.sendFailedReason).toBe("no_weight");
+  });
+
+  it.each([
+    ["absent", {}],
+    ["empty strings", { sendFailedAt: "", sendFailedReason: "" }],
+    ["null", { sendFailedAt: null, sendFailedReason: null }],
+    ["non-strings", { sendFailedAt: 5, sendFailedReason: true }],
+  ])("reads a send-failed pair that is %s as NOT flagged", (_l, extra) => {
+    const link = normalizeLink({ ...linked, ...extra });
+    expect(link.sendFailedAt).toBeNull();
+    expect(link.sendFailedReason).toBeNull();
+  });
+
+  it("an unlinked or unavailable answer carries autoSend false and no flag, whatever the body says", () => {
+    expect(
+      normalizeLink({ available: true, linked: false, autoSend: true })
+        .autoSend,
+    ).toBe(false);
+    expect(
+      normalizeLink({ available: false, autoSend: true, sendFailedAt: "x" })
+        .sendFailedAt,
+    ).toBeNull();
   });
 });

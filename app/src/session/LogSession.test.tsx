@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -460,10 +466,19 @@ function mockApi(
   return fn;
 }
 
+/** The calls that went to `POST /api/logs`, and only those. Since Wave E
+ *  auto-send a 201 is followed by one `GET /api/concept2/link` (the
+ *  automatic-send decision, `log/concept2Send.ts`), so a raw call count or
+ *  `mock.calls[0]` on the shared `api` spy would count the read too. Every
+ *  save assertion in this file goes through here. */
+function logCalls(fn: ReturnType<typeof mockApi>) {
+  return fn.mock.calls.filter(([path]) => path === "/api/logs");
+}
+
 function parsedBodies(
   fn: ReturnType<typeof mockApi>,
 ): Record<string, unknown>[] {
-  return fn.mock.calls.map(([, init]) =>
+  return logCalls(fn).map(([, init]) =>
     JSON.parse((init as RequestInit).body as string),
   );
 }
@@ -1495,8 +1510,8 @@ describe("LogSession: save", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
-    const [path, init] = apiFn.mock.calls[0]!;
+    expect(logCalls(apiFn)).toHaveLength(1);
+    const [path, init] = logCalls(apiFn)[0]!;
     expect(path).toBe("/api/logs");
     const body = JSON.parse((init as RequestInit).body as string) as Record<
       string,
@@ -1575,8 +1590,8 @@ describe("LogSession: save", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
-    const [, init] = apiFn.mock.calls[0]!;
+    expect(logCalls(apiFn)).toHaveLength(1);
+    const [, init] = logCalls(apiFn)[0]!;
     const body = JSON.parse((init as RequestInit).body as string) as Record<
       string,
       unknown
@@ -1722,7 +1737,7 @@ describe("LogSession: save", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     const body = parsedBodies(apiFn)[0]!;
     expect(body.steps).toStrictEqual([{ label: "2k test" }]);
     expect(loadDraft()).toBeNull();
@@ -1762,7 +1777,7 @@ describe("LogSession: save", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     expect(loadDraft()).not.toBeNull();
     expect(loadRun()).not.toBeNull();
     expect(
@@ -1784,7 +1799,7 @@ describe("LogSession: save", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     expect(loadDraft()).not.toBeNull();
     expect(loadRun()).not.toBeNull();
   });
@@ -1803,7 +1818,7 @@ describe("LogSession: save", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     expect(loadDraft()).not.toBeNull();
     expect(loadRun()).not.toBeNull();
   });
@@ -1835,7 +1850,7 @@ describe("LogSession: save", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(2);
+    expect(logCalls(apiFn)).toHaveLength(2);
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.workoutId).toBe(run.workoutId);
     expect(bodies[1]!.workoutId).toBeNull();
@@ -1874,7 +1889,7 @@ describe("LogSession: save", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(2);
+    expect(logCalls(apiFn)).toHaveLength(2);
     const bodies = parsedBodies(apiFn);
     expect(bodies[1]).toStrictEqual({ ...bodies[0], workoutId: null });
     expect(loadDraft()).not.toBeNull();
@@ -1906,7 +1921,7 @@ describe("LogSession: save", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     expect(loadDraft()).not.toBeNull();
     expect(loadRun()).not.toBeNull();
   });
@@ -1918,6 +1933,200 @@ describe("LogSession: save", () => {
 // copy keeps the house `Tap again to discard` (the mock never designed its
 // own armed state, PROVENANCE item 4). The two-tap safety itself, and the
 // clear-both-records-then-navigate behaviour, are unchanged.
+// Wave E auto-send, spec 2026-09-05 §3.3 — the automatic send, gated at the
+// SEAM it crosses (RF24): these tests start at the rower's Save tap and
+// assert the wire body of the send that follows the 201. `autoSend.test.ts`
+// pins the decision table on `autoSendAfterSave` alone; this block proves the
+// form actually calls it, after the 201, with the row's own id.
+describe("LogSession: the automatic Concept2 send (Wave E auto-send §3.3)", () => {
+  const LINK_AUTO = {
+    available: true,
+    linked: true,
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+    autoSend: true,
+  };
+
+  function sends(fn: ReturnType<typeof mockApi>) {
+    return fn.mock.calls.filter(([path]) =>
+      path.startsWith("/api/concept2/results/"),
+    );
+  }
+
+  it("a 201 under AUTOMATIC is followed by ONE POST to the new row's send route, JSON body carrying tz", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const order: string[] = [];
+    const apiFn = mockApi((path, init) => {
+      order.push(`${init?.method ?? "GET"} ${path}`);
+      if (path === "/api/logs") {
+        return new Response(JSON.stringify({ id: "log-auto-1" }), {
+          status: 201,
+        });
+      }
+      if (path === "/api/concept2/link") {
+        return new Response(JSON.stringify(LINK_AUTO), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ resultId: 1 }), { status: 200 });
+    });
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndEffort();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    await waitFor(() => expect(sends(apiFn)).toHaveLength(1));
+    const [path, init] = sends(apiFn)[0]!;
+    expect(path).toBe("/api/concept2/results/log-auto-1");
+    expect((init as RequestInit).method).toBe("POST");
+    expect((init as RequestInit).headers).toStrictEqual({
+      "Content-Type": "application/json",
+    });
+    const body = JSON.parse((init as RequestInit).body as string) as {
+      tz: unknown;
+    };
+    expect(typeof body.tz).toBe("string");
+    expect((body.tz as string).length).toBeGreaterThan(0);
+    // The decision was made on a read taken AFTER the 201 — never before.
+    expect(order).toStrictEqual([
+      "POST /api/logs",
+      "GET /api/concept2/link",
+      "POST /api/concept2/results/log-auto-1",
+    ]);
+  });
+
+  it.each([
+    ["MANUAL (autoSend false)", { ...LINK_AUTO, autoSend: false }],
+    ["unlinked", { available: true, linked: false }],
+    ["unavailable", { available: false }],
+    [
+      "a server that predates the column (autoSend absent)",
+      { ...LINK_AUTO, autoSend: undefined },
+    ],
+  ])("a 201 with the link reading %s sends nothing", async (_l, link) => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi((path) => {
+      if (path === "/api/logs") {
+        return new Response(JSON.stringify({ id: "log-auto-2" }), {
+          status: 201,
+        });
+      }
+      return new Response(JSON.stringify(link), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndEffort();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    // Await the read the decision waits on, THEN assert the absence.
+    await waitFor(() =>
+      expect(
+        apiFn.mock.calls.filter(([p]) => p === "/api/concept2/link"),
+      ).toHaveLength(1),
+    );
+    expect(sends(apiFn)).toHaveLength(0);
+  });
+
+  it("a failed link read after the 201 sends nothing — a failed read is a decision, not a silence", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi((path) => {
+      if (path === "/api/logs") {
+        return new Response(JSON.stringify({ id: "log-auto-3" }), {
+          status: 201,
+        });
+      }
+      return new Response("<html>502</html>", { status: 502 });
+    });
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndEffort();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        apiFn.mock.calls.filter(([p]) => p === "/api/concept2/link"),
+      ).toHaveLength(1),
+    );
+    expect(sends(apiFn)).toHaveLength(0);
+  });
+
+  it("a 201 whose body carries an EMPTY id sends nothing and reads nothing — no row to name", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi((path) =>
+      path === "/api/logs"
+        ? new Response(JSON.stringify({ id: "" }), { status: 201 })
+        : new Response(JSON.stringify(LINK_AUTO), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndEffort();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    // The save still lands the rower on Today (an unreadable id never fails
+    // a save); nothing about Concept2 follows it.
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(
+      apiFn.mock.calls.filter(([p]) => p.startsWith("/api/concept2/")),
+    ).toHaveLength(0);
+  });
+
+  it("a failed save reads the link NOT AT ALL — the decision belongs to a 201", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi(
+      () => new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndEffort();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(
+      apiFn.mock.calls.filter(([p]) => p === "/api/concept2/link"),
+    ).toHaveLength(0);
+    expect(sends(apiFn)).toHaveLength(0);
+  });
+
+  it("the send is not awaited: a send route that never answers still lands the rower on Today", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    mockApi((path) => {
+      if (path === "/api/logs") {
+        return new Response(JSON.stringify({ id: "log-auto-4" }), {
+          status: 201,
+        });
+      }
+      if (path === "/api/concept2/link") {
+        return new Response(JSON.stringify(LINK_AUTO), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Promise<Response>(() => {});
+    });
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndEffort();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+});
+
 describe("LogSession: staged discard", () => {
   it("arms on the first press without clearing anything or firing a network request", async () => {
     buildSessionFixture();
@@ -2209,7 +2418,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     const body = parsedBodies(apiFn)[0]!;
     expect(body).toMatchObject({
       workoutId: workout.id,
@@ -2271,7 +2480,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
 
     await userEvent.click(
       screen.getByRole("button", { name: "SIMULATE BROWSER BACK" }),
@@ -2286,7 +2495,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(
       screen.queryByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
   });
 
   it("leaves an unrelated live run/draft byte-identical in storage after a manual log saves", async () => {
@@ -2310,7 +2519,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     expect(localStorage.getItem(DRAFT_KEY)).toBe(draftBefore);
     expect(localStorage.getItem(RUN_KEY)).toBe(runBefore);
   });
@@ -2332,7 +2541,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     expect(
       screen.getByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeDisabled();
@@ -2369,7 +2578,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     const body = parsedBodies(apiFn)[0]!;
     expect(body.steps).toStrictEqual([{ label: "2k test" }]);
   });
@@ -2402,7 +2611,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(2);
+    expect(logCalls(apiFn)).toHaveLength(2);
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.workoutId).toBe(workout.id);
     expect(bodies[1]!.workoutId).toBeNull();
@@ -2432,7 +2641,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
   });
 
   it("treats an unparseable 400 body as 'no field named' — no retry, a genuine failure surfaces", async () => {
@@ -2450,7 +2659,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
   });
 
   it("catches a thrown network error and surfaces the same inline failure", async () => {
@@ -2468,7 +2677,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
   });
 
   it("resolves each PACES OFF base from its OWN matching baseline when a workout references both", async () => {
@@ -3548,7 +3757,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     const body = parsedBodies(apiFn)[0]!;
     expect(body.workoutId).toBe(MONITOR_WORKOUT_ID);
     expect(body.deviceName).toBe("PM5 432331249 Row");
@@ -4086,7 +4295,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
     const body = parsedBodies(apiFn)[0]!;
     expect(body.series).toStrictEqual(series);
     expect(loadMonitorRun()).toBeNull();
@@ -4156,7 +4365,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(2);
+    expect(logCalls(apiFn)).toHaveLength(2);
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.series).toStrictEqual(series);
     expect("series" in bodies[1]!).toBe(false);
@@ -4260,7 +4469,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(2);
+    expect(logCalls(apiFn)).toHaveLength(2);
 
     const ring = JSON.parse(
       sessionStorage.getItem("ergomatic:last-rowed-log")!,
@@ -4315,7 +4524,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(2);
+    expect(logCalls(apiFn)).toHaveLength(2);
     expect(loadMonitorRun()).not.toBeNull();
     expect(retireSpy).not.toHaveBeenCalled();
   });
@@ -4373,7 +4582,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(3);
+    expect(logCalls(apiFn)).toHaveLength(3);
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.workoutId).toBe(MONITOR_WORKOUT_ID);
     expect(bodies[0]!.series).toStrictEqual(series);
@@ -4411,7 +4620,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
   });
 
   it("a failed save does NOT clear MonitorRun — the record survives so a retry can still prefill", async () => {
@@ -5576,7 +5785,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     );
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(apiFn).toHaveBeenCalledTimes(2);
+    expect(logCalls(apiFn)).toHaveLength(2);
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.workoutId).toBe(run.workoutId);
     expect(bodies[0]!.advancesPlan).toBe(false);
@@ -5688,7 +5897,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
-    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(logCalls(apiFn)).toHaveLength(1);
   });
 
   it("manual door: plan-hook error renders no Log against plan button either", async () => {

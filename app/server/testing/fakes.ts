@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { WeightClassFailure } from "../concept2/mapping.js";
 import { derivedDifficulty, type Difficulty } from "../compat/difficulty.js";
 import { isFreeRow } from "../../domain/types.js";
 import type { SessionStore } from "../auth/sessions.js";
@@ -557,7 +558,10 @@ function makeFakeLogsStore(
     // store's `WHERE user_id = $userId` gives.
     async get(userId: string, id: string) {
       const rows = byUser.get(userId) ?? [];
-      const found = rows.find((r) => r.id === id);
+      // Case-insensitive, as Postgres compares `uuid` — the send route's
+      // claim folds its key for the same reason, and a fake that matched
+      // bytes would 404 the upper-cased spelling the real store finds.
+      const found = rows.find((r) => r.id.toLowerCase() === id.toLowerCase());
       if (!found) return null;
       const { seq: _seq, ...row } = found;
       return row;
@@ -779,7 +783,9 @@ function makeFakeLogsStore(
       c2UserId: number,
     ) {
       const rows = byUser.get(userId) ?? [];
-      const idx = rows.findIndex((r) => r.id === id);
+      const idx = rows.findIndex(
+        (r) => r.id.toLowerCase() === id.toLowerCase(),
+      );
       if (idx === -1) return false;
       rows[idx] = { ...rows[idx], c2ResultId, c2UserId };
       byUser.set(userId, rows);
@@ -990,6 +996,15 @@ export function makeFakeConcept2Store(
         refreshToken: link.refreshToken,
         expiresAt: link.expiresAt,
         needsReauthAt: null,
+        // Mirrors the real store's two split rules (Wave E auto-send §3.1):
+        // the MODE survives a same-account reconnect and resets on an account
+        // switch; the FAILURE flag clears on every relink.
+        autoSend:
+          existing !== undefined && existing.c2UserId === link.c2UserId
+            ? existing.autoSend
+            : false,
+        sendFailedAt: null,
+        sendFailedReason: null,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       });
@@ -997,6 +1012,34 @@ export function makeFakeConcept2Store(
 
     async deleteLink(userId: string) {
       links.delete(userId);
+    },
+
+    async setAutoSend(userId: string, autoSend: boolean) {
+      const existing = links.get(userId);
+      if (!existing) return false;
+      links.set(userId, { ...existing, autoSend, updatedAt: clock() });
+      return true;
+    },
+
+    async setSendFailed(userId: string, reason: WeightClassFailure) {
+      const existing = links.get(userId);
+      if (!existing) return;
+      links.set(userId, {
+        ...existing,
+        sendFailedAt: clock(),
+        sendFailedReason: reason,
+        updatedAt: clock(),
+      });
+    },
+
+    async clearSendFailed(userId: string) {
+      const existing = links.get(userId);
+      if (!existing || existing.sendFailedAt === null) return;
+      links.set(userId, {
+        ...existing,
+        sendFailedAt: null,
+        sendFailedReason: null,
+      });
     },
 
     async withLinkLock(userId, fn) {

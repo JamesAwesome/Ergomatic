@@ -38,8 +38,16 @@ const LINKED: Concept2Link = {
   c2Username: "jamesawesome",
   needsReauth: false,
   logbookBaseUrl: "https://log-dev.concept2.com",
+  autoSend: false,
+  sendFailedAt: null,
+  sendFailedReason: null,
 };
 const REAUTH: Concept2Link = { ...LINKED, needsReauth: true };
+const SEND_FAILED: Concept2Link = {
+  ...LINKED,
+  sendFailedAt: "2026-09-05T12:00:00.000Z",
+  sendFailedReason: "no_weight",
+};
 const FAILED = { status: 502 };
 
 beforeEach(() => {
@@ -59,7 +67,7 @@ function renderRow(accountId = "u1") {
   );
 }
 
-describe("rowState — the decision table, all eleven leaf cells (spec §5.1)", () => {
+describe("rowState — the decision table, all fifteen leaf cells (spec §5.1 + auto-send §3.4)", () => {
   // Written as INDEPENDENT literals against the table's own row numbers, so
   // a change to the derivation is caught by the cell it moves, not by a
   // symbol that moved with it (RF21).
@@ -78,6 +86,40 @@ describe("rowState — the decision table, all eleven leaf cells (spec §5.1)", 
     ["10", REAUTH, FAILED, false, "RECONNECT NEEDED"],
   ] as const)("cell %s", (_cell, link, failed, seen, expected) => {
     expect(rowState(link, failed, seen)).toBe(expected);
+  });
+
+  // Wave E auto-send §3.4 (A8): the fifth string. Server-sticky like
+  // needsReauth — RECONNECT NEEDED > SEND FAILED > LINKED ✓, and both sticky
+  // states beat a transient read failure (ruling 5's shape).
+  it.each([
+    ["11 flagged, read ok", SEND_FAILED, null, false, "SEND FAILED"],
+    ["12 flagged, read failed", SEND_FAILED, FAILED, false, "SEND FAILED"],
+    [
+      "13 flagged AND needsReauth",
+      { ...SEND_FAILED, needsReauth: true },
+      null,
+      false,
+      "RECONNECT NEEDED",
+    ],
+    [
+      "14 flagged AND needsReauth, read failed",
+      { ...SEND_FAILED, needsReauth: true },
+      FAILED,
+      true,
+      "RECONNECT NEEDED",
+    ],
+  ] as const)("cell %s", (_cell, link, failed, seen, expected) => {
+    expect(rowState(link, failed, seen)).toBe(expected);
+  });
+
+  it("a flag on an UNLINKED shape is not a fact: SEND FAILED is a LINKED state only", () => {
+    expect(
+      rowState(
+        { ...AVAILABLE_UNLINKED, sendFailedAt: "2026-09-05T12:00:00.000Z" },
+        null,
+        false,
+      ),
+    ).toBe("NOT LINKED");
   });
 
   it("cell 10 is ruling 5: a failed re-read does NOT overwrite a sticky RECONNECT NEEDED", () => {
@@ -105,6 +147,12 @@ describe("Concept2Row on You (spec §5.1 R1-R4, R11)", () => {
     c2Link.body = LINKED;
     renderRow();
     expect(await screen.findByText("LINKED ✓")).toBeInTheDocument();
+  });
+
+  it("cell 11: a send-failed flag reads SEND FAILED on the row (Wave E auto-send A8)", async () => {
+    c2Link.body = SEND_FAILED;
+    renderRow();
+    expect(await screen.findByText("SEND FAILED")).toBeInTheDocument();
   });
 
   it("cell 9: needsReauth reads RECONNECT NEEDED — the pre-emptive warning the row exists for (R3)", async () => {

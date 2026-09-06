@@ -4,6 +4,8 @@ import type { Concept2Link } from "../api/useConcept2Link";
 import {
   describeFailure,
   identityLine,
+  linkedPill,
+  modeLine,
   FAILED_LINE,
 } from "./concept2CardModel";
 
@@ -60,6 +62,9 @@ const LINKED: Concept2Link = {
   c2Username: "jamesawesome",
   needsReauth: false,
   logbookBaseUrl: "https://log-dev.concept2.com",
+  autoSend: false,
+  sendFailedAt: null,
+  sendFailedReason: null,
 };
 
 describe("identityLine (Gate 0 amendment 1c)", () => {
@@ -377,5 +382,93 @@ describe("describeFailure — the two rules that outlive any one string", () => 
     // green (this exact assertion is what mutation M3 trips).
     expect(strings).toHaveLength(30);
     expect(strings.filter((value) => value.includes("—"))).toStrictEqual([]);
+  });
+});
+
+// Wave E auto-send (Gate 0 amendment 2026-09-05 §1a, §3, §4a) — the mode line
+// and the pill, pinned at the model with INDEPENDENT literals transcribed from
+// the page, one row per branch of the switch.
+describe("modeLine / linkedPill (Wave E auto-send)", () => {
+  const linked: Concept2Link = {
+    available: true,
+    linked: true,
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+    autoSend: false,
+    sendFailedAt: null,
+    sendFailedReason: null,
+  };
+  const flagged = (reason: string | null): Concept2Link => ({
+    ...linked,
+    autoSend: true,
+    sendFailedAt: "2026-09-05T12:00:00.000Z",
+    sendFailedReason: reason,
+  });
+
+  it("MANUAL and AUTOMATIC read their Gate 0 §1a lines, unwarned, no remedy", () => {
+    expect(modeLine(linked)).toStrictEqual({
+      text: "Send each finished monitor row yourself, from the log.",
+      warn: false,
+      remedy: null,
+    });
+    expect(modeLine({ ...linked, autoSend: true })).toStrictEqual({
+      text: "Finished monitor rows are sent when you save them.",
+      warn: false,
+      remedy: null,
+    });
+  });
+
+  it("needsReauth reads paused (§3) and beats the flag; the pill agrees", () => {
+    const paused = { ...flagged("no_weight"), needsReauth: true };
+    expect(modeLine(paused)).toStrictEqual({
+      text: "Sends are paused until you reconnect.",
+      warn: false,
+      remedy: null,
+    });
+    expect(linkedPill(paused)).toBe("RECONNECT NEEDED");
+  });
+
+  it.each([
+    [
+      "no_weight",
+      "Rows aren't being sent: Concept2 needs a weight class, and your Concept2 profile has no weight set.",
+    ],
+    [
+      "unreadable_weight",
+      "Rows aren't being sent: Concept2 needs a weight class, and we couldn't read the weight on your Concept2 profile.",
+    ],
+    [
+      "implausible_weight",
+      "Rows aren't being sent: Concept2 needs a weight class, and we couldn't read the weight on your Concept2 profile.",
+    ],
+    [
+      "no_gender",
+      "Rows aren't being sent: Concept2 needs a weight class, and we couldn't work one out from your Concept2 profile.",
+    ],
+    [
+      "toString",
+      "Rows aren't being sent: Concept2 needs a weight class, and we couldn't work one out from your Concept2 profile.",
+    ],
+  ])(
+    "SEND FAILED · %s: the §4a line, warned, with the profile remedy; the pill reads SEND FAILED",
+    (reason, text) => {
+      expect(modeLine(flagged(reason))).toStrictEqual({
+        text,
+        warn: true,
+        remedy: "profile",
+      });
+      expect(linkedPill(flagged(reason))).toBe("SEND FAILED");
+    },
+  );
+
+  it("a null sub-reason with the flag set still reads as SEND FAILED, on the no_gender sentence", () => {
+    expect(modeLine(flagged(null)).warn).toBe(true);
+    expect(linkedPill(flagged(null))).toBe("SEND FAILED");
+  });
+
+  it("a healthy link's pill is LINKED ✓", () => {
+    expect(linkedPill(linked)).toBe("LINKED ✓");
   });
 });

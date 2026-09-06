@@ -17,9 +17,11 @@ import { readConcept2Seen, writeConcept2Seen } from "./concept2Seen";
  * attempt at once (R2). The fifth attempt value, `adapters/linkFlow.ts`'s
  * module-level `linkInFlight`, does survive unmount — and is rendered nowhere.
  *
- * THE ROW MINTS NO COPY (R1): its four strings are ones `Concept2Card` already
- * renders. The card's fifth status, `WAITING`, is an attempt state and is
- * unreachable here.
+ * THE ROW MINTS NO COPY (R1): its five strings are ones `Concept2Card` already
+ * renders — the three linked ones from the same `linkedStatus` the card's
+ * pill draws (auto-send added `SEND FAILED` to both at once), plus NOT LINKED
+ * and COULDN'T READ. The card's other status, `WAITING`, is an attempt state
+ * and is unreachable here.
  *
  * `rowState` (`./concept2RowState.ts`, a separate module so this file exports
  * only a component for Fast Refresh) is the decision table, spec §5.1, over

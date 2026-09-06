@@ -1,5 +1,6 @@
 import type { LinkOutcome } from "../adapters/linkFlow";
 import type { Concept2Link } from "../api/useConcept2Link";
+import { linkedStatus, type LinkedStatus } from "./concept2RowState";
 
 /** Board 1e, verbatim and gate-approved. Every failure that is not
  *  specifically about the rower's own choice reads this line. */
@@ -147,4 +148,82 @@ export function describeFailure(outcome: LinkOutcome): LinkFailure | null {
         reason: "THIS DEVICE COULDN'T OPEN CONCEPT2",
       };
   }
+}
+
+/** Wave E auto-send (spec 2026-09-05 §3.2, §3.4; Gate 0 amendment
+ *  2026-09-05 §1a, §3, §4a): the line beneath the sending-mode control.
+ *
+ *  It reads from the SAME inputs the You row's `rowState` does and in the
+ *  same order — `needsReauth` first, then the sticky send-failed flag, then
+ *  the mode — so the card and the row can never disagree about why rows
+ *  are or are not going to Concept2. Rev 1's AUTOMATIC line ("Finished
+ *  monitor rows are sent when you save them.") was a promise the link
+ *  cannot keep in two states the antagonist found: every automatic send
+ *  409s while the card reads CONCEPT2 STOPPED ACCEPTING THIS LINK, and
+ *  every one 422s while the flag is set. Those two states own the line.
+ *
+ *  `warn` is the colour step (Gate 0 §7: `--ink` 17.11:1 instead of
+ *  `--ink-3` 7.43:1, both on `--surface`); `remedy` says whether the block's
+ *  OPEN CONCEPT2 PROFILE link-out follows the line — it does for exactly the
+ *  failure lines, since every one of them is answerable from the rower's
+ *  Concept2 profile (`log/concept2Send.ts`'s `noWeightCopy` comment). */
+export interface ModeLine {
+  text: string;
+  warn: boolean;
+  remedy: "profile" | null;
+}
+
+const MODE_LINE_MANUAL =
+  "Send each finished monitor row yourself, from the log.";
+const MODE_LINE_AUTOMATIC =
+  "Finished monitor rows are sent when you save them.";
+const MODE_LINE_PAUSED = "Sends are paused until you reconnect.";
+
+/** The block's three no-weight sentences re-hung on "Rows aren't being
+ *  sent:" (Gate 0 §4a, the prefix ruled in) so they read as a status rather
+ *  than a reply to a tap. Grouping mirrors `noWeightCopy`: `implausible_weight`
+ *  shares `unreadable_weight`'s line, and an unrecognised sub-reason shares
+ *  `no_gender`'s — a switch, not a Record, for the `Object.prototype` reason
+ *  given there. */
+function sendFailedLine(reason: string | null): string {
+  switch (reason) {
+    case "no_weight":
+      return "Rows aren't being sent: Concept2 needs a weight class, and your Concept2 profile has no weight set.";
+    case "unreadable_weight":
+    case "implausible_weight":
+      return "Rows aren't being sent: Concept2 needs a weight class, and we couldn't read the weight on your Concept2 profile.";
+    case "no_gender":
+    default:
+      return "Rows aren't being sent: Concept2 needs a weight class, and we couldn't work one out from your Concept2 profile.";
+  }
+}
+
+export function modeLine(link: Concept2Link): ModeLine {
+  // Switched on the SAME value the row and the pill read, so the three
+  // surfaces cannot order the sticky states differently. Total over the
+  // union, no `default`: a fourth linked status is a compile error here.
+  switch (linkedStatus(link)) {
+    case "RECONNECT NEEDED":
+      return { text: MODE_LINE_PAUSED, warn: false, remedy: null };
+    case "SEND FAILED":
+      return {
+        text: sendFailedLine(link.sendFailedReason),
+        warn: true,
+        remedy: "profile",
+      };
+    case "LINKED ✓":
+      return {
+        text: link.autoSend ? MODE_LINE_AUTOMATIC : MODE_LINE_MANUAL,
+        warn: false,
+        remedy: null,
+      };
+  }
+}
+
+/** The card's status pill, LINKED states only — `linkedStatus` itself, named
+ *  for the card so the call site reads as the pill it draws. The precedence
+ *  is defined ONCE, in `concept2RowState.ts`, for the row, this pill and the
+ *  mode line (spec §3.4, "the card's own status pill mirrors the row"). */
+export function linkedPill(link: Concept2Link): LinkedStatus {
+  return linkedStatus(link);
 }
