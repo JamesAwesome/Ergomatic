@@ -29,18 +29,19 @@ const config: CapacitorConfig = {
     },
     // Phase KB (docs/superpowers/specs/2026-09-06-keyboard-webview-resize-design.md).
     // iOS WebKit never shrinks the fixed-position viewport under the software
-    // keyboard; it re-anchors fixed elements to the visual viewport on the
-    // first scroll and clips them to it, so the tab bar's own paint can never
-    // reach the band above the keyboard tray (research doc
-    // 2026-09-06-ios-keyboard-fixed-viewport.md, §2). `native` shrinks the
-    // WebView itself to the keyboard's top (@capacitor/keyboard 8.0.5,
-    // Keyboard.m:356-358); `auto` paints the window behind the shrunk WebView
-    // with `backgroundColor` above (Keyboard.m:131-143), which is what the
-    // keyboard's corners and the tray's band then show. The enum, not the
-    // string: the string form is unchecked at build, the enum form fails
-    // typecheck on a typo.
+    // keyboard; after the first scroll the tab bar sits at the visual
+    // viewport's bottom and nothing it paints below that line shows
+    // (research doc 2026-09-06-ios-keyboard-fixed-viewport.md, §2). The
+    // plugin is here for its keyboardWillShow/WillHide EVENTS, which
+    // AppRoutes uses to hide the bar while the keyboard is up (Ionic's own
+    // tab bar does the same). `none`, not `native`: `native` shrinks the
+    // WebView (Keyboard.m:356-358) but only 0.2 s AFTER the keyboard's
+    // animation ends and in one unanimated step (Keyboard.m:256), which
+    // James saw as the bar vanishing and then popping up (Gate 0 build C,
+    // 2026-09-06). The enum, not the string: the string form is unchecked
+    // at build, the enum form fails typecheck on a typo.
     Keyboard: {
-      resize: KeyboardResize.Native,
+      resize: KeyboardResize.None,
       autoBackdropColor: "auto",
     },
   },

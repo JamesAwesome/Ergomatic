@@ -17,3 +17,31 @@ export async function restoreKeyboardAccessoryBar(): Promise<void> {
   const { nativeSetAccessoryBarVisible } = await import("../native/keyboard");
   await nativeSetAccessoryBarVisible(true);
 }
+
+/** Reports the software keyboard opening (`true`) and closing (`false`), from
+ *  the plugin's `keyboardWillShow` / `keyboardWillHide` — fired as the
+ *  keyboard starts to animate, before it covers anything. This is the signal
+ *  the withdrawn #317 candidate lacked: it is the keyboard itself, not
+ *  `visualViewport.height`, so a pinch-zoom cannot fake it. Web: the browser
+ *  has no such event, and nothing on the web arm reacts to the keyboard
+ *  (native-first; the web keeps its strip) — the listener never fires and
+ *  the unsubscribe is a no-op. The native module is reached through the same
+ *  dynamic import as above, so the plugin stays out of the web bundle. */
+export function subscribeKeyboardOpen(
+  listener: (open: boolean) => void,
+): () => void {
+  if (!isNative()) return () => {};
+  let unsubscribe: (() => void) | null = null;
+  let cancelled = false;
+  void import("../native/keyboard").then(({ nativeSubscribeKeyboard }) => {
+    if (cancelled) return;
+    unsubscribe = nativeSubscribeKeyboard(
+      () => listener(true),
+      () => listener(false),
+    );
+  });
+  return () => {
+    cancelled = true;
+    unsubscribe?.();
+  };
+}
