@@ -1,4 +1,4 @@
-# NF-PRODUCT-v1 — Scan NFC product walk (DRAFT, awaiting PM readiness PASS)
+# NF-PRODUCT-v1 — Scan NFC product walk (v1 · 2026-09-06 · awaiting PM readiness PASS)
 
 **Status:** DRAFT. Not a ready runsheet. Requires (1) the product PR's
 automated gates green on the required tree, (2) the signed device build
@@ -21,16 +21,31 @@ Leg 3: a valid tag → `✓ PM5 found` → connect → program → READY (`armed
 verified) → first pull → terminal logging, on the product build. Legs 1, 2,
 4-6 and 10 decide the ship call; 7-9 are stress legs run only inside the cap.
 
-## Build identity (fill before inviting)
+## Build identity (v1, 2026-09-06)
 
-- Branch and head SHA: `codex/phase-nf-nfc-design` @ `<sha>` (the PR head,
-  merged with current `origin/main`).
-- Build: `pnpm exec vite build && npx cap sync ios`, then the Xcode Debug
-  archive for the device (NOT `pnpm ios:build`, which rewrites tracked
-  version stamps). Marketing/build version as installed: `<x.y.z/nnn>`.
-- Entitlement and usage description verified on the built `.app`
-  (`codesign -d --entitlements :-` → `com.apple.developer.nfc.readersession.formats = [TAG]`;
-  `plutil -p Info.plist` → `NFCReaderUsageDescription = "Scan a PM5 to connect and program your workout."`).
+- Branch and head SHA: `codex/phase-nf-nfc-design` @ `9bd11520`, merged
+  with `origin/main` at `2a6ba780`. The walk uses the PR head at the time
+  of the go; a later head re-runs this section.
+- Build: `cd app && pnpm exec vite build && npx cap sync ios` (no tracked
+  change; measured 2026-09-06), then
+  `xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath <scratch> -allowProvisioningUpdates build`
+  → `BUILD SUCCEEDED`. NOT `pnpm ios:build`, which rewrites tracked version
+  stamps from the tag.
+- Verified on the built `.app` (2026-09-06, `codesign -d --entitlements :-`
+  and `plutil -p Info.plist`): `com.apple.developer.nfc.readersession.formats = [TAG]`,
+  `application-identifier = QYA37BHP3N.haus.waffle.ergomatic`,
+  `NFCReaderUsageDescription = "Scan a PM5 to connect and program your workout."`,
+  `TeamIdentifier=QYA37BHP3N`.
+- **Identity hazard, and the rule it produces:** the tree stamps
+  `CFBundleShortVersionString 0.23.0` / `CFBundleVersion 789` — the SAME
+  identity as the retired Gate -1 diagnostic build that was installed on
+  the phone (`ZERO-SCAN-SETUP-V3-RESULT.md`). An installed-app check keyed
+  on version would not tell them apart. **The walk build sets a distinct
+  `CURRENT_PROJECT_VERSION` (e.g. `9001`) for the walk only** (a
+  `-derivedDataPath` build with `CURRENT_PROJECT_VERSION=9001` on the
+  xcodebuild line; the tracked pbxproj is never committed with it), and
+  the install receipt records `0.23.0/9001`. Anything reporting `/789` is
+  the OLD probe and the walk stops.
 - Install: ONE install, with James's explicit permission for that install,
   recorded with `xcrun devicectl device info apps` as provenance. **Recheck
   identity before assuming it is installed** — TestFlight builds replace

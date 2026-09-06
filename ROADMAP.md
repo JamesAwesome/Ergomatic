@@ -2413,11 +2413,17 @@ trigger is the whole entry.
   committed (probe retired, parser, `scanTarget` + operation tail,
   decorators, NFC reader port + native arm + scripted reader + trace,
   keyed staged retire + mount lease, `connect(request)`, Scan NFC on detail
-  with the routed click-to-`armed` proof); remaining: e2e/captures run,
-  mutation sweep, iOS build verification, walk runsheet PM readiness
-  (`docs/monitor/sessions/phase-nf-product-walk/RUNSHEET.md`, DRAFT), the
-  PR. Open number for James: the 1_000 ms collision window is paid on every
-  NFC connect.
+  with the routed click-to-`armed` proof); `/harden` lens 2 (18 findings)
+  applied; the self-mutation sweep record is
+  `docs/monitor/sessions/phase-nf-product-walk/MUTATIONS.md` (all bite);
+  main merged (2a6ba780) and every gate green on the merged tree (unit 1965,
+  client 5393, e2e 521, captures 137). **Remaining before the PR is
+  presented:** whole-branch review verdict, built-app entitlement check,
+  PM readiness on the walk runsheet
+  (`docs/monitor/sessions/phase-nf-product-walk/RUNSHEET.md`, DRAFT). The
+  branch is NOT pushed; James's word gates push, PR, walk and merge. Open
+  number for James: the 1_000 ms collision window is paid on every NFC
+  connect.
   James chose a
   56 px filled muted-fern **Scan NFC** action directly above the equal-weight
   existing blue **Connect**, present only when native iOS reports NFC support.
