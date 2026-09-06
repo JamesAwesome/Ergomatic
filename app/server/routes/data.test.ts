@@ -1824,6 +1824,56 @@ describe("GET/POST /api/logs", () => {
     expect(res.status).toBe(201);
   });
 
+  // Phase LP (spec §2.2): the four 0x003A session fields ride machineSummary
+  // as integers off the PM5's own u16/u24 fields; a float, a negative, or
+  // a value past the wire's width is refused by name.
+  it.each([
+    [
+      "totalCalories",
+      372.5,
+      "machineSummary.totalCalories must be an integer, 0..65535",
+    ],
+    ["avgWatts", -1, "machineSummary.avgWatts must be an integer, 0..65535"],
+    [
+      "avgCalPerHour",
+      "858",
+      "machineSummary.avgCalPerHour must be an integer, 0..65535",
+    ],
+    [
+      "totalRestMeters",
+      1_000_001,
+      "machineSummary.totalRestMeters must be an integer, 0..1000000",
+    ],
+  ] as const)(
+    "Phase LP: 400s a malformed machineSummary.%s, naming it",
+    async (key, value, message) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({ ...validLogBody(), machineSummary: { [key]: value } });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("machineSummary");
+      expect(res.body.error).toBe(message);
+    },
+  );
+
+  it("Phase LP: stores the four 0x003A session fields on machineSummary and reads them back, a zero-calorie total included", async () => {
+    const app = appFor(makeStores());
+    const machineSummary = {
+      avgStrokeRate: 26,
+      totalCalories: 0,
+      avgWatts: 162,
+      avgCalPerHour: 863,
+      totalRestMeters: 274,
+    };
+    const created = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      machineSummary,
+    });
+    expect(created.status).toBe(201);
+    const fetched = await getLogById(app, created.body.id);
+    expect(fetched.body.machineSummary).toStrictEqual(machineSummary);
+  });
+
   it("400s a machineSummary that is not a plain object (a string)", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {
@@ -2921,6 +2971,73 @@ describe("GET/POST /api/logs", () => {
       expect(res.body.error).toBe(
         "steps[0]: partialSeconds must be a number, >= 0",
       );
+    });
+
+    // Phase LP (spec 2026-09-06-logbook-parity §2.1): the five per-split
+    // machine fields are integers off the PM5's own u16/u8 fields, banded
+    // as such — never a float, never negative, never above the wire's own
+    // width. `machineRestHr` is the only nullable one (no belt on the rest).
+    it.each([
+      [
+        { machineCalories: 73.5 },
+        "machineCalories must be an integer, 0..65535",
+      ],
+      [
+        { machineCalories: 65536 },
+        "machineCalories must be an integer, 0..65535",
+      ],
+      [
+        { machineCalPerHour: -1 },
+        "machineCalPerHour must be an integer, 0..65535",
+      ],
+      [{ machineWatts: "157" }, "machineWatts must be an integer, 0..65535"],
+      [
+        { machineDragFactor: 256 },
+        "machineDragFactor must be an integer, 0..255",
+      ],
+      [
+        { machineRestHr: 300 },
+        "machineRestHr must be null or an integer, 20..254",
+      ],
+      [
+        { machineRestHr: false },
+        "machineRestHr must be null or an integer, 20..254",
+      ],
+    ] as const)(
+      "Phase LP: rejects a malformed per-split machine field %j, naming it",
+      async (field, message) => {
+        const res = await asA(
+          request(appFor(makeStores())).post("/api/logs"),
+        ).send({
+          ...validLogBody(),
+          steps: [{ label: "Row 1", actualSource: "pm5", ...field }],
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.field).toBe("steps");
+        expect(res.body.error).toBe(`steps[0]: ${message}`);
+      },
+    );
+
+    it("Phase LP: round-trips all five per-split machine fields unchanged, a null rest HR and a zero calorie count included", async () => {
+      const app = appFor(makeStores());
+      const step = {
+        label: "Row 1",
+        actualSource: "pm5",
+        actualSeconds: 313.5,
+        actualMeters: 1200,
+        machineCalories: 0,
+        machineCalPerHour: 840,
+        machineWatts: 157,
+        machineDragFactor: 101,
+        machineRestHr: null,
+      };
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [step],
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.steps[0]).toStrictEqual(step);
     });
 
     // Split-band boundary: pm5's own bound is "> 0 and <= 6000", not >= 0.

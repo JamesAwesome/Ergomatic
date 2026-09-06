@@ -124,6 +124,14 @@ export interface StoredLogStep {
   avgHr?: number;
   actualSeconds?: number;
   actualMeters?: number;
+  // Phase LP (spec 2026-09-06-logbook-parity §2.1): the PM5's own per-split
+  // figures, verbatim — the lockstep mirror of `LogStep`'s five (see that
+  // interface's own comment for what each is and why two are provenance).
+  machineCalories?: number;
+  machineCalPerHour?: number;
+  machineWatts?: number;
+  machineDragFactor?: number;
+  machineRestHr?: number | null;
   // Phase LT spec 1 (2026-08-18), §2, MEDIUM-1 (Task 1 review): the
   // lockstep line this interface's own header comment demands —
   // `session/logDraft.ts`'s `LogStep` gained this field the same task
@@ -235,6 +243,16 @@ export interface StoredLog {
   machineSummary: {
     verificationBytes?: number[];
     avgPaceSecondsPer500m?: number;
+    // Phase LP (spec §2.2/§3): the hero's machine tier reads these —
+    // 0x0039's stroke rate and drag (always written by `summaryDetail`
+    // since RC-3) and 0x003A's four (absent on any row saved before this
+    // phase, or when the frame missed the burst; rendered as a dash).
+    avgStrokeRate?: number;
+    dragFactorAverage?: number;
+    totalCalories?: number;
+    avgWatts?: number;
+    avgCalPerHour?: number;
+    totalRestMeters?: number;
   } | null;
   // RC-1 (storage-spine design spec §3, TRIAD): the session's rest pair,
   // required-and-nullable — same convention as `machineWorkSeconds` above

@@ -1588,6 +1588,45 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(steps[2]!.actualSource).toBe("pm5");
   });
 
+  it("Phase LP: copies the 0x0038 machine fields onto the step (calories, cal/hr, watts, drag, rest HR) and omits every one of them when the actual lacks them", () => {
+    const run: MonitorRun = {
+      ...THREE_STEP_RUN,
+      actuals: [
+        {
+          ...THREE_STEP_ACTUALS[0]!,
+          calories: 73,
+          calPerHour: 840,
+          watts: 157,
+          dragFactor: 101,
+          restHeartRateBpm: null,
+        },
+        THREE_STEP_ACTUALS[1]!, // old-shape actual: no machine fields
+        { ...THREE_STEP_ACTUALS[2]!, calories: 0, restHeartRateBpm: 96 },
+      ],
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps[0]).toMatchObject({
+      machineCalories: 73,
+      machineCalPerHour: 840,
+      machineWatts: 157,
+      machineDragFactor: 101,
+      machineRestHr: null,
+    });
+    for (const key of [
+      "machineCalories",
+      "machineCalPerHour",
+      "machineWatts",
+      "machineDragFactor",
+      "machineRestHr",
+    ]) {
+      expect(steps[1]).not.toHaveProperty(key);
+    }
+    // 0 is a value, and a belt reading on the rest is kept.
+    expect(steps[2]!.machineCalories).toBe(0);
+    expect(steps[2]!.machineRestHr).toBe(96);
+    expect(steps[2]).not.toHaveProperty("machineWatts");
+  });
+
   it("index:null actuals are dropped entirely", () => {
     const run: MonitorRun = {
       ...WALK4_RUN,

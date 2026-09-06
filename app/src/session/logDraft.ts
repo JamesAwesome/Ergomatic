@@ -228,6 +228,21 @@ export interface LogStep {
    *  (`domain/monitor/types.ts`). Paired with `partialMeters` above:
    *  `buildMonitorLogSteps` writes both or neither. */
   partialSeconds?: number;
+  /** Phase LP (spec 2026-09-06-logbook-parity §2.1): the PM5's own
+   *  per-split figures off 0x0038, VERBATIM — `IntervalActual.calories/
+   *  calPerHour/watts/dragFactor/restHeartRateBpm`, copied by
+   *  `buildMonitorLogSteps` when the actual carries them and omitted
+   *  otherwise (old records, the summary-fallback final). `0` is a value.
+   *  `machineCalPerHour`/`machineWatts` are PROVENANCE: the screen shows
+   *  the logbook's derivation from `actualSeconds`/`actualMeters`/
+   *  `machineCalories` (`logbookDerived.ts`), never these. `machineRestHr`
+   *  is `null` when no belt reported on the rest. Server mirror:
+   *  `server/stores/logs.ts`'s `LogStep`; bands in `routes/data.ts`. */
+  machineCalories?: number;
+  machineCalPerHour?: number;
+  machineWatts?: number;
+  machineDragFactor?: number;
+  machineRestHr?: number | null;
 }
 
 /** THE ROW-LOCAL DISCRIMINANT for a pre-split monitor row (Phase LT spec 1,
@@ -925,6 +940,16 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
         step.actualSpm = actual.avgSpm;
         if (interval.displaySpm !== null) step.spm = interval.displaySpm;
       }
+      // Phase LP: the 0x0038 fields ride along verbatim when the actual
+      // carries them (absent otherwise — never written as 0).
+      if (actual.calories !== undefined) step.machineCalories = actual.calories;
+      if (actual.calPerHour !== undefined)
+        step.machineCalPerHour = actual.calPerHour;
+      if (actual.watts !== undefined) step.machineWatts = actual.watts;
+      if (actual.dragFactor !== undefined)
+        step.machineDragFactor = actual.dragFactor;
+      if (actual.restHeartRateBpm !== undefined)
+        step.machineRestHr = actual.restHeartRateBpm;
       if (
         actual.avgHeartRateBpm !== null &&
         actual.avgHeartRateBpm >= MONITOR_HR_MIN &&
