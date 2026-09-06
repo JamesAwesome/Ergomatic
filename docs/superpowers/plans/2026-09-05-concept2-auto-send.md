@@ -53,6 +53,8 @@ Mutations M1-M16 are listed under the task whose invariant each protects; all me
 
 **Tests (integration, Docker):** the describe "auto_send / send_failed_* (Wave E auto-send)" — 7 tests: default false; setAutoSend flips and returns true / false when unlinked; same-account relink keeps the mode; different-account relink resets it; relink clears the flag; setSendFailed stores the instant and sub-reason; clearSendFailed nulls both. Suite: 31 passed.
 
+**Corrected after commit (review fix rounds, `cfb99c98` / `4bfe26f3`):** the column comments in this task's `schema.ts` and `stores/concept2.ts` blocks name THREE sub-reasons; the committed source names all four (`implausible_weight` included) and types `setSendFailed`'s `reason` as `WeightClassFailure` from `server/concept2/mapping.ts` — read the diff below as the history, the head as the code.
+
 **Mutation (measured):**
 
 | # | mutation | failure |
@@ -2705,8 +2707,8 @@ index d0806f74..ea1e62b4 100644
 | state | mint | clear sites | survives |
 | --- | --- | --- | --- |
 | `armed` (the OFF arm) | first OFF tap | the second tap (unlink runs), the 4 s timer, ANY other tap on the control (`setMode` disarms first), unmount / route change (effect cleanup) | nothing — never a link change, never a screen change |
-| `modeBusy` | `setMode` past the same-mode return | `setMode`'s `finally`, after the re-read | one write; a component unmount mid-write discards it |
-| `modeFailed` (the A7 line) | a non-2xx or thrown PATCH | ANY tap on the control (`setMode` entry), `connect()` entry — the ONE site on the relink path (the unlink-path clear was measured redundant and removed, `a46cb712`) | an unlink alone (unobservable: the mode block is unmounted while unlinked); NOT a relink (tested, M20) |
+| `modeBusy` | `setMode` past the same-mode return | `setMode`'s `finally`, after the re-read | one write; the control's unmount mid-write discards it |
+| `modeFailed` (the A7 line) | a non-2xx or thrown PATCH | any tap that reaches `setMode`; and the UNMOUNT of `SendingModeControl`, which the card mounts only while `link.linked` (review fix round, `4bfe26f3` — the earlier `connect()`-entry clear missed the `pageshow` re-read and the Retry paths back to a linked card) | nothing past the card reading UNLINKED; a same-account relink the card never saw as unlinked (the link, to this card, never changed) |
 | `link` / `failed` (the hook) | mount read | every re-read (`pageshow`, `visibilitychange`, `reload()`) | a superseded read applies nothing (generation token) |
 
 **Layout departure (recorded on the design page §9):** the mode line sits in the ACT column beneath the control in both orientations; the page's landscape frame drew it in the tell column.
@@ -5540,6 +5542,36 @@ index 20115d16..5dcecf3b 100644
 | M20 | `setModeFailed(false)` removed from `connect()` | `the A7 line does not survive an unlink and relink…` — `expected <p class="c2-card-mode-error"></p> to be null`. (With the clear ALSO in `unlink()`, this probe stayed green — that site was redundant and is gone.) |
 
 **Gates on the fixed head:** `pnpm typecheck` clean; `pnpm lint` clean; routes 160 passed (159 + the abort leg); `webauth-contract` 8; card 65; hook 36; `LogSession` 195; `autoSend` 16; `Concept2SendBlock`, `Concept2Row` green. Browser suites: `bash scripts/e2e.sh e2e/concept2.spec.ts e2e/design.spec.ts -g "Concept2\|concept2\|c2-card\|C2"` → 44 passed (43 + the mid-PATCH contrast test).
+
+## Review fix round — commit `4bfe26f3`
+
+Seven task reviewers (one per commit plus one for the harden fix round; reports in `.superpowers/sdd/2026-09-05-concept2-auto-send/`). Spec ✅ on every task; quality "fix" on Tasks 1, 2, 3 and the harden round. Folded in one commit:
+
+| finding (review) | fix | gate |
+| --- | --- | --- |
+| harden-round I1: `modeFailed` cleared only at `connect()`, but the `pageshow` re-read and the Retry `reload()` return a card to linked without it | the control is `SendingModeControl`, mounted only while `link.linked`; its state dies on unmount | card test: fail a PATCH, unlink, relink by a `pageshow` re-read, line gone |
+| T3 I2: `disabled` during the write drops keyboard focus to `<body>` | the activated segment is re-focused when the control re-enables (effect on `modeBusy`, no state) | card test: Enter on AUTOMATIC → after the write it has focus |
+| T3 I3: the pill spelled the precedence a second time | `linkedStatus()` in `concept2RowState.ts` feeds `rowState`, `linkedPill` and `modeLine` (a total switch) | model tests; Row cells 13/14 |
+| T3 I1 / lens 2 bookkeeping: the `.c2-card-helper` assertion could never go red | re-pointed at `.c2-card-mode-line` absent on the unlinked card | itself |
+| T3 M4/M5/M6/M7: Up/Down swallowed; `aria-pressed` on an armed OFF; mode line not associated | Left/Right only; OFF `aria-pressed="false"` always; `aria-describedby` → the mode line | card tests (arrows, description); fixtures regenerated; e2e armed test asserts the false state and the armed pairing as literals |
+| T2 F1/F2: `PATCH /link` absent from the ambiguous-auth and per-user-gate sweeps | rows added; the 400 rows seed AUTOMATIC | M22, M23 |
+| T2 F4: the case-folded key had no test | two spellings of one uuid → one wire call; the fake logs store folds uuid case as Postgres does | M21 |
+| T1 / T2 F7: `setSendFailed(reason: string)` | typed `WeightClassFailure` (store + fake), schema comment names the type | typecheck |
+| T2 F5/F6/F8/F13, T6, lens 2 bookkeeping 2 | comment counts (five strings, fifteen cells, nine keys); the contract extractor's window ends at the nearest of PATCH/DELETE; the post-ok-record-failed 502 says why it keeps the flag; the intermediate A10 assertion labelled fast-fail; §9 lede; RELEASING clause | — |
+| T4 minor | `autoSend.test`: AUTOMATIC under `needsReauth` still sends (server answers 409) | itself |
+| T3 M1/M2/M8 | `MODE_LINE_*` module-private; model tests for `modeLine`/`linkedPill`; the A7 `it.each` typed | — |
+
+Not taken, with the reason: T2 F9 (the already-sent short-circuit clears the flag on historical evidence) is the spec's own ruling and goes to the PM gate as an observation; T2 F11 (`sendFailedAt` not validated as ISO) — the mode line never formats the instant, so nothing renders `Invalid Date`; T3 M5's alternative (drop arrows) — the spec's F4 chose arrows-move-focus explicitly.
+
+**Mutations (measured, committed tree `4bfe26f3`):**
+
+| # | mutation | failure |
+| --- | --- | --- |
+| M21 | `claimSend`'s key without `.toLowerCase()` | `two spellings of one row's id take ONE claim` — `called 1 times, but got 2 times` |
+| M22 | `refuseAmbiguousAuth` removed from `PATCH /link` | `patch /api/concept2/link -> 400 ambiguous_auth` — `expected 204 to be 400` |
+| M23 | `PATCH /link` gated on `available()` instead of `availableFor(email)` | `PATCH /link: an off-list user gets 403…` — `expected 204 to be 403` |
+
+**Gates on `4bfe26f3`:** typecheck clean; lint clean; routes 163; contract 8; card + model + Row + hook + LogSession + autoSend + SendBlock 412 passed; browser suites `bash scripts/e2e.sh e2e/concept2.spec.ts e2e/design.spec.ts -g "Concept2\|concept2\|c2-card\|C2"` → 44 passed.
 
 ## Task 7: the whole-branch gate, the PR, and STOP
 
