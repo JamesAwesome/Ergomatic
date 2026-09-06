@@ -6757,6 +6757,7 @@ async function captureWorkoutDetailNfc(
   page: Page,
   file: string,
   email: string,
+  landscape = false,
 ): Promise<void> {
   await page.addInitScript(() => {
     window.__nfcScript__ = {
@@ -6766,35 +6767,44 @@ async function captureWorkoutDetailNfc(
   });
   await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
   await setBaselines(page);
-  // A production-shaped PERSONAL workout (RF3; review B5 found the first
-  // capture was a one-row piece too thin to evidence Gate 0's fold claim):
-  // 4 × 2000 m at 2K with rest, built the way the personal-workout capture
-  // above builds its own — one row, then a distance row, duplicated twice.
+  // THE GATE 0 WORKOUT (review B5): the approved artifact drew the
+  // "Screenshot Personal Workout" above (20:00 @ 6k, then 0:30 @ MAX at
+  // 21 spm), and its fold claim ("Delete workout moves below the initial
+  // fold on a 390×844 personal-workout detail") was made against THAT
+  // screen. The first NFC capture used a one-row piece and could not
+  // evidence the claim either way (RF3/RF7). Same build sequence as the
+  // personal capture, so the two records agree on what they show.
   const title = "Screenshot NFC Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(title);
   await page.getByRole("button", { name: "Effort 3" }).click();
-  await page.getByRole("radio", { name: "Row 1 duration unit meters" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
-  await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
-  const nfcRow1RestUp = page.getByRole("button", { name: "Row 1 rest up" });
-  for (let i = 0; i < 6; i++) {
-    await nfcRow1RestUp.click();
-  }
   await page.getByRole("button", { name: "DONE" }).click();
-  for (let i = 0; i < 3; i++) {
-    await page.getByRole("button", { name: "Duplicate Step 1" }).click();
-  }
+  await page.getByRole("button", { name: "+ ADD STEP" }).click();
+  await page.getByLabel("Row 2 duration", { exact: true }).fill("30");
+  await page.getByRole("radio", { name: "Row 2 pace MAX" }).click();
+  const nfcRow2SpmUp = page.getByRole("button", {
+    name: "Row 2 stroke rate up",
+  });
+  await nfcRow2SpmUp.click();
+  await nfcRow2SpmUp.click();
   await page.getByRole("button", { name: "Save to library" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+$/);
   await page.locator(".workout-detail-title").waitFor();
+  await expect(page.getByText("ALL OUT")).toBeVisible();
   const scanNfc = page.getByRole("button", { name: "Scan NFC" });
   await expect(scanNfc).toBeVisible();
-  // Landscape keeps today's scrolling document column (spec: no landscape
-  // reflow), so the pair sits below the first fold there; the capture is
-  // of the two buttons, not of the fold. RF7: look at the PNG afterwards.
-  await scanNfc.scrollIntoViewIfNeeded();
-  await page.getByRole("button", { name: "Connect" }).scrollIntoViewIfNeeded();
+  if (landscape) {
+    // Landscape keeps today's scrolling document column (spec: no
+    // landscape reflow), so the pair sits below the first fold there; the
+    // capture is of the two buttons, not of the fold. RF7: look at the PNG.
+    await scanNfc.scrollIntoViewIfNeeded();
+    await page
+      .getByRole("button", { name: "Connect" })
+      .scrollIntoViewIfNeeded();
+  }
+  // Portrait is captured UNSCROLLED on purpose: it is the initial fold the
+  // Gate 0 claim is about.
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, file) });
   await cleanupByTitle(page, title);
 }
@@ -6813,5 +6823,6 @@ test("workout-detail-nfc-landscape", async ({ page }) => {
     page,
     "workout-detail-nfc-landscape.png",
     "screenshots-detail-nfc-landscape@e2e.test",
+    true,
   );
 });

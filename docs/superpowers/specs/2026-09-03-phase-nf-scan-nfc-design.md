@@ -360,10 +360,16 @@ the existing screen-level control rule and must remain visible against both
 fills.
 
 The accepted portrait cost is 68 px: 56 px control plus the stack's 12 px gap.
-On a 390×844 personal-workout detail, **Delete workout** moves below the initial
-fold and remains reachable by normal vertical scroll. The workout and all happy
-paths remain in the first viewport. Landscape keeps today's centered, scrolling
-document column; Phase NF does not invent a landscape reflow.
+On a 390×844 personal-workout detail (the Gate 0 workout: 20:00 @ 6k, then
+0:30 @ MAX), **Delete workout**'s bottom edge drops under the tab bar on the
+initial fold — its label still reads, and it remains reachable by normal
+vertical scroll. That is what the committed capture shows
+(`docs/screenshots/workout-detail-nfc.png`, unscrolled, 2026-09-06); the
+Gate 0 artifact's own sentence ("moves below the initial fold") over-stated
+the cost by roughly one control's height and is superseded by the capture
+(whole-branch review B5). The workout and all happy paths remain in the first
+viewport. Landscape keeps today's centered, scrolling document column; Phase NF
+does not invent a landscape reflow.
 
 ### User-visible states and copy
 
@@ -1206,8 +1212,10 @@ Phase NF closes only when:
 - The checked-in NFC patch is part of the safety mechanism. Any NFC or Capacitor
   upgrade must reapply/review the patch and rerun native identity, retention,
   drain, and WebView-reload tests before dependency acceptance.
-- **Delete workout** moving below the initial portrait fold was visible in Gate
-  0 and accepted. No compensating layout compression ships in this phase.
+- **Delete workout** dropping partly under the tab bar on the initial portrait
+  fold (Gate 0 said "below the fold"; the capture shows the label still in
+  frame) was visible in Gate 0 and accepted. No compensating layout compression
+  ships in this phase.
 - **Backgrounding during the targeted BLE scan can poison the tail** (whole-
   branch review SF3, 2026-09-06). A `pause` aborts the scan; the abort's
   `stopLEScan()` and its 10 s cleanup deadline both ride the process, which iOS
