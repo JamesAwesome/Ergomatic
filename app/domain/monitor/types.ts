@@ -357,6 +357,27 @@ export interface IntervalActual {
   // absent on the synthesized-final fallback (no wire reading — 0x0039
   // carries no per-interval type either).
   type?: number;
+  // ADDITIVE (Phase LP, spec 2026-09-06-logbook-parity §2.1): the 0x0038
+  // fields Concept2's logbook shows per split, kept VERBATIM off the same
+  // `parseAdditionalSplitIntervalData` decode `avgSpm`/`avgHeartRateBpm`
+  // already ride. Absent (never `0`) when the frame did not carry them —
+  // records persisted before this field existed, and the summary-fallback
+  // synthesized final (`driver.ts`, which has no 0x0038 for it). `0` IS a
+  // value everywhere here: a zero-calorie split reads 0.
+  //
+  // `calPerHour` and `watts` are the PM5's OWN figures (0x0038 offsets
+  // 10-11 and 14-15), stored as PROVENANCE only. The screen shows the
+  // LOGBOOK's derivation of both (`src/session/logbookDerived.ts`:
+  // round(2.80/(t/d)³) and floor(cal×3600/t)), which differs from these by
+  // ≤1 W and 24–78 cal/hr across the committed captures (spec §1.1) —
+  // nothing derived is ever stored, and nothing stored is ever derived.
+  calories?: number;
+  calPerHour?: number;
+  watts?: number;
+  dragFactor?: number;
+  // 0x0038's rest heart rate: `null` = the belt reported nothing for the
+  // rest (`HEARTRATE_NO_BELT`), absent = no frame at all.
+  restHeartRateBpm?: number | null;
 }
 
 /**

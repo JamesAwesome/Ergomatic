@@ -520,6 +520,24 @@ describe("selected recording recovery", () => {
         corruptActual(run, "type", true);
       },
     ],
+    [
+      "a string present split calories (Phase LP)",
+      (run: MonitorRun) => {
+        corruptActual(run, "calories", "73");
+      },
+    ],
+    [
+      "a null present drag factor (Phase LP)",
+      (run: MonitorRun) => {
+        corruptActual(run, "dragFactor", null);
+      },
+    ],
+    [
+      "a boolean present rest heart rate (Phase LP — null is allowed, a boolean is not)",
+      (run: MonitorRun) => {
+        corruptActual(run, "restHeartRateBpm", false);
+      },
+    ],
   ])(
     "programmed recording with %s stays read-only",
     async (_label, corrupt) => {

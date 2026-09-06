@@ -43,6 +43,12 @@ export function requireProgrammedMeasurements(run: MonitorRun): void {
     if (actual.restSeconds !== undefined)
       requireFiniteNumber(actual.restSeconds);
     if (actual.type !== undefined) requireFiniteNumber(actual.type);
+    if (actual.calories !== undefined) requireFiniteNumber(actual.calories);
+    if (actual.calPerHour !== undefined) requireFiniteNumber(actual.calPerHour);
+    if (actual.watts !== undefined) requireFiniteNumber(actual.watts);
+    if (actual.dragFactor !== undefined) requireFiniteNumber(actual.dragFactor);
+    if (actual.restHeartRateBpm !== undefined)
+      requireNullableFiniteNumber(actual.restHeartRateBpm);
   }
   if (run.summaryTotals !== undefined) {
     requireFiniteNumber(run.summaryTotals.workElapsedSeconds);

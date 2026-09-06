@@ -714,5 +714,14 @@ export function toIntervalActual(raw: RawPm5Status): IntervalActual {
     // (0x0032's own, different field).
     restSeconds: raw.intervalRestTimeSeconds,
     type: raw.splitIntervalType,
+    // Phase LP: 0x0038's own calories / cal-hr / watts / drag / rest HR,
+    // already decoded by `parseAdditionalSplitIntervalData` and until now
+    // dropped here. See `IntervalActual`'s own doc comment for why the
+    // PM5's cal/hr and watts are kept as provenance, not shown.
+    calories: raw.splitIntervalTotalCalories,
+    calPerHour: raw.splitIntervalAvgCalories,
+    watts: raw.splitIntervalPowerWatts,
+    dragFactor: raw.splitAvgDragFactor,
+    restHeartRateBpm: raw.splitIntervalRestHeartRateBpm,
   };
 }

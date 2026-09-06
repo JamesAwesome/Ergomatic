@@ -829,6 +829,29 @@ describe("toIntervalActual: field mapping (interface-notes.md's own reasoning co
     expect(actual.avgHeartRateBpm).toBeNull();
   });
 
+  it("Phase LP: keeps 0x0038's calories, cal/hr, watts, drag factor and rest heartrate verbatim (James's 6k split 1: 73 cal, 840 cal/hr, 157 W)", () => {
+    const actual = toIntervalActual(
+      baseRaw({
+        splitIntervalTotalCalories: 73,
+        splitIntervalAvgCalories: 840,
+        splitIntervalPowerWatts: 157,
+        splitAvgDragFactor: 101,
+        splitIntervalRestHeartRateBpm: null,
+      }),
+    );
+    expect(actual.calories).toBe(73);
+    expect(actual.calPerHour).toBe(840);
+    expect(actual.watts).toBe(157);
+    expect(actual.dragFactor).toBe(101);
+    expect(actual.restHeartRateBpm).toBeNull();
+  });
+
+  it("Phase LP: a zero-calorie split reads 0, not undefined — 0 is a value", () => {
+    expect(
+      toIntervalActual(baseRaw({ splitIntervalTotalCalories: 0 })).calories,
+    ).toBe(0);
+  });
+
   it("uses intervalRestDistanceMeters (0x0037) for restDistanceMeters (R-B)", () => {
     const actual = toIntervalActual(
       baseRaw({ intervalRestDistanceMeters: 22 }),
