@@ -138,6 +138,11 @@ requirements).
   saved row renders a different figure after a change, the gate shows the
   before and after side by side, because it has to read as an improvement
   rather than as a row that quietly moved.
+  **When the gate offers OPTIONS, every cost attached to one is a
+  factual claim** and gets the same evidence bar as the design — measure
+  it or mark it untested, because James decides on that list and an
+  invented cost picks the design for him (recurring failure 30, which
+  cost a whole implementation).
   Present it as a rendered artifact, then STOP. The gate is the approval,
   not the presentation.
 - **Brainstorming carries a research pass and a does-it-exist question
@@ -991,6 +996,30 @@ often they recur.
     "decide later" ruling is not a row; it lives in a PR body, which is a
     presentation (RF14). Deleting the consumer and leaving the dependency is
     RF5 with a package name.
+
+30. **Ruling an option OUT of a design gate on a cost nobody measured
+    (James, 2026-09-06).** A gate's option list is where James decides, so
+    every stated cost in it selects the design — and an invented cost
+    selects the wrong one. The Library keyboard gate offered two fixes and
+    dismissed the second, painting the strip the tab bar leaves exposed, as
+    "guessing a height the platform won't tell us." Nobody tried it. James
+    picked the first on that basis, it was built, reviewed and pushed —
+    and the branch review then found that hiding the bar deletes the whole
+    main navigation on a 1.21x pinch-zoom (`visualViewport.height` is in CSS
+    pixels, so a zoom shrinks it exactly like a keyboard does), that it
+    removes an affordance `e2e/builder.spec.ts` already tests, and that the
+    rejected option needs NO height at all: you over-fill downward and the
+    excess paints below the fold. The whole implementation was thrown away
+    and rebuilt as six lines of CSS.
+    **A cost attached to an option is a factual claim and carries the same
+    evidence bar as the design itself.** Measure it, or write "untested" and
+    let the gate decide with that on the table. The tell is a
+    disqualifying reason that sounds like a platform limit and has no number
+    beside it — this one had the shape of RF16's unsourced premise, but
+    pointed at the road not taken, where nothing downstream ever re-checks
+    it. Corollary: the option you are about to recommend is the one you
+    tested; the one you rule out in a clause is the one that needs the
+    receipt.
 
 ## Commands
 

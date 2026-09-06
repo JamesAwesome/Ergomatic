@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { canConnectMonitor } from "../adapters/bluetoothCapability";
 import { useNavigate } from "react-router-dom";
 import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
 import type { NfcCapability } from "../adapters/nfcReader";
@@ -57,7 +58,7 @@ import {
  * the full mechanism. So a connect attempt that fails or is
  * abandoned before rowing starts destroys nothing (verified directly:
  * `e2e/session.spec.ts`'s "Connect anyway" test, and
- * `WorkoutDetail.test.tsx`'s real-transport-missing test, both against the
+ * `WorkoutDetail.test.tsx`'s real scan-failure test, both against the
  * REAL hook). The guard's warning is still the honest one: a
  * finished-but-unlogged `SessionRun` sitting in `RUN_KEY` — real, permanent
  * history — WILL be gone once a connected session gets underway, 6B's F5
@@ -75,8 +76,8 @@ import {
  * IMMEDIATELY, at that press — before BLE, before programming, before
  * either of `handleConnectProceed`'s own two synchronous early returns
  * (a missing-baselines guard, a `CompileError`). The reviewer's own
- * probe: seed a stale record, Connect, Connect anyway, a REAL
- * transport-missing failure, Cancel — `currentUnretired()` and
+ * probe: seed a stale record, Connect, Connect anyway, a real
+ * scan failure, Cancel — `currentUnretired()` and
  * `loadMonitorRun()` both came back `null`. A real F5-class regression:
  * every interstitial state's own Cancel doc comment says "nothing lost,"
  * and this proved it false. **Fixed by moving EXECUTION downstream to
@@ -297,7 +298,8 @@ export default function ConnectAction({
           <button
             type="button"
             className="button-nfc"
-            disabled={busy}
+            disabled={busy || !canConnectMonitor()}
+            aria-busy={busy}
             onClick={() => handleEntry("nfc")}
           >
             Scan NFC
@@ -306,7 +308,8 @@ export default function ConnectAction({
       <button
         type="button"
         className="button-connect"
-        disabled={busy}
+        disabled={busy || !canConnectMonitor()}
+        aria-busy={busy}
         onClick={() => handleEntry("manual")}
       >
         Connect

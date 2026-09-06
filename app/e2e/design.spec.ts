@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { signInViaBackdoor, stableBoundingBox } from "./helpers";
+import {
+  signInViaBackdoor,
+  stableBoundingBox,
+  stubBluetoothScanFailure,
+} from "./helpers";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 import type { Step, WorkoutType } from "../domain/types.js";
 import { compileProgram } from "../domain/monitor/program.js";
@@ -7225,23 +7229,16 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  test("the interstitial's FAILED state (no Bluetooth transport): axe, the 44px floor and the ink-4 rule", async ({
+  test("the interstitial's FAILED state (scan failure): axe, the 44px floor and the ink-4 rule", async ({
     page,
   }) => {
     const title = "Design Connected Failed Workout";
-    // `screenshots.spec.ts`'s own `stubNoBluetooth`: removing
-    // `navigator.bluetooth` BEFORE the app loads reaches `failed` via
-    // `transport-missing` with no picker to hang on. Duplicated here for
-    // the same reason the other helpers in this file are.
-    await page.addInitScript(() => {
-      Object.defineProperty(window.navigator, "bluetooth", {
-        value: undefined,
-        configurable: true,
-      });
-    });
+    // The browser supports Bluetooth, but scanning fails. An unsupported
+    // browser now keeps Connect disabled before this screen can mount.
+    await stubBluetoothScanFailure(page);
     await openConnected(page, title, "design-connected-failed@e2e.test");
     const failed = page.locator(".connected-serif-line", {
-      hasText: "This device has no Bluetooth transport.",
+      hasText: "The link to the monitor failed.",
     });
     await expect(failed).toBeVisible({ timeout: 10_000 });
     await sweep(page);
@@ -10268,6 +10265,7 @@ test.describe("unlogged recovery render registrations", () => {
     page,
   }) => {
     const targetTitle = "Recovery warning target";
+    await stubBluetoothScanFailure(page);
     await signInViaBackdoor(page, {
       email: "design-unlogged-recovery-warning@e2e.test",
       name: "Recovery Warning Tester",
@@ -10349,6 +10347,7 @@ test.describe("unlogged recovery render registrations", () => {
     page,
   }) => {
     const targetTitle = "Recovery warning safe exit target";
+    await stubBluetoothScanFailure(page);
     await signInViaBackdoor(page, {
       email: "design-unlogged-recovery-safe-exit@e2e.test",
       name: "Recovery Safe Exit Tester",
@@ -11187,6 +11186,36 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
     expect(await title.evaluate((el) => getComputedStyle(el).fontSize)).toBe(
       "31px",
     );
+  });
+});
+
+// Phase KB (docs/superpowers/specs/2026-09-06-keyboard-webview-resize-design.md).
+// The fill this suite used to pin under the tab bar is gone — it painted
+// nothing on iOS (research doc 2026-09-06-ios-keyboard-fixed-viewport.md §2)
+// — and the tab bar now hides on the plugin's keyboardWillShow/WillHide
+// events, which Chromium cannot raise. What survives is the one fill-independent invariant
+// the deleted suite carried: with no keyboard, the bar's box ends exactly at
+// the viewport's bottom edge, both orientations. Two-sided on purpose: a bar
+// pushed past the edge AND a bar floating above it both fail. Mutation
+// `.tabbar { bottom: -10px }` → "Expected: <= 853, Received: 862" (2026-09-06).
+test.describe("the tab bar's bottom edge", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-tabbar-edge@e2e.test",
+      name: "Design Edge Tester",
+    });
+    await page.goto("/library");
+    await expect(page.locator(".tabbar")).toHaveCount(1);
+  });
+
+  test("is the viewport's own, in both orientations", async ({ page }) => {
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      const bar = await stableBoundingBox(page.locator(".tabbar"));
+      if (bar == null) throw new Error("the tab bar did not render");
+      expect(bar.y + bar.height).toBeLessThanOrEqual(vp.height + 1);
+      expect(bar.y + bar.height).toBeGreaterThanOrEqual(vp.height - 1);
+    }
   });
 });
 

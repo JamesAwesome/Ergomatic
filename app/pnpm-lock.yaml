@@ -29,6 +29,9 @@ importers:
       '@capacitor/haptics':
         specifier: 8.0.2
         version: 8.0.2(@capacitor/core@8.5.0)
+      '@capacitor/keyboard':
+        specifier: ^8.0.5
+        version: 8.0.5(@capacitor/core@8.5.0)
       '@capgo/capacitor-nfc':
         specifier: 8.2.5
         version: 8.2.5(patch_hash=30afcb82af2e9a060332756cf52cc9117090b29447437f0226002e4349afbc32)(@capacitor/core@8.5.0)

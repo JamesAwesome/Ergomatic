@@ -566,6 +566,12 @@ async function renderManualLogWithHistory(workoutId: string) {
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
+  Object.defineProperty(navigator, "bluetooth", {
+    configurable: true,
+    value: {
+      requestDevice: vi.fn().mockRejectedValue(new Error("Test scan failed")),
+    },
+  });
   // Default: no active plan — see `mockPlan`'s own comment on why this
   // keeps every plan-agnostic test in this file passing unmodified.
   mockPlan();
@@ -583,6 +589,7 @@ beforeEach(() => {
 // describe block, because `mockHandoffRetireSpy` is called from several.
 afterEach(() => {
   vi.doUnmock("../monitor/handoffStore");
+  Reflect.deleteProperty(navigator, "bluetooth");
 });
 
 async function chooseHeldAndEffort() {

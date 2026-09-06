@@ -2552,6 +2552,10 @@ trigger is the whole entry.
 One row each. The body is in `docs/history/`, archived verbatim, and it is a
 RECORD — do not cite it for a live question.
 
+- **Phase KB** — the tab bar hides while the keyboard is up (the v0.39.1 fill
+  under it never painted: iOS never shrinks the fixed viewport; Ionic hides
+  its bar too); the Keyboard plugin for its events only, tray restored ·
+  closed 2026-09-06 · #321 · v0.39.2 · [detail](docs/history/phase-kb.md)
 - **Phase SF** — SHUFFLE actually shuffles, Today rolls a type and keeps its filters per type, TIME is a minutes range, the sources read ERGOMATIC LIBRARY / MY WORKOUTS, the Library is searchable by name · closed 2026-09-05 · #296, #297, #300, #301 · released v0.38.0 · [detail](docs/history/phase-sf.md)
 - **Wave F** — received work survives lifecycle interruptions; true link loss has an honest End/save fallback · closed 2026-09-04 · [detail](docs/history/wave-f.md) · [native exit walk](docs/monitor/sessions/walk-2026-09-04-wave-f/README.md)
 - **Phase 0** — the repo where bad code cannot be committed: pnpm, TS strict, Vitest 3-project, husky, CI · closed 2026-07-27 · #1 · [detail](docs/history/phase-0.md)

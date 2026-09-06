@@ -799,8 +799,8 @@ function WorkoutDetailView({
  *  dashed treatment is a CSS descendant rule (`.connect-block-dashed
  *  .button-connect`, fast-follow spec §4 — retargeted from `.button-l2` in
  *  the same edit that swapped `ConnectAction`'s own class) reskinning
- *  `ConnectAction`'s own `<button>`, not a second button — "still tappable"
- *  (handoff) means the SAME control, restyled. */
+ *  `ConnectAction`'s own `<button>`, not a second button. The shared ConnectAction disables unsupported
+ *  browsers; radio-off remains tappable so the rower can recover. */
 function ConnectBlock({
   bluetoothStatus,
   lastDevice,

@@ -168,12 +168,19 @@ function parsedBodies(fn: typeof apiFn): Record<string, unknown>[] {
 
 beforeEach(() => {
   localStorage.clear();
+  Object.defineProperty(navigator, "bluetooth", {
+    configurable: true,
+    value: {
+      requestDevice: vi.fn().mockRejectedValue(new Error("Test scan failed")),
+    },
+  });
   fakeForTest = null;
   apiFn.mockClear();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  Reflect.deleteProperty(navigator, "bluetooth");
 });
 
 describe("WorkoutDetail -> real connected recovery -> LogSession (James's PR #230 review, P2a)", () => {

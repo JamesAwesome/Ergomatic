@@ -335,6 +335,16 @@ async function renderDetailWithLogRoute(initialPath: string) {
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
+  Object.defineProperty(navigator, "bluetooth", {
+    configurable: true,
+    value: {
+      requestDevice: vi.fn().mockRejectedValue(new Error("Test scan failed")),
+    },
+  });
+});
+
+afterEach(() => {
+  delete (navigator as { bluetooth?: unknown }).bluetooth;
 });
 
 describe("WorkoutDetail", () => {
@@ -1344,12 +1354,14 @@ describe("custom badge on the detail screen", () => {
 
 const LAST_DEVICE_KEY = "ergomatic.lastMonitorDevice";
 
-/** Installs (or removes) a `navigator.bluetooth` stub for exactly one test.
- *  jsdom has no Web Bluetooth of its own — `navigator.bluetooth` is
- *  `undefined` by default, which IS the "absent" case; the other two
- *  states are stubbed in directly, restored after. */
+/** Installs (or removes) a `navigator.bluetooth` stub for exactly one test. */
 function stubBluetooth(
-  bt: { getAvailability?: () => Promise<boolean> } | undefined,
+  bt:
+    | {
+        getAvailability?: () => Promise<boolean>;
+        requestDevice?: () => Promise<unknown>;
+      }
+    | undefined,
 ) {
   const original = Object.getOwnPropertyDescriptor(
     Navigator.prototype,
@@ -1428,10 +1440,13 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     restore();
   });
 
-  it("no Web Bluetooth API at all: dashed treatment, a different caption", async () => {
-    // No stub installed at all — the real jsdom default.
-    mockHooks(BASELINES);
-    await renderDetail();
+  it("no Web Bluetooth API: Connect is disabled and cannot stage a warning or error while an unlogged record survives", async () => {
+    const restore = stubBluetooth(undefined);
+    const draft = buildDraft(PERSONAL_WORKOUT);
+    const run = completedRunFor(draft);
+    saveRun(run);
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetail("/library/w3");
 
     expect(
       await screen.findByText("NO BLUETOOTH ON THIS DEVICE"),
@@ -1439,7 +1454,23 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     const button = screen.getByRole("button", { name: "Connect" });
     expect(button.closest(".connect-block-dashed")).not.toBeNull();
     expect(button).toHaveClass("button-connect");
-    expect(button).not.toBeDisabled();
+    expect(button).toBeDisabled();
+
+    await userEvent.click(button);
+
+    expect(loadRun()).toStrictEqual(run);
+    expect(
+      screen.queryByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("A session is in progress. Replace it?"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("The monitor wouldn't take it"),
+    ).not.toBeInTheDocument();
+    restore();
   });
 
   it("LAST USED · <name> appears only once available and only after a first pair", async () => {
@@ -1486,10 +1517,10 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
   // (`compileProgram` already resolves an effort phase with no
   // `targetSplit`, Task 1's own comment fix to domain/monitor/program.ts)
   // — Connect proceeds straight to the interstitial with NO baselines
-  // error, unlike WORKOUT's split-ref case just above. jsdom has no
-  // `navigator.bluetooth`, so the interstitial's own REAL (unmocked)
-  // `useMonitorSession` deterministically fails `transport-missing` the
-  // instant it mounts — that message showing up (not the baselines error)
+  // error, unlike WORKOUT's split-ref case just above. The supported Web
+  // Bluetooth fixture's picker rejects, so the interstitial's own REAL
+  // `defaultTransport` and `useMonitorSession` fail the scan. That failure
+  // showing up (not the baselines error)
   // is what proves the interstitial actually mounted, i.e. that Connect's
   // own guard let this workout through.
   it("effort-only workout, baselines unset: Connect proceeds to the interstitial with NO baselines error", async () => {
@@ -1498,11 +1529,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    expect(
-      await screen.findByText("This device has no Bluetooth transport.", {
-        selector: ".connected-serif-line",
-      }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Test scan failed")).toBeInTheDocument();
     expect(
       screen.queryByText(
         "Set your baselines first. Connect needs a target to program.",
@@ -1575,9 +1602,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     await renderDetailWithCountdownRoute("/library/w3");
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
-    await screen.findByText("This device has no Bluetooth transport.", {
-      selector: ".connected-serif-line",
-    });
+    await screen.findByText("Test scan failed");
 
     const spy = vi
       .spyOn(Storage.prototype, "setItem")
@@ -1596,13 +1621,13 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
   });
 
   // The full wiring, real (unmocked) hook included: nothing on record, so
-  // ConnectAction's guard proceeds immediately; jsdom has no
-  // `navigator.bluetooth`, so the REAL `useMonitorSession` genuinely fails
-  // `transport-missing` — a deterministic real failure, not a mock. "Row on
+  // ConnectAction's guard proceeds immediately; the supported Web Bluetooth
+  // fixture rejects its picker, so the REAL `defaultTransport` and
+  // `useMonitorSession` genuinely fail the scan. "Row on
   // the phone timer instead" then has to prove its own promise: the SAME
   // nudge this screen's preview stack applied survives into the phone
   // session's own draft (not the always-empty one `startSession` builds).
-  it("Connect -> a real transport-missing failure -> 'Row on the phone timer instead' keeps the nudge", async () => {
+  it("Connect -> a real Web Bluetooth scan failure -> 'Row on the phone timer instead' keeps the nudge", async () => {
     // PERSONAL_WORKOUT, not WORKOUT: WORKOUT's own "test" step is
     // deliberately open-ended (no fixed time/distance) and so cannot
     // compile to a `WorkoutProgram` at all — the wrong fixture for a test
@@ -1625,11 +1650,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    expect(
-      await screen.findByText("This device has no Bluetooth transport.", {
-        selector: ".connected-serif-line",
-      }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Test scan failed")).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Row on the phone timer instead" }),
@@ -1646,9 +1667,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     await renderDetail("/library/w3");
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
-    await screen.findByText("This device has no Bluetooth transport.", {
-      selector: ".connected-serif-line",
-    });
+    await screen.findByText("Test scan failed");
 
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
@@ -1746,7 +1765,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       // CORRECTED (Task 5 review fix round, 2026-08-30): a first draft of
       // this comment (and the code it described) claimed "Connect anyway"
       // itself destroyed the stale record here. It never did on THIS
-      // path: the real transport-missing failure below means "armed" (the
+      // path: the real Web Bluetooth scan failure below means "armed" (the
       // wire event `ConnectAction.tsx`'s own retire now waits for) never
       // fires at all, and `useMonitorSession.ts`'s own `cancel()` — called
       // by `ConnectedInterstitial.tsx`'s `handleRowInstead` immediately
@@ -1756,9 +1775,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       // `currentUnretired()` read + retire (this describe block's own
       // dedicated "the door leg" test exercises that mechanism directly)
       // that finally destroys it, right here, at THIS press.
-      await screen.findByText("This device has no Bluetooth transport.", {
-        selector: ".connected-serif-line",
-      });
+      await screen.findByText("Test scan failed");
       await userEvent.click(
         screen.getByRole("button", { name: "Row on the phone timer instead" }),
       );
@@ -1771,7 +1788,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     // `ConnectAction.tsx` retired the staged record IMMEDIATELY at
     // "Connect anyway" press — before BLE, before programming, before
     // either of `handleConnectProceed`'s own two synchronous early
-    // returns. Seed, Connect, Connect anyway, a REAL transport-missing
+    // returns. Seed, Connect, Connect anyway, a REAL Web Bluetooth scan
     // failure, Cancel: the record came back `null` on both
     // `currentUnretired()` and `loadMonitorRun()` — gone, even though
     // nothing was ever created to replace it, and every interstitial
@@ -1791,9 +1808,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       await userEvent.click(
         screen.getByRole("button", { name: "Connect anyway" }),
       );
-      await screen.findByText("This device has no Bluetooth transport.", {
-        selector: ".connected-serif-line",
-      });
+      await screen.findByText("Test scan failed");
 
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
@@ -1822,9 +1837,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
       // Nothing staged: Connect proceeds straight to the interstitial.
-      await screen.findByText("This device has no Bluetooth transport.", {
-        selector: ".connected-serif-line",
-      });
+      await screen.findByText("Test scan failed");
 
       // THE RACE: a record becomes unretired while the failure screen is
       // showing — not staged at Connect's own guard, so ConnectAction's
@@ -1877,8 +1890,8 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 // (`vi.doMock` + `vi.doUnmock` in `afterEach`, the same scoped idiom
 // `useMonitorSession.test.ts`'s own B1 describe and `lifecycleReplay.test.ts`
 // use) so every other describe in this file keeps exercising the REAL hook
-// unaffected — a global `vi.mock` here would silently turn every
-// `transport-missing` assertion elsewhere in this file into a lie.
+// unaffected — a global `vi.mock` here would silently turn every real
+// Web Bluetooth failure assertion elsewhere in this file into a lie.
 // ---------------------------------------------------------------------------
 
 describe("RC-37 ([R5]): the nudge survives Menu-at-READY, the same way it survives Cancel", () => {

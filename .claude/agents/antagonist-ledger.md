@@ -8281,3 +8281,87 @@ had passed over the same document without a single duration in it.
   the BLE scan; Cancel-from-READY terminating the erg, which is why each leg
   re-navigates to Connect Device; and no timer of any kind at READY on either
   machine.
+
+### 2026-09-06 — Phase KB keyboard/WebView-resize spec, phase-open anchor (not TRIAD)
+
+- **"Installing `@capacitor/keyboard` only does what we configured."** Believed
+  because the spec quoted six correct `Keyboard.m` line ranges — every citation
+  checked out. False: `load()` also runs `self.hideFormAccessoryBar = YES;`
+  (`Keyboard.m:187`), whose custom setter swizzles `-inputAccessoryView` to
+  `nil` process-wide, removing the ‹ › ✓ tray app-wide — the exact cost the
+  spec's own table used to REJECT `setAccessoryBarVisible(false)` (which is
+  itself a no-op, since the setter's equality guard rejects a second `YES`).
+  **Technique:** read the plugin's `load()` line by line rather than only the
+  lines the spec cites — a vendor plugin's CONFIG surface is not its BEHAVIOUR
+  surface, and the constructor is where the unconfigurable side effects live.
+  Then diff the same file across three major versions from npm to prove it is
+  longstanding, not a regression you happened to catch. And trace the
+  invocation: `packageClassList` → `CapacitorBridge.init` → `registerPlugins()`
+  → `loadPlugin` → `load()` proves it runs at launch, unconditionally.
+- **"The app capture shows: library visible 498..566, tray 566..581, keyboard
+  from 581."** Believed because a research doc transcribed it into a table and
+  a spec derived Gate 0's expected `innerHeight` from it. False: a PIL per-column
+  row scan of the same committed PNG puts the tray at ~505..556 and the keyboard
+  at 566, with list content painting at CSS 500 — ABOVE the tray, not below it.
+  **Technique:** measure the capture yourself; a table's boundary labels are
+  testimony. Scan several x-columns, not one — the left margin (outside a
+  floating pill) and a column through it disagree, and that disagreement is the
+  geometry. **Corollary that generalised:** when two in-repo documents disagree
+  about one measurement, the DELETED one may be the right one — the comment this
+  spec removed as "falsified" had the 66px accessory band correct.
+- **"Gate 0's expected number confirms the design."** Believed because the spec
+  stated a mechanism and a number in the same section. False: the mechanism
+  ("the WebView ends at the tray's top") predicts 498 and the stated number was
+  566, which is the OTHER hypothesis — under which the tray covers the whole tab
+  bar. **Technique:** compute the expected value under each competing hypothesis
+  BEFORE reading the gate's. If the gate's number matches only one, the spec has
+  silently picked a side; if it matches neither, nobody did the arithmetic. A
+  gate whose expected value cannot discriminate between success and the bad
+  outcome is RF21 with a number attached.
+- **"No screen with a text input uses `vh`/`dvh` sizing."** Believed because the
+  spec ran `grep -rln '<input\|<textarea' app/src --include='*.tsx'` and
+  cross-referenced the hits against the `vh` census. False: `.onb-screen`
+  (`min-height: 100vh`) is rendered by `KnowBaseline.tsx` and `Recommend.tsx`,
+  both of which render `<BaselineField>` → `SplitInput` → `<input>`, three
+  components deep. **Technique:** a file-level grep for `<input` is structurally
+  blind to composed inputs. Walk the component tree from each `vh` selector's
+  renderer instead — grep the CLASS NAME to find the renderers, then follow
+  their imports. (The same sweep also produced a false POSITIVE worth knowing:
+  `DurationRange.tsx` matched `<input` only inside a comment explaining why it
+  uses `role="slider"` buttons instead.)
+- **"The WebView stays shrunk while the keyboard is up."** Believed because the
+  plugin sets the frame on `keyboardWillShow`. Not established, and one
+  composition says otherwise: `CAPBridgeViewController.swift:46` does
+  `view = webView`, so the WKWebView is the view controller's ROOT VIEW and UIKit
+  resets its frame on every relayout; `_updateFrame` has exactly one caller; and
+  that caller early-returns when `paddingBottom == height`. So any rotation,
+  status-bar frame change or presented native VC un-shrinks it permanently until
+  the keyboard height CHANGES. The plugin observes no
+  `UIKeyboardWillChangeFrameNotification` and removes the webView's own
+  (`Keyboard.m:196-199`). **Technique:** find the view's OWNER before trusting a
+  `setFrame:` — if something else lays it out, a one-shot apply is not a state.
+  Then find every caller of the apply function and read its guard; a guard on
+  "the value changed" cannot restore a state that something else destroyed.
+- **"Gate 0 will catch it if the safe-area inset goes wrong."** False by
+  construction: the gate read `env(safe-area-inset-bottom)` only while the
+  WebView was shrunk, where 0 is the CORRECT answer. The documented upstream bug
+  (`ionic-team/capacitor#6430`) is that the inset is not re-evaluated and is gone
+  AFTER the keyboard closes — a frame the gate never looks at. **Technique:** for
+  every gated quantity, ask in which state a WRONG value is distinguishable from
+  a right one, and gate that state. A reading taken where both the correct and
+  the broken system print the same number is decoration.
+- **Attacked and HELD (the phase's vetted ground):** three independent fill
+  mechanisms on a fixed bar painted zero pixels on the phone (the probe read
+  as code for the flex-shrink trap — no flex, no overflow, one of the fills is
+  the fixed element's OWN box); `resize: native` is `Keyboard.m:356-358`
+  verbatim and `body` is ruled out on `:346-348`; observer lifetime is safe
+  (registered once in `load()`, removed only in `dealloc`); no session-scoped
+  state added in `app/src`; the typecheck matrix (string form unchecked, enum
+  form checked, typo caught) reproduces in both directions; the config test
+  bites (`Native` → `Body`: "expected 'body' to be 'native'"); the web arm is
+  untouched (`dist:grep` clean, no plugin string in `dist/`); the
+  `.tabbar::after` removal moves no capture (out of flow inside a fixed
+  parent). **Not established, all one device session away:** whether the
+  accessory swizzle takes on iOS 26's floating pill; whether iOS re-posts
+  `willShow` on rotation with the keyboard up; whether `capacitor#6430`'s
+  stale inset reproduces on this iOS.

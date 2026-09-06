@@ -22,6 +22,23 @@ import JustRow from "./JustRow";
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 
+function installSupportedWebBluetooth(): void {
+  Object.defineProperty(navigator, "bluetooth", {
+    configurable: true,
+    value: {
+      requestDevice: vi.fn().mockRejectedValue(new Error("Test scan failed")),
+    },
+  });
+}
+
+beforeEach(() => {
+  installSupportedWebBluetooth();
+});
+
+afterEach(() => {
+  delete (navigator as { bluetooth?: unknown }).bluetooth;
+});
+
 function renderDoor() {
   return render(
     <MemoryRouter initialEntries={["/justrow"]}>
@@ -183,11 +200,9 @@ describe("JustRow door", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    // No confirm panel — the press reached `connect()`. In jsdom the real
-    // default transport is MISSING, and the honest screen for that is the
-    // FAILED frame (review #1, finding 5): before it existed, this exact
-    // state fell through to "Connecting to monitor" forever, and this
-    // test pinned the false promise as if it were the design.
+    // No confirm panel — the press reached `connect()`. The supported Web
+    // Bluetooth fixture rejects its picker through the real default transport
+    // and hook, and the honest screen for that is the FAILED frame.
     expect(
       screen.queryByText(
         /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
@@ -197,6 +212,28 @@ describe("JustRow door", () => {
       await screen.findByRole("heading", { name: "Could not connect" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+
+  it("without Web Bluetooth, Connect is disabled and cannot stage a warning or error while an unlogged record survives", async () => {
+    delete (navigator as { bluetooth?: unknown }).bluetooth;
+    const run = unloggedTimerSession();
+    saveRun(run);
+    renderDoor();
+
+    const button = screen.getByRole("button", { name: "Connect" });
+    expect(button).toBeDisabled();
+
+    await userEvent.click(button);
+
+    expect(loadRun()).toStrictEqual(run);
+    expect(
+      screen.queryByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Could not connect" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -355,11 +392,9 @@ describe("JustRow ready frame", () => {
     renderDoor();
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    // The real hook against the default web transport lands on the FAILED
-    // frame in jsdom (no Web Bluetooth) — review #1's finding 5 made that
-    // an honest screen rather than the forever-Connecting one this test
-    // used to pin. Cancel from it returns to the door with the once-latch
-    // cleared.
+    // The real hook against the default web transport reaches the supported
+    // Web Bluetooth fixture, whose picker rejection lands on the FAILED frame.
+    // Cancel from it returns to the door with the once-latch cleared.
     expect(
       await screen.findByRole("heading", { name: "Could not connect" }),
     ).toBeInTheDocument();

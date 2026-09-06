@@ -176,6 +176,13 @@ async function twoFrames(): Promise<void> {
 mockHooks();
 
 beforeEach(() => {
+  // #319 gates both hardware buttons on `canConnectMonitor()`; jsdom has no
+  // Web Bluetooth, so the browser capability is made explicit here (the
+  // same idiom `WorkoutDetail.test.tsx` adopted), or every press is inert.
+  Object.defineProperty(navigator, "bluetooth", {
+    value: {},
+    configurable: true,
+  });
   localStorage.clear();
   resetHandoffStoreForTests();
   resetMountLeasesForTests();
@@ -185,6 +192,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete (navigator as { bluetooth?: unknown }).bluetooth;
   setNfcScript(null);
   setFakeScript(null);
   setAttemptIdMintForTests(null);
