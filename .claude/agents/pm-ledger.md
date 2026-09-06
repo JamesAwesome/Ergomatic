@@ -5308,3 +5308,58 @@ rule over the FIXED steps found one clause.
   column" rule is attributed to v4 when it is v5's — the same
   version-attribution class this ledger named at v4, recurring in the round
   that fixed it.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v7: NOT READY)
+
+Sixth gate. v7 is the timed-protocol hardening James asked for after v5's PASS;
+it is the strongest revision of the six, and the one blocker is again inside the
+fix — the fifth consecutive gate where that is true.
+
+- **A discriminator can be sound in ONE direction, and that is the sentence to
+  write.** v5 said leg 4 had no discriminator; v7 found a real one and stated it
+  as a bijection. `NFCNDEFReaderSession.h` documents 202 for backgrounding, and
+  our patch cannot produce 202 (every programmatic invalidate is Cancel-200), so
+  **202 ⇒ iOS ended it** holds absolutely. **200 ⇒ ours** does not: the phase's
+  own `BACKGROUND-OBSERVATIONS.md` records a Cancel-200 arriving BEFORE a
+  delivered pause, from a gesture whose "causal role was not identified". Before
+  writing "X = producer P", ask what ELSE emits X, and check the phase's own
+  receipts for a sighting; a one-way implication written as a mapping puts a
+  causal claim into the record that the evidence cannot carry.
+- **A blocker can be record-facing rather than operator-facing, and it still
+  blocks.** Leg 4's two outcomes are both PASS and neither changes what James
+  does — so the defect costs the walk nothing at the erg and costs it everything
+  afterwards, because producing that verdict IS the leg. When a leg's product is
+  a written conclusion, gate the conclusion as hard as the actions.
+- **Give every wait a ceiling AND a "then what", not just the one wait you were
+  asked about.** The lens that added "10-20 s is the test" to the leg with the
+  known slow path left the PRIMARY leg reading "under 10 s" with no ceiling —
+  on the same buttonless screen, with a 1 s collision window, a second
+  `stopLEScan()` cleanup bound armed at every settle, and a 10 s GATT bound
+  stacked underneath. A hold doctrine applied to the interesting leg and not to
+  the boring one is half a doctrine.
+- **A range in the table must be a range in the budget.** Extracting `(n)` from
+  the "James does" column gives 39 at the floor and 42 at the ceiling (one leg
+  carries a literal `(0-3)`); the budget sentence states 39 flat. The counts are
+  the time estimate, so a point value silently spends the slack the ceiling
+  needs. Third recount, third different failure: v3 mis-added, v4 mis-named the
+  column, v7 dropped the range.
+- **A D/H tag belongs to the VALUE, not the mechanism.** The timer table tagged
+  the reader-busy row `D`; the header documents the CONDITION (a live session)
+  and states no ~1 s grace. The operator rule built on it was conservative and
+  safe — only the tag claimed evidence it did not have.
+- **Cheap positive techniques worth keeping:** the whole 200/202 chain took four
+  greps and one `sed` — SDK header → `nfcSessionEndReason`'s switch →
+  `native/nfc.ts`'s mapping → `runNfcAttempt.ts`'s copy — and settled both
+  directions of the claim in one pass; and reading `DeviceManager.swift`'s
+  `stopScan()` proved the picker title does NOT change while devices populate,
+  which is what makes two separate operator instructions correct rather than
+  one of them stale.
+- **Fold: 133 words / 5 bullets / longest 26 — FAIL**, the first per-bullet
+  breach in this series. Series: door PR B 121 · SF PR1 246 · SF PR2 109 ·
+  DE PR1 209 · DE PR2 122 · auto-send 214 · NF v1 219 · v2 130 · v3 130 ·
+  v4 130 · v5 130 · **v7 133**. #277, fold/Record merge-order and the head SHA
+  all pass. **Version attribution failed for the third consecutive round** — the
+  Record names v7 three times and never names v6, which is a separate commit on
+  the branch. The rule has now been stated at v4, v5 and v7 without sticking:
+  when a round produces two commits, the Record names both or explicitly says
+  which one is gated.

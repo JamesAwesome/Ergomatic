@@ -184,9 +184,12 @@ unchanged, so no Gate 0.
   client application enters the background state"; correction landed
   2026-09-06 from the walk's timed-protocol hardening, which had inherited
   the earlier sentence "no operator action forces them"). The product walk's
-  leg 4 stages exactly that and reads 200 vs 202 on the console as its
-  verdict; the JS maps a bare `invalidated` to `NFC scan stopped. Try again.`,
-  which is therefore a correct outcome of a lock, beside the quiet return.
+  leg 4 stages exactly that and reads the console's ending code ONE WAY:
+  202 ⇒ iOS ended the reader (our invalidate can only produce Cancel-200),
+  while a 200 attributes nothing (`BACKGROUND-OBSERVATIONS.md` records a
+  Cancel-200 before a delivered pause from an unidentified cause). The JS
+  maps a bare `invalidated` to `NFC scan stopped. Try again.`, which is
+  therefore a correct outcome of a lock, beside the quiet return.
   The "forced generic invalidation" leg of criterion 7 remains provable by
   injection, and now is.
 

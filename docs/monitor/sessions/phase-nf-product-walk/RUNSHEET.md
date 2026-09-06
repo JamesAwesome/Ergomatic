@@ -1,6 +1,6 @@
-# NF-PRODUCT-v7 — Scan NFC product walk (v7 · 2026-09-06 · hardened as a TIMED PROTOCOL, both lenses; awaiting PM readiness PASS on this version)
+# NF-PRODUCT-v8 — Scan NFC product walk (v8 · 2026-09-06 · hardened as a TIMED PROTOCOL, both lenses; v7 PM gate: one record clause, fixed here; awaiting the PM delta PASS)
 
-**Status:** v7 — v5 had the PM readiness PASS (2026-09-06); James then asked
+**Status:** v8 — v5 had the PM readiness PASS (2026-09-06); James then asked
 for the walk to be hardened as a TIMED PROTOCOL ("minimal gaps between human
 actions so the phone screen and PM5 don't time out; and I'm not holding my
 phone up forever without understanding why"). `/harden` lens 1 (antagonist,
@@ -18,8 +18,15 @@ blocks"), templated the reports, scoped the no-tag stop rule to a real hold,
 priced every step (≈ 8 min, worst ≈ 9:30, against the 15 min cap), and found
 the `Unsupported NFC tag` evidence line unreachable on a product build, the
 control-tag read's own consequences undescribed, and the PM5 menu path
-wrong by one press. v7 needs its own PM pass because legs, blocks and
-observables changed since v5's PASS.
+wrong by one press. v7's PM gate (sixth) found one blocker, in the RECORD
+not the actions: leg 4 wrote 200/202 as a bijection, and only the 202 half
+holds — our invalidate cannot produce 202, so 202 ⇒ iOS ended it; but a 200
+has more than one producer (the phase's own `BACKGROUND-OBSERVATIONS.md`
+records a Cancel-200 arriving BEFORE a delivered pause, from a gesture whose
+cause was never identified), so a 200 attributes nothing. v8 fixes that
+clause, gives block A step 4 a ceiling and a then-what, closes the
+save-failure branch in block A, states the interaction count as a range,
+and re-tags timer row 2.
 v1 (ten legs, 25 min), v2 (the five-leg cut), v3 and v4 were each judged NOT
 READY the same day (five entries in `.claude/agents/pm-ledger.md`, "Phase NF
 product walk readiness"). v5 answers v4's three: the summary's save label depends on
@@ -207,7 +214,7 @@ entry "Phase NF product walk, timed-protocol lens, 2026-09-06".
 | # | Clock | Value | Starts | Cleared by | Can a walk gap expire it? | D/H |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Core NFC reader sheet | **60 s** hard limit → code 201 `SessionTimeout` | each **Scan NFC** tap | tag read + our stop; Cancel; backgrounding | It IS the hold budget; the only clock James can watch | D (`NFCNDEFReaderSession.h`) |
-| 2 | One reader session per system | state | any live sheet | that sheet's ending | A tap within ~1 s of a sheet closing → code 203 `SystemIsBusy` → `NFC scan stopped. Try again.` | D |
+| 2 | One reader session per system | state (the header documents the CONDITION, no grace period) | any live sheet | that sheet's ending | A tap while the previous session is still ending → code 203 `SystemIsBusy` → `NFC scan stopped. Try again.`; "count to three" is a conservative rule, not a documented value | D for the condition, H for the 3 s |
 | 3 | Backgrounding ends the reader | immediate | lock, call, swipe | — | Leg 4 stages it on purpose → code **202** | D |
 | 4 | Phone auto-lock | Never (precondition) | idle screen | any touch | The clock that killed the v5 recovery walk; no app protection on detail | H (unreadable from the host) |
 | 5 | App keep-awake | while the interstitial/Countdown/Timer/JustRow is mounted | mount | unmount | Covers NO screen this walk waits on | D |
@@ -245,8 +252,9 @@ entry "Phase NF product walk, timed-protocol lens, 2026-09-06".
 - Physical interactions, EXTRACTED mechanically from the `(n)` marks in the
   table's "James does" column ONLY (the rule: sum every `(n)` in that
   column per block; prose columns carry literals like `(200)` that are not
-  marks): **39** (A: 19, B: 11, C: 9). Typing by
-  James: the three block reports (above); paste: **0**.
+  marks; leg 3 carries a literal `(0-3)`, so the count is a RANGE): **39-42**
+  (A: 19, B: 11-14, C: 9). Typing by James: the three block reports
+  (above); paste: **0**.
 - Rowing: **one pull** (leg 1), then END. No piece is rowed to completion.
 - Reader starts: **at most 6, plus at most one control-tag read** — leg 1:
   1 (+1 retry, scoped below), leg 2: 1, leg 3: 2, leg 4: 1, leg 5: 0. The
@@ -329,7 +337,7 @@ dark-tag stop rule fire from a cause the controller created.
 | 1 | A | Primary target | On the walk workout's detail screen (the dry run left it there): PM5 reads `Ready for App Connection`, else Menu, More Options, Connect Device (1); tap **Scan NFC** (1) — if a `Replace it?` panel or an unsaved-workout warning appears instead of the sheet: Cancel, stop, report (a diagnostic-build leftover in localStorage); HOLD-A (1); at `Ready when you pull`: the photo, second camera (1); phone in the cradle (1); one pull (1); END per the END rule (2); the ONE summary screen shows: tap the LOWER button **Save without logging** (a plan is active; the top accent button `Log against plan` is NEVER tapped) (1) → Today; Library → the walk workout again (2) | **Scan NFC** above **Connect**; NO device list; the HOLD-A sequence in order (`Choosing your monitor` → `CONNECTING` → the exact PM5 name → `SENDING THE WORKOUT` → `<PM5 name> · PROGRAMMED` / `Ready when you pull`, which this runsheet calls READY); the PM5 shows the program; first frame live; END → the one summary → the save → Today. The buzz is SUPPORTING only (iOS gives its own feedback on a tag read, INFERENCE); the discriminator is picker-free + the exact name | a picker sheet; a wrong name; `Unsupported NFC tag` (named STOP: the parser has never met the real tag on the product path); never READY; wrong program |
 | 2 | A | Not advertising | Glance at the PM5: it must NOT read `Ready for App Connection`; if it is DARK, press Menu once (awake but off Connect Device — a dark PM5 passes the eye test and may also be a dark tag) (1); tap **Scan NFC** (1); HOLD-A (1); watch `Choosing your monitor` for ~10 s (up to 20 s); note the card; PM5: Menu, More Options, Connect Device → `Ready for App Connection` (3); tap **Try again** (1); at `Ready when you pull` tap **Cancel** (1) → detail; phone down face up | `Open Connect Device on this PM5, then try again.` with **Try again**, no picker, after ~10 s (up to 20 s: the scan deadline plus the stop-scan cleanup bound); Try again → CONNECTING with NO second NFC sheet → READY. **PREMISE, INFERENCE, unestablished in this repo:** that leaving Connect Device stops the PM5 advertising within the deadline. **Inconclusive branch:** if the scan CONNECTS instead (READY with no card), tap Cancel, record leg 2 INCONCLUSIVE (premise false), no retry, continue | picker; generic copy; a second sheet |
 | 3 | B | Re-arm (mandatory) | PM5: Menu, More Options, Connect Device → `Ready for App Connection` (3); **Scan NFC** (1) → HOLD-NONE: the sheet's Cancel (1); count to three; **Connect** (1) → the `Looking for your PM5` list sheet: its **Cancel**, listed or not (1) → the card `No monitor was picked.` (Try again / Row on the phone timer instead / View connection log / Cancel): tap **Cancel** (1) → detail; glance at the PM5: if it STILL reads `Ready for App Connection` leave it (nothing connected), else Menu, More Options, Connect Device (0-3); **Scan NFC** (1); HOLD-A (1); at `Ready when you pull` tap **Cancel** (1); phone down face up | one session; READY once; every button back after each cancel; the picker cancel lands on the failure screen (Try again / Row on the phone timer instead / View connection log / Cancel), never on a stuck screen | two sessions; a stuck busy state; Scan NFC missing after a cancel (see the stop rules: re-open once) |
-| 4 | C | Background during a live reader — a DECIDED leg, not an experiment | Phone away from the erg; tap **Scan NFC** (1); HOLD-LOCK: side button while the sheet is up (1); count to three; unlock (1); note the letter (a)-(d) | THREE outcomes, two of them PASS, and the console tells them apart by the ending's raw `code`: **200** = our `pause`-abort ended the reader first → quiet return, both buttons back; **202** (`SessionTerminatedUnexpectedly` — `NFCNDEFReaderSession.h`: the session ends "when the client application enters the background state") = iOS ended it first → `NFC scan stopped. Try again.` in red on the workout screen, both buttons back. Both are correct product behaviour; 202 is also a CORRECTION to the design spec's "no operator action forces 202", landed 2026-09-06. FAIL = an interstitial on resume, or no ending line at all | interstitial on resume; no ending line within 60 s (the sheet survived the lock: outcome (d), INCONCLUSIVE, not the dark-tag rule) |
+| 4 | C | Background during a live reader — a DECIDED leg, not an experiment | Phone away from the erg; tap **Scan NFC** (1); HOLD-LOCK: side button while the sheet is up (1); count to three; unlock (1); note the letter (a)-(d) | Outcomes (a)-(d) per HOLD-LOCK; (a) and (b) are PASS, and the console's raw ending `code` is read ONE WAY: **202** (`SessionTerminatedUnexpectedly` — `NFCNDEFReaderSession.h`: the session ends "when the client application enters the background state"; our own invalidate can only ever produce Cancel-200, patch comment) ⇒ iOS ended the reader → `NFC scan stopped. Try again.` in red, both buttons back; 202 is also a CORRECTION to the design spec's "no operator action forces 202", landed 2026-09-06. **200 attributes NOTHING:** our `pause`-abort is one producer, and `BACKGROUND-OBSERVATIONS.md` records a Cancel-200 arriving BEFORE a delivered pause from a cause that was never identified — on a 200 the walk records the outcome letter and the code, not a winner. FAIL = an interstitial on resume; (d) a sheet that survived the lock = INCONCLUSIVE | interstitial on resume; no ending line within 60 s (the sheet survived the lock: outcome (d), INCONCLUSIVE, not the dark-tag rule) |
 | 5 | C | Manual Connect unchanged | PM5: any button if dark, then Menu, More Options, Connect Device (3); tap **Connect** (1); the `Looking for your PM5` sheet lists the PM5 within a few seconds: tap it (1) (not listed after 15 s: the sheet's Cancel, then Cancel on the card, note it); at `Ready when you pull` tap **Cancel** (1) | today's picker; the same workout to READY | anything new |
 
 State residue, walked leg by leg on BOTH machines: leg 1 SAVES its log
@@ -362,14 +370,14 @@ within 90 s of each report. Each block is under ~280 words.
 > 1. PM5: if it doesn't read **Ready for App Connection**, press Menu, More Options, Connect Device.
 > 2. Tap **Scan NFC**. A sheet appears at once: "Hold your iPhone near the PM5." (If a panel asks "Replace it?" or warns about an unsaved workout instead: tap Cancel, stop, tell me.)
 > 3. Hold the top of the phone flat on the PM5's NFC spot until the sheet disappears. Usually 2-5 s; iOS gives up at 60.
-> 4. Bring it back and watch: Choosing your monitor (1-2 s, no buttons) → Connecting → Sending the workout → **"<PM5 name> · PROGRAMMED / Ready when you pull"**. Under 10 s. If the workout screen comes back with red text, note the words. "No NFC tag detected": if the phone honestly never reached the spot, count to three and tap Scan NFC once more; if it was there the whole time, stop and report. "Unsupported NFC tag": photograph the screen, stop, report.
+> 4. Bring it back and watch: Choosing your monitor (usually 1-2 s, no buttons — up to 20 s is still normal; past 20 s with no button, wait for one and tap Cancel, note "stuck") → Connecting → Sending the workout → **"<PM5 name> · PROGRAMMED / Ready when you pull"**. Usually under 10 s, at most about 30. If the workout screen comes back with red text, note the words. "No NFC tag detected": if the phone honestly never reached the spot, count to three and tap Scan NFC once more; if it was there the whole time, stop and report. "Unsupported NFC tag": photograph the screen, stop, report.
 > 5. Photo with the other camera: phone at Ready when you pull beside the PM5 showing the workout. Nothing is timing out; take your time.
 > 6. Phone in the cradle. One pull. The live screen appears within a second.
 > 7. Tap **END** (top right), then **TAP AGAIN** within 4 s. The log screen appears.
 > 8. Tap the LOWER button, **Save without logging**. NOT the top one, "Log against plan". Today appears in ~3 s. (Red text: tap it once more; still red, note it and carry on.)
 > 9. Library tab → NFC Walk (My Workouts). Scan NFC should be there.
 > 10. Glance at the PM5: it must NOT read Ready for App Connection. If it's dark, press Menu once.
-> 11. Tap Scan NFC, hold as in 3, bring it back. **Choosing your monitor with no buttons for 10-20 s is the test.** Then a card: "Open Connect Device on this PM5, then try again." (If it reaches Ready when you pull instead: tap Cancel, note "connected".)
+> 11. Tap Scan NFC (if step 8 stayed red, a panel warns about an unsaved workout here: tap Cancel, stop, report), hold as in 3, bring it back. **Choosing your monitor with no buttons for 10-20 s is the test.** Then a card: "Open Connect Device on this PM5, then try again." (If it reaches Ready when you pull instead: tap Cancel, note "connected".)
 > 12. PM5: Menu, More Options, Connect Device. Tap **Try again**. Connecting → Ready when you pull, no sheet.
 > 13. Tap **Cancel**. Phone down, face up. Don't press the side button.
 >
