@@ -32,7 +32,7 @@ Checked on 2026-09-06 after fetching tags: `git log v0.39.0..origin/main --oneli
 | [#318](https://github.com/JamesAwesome/Ergomatic/pull/318), `f78be4fa` | Repository design-gate guidance only. | Account in the source comment; no rower-facing item. |
 | [#319](https://github.com/JamesAwesome/Ergomatic/pull/319), `1cda41e7` | Target nudges are ▼▲. Unsupported web browsers disable Connect at every entry point; native Connect remains available. | Items 3 and 4, with item 4 explicitly scoped to web. |
 
-The merged source is authoritative for #317: `app/src/index.css` has `.tabbar::after`; the old PR body describes a withdrawn keyboard-hiding approach. Do not repeat that description in the release notes.
+The merged source is authoritative for #317: `app/src/index.css` has `.tabbar::after`; the old PR body describes a withdrawn keyboard-hiding approach. Do not repeat that description in the release notes. _(Superseded 2026-09-06, same day: the fill shipped in v0.39.1 and painted nothing on the phone — Phase KB, `docs/superpowers/specs/2026-09-06-keyboard-webview-resize-design.md`, removes `.tabbar::after` and replaces the note's second item.)_
 
 The only open PR at this check is #316, the NFC design. It is outside this release. Concept2 cohort activation is also outside this release; existing dark functionality is not announced as newly available. The latest git tag is verified. The release uses the existing Xcode CLI account; no browser sign-in is required.
 

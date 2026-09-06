@@ -11,6 +11,10 @@ import config from "../capacitor.config";
 // and still tints the backdrop from the page. Independent string literals
 // on purpose: asserting `KeyboardResize.Native` would import the constant
 // this exists to gate (RF21's first smell).
+// This reads `capacitor.config.ts`, one hop upstream of what the phone reads
+// (`ios/App/App/capacitor.config.json`, untracked); that file cannot drift
+// because `ios:build` is `vite build && npx cap sync ios`, which regenerates
+// it from this source on every build.
 describe("capacitor.config Keyboard plugin", () => {
   it("shrinks the native WebView under the keyboard (resize: native)", () => {
     expect(config.plugins?.Keyboard?.resize).toBe("native");

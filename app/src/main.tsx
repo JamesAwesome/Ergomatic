@@ -10,6 +10,12 @@ import "./index.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { restoreKeyboardAccessoryBar } from "./adapters/keyboard";
+
+// Native only (a no-op on the web): `@capacitor/keyboard` hides the ‹ › ✓
+// tray at load, and the numeric keypad has no other dismiss — see the
+// adapter. Fire-and-forget; nothing on screen waits for it.
+void restoreKeyboardAccessoryBar();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

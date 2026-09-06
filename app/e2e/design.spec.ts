@@ -11114,6 +11114,36 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
   });
 });
 
+// Phase KB (docs/superpowers/specs/2026-09-06-keyboard-webview-resize-design.md).
+// The fill this suite used to pin under the tab bar is gone — it painted
+// nothing on iOS (research doc 2026-09-06-ios-keyboard-fixed-viewport.md §2)
+// — and the keyboard is now handled by shrinking the native WebView, which
+// Chromium cannot show. What survives is the one fill-independent invariant
+// the deleted suite carried: with no keyboard, the bar's box ends exactly at
+// the viewport's bottom edge, both orientations. Two-sided on purpose: a bar
+// pushed past the edge AND a bar floating above it both fail. Mutation
+// `.tabbar { bottom: -10px }` → "expected 884 to be less than or equal to 875".
+test.describe("the tab bar's bottom edge", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-tabbar-edge@e2e.test",
+      name: "Design Edge Tester",
+    });
+    await page.goto("/library");
+    await expect(page.locator(".tabbar")).toHaveCount(1);
+  });
+
+  test("is the viewport's own, in both orientations", async ({ page }) => {
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      const bar = await stableBoundingBox(page.locator(".tabbar"));
+      if (bar == null) throw new Error("the tab bar did not render");
+      expect(bar.y + bar.height).toBeLessThanOrEqual(vp.height + 1);
+      expect(bar.y + bar.height).toBeGreaterThanOrEqual(vp.height - 1);
+    }
+  });
+});
+
 test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
   const C2_UNLINKED = {
     available: true,
