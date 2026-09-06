@@ -5156,3 +5156,57 @@ step leaves the operator on.
   passes because the disclaimer ("Not yet proven on the erg") sits bolded
   INSIDE the opening line rather than in a later bullet — that placement is
   the pattern to copy.
+
+## Phase NF product walk readiness, 2026-09-06 (NF-PRODUCT-v3: NOT READY)
+
+v3 fixed every v2 finding and introduced two new ones INSIDE the fixes. All
+four blockers are in the fix work itself, not in the ground v2 cleared.
+
+- **A fix is a new claim and gets the gate the original claim got.** v2 said
+  "leg 1 leaves an unretired `MonitorRun`"; v3's fix — save the log — was
+  written without walking the save path, and prescribed a Save on a second
+  screen that does not exist (END navigates to ONE `PostWorkoutSummary` whose
+  save goes straight to `/today`). The rule v2 wrote ("check each step against
+  the screen the previous step leaves you on") has to be re-run over the
+  FIXED steps, not only the ones that were wrong.
+- **A restated discriminator is re-derived from the emitter, not from the
+  mechanism.** v3 correctly demoted the haptic and reached for the console
+  instead — then named a `cause` field that `NfcDiagnosticTrace.emit` never
+  writes (its keys are event/generation/processUptimeMs/operation/
+  domainCategory/code), on a path (`stopScanning` → plain `session.invalidate()`)
+  that supplies no cause at all. The patch's OWN comment killed it in one
+  line: "Core NFC reports every programmatic invalidation with the Cancel
+  code (200)." Read the emitter's field list before promising an operator a
+  field.
+- **A recount is a countable claim: extract the numbers, do not re-add them by
+  eye.** v3 "recounted" 38 (A 11, B 21, C 6); mechanically summing every `(n)`
+  in its own table gives 39 (A 11, B 20, C 8). This is v1's reader-start
+  breach recurring in the fix that answered it. Where per-block TIME estimates
+  are declared "INFERENCE from action counts", the counts are the budget —
+  and a budget summing exactly to the cap has no slack to absorb the error.
+- **Check the capture rule against the state the capture needs.** v3's one
+  photo targets READY "taken between blocks, never mid-leg" — READY exists
+  only mid-leg-1. RF7's family: the capture rule and the capture target have
+  to be satisfiable at the same instant.
+- **A build command with no ABSOLUTE directory is unverifiable, and the
+  evidence is in the git status.** v3's block says "from `app/`" while the
+  walk builds a WORKTREE head; the v2 gate's own build left the MAIN checkout
+  carrying exactly `app/ios/App/App/Info.plist` and
+  `app/ios/App/App.xcodeproj/project.pbxproj`. `git restore` and
+  `git status --short` are checkout-scoped, so in the wrong tree the cleanup
+  check passes while cleaning nothing. Also diff the block against the
+  operator's SHELL: `(cd x && y)` is a subshell in bash and a command
+  substitution in fish.
+- **Cheap positive technique, worth keeping:** verifying "`agvtool new-version
+  -all` touches exactly these two files" took two greps —
+  `INFOPLIST_FILE`/`CURRENT_PROJECT_VERSION` counts in the pbxproj plus
+  `find -name Info.plist` — and was then corroborated for free by the residue
+  a previous gate's build had left in `git status`. A build's file footprint
+  is a countable property, not a judgement.
+- **Fold: 130 words / 5 bullets / longest 24 — PASS** (body unchanged since
+  the v2 gate; #277, fold/Record merge-order agreement and the install-identity
+  line all pass). One should-fix: the Record's v1/v2 paragraph still carries
+  "28 counted interactions" and "the haptic as the operator observable" —
+  both superseded, the second withdrawn by this PM's own v2 entry. Replace a
+  superseded canonical figure; do not leave it standing under a "current is
+  v3" sentence.

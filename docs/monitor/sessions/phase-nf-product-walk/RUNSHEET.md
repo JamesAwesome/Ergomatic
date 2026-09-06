@@ -1,15 +1,17 @@
-# NF-PRODUCT-v3 — Scan NFC product walk (v3 · 2026-09-06 · awaiting PM readiness PASS)
+# NF-PRODUCT-v4 — Scan NFC product walk (v4 · 2026-09-06 · awaiting PM readiness PASS)
 
-**Status:** DRAFT v3. v1 (ten legs, 25 min) and v2 (the five-leg cut) were
-both judged NOT READY by the `product-manager` on 2026-09-06 (entries in
-`.claude/agents/pm-ledger.md`, "Phase NF product walk readiness"). v2's
-shape stands — **five legs, three blocks, ≤ 15 minutes, ≤ 6 reader starts**,
-every retired leg named with its substitute evidence (design spec, "Native
-hardware walk") — and v3 fixes what v2's gate found by BUILDING and by
-walking the state machine: the build identity rule was inert (the plist
-holds a literal), the build reached no server (no `VITE_API_BASE`), leg 3
-strands the operator on the failure screen, and leg 1's unsaved row would
-have hijacked leg 2's first tap.
+**Status:** DRAFT v4. v1 (ten legs, 25 min), v2 (the five-leg cut) and v3
+were each judged NOT READY by the `product-manager` on 2026-09-06 (three
+entries in `.claude/agents/pm-ledger.md`, "Phase NF product walk
+readiness"). v2's shape stands — **five legs, three blocks, ≤ 15 minutes,
+≤ 6 reader starts**, every retired leg named with its substitute evidence
+(design spec, "Native hardware walk"). v3 fixed the build (agvtool stamp,
+`ios:build`'s env) and the state-machine breaks; v4 fixes what v3's fixes
+introduced: leg 1 prescribed a Save on a screen that does not exist (END →
+ONE summary → Save → Today), leg 4 named a diagnostic field the emitter
+never writes, the interaction recount did not reconcile with its own table
+(now extracted mechanically), and the one photo was specified at a state
+that exists only mid-leg.
 Requires (1) the product PR's automated gates green on the required tree,
 (2) the signed device build verified (entitlement + usage description),
 (3) a `product-manager` readiness PASS attached to THIS versioned runsheet,
@@ -36,21 +38,31 @@ on the product build.
   time of the go**; this section is re-run against that head and its SHA
   written here before the invitation (v1 was verified at `9bd11520`, merged
   with `origin/main` at `2a6ba780`).
-- Build, from `app/` — the SAME env `pnpm ios:build` supplies, minus its
-  tag-derived version stamp (v2's gate found a hand-rolled line had dropped
-  `VITE_API_BASE`, so the native build fetched relative to the WebView origin
-  and could reach no library, workout or save):
+- Build — run by the CONTROLLER (bash), never handed to James, in the
+  WORKTREE's app directory, absolute:
+  `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/phase-nf-nfc-design/app`
+  (the v2 gate's build ran in the MAIN checkout and left its stamp there;
+  `git restore` and `git status` are checkout-scoped and pass in the wrong
+  tree while cleaning nothing). The SAME env `pnpm ios:build` supplies, minus
+  its tag-derived version stamp (v2's gate found a hand-rolled line had
+  dropped `VITE_API_BASE`, so the native build fetched relative to the
+  WebView origin and could reach no library, workout or save — and leg 1's
+  Save is a real `POST /api/logs`):
 
-  ```
+  ```bash
+  cd /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/phase-nf-nfc-design/app
   VITE_API_BASE=https://ergomatic.waffle.haus \
   VITE_GOOGLE_IOS_CLIENT_ID=$(bash scripts/ios-google-client-id.sh ios/App/App/Info.plist) \
   pnpm exec vite build && npx cap sync ios
-  (cd ios/App && agvtool new-version -all 9001)
+  cd ios/App; agvtool new-version -all 9001; cd ../..
   xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
     -destination 'generic/platform=iOS' -derivedDataPath <scratch> \
     -allowProvisioningUpdates build
   git restore ios/App/App/Info.plist ios/App/App.xcodeproj/project.pbxproj
-  git status --short   # must be empty: the 9001 stamp is never committed
+  git status --short   # must be empty; if not, the file to look at is
+                       # ios/App/CapApp-SPM/Package.swift (cap sync rewrites it)
+  xcrun devicectl device install app --device <id> <scratch>/Build/Products/Debug-iphoneos/App.app
+  xcrun devicectl device info apps --device <id> | grep -A2 haus.waffle.ergomatic
   ```
 
   `VITE_GOOGLE_IOS_CLIENT_ID` is derived the way `ios:release` derives it;
@@ -107,7 +119,8 @@ on the product build.
   the keep-awake control). **System Haptics ON** (Settings → Sounds &
   Haptics), or the buzz observation cannot produce a NO.
 - PM5 on and on **Connect Device** at the start of legs 1, 3 (its final
-  scan) and 5; leg 2 turns it off and back on. **Whether a PM5 resumes
+  scan) and 5; leg 2 leaves Connect Device and returns to it (a menu move,
+  never a power cycle). **Whether a PM5 resumes
   advertising after a disconnect is not established anywhere in this repo
   (INFERENCE: it does not), so every connect is preceded by an explicit
   "PM5: Menu → Connect Device" step** rather than assumed.
@@ -120,10 +133,11 @@ on the product build.
 - TOTAL operator wall-clock cap: **15 minutes** from go, captures included.
   At the cap: STOP, preserve evidence, release James.
 - Per-block estimates (INFERENCE from action counts and the v8 measured
-  1:46 for one scan-and-connect; not measured): A ≈ 5 min, B ≈ 6 min,
-  C ≈ 4 min. Sum 15, at the cap; the cap wins.
-- Physical interactions, counted step by step from the table: **38**
-  (A: 11, B: 21, C: 6). Typing/paste by James: **0**.
+  1:46 for one scan-and-connect; not measured): A ≈ 4 min, B ≈ 6 min,
+  C ≈ 3 min. Sum 13, two minutes under the cap; the cap wins.
+- Physical interactions, EXTRACTED mechanically from the `(n)` marks in the
+  table (v3 re-added by eye and was off by one): **39**
+  (A: 11, B: 20, C: 8). Typing/paste by James: **0**.
 - Rowing: **one pull** (leg 1), then END. No piece is rowed to completion.
 - Reader starts: **at most 6** — leg 1: 1 (+1 retry, scoped below), leg 2:
   1, leg 3: 2, leg 4: 1, leg 5: 0. A control-tag read is a seventh start and
@@ -134,8 +148,10 @@ on the product build.
   not get the phone to the logo before the sheet ended (his own miss). A
   no-tag ending on a PROPER hold is NOT retried — it goes straight to the
   control-tag stop rule below. Nothing else is re-scanned.
-- Captures: one photo (leg 1: phone READY beside the PM5 showing the
-  program), taken between blocks, never mid-leg.
+- Captures: one photo, INSIDE leg 1 at READY, before the pull (the only
+  instant the state exists): phone READY beside the PM5 showing the
+  program. Priced at ~10 s; the controller says "photo now" as its own
+  step, and no other capture is taken mid-leg.
 
 ## The walk workout
 
@@ -152,10 +168,10 @@ w 250m max
 
 | # | Block | Leg | James does | Observable (pass) | Fail / inconclusive |
 | --- | --- | --- | --- | --- | --- |
-| 1 | A | Primary target | Library → the walk workout (2); tap **Scan NFC** (1); hold the phone to the PM5 logo (1); when READY shows, one pull (1); tap END, then TAP AGAIN (2); on the summary tap **Save** (1); on the Log screen tap **Save** (1) → Today; Library → the walk workout again (2) | **Scan NFC** above **Connect**; NO device list; the header reads CONNECTING and then the exact PM5 name (a sequence, not one state); READY; the PM5 shows the program; first frame live; END → summary → Log → Today. The buzz is a SUPPORTING signal only (iOS gives its own feedback on a tag read, INFERENCE); the discriminator is picker-free + the exact name | a picker sheet; a wrong name; `Unsupported NFC tag` (named STOP: the parser has never met the real tag on the product path); never READY; wrong program |
+| 1 | A | Primary target | Library → the walk workout (2); tap **Scan NFC** (1); hold the phone to the PM5 logo (1); at READY: the photo (1); one pull (1); tap END, then TAP AGAIN (2); the ONE summary screen shows: tap **Save** (1) → Today; Library → the walk workout again (2) | **Scan NFC** above **Connect**; NO device list; the header reads CONNECTING and then the exact PM5 name (a sequence, not one state); READY; the PM5 shows the program; first frame live; END → the one summary → Save → Today. The buzz is a SUPPORTING signal only (iOS gives its own feedback on a tag read, INFERENCE); the discriminator is picker-free + the exact name | a picker sheet; a wrong name; `Unsupported NFC tag` (named STOP: the parser has never met the real tag on the product path); never READY; wrong program |
 | 2 | B | Not advertising | PM5: Menu, leave Connect Device (2); tap **Scan NFC** (1), hold to the tag (1); read the card; PM5: Menu → Connect Device (2); tap **Try again** (1); at READY tap **Cancel** (1) → detail | `Open Connect Device on this PM5, then try again.` with **Try again**, no picker; Try again → CONNECTING with NO second NFC sheet → READY | picker; generic copy; a second sheet |
-| 3 | B | Re-arm (mandatory) | PM5: Menu → Connect Device (2); **Scan NFC** (1) → Cancel the sheet (1) → **Connect** (1) → cancel the picker (1) → the interstitial's failure screen shows: tap **Cancel** (1) → detail → PM5: Menu → Connect Device (2) → **Scan NFC** (1), hold to the tag (1); at READY tap **Cancel** (1) | one session; READY once; every button back after each cancel; the picker cancel lands on the failure screen (Try again / Row on the phone timer / Cancel), never on a stuck screen | two sessions; a stuck busy state; Scan NFC missing after a cancel |
-| 4 | C | Background during a live reader (bounded feasibility experiment) | Tap **Scan NFC** (1); press the side button while the sheet is up (1); unlock (1) | quiet return, both buttons back, no late interstitial — OR a recorded "lock did not deliver pause". The console discriminates NATIVELY: a `pause`-driven abort calls `stopScanning({attemptId})`, which the patch records as a forced ending with a cause; a Core NFC-driven ending carries its own code and no cause. (There is no `console.*` in the JS NFC path; the WebView console carries nothing from the trace.) | interstitial appears on resume |
+| 3 | B | Re-arm (mandatory) | PM5: Menu → Connect Device (2); **Scan NFC** (1) → Cancel the sheet (1) → **Connect** (1) → cancel the picker (1) → the interstitial's failure screen shows: tap **Cancel** (1) → detail → PM5: Menu → Connect Device (2) → **Scan NFC** (1), hold to the tag (1); at READY tap **Cancel** (1) | one session; READY once; every button back after each cancel; the picker cancel lands on the failure screen (Try again / Row on the phone timer instead / Cancel), never on a stuck screen | two sessions; a stuck busy state; Scan NFC missing after a cancel |
+| 4 | C | Background during a live reader (bounded feasibility experiment) | Tap **Scan NFC** (1); press the side button while the sheet is up (1); unlock (1) | quiet return, both buttons back, no late interstitial — OR a recorded "lock did not deliver pause". The console discriminates by TIMING plus code, not by any field: a `pause`-driven abort calls `stopScanning({attemptId})` → plain `invalidate()`, and Core NFC reports EVERY programmatic invalidation with the same Cancel code (200) as a user cancel (the patch's own comment), so the `ndef.ending` line's code cannot tell them apart; what can is WHEN it lands — at the lock instant (pause delivered, our abort) vs at unlock or at the Core NFC timeout (pause not delivered). The controller timestamps the lock from James's "locked" and reads the ending's `processUptimeMs` against it. Observational; a no-verdict is a recorded result. (There is no `console.*` in the JS NFC path; the WebView console carries nothing from the trace.) | interstitial appears on resume |
 | 5 | C | Manual Connect unchanged | PM5: Menu → Connect Device (2); tap **Connect** (1); pick the PM5 (1); at READY tap **Cancel** (1) | today's picker; the same workout to READY | anything new |
 
 State residue, walked leg by leg: leg 1 SAVES its log before block B, so no
