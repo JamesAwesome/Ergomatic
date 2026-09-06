@@ -526,7 +526,10 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     expect(readsB.body).toStrictEqual({ slugs: [] });
 
     const readsA = await asA().get("/api/article-reads");
-    expect(readsA.body).toStrictEqual({ slugs: ["effort-scale"] });
+    // Phase DE PR 2: the GET lists the legacy `pain-scale` alias beside it.
+    expect(readsA.body).toStrictEqual({
+      slugs: ["effort-scale", "pain-scale"],
+    });
   });
 
   it("article-reads DELETE is isolated per user: A's unmark never touches B's reads, and is idempotent", async () => {
@@ -545,7 +548,10 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     ).toBe(204);
 
     const readsA = await asA().get("/api/article-reads");
-    expect(readsA.body).toStrictEqual({ slugs: ["effort-scale"] });
+    // Phase DE PR 2: the GET lists the legacy `pain-scale` alias beside it.
+    expect(readsA.body).toStrictEqual({
+      slugs: ["effort-scale", "pain-scale"],
+    });
     const readsB = await asB().get("/api/article-reads");
     expect(readsB.body).toStrictEqual({ slugs: ["workout-types"] });
   });

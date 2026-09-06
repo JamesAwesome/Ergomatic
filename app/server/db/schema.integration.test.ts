@@ -158,19 +158,15 @@ describe("migration 0008: the workouts wu-strip", () => {
         ref: { effort: "max" },
       },
     ];
-    const [row] = await db
-      .insert(workouts)
-      .values({
-        userId: u.id,
-        title: "Legacy warm-up workout",
-        type: "AT",
-        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
-        difficulty: "easy",
-        effort: 2,
-        source: "user",
-        steps: legacySteps,
-      })
-      .returning();
+    const inserted = await db.execute<{ id: string }>(
+      // Raw SQL against the PRE-0024 table: the column is still `pain` here
+      // (0024 renames it), so the typed insert helper cannot be used.
+      sql`insert into "workouts"
+          ("user_id", "title", "type", "difficulty", "pain", "source", "steps")
+          values (${u.id}, 'Legacy warm-up workout', 'AT', 'easy', 2, 'user', ${JSON.stringify(legacySteps)}::jsonb)
+          returning "id"`,
+    );
+    const row = inserted.rows[0]!;
 
     // The real, full folder — this is the boot-time migrate() call that
     // ships 0008. Only 0008 is new (0000-0007's hashes already match what
@@ -238,7 +234,7 @@ describe("migration 0008: the workouts wu-strip", () => {
         difficulty: "easy",
         effort: 1,
         source: "user",
-        steps,
+        steps: steps,
       })
       .returning();
 
@@ -406,7 +402,8 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
       })
       .returning();
 
-    // Seeded against the PRE-0009 schema (held/effort both NOT NULL, no
+    // Seeded against the PRE-0009 schema (held/pain both NOT NULL — the
+    // column is `pain` until 0024 renames it, so raw SQL names it; no
     // thumbs column exists yet) — the only shape a real row could have had
     // before this migration. Raw SQL, not the typed `sessionLogs` insert
     // helper: drizzle's insert builder always lists EVERY column the TS
@@ -417,7 +414,7 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
     // reaches the assertion this test exists to make.
     const inserted = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "held", "effort", "steps")
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
           values (${u.id}, 'Legacy reflection row', 'AT', 'under', 3, '[]'::jsonb)
           returning "id"`,
     );
@@ -565,7 +562,7 @@ describe("migration 0010: hero numbers and plan linkage", () => {
     // right below, while the table still lacks the five new columns.
     const inserted = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "held", "effort", "thumbs", "steps")
+          ("user_id", "workout_title", "workout_type", "held", "pain", "thumbs", "steps")
           values (${u.id}, 'Pre-migration session', 'AT', 'held', 2, null, '[]'::jsonb)
           returning "id"`,
     );
@@ -718,7 +715,7 @@ describe("migration 0011: the series column", () => {
     // pre-0011 table. Must run before the full migrate() call below.
     const inserted = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "held", "effort", "steps")
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
           values (${u.id}, 'Pre-0011 session', 'AT', 'held', 2, '[]'::jsonb)
           returning "id"`,
     );
@@ -866,7 +863,7 @@ describe("migration 0012: the ended_by column", () => {
     // pre-0012 table. Must run before the full migrate() call below.
     const inserted = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "held", "effort", "steps")
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
           values (${u.id}, 'Pre-0012 session', 'AT', 'held', 2, '[]'::jsonb)
           returning "id"`,
     );
@@ -949,7 +946,7 @@ describe("migration 0012: the ended_by column", () => {
     await expect(
       db.execute(
         sql`insert into "session_logs"
-            ("user_id", "workout_title", "workout_type", "held", "effort", "steps", "ended_by")
+            ("user_id", "workout_title", "workout_type", "held", "pain", "steps", "ended_by")
             values (${u.id}, 'Bad ended_by', 'AT', 'held', 2, '[]'::jsonb, 'reconnecting')`,
       ),
     ).rejects.toThrow();
@@ -1191,7 +1188,7 @@ describe("migration 0016: the machine summary columns", () => {
     // real pre-0016 table. Must run before the full migrate() call below.
     const inserted = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "held", "effort", "steps")
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
           values (${u.id}, 'Pre-0016 session', 'AT', 'held', 2, '[]'::jsonb)
           returning "id"`,
     );
@@ -1363,7 +1360,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
     // call below.
     const inserted = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
-          ("user_id", "workout_title", "workout_type", "held", "effort", "steps")
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
           values (${u.id}, 'Pre-0018 session', 'AT', 'held', 2, '[]'::jsonb)
           returning "id"`,
     );
