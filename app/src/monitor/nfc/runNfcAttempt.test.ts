@@ -94,7 +94,10 @@ describe("runNfcAttempt", () => {
     ],
     [
       { kind: "invalidated", cause: "tagFailure" },
-      { kind: "inline-error", copy: "NFC scan stopped. Try again." },
+      {
+        kind: "inline-error",
+        copy: "Couldn't scan the monitor tag. Try again.",
+      },
     ],
     [
       { kind: "invalidated" },

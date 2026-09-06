@@ -515,7 +515,7 @@ async function injectFakeMonitor(
   program = FIXTURE_PROGRAM,
   // Phase NF: drives the fake's targeted-scan failure kinds (spec §5 copy).
   targetedScan?:
-    "match" | "not-advertising" | "ambiguous" | "already-connected",
+    "match" | "not-advertising" | "ambiguous" | "already-connected" | "pending",
 ): Promise<void> {
   await page.addInitScript(
     ({ program, events, deviceName: name, delayWritesMs, targetedScan }) => {
@@ -2271,6 +2271,51 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
     await expect(page.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
+  test("the targeted-scan screen names the target and its Cancel returns to detail with both buttons (follow-on Gate 0 §2)", async ({
+    page,
+  }) => {
+    const title = "NFC Looking Walk";
+    // `pending`: the fake's targeted scan settles only on abort, which is
+    // the one way to hold this screen open (the real scan lasts up to 20 s).
+    await injectFakeMonitor(
+      page,
+      NAME,
+      buildStoryEvents(),
+      FIXTURE_PROGRAM,
+      "pending",
+    );
+    await injectNfcScript(page, {
+      kind: "records",
+      records: pm5NfcFixtureRecords(),
+    });
+    await signInViaBackdoor(page, {
+      email: "nfc-looking@e2e.test",
+      name: "NFC Tester",
+    });
+    await setBaselines(page);
+    await importBulk(page, BULK_TEXT(title));
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await page.getByRole("button", { name: "Scan NFC" }).click();
+    await expect(
+      page.locator(".connected-serif-line", {
+        hasText: `Looking for ${NAME}`,
+      }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Keep the PM5 on and close by.")).toBeVisible();
+    await expect(page.getByText("Choosing your monitor")).toHaveCount(0);
+    const cancel = page.locator(".connected-interstitial-actions .button-l2", {
+      hasText: "Cancel",
+    });
+    await expect(cancel).toHaveCount(1);
+    // The house L2 geometry, measured (design assertion lives here because
+    // this is the one spec that carries the NFC fixture and the fake).
+    expect((await cancel.boundingBox())!.height).toBe(52);
+    await cancel.click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Scan NFC" })).toBeVisible();
+  });
+
   test("a PM5 that is not advertising: the approved copy, Try again, and Cancel back to detail with Connect", async ({
     page,
   }) => {
@@ -2294,11 +2339,18 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
     await importBulk(page, BULK_TEXT(title));
     await page.locator(".workout-row").filter({ hasText: title }).click();
     await page.getByRole("button", { name: "Scan NFC" }).click();
+    // Two lines with a break between them (follow-on Gate 0, James
+    // 2026-09-06); the name is the fake's advertised name.
     await expect(
       page.locator(".connected-serif-line", {
-        hasText: "Open Connect Device on this PM5, then try again.",
+        hasText: "Couldn't reach PM5 432331249 Row.",
       }),
     ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.locator(".connected-body-line", {
+        hasText: "Check nothing else is connected to it, then try again.",
+      }),
+    ).toBeVisible();
     await expect(
       page.getByText("End whatever is showing on the monitor"),
     ).toHaveCount(0);

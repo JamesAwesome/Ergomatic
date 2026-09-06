@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test, expect, type Page } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
 
@@ -83,6 +86,84 @@ async function injectFakeMonitor(page: Page): Promise<void> {
     { program: FIXTURE_PROGRAM, events: freeRowEvents() },
   );
 }
+
+function pm5NfcFixtureRecordsForJustRow(): {
+  tnf: number;
+  type: number[];
+  payload: number[];
+}[] {
+  const raw = JSON.parse(
+    readFileSync(
+      path.join(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../docs/monitor/nfc/pm5-tag-2026-09-04-iphone.json",
+      ),
+      "utf8",
+    ),
+  ) as { records: { tnf: number; type: number[]; payload: number[] }[] };
+  return raw.records.map((r) => ({
+    tnf: r.tnf,
+    type: r.type,
+    payload: r.payload,
+  }));
+}
+
+// Phase NF follow-on (Gate 0 §1): Scan NFC on the Just Row door, driven
+// through the scripted reader and the fake radio's `scanTarget` — the same
+// route workout detail proves, on the door James noticed it missing from.
+test.describe("Just Row: Scan NFC (390×844)", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("Scan NFC above Connect; a valid tag reaches Ready when you pull with no picker", async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      ({ program, events, records }) => {
+        window.__pm5FakeScript__ = {
+          program,
+          events,
+          deviceName: "PM5 432331249 Row",
+        };
+        window.__nfcScript__ = {
+          capability: "supported",
+          outcome: { kind: "records", records },
+        };
+        Object.defineProperty(navigator, "bluetooth", {
+          value: {},
+          configurable: true,
+        });
+      },
+      {
+        program: FIXTURE_PROGRAM,
+        events: freeRowEvents(),
+        records: pm5NfcFixtureRecordsForJustRow(),
+      },
+    );
+    await signInViaBackdoor(page, {
+      email: "justrow-nfc@e2e.test",
+      name: "Just Row NFC Tester",
+    });
+    await page.goto("/justrow");
+    const nfc = page.getByRole("button", { name: "Scan NFC" });
+    const connect = page.getByRole("button", { name: "Connect" });
+    await expect(nfc).toBeVisible();
+    const [nfcBox, connectBox] = await Promise.all([
+      nfc.boundingBox(),
+      connect.boundingBox(),
+    ]);
+    expect(nfcBox!.height).toBe(56);
+    expect(connectBox!.height).toBe(56);
+    expect(connectBox!.y - (nfcBox!.y + nfcBox!.height)).toBe(12);
+    expect(
+      await nfc.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe("rgb(73, 98, 79)");
+    await nfc.click();
+    await expect(
+      page.getByRole("heading", { name: "Ready when you pull" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Choose your monitor")).toHaveCount(0);
+  });
+});
 
 test.describe("Just Row: the whole flow", () => {
   test("Today → Connect → live free row → Menu end → log door → history", async ({

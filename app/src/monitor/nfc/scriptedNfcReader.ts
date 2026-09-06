@@ -22,8 +22,9 @@ import { decodeNfcEvent } from "./nfcBridge";
 
 export interface NfcScript {
   /** `"rejects"` makes the probe itself fail (a plugin that will not
-   *  load), the `capability-failed` path. */
-  capability: NfcCapability | "rejects";
+   *  load), the `capability-failed` path; `"hangs"` never answers, the
+   *  `capability-timed-out` path. */
+  capability: NfcCapability | "rejects" | "hangs";
   /** What the reader delivers for the attempt. `records` are delivered as
    *  a native-shaped `nfcEvent` carrying the attempt ID and pass through
    *  the production bridge, exactly like the plugin's own event. */
@@ -36,6 +37,10 @@ export interface NfcScript {
   /** Optional: deliver the outcome only once this resolves, so a test can
    *  interleave an abort or a background transition first. */
   gate?: Promise<void>;
+  /** Optional: called the moment a session is requested (after the
+   *  `session-requested` trace entry), so a test can time an abort AFTER the
+   *  reader is live rather than racing the registration that precedes it. */
+  onStart?: () => void;
 }
 
 export interface ScriptedNfcReader extends NfcReader {
@@ -52,11 +57,14 @@ export function createScriptedNfcReader(script: NfcScript): ScriptedNfcReader {
     capability: () =>
       script.capability === "rejects"
         ? Promise.reject(new Error("scripted capability rejection"))
-        : Promise.resolve(script.capability),
+        : script.capability === "hangs"
+          ? new Promise<NfcCapability>(() => undefined)
+          : Promise.resolve(script.capability),
     async readOne({ attemptId, signal, trace }: NfcReadOptions) {
       if (signal.aborted) throw new NfcAbortError();
       trace.record("session-requested");
       starts += 1;
+      script.onStart?.();
       let aborted = false;
       const onAbort = (): void => {
         aborted = true;

@@ -1868,12 +1868,40 @@ describe("targeted failures (Phase NF)", () => {
     return { ...view, session: current, onExit, onRowInstead, onEnded };
   }
 
+  it("target-not-advertising: the first line is the serif line, the second the body line, the DETAIL panel keeps both", () => {
+    renderTargeted({
+      phase: "failed",
+      error: connectedError({
+        reason: "target-not-advertising",
+        detail:
+          "Couldn't reach PM5 999.\nCheck nothing else is connected to it, then try again.",
+      }),
+    });
+    expect(screen.getByText("Couldn't reach PM5 999.")).toHaveClass(
+      "connected-serif-line",
+    );
+    expect(
+      screen.getByText(
+        "Check nothing else is connected to it, then try again.",
+      ),
+    ).toHaveClass("connected-body-line");
+    expect(
+      screen.queryByText(
+        "End whatever is showing on the monitor, then try again.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.classList.contains("connected-detail-line") === true &&
+          el.textContent ===
+            "Couldn't reach PM5 999.\nCheck nothing else is connected to it, then try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
   it.each([
-    [
-      "target-not-advertising",
-      "Open Connect Device on this PM5, then try again.",
-      true,
-    ],
     [
       "target-already-connected",
       "End this PM5's current connection, then try again.",
@@ -1915,12 +1943,36 @@ describe("targeted failures (Phase NF)", () => {
     },
   );
 
+  it("picking on the NFC route names the target and offers Cancel; Cancel cancels the session and exits (follow-on Gate 0 §2)", async () => {
+    const { session: s, onExit } = renderTargeted({ phase: "picking" });
+    expect(screen.getByText("Looking for PM5 432331249 Row")).toHaveClass(
+      "connected-serif-line",
+    );
+    expect(screen.getByText("Keep the PM5 on and close by.")).toHaveClass(
+      "connected-body-line",
+    );
+    expect(screen.queryByText("Choosing your monitor")).toBeNull();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveClass("button-l2");
+    await userEvent.click(cancel);
+    expect(s.cancel).toHaveBeenCalledTimes(1);
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it("picking on the PICKER route is unchanged: the backdrop, no Cancel", () => {
+    renderInterstitial({ phase: "picking" });
+    expect(screen.getByText("Choosing your monitor")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.queryByText(/Looking for/)).toBeNull();
+  });
+
   it("mounts with connect(request) — the SAME request object — and Try again repeats it", async () => {
     const { session: s } = renderTargeted({
       phase: "failed",
       error: connectedError({
         reason: "target-not-advertising",
-        detail: "Open Connect Device on this PM5, then try again.",
+        detail:
+          "Couldn't reach PM5 999.\nCheck nothing else is connected to it, then try again.",
       }),
     });
     expect(s.connect).toHaveBeenCalledTimes(1);

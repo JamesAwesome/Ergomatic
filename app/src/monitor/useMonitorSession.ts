@@ -994,7 +994,7 @@ export interface MonitorSession {
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
    *  header). */
-  /** Phase NF: `request` selects discovery. Omitted (every pre-NF caller,
+  /** Phase NF: `request` selects discovery. Omitted (pre-NF callers;
    *  JustRow included) means today's picker under a freshly minted attempt
    *  ID; an `advertised-name` request runs the picker-free exact-name scan
    *  through `TargetedScanTransport.scanTarget` and fails closed —
@@ -1671,10 +1671,6 @@ function mapRadioFailure(err: unknown): ConnectedError {
 const TARGETED_FAILURE_COPY: Readonly<
   Record<string, { reason: ConnectedError["reason"]; detail: string }>
 > = {
-  TargetMonitorNotAdvertisingError: {
-    reason: "target-not-advertising",
-    detail: "Open Connect Device on this PM5, then try again.",
-  },
   TargetAlreadyConnectedError: {
     reason: "target-already-connected",
     detail: "End this PM5's current connection, then try again.",
@@ -1700,9 +1696,27 @@ const TARGETED_FAILURE_COPY: Readonly<
   },
 };
 
-function mapTargetedFailure(err: unknown): ConnectedError {
+/** The not-advertising card's two lines, separated by `\n` — every failure
+ *  card that renders `detail` splits on it (the interstitial, Just Row).
+ *  Built from the request's exact name (follow-on Gate 0, James
+ *  2026-09-06: the PM5 advertises whenever it is awake and not already
+ *  connected, on any screen, so the old "Open Connect Device" instruction
+ *  asked for something the rower does not need to do). Not exported: no
+ *  test may import the string it exists to pin (RF21). */
+function notAdvertisingDetail(exactName: string): string {
+  return `Couldn't reach ${exactName}.\nCheck nothing else is connected to it, then try again.`;
+}
+
+function mapTargetedFailure(err: unknown, exactName: string): ConnectedError {
   const name = err instanceof Error ? err.name : "";
   const raw = err instanceof Error ? err.message : String(err);
+  if (name === "TargetMonitorNotAdvertisingError") {
+    return {
+      reason: "target-not-advertising",
+      detail: notAdvertisingDetail(exactName),
+      raw,
+    };
+  }
   const hit = TARGETED_FAILURE_COPY[name];
   if (hit !== undefined) return { ...hit, raw };
   return mapRadioFailure(err);
@@ -4979,7 +4993,7 @@ export function useMonitorSession(
               return;
             }
             connectingRef.current = false;
-            fail(mapTargetedFailure(err));
+            fail(mapTargetedFailure(err, discovery.exactName));
             bestEffort(transport.disconnect());
             return;
           } finally {

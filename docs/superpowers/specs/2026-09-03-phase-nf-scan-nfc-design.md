@@ -50,8 +50,10 @@ candidate; the established Bluetooth transport, `useMonitorSession`, PM5 driver,
    duration timer.
 6. NFC narrows discovery to the tag's advertised PM5 name. It never falls back
    to a general picker or a strongest-signal guess.
-7. If that PM5 is not advertising, show:
-   `Open Connect Device on this PM5, then try again.`
+7. If that PM5 cannot be found, show (follow-on, 2026-09-06, superseding the
+   original `Open Connect Device on this PM5, then try again.`):
+   `Couldn't reach <name>.` / `Check nothing else is connected to it, then
+   try again.` — two lines.
 8. A non-PM5 record shows: `Unsupported NFC tag`.
 9. The NFC route uses the same stale/unlogged-session safety authorization as
    **Connect**. It cannot bypass or duplicate that guard.
@@ -394,8 +396,8 @@ does not invent a landscape reflow.
 | wrong/malformed record    | workout detail inline error | `Unsupported NFC tag`                                                                   |
 | user cancelled sheet      | workout detail              | quiet return; no error                                                                  |
 | system reader timeout     | workout detail inline error | `No NFC tag detected. Try again.`                                                       |
-| reader invalidated        | workout detail inline error | `NFC scan stopped. Try again.`                                                          |
-| target not advertising    | connected failure card      | approved copy; exact-target **Try again** or **Cancel**                                 |
+| reader invalidated        | workout detail inline error | `NFC scan stopped. Try again.`; cause `tagFailure` → `Couldn't scan the monitor tag. Try again.` (follow-on) |
+| target not advertising    | connected failure card      | `Couldn't reach <name>.` / `Check nothing else is connected to it, then try again.` (follow-on, 2026-09-06); exact-target **Try again** or **Cancel** |
 | exact target already held | connected failure card      | `End this PM5's current connection, then try again.`; exact retry                       |
 | duplicate exact targets   | connected failure card      | `More than one PM5 has this name. Use Connect.`; no targeted retry                      |
 | target scan interrupted   | connected failure card      | `Connection interrupted. Try again.`; exact retry or **Cancel**                         |
@@ -405,8 +407,8 @@ does not invent a landscape reflow.
 `NFCReaderUsageDescription` is:
 `Scan a PM5 to connect and program your workout.`
 
-The approved not-advertising copy remains
-`Open Connect Device on this PM5, then try again.` The new targeted error
+The not-advertising copy is the follow-on's two-line card (ruling 7 above;
+the original line was withdrawn after the erg walk). The new targeted error
 reasons suppress the existing generic `End whatever is showing...` sentence.
 For an already-held target, **Try again** repeats exact-name discovery after the
 rower ends the existing connection; it never invokes manual discovery. The
@@ -1089,9 +1091,10 @@ and an NFC tap wakes a sleeping PM5.** This overturns this spec's premise
 "the PM5 advertises while on Connect Device" and makes the approved copy
 `Open Connect Device on this PM5, then try again.` an instruction the rower
 does not need: the only real not-advertising states are "asleep" (which the
-NFC tap itself cures) and "already connected to something else". The copy
-change is Gate 0 work for the follow-on PR (ROADMAP NF block); nothing in the
-targeted-scan mechanism depends on the premise.
+NFC tap itself cures) and "already connected to something else". **The copy
+LANDED in the follow-on PR** (Gate 0 approved 2026-09-06; two lines, the
+target's exact name); nothing in the targeted-scan mechanism depends on the
+premise.
 
 Keep the redacted NFC capture and connection log under `docs/monitor/sessions/`
 or `docs/monitor/nfc/` per the hardware-walk contract. Teardown the per-worktree

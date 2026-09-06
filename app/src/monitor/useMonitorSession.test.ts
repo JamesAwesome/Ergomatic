@@ -15111,7 +15111,9 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
       [
         "TargetMonitorNotAdvertisingError",
         "target-not-advertising",
-        "Open Connect Device on this PM5, then try again.",
+        // Built from the request's exact name (`targeted()` = DEVICE_NAME),
+        // two lines with a break between them (follow-on Gate 0, James).
+        `Couldn't reach ${DEVICE_NAME}.\nCheck nothing else is connected to it, then try again.`,
       ],
       [
         "TargetAlreadyConnectedError",
