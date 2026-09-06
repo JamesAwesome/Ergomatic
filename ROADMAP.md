@@ -548,9 +548,10 @@ a DEVIATIONS row. Anchor pass RUN 2026-09-06: two BLOCKING (the
 
 **Gates:** antagonist anchor pass on the spec (the surface census in §4 is
 the target); PM open/close SKIPPED aloud (pure UI); **Gate 0 on Kaito** —
-Detail scrolled (the reported frame) beside v0.39.2, Library scrolled,
-landscape (expected 0px), one non-scrolling screen at rest (expected
-identical) — contrast stated as numbers (spec §5).
+the seven captures in spec §5 (Detail scrolled beside v0.39.2, Library
+scrolled, landscape at 0px, one non-scrolling screen at rest, Releases
+scrolled inside its overlay panel, Dark Mode, the half-blurred straddle)
+— contrast stated as numbers.
 
 **Exit:** Gate 0 approved; e2e green, no web capture moved; DEVIATIONS row;
 rides the next tag (no release of its own).

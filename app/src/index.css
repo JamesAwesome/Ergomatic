@@ -494,7 +494,8 @@ button:disabled {
    where two device captures show no status bar at all:
    docs/design/findings/2026-09-02-timer-mode-landscape.png and the
    2026-08-17 measurement recorded further down this file). `pointer-events:
-   none` so a 59px full-width strip at z 30 never swallows a tap meant for
+   none` so a full-width strip the inset tall (62px on a Dynamic Island
+   phone) at z 30 never swallows a tap meant for
    content that scrolled under it — nothing to do with the status-bar
    scroll-to-top gesture, which UIKit dispatches to the native scroll view
    and no DOM property can reach. z 30 sits above `.tabbar` (20) and

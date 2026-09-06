@@ -11131,8 +11131,10 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
 // seam the connected-gutter tests use — and pins that the strip's height IS
 // the inset and that a scrolled row passes under it. That proves the CSS
 // reacts to an inset; what iOS reports is Gate 0's to see (anchor pass B2).
-// Mutations: drop `pointer-events: none` → "expected 'auto' to be 'none'";
-// hardcode `height: 20px` → "expected 20 to be 62".
+// Mutations: drop `pointer-events: none` → "Expected: none, Received: auto";
+// hardcode `height: 20px` → "Expected: 0, Received: 20" (the no-inset line);
+// `max-height: 40px` → "Expected: 62, Received: 40" (the with-inset line —
+// the 20px mutant never reaches it).
 test.describe("the status-bar backdrop", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {
@@ -11141,6 +11143,9 @@ test.describe("the status-bar backdrop", () => {
     });
     await page.goto("/library");
     await expect(page.locator(".tabbar")).toHaveCount(1);
+    // The list has height only once both hooks land on "ready" (Library.tsx's
+    // own LOADING-race note); scrolling before that is a silent no-op.
+    await page.locator(".workout-row").first().waitFor();
   });
 
   test("is one fixed, tap-inert strip at the top, stacked above the tab bar", async ({
@@ -11190,8 +11195,8 @@ test.describe("the status-bar backdrop", () => {
     const box = (await strip.boundingBox())!;
     expect(box.y).toBe(0);
     expect(box.height).toBe(INSET);
-    // Scroll a row up under the band and prove the two boxes overlap —
-    // the strip is what obscures it, not padding.
+    // Scroll a row up under the band and prove a row's box intersects the
+    // STRIP's box (not the constant) — the strip is what obscures it.
     await page.evaluate(() => window.scrollTo(0, 400));
     await page.evaluate(
       () => new Promise((r) => requestAnimationFrame(() => r(null))),
@@ -11201,7 +11206,8 @@ test.describe("the status-bar backdrop", () => {
     let overlapped = false;
     for (let i = 0; i < n && !overlapped; i++) {
       const r = await rows.nth(i).boundingBox();
-      if (r && r.y < INSET && r.y + r.height > 0) overlapped = true;
+      if (r && r.y < box.y + box.height && r.y + r.height > box.y)
+        overlapped = true;
     }
     expect(overlapped).toBe(true);
     await client.send("Emulation.setSafeAreaInsetsOverride", {

@@ -261,7 +261,7 @@ strip on iOS is UNMEASURED (no primary source found either way) and Gate
 
 ## 8. Exit
 
-- Gate 0 approved on the four captures.
+- Gate 0 approved on the seven captures in §5.
 - Unit + client green; e2e green with the new assertion and its recorded
   mutation; no web capture moved (0px strip).
 - DEVIATIONS row present; ROADMAP ledger bullet at close.
