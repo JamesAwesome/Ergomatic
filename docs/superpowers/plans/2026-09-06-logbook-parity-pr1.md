@@ -365,6 +365,12 @@ and add, beside `noteSummaryHalf`:
       return;
     }
     run.additionalSummary = decoded;
+    // ONLY when the drain is already waiting on this frame. Unconditional
+    // reached the `verificationBytes === null` arm from a pre-terminal burst
+    // (the keystone's burst-first race) and armed a reconcile against a run
+    // not yet closed — observations lost, avg-pace verdict fired twice
+    // (burstReplay + oracleCorpusReplay went red, measured 2026-09-06).
+    if (run.additionalSummaryWaited) maybeReconcileImmediately(run);
   }
 ```
 
@@ -1359,9 +1365,9 @@ git commit -m "LP PR1 T8: the fake's split frames carry the PM5's own watts, cal
 ### Task 9: Cross-characteristic identities over the corpus (real oracles, not mirrors)
 
 **Files:**
-- Create: `app/src/monitor/logbookParityReplay.test.ts`
+- Modify: `app/src/monitor/oracleCorpusReplay.test.ts` (a new `describe` at the end)
 
-**Interfaces:** reuses `oracleCorpusReplay.test.ts`'s pattern (`loadCapture`, `createReplayTransport`, `createSubscribedDriver`, `createEventLog`) — copy the `replayThroughDriver` helper and the capture → program table from that file rather than importing test-private helpers (mirror its import block exactly).
+**Why not a new file (RF10, found at execution):** `src/monitor` test files never import each other — each re-declares its programs verbatim — so a new file would re-transcribe seven `WorkoutProgram`s. The corpus file already holds every program, `loadCapture`, `replayThroughDriver` and `fromHexString`; the identities are the same kind of evidence it exists for. Captures carrying 0x003A are SIX, not nine: rests-finished, smoke-terminated, boundaries-terminated, keystone, rest-boundary, end-on-interval-1 (`grep -c '"rx".*ce06003a'` per file, 2026-09-06 — menu-at-ready, pyramid, session-1-keystone and step-2 carry none). Two of the six (smoke-terminated, end-on-interval-1) end before any boundary, so the driver-side per-actual checks are conditional there while the raw-bytes identities still run.
 
 - [ ] **Step 1: Write the test** (it is expected to PASS from the start on the retention code Tasks 2–3 landed; its value is that it can go RED — Step 3 proves it)
 
