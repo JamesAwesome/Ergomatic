@@ -443,6 +443,44 @@ export function parseAdditionalSummaryRest(
 }
 
 /**
+ * 0x003A — C2 rowing end-of-workout additional summary 1, 19 bytes
+ * (BLE rev 1.30 p.22; docs/monitor/pm5-interface-notes.md §23). Phase LP
+ * reads the four fields the logbook shows and the upload carries: Total
+ * Calories [8..9], Watts [10..11], Total Rest Distance [12..14], Avg
+ * Calories [17..18]. Each offset is confirmed by an identity we did not
+ * compute (spec 2026-09-06-logbook-parity §1.1): the per-split 0x0038
+ * calories sum to [8..9] on 9/9 committed captures, [10..11] is within
+ * 1 W of round(2.80/(t/d)³) from 0x0039's own time and distance, and
+ * [12..14] is the same field `parseAdditionalSummaryRest` already
+ * verified against the PM5's memory screen (147 + 95 = 242).
+ *
+ * Interval Rest Time [15..16] is deliberately NOT returned: it reads 0 on
+ * every committed capture including genuine r60 rests, so its meaning is
+ * undetermined and an unobserved field never ships as a stored value
+ * (spec §1.1, §2.2). This widens the I5 "no reader" narrowing above on
+ * purpose — these four fields now have readers (the record, the screen,
+ * the upload), the rest of the frame still does not.
+ */
+export interface AdditionalSummary {
+  totalCalories: number;
+  avgWatts: number;
+  totalRestDistanceMeters: number;
+  avgCalPerHour: number;
+}
+
+export function parseAdditionalSummary(
+  bytes: Uint8Array,
+): AdditionalSummary | null {
+  if (bytes.length < 19) return null;
+  return {
+    totalCalories: readU16LE(bytes, 8),
+    avgWatts: readU16LE(bytes, 10),
+    totalRestDistanceMeters: readU24LE(bytes, 12),
+    avgCalPerHour: readU16LE(bytes, 17),
+  };
+}
+
+/**
  * The merged view of all five status characteristics. A driver (a later
  * task) builds one of these per "tick" by spreading each characteristic's
  * latest decoded value (`{ ...prev, ...parseGeneralStatus(bytes) }`, etc.)
