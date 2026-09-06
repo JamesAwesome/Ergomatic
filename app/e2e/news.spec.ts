@@ -207,7 +207,7 @@ test("/news/releases lists every version, newest first", async ({ page }) => {
   // deliberately fails here — that is this pin's job, and it is why the
   // title no longer names a number that goes stale every tag.
   const versions = page.locator(".news-release-version");
-  await expect(versions).toHaveCount(39);
+  await expect(versions).toHaveCount(40);
   await expect(versions.nth(0)).toContainText(NEWEST_RELEASE_VERSION);
   await expect(versions.nth(1)).toContainText("v0.38.0");
   await expect(versions.nth(2)).toContainText("v0.37.0");
