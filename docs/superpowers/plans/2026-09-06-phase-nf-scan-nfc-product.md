@@ -29,6 +29,7 @@ Copied from the spec; every task's requirements include this section.
 - The checked-in NFC patch is part of the safety mechanism; its `nfcSessionEnd` carries `cause: "multipleTags" | "tagFailure"` with `reason: "invalidated"` on controller-forced endings (spec "Reader-ending seam").
 - `pnpm build` + `pnpm dist:grep` prove the web bundle contains no NFC, haptics or scripted-reader code (string-literal needles, both directions).
 - All work in the worktree `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/phase-nf-nfc-design`, branch `codex/phase-nf-nfc-design`. Before every commit run `git rev-parse --show-toplevel` and require that path. No push, merge or release without James's word. Commit before every mutation probe; revert probes with `git checkout -- <file>` only after `git status` shows the file clean (RF22).
+- Paste-test findings folded into the blocks: `@typescript-eslint/only-throw-error` rejects `throw poisoned` on a module-level `let` (copy to a `const` first); a manual test clock must drain ~25 microtasks per `advance()` because `scanTarget` crosses five awaits before it schedules its deadline; attach a `.catch` to a promise you expect to reject before advancing fake timers past its rejection.
 - Lint rules the paste-test hit: `vitest/prefer-strict-equal` (write `toStrictEqual`, never `toEqual`) and TypeScript excess-property checks on object literals typed as `Transport` (build a `Transport & TargetedScanTransport` variable before passing it).
 - Test commands (from `app/`): `pnpm test --project unit`, `pnpm test --project client`; a single file: `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`; the native patch: `cd app/node_modules/@capgo/capacitor-nfc && xcodebuild -scheme CapgoCapacitorNfc -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' test`. Read both the `Test Files` and `Tests` summary lines.
 
@@ -669,8 +670,7 @@ describe("scanTarget (Phase NF)", () => {
         if (timer.at <= clock.now) timer.fn();
         else timers.push(timer);
       }
-      await Promise.resolve();
-      await Promise.resolve();
+      for (let i = 0; i < 25; i += 1) await Promise.resolve();
     };
     return { t, advance };
   }
@@ -1114,7 +1114,7 @@ Note the `requestLEScan` mock resolves immediately; real `BleClient.requestLESca
 
 - [ ] **Step 4: Run to verify pass**
 
-Same command as Step 2. Expected: PASS, plus the whole file's existing tests still green. Then `pnpm typecheck && pnpm lint`.
+Same command as Step 2. Expected: PASS. Measured on the paste-test (2026-09-06, this worktree): `Tests 64 passed (64)` for the whole file (47 existing + 17 new). Then `pnpm typecheck && pnpm lint`.
 
 - [ ] **Step 5: Mutations (commit first; each restored before the next)**
 

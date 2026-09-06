@@ -43,10 +43,14 @@ import {
   SPLIT_INTERVAL_DATA_UUID,
   TRANSMIT_CHARACTERISTIC_UUID,
 } from "../../../domain/monitor/pm5/uuids.js";
-import type {
-  DiscoveredMonitor,
-  Transport,
+import {
+  isValidAttemptId,
+  type DiscoveredMonitor,
+  type TargetedMonitorDiscoveryRequest,
+  type TargetedScanTransport,
+  type Transport,
 } from "../../../domain/monitor/types.js";
+import { isValidPm5AdvertisingName } from "../../../domain/monitor/nfc.js";
 import { NAMELESS_MONITOR_CAPTION } from "../deviceCaption.js";
 
 // `Transport.write`/`subscribe` take a bare characteristic id (design's own
@@ -127,6 +131,144 @@ class ScanTimeoutError extends Error {
     );
     this.name = "ScanTimeoutError";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Phase NF (design spec 2026-09-03 §5): the targeted, picker-free discovery
+// operation and the operation tail it shares with the manual picker.
+//
+// POLICY CONSTANTS, not platform facts. Gate -1 measured the first matching
+// `requestLEScan` callback 103 ms after scan start and the next duplicate
+// 1 ms later (`docs/monitor/sessions/phase-nf-gate-minus-one/
+// REPAIRED-NORMAL.md`). The deadline is ~100x the observed match latency,
+// the collision window ~1000x the observed duplicate spacing. Tests pin both
+// with INDEPENDENT literals (9_999/10_000, 999/1_000), never these names
+// (RF21: a test importing the constant it gates proves nothing about it).
+export const TARGET_SCAN_DEADLINE_MS = 10_000;
+export const TARGET_COLLISION_WINDOW_MS = 1_000;
+
+export class TargetMonitorNotAdvertisingError extends Error {
+  constructor() {
+    super("The named PM5 was not advertising within the targeted deadline.");
+    this.name = "TargetMonitorNotAdvertisingError";
+  }
+}
+export class TargetAlreadyConnectedError extends Error {
+  constructor() {
+    super(
+      "A device with the exact PM5 name is already connected to this phone.",
+    );
+    this.name = "TargetAlreadyConnectedError";
+  }
+}
+export class TargetMonitorAmbiguousError extends Error {
+  constructor() {
+    super("More than one device advertised the exact PM5 name.");
+    this.name = "TargetMonitorAmbiguousError";
+  }
+}
+export class TargetScanInterruptedError extends Error {
+  constructor() {
+    super("The targeted scan was aborted.");
+    this.name = "TargetScanInterruptedError";
+  }
+}
+export class ScanCleanupFailedError extends Error {
+  constructor(raw: string) {
+    super(`stopLEScan() failed: ${raw}`);
+    this.name = "ScanCleanupFailedError";
+  }
+}
+export class TargetedRequestInvalidError extends Error {
+  constructor(reason: string) {
+    super(`Invalid targeted discovery request: ${reason}`);
+    this.name = "TargetedRequestInvalidError";
+  }
+}
+
+// THE OPERATION TAIL (spec §5). One module-level FIFO shared by targeted
+// scans and the manual picker: each operation captures its predecessor's
+// drain promise and installs its own BEFORE its first native radio call,
+// and only that operation ever releases its own drain (the `release`
+// closure is never shared). A targeted drain follows `requestLEScan`
+// through the matching `stopLEScan()` completion; a manual drain follows
+// the RAW picker pipeline, not the outer UI timeout race: `stopLEScan()`
+// cannot dismiss the native sheet, so a timed-out picker keeps every later
+// scan waiting here until the rower's Cancel or pick settles it.
+//
+// `poisoned` is set by a `stopLEScan()` rejection and NEVER cleared in this
+// process: cleanup failure outranks match, timeout, abort and ambiguity,
+// nothing connects, and every later scan rejects without a native call
+// (the restart-required copy upstairs). Module scope on purpose — the
+// same argument `initPromise` above makes: this ownership must survive an
+// interstitial unmount and a fresh transport instance.
+let operationTail: Promise<void> = Promise.resolve();
+let poisoned: ScanCleanupFailedError | null = null;
+
+/** Test seam only. `capacitorBle.test.ts` re-imports this module per test
+ *  (`vi.resetModules()`), which already gives it a fresh tail; this exists
+ *  for suites that cannot. */
+export function resetOperationTailForTests(): void {
+  operationTail = Promise.resolve();
+  poisoned = null;
+}
+
+function captureTail(): { prior: Promise<void>; release: () => void } {
+  const prior = operationTail;
+  let release!: () => void;
+  operationTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { prior, release };
+}
+
+function validateTargetedRequest(
+  request: unknown,
+): TargetedMonitorDiscoveryRequest {
+  if (typeof request !== "object" || request === null) {
+    throw new TargetedRequestInvalidError("not an object");
+  }
+  const r = request as Partial<TargetedMonitorDiscoveryRequest>;
+  if (r.kind !== "advertised-name")
+    throw new TargetedRequestInvalidError("kind");
+  if (!isValidAttemptId(r.attemptId)) {
+    throw new TargetedRequestInvalidError("attemptId");
+  }
+  if (!isValidPm5AdvertisingName(r.exactName)) {
+    throw new TargetedRequestInvalidError("exactName");
+  }
+  return {
+    kind: "advertised-name",
+    attemptId: r.attemptId,
+    exactName: r.exactName,
+  };
+}
+
+/** Decodes one `requestLEScan` callback from `unknown` — a TypeScript
+ *  declaration is not runtime validation. A missing `localName` is a valid
+ *  NONMATCH (the field comes from the live advertisement packet and is
+ *  simply absent from some packets); an invalid `deviceId` is dropped
+ *  before it can enter the deduplication set. */
+function decodeScanResult(
+  value: unknown,
+): { deviceId: string; localName: string | null } | null {
+  if (typeof value !== "object" || value === null) return null;
+  const device = (value as { device?: unknown }).device;
+  if (typeof device !== "object" || device === null) return null;
+  const deviceId = (device as { deviceId?: unknown }).deviceId;
+  if (typeof deviceId !== "string" || deviceId.length === 0) return null;
+  const localName = (value as { localName?: unknown }).localName;
+  return {
+    deviceId,
+    localName: typeof localName === "string" ? localName : null,
+  };
+}
+
+export interface CapacitorBleTransportOptions {
+  targetDeadlineMs?: number;
+  collisionWindowMs?: number;
+  setTimeout?: typeof setTimeout;
+  clearTimeout?: typeof clearTimeout;
 }
 
 /** Plugin prose in, our vocabulary out. POSITIVE MATCHES ONLY (REVIEW I1):
@@ -266,29 +408,36 @@ const CRITICAL_CHARACTERISTICS: ReadonlySet<string> = new Set([
 // module-scope JS variable survives that either way).**
 let initPromise: Promise<void> | null = null;
 
-export function createCapacitorBleTransport(): Transport & {
-  /** See the returned object's own doc comment on this method. */
-  onCharacteristicDegraded(
-    cb: (characteristicId: string, message: string) => void,
-  ): () => void;
-  /** Phase LL Task 3 (§3, F-6), "say so in the ring": names the OUTCOME of
-   *  this transport's own most recent `scan()` call — whether the
-   *  already-connected guard offered a device iOS already held (no picker
-   *  ever opened) or found nothing and degraded to today's flow (the
-   *  picker ran as it always has). `null` before any `scan()` has run.
-   *  A structural extension, not a core `Transport` method — same idiom as
-   *  `onCharacteristicDegraded`/`liveness.ts`'s `markSuspect`, forwarded
-   *  through `withLiveness`'s own `...inner` spread unchanged.
-   *  `useMonitorSession.ts`'s own `hasDescribeLastScan` check reads this
-   *  once a connection's log exists (after `transport.connect()`
-   *  succeeds) and records it — the guard itself has no log to write to at
-   *  `scan()` time, since a session's log is not created until a device is
-   *  actually found (`connect()`'s own ordering). NOT part of the file
-   *  list's original three named files; called out as a finding per the
-   *  task-3 brief's own "no new exported surface is expected... unless
-   *  necessary" instruction. */
-  describeLastScan(): string | null;
-} {
+export function createCapacitorBleTransport(
+  options: CapacitorBleTransportOptions = {},
+): Transport &
+  TargetedScanTransport & {
+    /** See the returned object's own doc comment on this method. */
+    onCharacteristicDegraded(
+      cb: (characteristicId: string, message: string) => void,
+    ): () => void;
+    /** Phase LL Task 3 (§3, F-6), "say so in the ring": names the OUTCOME of
+     *  this transport's own most recent `scan()` call — whether the
+     *  already-connected guard offered a device iOS already held (no picker
+     *  ever opened) or found nothing and degraded to today's flow (the
+     *  picker ran as it always has). `null` before any `scan()` has run.
+     *  A structural extension, not a core `Transport` method — same idiom as
+     *  `onCharacteristicDegraded`/`liveness.ts`'s `markSuspect`, forwarded
+     *  through `withLiveness`'s own `...inner` spread unchanged.
+     *  `useMonitorSession.ts`'s own `hasDescribeLastScan` check reads this
+     *  once a connection's log exists (after `transport.connect()`
+     *  succeeds) and records it — the guard itself has no log to write to at
+     *  `scan()` time, since a session's log is not created until a device is
+     *  actually found (`connect()`'s own ordering). NOT part of the file
+     *  list's original three named files; called out as a finding per the
+     *  task-3 brief's own "no new exported surface is expected... unless
+     *  necessary" instruction. */
+    describeLastScan(): string | null;
+  } {
+  const deadlineMs = options.targetDeadlineMs ?? TARGET_SCAN_DEADLINE_MS;
+  const windowMs = options.collisionWindowMs ?? TARGET_COLLISION_WINDOW_MS;
+  const schedule = options.setTimeout ?? setTimeout;
+  const unschedule = options.clearTimeout ?? clearTimeout;
   let deviceId: string | null = null;
   // See `describeLastScan()`'s own doc comment above.
   let lastScanOutcome: string | null = null;
@@ -427,6 +576,18 @@ export function createCapacitorBleTransport(): Transport & {
     // see the queue, so no test guards this — new code in the `picking`
     // phase gets read against this comment.
     async scan(): Promise<DiscoveredMonitor[]> {
+      // Phase NF: a poisoned tail rejects before any work, and the manual
+      // drain attaches to the RAW pipeline below (never to the timeout
+      // race) — see the operation-tail comment on `operationTail`.
+      const poisonBefore = poisoned;
+      if (poisonBefore !== null) throw poisonBefore;
+      const { prior, release } = captureTail();
+      await prior;
+      const poisonAfter = poisoned;
+      if (poisonAfter !== null) {
+        release();
+        throw poisonAfter;
+      }
       // Order is load-bearing, not style (REVIEW I2): `isEnabled` REJECTS
       // if ever called uninitialized (`Plugin.swift:74-80`, `:598-604`)
       // with a message no classifier arm matches, and `initialize`
@@ -515,7 +676,127 @@ export function createCapacitorBleTransport(): Transport & {
           },
         ];
       })();
+      pipeline.then(release, release);
       return raceScanTimeout(pipeline);
+    },
+
+    async scanTarget(
+      requestValue: TargetedMonitorDiscoveryRequest,
+      signal: AbortSignal,
+    ): Promise<DiscoveredMonitor[]> {
+      const poisonBefore = poisoned;
+      if (poisonBefore !== null) throw poisonBefore;
+      const request = validateTargetedRequest(requestValue);
+      if (signal.aborted) throw new TargetScanInterruptedError();
+      const { prior, release } = captureTail();
+      // The terminal/abort owner is installed before any await.
+      let settled = false;
+      let scanning = false;
+      let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+      let windowTimer: ReturnType<typeof setTimeout> | null = null;
+      const seen = new Set<string>();
+      const matches: DiscoveredMonitor[] = [];
+      type Outcome = { ok: DiscoveredMonitor[] } | { err: Error };
+      let finish!: (outcome: Outcome) => void;
+      const outcome = new Promise<Outcome>((resolve) => {
+        finish = resolve;
+      });
+      const settle = (result: Outcome): void => {
+        if (settled) return;
+        settled = true;
+        if (deadlineTimer !== null) unschedule(deadlineTimer);
+        if (windowTimer !== null) unschedule(windowTimer);
+        // Every settle path awaits `stopLEScan()` before the caller hears
+        // anything, so BleClient's serialized queue never carries a stale
+        // scan into the next operation.
+        const stop = scanning ? BleClient.stopLEScan() : Promise.resolve();
+        stop.then(
+          () => finish(result),
+          (err: unknown) => {
+            poisoned = new ScanCleanupFailedError(
+              err instanceof Error ? err.message : String(err),
+            );
+            finish({ err: poisoned });
+          },
+        );
+      };
+      const onAbort = (): void =>
+        settle({ err: new TargetScanInterruptedError() });
+      signal.addEventListener("abort", onAbort, { once: true });
+      const interruptedIfAborted = (): void => {
+        if (signal.aborted) throw new TargetScanInterruptedError();
+      };
+      try {
+        await prior;
+        interruptedIfAborted();
+        const poisonAfter = poisoned;
+        if (poisonAfter !== null) throw poisonAfter;
+        await ensureInitialized();
+        interruptedIfAborted();
+        // `isEnabled` AFTER initialize (the manual path's own I2 rule) and
+        // BEFORE the held-device query.
+        if (!(await BleClient.isEnabled())) {
+          throw new BluetoothOffError("Bluetooth is powered off.");
+        }
+        interruptedIfAborted();
+        // The plugin drops already-connected peripherals from scan
+        // callbacks, so a held exact-name device would otherwise time out
+        // as "not advertising". Cached `name` is used ONLY to refuse —
+        // never to select: a held device is never returned from here.
+        const held = await BleClient.getConnectedDevices([
+          ROWING_SERVICE_UUID,
+          CONTROL_SERVICE_UUID,
+        ]);
+        interruptedIfAborted();
+        if (held.some((d) => d.name === request.exactName)) {
+          throw new TargetAlreadyConnectedError();
+        }
+        lastScanOutcome = "targeted scan by exact advertised name";
+        scanning = true;
+        // No `name` (the plugin filters cached `CBPeripheral.name`), no
+        // `services` (0x0030 is not advertised; CoreBluetooth ANDs the
+        // filters): scan broadly at the radio, settle only on the exact
+        // live `localName`.
+        await BleClient.requestLEScan(
+          { allowDuplicates: true },
+          (raw: unknown) => {
+            if (settled) return;
+            const result = decodeScanResult(raw);
+            if (result === null) return;
+            if (result.localName !== request.exactName) return;
+            if (seen.has(result.deviceId)) return;
+            seen.add(result.deviceId);
+            matches.push({ id: result.deviceId, name: request.exactName });
+            if (matches.length === 1) {
+              if (deadlineTimer !== null) unschedule(deadlineTimer);
+              deadlineTimer = null;
+              // Keep scanning for the collision window: a second DISTINCT
+              // device with the exact name fails closed.
+              windowTimer = schedule(
+                () => settle({ ok: [matches[0]!] }),
+                windowMs,
+              );
+            } else {
+              settle({ err: new TargetMonitorAmbiguousError() });
+            }
+          },
+        );
+        // A callback may already have fired while `requestLEScan` was
+        // resolving; only an empty, unsettled scan gets the deadline.
+        if (matches.length === 0 && !settled) {
+          deadlineTimer = schedule(
+            () => settle({ err: new TargetMonitorNotAdvertisingError() }),
+            deadlineMs,
+          );
+        }
+      } catch (err: unknown) {
+        settle({ err: err instanceof Error ? err : new Error(String(err)) });
+      }
+      const result = await outcome;
+      signal.removeEventListener("abort", onAbort);
+      release();
+      if ("err" in result) throw result.err;
+      return result.ok;
     },
 
     async connect(id: string): Promise<void> {
