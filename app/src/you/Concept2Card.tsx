@@ -175,6 +175,8 @@ export default function Concept2Card({ email }: { email: string }) {
   async function connect(): Promise<void> {
     setBusy(true);
     setOutcome(null);
+    // A failed mode write was about the link this attempt replaces.
+    setModeFailed(false);
     try {
       const result = await startLink();
       setOutcome(result);
@@ -198,6 +200,10 @@ export default function Concept2Card({ email }: { email: string }) {
       // operation that succeeded" is the defect being avoided).
       if (res.ok || res.status === 404) {
         setOutcome(null);
+        // The A7 line ("Couldn't change this") was about THIS link's mode;
+        // without a clear here it outlived an unlink and reappeared under a
+        // freshly linked account's control (harden lens 1 F2 / lens 2 F4).
+        setModeFailed(false);
         // Invariant I4 needs no clear site here any more: an earlier
         // revision reset a weight-class draft on unlink so a relink would
         // ask again. There is no draft, and nothing about the removed
@@ -237,9 +243,11 @@ export default function Concept2Card({ email }: { email: string }) {
   // other tap" disarmer, kept from the button this control replaces).
   async function setMode(autoSend: boolean): Promise<void> {
     disarm();
+    // Any tap on the control retires the last write's failure line, the
+    // pressed segment included — the rower has acted since it was drawn.
+    setModeFailed(false);
     if (link !== null && link.linked && link.autoSend === autoSend) return;
     setModeBusy(true);
-    setModeFailed(false);
     try {
       const res = await api("/api/concept2/link", {
         method: "PATCH",

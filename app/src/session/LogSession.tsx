@@ -867,7 +867,11 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
         let logId: string | null = null;
         try {
           const parsed = (await res.json()) as { id?: unknown };
-          if (typeof parsed.id === "string") logId = parsed.id;
+          // `""` is no more a row than an absent id (harden lens 2: the
+          // absent / empty / valued read this call site had skipped).
+          if (typeof parsed.id === "string" && parsed.id !== "") {
+            logId = parsed.id;
+          }
         } catch {
           logId = null;
         }

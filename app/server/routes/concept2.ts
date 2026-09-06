@@ -1,5 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { Router, type Request, type RequestHandler } from "express";
+import {
+  Router,
+  type Request,
+  type RequestHandler,
+  type Response,
+} from "express";
 import type { LogSource } from "../../domain/types.js";
 import { bearerToken, cookieToken } from "../auth/middleware.js";
 import type { SessionStore, SessionUser } from "../auth/sessions.js";
@@ -256,7 +261,7 @@ export function createConcept2Router({
   // reading the row before either writes, with no lock on `session_logs`.
   // Concept2's own 409 dedup is a vendor heuristic, not our guard. Callers
   // for one `userId:logId` chain here: a later caller waits for the earlier
-  // one's RESPONSE to finish, then runs the handler itself — and finds the
+  // one's HANDLER to settle, then runs the handler itself — and finds the
   // row already carrying `c2_result_id`, so it takes the already-sent
   // short-circuit and answers the same `resultId`. No response is captured
   // or replayed; the stored row is the shared result. Scoped to THIS router
@@ -264,32 +269,50 @@ export function createConcept2Router({
   // `--scale` impossible; one instance per test app so route tests share no
   // table).
   //
-  // A MIDDLEWARE, not a wrapper around the handler: the handler keeps its
-  // seventeen exits and its indentation, and the claim reads one thing —
-  // the response's own `finish`/`close` — so a handler that THREW (Express 5
-  // routes the rejection to the error handler, which answers) or a client
-  // that hung up both release the key. The map entry is the CHAIN for the
-  // key (each caller's gate appended to the last), set synchronously before
-  // any await so a third caller queues behind the second, never beside it;
-  // it is deleted when the chain it holds settles.
+  // A WRAPPER around the handler, released in a `finally` on the handler's
+  // OWN settlement — never on the response's `finish`/`close` events. The
+  // first build of this claim was a middleware releasing on those events,
+  // and the harden pass proved the hole with a ten-line probe: Express does
+  // not stop a handler when its client hangs up, `close` fires while the
+  // handler is still inside `postResult`, the key is freed, and a second
+  // caller runs BESIDE the first — both reach Concept2. The client that
+  // hangs up is the rower's own, routinely, because the automatic send is
+  // fire-and-forget from a screen they have already left. Holding the key
+  // for the handler instead costs a waiting caller the first handler's
+  // remaining wire time (bounded by `server/concept2/client.ts`'s timeouts),
+  // and removes every dependence on Node's response-event semantics. A
+  // thrown handler rethrows through the wrapper: `router`'s
+  // `Layer.handleRequest` passes the rejection to `next(err)` and
+  // finalhandler answers 500 — measured, not read. The wrapper keeps THREE
+  // parameters or fewer, since `Layer.handleRequest` skips `fn.length > 3`.
+  // The key lower-cases the id: `UUID_RE` is `/i` and Postgres compares
+  // uuids case-insensitively, so two spellings of one row are one claim.
+  // The map entry is the CHAIN for the key (each caller's gate appended to
+  // the last), set synchronously before any await so a third caller queues
+  // behind the second, never beside it; it is deleted when the chain it
+  // holds settles.
   const inflightSends = new Map<string, Promise<void>>();
-  const claimSend: RequestHandler = async (req, res, next) => {
-    const key = `${req.user!.id}:${String(req.params.logId)}`;
-    let release: () => void = () => undefined;
-    const mine = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const prior = inflightSends.get(key);
-    const chain = prior === undefined ? mine : prior.then(() => mine);
-    inflightSends.set(key, chain);
-    void chain.then(() => {
-      if (inflightSends.get(key) === chain) inflightSends.delete(key);
-    });
-    res.once("finish", release);
-    res.once("close", release);
-    if (prior !== undefined) await prior;
-    next();
-  };
+  const claimSend =
+    (handler: (req: Request, res: Response) => Promise<void>): RequestHandler =>
+    async (req, res) => {
+      const key = `${req.user!.id}:${String(req.params.logId).toLowerCase()}`;
+      let release: () => void = () => undefined;
+      const mine = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const prior = inflightSends.get(key);
+      const chain = prior === undefined ? mine : prior.then(() => mine);
+      inflightSends.set(key, chain);
+      void chain.then(() => {
+        if (inflightSends.get(key) === chain) inflightSends.delete(key);
+      });
+      if (prior !== undefined) await prior;
+      try {
+        await handler(req, res);
+      } finally {
+        release();
+      }
+    };
 
   async function resolveCookieSession(
     req: Request,
@@ -785,8 +808,7 @@ export function createConcept2Router({
     "/api/concept2/results/:logId",
     requireUser,
     refuseAmbiguousAuth,
-    claimSend,
-    async (req, res) => {
+    claimSend(async (req, res) => {
       if (!availableFor(req.user!.email)) {
         unavailableJson(res);
         return;
@@ -1379,7 +1401,7 @@ export function createConcept2Router({
       // handled above, either by a successful retry or by the repeat-401
       // flagReauth branch.
       res.status(502).json({ error: "c2_error" });
-    },
+    }),
   );
 
   return router;

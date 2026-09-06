@@ -211,12 +211,12 @@ export async function fetchLink(): Promise<
 export function useConcept2Link(): {
   link: Concept2Link | null;
   failed: LinkReadFailure | null;
-  /** Reads the link and applies it. RESOLVES to the link it applied, or
-   *  `null` when the read failed or a newer read superseded it — so a caller
-   *  that must decide on a FRESH answer (Wave E auto-send §3.3: the log form,
-   *  after a 201) awaits this and never acts on a null. Existing callers that
-   *  `void reload()` are unaffected. */
-  reload: () => Promise<Concept2Link | null>;
+  /** Reads the link and applies it. Resolves once the read has been applied
+   *  (or dropped as superseded / recorded as failed); the VALUE is not
+   *  exposed — a caller that must decide on a fresh answer takes its own
+   *  `fetchLink()` (Wave E auto-send §3.3, `log/concept2Send.ts`), and a
+   *  widened return here had no reader (harden lens 1 F4, RF29). */
+  reload: () => Promise<void>;
 } {
   const [link, setLink] = useState<Concept2Link | null>(null);
   const [failed, setFailed] = useState<LinkReadFailure | null>(null);
@@ -228,20 +228,19 @@ export function useConcept2Link(): {
    *  component. Nothing outside this hook can read or write it. */
   const generation = useRef(0);
 
-  const reload = useCallback((): Promise<Concept2Link | null> => {
+  const reload = useCallback((): Promise<void> => {
     const mine = ++generation.current;
-    return fetchLink().then((result): Concept2Link | null => {
+    return fetchLink().then((result) => {
       // Checked once the WHOLE read has settled — `fetchLink` awaits the
       // body as well as the headers, and a foreground burst can start a
       // newer read inside either window. A superseded read applies nothing.
-      if (mine !== generation.current) return null;
+      if (mine !== generation.current) return;
       if ("failed" in result) {
         setFailed(result.failed);
-        return null;
+        return;
       }
       setLink(result.link);
       setFailed(null);
-      return result.link;
     });
   }, []);
 

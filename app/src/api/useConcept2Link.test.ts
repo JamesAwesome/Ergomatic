@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
-import {
-  normalizeLink,
-  LINK_UNAVAILABLE,
-  type Concept2Link,
-} from "./useConcept2Link";
+import { normalizeLink, LINK_UNAVAILABLE } from "./useConcept2Link";
 
 // `document.visibilityState` is replaced with `Object.defineProperty`, which
 // `vi.restoreAllMocks()` does NOT undo — the stub would leak to every later
@@ -384,7 +380,7 @@ describe("useConcept2Link: a newer read always wins (review F7)", () => {
     await waitFor(() => expect(releases).toHaveLength(1));
 
     // A second read starts while the first is still unanswered.
-    let second: Promise<Concept2Link | null>;
+    let second: Promise<void>;
     await act(async () => {
       second = result.current.reload();
       await Promise.resolve();
@@ -432,7 +428,7 @@ describe("useConcept2Link: a newer read always wins (review F7)", () => {
     const { result } = renderHook(() => useConcept2Link());
     await waitFor(() => expect(releases).toHaveLength(1));
 
-    let second: Promise<Concept2Link | null>;
+    let second: Promise<void>;
     await act(async () => {
       second = result.current.reload();
       await Promise.resolve();
@@ -575,7 +571,7 @@ describe("useConcept2Link: a newer read always wins (review F7)", () => {
     const { result } = renderHook(() => useConcept2Link());
     await waitFor(() => expect(ctl).toHaveLength(1));
 
-    let second: Promise<Concept2Link | null>;
+    let second: Promise<void>;
     await act(async () => {
       second = result.current.reload();
       await Promise.resolve();
@@ -731,69 +727,5 @@ describe("normalizeLink — autoSend and the send-failed flag (Wave E auto-send)
       normalizeLink({ available: false, autoSend: true, sendFailedAt: "x" })
         .sendFailedAt,
     ).toBeNull();
-  });
-});
-
-describe("reload() resolves to what it applied (Wave E auto-send §3.3's fresh read)", () => {
-  // The log form's post-save decision reads the RESOLVED value, not
-  // `result.current.link` — a closure over state would see the mount-time
-  // link, and a mode flipped on /you/concept2 mid-form would be missed.
-  it("resolves to the normalized link on a 200", async () => {
-    let autoSend = false;
-    const api = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            available: true,
-            linked: true,
-            c2UserId: 1,
-            autoSend,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-    );
-    vi.doMock("../api", () => ({ api }));
-    const { useConcept2Link } = await import("./useConcept2Link");
-    const { result } = renderHook(() => useConcept2Link());
-    await waitFor(() => expect(result.current.link).not.toBeNull());
-    expect(result.current.link?.autoSend).toBe(false);
-
-    autoSend = true;
-    let fresh: Concept2Link | null = null;
-    await act(async () => {
-      fresh = await result.current.reload();
-    });
-    expect(fresh).toMatchObject({ linked: true, autoSend: true });
-    expect(result.current.link?.autoSend).toBe(true);
-  });
-
-  it("resolves null on a failed read, and leaves the last good link in place", async () => {
-    let ok = true;
-    const api = vi.fn(async () =>
-      ok
-        ? new Response(
-            JSON.stringify({
-              available: true,
-              linked: true,
-              c2UserId: 1,
-              autoSend: true,
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          )
-        : new Response("gone", { status: 502 }),
-    );
-    vi.doMock("../api", () => ({ api }));
-    const { useConcept2Link } = await import("./useConcept2Link");
-    const { result } = renderHook(() => useConcept2Link());
-    await waitFor(() => expect(result.current.link).not.toBeNull());
-
-    ok = false;
-    let fresh: Concept2Link | null = LINK_UNAVAILABLE;
-    await act(async () => {
-      fresh = await result.current.reload();
-    });
-    expect(fresh).toBeNull();
-    expect(result.current.failed?.status).toBe(502);
-    expect(result.current.link?.autoSend).toBe(true);
   });
 });

@@ -10922,6 +10922,36 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
     await assertNoA11yViolations(page);
   });
 
+  test("the pressed mode segment keeps --on-color on --ink while its PATCH is in flight (Wave E auto-send)", async ({
+    page,
+  }) => {
+    // Harden lens 2, finding 1: the `:disabled` colour rule sits later in the
+    // sheet at the same specificity as the pressed rule, so without its
+    // `:not([aria-pressed="true"])` scope the pressed segment read `--ink-3`
+    // on `--ink` — 2.30:1 — for both round trips of every mode write. jsdom
+    // applies no stylesheet, so this is the only gate that can go red on it.
+    await openYouLinked(page, "pressed-disabled");
+    const [ink, onColor] = await Promise.all([
+      tokenColor(page, "--ink"),
+      tokenColor(page, "--on-color"),
+    ]);
+    // Hold the PATCH open; every other Concept2 call falls through to the
+    // link fake registered by `openYouLinked`.
+    await page.route(/\/api\/concept2\/link$/, async (route) => {
+      if (route.request().method() === "PATCH") return; // never answers
+      await route.fallback();
+    });
+    await page.getByRole("button", { name: "AUTOMATIC" }).click();
+    const pressed = page.getByRole("button", { name: "MANUAL" });
+    await expect(pressed).toBeDisabled();
+    expect(await pressed.evaluate((el) => getComputedStyle(el).color)).toBe(
+      onColor,
+    );
+    expect(
+      await pressed.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe(ink);
+  });
+
   test("the card paints its own tokens, not raw values", async ({ page }) => {
     // `index.css`'s `.c2-card` block names `--surface`, `--rule` and — for
     // the panel's REASON line — `--ink-3` rather than the `--ink-4` its

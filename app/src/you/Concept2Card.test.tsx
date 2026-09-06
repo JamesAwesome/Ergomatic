@@ -897,6 +897,42 @@ describe("the sending-mode control (Wave E auto-send §3.2)", () => {
     );
   });
 
+  it("the A7 line does not survive an unlink and relink — it was about the link that is gone", async () => {
+    let linked = true;
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PATCH")
+        return new Response("nope", { status: 500 });
+      if (init?.method === "DELETE") {
+        linked = false;
+        return new Response(null, { status: 204 });
+      }
+      return new Response(
+        JSON.stringify(linked ? LINKED : { available: true, linked: false }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.doMock("../api", () => ({ api }));
+    const startLink = vi.fn(async () => {
+      linked = true;
+      return { kind: "linked" } as LinkOutcome;
+    });
+    vi.doMock("../adapters/linkFlow", () => ({ startLink }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "AUTOMATIC" }),
+    );
+    await screen.findByText("Couldn't change this. Try again.");
+    await userEvent.click(screen.getByRole("button", { name: "OFF" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to unlink" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    );
+    expect(await screen.findByRole("button", { name: "MANUAL" })).toBeTruthy();
+    expect(screen.queryByText("Couldn't change this. Try again.")).toBeNull();
+  });
+
   it("arrows move focus only — no PATCH, no arm (F4)", async () => {
     const { api } = mount(LINKED);
     await renderCard();

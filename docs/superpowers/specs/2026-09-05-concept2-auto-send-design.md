@@ -98,7 +98,7 @@ and a **Gate 0** for the redrawn card and the You row's new state — owed next.
 - `send_failed_at timestamptz NULL` and `send_failed_reason text NULL` — the
   failure flag (rulings 6, 7): set only when an eligible send fails with
   `no_weight_class`, and the reason column carries the route's **sub-reason**
-  (`no_weight` | `unreadable_weight` | `no_gender` — the key the block's own
+  (`no_weight` | `unreadable_weight` | `implausible_weight` | `no_gender` — the key the block's own
   copy is chosen by; the route code alone cannot pick a sentence). Both clear
   to `NULL` on every outcome that leaves the row at Concept2 (§3.4) and on
   every relink.
@@ -300,7 +300,7 @@ have cleared them). This is new copy on the row (R1 said the row mints none)
 
 **The screen names the reason — and that is Gate 0 copy, not a reuse (delta
 F2).** The block's three no-weight sentences are chosen by the SUB-reason
-(`no_weight` / `unreadable_weight` / `no_gender`), which is why the column
+(`no_weight` / `unreadable_weight` / `implausible_weight` / `no_gender`), which is why the column
 stores it; but those sentences were written for a tap's immediate response, and
 a persistent status line on the You screen is a different sentence. Gate 0
 sees three variants drawn (one per sub-reason), each followed by the block's

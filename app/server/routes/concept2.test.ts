@@ -2853,6 +2853,12 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       expect(link?.sendFailedAt).not.toBeNull();
       expect(link?.sendFailedReason).toBe("no_weight");
       expect(client.postResult).not.toHaveBeenCalled();
+      // RF24, the seam from the 422 to the wire the You row reads: the same
+      // sub-reason the send answered, carried by GET /link.
+      const read = await asA(request(app).get("/api/concept2/link"));
+      expect(read.status).toBe(200);
+      expect(read.body.sendFailedReason).toBe(res.body.reason);
+      expect(typeof read.body.sendFailedAt).toBe("string");
     });
 
     it("a 200 post CLEARS a set flag", async () => {
@@ -3016,6 +3022,51 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       expect(r1.body.resultId).toBe(4242);
       expect(r2.body.resultId).toBe(4242);
       expect(d.impl).toHaveBeenCalledTimes(1);
+    });
+
+    it("a first caller that HANGS UP mid-wire-call still holds the claim: the second send waits, then takes the short-circuit", async () => {
+      // The harden pass's kill-shot on the first build (a middleware
+      // releasing on the response's `finish`/`close`): Express does not stop
+      // a handler when its client goes away, so `close` freed the key while
+      // request 1 was still inside `postResult`, and request 2 ran beside
+      // it — two wire calls. Deterministic arranged sequence, not a race
+      // (PR #269's rule): enter the wire call, abort, issue the second
+      // request, assert the wire count BEFORE releasing. Red on the
+      // middleware build (`called 1 times, but got 2`), green on the wrapper.
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      const d = deferredPostResult();
+      vi.mocked(client.postResult).mockImplementation(
+        d.impl as unknown as typeof client.postResult,
+      );
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+
+      const r1 = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      const first = r1.then((r) => r).catch(() => "aborted" as const);
+      await d.enteredOnce; // request 1 is INSIDE the wire call
+      r1.abort(); // its client hangs up
+      await new Promise((r) => setTimeout(r, 50));
+      const second = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await new Promise((r) => setTimeout(r, 100));
+      // The claim is still held by the running handler.
+      expect(d.impl).toHaveBeenCalledTimes(1);
+
+      d.resolve({ ok: true, resultId: 4242 });
+      const r2 = await second;
+      expect(r2.status).toBe(200);
+      expect(r2.body.resultId).toBe(4242);
+      expect(d.impl).toHaveBeenCalledTimes(1);
+      expect(await first).toBe("aborted");
     });
 
     it("a send whose wire call THREW releases the claim: the next send for the same row reaches the wire", async () => {

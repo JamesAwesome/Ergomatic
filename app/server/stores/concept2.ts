@@ -218,7 +218,8 @@ export function createConcept2Store(db: Db) {
 
     /** Wave E auto-send §3.4: the send route's one write on an eligible send
      *  that failed with `no_weight_class`. `reason` is the route's SUB-reason
-     *  (`no_weight` | `unreadable_weight` | `no_gender`), stored verbatim so
+     *  (`no_weight` | `unreadable_weight` | `implausible_weight` | `no_gender`),
+     *  stored verbatim so
      *  the You screen can choose the rower-facing sentence. Idempotent on a
      *  missing link (zero rows, no error). */
     async setSendFailed(userId: string, reason: string): Promise<void> {

@@ -2065,6 +2065,29 @@ describe("LogSession: the automatic Concept2 send (Wave E auto-send §3.3)", () 
     expect(sends(apiFn)).toHaveLength(0);
   });
 
+  it("a 201 whose body carries an EMPTY id sends nothing and reads nothing — no row to name", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi((path) =>
+      path === "/api/logs"
+        ? new Response(JSON.stringify({ id: "" }), { status: 201 })
+        : new Response(JSON.stringify(LINK_AUTO), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    // The save still lands the rower on Today (an unreadable id never fails
+    // a save); nothing about Concept2 follows it.
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(
+      apiFn.mock.calls.filter(([p]) => p.startsWith("/api/concept2/")),
+    ).toHaveLength(0);
+  });
+
   it("a failed save reads the link NOT AT ALL — the decision belongs to a 201", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);

@@ -581,7 +581,7 @@ export const concept2Links = pgTable("concept2_links", {
   autoSend: boolean("auto_send").notNull().default(false),
   // The sticky "sends are failing" flag (rulings 6, 7). Set by the send
   // route ONLY when an eligible send fails with `no_weight_class`; the reason
-  // column carries the route's SUB-reason (`no_weight` | `unreadable_weight`
+  // column carries the route's SUB-reason (`no_weight` | `unreadable_weight` | `implausible_weight`
   // | `no_gender`), which is the key the rower-facing sentence is chosen by.
   // Cleared on every outcome that leaves the row at Concept2 (200 post, 200
   // already-sent short-circuit, 409 duplicate) and on every relink. `c2_error`

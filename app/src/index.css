@@ -10411,7 +10411,12 @@ section:not(.news-pinned) .news-row:last-of-type {
    `--surface` 17.11:1). The armed OFF is the danger button's own fill moved
    onto the segment — `--on-color` on `--accent` 5.94:1, 52px, 15px sans
    600, spanning the control — so `--accent` gains no new use. Disabled
-   (a PATCH in flight): `--ink-3` on `--surface` 7.43:1. All ≥ 4.5. */
+   (a PATCH in flight, both round trips): the UNPRESSED segments drop to
+   `--ink-3` on `--surface` 7.43:1; the PRESSED one KEEPS `--on-color` on
+   `--ink` 17.11:1. The disabled rule is scoped to `:not([aria-pressed=
+   "true"])` on purpose: it sits later in the sheet at equal specificity, so
+   an unscoped `color: var(--ink-3)` would win over the pressed fill and read
+   2.30:1 for the whole write (harden lens 2, finding 1). All ≥ 4.5. */
 .c2-card-mode {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -10446,8 +10451,11 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 .c2-card-mode-btn:disabled {
-  color: var(--ink-3);
   border-color: var(--rule-3);
+}
+
+.c2-card-mode-btn:disabled:not([aria-pressed="true"]) {
+  color: var(--ink-3);
 }
 
 /* Armed OFF spans the control as today's full-width "Tap again to unlink"
