@@ -15,9 +15,11 @@ independent fill mechanisms; the mechanism behind the observation is
 INFERENCE — §1.1). The band between that line and the keyboard proper
 (≈505..566 CSS in the app capture, holding the ‹ › ✓ pill) is inside the
 WebView, outside the visual viewport, and shows the document — that is the
-strip. No CSS hung off the tab bar can fill it. The fix is to shrink the WebView itself
-(`@capacitor/keyboard`, `resize: 'native'`), which makes the fixed viewport
-and the visual viewport the same thing.
+strip. No CSS hung off the tab bar can fill it. The fix that survived four
+device builds is the platform's own convention: hide the tab bar on the
+Keyboard plugin's `keyboardWillShow`/`keyboardWillHide` events and never
+resize the WebView (`resize: 'native'` was built and rejected on a
+recording — §2, build C).
 
 Prior art in this repo: none. `ls docs/superpowers/research/` (eight docs,
 2026-09-06) has nothing on the keyboard or viewport, and
@@ -123,6 +125,22 @@ unrelated hit (line 1666). RF18 discharged.
   the keyboard shows/hides. This affects the `vh` relative unit."_ The
   `vh`/`dvh` census that consequence demands is in spec §5.
 
+### 1.3 What the platform's own tab bars do
+
+- **PRIMARY.** Ionic Framework, `core/src/components/tab-bar/tab-bar.tsx`
+  (main, fetched 2026-09-06): `@State() keyboardVisible = false;`, fed by
+  `createKeyboardController()` in `connectedCallback()`; render computes
+  `const shouldHide = keyboardVisible && this.el.getAttribute('slot') !==
+  'top';` and, when true, applies class `tab-bar-hidden` and
+  `aria-hidden="true"`. The comment on the hide side: _"If the keyboard is
+  hiding, then we need to wait for the webview to resize. Otherwise, the
+  tab bar will flicker before the webview resizes."_ — Ionic combines
+  `resize: native` WITH hiding the bar, and masks the resize by keeping the
+  bar hidden until the resize lands. This app's document scrolls the page
+  itself, so it needs no resize at all and takes the hide alone.
+- **INFERENCE from platform convention:** UIKit tab bars are covered by the
+  keyboard; no first-party iOS app shows a tab bar above a keyboard.
+
 ## 2. Measurements
 
 All on James's iPhone (dpr 3, 402×874 CSS portrait), 2026-09-06. The probe
@@ -158,6 +176,20 @@ What the rows say:
   inside the WebView, and the document layer paints there while the fixed
   layer cannot. Same arithmetic in Chrome (`684 − 383 = 301`), whose taller
   autofill tray makes three rows of list visible through it.
+- **Build C recording** (`resize: native`, `autoBackdropColor: auto`,
+  tray restored; James's screen recording 2026-09-06 14:41, 6.55 s, frames
+  extracted at 10 fps — not committed, the numbers are): frame 14 (before
+  the tap) bar at the bottom; frames 16–20 (0.4 s) the keyboard rises with
+  the bar GONE — page and cards run to the tray; frame 26 (≈0.6 s after the
+  tap) the bar appears above the tray in one step. On dismiss (frames
+  38–41): the bar drops to the screen's bottom instantly while the keyboard
+  is still descending, invisible behind it, then shows when the keyboard
+  clears. Source: `Keyboard.m:256` schedules `_updateFrame` at
+  `UIKeyboardAnimationDuration + 0.2`; `:215` `setKeyboardHeight:0
+  delay:0.01` on hide; neither animates. James: _"Very unsettling."_
+- **Build D** (`resize: none`, hide on events, tray restored): bar goes as
+  the keyboard starts to rise, returns as it starts to fall. James: _"That's
+  perfect."_ Not captured; the approval is the record.
 - **The app's own capture** (`app-v0.39.1-portrait-scrolled.png`, from
   James, the TestFlight build), **per-column pixel scan** (anchor pass B2
   corrected this doc's first, single-column reading, which put the tray at
@@ -190,7 +222,7 @@ What the rows say:
   fill was never seen on a device before v0.39.1 shipped.
 - `docs/design/DEVIATIONS.md` row 66 repeats both claims.
 
-## 4. What this does not settle
+## 4. What this does not settle (rev 1's list; under `resize: none` the first four are moot — the WebView is never resized — and stand only as the record of why `native` was not the answer)
 
 - Whether `env(safe-area-inset-bottom)` reads 0 inside a WebView whose
   frame no longer touches the screen bottom (INFERENCE: it should, and the

@@ -15,14 +15,6 @@ const config: CapacitorConfig = {
   appId: "haus.waffle.ergomatic",
   appName: "Ergomatic",
   webDir: "dist/client",
-  // `--surface` (theme/tokens.css). Two consumers: the WKWebView's own
-  // background (visible only before the first paint), and — through the
-  // Keyboard plugin's `autoBackdropColor: "auto"` — the window behind the
-  // WebView while it is shrunk under the keyboard. The keyboard's rounded
-  // corners and the accessory tray's band show that window, directly below
-  // the tab bar, so it carries the bar's surface rather than the page's
-  // (James, Gate 0 build A, 2026-09-06: "the corner is the wrong color").
-  backgroundColor: "#fffdf7",
   plugins: {
     CapacitorHttp: {
       enabled: true,
@@ -42,7 +34,6 @@ const config: CapacitorConfig = {
     // at build, the enum form fails typecheck on a typo.
     Keyboard: {
       resize: KeyboardResize.None,
-      autoBackdropColor: "auto",
     },
   },
 };

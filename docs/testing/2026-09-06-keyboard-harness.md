@@ -59,18 +59,16 @@ checked on a real build. From the worktree's `app/`:
    `GOOGLE_IOS_CLIENT_ID` or sign-in is silently dead — CLAUDE.md,
    Commands), then `pnpm ios:open` and run on the paired iPhone; or
    `pnpm ios:release` from a tag for TestFlight (`docs/RELEASING.md`).
-2. Library → tap search → scroll. Expected: the tab bar's bottom edge is
-   the keyboard tray's top; no list between them; the band behind the
-   translucent tray is `--surface`, the bar's own colour.
+2. Library → tap search. Expected: the tab bar disappears as the keyboard
+   starts to rise (not after it settles), the ‹ › ✓ tray is present, the
+   list runs to the tray with nothing between. Dismiss with ✓: the bar is
+   back as the keyboard starts down. Nothing else on the screen moves.
 3. Readings, via Safari's Web Inspector attached to the device
-   (Develop → the phone → Ergomatic): with the keyboard up,
-   `window.innerHeight` (expected: the pre-keyboard value minus the keyboard
-   frame), `document.querySelector(".tabbar").getBoundingClientRect().bottom`
-   (expected: equal to `innerHeight`), and
-   `getComputedStyle(document.querySelector(".tabbar")).paddingBottom` (the
-   safe-area pad — expected `0px` while shrunk; INFERENCE until read).
-4. Both orientations. Landscape is the one to look at hardest: ~402px of
-   height minus a ~300px keyboard frame.
+   (Develop → the phone → Ergomatic): `window.innerHeight` is UNCHANGED
+   with the keyboard up (`resize: none`), and
+   `document.querySelector(".tabbar")` is `null` while it is up.
+4. A numeric field (You → BASELINES, a split): the number pad with the ✓
+   in the tray — the tray restore is the only reason it is there.
 
 ## 3. The simulator, and why it is not listed above
 

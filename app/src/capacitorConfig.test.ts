@@ -7,8 +7,7 @@ import config from "../capacitor.config";
 // WebView actually shrinks is verified on the phone at Gate 0 and recorded
 // in the PR. What a web test CAN reach is that the config still asks for
 // the mode the design chose (`none`: the WebView is never resized, the bar
-// hides on the plugin's events instead) and still paints the WebView's own
-// background with the bar's surface. Independent string literals
+// hides on the plugin's events instead). Independent string literals
 // on purpose: asserting `KeyboardResize.Native` would import the constant
 // this exists to gate (RF21's first smell).
 // This reads `capacitor.config.ts`, one hop upstream of what the phone reads
@@ -23,10 +22,11 @@ describe("capacitor.config Keyboard plugin", () => {
     expect(config.plugins?.Keyboard?.resize).toBe("none");
   });
 
-  it("paints the keyboard backdrop with the tab bar's surface, not the page", () => {
-    // `auto` = the config's `backgroundColor`; `--surface` is #fffdf7
-    // (theme/tokens.css). Independent literals on both.
-    expect(config.plugins?.Keyboard?.autoBackdropColor).toBe("auto");
-    expect(config.backgroundColor).toBe("#fffdf7");
+  it("declares no backdrop colour: with the WebView never resized, the window behind it never shows", () => {
+    // Builds A–C set `autoBackdropColor` and a `backgroundColor` for the band
+    // a shrunk WebView exposes; `none` exposes nothing, so both are gone
+    // rather than left as config that does nothing (RF29's spirit).
+    expect(config.plugins?.Keyboard?.autoBackdropColor).toBeUndefined();
+    expect(config.backgroundColor).toBeUndefined();
   });
 });
