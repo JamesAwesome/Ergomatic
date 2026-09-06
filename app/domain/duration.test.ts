@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  DURATION_RANGE_MAX,
+  UNBOUNDED_RANGE,
+  clampRange,
+  inRange,
+  isUnbounded,
+  rangeForCap,
+  rangeFromBuckets,
   fmtDuration,
   fmtDurationSpoken,
   parseClock,
@@ -131,4 +138,87 @@ describe("parseDurationToken", () => {
       expect(parseDurationToken(token)).toBeNull();
     },
   );
+});
+
+// Phase SF PR2 (spec §3): the minutes range that replaces the buckets.
+describe("inRange / isUnbounded", () => {
+  it("is inclusive at both ends and treats a max of 120 as no upper bound", () => {
+    expect(inRange(24, { min: 25, max: 35 })).toBe(false);
+    expect(inRange(25, { min: 25, max: 35 })).toBe(true);
+    expect(inRange(35, { min: 25, max: 35 })).toBe(true);
+    expect(inRange(36, { min: 25, max: 35 })).toBe(false);
+    expect(inRange(200, { min: 60, max: 120 })).toBe(true);
+    expect(inRange(59, { min: 60, max: 120 })).toBe(false);
+    expect(inRange(0, { min: 0, max: 0 })).toBe(true);
+  });
+
+  it("calls only [0, 120] unbounded", () => {
+    expect(isUnbounded(UNBOUNDED_RANGE)).toBe(true);
+    expect(isUnbounded({ min: 0, max: 120 })).toBe(true);
+    expect(isUnbounded({ min: 5, max: 120 })).toBe(false);
+    expect(isUnbounded({ min: 0, max: 115 })).toBe(false);
+    expect(DURATION_RANGE_MAX).toBe(120);
+  });
+});
+
+describe("rangeForCap", () => {
+  it("rounds the cap DOWN to the step so nothing longer than the cap is admitted, and clamps at the top", () => {
+    expect(rangeForCap(60)).toStrictEqual({ min: 0, max: 60 });
+    expect(rangeForCap(47)).toStrictEqual({ min: 0, max: 45 });
+    expect(rangeForCap(10)).toStrictEqual({ min: 0, max: 10 });
+    expect(rangeForCap(120)).toStrictEqual({ min: 0, max: 120 });
+    expect(rangeForCap(300)).toStrictEqual({ min: 0, max: 120 });
+    expect(isUnbounded(rangeForCap(300))).toBe(true);
+  });
+});
+
+describe("clampRange", () => {
+  it("rounds, clamps to [0, 120], and collapses a crossed pair to the lower point", () => {
+    expect(clampRange({ min: -5, max: 500 })).toStrictEqual({
+      min: 0,
+      max: 120,
+    });
+    expect(clampRange({ min: 24.6, max: 35.2 })).toStrictEqual({
+      min: 25,
+      max: 35,
+    });
+    expect(clampRange({ min: 50, max: 40 })).toStrictEqual({
+      min: 40,
+      max: 40,
+    });
+  });
+});
+
+describe("rangeFromBuckets (v1 → v2)", () => {
+  it("maps a bucket union to [lowest lower bound, highest upper bound], 60+ reaching the top", () => {
+    expect(rangeFromBuckets(["<30", "30-45", "45-60"])).toStrictEqual({
+      min: 0,
+      max: 60,
+    });
+    expect(rangeFromBuckets(["30-45"])).toStrictEqual({ min: 30, max: 45 });
+    expect(rangeFromBuckets(["45-60", "60+"])).toStrictEqual({
+      min: 45,
+      max: 120,
+    });
+    expect(rangeFromBuckets(["<30", "60+"])).toStrictEqual({
+      min: 0,
+      max: 120,
+    });
+    // Order-independent: a later bucket with a LOWER upper bound (and a
+    // higher lower bound) must not narrow the span.
+    expect(rangeFromBuckets(["60+", "30-45"])).toStrictEqual({
+      min: 30,
+      max: 120,
+    });
+    expect(rangeFromBuckets(["45-60", "<30", "30-45"])).toStrictEqual({
+      min: 0,
+      max: 60,
+    });
+  });
+
+  it("returns null for an empty or unrecognisable union, ignoring garbage members", () => {
+    expect(rangeFromBuckets([])).toBeNull();
+    expect(rangeFromBuckets(["90+", 45, null])).toBeNull();
+    expect(rangeFromBuckets(["90+", "<30"])).toStrictEqual({ min: 0, max: 30 });
+  });
 });

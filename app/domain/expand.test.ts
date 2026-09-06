@@ -232,7 +232,7 @@ describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => 
       type: "work",
       targetKind: "effort",
       meters: 6000,
-      label: "EASY", // effortWord("min") — the word, never a number
+      label: "EASY", // paceWordLabel("min") — the word, never a number
     });
     expect(p[0]!.targetSplit).toBeUndefined();
     // No targetSplit means phaseSeconds (the estimate builder) can't price

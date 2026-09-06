@@ -7232,3 +7232,990 @@ controller; the findings were applied as a fix round against committed code
   committed code rather than as plan edits. Hardening a document while its
   implementation races ahead costs the pass its leverage — the cheap half of
   /harden is worth nothing after the paste.
+## 2026-09-03 — Reattaching a connection without re-owning the old state (lens 1, single pass)
+
+- **“The logical record owns the actuals, so a fresh driver need not receive
+  them” was false.** The disposable driver's private run state also decided
+  duplicate refusal, cumulative subtraction, final-summary reconciliation,
+  boundary attribution, and finish grace. **Technique: before replacing a
+  stateful object, enumerate every reader of its discarded fields and classify
+  each field as connection state, logical-run state, or diagnostic-only state;
+  naming the surviving database record is not a lifetime proof.**
+- **“A connection generation identifies reconnect work” was incomplete.** A
+  connect can outlive its UI deadline and resolve after Cancel, while native
+  serializes the cleanup behind that connect; a later loss can also replace the
+  reconnect authority while retaining the same logical session and device. The
+  design needed distinct token, reconnect-attempt, and base-attempt IDs, bounded
+  phases, and exact triple-matched late teardown before retry. **Technique: every
+  cancellable async operation gets an identity independent of the object it may
+  eventually create, plus a terminal rule for success after invalidation.**
+- **“Three fresh notifications form a current cohort” was a heuristic disguised
+  by the word cohort.** The feeds are independently delivered; the first triple
+  can mix PM5 instants. Compatibility may release, but a destructive mismatch
+  now requires repeated 0x0031-led evidence over the existing time window, and
+  both false-release and false-close directions stay named. **Technique: write
+  the assembly rule for every multi-feed verdict, then give destructive and
+  non-destructive outcomes different evidence thresholds.**
+- **“The reattach path wrote nothing” had no hardware oracle on native.** Driver
+  logs miss sample-rate and direct error-detail paths. The proof moved to a
+  generation-scoped counter at the lowest shared transport write seam, with one
+  mutation per forbidden write and a still-connected Terminate positive control.
+  **Technique: a negative side-effect invariant belongs below every producer of
+  that side effect; logging from one producer is not an oracle.**
+- **“Server first, client second” did not imply safe rollback.** A loaded web
+  client or distributed native build can keep writing after a nominal client
+  rollback. The additive server reader therefore remains deployed until every
+  capable writer is withdrawn. **Technique: rollout prose must name forward
+  compatibility, already-loaded clients, native distribution, and rollback
+  order separately.**
+- **VETTED GROUND:** base-handle retention with fresh wrappers, typed adapter
+  provenance, confirmed local-disconnect authority, explicit series breaks,
+  retained same-device routes, and the MISSED producer/server/reader seam
+  survived the attack.
+
+## 2026-09-03 — Unlogged-session door, phase-open anchor
+
+- **“Putting retained records on Today makes them reachable” missed the
+  destination’s prerequisite requests.** Local snapshots exist before Today
+  returns loading/error screens for unrelated plan, preference, baseline and
+  history fetches. **Technique:** trace every early return between the local
+  reader and its rendered recovery control; a working destination route is
+  not proof that its local content can render.
+- **“Each displayed row can reuse the existing Just Row save route” failed
+  selected-record identity.** Both sources navigate to one route whose
+  consumer chooses the newer completion timestamp, regardless of the row
+  selected. Coexistence is a defensive, violated-invariant state, not a proven
+  normal producer. **Technique:** give sibling records different identities
+  and trace each affordance through the destination’s actual selection rule;
+  deterministic recency is not deterministic user intent.
+- **The dual-record design’s discard confirmation named the first record
+  even when the second was selected.** A shared title variable survived the
+  per-row render. **Technique:** exercise every destructive sibling against
+  distinct titles and sources; a correctly labelled trigger does not prove
+  its confirmation names the same subject.
+- **VETTED GROUND:** the completed-programmed Today exclusion is real;
+  explicit monitor-route intent and frozen-seed validation preserve existing
+  programmed provenance; missing-library/legacy recovery remains a
+  pre-implementation decision; View can cancel existing staged authorization
+  without inventing device state, reconnect behavior, or another session
+  lifetime.
+
+### 2026-09-04 — Unlogged-session recovery delta: extracted bodies do not inherit caller gates
+
+**Claim:** selecting the exact retained monitor record and successfully building its existing summary is sufficient admission for the new recovery route.
+
+**Why it looked sound:** Today already closes interrupted records on Review, and both legacy summary doors reject open monitor records.
+
+**Finding:** the legacy closure checks belong to their adapters (`LogSession.tsx:333`, `JustRowLog.tsx:72`), not the reused builders. `buildMonitorLogSteps` checks frozen-seed alignment (`logDraft.ts:857`); `buildMonitorModel` accepts absent completion time (`summaryModel.ts:1194`). Direct/reloaded review URLs bypass Today's close action. Require a closed selected monitor snapshot before summary/claim/save; an open selection is unavailable. Route mounting never closes it.
+
+**Technique:** follow admission from every entry point, then remove the old caller mentally and inspect what the extracted callee actually guarantees. Exact record identity and readable data do not establish eligibility. Pin direct-open deep links and refused-close behavior, not only the happy Today click.
+
+**Related seam:** do not label the existing rower-End fake story natural completion. Its actual terminal producer must supply WORKOUTEND, reach the hook's `"finished"` writer, and survive leave/recovery before that producer-consumer claim is earned.
+
+**Prescribed-code lens:** absent/empty/duplicate selector inputs, independent encoded output, missing-type submit guard, visible copy failure and the producer-to-history seam held. No further code finding; hardening ends here. The selector blocks passed the author's isolated typecheck, lint and behavioral paste-test before review. This is plan evidence, not implementation or hardware acceptance.
+
+## 2026-09-04 — Unlogged-session EXIT: a short native recovery walk is structurally sufficient, not native clearance
+
+- **Held:** the proposed one-minute, no-rest programmed piece can exercise the new recovery door; the positive-rest browser fixture initially suggested another rest-bearing walk might be necessary. **Technique:** trace each new admission/navigation gate to its actual predicate: retained monitor presence, completed selected entry, exact source/key and explicit View/Save actions—not resting frames or interval count. No additional rowing justified.
+- **Held:** both warm and cold browser legs traverse the complete producer-to-history recovery journey; cold hydration is not merely a Today-card check. **Technique:** follow both invocations through the conditional reload into the shared warning/View/failed-Save/retry/history body, and check literal retained actuals against fresh API detail.
+- **Held:** the failed-Save proof survives the existing series-sacrifice fallback. **Technique:** inspect the saver branch and require both first-button POSTs to fail, retained bytes and no history row afterward, then a separate explicit button press producing the third POST. One injected 500 would prove the wrong state.
+- **Held:** original/recovered phone photographs prove preservation, not independent arithmetic; persisted history is a separate server-read witness. **Technique:** trace the history detail reader to GET /api/logs/:id and retain the protocol's explicit rejection of same-frame PM5 and independent arithmetic claims.
+- **Determinism/platform ceiling:** exact selection and explicit transitions are deterministic. Focus/center-scroll is a standard browser request, not proof that every action clears fixed navigation on the phone. PRIMARY: https://html.spec.whatwg.org/multipage/interaction.html#dom-focus-dev and https://drafts.csswg.org/cssom-view/#determine-the-scroll-into-view-position. The proposed landscape-before-warning observation tests the actual native result without extra rowing/captures.
+- **Verdict/limits:** protocol and bounded evidence PASS; no native or phase clearance. Separate final-review fixes and refreshed candidate evidence, budget approval, exact candidate/build/API identity, actual native evidence and PM close remain prerequisites. RC-8 zero-rest fake behavior stays excluded; the prior SESSION SAVED timeout remains intermittent/unclassified. Read-only pass; broad suites/mutations not rerun; no phone, account, install, rowing or repository writes.
+### 2026-09-03 — Wave E PR2 client plan (harden Lens 1)
+
+- **The spec's PRIMARY mapping branch was unreachable because the two PRs that
+  own its halves each built the other's.** PR1 shipped `completed_at`/`tz`
+  through the POST validator; no PR ever taught the client to POST them, so
+  `buildC2Payload`'s accurate branch never fires and every Concept2 upload
+  carries the SAVE clock. Both halves are tested; the seam has no test because
+  no test starts upstream of the writer. **Technique: for any field a spec
+  splits across PRs, grep the CLIENT tree for the field name before believing
+  the server-side validator means the field arrives — `git grep "\btz\b" --
+  src/` returning nothing outside tests settled it in one command. A validator
+  is evidence that a field is ACCEPTED, never that it is SENT.**
+- **A schema comment naming a future PR is a claim about that PR's scope, and
+  nobody checks it when the PR is written.** `session_logs.tz`'s own comment
+  said "posted at save from PR2 on"; PR2's plan never mentioned it. **Technique:
+  when planning PR N, grep the repo for the PR's own name (`PR2`, `Wave E PR2`)
+  — comments, spec bullets and ROADMAP clauses that assign work to it are
+  requirements the plan must either schedule or explicitly decline.**
+- **`??` is not a null-guard for a vendor string.** The identity line meant to
+  discharge an account-injection residual renders blank on `username: ""`,
+  because `fetchMe` passes the empty string through and `??` only catches
+  nullish — one seam over from the `?code=` defect that taught this ledger the
+  absent/empty/valued rule, and with a doc comment claiming "never an empty
+  identity". **Technique: the absent/empty/valued triad applies to every
+  vendor-supplied STRING that reaches a rendered surface, not just to URL
+  params; and when a code comment claims a guarantee, feed the code the value
+  the guarantee names and read the output.**
+- **A retired lifecycle seam retires its justification too, and the surviving
+  half of the reasoning goes unexamined.** `useReturnToApp` was deleted on
+  "native resolves in a promise, web unloads" — true of native, and true of web
+  only until the back-forward cache RESTORES the page instead of reloading it,
+  at which point no mount runs and the card is frozen mid-attempt. **Technique:
+  when a design says "the mount read reveals it", ask what re-mounts — and check
+  for `pageshow`/bfcache eligibility by looking for `no-store` on the DOCUMENT
+  and for any `unload` handler, both of which are one grep each.**
+- **A capture whose seed has no supported producer.** A screenshot seeding
+  `c2_result_id` cannot exist in a stack where the only writer of that column is
+  a route that 403s. **Technique: for every "seed state X and capture" step,
+  name the WRITER of X and confirm it is reachable in the environment the
+  capture runs in; `git grep` the column name minus tests usually returns the
+  single writer.**
+- **`A && B || C` in a prescribed gate block reports C's exit status when A
+  fails.** A red suite reads green. **Technique: run every prescribed shell
+  block with a deliberately failing first command and read `$?`, or forbid
+  `&&`/`||` chains in gate blocks outright — one command per line.**
+- **Attacked and HELD:** all nine contrast figures recomputed independently from
+  `tokens.css` (17.11 / 10.81 / 7.43 / 5.29 / 14.50 / 6.30 / 4.48 / 5.94 / 1.73
+  — every one exact, including the `--ink-4`-on-sunken refusal); ruling (i)'s
+  "the mint 400s without `weightClass`" and the sixteen-field `/users/me`
+  measurement; ruling (ii)'s "both write sites already hold `me`"; the 409
+  duplicate's write-before-respond and its readback through `db.select()`;
+  `upsertLink` clearing `needsReauthAt` on every path; `api()` not throwing on
+  non-2xx; the `busy` widening against the contract census (it parses case
+  LABELS, not returns); the measured logbook origin; and every REASON string
+  present in the Gate 0 amendment.
+
+#### Lens 2 techniques (the same engagement, code-reader lens)
+
+- **A gate can pin the wrong reader.** `webauth-contract.test.ts` holds the
+  `GET /link` response equal to the DEV PROBE's interface, which no rower sees;
+  the product reader is `normalizeLink`, and every test that touched it either
+  hand-built the body or CAST the route's. Believed because the gate exists and
+  is green. Settled by asking, of each gate, WHICH consumer it compares against
+  — then renaming a key and watching the whole suite stay green while the card
+  would render `account #2211` forever.
+- **A fix that re-reads the wrong state.** The bfcache fix re-read the LINK,
+  but the frozen panel is drawn from the ATTEMPT (`outcome`/`busy`), so it fixed
+  only the case where the link succeeded and left the DECLINED case frozen
+  exactly as before. Believed because the observation and the fix both said
+  "re-read on restore". Settled by reading the JSX predicate that draws the
+  stuck panel and asking which state it actually keys on.
+- **An absent/empty/valued rule applied to one field and not its neighbour.**
+  The plan WROTE the rule for `c2Username` and left `logbookBaseUrl` guarded on
+  `typeof` alone, with `??` on the server env read — an empty origin builds a
+  RELATIVE url that opens on our own domain. Settled by running the plan's own
+  stated rule over every vendor string in the same response, mechanically, as a
+  table.
+- **A conjunction that hides one of its conjuncts.** The result id rendered
+  inside `url !== null && resultId !== null`, so the deployment case that kills
+  the link-out also killed the id — the evidence an earlier amendment change had
+  just declared durable. Settled by asking, for each `&&` in a render guard,
+  what each side can independently be false for.
+- **"The block disappears" used for two different facts.** `unlinked` (a
+  precondition lapsed) and `not_eligible` (the two predicates disagree) were
+  folded into one state, so the divergence a whole seam test exists to catch
+  would reach the rower as a control vanishing under their finger. Settled by
+  reading each error code's PRODUCER and asking who is wrong when it fires.
+- **A degraded field disabling the only control that reads it.** `normalizeLink`
+  maps an unrecognised `weightClass` to `null`, and RECONNECT was wired to it
+  alone — a permanently dead button under a failure message, on a card where
+  every other failure carries a reason. Settled by tracing each normalizer's
+  degrade path to the control that consumes the degraded value.
+- **A client field that can cost a rower their row (TRIAD).** `POST /api/logs`
+  400s on any `tz` outside the SERVER image's zone list; before PR2 no client
+  sent the field, so the branch had never fired. Believed safe because the
+  validator predates the producer. Settled by asking what happens the first time
+  the field is actually sent, and by whom the disagreeing list is owned — ours.
+  The route's own sibling (`checkCompletedAt` returning `{ok:true, value:null}`)
+  already modelled the answer.
+- **A "precedent" that is erased at runtime.** The cross-tree import cited
+  `import type`, which compiles to nothing; the new imports are runtime ones and
+  nothing in the repo resolved a `.js` specifier into `src/*.ts` at runtime.
+  Settled by writing a one-line scratch test and running it — it DOES resolve,
+  and the trap is that the specifier is relative to the FILE's directory, so the
+  same string is right from `server/routes/` and wrong from `server/`.
+- **A mutation hidden by a gate the covering scenario flips.** M21c targeted a
+  panel rendered under `link.linked && unlinkFailed !== null`, and its scenario
+  made `link.linked` false — so the mutant was invisible regardless. Settled by
+  asking, for every probe, which RENDER CONDITION stands between the mutated
+  state and the assertion, and whether the test's own scenario satisfies it.
+- **Ruling 2026-09-03 — "the API applies the profile's weight-class default".**
+  The claim: Concept2's logbook profile carries a Weight Class default that
+  "applies to the majority of your results", so a result POSTed without
+  `weight_class` would be filled in from it — which is why the design had spent
+  two revisions arguing about WHEN to ask the rower for a class rather than
+  whether to ask at all. Believed because the logbook help says exactly that, in
+  those words, and it is a true statement about the WEBSITE. Settled in one
+  command pair against log-dev: `POST /api/users/me/results` with no
+  `weight_class` answers **422**
+  (`{"errors":{"weight_class":["The weight class field is required."]}}`), and
+  the SAME row with `weight_class:"H"` answers **201** — a same-row control, so
+  the 422 cannot be blamed on anything else in the body. **Technique: when a
+  vendor's help page describes a default, the question is not whether the
+  default exists but which SURFACE applies it; ask the API by sending the
+  request without the field, with a control that differs in exactly that field.**
+  The same probe's `GET /api/users/me` also falsified the spec's V10 ("13
+  fields, none of them weight") — sixteen fields, `weight` and `gender` both
+  present — which turned the whole question around: the class was always
+  derivable and never had to be asked. **The residual this ruling creates is
+  named rather than closed:** the UNIT of that `weight` field is an INFERENCE
+  (Concept2's only published line sits on a different endpoint and contradicts
+  its own example — "decigrams", "e.g. 7500 for 75kg"). **Superseded in part by
+  the delta pass below**, which added a plausibility band that refuses four of
+  the five candidate units, made the derivation a FALLBACK behind the rower's own
+  declaration, and moved the confirming measurement from a walk leg to a
+  two-reading DESK step. What stands: a 2.2x pound-vs-kilogram error is inside
+  any band wide enough to hold real rowers, so that one reading is still not
+  settleable by a test. RF11's shape, narrowed rather than closed.
+
+**Delta pass, 2026-09-03 (the ruling-(i) mechanism). Six of seven claims broke;
+the fixes are folded into the plan, the spec, the amendment and ROADMAP.**
+
+- **A vendor field we can read, mistaken for the vendor's authority on the thing
+  it describes.** The design derived Concept2's `weight_class` from the profile's
+  `weight` + `gender` because both are on `GET /users/me` and C2's lightweight
+  definition is written in those terms. Concept2's own help says the opposite in
+  one sentence: _"Even though you may have entered a weight in your profile, you
+  must designate L or H for every piece that you enter."_ The class is a
+  DECLARATION (a profile default plus a per-piece choice); the weight is a
+  different attribute C2 never derives it from. **Technique: having established
+  that the system HAS the concept, do not stop — find its PRODUCER, and check
+  whether the field you can read is the one the vendor's own surfaces write.**
+  Corroborated by looking at what the vendor's OWN client does: ErgData carries a
+  separate Weight Class setting, and its most-reported bug is uploading the wrong
+  class — the vendor got this wrong too, which is evidence the derivation is not
+  the intended one. **Follow-through, and the reason this one paid twice:** the
+  same question asked of the RESULTS endpoint found the declaration is readable
+  (every result carries `weight_class`, date-descending, ~220 ms for a page of
+  five), so the fix was a better producer rather than a caveat.
+- **A `curl -sI` 200 cited as proof a page is the right destination.** The 2i
+  link-out pointed at `/profile/{id}` on the strength of a status line. Fetching
+  the BODY showed a public read-only card — Age, Country, Logbook ID, Login/Sign
+  Up chrome, no weight and no form — while `/profile` (no id) 302s to `/login`.
+  **Technique: for a link-out, a 200 to an ANONYMOUS fetcher is evidence AGAINST
+  the page being the rower's own settings form; the account page is the one that
+  redirects to login.** Compounded by the browser layer: the native arm is
+  `SFSafariViewController`, cookie-isolated from Safari since iOS 11 (which is
+  why the OAuth hop uses `ASWebAuthenticationSession`), so the rower arrives
+  signed out — ask which COOKIE JAR a link-out opens in before assuming a
+  signed-in page.
+- **Copy and controls contradicting each other on one approved frame.** 2i read
+  "Set it there, then send this row again" and offered no way to send again; the
+  rationale for removing Retry ("the server would refuse again") is true only if
+  the rower ignores the sentence above it. **Technique: read a design frame's
+  COPY as a list of actions and check each one against the frame's own
+  controls** — RC-24's "REST twice with two numbers" in its verb form.
+- **A unit inference whose failure DIRECTION was never enumerated.** "A wrong
+  unit classifies every rower as one class" was written as a single risk;
+  tabulating the five candidate units against the actual predicate shows two of
+  them (integer kg, integer lb) make every rower LIGHTWEIGHT, which falsifies a
+  competition record rather than merely disadvantaging its owner. **Technique:
+  for any unit inference, tabulate every candidate unit against the actual
+  predicate and name which way each one fails — then add the PLAUSIBILITY BAND
+  that turns the un-measurable inference into a loud refusal.** **And state what
+  the band cannot catch**: writing the band's own test found that
+  hundredths-of-a-pound (16530 for 75 kg) sits inside any range wide enough to
+  hold real rowers. The plan, the code comment and a dedicated test say **four of
+  the SIX candidate readings refuse and two do not** — hundredths-of-a-kilogram
+  because it is the reading we assume is right, hundredths-of-a-pound because no
+  band can exclude a 2.2x error. (Corrected 2026-09-03: this entry and four
+  other places said "four of five" over a six-element list, and the sweep that
+  fixed the rest missed a capitalised instance because its grep was
+  case-sensitive. A guard oversold is worse than no guard, and the test exists
+  so a later overclaim goes red.)
+- **A wrong-surface doc row refused for one field and accepted for its neighbour,
+  in the same paragraph.** The plan correctly tagged Create User's `weight` row
+  "PRIMARY for the write parameter; INFERENCE for the read field", then two
+  paragraphs later cited Create User's `gender | Required: Yes | Must be one of
+  F, M` as proof a read can never carry a third value — on a
+  client-credentials admin endpoint, with no gender row on Edit User at all.
+  **Technique: after catching a wrong-surface citation, grep the same document
+  for every OTHER field the argument leans on and re-ask the surface question for
+  each** — RF16's second corollary applies to the neighbour, not just to the
+  field that was caught. The victim was real: any value outside `M`/`F` routed to
+  a state rendering `SET YOUR WEIGHT ON CONCEPT2` for a rower whose weight was
+  set, forever.
+- **A schema drop whose test ripple runs in two directions at once.** The plan
+  scoped `schema.integration.test.ts` as "two `db.insert` calls". The file's
+  describes run against DIFFERENT migration caps: the full-migrate block must
+  LOSE the column (and delete outright the test whose subject is the dropped
+  enum), while the capped-at-0021 block must KEEP its raw-SQL `weight_class`
+  inserts — and its two typed `db.insert` calls break precisely because the
+  drizzle object can no longer supply a column the capped DB still requires,
+  failing with a not-null violation instead of the unique violation they assert.
+  **Technique: for a DROP, group the test sites by which migration CAP their
+  describe runs against; the answer is opposite on each side, and raw-SQL sites
+  are invisible to both `typecheck` and `--project unit`.** And note the sibling
+  gate the repo already has: migration 0021 carries a "rollback-image insert
+  still succeeds" test — a drop that cannot pass its equivalent is not
+  rollback-safe, and that must be STATED rather than omitted.
+- **A count query standing in for a writer check.** "Both tables are empty" makes
+  a drop safe against DATA LOSS and says nothing about an old instance still
+  INSERTing. **Technique: name the predicate that actually makes the migration
+  safe (here: the feature flag being off on every running instance) and assert
+  THAT; the counts are corroboration, not the check.**
+- **An exit criterion labelled "on hardware" that touches no hardware.** 3b is a
+  profile edit plus API GETs — a desk step, coupled by its own wording to erg
+  time. **Technique: for every criterion that names a walk, list the equipment it
+  actually touches; if the list is empty, it is blocking the flag flip for
+  nothing.** And ask whether ONE reading can distinguish the failure that
+  matters: a single weight measurement cannot detect a per-user display-unit
+  preference, which the profile carries no field for — so it is two readings, kg
+  then lb.
+- **What the paste-test found that no reading pass had.** Placing the whole
+  producer chain (including the route step the previous receipt had to leave
+  UNRUN) surfaced three things a review would have caught only in a task round:
+  the band's pound blind spot above; that adding a second read call to the upload
+  path breaks ~20 existing route tests until `makeStubClient` gains a
+  `fetchResults` default; and that a new method on an `as unknown as C2Client`
+  cast is invisible to `typecheck` and appears only as a runtime TypeError.
+  **Technique: a paste-test is not a formality when the change adds a CALL to a
+  shared path — the ripple is in the stubs, and stubs behind a cast are exactly
+  where the compiler stops helping.**
+
+**Code-reading lens, 2026-09-03 (the declaration mechanism). Twelve findings;
+the two that changed the design are first, and both are mirrors.**
+
+- **A vendor list read back as an oracle, containing our own writes.** The
+  design read the rower's most recent Concept2 result to get their DECLARED
+  weight class — the right producer, established by the delta pass. The list
+  also contains the rows Ergomatic itself posted: Concept2's 201 echoes back
+  the very class we supplied, and no projected field distinguishes our row
+  from a real declaration (`source` is the account holder's name, not the
+  application's). So a DERIVED guess on send 1 returns as producer 1 on send
+  2, relabelled as the rower's own declaration, and the SENT provenance line
+  that exists to make the guess correctable goes silent at exactly the moment
+  it starts being wrong. **Technique: after establishing that a vendor field
+  is the right producer, ask whether the collection you read it from contains
+  your own writes — and prove it with a TWO-CALL probe rather than one.** One
+  send looks correct; the defect only exists on the second. RF11 one level up:
+  we wrote a number to a third party and then read it back as our authority.
+  The fix is an exclusion (`session_logs.c2_result_id`) plus an invariant: a
+  page whose only rows are ours is NO declaration, not a declaration.
+- **A failed read silently becoming a guess.** The resolver branched on
+  `list.ok`, returned early only for an auth failure, and let every other
+  error — a 500, a timeout, a reset connection — fall through to the profile
+  derivation. Proven by stubbing the results endpoint to 500 for a rower who
+  had declared `L`: the POST body carried `H`. **Technique: for any layered
+  producer, separate "the source said nothing" from "we failed to ask" and
+  check which branch a transport error takes.** Having no data is a reason to
+  fall back; failing to read data is a reason to retry. The asymmetry was
+  nowhere argued for, and the plan had even prescribed a test blessing it.
+- **A seam test that passed for the wrong reason, because a fetch mock had no
+  arm for the call under test.** "A profile with no weight stops the send
+  BEFORE the results endpoint is touched" had arms for the profile and the
+  POST but none for the results GET, so that call fell into the POST
+  catch-all, which ran `JSON.parse(String(init?.body))` on `undefined` and
+  threw — exercising a thrown fetch rather than an empty declaration page, and
+  making the test's own title false. **Technique: read a fetch mock's arms
+  against the calls the code under test actually makes; a missing arm does not
+  fail loudly, it silently redirects the call into whatever the catch-all
+  does.**
+- **Copy and controls contradicting each other, one gate revision later.** The
+  redrawn refusal state told a rower whose profile cannot be classified to
+  "pick lightweight or heavyweight on a result in your Concept2 logbook",
+  beneath a button that opens the PROFILE — where a per-result class cannot be
+  picked. The same frame's sibling sentence blamed the rower's weight for an
+  implausible number that is most likely our own unit inference being wrong.
+  **Technique: this check does not retire after one pass — re-read every
+  sentence against its controls after each redraw, because a fix to one
+  sentence is where the next mismatch is introduced.**
+- **A stated worst case that undercounted its own chain by 3x.** A 10 s
+  per-call timeout was documented as bounding "one send's worst case to three
+  of these"; the route's real worst path is nine bounded calls, so 90 s, and
+  nothing else caps the SENDING state. **Technique: for any per-call bound,
+  enumerate the actual call chain including every refresh-and-retry arm, and
+  check whether anything upstream caps the total; a per-call number is not a
+  worst case.**
+
+## 2026-09-04 — Wave F exit: causal evidence beats the banner
+
+- **A live screenshot and `liveness-silence` do not prove a radio drop.**
+  The Drop ring's 7.23 s resume gap recovered before its later typed native
+  Bluetooth-disabled event. **Technique:** grade the ordered ring receipts
+  (`record-actual` → `disconnected` → `partial-written` → saved commit)
+  separately from the saved-door screenshot. The [exit walk](../../docs/monitor/sessions/walk-2026-09-04-wave-f/README.md)
+  passes for this phone and these runs; its pre-pull lock did not recover the
+  unreceived 21.1-second trace head.
+- **Zero programmed rest does not mean no `resting` status frame.** The
+  2×100 m run emitted workoutState 7 for one transition despite compiled
+  rest 0. **Technique:** prove partial eligibility from its own ordered
+  evidence—accepted prior actual, then the new interval's rowing reading,
+  then `partial-written`—not from the workout grammar.
+
+## 2026-09-04 — Phase SF anchor: the platform ships one thumb
+
+Spec `docs/superpowers/specs/2026-09-04-shuffle-and-filters-design.md`,
+revision 0 → 1. Eleven findings, two of which changed the design.
+
+- **"Two overlaid native `<input type=range>` gives a two-thumb slider keyboard-,
+  screen-reader- and touch-complete for free, so building a custom control would
+  be hand-rolling what the platform ships."** False, and it inverted the repo's
+  own RF8. **Technique:** ask what the PLATFORM actually ships before invoking
+  "don't hand-roll it". The native element carries one value (MDN), nothing in
+  the HTML spec limits a range input's hit region to its thumb, so the overlay
+  needs `pointer-events` on `::-webkit-slider-thumb` — which MDN itself labels
+  *"Non-standard … We do not recommend using non-standard features in
+  production"* — and the CSSWG's own replacement (`css-forms-1`) carries an OPEN
+  issue reading *"The pseudo elements for the 'slider' controls do not support
+  multiple thumbs."* Then check what real implementations DO: MUI's thumb is a
+  styled span wrapping a hidden native input; the APG pattern is custom
+  `role="slider"` nodes; USWDS ships single-thumb only. **Reuse-vs-invent is
+  settled by finding two shipping implementations, not by asserting a primitive
+  exists.**
+- **"The write happens inside the same lazy initializer that reads, so the second
+  StrictMode invocation reads the first's write."** True (react.dev confirms
+  `useState` initializers double-invoke, development-only) — and it was the wrong
+  thing to be worried about. **Technique:** when a spec names one concurrency
+  hazard, check whether the WRITE can fail instead. `saveTodayPick` returns a
+  boolean nobody reads; under storage denial the read-then-write initializer
+  redraws on every mount, turning a stable card into a card that changes on every
+  tab round trip — a regression against behaviour that is currently stable.
+  RF25's shape, found by reading the writer's return type rather than the race.
+- **"An rng injected into `suggest()` draws once."** No: `suggestion` is
+  recomputed on every render and a second time per render against the sheet
+  draft. **Technique:** for any "draw once" claim, count the CALL SITES of the
+  function that draws, per render, before placing the draw. The fix was to
+  return the tie class and let the one initializer that persists draw.
+- **"Bumping a stored shape means the old record fails validation and reads as
+  null."** False for a shape change that only REMOVES fields: a hand-written
+  validator that builds its result from named keys ignores extras, so the old
+  record validates cleanly. **Technique:** removal and rename fail differently.
+  Read the parser's RETURN statement, not its checks — the checks tell you what
+  is rejected; the return tells you what a surviving record becomes.
+- **"A no-filter sentinel and a default can both govern the same control."** They
+  cannot, silently. `[0,120]` = "no filter, render no token" and "deviation is
+  measured against the key's default `[0,60]`" produce a state that IS a filter
+  and shows nothing. **Technique:** for any control with both a SENTINEL and a
+  per-account DEFAULT, enumerate the four cells (at-default / at-sentinel /
+  both / neither) and name the token for each. A rule stated per-cell cannot
+  hide the contradiction that two prose sentences can.
+- **"An e2e route counter reading zero proves the interaction issues no request."**
+  Decoration when the count is already zero on main. **Technique:** before
+  accepting any counter-reads-zero gate, run it against BASE. If base is already
+  the pass value, the gate cannot go red — replace the count with a snapshot of
+  the request LIST compared to a recorded baseline, so an added mount is caught,
+  and prove it red by adding a fetch.
+- **"`git grep <symbol>` is empty after the removal PR."** Never, when the phase's
+  own ROADMAP row and spec name the symbol they are retiring. **Technique:** run
+  every prescribed grep AT SPEC TIME and read the hit list — a removal criterion
+  must be path-scoped (`-- app/`) or it is unpassable by construction.
+- **"A cleared chip and an un-rolled day are distinguishable."** Both were
+  `swapType: null`. **Technique:** for every "first time today" mechanism, name
+  the stored value that distinguishes "never happened" from "happened and was
+  undone"; if one field carries both, the undo re-triggers the mechanism.
+
+## 2026-09-05 — Phase SF PR1 e2e: tests that pass by coin flip
+
+- **"The e2e suite is green, so the randomised order broke nothing."** Four
+  `today.spec.ts` tests imported two never-done fixtures and asserted which
+  one the card showed — an assumption that creation order breaks the tie,
+  which is exactly the determinism PR1 removed. They passed a four-spec run
+  by coin flip and failed the full run. **Technique:** when a change replaces
+  a deterministic order with a draw, list every test whose fixture has a TIE
+  under the old order (two rows with equal `lastDoneDaysAgo`, equal
+  `sortOrder`, equal anything the sort read) and run the suite several times
+  over (`--repeat-each 3`) before trusting green. A test that states the
+  draw (`pinToday`) is the fix; a test that happens to pass is not.
+
+## 2026-09-05 — Phase SF PR2 delta: a rename's census, and ARIA that contradicts its own clamp
+
+- **"The source rename landed at six rendered sites."** Seven, plus an
+  accessible-name site the census had no column for. The miss was the
+  workout DETAIL badge, which shares the row badge's CLASS and whose own
+  comment says it exists *because* the row badge alone was not enough — and
+  a test pinned the stale word, so the suite defended it. **Technique: for a
+  copy rename, grep the retired STRING (`>CUSTOM<`, `"CUSTOM"`) across
+  `src/` and `e2e/` after the change and read every hit, rather than
+  trusting the site list the plan enumerated before it. A shared CSS class
+  is a census key the file list misses; a test asserting the old word is the
+  cheapest possible tell.**
+- **"The control follows the APG multi-thumb pattern."** True for role, tab
+  order and keys; false for the one attribute the clamp makes dynamic. The
+  pattern says *"When the range … of another slider is dependent on the
+  current value of a slider, the values of aria-valuemin or aria-valuemax of
+  the dependent sliders are updated when the value changes"* — and the code
+  DECLARED the dependency twice (`Math.min(n, value.max)`, and End on the
+  lower thumb going to `value.max`) while advertising a static max.
+  **Technique: when a spec cites a pattern, check the pattern's CONDITIONAL
+  clauses against the code's own clamp, not its headline attributes. The
+  code that implements a dependency is the evidence that the ARIA owes one.**
+- **"`touch-action: none` on the rail does not protect the thumbs, because
+  `touch-action` is not inherited."** Both halves of the premise are true and
+  the conclusion is false: Pointer Events L2 §9.2 says a touch behavior is
+  supported only if it conforms to the property of *each element between the
+  hit tested element and its nearest ancestor with the default touch
+  behavior*. **Technique: CSS inheritance and gesture arbitration are
+  different mechanisms — read the spec's arbitration algorithm before
+  reasoning from the property's inherited-ness.**
+- **A collapsed two-thumb range has a dead tap that no test could see.** A
+  `<=` tie-break sent every rail tap to the clamped thumb, so `onChange` was
+  never called. **Technique: for any "nearer of two" rule, evaluate it at
+  the DEGENERATE input (the two are equal) and ask which branch the tie
+  takes and whether that branch can move.**
+- **A membership change measured only at the default.** The direction table
+  was right for cap 60 and wrong for a third of the supported cap range —
+  and it did not matter, because no client path writes the cap.
+  **Technique: sweep the parameter's whole VALIDATED range in a script, then
+  ask who can actually produce each value; report the sweep, promote only
+  what a supported writer can reach.**
+- **An exit criterion corrected in the ROADMAP and left standing in the
+  spec.** `git grep <symbol> -- app/` "returns nothing" survived in two
+  places while a third was amended, and the amendment itself named two
+  comments where the same PR had reduced it to one. **Technique: run every
+  prescribed grep at REVIEW time too, not only at spec time, and grep the
+  withdrawn PHRASING ("returns nothing") across every file that repeated it.**
+
+## 2026-09-05 — Phase SF exit: a differencing gate with three random inputs
+
+- **"Two runs of twelve SHUFFLE taps differing proves the shuffle is random."**
+  The e2e clears storage between runs, which also re-rolls the freestyle TYPE
+  (4 candidates) and re-draws the first card — both random, both upstream of a
+  type-scoped pool. Against a deterministic `nextShuffle` the assertion still
+  passes ~75% of the time; it goes red on main only because main has no
+  randomness anywhere. **Technique: for any A-differs-from-B gate, enumerate
+  every random or context input the reset also re-rolls, and compute the gate's
+  power against the SINGLE regression it names — not against the base commit.
+  "Fails on main" and "catches the regression" are different claims.**
+- **"The design sweep proves the criterion, so the criterion is in CI."**
+  `playwright.config.ts` gives screenshots its own project and CI runs
+  `--project=chromium` with `testIgnore: "**/screenshots.spec.ts"`. An
+  assertion parked in the capture spec is a local-only gate. **Technique: for
+  every exit criterion whose oracle is an e2e file, read the CI workflow's
+  actual project flag and the config's testMatch/testIgnore before calling it a
+  standing gate.**
+- **A struck design decision survived in the exit criterion that names it.**
+  James struck the sticky clear at PR1's Gate 0; §1.5, the store's comment, the
+  ROADMAP and the test all record the strike, and §7's criterion 2 still
+  demanded it — the second instance of this exact shape in ONE phase.
+  **Technique: when a ruling strikes a mechanism, grep the ruling's own SUBJECT
+  ("sticky", "clear", "next day") across the spec — the exit-criteria section
+  is written first and reconciled last, so it is where a struck clause hides.**
+- **A capture unchanged across a feature PR is not automatically stale.**
+  `today-freestyle-landscape.png` last changed at #296 yet appears in PR1's
+  Gate 0 table. It is honest: the capture block re-taps the chip before the
+  landscape frame, so the pixels are identical under a manual tap and under the
+  roll. **Technique: before calling a carried-forward capture stale, read the
+  capture block's own steps — `pinToday`/a re-tap can make a new mechanism
+  produce byte-identical pixels.**
+
+## 2026-09-04 — Wave E PR A: gates that measure the wrong distance
+
+- **A mutation that moves a declaration is not the mutation that reproduces the
+  design alternative.** A gate for "ONE auto margin on the wrapper pins the
+  group" prescribed moving `margin-top: auto` from the wrapper onto its
+  children; inside a wrapper that is itself a flex ITEM there is no free space
+  to split, so the rows stayed flush and the gate stayed green in both
+  orientations. **Technique: paint the mutant and the counterfactual SIDE BY
+  SIDE in a real engine before writing the expected failure** — the real
+  counterfactual (delete the wrapper, put the auto margin back on the rows as
+  direct flex children) split 174.5px in portrait and 0 in landscape, which is
+  also how you learn which orientation the gate can even fail in.
+- **An adjacency assertion cannot fail on a position defect.** The same gate
+  asserted `|diag.y - (c2.y + c2.height)| <= 1` and nothing else, so a mutant
+  that moved the whole group 349px up the screen was green. **Technique: for a
+  layout invariant with two halves ("pinned to X" and "adjacent to each other"),
+  write one assertion per half and name which mutant reddens each** — a comment
+  arguing about half A above an assertion measuring half B reads as coverage.
+- **`fullPage: true` is a claim, and on a `position: fixed` overlay it is a
+  false one.** Four new captures carried the flag across from captures shot on a
+  plain-flow screen. **Technique: before copying a capture flag onto a new
+  route, grep the screenshot file for its own documented rule and for the
+  nearest existing capture of the SAME route shape** — this file already said
+  "`fullPage: true` is useless on this route" and its three `.overlay-screen`
+  captures already took plain viewport shots.
+- **Two instances of the same read hook are two authorities, and the plan named
+  the mechanism without the consequence.** A screen ran its own
+  `useConcept2Link` for a redirect while its child ran another for its content;
+  the child's Retry re-reads only the child, so a child that goes silent
+  (`available: false`) under a parent still holding `null` leaves chrome over an
+  empty body — which the parent's own header sentence said could never happen.
+  **Technique: when a design justifies duplicating a reader with "nothing else
+  here can observe the child's null return", treat that sentence as the finding
+  and ask what the child renders in each state and who re-reads after a retry.**
+  RF25/AUD-016's shape with a reader instead of a writer.
+- **A test's stated precondition is not enforced by the file it lives in.** An
+  I-D sign-out test explained itself with "the fact is MINTED by this mount", on
+  a suite whose setup file is one `import` line and whose `afterEach` clears no
+  storage — two earlier tests in the same file had already minted the key.
+  **Technique: for any test whose comment asserts a precondition about persisted
+  state, read the file's `afterEach` and the shared setup before believing it;
+  a precondition satisfied by leakage is a precondition that will stop being
+  satisfied when someone reorders the file.**
+
+## 2026-09-05 — Wave E PR C: "send the machine's own distance to Concept2" (TRIAD, full pass)
+
+- **A spec that says "settled by a live test" and points at a "full record"
+  file — OPEN THE FILE and read it to the end.** PR C's §2 cited a research
+  file as the "Full record" of a live API test (5706 verified / 5708 not);
+  the file was the pre-test PROPOSAL and ended with "Walk proposal". Grepping
+  the whole tree for the result's distinctive tokens (`85921`, "test row was
+  deleted") found them ONLY in the spec's own prose — the result was
+  uncommitted. RF16's dangling-citation shape: the citation read as evidence
+  and contained none. Technique: `git log` the cited file (committed in the
+  same commit as the spec), then grep the tree for the result's own literals.
+- **A two-row "A/B" table whose two rows are different KINDS of thing is not
+  an A/B.** §2's "only the distance varied" table labelled its failing row
+  "the existing row 85921" — a pre-existing row, not a fresh controlled POST.
+  Read the table's own labels against the prose that summarises it.
+- **A replay/oracle test that imports no payload builder cannot gate a
+  payload.** §5 named `oracleCorpusReplay` (client, imports domain parse only)
+  as the gate that "asserts on the built C2 payload"; that test never builds
+  one. The real send seam (`store.get → toMappingRow → buildC2Payload`) was
+  untested for the non-null case and the field was dropped in `toMappingRow`.
+  Technique: grep the named test's imports for the module whose output the
+  gate claims to assert on; trace the production seam separately and find the
+  one line that drops the field.
+- **"Gate it structurally" is RF21 when the structural value equals the
+  fallback in every fixture.** The time change had no divergent-work-seconds
+  capture (the one distance-divergent capture had identical seconds, 60==60),
+  so a mutation reverting time to workSeconds stayed green everywhere. Only a
+  SEEDED unit test with distinct literals can bite — which the spec's own
+  "no seeding / upstream of producer" gate contract forbade. Read the actual
+  asserted numbers in the corpus before believing a divergence exists to gate.
+- **"Every surface already uses X" — enumerate the TIERS.** The display used
+  `machineWorkMeters` only in TIER A; TIER B1 showed `workMeters`. The C5
+  conclusion (no number moves) still held because the send's `?? workMeters`
+  fallback mirrors the display tiers — but the claim as worded was false.
+
+## 2026-09-05 — Phase DE anchor pass: the compat risk the spec reasoned about was the wrong one
+
+- **"An old client renders a NULL enum as a blank chip — the compat risk is
+  cosmetic."** False, and the spec had reasoned carefully about the WRONG
+  failure: it compared "a derived band mislabels ~70 workouts" against what it
+  believed was an empty label, and chose NULL. The three actual renderers do
+  not use the lookup the spec named (`DIFFICULTY_CHIPS.find`); they call
+  `workout.difficulty.toUpperCase()` directly (`WorkoutRow.tsx:52`,
+  `Today.tsx:1487`, `WorkoutDetail.tsx:436`), so a NULL takes out the Library
+  list, the Today card and the detail screen inside React render.
+  **Technique: for any "the old client degrades gracefully" claim, grep
+  `\.<field>` — the property ACCESS — across the client and read every hit's
+  expression, not the lookup helper the spec names.** A spec naming a
+  tolerant-looking helper is describing the code it wishes existed.
+- **"The log draft carries `pain` in localStorage."** False. `grep -n pain
+  app/src/session/{draft,logDraft}.ts` exits 1, and `LogSession.tsx:545` says
+  it verbatim: "`held`/`pain`/`notes` are NOT here". The spec would have
+  prescribed a compat fallback read for a key that never existed — a gate that
+  cannot go red (RF21). **Technique: a stored-shape TABLE gets one grep per
+  row, and the grep's actual output is pasted.** A census assembled from
+  plausibility reads exactly like one assembled from greps.
+- **"A `|` in a bulk title was never legal."** False: `parseHeader` accepts 4
+  OR 5 fields and `slice(1)`s the 5-field form, so `A|B | AN | medium | 3`
+  parses silently with title `"B"`. **Technique: for any "the parser rejects
+  X" claim, find the branch that would ACCEPT X by another route.**
+- **"Is there a deploy path that rolls back without the operator knowing?"**
+  Yes, and the repo had already written it down three times:
+  `docs/RELEASING.md` § Rollback constraints names `scripts/deploy.sh:23-29`'s
+  ERR-trap `rollback()` firing AFTER the new container migrated, "while the
+  deploy log reports the rollback succeeded". **Technique: before researching
+  a deployment/rollback question, read the repo's own floor table** — RF18's
+  sibling, for ops rather than vendor docs.
+- **Strongest thing that survived attack:** the claim that an old Today throws
+  on a missing `preferences.difficulties`. It holds — by a different route
+  than the spec gave (`usePreferences.ts:42` casts unvalidated; the value
+  reaches `suggest.ts:295` through `Today.tsx:900`'s `seedSet` →
+  `filterSetFor`, firing only for a filter key with no stored entry).
+  **Technique: when a "would throw" claim survives, still trace WHICH path
+  throws — a wrong mechanism with a right conclusion is inherited by the
+  implementer's test.**
+- **Rename-migration precedent.** `grep -rl RENAME app/drizzle/` returns
+  nothing: this repo has never generated a column rename, and drizzle-kit
+  resolves renames through an interactive prompt whose non-TTY fallback is
+  DROP + ADD. **Technique: before trusting "one migration, generated by
+  db:generate", grep the existing migration corpus for the DDL verb in
+  question. Zero precedent means the tool's behaviour is unmeasured here.**
+
+## 2026-09-05 — Phase DE `/harden` run: lens 2 on a spec's prescribed rules
+
+- **A prose rule that says "if present" lands on a route that branches on
+  KEY presence.** §4.3's inbound adapter ("effort wins if present, else pain
+  copied") reads fine until it meets `PATCH /api/logs/:id`, which decides
+  what to touch by `"pain" in body`; the natural `body.effort = body.effort
+  ?? body.pain` creates the key with `undefined`, makes `"effort" in body`
+  true on a `{held}`-only PATCH, and silently clears the stored figure.
+  **Technique: for every adapter rule, find the consumer that uses the `in`
+  operator or `hasOwnProperty` and run the rule through absent / null /
+  valued at that consumer, not at the validator.**
+- **"On every insert and update" named two verbs; the store had four write
+  sites, and one was a live door.** `createMany` serves `POST /api/workouts/
+  bulk`, not only the seeder; a derived NOT-NULL write added to `create`/
+  `update` alone 500s every bulk import for a whole compat cycle.
+  **Technique: when a spec says "every write", grep the store for every
+  method that writes the column and name each one; then grep the routes for
+  which of them are reachable from a request.**
+- **A hand-transcribed identifier census went stale between two passes on
+  the same day.** The anchor pass listed ~20 pace-word identifiers with hit
+  counts; a grep two hours later found four it missed and two that do not
+  exist. **Technique: a census is its COMMAND. The spec carries the grep and
+  the plan re-runs it against its base; transcribed names and counts are
+  deleted, not corrected.** (`/harden` phase 0 item 3, confirmed again.)
+- **A log-line trigger that a redeploy resets.** "Zero `compat.pain_write`
+  for seven days" read from `docker logs` measures only the CURRENT
+  container, and `deploy.sh` recreates it on every deploy with no log
+  driver or retention configured. **Technique: for any gate read from a
+  log, name the log's LIFETIME (container, file rotation, external sink)
+  beside the window, and state what resets it.**
+- **A "fallback read" relaxes a parser whose own comment says it is
+  whole-record strict.** `libraryFilters.ts`'s `parseFilters` nulls the
+  whole record on any malformed field by documented design; a lenient
+  `painLevels` fallback would have produced exactly the half-populated
+  record that design exists to prevent. **Technique: before prescribing a
+  tolerant read, open the host parser and read its strictness comment; the
+  fallback inherits the host's failure mode, it does not get its own.**
+- **The SQL paste-test is cheap and belongs in phase 0.** Fresh
+  `postgres:18.4`, 24 migrations applied by `sed`-stripping the drizzle
+  breakpoints, the prescribed block piped through `psql -v ON_ERROR_STOP=1`,
+  constraint names checked in `pg_constraint`: four minutes, and it settled
+  the "does RENAME CONSTRAINT exist under that name" question the anchor
+  pass could only read about.
+
+## 2026-09-05 — Phase DE PR 2 `/harden` (delta + lens 2): a rename's compat lives in the halves nobody renamed
+
+- **A plan that says "already authored/already renamed" is a claim about the
+  TREE, and trees move.** Task 1 said `schema.ts` was already renamed and the
+  `db:generate` no-drift gate already green; `git diff --stat origin/main..HEAD`
+  listed six files and `schema.ts` was not one of them. **Technique: for every
+  "already done" sentence in a plan, run `git diff --stat <base>..HEAD` and
+  match the file list against the sentence — a measured gate on an unrecorded
+  tree state is a number without a tree.**
+- **A field rename inside a FINGERPRINT breaks the record that decides whether
+  the record is kept.** The builder draft's compat fallback was prescribed for
+  `form`; the value that decides survival is `baseline`, compared through
+  `formFingerprint`, which carried the renamed field. `JSON.stringify` renders
+  `undefined` inside an array as `null`, so the null-valued (new-mode) case
+  the plan sketched passes by accident while the valued (edit-mode) case
+  silently drops the draft. **Technique: grep the renamed field for every
+  hash/fingerprint/equality helper that reads it, and test the case whose OLD
+  value was non-null; a fallback test written against a null field cannot
+  fail.**
+- **Express 5 leaves `req.body` undefined, so a body adapter using `in` turns
+  400s into 500s.** Measured: `content-type: text/plain` and a bodiless POST
+  both yield `typeof req.body === "undefined"`; two routes passed `req.body`
+  straight to a validator that already handled non-records. **Technique:
+  before prescribing "call the adapter FIRST at every write site", open each
+  site and check whether a `body` local (and its `isRec` guard) even exists —
+  the sites that already had one are not the sites that will break.**
+- **A `sort -u` token census cannot gate a MEANING.** `grep … | sort -u`
+  collapsed 925 occurrences to one line, so a surviving pace-word literal
+  (`kind: "effort"`) left the gate green while the stated goal was false.
+  **Technique: a gate about ambiguity must be per-LOCATION with a base-vs-head
+  count; a deduplicated token list only ever catches new COMPOUND
+  identifiers.**
+- **Check the storage MEDIUM before writing a one-release fallback.** Two of
+  three "localStorage parsers" were localStorage; the Library's is
+  sessionStorage, whose lifetime ends at relaunch, so its fallback had no
+  native producer at all. **Technique: grep the parser file for
+  `sessionStorage` before believing a plan's storage table.**
+- **A compat trigger keyed on "the value came from the old key" misses "the
+  request carried the old key".** `usedPainKey` was false whenever both keys
+  agreed. **Technique: state a log-based trigger as a property of the REQUEST
+  (`"pain" in body`), never of the resolution.**
+- **A rename migration moves ONE side of a two-sided identity.** The
+  `article_reads` slug UPDATE preserved the read for the new client and
+  orphaned it for the installed old one, which keeps asking for the old slug.
+  **Technique: for every value a migration rewrites, ask which key the OLD
+  client will send afterwards — the migration is the server's half; the alias
+  is the client's.**
+- **Lens 2 on the same plan found the response-site census wrong by one route
+  (PATCH has two `res.json` exits) and one dual-field site (PUT) with no
+  request in the contract test.** **Technique: a census of `res.json` sites is
+  the grep, and the contract test is checked against the grep's output, not
+  the plan's list.**
+### 2026-09-05 — Concept2 auto-send spec, phase-open anchor (TRIAD: stored shape + a number leaving on an untapped trigger)
+
+- **"An automatic send that races a manual tap cannot create two rows."** The
+  already-sent short-circuit reads a row fetched before any wire call, and the
+  route holds no lock on `session_logs` — `withLinkLock` locks the LINK row,
+  for tokens, and the C2 post happens outside it. Two overlapping requests both
+  read `c2_result_id = null` and both reach the vendor; only the VENDOR's dedup
+  covers it. **Technique: for any "our guard prevents X" claim, find what the
+  guard is compared against and WHEN it is read — a check against a value
+  fetched before the mutating call covers sequential callers and never
+  concurrent ones.** And the corollary that made it matter: the race was
+  reachable by ordinary use, because the surface shows a live Send button for
+  the whole duration of the send it is racing.
+- **A four-clause predicate with two inert clauses, because the caller's shape
+  uses `undefined` where the predicate checks `null`.** `isSendable` is typed
+  `Pick<StoredLog>` (`number | null`) and the spec fed it `LogFormFields`
+  (`workSeconds?: number`). **Technique: run the predicate against BOTH shapes
+  and print both answers** — `true` for the form shape with absent totals,
+  `false` for the stored shape with null totals, one `node
+  --experimental-strip-types -e` away. The absent/empty/valued rule this ledger
+  carries for vendor STRINGS applies to our own optional keys crossing a seam.
+- **Reusing an ARIA idiom by name instead of by handler.** "Reuse the
+  `PaceRefInput` radiogroup (RF8)" — but `selectByIndex` focuses AND commits,
+  because in a radiogroup selection IS commitment. Copied onto a control whose
+  third position ARMS AN UNLINK, one arrow key arms a destructive action and
+  every arrow across the other two fires a write. **Technique: before reusing a
+  keyboard idiom, read the arrow handler and ask whether the new control's
+  members all commit on selection; if one of them is a DOOR rather than a
+  value, the radio role is wrong, not just the copy.** (Count check too: the
+  repo has four hand-rolled radiogroups, so "not a fourth" would be a fifth.)
+- **Transcribing an invariant's PRICE from a spec that measured it for a
+  different change.** Walk-fixes R6 priced "four fixtures regenerate" for
+  removing the card's head — a change touching every state. This change renders
+  only when LINKED, and exactly ONE of the four fixtures is a linked state; the
+  card's commonest state has no fixture at all, so the real price is one
+  regeneration plus two NEW fixtures and new design.spec rows. **Technique:
+  when a spec spends a named invariant, re-derive the price against the
+  PREDICATE the new markup renders on, and open the fixtures — a price is a
+  measurement of one change, never a property of the invariant.** The same pass
+  found the neighbouring invariant (R8, "no new tier, no new accent") spent
+  silently.
+- **A response key set pinned by a CONTRACT SCRIPT the spec never read.**
+  Adding one field to `GET /api/concept2/link` needs four coordinated edits, not
+  two: `scripts/webauth-contract.test.ts` holds the route's parsed key list
+  `toStrictEqual` a hardcoded six-string literal AND two hand copies — the
+  product hook and the DEV PROBE (`Concept2LinkProbe.tsx`), which the spec
+  never mentions. **Technique: for any wire-shape change, grep `scripts/` and
+  the test tree for the FIELD NAMES of its siblings, not for the new field —
+  the gate that will go red names the neighbours.**
+- **"Relink resets" was true of one relink path and false of the other.**
+  `DELETE /link` deletes the row, but `upsertLink` is `ON CONFLICT DO UPDATE`
+  and never touches the new column — so RECONNECT keeps the mode (fine) and an
+  ACCOUNT SWITCH keeps it too, pointing an automatic send at a different
+  Concept2 account with no tap. **Technique: for any "X resets on Y" claim
+  about a stored column, enumerate every WRITER of the row and read each one's
+  SET clause; an upsert's set clause is the list of things that reset, and
+  everything else survives.**
+- **A citation that says the opposite, in the same clause.** The does-it-exist
+  answer cited our own logbook spec as recording "an observed ErgData post";
+  that document says *"not an observed ErgData post … remains open"* and labels
+  itself INFERENCE. **Technique: RF16's second corollary in its cheapest form —
+  open the cited section and read the sentence containing the word the claim
+  leans on ("observed"); a section reference is not a quotation.**
+- **Counting SURFACES, not states, for a silent-by-design feature.** The spec
+  called an automatic failure "one tap away". `git grep c2ResultId -- src/`
+  minus tests returns two files, one of which is a type — so the log detail
+  block is the ONLY surface in the client that can render a row's sent state,
+  and of the send route's six outcomes exactly ONE (`needs_reauth`) has a
+  proactive surface, by accident of a server flag set for another reason.
+  **Technique: for any feature whose value is that the rower stops looking,
+  tabulate every failure outcome against the surfaces reachable WITHOUT the
+  action the feature removed; the answer is a number, and the number is what
+  the PM rules on.** The case that made it a defect was systematic, not
+  per-row: a rower with no Concept2 weight declaration fails EVERY row,
+  identically, forever, silently.
+- **Attacked and HELD** (this phase's VETTED GROUND): the one save seam (one
+  client POST producer, one server insert, four doors); fire-and-forget
+  surviving navigation (`src/api.ts` creates no AbortController and reaches
+  `fetch` with no await on web); the block re-reading the row fresh on mount;
+  `raw.autoSend === true` fail-closed; `ADD COLUMN NOT NULL DEFAULT false`
+  being rollback-safe — **measured, via drizzle's `.toSQL()` emitting an
+  explicit column list rather than `SELECT *`, so an old image is blind to the
+  new column**; exactly one unlink affordance; `upsertLink` not writing the new
+  column; the 409-duplicate rendering as `ALREADY THERE` rather than a failure;
+  and the e2e seam being buildable upstream of the producer via
+  `connected.spec.ts`'s `MonitorRun`-seeding idiom.
+- **Standing axis, applied:** every mechanism here is deterministic except
+  Concept2's dedup (the vendor's heuristic, on a key whose `date` granularity
+  our own document marks "Unknown") — and A4's silence, which is a correctly
+  fail-closed check whose FREQUENCY no instrument this repo owns can observe.
+  **Technique: when a design's correct behaviour is to do nothing, ask which
+  instrument records that it chose to do nothing; if none does, the diagnostic
+  is part of the change** (the `rowingActive` pattern), because the first field
+  report will otherwise be undiagnosable.
+
+### 2026-09-05 — Concept2 auto-send spec rev 2, DELTA pass (four new mechanisms)
+
+- **A prescribed client call that does not typecheck, whose two prescribed
+  gates could not have caught it if it did.** `api(path, init: RequestInit)`
+  cannot take `body: { tz, trigger }`, and the "fix" an implementer reaches for
+  (`JSON.stringify` without the sibling's `Content-Type` header) makes
+  `express.json()` skip, `tz` absent, and every automatic send 400 — silently,
+  because 400 is not a flag-setting code. **Technique: paste-test a prescribed
+  call against the ADAPTER'S SIGNATURE and against the sibling call site, then
+  ask what each gate observes — a unit gate asserting a mocked client's
+  arguments and an e2e fake that answers regardless of body are both blind to
+  serialisation. One gate must see the parsed wire body.**
+- **A stored CODE is not the key the copy is chosen by.** "The screen reuses the
+  block's strings for that code" — but the block's three no-weight sentences are
+  selected by a SUB-reason the column does not store, so every rower would get
+  the one sentence that is not actionable. **Technique: before reusing a
+  renderer from a stored value, open the function and read its PARAMETERS; a
+  response parser keyed on `(status, body)` is not a code→copy map, and the
+  difference is a stored-shape decision.**
+- **"Cleared on success" enumerated from the branch that says 200.** Two exits
+  leave the row carrying a result id without reaching it: the already-sent
+  short-circuit and the vendor's own 409 duplicate. **Technique: for any
+  sticky flag cleared "on success", enumerate the route's exits that mean
+  success IN THE WORLD (the row is at the vendor), not the branch that names
+  it — and look for the outcome an ordinary third-party integration produces
+  (here, a rower who also runs ErgData).**
+- **The flag's other clearer, found by reading what the same statement already
+  does.** The relink upsert clears `needs_reauth_at`, so preserving a failure
+  flag across a same-account reconnect flips the row from RECONNECT NEEDED
+  straight to SEND FAILED for a failure the replaced grant caused. **Technique:
+  when a rule says "X survives Y", read Y's full SET clause and ask what Y
+  means about the evidence X represents.**
+- **A diagnostic that cannot observe the failure it is justified by.** A
+  `trigger` field on the send body was justified as making "automatic isn't
+  working" diagnosable — but both silent-failure modes produce no request at
+  all. **Technique: for any instrument, state what it prints in the FAILING
+  case, not the working one; if the failure's signature is the absence of the
+  event the instrument rides on, the instrument is decoration.** Corollary:
+  never scope a STORED write by a client-asserted body field when the server
+  holds the same fact in a column.
+- **A conditional upsert is settleable in five minutes, both halves.** Drizzle
+  `.toSQL()` (run with `node --input-type=module -e` from `app/`, so
+  `node_modules` resolves) proves EXPRESSIBILITY without a database; piping the
+  emitted statement into a scratch `postgres:18.4` proves SEMANTICS for both
+  branches. **Technique: expressibility and semantics are two questions and each
+  has a cheap separate answer — never settle either by reading the ORM's docs.**
+- **`container_name` in compose is a structural proof of single-process.** A
+  fixed container name makes `docker compose up --scale` impossible, which is
+  stronger evidence for a per-process claim than "we only run one".
+- **Attacked and HELD:** per-process as the whole surface; F7's SQL in both
+  branches; the account-switch path having a supported producer (`/connect` has
+  no already-linked guard); the You row's fifth string breaking no existing test
+  (no exhaustiveness assertion anywhere, verified by grep rather than assumed).
+
+### 2026-09-05 — Concept2 auto-send, /harden lens 1 on the plan as BUILT (delta)
+
+- **A serialisation guard released by the RESPONSE, protecting work done by the
+  HANDLER.** The spec said the claim "clears in a `finally`"; the built
+  middleware cleared it from `res.once("finish"/"close")`, and Express does not
+  stop a handler when its client hangs up — so a hung-up first caller freed the
+  key while it was still mid-wire-call, and both sends reached the vendor.
+  **Technique: for any guard held across async work, name the EVENT that
+  releases it and the WORK it is protecting, and ask whether one can end before
+  the other; if the release rides on a lifecycle the work does not own, copy the
+  guard verbatim into a scratch server and abort a request mid-handler.** The
+  probe is ten lines and answers in one run. Corollary: when the fix is "hold it
+  around the work instead", the middleware becomes a handler WRAPPER, which also
+  deletes every claim the design was making about the framework's event
+  semantics — the cheapest way to settle a vendor-hook question is to stop
+  depending on the hook.
+- **A response event pair where each member covers the other's blind spot, and
+  neither is safe alone.** Measured on Node 26 / express 5: a throw AFTER
+  headers fires `close` and never `finish`; a client abort fires `close` while
+  the handler runs on. **Technique: enumerate a framework event's firing cases
+  with a six-route probe app (normal, sync throw, async throw, throw after
+  headers, abort mid-handler, never respond) and print the ORDER — the ordering
+  is the finding, not the presence.**
+- **A concurrency gate that only ever runs well-behaved requests.** The
+  existing test was a real supertest run and its mutation bit, so it looked
+  like a gate on the invariant; it could not go red on the one case that
+  breaks it. **Technique: for a guard whose failure needs an ABNORMAL client,
+  check the test's client can produce one before believing the coverage —
+  supertest exposes superagent's `.abort()`, and the arranged sequence (enter
+  the wire call, abort, issue the second request, assert the wire count BEFORE
+  releasing) is deterministic where a `Promise.all` race is not.**
+- **A lifetime table that lists the STORED shapes and none of the session
+  state the same change minted.** RF27's table covered two columns; the three
+  new client flags were absent, and the one with no clear site (a failed-write
+  line) outlived an unlink-and-relink onto a card whose own comment claimed
+  "nothing about the removed account survives in this component".
+  **Technique: grep every `set<Name>` for each new piece of component state and
+  list the call sites; a piece of state whose only clear sites are "the start
+  of the next attempt" and "unmount" survives every state change in between —
+  and the comment nearest it is usually a claim you can now falsify.**
+- **A widened return type outliving the caller it was widened for.** A hook's
+  `reload()` was given a resolved value for a consumer a later revision
+  replaced; `grep` for the call sites showed none reads it, while its doc still
+  named the deleted caller. **Technique: when a revision replaces a consumer,
+  grep the PRODUCER's call sites for anyone reading its value — a return type
+  is dead code that typechecks, and its doc comment is the part that misleads.**
+- **Attacked and HELD:** the chain identity (third caller queues behind the
+  second — measured `maxConcurrentHandlers: 1` and a map that drains to 0);
+  write visibility for a caller that actually waits (single awaited `UPDATE`,
+  committed before `res.json`, fresh `SELECT` on the same pool); the deadlock
+  ceiling (every vendor call bounded, longest chain counted in the client's own
+  comment); the spec's `send_failed_*` clear sites matching the code's in both
+  directions (five writers enumerated by grep); the direct fresh read being
+  strictly fresher than the mounted hook it replaced; and the save-to-send seam
+  gate genuinely starting at the Save tap and asserting request ORDER, not a
+  call count.

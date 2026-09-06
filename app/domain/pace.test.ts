@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   parsePaceRef,
   resolveSplit,
-  isEffortRef,
-  effortWord,
-  effortFromWord,
-  effortSpoken,
+  isPaceWordRef,
+  paceWordLabel,
+  paceWordFromLabel,
+  paceWordSpoken,
   refLabel,
   estimationSplit,
 } from "./pace.js";
@@ -68,35 +68,35 @@ describe("effort refs", () => {
   });
 
   it("discriminates the arms", () => {
-    expect(isEffortRef({ effort: "max" })).toBe(true);
-    expect(isEffortRef({ base: "2k", off: 0 })).toBe(false);
+    expect(isPaceWordRef({ effort: "max" })).toBe(true);
+    expect(isPaceWordRef({ base: "2k", off: 0 })).toBe(false);
   });
 
   it("maps efforts to the display pair", () => {
-    expect(effortWord("max")).toBe("ALL OUT");
-    expect(effortWord("min")).toBe("EASY");
+    expect(paceWordLabel("max")).toBe("ALL OUT");
+    expect(paceWordLabel("min")).toBe("EASY");
   });
 
-  // effortFromWord is effortWord's inverse — round-tripping every real
-  // Effort through both directions proves it's actually bijective, not just
+  // paceWordFromLabel is paceWordLabel's inverse — round-tripping every real
+  // PaceWord through both directions proves it's actually bijective, not just
   // individually correct on each hand-picked input (Phase 6C Task 1 F1: a
   // caller holding only a frozen display word, like an EnginePhase's
   // `label`, needs to recover the chip word via refLabel({effort: ...})).
-  it("effortFromWord inverts effortWord", () => {
-    expect(effortFromWord("ALL OUT")).toBe("max");
-    expect(effortFromWord("EASY")).toBe("min");
+  it("paceWordFromLabel inverts paceWordLabel", () => {
+    expect(paceWordFromLabel("ALL OUT")).toBe("max");
+    expect(paceWordFromLabel("EASY")).toBe("min");
     for (const effort of ["max", "min"] as const) {
-      expect(effortFromWord(effortWord(effort))).toBe(effort);
+      expect(paceWordFromLabel(paceWordLabel(effort))).toBe(effort);
     }
   });
 
   // The spoken pair a screen reader gets instead of the chip word — "MIN"
   // read aloud is indistinguishable from "minutes", the exact confusion the
-  // display-word pair (effortWord) exists to prevent visually, so the
+  // display-word pair (paceWordLabel) exists to prevent visually, so the
   // spoken form needs its own vocabulary rather than reusing the chip text.
   it("maps efforts to the spoken pair, not the chip word", () => {
-    expect(effortSpoken("max")).toBe("at max effort");
-    expect(effortSpoken("min")).toBe("easy");
+    expect(paceWordSpoken("max")).toBe("at max effort");
+    expect(paceWordSpoken("min")).toBe("easy");
   });
 
   it("labels refs with the chip word", () => {

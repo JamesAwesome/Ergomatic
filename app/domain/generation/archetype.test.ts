@@ -535,8 +535,7 @@ const workout = (
 ): WorkoutInput => ({
   title,
   type,
-  difficulty: "easy",
-  pain: 1,
+  effort: 1,
   steps,
 });
 
@@ -594,7 +593,7 @@ describe("nearDuplicates", () => {
     expect(pairs[0]!.pieceCount).toBe(6);
   });
 
-  it("the EffortRef arm (effort share + archetype + duration) pairs two all-out sets with no offset to band (M3's original gap)", () => {
+  it("the PaceWordRef arm (effort share + archetype + duration) pairs two all-out sets with no offset to band (M3's original gap)", () => {
     const giantHail = workout(
       "Giant Hail",
       [
@@ -670,7 +669,7 @@ describe("nearDuplicates", () => {
 
   it("an effort-only workout never collides with a split-only workout even when archetype/pieces/total all match", () => {
     const effortOnly = workout(
-      "Effort Only",
+      "PaceWord Only",
       [w(t(10), { effort: "max" }, 30)],
       "AN",
     );

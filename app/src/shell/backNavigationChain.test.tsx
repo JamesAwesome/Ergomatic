@@ -35,8 +35,7 @@ function personalWorkout(title: string, id: string): LibraryWorkout {
     id,
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
-    pain: w.pain,
+    effort: w.effort,
     steps: w.steps,
     isGlobal: false,
     lastDoneDaysAgo: 5,
@@ -62,7 +61,6 @@ function mockHooks(workouts: LibraryWorkout[] = [WORKOUT]) {
     usePreferences: () => ({
       state: "ready",
       preferences: {
-        difficulties: ["easy", "medium", "hard"],
         timeCapMinutes: 60,
       },
     }),
@@ -145,8 +143,7 @@ describe("history-aware BACK: the You re-test shortcut -> detail round trip", ()
         id: "w-6k",
         title: seed.title,
         type: seed.type,
-        difficulty: seed.difficulty,
-        pain: seed.pain,
+        effort: seed.effort,
         steps: seed.steps,
         isGlobal: true,
         lastDoneDaysAgo: null,

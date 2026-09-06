@@ -9,11 +9,13 @@
 // STANDING CONSTRAINT (design §5): this HTML carries NO subresource and NO
 // outbound link — the callback URL carries `code` and `state`, and the
 // first external stylesheet, font, image or anchor would leak them in
-// `Referer` (RFC 9700 §4.2). The two "here" occurrences are PLAIN TEXT (no
-// anchor at all), and every callback response ALSO sets
-// `Referrer-Policy: no-referrer` (routes/concept2.ts). Request- or
-// DB-derived values reach this template ONLY through `escapeHtml` — today
-// the Linked page's two identities; every other page is literal copy.
+// `Referer` (RFC 9700 §4.2). Every callback response ALSO sets
+// `Referrer-Policy: no-referrer` (routes/concept2.ts). No page names a
+// destination either, for the same reason: the 401 and 403 lines said
+// "sign in … here" until the 2026-09-03 amendment (§3, ruling iii), where
+// "here" was plain text pointing at nothing. Request- or DB-derived values
+// reach this template ONLY through `escapeHtml` — today the Linked page's
+// two identities; every other page is literal copy.
 //
 // The copy is the design's table VERBATIM. Changing a word here is a
 // design-gate question (CLAUDE.md: a spec that changes what a rower reads
@@ -50,11 +52,6 @@ interface PageSpec {
   action: string;
 }
 
-// This template emits NO anchors and NO subresources (design §5: the callback
-// URL carries `code`; the first outbound link or stylesheet would leak it in
-// Referer). "here" is plain text, matching the approved Gate 0 render.
-const SIGN_IN_HERE = "here";
-
 const LITERAL_PAGES: Record<Exclude<CallbackPageKind, "linked">, PageSpec> = {
   alreadyLinked: {
     status: 409,
@@ -79,13 +76,25 @@ const LITERAL_PAGES: Record<Exclude<CallbackPageKind, "linked">, PageSpec> = {
     status: 401,
     label: "NOT SIGNED IN",
     statement: "No Ergomatic session in this browser.",
-    action: `Sign in to Ergomatic ${SIGN_IN_HERE}, then start the link again from the app.`,
+    // Gate 0 amendment §3 (ruling iii, 2026-09-03): was "Sign in to
+    // Ergomatic here, …". This template emits no anchors by design (the
+    // STANDING CONSTRAINT above), so "here" named a destination the page
+    // could not take the rower to. No link is added; the false affordance
+    // is removed.
+    action:
+      "Open Ergomatic in this browser and sign in, then start the link again from the app.",
   },
   wrongAccount: {
     status: 403,
     label: "WRONG ACCOUNT",
     statement: "This link was started by a different Ergomatic account.",
-    action: `Sign in as that account ${SIGN_IN_HERE}, or start a new link from the account you're using.`,
+    // Same amendment: was "Sign in as that account here, …".
+    // `you&#39;re` is the HTML ENTITY, not a literal apostrophe: `action` is
+    // documented above as already-escaped HTML and `shell()` interpolates it
+    // RAW, so this field carries what `escapeHtml` would have produced. Both
+    // forms render as `you're`, which is what the design page draws.
+    action:
+      "Sign in as that account in this browser, or start a new link from the account you&#39;re using.",
   },
   unavailable: {
     status: 403,

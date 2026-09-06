@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { ComponentProps } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { compileProgram } from "../../domain/monitor/program.js";
@@ -129,12 +130,14 @@ function connectAsTaskFiveWill(): void {
 
 function renderConnect() {
   render(
-    <ConnectAction
-      onProceed={connectAsTaskFiveWill}
-      nfcCapability="unsupported"
-      busy={false}
-      accepted={false}
-    />,
+    <MemoryRouter>
+      <ConnectAction
+        onProceed={connectAsTaskFiveWill}
+        nfcCapability="unsupported"
+        busy={false}
+        accepted={false}
+      />
+    </MemoryRouter>,
   );
 }
 
@@ -172,7 +175,7 @@ describe("ConnectAction: the guard", () => {
     expect(loadMonitorRun()).not.toBeNull();
     expect(
       screen.queryByText(
-        "You have an unlogged session. Connecting discards it.",
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
       ),
     ).not.toBeInTheDocument();
   });
@@ -187,7 +190,7 @@ describe("ConnectAction: the guard", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       // Not merely "still present" — byte-identical, and no monitor run
@@ -211,7 +214,7 @@ describe("ConnectAction: the guard", () => {
       expect(screen.getByRole("button", { name: "Connect" })).toBeVisible();
       expect(
         screen.queryByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).not.toBeInTheDocument();
       expect(loadRun()).toStrictEqual(runA);
@@ -247,7 +250,7 @@ describe("ConnectAction: the guard", () => {
       ).toBeInTheDocument();
       expect(
         screen.queryByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).not.toBeInTheDocument();
       expect(loadRun()).toStrictEqual(live);
@@ -288,7 +291,7 @@ describe("ConnectAction: the guard", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(
@@ -300,24 +303,26 @@ describe("ConnectAction: the guard", () => {
   it("uses the house panel classes, not a new confirm idiom", async () => {
     saveRun(unloggedSessionRun());
     const { container } = render(
-      <ConnectAction
-        onProceed={connectAsTaskFiveWill}
-        nfcCapability="unsupported"
-        busy={false}
-        accepted={false}
-      />,
+      <MemoryRouter>
+        <ConnectAction
+          onProceed={connectAsTaskFiveWill}
+          nfcCapability="unsupported"
+          busy={false}
+          accepted={false}
+        />
+      </MemoryRouter>,
     );
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(container.querySelector(".baseline-confirm")).not.toBeNull();
-    expect(container.querySelector(".baseline-confirm-line")).not.toBeNull();
-    expect(container.querySelector(".baseline-actions")).not.toBeNull();
+    expect(container.querySelector(".unsaved-warning-copy")).not.toBeNull();
+    expect(container.querySelector(".unsaved-secondary")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
       "button-outline",
     );
     expect(screen.getByRole("button", { name: "Connect anyway" })).toHaveClass(
-      "button-primary",
+      "button-outline",
     );
   });
 
@@ -350,7 +355,9 @@ describe("ConnectAction: the guard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(
-      screen.getByText("You have an unlogged session. Connecting discards it."),
+      screen.getByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
     ).toBeInTheDocument();
     expect(loadRun()).not.toBeNull();
     expect(loadMonitorRun()).toBeNull();
@@ -399,7 +406,9 @@ describe("ConnectAction: the guard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(
-      screen.getByText("You have an unlogged session. Connecting discards it."),
+      screen.getByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
     ).toBeInTheDocument();
   });
 });
@@ -416,6 +425,52 @@ describe("ConnectAction: the guard", () => {
 // describe block to prove — this file has no real hook/transport to
 // reach "armed" with.
 describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", () => {
+  it.each([false, true])(
+    "View unsaved cancels Connect authorization and preserves both records (timer also retained: %s)",
+    async (both) => {
+      localStorage.clear();
+      resetHandoffStoreForTests();
+      connectAsTaskFiveWill();
+      if (both) saveRun(unloggedSessionRun());
+      const before = currentUnretiredHandoff();
+      const timer = loadRun();
+      render(
+        <MemoryRouter initialEntries={["/connect"]}>
+          <Routes>
+            <Route
+              path="/connect"
+              element={
+                <ConnectAction
+                  onProceed={connectAsTaskFiveWill}
+                  nfcCapability="unsupported"
+                  busy={false}
+                  accepted={false}
+                />
+              }
+            />
+            <Route path="/today" element={<h1>Today</h1>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      expect(
+        screen.getByRole("heading", {
+          name: both
+            ? "You have unsaved workouts."
+            : "You have an unsaved workout.",
+        }),
+      ).toBeVisible();
+      const view = screen.getByRole("button", { name: "View unsaved" });
+      expect(view).toHaveFocus();
+      await userEvent.click(view);
+      expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
+      expect(
+        takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
+      ).toStrictEqual([]);
+      expect(currentUnretiredHandoff()).toStrictEqual(before);
+      expect(loadRun()).toStrictEqual(timer);
+    },
+  );
   beforeEach(() => {
     localStorage.clear();
     resetHandoffStoreForTests();
@@ -532,7 +587,9 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(
-      screen.getByText("You have an unlogged session. Connecting discards it."),
+      screen.getByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
     ).toBeInTheDocument();
     expect(
       takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
@@ -557,12 +614,14 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
   ) {
     const onProceed = vi.fn();
     render(
-      <ConnectAction
-        onProceed={onProceed}
-        nfcCapability={props.nfcCapability ?? "unsupported"}
-        busy={props.busy ?? false}
-        accepted={props.accepted ?? false}
-      />,
+      <MemoryRouter>
+        <ConnectAction
+          onProceed={onProceed}
+          nfcCapability={props.nfcCapability ?? "unsupported"}
+          busy={props.busy ?? false}
+          accepted={props.accepted ?? false}
+        />
+      </MemoryRouter>,
     );
     return { onProceed };
   }
@@ -571,12 +630,14 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
     "renders Connect ALONE when capability is %s — no Scan NFC button, no placeholder element",
     (nfcCapability) => {
       const { container } = render(
-        <ConnectAction
-          onProceed={vi.fn()}
-          nfcCapability={nfcCapability}
-          busy={false}
-          accepted={false}
-        />,
+        <MemoryRouter>
+          <ConnectAction
+            onProceed={vi.fn()}
+            nfcCapability={nfcCapability}
+            busy={false}
+            accepted={false}
+          />
+        </MemoryRouter>,
       );
       expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
       expect(container.querySelector(".button-nfc")).toBeNull();
@@ -586,12 +647,14 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
 
   it("renders Scan NFC DIRECTLY ABOVE Connect when supported, both enabled", () => {
     const { container } = render(
-      <ConnectAction
-        onProceed={vi.fn()}
-        nfcCapability="supported"
-        busy={false}
-        accepted={false}
-      />,
+      <MemoryRouter>
+        <ConnectAction
+          onProceed={vi.fn()}
+          nfcCapability="supported"
+          busy={false}
+          accepted={false}
+        />
+      </MemoryRouter>,
     );
     const buttons = Array.from(container.querySelectorAll("button"));
     expect(buttons.map((b) => b.textContent)).toStrictEqual([
@@ -647,12 +710,14 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
 
   it("accepted swaps the Scan NFC slot for the `✓ PM5 found` status (aria-live), same fill class", () => {
     render(
-      <ConnectAction
-        onProceed={vi.fn()}
-        nfcCapability="supported"
-        accepted
-        busy
-      />,
+      <MemoryRouter>
+        <ConnectAction
+          onProceed={vi.fn()}
+          nfcCapability="supported"
+          accepted
+          busy
+        />
+      </MemoryRouter>,
     );
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("✓ PM5 found");
@@ -667,7 +732,7 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
     await userEvent.click(screen.getByRole("button", { name: "Scan NFC" }));
     expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
-    expect(screen.getByText(/unlogged session/)).toBeInTheDocument();
+    expect(screen.getByText(/unsaved workout/)).toBeInTheDocument();
     const stagedId = stagedRetireAttemptId();
     expect(stagedId).not.toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));

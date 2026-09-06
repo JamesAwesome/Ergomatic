@@ -5,6 +5,106 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.39.0: git log v0.38.1..main --oneline at d3ad7fb7 — six merges,
+    // every one accounted (RF15, no `--merges`; main is squash-merged):
+    //   #307 Wave E PR C — the Concept2 send carries the monitor's own
+    //     total; that surface stays DARK in production behind
+    //     C2_LINK_ENABLED and C2_ALLOWED_EMAILS (same reason v0.37.0 and
+    //     v0.38.0 skipped #290/#293/#298/#303): no item.
+    //   #308 Phase DE spec + ROADMAP — docs only: no item.
+    //   #309 Phase DE PR 1 — items 1 and 2 (the removed axis, the
+    //     re-sorted AT and TR blocks) and the discarded difficulty filter
+    //     named inside item 1, per the PM open gate's release-note ruling.
+    //   #310 Phase DE PR 2 — item 3 (the rename) and item 4 (the article).
+    //   #311 this notes PR — no behavior: no item.
+    //   #312 Wave E auto-send (OFF · MANUAL · AUTOMATIC Concept2 sends +
+    //     the SEND FAILED flag) — the same DARK surface as #307, behind
+    //     C2_ALLOWED_EMAILS; its one non-dark change is a `GET
+    //     /api/concept2/link` after every save, answered `{available:false}`
+    //     and rendered nowhere: no item. Notes for it ride the tag that
+    //     widens the cohort.
+    // Installed pre-v0.39.0 builds keep working against this server for
+    // one tag cycle (the API answers with both PAIN and EFFORT); the
+    // compat comes out in Phase DE PR 3.
+    version: "v0.39.0",
+    date: "2026-09-05",
+    items: [
+      "One number for how hard a workout is. EASY / MEDIUM / HARD is gone from every row, filter and picker. If you had narrowed Today by difficulty, that filter is gone and Today may suggest more workouts than before; narrow by effort instead.",
+      "The AT and TR blocks of the Library are sorted by effort, so scrolling a type never steps back down. About forty workouts sit a few rows from where they were.",
+      "PAIN is now EFFORT. Same 1 to 5, same five words, one name, on the Log, the filter sheets, the Builder card and every row.",
+      "The pain scale article is now the effort scale. Your read of it carries over, and its old link still opens it.",
+    ],
+  },
+  {
+    // v0.38.1: git log v0.38.0..main --oneline at f927ef4d — two merges,
+    // both accounted (RF15, no `--merges`; main is squash-merged):
+    //   #304 the Library search field no longer zooms the page — the item.
+    //   #305 GET /api/today removed; no client ever called it, so no build
+    //     can notice: no item. This notes/capture PR adds no behavior.
+    version: "v0.38.1",
+    date: "2026-09-05",
+    items: [
+      "Tapping SEARCH BY NAME in the Library no longer zooms the page in.",
+    ],
+  },
+  {
+    // v0.38.0: git log v0.37.0..main --oneline at e1337844 — six merges,
+    // every one accounted (RF15, no `--merges`; main is squash-merged):
+    //   #296 freestyle type chips on Today — the chip row item 2 lights.
+    //   #297 Phase SF PR1 — items 1, 2 and 3.
+    //   #298 Wave E PR B — "View on Concept2" opens the phone's default
+    //     browser; that surface stays DARK in production behind
+    //     C2_LINK_ENABLED and C2_ALLOWED_EMAILS (the same reason v0.37.0
+    //     skipped #290 and #293), so no tester receives it: no item.
+    //   #300 Phase SF PR2 — items 4 and 5.
+    //   #301 Phase SF PR3 — item 6.
+    //   #303 Wave E PR A — the Concept2 row and screen stay DARK like
+    //     #298, but the same PR fixes a bug every rower could hit: opening
+    //     You while offline showed a CONCEPT2 error panel about a feature
+    //     they had never been offered (walk-fixes spec, "production
+    //     today"). Item 7.
+    // Deploy-day churn, stated here rather than warned about in an item
+    // (PM close gate): Today redraws its card and re-rolls its type once
+    // on the first open after this update, and the Library forgets one
+    // BACK round trip's filters once; item 2's own sentence covers the
+    // only reading that stings. This notes/capture PR adds no behavior.
+    version: "v0.38.0",
+    date: "2026-09-05",
+    items: [
+      "SHUFFLE now draws at random and will not repeat a workout until you have seen the whole pool. The first card each morning is a random pick from the workouts you have gone longest without, and it stays put if you reload.",
+      "With no plan chosen, Today now picks a type for you each morning and lights that chip. Tap a different chip to change it, or tap the lit chip for ANY TYPE. Tomorrow picks again, and so does logging a session today.",
+      "Today's filters are remembered for each type and no longer reset at midnight. Set them once under AT and they are there the next time AT is lit, however many days later.",
+      "TIME is now a range you drag instead of four fixed bands, so you can ask for 25 to 35 minutes. A workout that lands exactly on your time cap now counts as within it, so you will see a few more options than before with no action from you.",
+      "GLOBAL and CUSTOM are now ERGOMATIC LIBRARY and MY WORKOUTS, on the filters and on the workouts themselves.",
+      "The Library has a search field above FILTER. Type a few letters of a name and the list narrows as you type. It works alongside the type chips and the filters, stays with you when you come back from a workout, and clears when you reopen the tab.",
+      "Opening You without a connection no longer shows a Concept2 error panel. Nothing about Concept2 appears unless your account has it.",
+    ],
+  },
+  {
+    // v0.37.0: git log v0.36.1..main --oneline at 52901126.
+    // #292 is the item below. #290's Concept2 link/send surfaces stay dark
+    // behind C2_LINK_ENABLED (set-but-empty in production at release), and
+    // its stored completion timestamp has no standalone rower-facing change.
+    // #293 further gates those dark surfaces to named accounts, so it is not
+    // independently visible either. #291 closes Wave F's native hardware
+    // evidence in docs only. This notes/capture PR adds no behavior.
+    version: "v0.37.0",
+    date: "2026-09-04",
+    items: [
+      "A finished workout you leave without saving now waits on Today under UNSAVED WORKOUT. Review & save opens its original summary so you can save or discard it; the warning before another workout now has View unsaved instead of making discard the only way forward.",
+    ],
+  },
+  {
+    // v0.36.1: git log v0.36.0..origin/main --oneline at 9baa4fa7.
+    // #288 is the item below; #287 defers Correct Resume in docs only,
+    // with nothing tester-visible. This notes/capture PR adds no behavior.
+    version: "v0.36.1",
+    date: "2026-09-03",
+    items: [
+      "Ending a phone-timed Just Row now lets you finish and save, instead of only abandoning the session.",
+    ],
+  },
+  {
     // v0.36.0 (2026-09-03): range v0.35.0..main RE-ACCOUNTED at AUD-011/015's
     // own PR-open head per RF15 (`git log v0.35.0..origin/main --oneline`,
     // NO `--merges` — main is squash-merged and that form returns empty).

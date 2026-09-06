@@ -3,7 +3,9 @@ import express from "express";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { SESSION_COOKIE } from "../auth/cookies.js";
+import { parseAllowlist } from "../auth/allowlist.js";
 import { requireUser } from "../auth/middleware.js";
+import { computeAvailableFor } from "../concept2/availability.js";
 import { baseDeps } from "../testDeps.js";
 import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import { makeFakeConcept2Store, makeFakeStores } from "../testing/fakes.js";
@@ -13,7 +15,6 @@ import { formatC2Date } from "../concept2/mapping.js";
 import {
   AttemptNonceCollisionError,
   type Concept2Store,
-  type WeightClass,
 } from "../stores/concept2.js";
 import {
   createConcept2Router,
@@ -42,6 +43,13 @@ function fakeSessionStore(): SessionStore {
   const users: Record<string, SessionUser> = {
     "token-a": userA,
     "token-b": userB,
+    // Wave E per-user gate: userA's OWN id, carrying the address in a
+    // different case. Google hands us whatever case the account was
+    // created with, and `req.user!.email` goes straight into
+    // `availableFor` — so the CANDIDATE side of `isAllowed` is a
+    // production path, not a harness detail, and it needs a session that
+    // can exercise it.
+    "token-a-mixedcase": { ...userA, email: userA.email.toUpperCase() },
   };
   return {
     resolveSession: async (token: string) => {
@@ -58,6 +66,8 @@ function fakeSessionStore(): SessionStore {
 
 const asA = (req: request.Test) => req.set("Authorization", "Bearer token-a");
 const asB = (req: request.Test) => req.set("Authorization", "Bearer token-b");
+const asAMixedCase = (req: request.Test) =>
+  req.set("Authorization", "Bearer token-a-mixedcase");
 // The web surface: the SAME fake session tokens, carried as the
 // `erg_session` cookie instead of a bearer.
 const asACookie = (req: request.Test) =>
@@ -66,6 +76,10 @@ const asBCookie = (req: request.Test) =>
   req.set("Cookie", `${SESSION_COOKIE}=token-b`);
 
 const WEB_REDIRECT_URI = "https://ergomatic.example/api/concept2/callback";
+// Wave E PR2: deliberately NOT a production origin, so a handler that
+// hardcodes `https://log.concept2.com` instead of echoing this dep has
+// something to disagree with (mutation M11).
+const LOGBOOK_BASE_URL = "https://log-dev.concept2.test";
 
 // Well-formed but guaranteed-absent from any fake store's map (data.test.ts
 // precedent).
@@ -89,6 +103,26 @@ function makeStubClient(): C2Client {
     fetchMe: vi.fn(async () => {
       throw new Error("fetchMe not stubbed for this test");
     }),
+    // Ruling (i): the upload path reads the rower's most recent Concept2
+    // results to find their own weight-class DECLARATION before it ever
+    // considers the profile. This default is the account we measured — every
+    // result on log-dev user 2211 carries `weight_class`, all "H", type
+    // `rower` — so it is the machine's own ordinary state, not a value
+    // chosen to make a gate pass. A test about the PROFILE fallback must
+    // override it with `{ ok: true, rows: [] }`, or it silently exercises
+    // the declaration path instead.
+    fetchResults: vi.fn(async () => ({
+      ok: true as const,
+      rows: [
+        {
+          id: 90001,
+          type: "rower",
+          weightClass: "H",
+          dateUtc: "2026-09-02 10:00:30",
+          date: "2026-09-02 06:00:30",
+        },
+      ],
+    })),
     postResult: vi.fn(async () => {
       throw new Error("postResult not stubbed for this test");
     }),
@@ -106,6 +140,13 @@ interface Harness {
 function buildApp(
   overrides: {
     available?: boolean;
+    // The RAW `C2_ALLOWED_EMAILS` string, not a Set: the harness runs it
+    // through the production `parseAllowlist` so every test in this file
+    // reaches `availableFor` through the real composition rather than a
+    // hand-set boolean. The default admits both fake users, which keeps the
+    // pre-existing tests here describing what they always described (the
+    // GLOBAL gate) instead of tripping over the new per-user one.
+    c2AllowedEmails?: string;
     store?: Concept2Store;
     logs?: LogsStore;
     client?: C2Client;
@@ -115,16 +156,24 @@ function buildApp(
   const store = overrides.store ?? makeFakeConcept2Store();
   const logs = overrides.logs ?? makeFakeStores().logs;
   const client = overrides.client ?? makeStubClient();
-  const state = { available: overrides.available ?? true };
+  const state = {
+    available: overrides.available ?? true,
+    allowedEmails: parseAllowlist(
+      overrides.c2AllowedEmails ?? `${userA.email},${userB.email}`,
+    ),
+  };
   const sessions = fakeSessionStore();
   const deps: Concept2RouterDeps = {
     available: () => state.available,
+    availableFor: (email: string) =>
+      computeAvailableFor(state.available, state.allowedEmails, email),
     store,
     logs,
     client,
     requireUser: requireUser(sessions),
     sessions,
     webRedirectUri: WEB_REDIRECT_URI,
+    logbookBaseUrl: LOGBOOK_BASE_URL,
     now: overrides.now,
   };
   const app = express();
@@ -143,7 +192,7 @@ function buildApp(
 
 // Task 5's own fixture (mapping.test.ts's FINISHED_ROW), transcribed from a
 // real capture (that file's own comment) — reused here rather than a
-// hand-built minimum (agent briefing: realistic fixtures). `held`/`pain`/
+// hand-built minimum (agent briefing: realistic fixtures). `held`/`effort`/
 // `notes`/`steps`/`advancesPlan` are the ordinary LogInput scaffolding a
 // session log always carries; none of them are read by this router.
 const FINISHED_LOG_INPUT: LogInput = {
@@ -153,7 +202,7 @@ const FINISHED_LOG_INPUT: LogInput = {
   baselineK2: null,
   baselineK6: null,
   held: null,
-  pain: null,
+  effort: null,
   notes: null,
   steps: [],
   advancesPlan: false,
@@ -192,11 +241,12 @@ const LINK_INPUT = {
   c2UserId: 2211,
   accessToken: "at-1",
   refreshToken: "rt-1",
-  weightClass: "H" as WeightClass,
 };
 
 function freshLink(
-  overrides: Partial<typeof LINK_INPUT & { expiresAt: Date }> = {},
+  overrides: Partial<
+    typeof LINK_INPUT & { expiresAt: Date; c2Username: string | null }
+  > = {},
 ) {
   return {
     ...LINK_INPUT,
@@ -210,7 +260,7 @@ function freshLink(
 async function mintAndGetState(
   app: express.Express,
   asUser: (req: request.Test) => request.Test = asACookie,
-  body: Record<string, unknown> = { weightClass: "H" },
+  body: Record<string, unknown> = {},
 ): Promise<string> {
   const res = await asUser(
     request(app).post("/api/concept2/connect").send(body),
@@ -218,7 +268,7 @@ async function mintAndGetState(
   expect(res.status).toBe(200);
   return res.body.state as string;
 }
-const NATIVE_MINT = { weightClass: "H", linkClient: "webauth-1" };
+const NATIVE_MINT = { linkClient: "webauth-1" };
 
 // The two wire calls a successful completion makes, both stubbed happy.
 function stubHappyExchange(client: C2Client, c2UserId = 2211): void {
@@ -234,6 +284,11 @@ function stubHappyExchange(client: C2Client, c2UserId = 2211): void {
     ok: true,
     c2UserId,
     username: "jmorelli",
+    // Present-and-plausible (step A5): none of the tests using this helper
+    // is about the derivation, and a `null` would silently make each one a
+    // test of the refusal branch instead.
+    weight: 8200,
+    gender: "M",
   });
 }
 
@@ -315,7 +370,8 @@ describe("concept2 router: auth guard", () => {
       expect(client.exchangeCode).not.toHaveBeenCalled();
     });
 
-    // The refusal is required on ALL FIVE JSON routes, and the three tests
+    // The refusal is required on ALL SIX JSON routes (auto-send added
+    // `PATCH /link`), and the three tests
     // above only reach two of them plus the callback: deleting
     // `refuseAmbiguousAuth` from `GET /link`, `DELETE /link` or
     // `POST /results/:logId` left every other assertion in this file green.
@@ -327,6 +383,7 @@ describe("concept2 router: auth guard", () => {
       ["post", "/api/concept2/connect"],
       ["post", "/api/concept2/exchange"],
       ["get", "/api/concept2/link"],
+      ["patch", "/api/concept2/link"],
       ["delete", "/api/concept2/link"],
       ["post", `/api/concept2/results/${NON_EXISTENT_UUID}`],
     ];
@@ -340,6 +397,7 @@ describe("concept2 router: auth guard", () => {
         const deleteSpy = vi.spyOn(store, "deleteLink");
         const upsertSpy = vi.spyOn(store, "upsertLink");
         const createSpy = vi.spyOn(store, "createAttempt");
+        const setAutoSendSpy = vi.spyOn(store, "setAutoSend");
         const recordSpy = vi.spyOn(logs, "recordC2Result");
         const agent = request(app) as unknown as Record<
           string,
@@ -347,16 +405,17 @@ describe("concept2 router: auth guard", () => {
         >;
         const res = await ambiguous(
           agent[method](path).send({
-            weightClass: "H",
             linkClient: "webauth-1",
             code: "c",
             state: "s",
             tz: "America/New_York",
+            autoSend: true,
           }),
         );
         expect(res.status).toBe(400);
         expect(res.body).toStrictEqual({ error: "ambiguous_auth" });
         expect(createSpy).not.toHaveBeenCalled();
+        expect(setAutoSendSpy).not.toHaveBeenCalled();
         expect(deleteSpy).not.toHaveBeenCalled();
         expect(upsertSpy).not.toHaveBeenCalled();
         expect(recordSpy).not.toHaveBeenCalled();
@@ -447,9 +506,7 @@ describe("availability matrix (spec §Architecture 8)", () => {
     const store = makeFakeConcept2Store();
     const createAttemptSpy = vi.spyOn(store, "createAttempt");
     const { app } = buildApp({ available: false, store });
-    const res = await asA(
-      request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
-    );
+    const res = await asA(request(app).post("/api/concept2/connect").send({}));
     expect(res.status).toBe(403);
     expect(res.body).toStrictEqual({ error: "unavailable" });
     expect(createAttemptSpy).not.toHaveBeenCalled();
@@ -543,12 +600,309 @@ describe("availability matrix (spec §Architecture 8)", () => {
   });
 });
 
+// Wave E per-user gate (docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md). The matrix
+// above moves ONE boolean and watches every route follow it; this describe
+// holds that boolean TRUE and moves the identity instead, because the
+// failure that matters here is a gate that opens for the wrong person, and
+// no amount of "flag off -> 403" can see it. Every test below runs userA
+// (on the list) and userB (off it) against the SAME app, so a route that
+// silently kept `available()` answers identically for both and reddens.
+//
+// The allowlist is passed as the raw env string and parsed by the
+// production `parseAllowlist` (buildApp), so "unset means nobody" is
+// asserted about the real parse rather than about a `new Set()` written
+// here.
+describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
+  const ONLY_A = userA.email;
+
+  it("mint: an off-list user gets 403 and no attempt is created; the on-list user still mints", async () => {
+    const store = makeFakeConcept2Store();
+    const createAttemptSpy = vi.spyOn(store, "createAttempt");
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const denied = await asB(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body).toStrictEqual({ error: "unavailable" });
+    expect(createAttemptSpy).not.toHaveBeenCalled();
+
+    const allowed = await asA(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(allowed.status).toBe(200);
+    expect(createAttemptSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Auto-send's one new write takes the PER-USER gate (`availableFor`), like
+  // every other write; `available: false` alone cannot tell the two gates
+  // apart, so this row seeds the link and denies by ADDRESS.
+  it("PATCH /link: an off-list user gets 403 and the mode is unchanged; the on-list user flips it", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink({ c2UserId: 4477 }));
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const denied = await asB(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body).toStrictEqual({ error: "unavailable" });
+    expect((await store.getLink(userB.id))?.autoSend).toBe(false);
+
+    const allowed = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(allowed.status).toBe(204);
+    expect((await store.getLink(userA.id))?.autoSend).toBe(true);
+  });
+
+  it("exchange: an off-list user gets 403 before any attempt is peeked", async () => {
+    const store = makeFakeConcept2Store();
+    const peekSpy = vi.spyOn(store, "peekAttempt");
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const denied = await asB(
+      request(app)
+        .post("/api/concept2/exchange")
+        .send({ code: "c", state: "s" }),
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body).toStrictEqual({ error: "unavailable" });
+    expect(peekSpy).not.toHaveBeenCalled();
+  });
+
+  // The one non-403 row of the matrix, and the reason the client needs no
+  // change: an off-list rower reads the SAME `{available:false}` a flag-off
+  // server sends, which both surfaces already render as "no card".
+  // Deliberately asserted on a user who HAS a link row: the response must
+  // be the capability answer, not "not linked", and it must leak neither
+  // the account id nor the origin.
+  it("GET /link: an off-list user reads {available:false} even holding a link row", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink({ c2UserId: 4477 }));
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const denied = await asB(request(app).get("/api/concept2/link"));
+    expect(denied.status).toBe(200);
+    expect(denied.body).toStrictEqual({ available: false });
+
+    const allowed = await asA(request(app).get("/api/concept2/link"));
+    expect(allowed.status).toBe(200);
+    expect(allowed.body).toMatchObject({ available: true, linked: false });
+  });
+
+  // F4 ruling (fix round 1) — the ONE authed route that stays on the global
+  // check, and the reason is a product one: a capability gate closes USE,
+  // not revocation. Gating this meant an off-list rower could not disconnect
+  // their own Concept2 account, so the row and its LIVE TOKENS persisted
+  // with no self-service exit — the gate would have created the hazard it
+  // exists to bound. Reading is still gated (`GET /link` answers
+  // `{available:false}`), so the card is absent; the door out is not.
+  it("DELETE /link: an off-list user can still disconnect, and the row is really gone", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink());
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store });
+
+    const res = await asB(request(app).delete("/api/concept2/link"));
+    expect(res.status).toBe(204);
+    expect(await store.getLink(userB.id)).toBeNull();
+  });
+
+  // The global gate still closes it: "revocation is not per-user gated" is
+  // not "revocation is ungated".
+  it("DELETE /link: the global gate still refuses when the surface is off entirely", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({
+      c2AllowedEmails: ONLY_A,
+      available: false,
+      store,
+    });
+
+    const res = await asA(request(app).delete("/api/concept2/link"));
+    expect(res.status).toBe(403);
+    expect(await store.getLink(userA.id)).not.toBeNull();
+  });
+
+  it("upload: an off-list user gets 403 and nothing is sent to Concept2", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userB.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+    const { app, logs } = buildApp({
+      c2AllowedEmails: ONLY_A,
+      store,
+      client,
+    });
+    const id = await seedEligibleLog(logs, userB.id);
+
+    const denied = await asB(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.body).toStrictEqual({ error: "unavailable" });
+    expect(client.postResult).not.toHaveBeenCalled();
+  });
+
+  // The fail-closed direction, at the ROUTE layer rather than the pure
+  // function's: an empty list must mean nobody, including the user the
+  // sign-in allowlist already admits.
+  // F6 (fix round 1): `NATIVE_MINT`, not `{}`. A bearer mint with an empty
+  // body answers 409 `update_required` on its own, so posting `{}` here
+  // discriminated one refusal from another rather than admission from
+  // refusal: with the gate broken open these tests failed at 409, never
+  // reaching the 200 that says a rower was ADMITTED. With `NATIVE_MINT` the
+  // only reason for a non-200 is the gate, and the probe reads
+  // `expected 200 to be 403`.
+  //
+  // An earlier version of this comment also claimed the `{}` form "would
+  // still pass if the body check moved above the availability check".
+  // STRUCK — it was measured false in both directions (2026-09-04): hoisting
+  // the body check over the old form gives 3 red, all
+  // `expected 409 to be 403`, one of them a pre-existing test. The old form's
+  // defect was never that it could not fail; it was that it could not fail
+  // for the right reason.
+  it("an empty C2_ALLOWED_EMAILS denies everyone, on a flag that is fully ON", async () => {
+    const { app } = buildApp({ c2AllowedEmails: "" });
+    expect(
+      (await asA(request(app).post("/api/concept2/connect").send(NATIVE_MINT)))
+        .status,
+    ).toBe(403);
+    expect(
+      (await asA(request(app).get("/api/concept2/link"))).body,
+    ).toStrictEqual({ available: false });
+  });
+
+  it("a list of only separators denies everyone", async () => {
+    const { app } = buildApp({ c2AllowedEmails: " , ," });
+    expect(
+      (await asA(request(app).post("/api/concept2/connect").send(NATIVE_MINT)))
+        .status,
+    ).toBe(403);
+  });
+
+  // `parseAllowlist` lower-cases and trims both sides; the entry a human
+  // types into a host `.env` is not the string Google hands us.
+  // BOTH sides of `isAllowed`, because each is a separate production path
+  // and a test that moved only one would pass through a mutation to the
+  // other. The ENTRY side is what a human typed into a host `.env`
+  // (padded, upper-cased); the CANDIDATE side is `req.user!.email`, which
+  // is whatever case Google's account carries.
+  it("a list entry that differs only in case and padding still admits the rower", async () => {
+    const { app } = buildApp({
+      c2AllowedEmails: `  ${userA.email.toUpperCase()} , `,
+    });
+    const res = await asA(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("a signed-in email that differs only in case from the list entry still admits the rower", async () => {
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A });
+    const res = await asAMixedCase(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  // F2 ruling (fix round 1). This test used to assert the OPPOSITE, on a
+  // comment claiming a per-user check here "would mean inventing a
+  // principal". The same handler falsifies that: step 3 resolves a full
+  // cookie `SessionUser` and step 8 already reads its email to render the
+  // Linked page. The residue the claim hid is what this test now closes —
+  // an attempt lives for 15 minutes (`ATTEMPT_MAX_AGE_MS`), so a rower
+  // removed from the list mid-window would otherwise complete the callback
+  // and walk away with a link row holding LIVE TOKENS.
+  //
+  // The attempt is seeded directly because the mint would refuse it: the
+  // arrangement is deliberately the one where the two hops disagree, which
+  // is the only state the per-callback check is for.
+  it("callback: an off-list principal is refused AFTER the principal is resolved — no exchange, no link, and the attempt survives", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const peekSpy = vi.spyOn(store, "peekAttempt");
+    const consumeSpy = vi.spyOn(store, "consumeAttemptFor");
+    const { app } = buildApp({ c2AllowedEmails: "", store, client });
+    await store.createAttempt({
+      nonce: "seeded-nonce",
+      userId: userA.id,
+      surface: "web",
+    });
+
+    const res = await asACookie(
+      request(app).get("/api/concept2/callback?state=seeded-nonce&code=abc123"),
+    );
+    expect(res.status).toBe(403);
+    expect(res.type).toBe("text/html");
+    expect(res.text).toContain("CONCEPT2 LINK · UNAVAILABLE · HTTP 403");
+    expect(client.exchangeCode).not.toHaveBeenCalled();
+    expect(await store.getLink(userA.id)).toBeNull();
+    // Consumes NOTHING, exactly like the global check above it: the refusal
+    // is read-only, so the same state completes once the rower is added
+    // back to the list.
+    expect(peekSpy).not.toHaveBeenCalled();
+    expect(consumeSpy).not.toHaveBeenCalled();
+    expect(await store.peekAttempt("seeded-nonce")).not.toBeNull();
+  });
+
+  // The ORDER the ruling asked for, pinned independently of the refusal
+  // itself: the per-user check sits AFTER step 3, so a caller carrying no
+  // session still reads "not signed in" rather than a capability answer.
+  // Signing in is the action that page asks for, and telling an anonymous
+  // browser the surface is unavailable would send them to fix the wrong
+  // thing.
+  it("callback: a signed-OUT caller still reads notSignedIn, not unavailable, even off the list", async () => {
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ c2AllowedEmails: "", store });
+    await store.createAttempt({
+      nonce: "seeded-nonce",
+      userId: userA.id,
+      surface: "web",
+    });
+
+    const res = await request(app).get(
+      "/api/concept2/callback?state=seeded-nonce&code=abc123",
+    );
+    expect(res.text).toContain("NOT SIGNED IN");
+  });
+
+  // The allow direction of the same hop, so the refusal above is not the
+  // only thing this route is pinned on: an ON-list principal completes.
+  it("callback: an on-list principal still completes the link", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, store, client });
+
+    const state = await mintAndGetState(app);
+    const res = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("CONCEPT2 LINK · LINKED · HTTP 200");
+    expect(await store.getLink(userA.id)).not.toBeNull();
+  });
+
+  // The conjunct, at the route layer: being on the C2 list never opens a
+  // surface the flag has closed.
+  it("on the list but the global gate is off -> still refused", async () => {
+    const { app } = buildApp({ c2AllowedEmails: ONLY_A, available: false });
+    const res = await asA(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("mint (POST /api/concept2/connect)", () => {
   it("cookie mint -> surface 'web', the WEB redirect in the URL, and the response carries state === the URL's state", async () => {
     const store = makeFakeConcept2Store();
     const { app } = buildApp({ store });
     const res = await asACookie(
-      request(app).post("/api/concept2/connect").send({ weightClass: "L" }),
+      request(app).post("/api/concept2/connect").send({}),
     );
     expect(res.status).toBe(200);
     const url = new URL(res.body.authorizeUrl as string);
@@ -556,7 +910,6 @@ describe("mint (POST /api/concept2/connect)", () => {
     expect(res.body.state).toBe(url.searchParams.get("state"));
     expect(await store.peekAttempt(res.body.state as string)).toStrictEqual({
       userId: userA.id,
-      weightClass: "L",
       surface: "web",
     });
   });
@@ -584,9 +937,7 @@ describe("mint (POST /api/concept2/connect)", () => {
     const store = makeFakeConcept2Store();
     const createSpy = vi.spyOn(store, "createAttempt");
     const { app } = buildApp({ store });
-    const res = await asA(
-      request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
-    );
+    const res = await asA(request(app).post("/api/concept2/connect").send({}));
     expect(res.status).toBe(409);
     expect(res.body).toStrictEqual({ error: "update_required" });
     expect(createSpy).not.toHaveBeenCalled();
@@ -597,7 +948,7 @@ describe("mint (POST /api/concept2/connect)", () => {
     const res = await asA(
       request(app)
         .post("/api/concept2/connect")
-        .send({ weightClass: "H", linkClient: "webauth-0" }),
+        .send({ linkClient: "webauth-0" }),
     );
     expect(res.status).toBe(409);
   });
@@ -651,7 +1002,7 @@ describe("mint (POST /api/concept2/connect)", () => {
       .mockImplementation(realCreate);
     const { app } = buildApp({ store });
     const res = await asACookie(
-      request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
+      request(app).post("/api/concept2/connect").send({}),
     );
     expect(res.status).toBe(200);
     expect(createSpy).toHaveBeenCalledTimes(2);
@@ -667,29 +1018,37 @@ describe("mint (POST /api/concept2/connect)", () => {
       .mockRejectedValue(new AttemptNonceCollisionError());
     const { app } = buildApp({ store });
     const res = await asACookie(
-      request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
+      request(app).post("/api/concept2/connect").send({}),
     );
     expect(res.status).toBe(500);
     expect(createSpy).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects a weightClass outside H|L, field-named", async () => {
-    const { app } = buildApp();
+  it("IGNORES a weightClass an older installed build still sends, rather than refusing it", async () => {
+    // Ruling (i): the mint takes nothing about the rower, and the field is
+    // read by nothing. Refusing an unknown key would brick every unupdated
+    // TestFlight build the moment this deploys — PR1.75b's installed build
+    // sends `{weightClass, linkClient}` on native. So the value is dropped
+    // on the floor, and the mint succeeds.
+    const store = makeFakeConcept2Store();
+    const { app } = buildApp({ store });
     const res = await asACookie(
       request(app).post("/api/concept2/connect").send({ weightClass: "X" }),
     );
-    expect(res.status).toBe(400);
-    expect(res.body.field).toBe("weightClass");
+    expect(res.status).toBe(200);
+    expect(typeof res.body.state).toBe("string");
   });
 
   it("a request with no body at all (req.body left undefined by express.json) is treated as empty, not a crash", async () => {
     const { app } = buildApp();
     // Deliberately no `.send()`/Content-Type: `express.json()` only ever
     // sets `req.body` for a matching Content-Type, so this exercises the
-    // `isRec` fallback for real, not a body-parser 400 of its own.
+    // `isRec` fallback for real, not a body-parser 400 of its own. A COOKIE
+    // mint needs no `linkClient`, so an empty body is a legitimate web mint
+    // and now succeeds (before ruling (i) this 400'd on the missing class).
     const res = await asACookie(request(app).post("/api/concept2/connect"));
-    expect(res.status).toBe(400);
-    expect(res.body.field).toBe("weightClass");
+    expect(res.status).toBe(200);
+    expect(typeof res.body.state).toBe("string");
   });
 
   // Pinned with the INDEPENDENT literal 900_000 (15 minutes in ms), not
@@ -700,9 +1059,7 @@ describe("mint (POST /api/concept2/connect)", () => {
     const store = makeFakeConcept2Store();
     const gcExpired = vi.spyOn(store, "deleteExpiredAttempts");
     const { app } = buildApp({ store });
-    await asACookie(
-      request(app).post("/api/concept2/connect").send({ weightClass: "H" }),
-    );
+    await asACookie(request(app).post("/api/concept2/connect").send({}));
     expect(gcExpired).toHaveBeenCalledWith(900_000);
   });
 });
@@ -730,7 +1087,6 @@ describe("callback (GET /api/concept2/callback) — the web ladder, design §5",
     );
 
     const link = await store.getLink(userA.id);
-    expect(link?.weightClass).toBe("H");
     expect(link?.c2UserId).toBe(2211);
   });
 
@@ -947,7 +1303,14 @@ describe("callback (GET /api/concept2/callback) — the web ladder, design §5",
     const store = makeFakeConcept2Store();
     const client = makeStubClient();
     stubHappyExchange(client);
-    vi.mocked(client.fetchMe).mockResolvedValue({ ok: false });
+    // Neither of this test's callback paths distinguishes the two kinds —
+    // both answer 502 — so the discriminator is set to the retryable one
+    // rather than the 401 that would also flag a grant.
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: false,
+      kind: "c2_error",
+      status: 500,
+    });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
     const res = await asACookie(
@@ -983,6 +1346,8 @@ describe("callback (GET /api/concept2/callback) — the web ladder, design §5",
       ok: true,
       c2UserId: 2211,
       username: null,
+      weight: 8200,
+      gender: "M",
     });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
@@ -991,8 +1356,85 @@ describe("callback (GET /api/concept2/callback) — the web ladder, design §5",
     );
     expect(res.status).toBe(200);
     expect(res.text.replace(/<[^>]+>/g, "")).toContain(
-      "Concept2 #2211 is now connected to Ergomatic a@x.com.",
+      "Concept2 account #2211 is now connected to Ergomatic a@x.com.",
     );
+  });
+
+  it("names the numeric account the SAME way the card does when Concept2 sends no username", async () => {
+    // Two shapes, one fallback: absent and empty are both "no identity",
+    // and both must read `account #2211` — the exact spelling the card's
+    // `identityLine` uses, so a rower meets one identity, not two.
+    const rendered: string[] = [];
+    for (const username of [null, ""] as const) {
+      const store = makeFakeConcept2Store();
+      const client = makeStubClient();
+      stubHappyExchange(client);
+      vi.mocked(client.fetchMe).mockResolvedValue({
+        ok: true,
+        c2UserId: 2211,
+        username,
+        weight: 8200,
+        gender: "M",
+      });
+      const { app } = buildApp({ store, client });
+      const state = await mintAndGetState(app);
+      const res = await asACookie(
+        request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+      );
+      rendered.push(res.text.replace(/<[^>]+>/g, ""));
+    }
+    expect(
+      rendered.map((text) =>
+        text.includes("Concept2 account #2211 is now connected to"),
+      ),
+    ).toStrictEqual([true, true]);
+  });
+
+  it("a real callback exchange stores the username GET /link then reports", async () => {
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jamesawesome",
+      // `weight`/`gender` are required on the success shape after step A5.
+      // Present-and-plausible here because this test is about the
+      // username; the derivation's own cases live in mapping.test.ts.
+      weight: 8200,
+      gender: "M",
+    });
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    const done = await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    expect(done.status).toBe(200);
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.c2Username).toBe("jamesawesome");
+  });
+
+  it("stores NO username rather than an empty one when Concept2 sends a blank", async () => {
+    // `""` is what `client.ts`'s fetchMe passes through for a blank field
+    // (observation 18); `??` would store it and the card would render a gap
+    // where the account name belongs.
+    const store = makeFakeConcept2Store();
+    const client = makeStubClient();
+    stubHappyExchange(client);
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "",
+      weight: 8200,
+      gender: "M",
+    });
+    const { app } = buildApp({ store, client });
+    const state = await mintAndGetState(app);
+    await asACookie(
+      request(app).get(`/api/concept2/callback?state=${state}&code=abc123`),
+    );
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.c2Username).toBeNull();
   });
 
   it("relinking clears a previously-set needsReauthAt", async () => {
@@ -1103,6 +1545,8 @@ describe("callback (GET /api/concept2/callback) — the web ladder, design §5",
       ok: true,
       c2UserId: 2211,
       username: "<script>alert(1)</script>",
+      weight: 8200,
+      gender: "M",
     });
     const { app } = buildApp({ store, client });
     const state = await mintAndGetState(app);
@@ -1116,7 +1560,7 @@ describe("callback (GET /api/concept2/callback) — the web ladder, design §5",
 });
 
 describe("exchange (POST /api/concept2/exchange) — the native ladder, design §6", () => {
-  it("happy path: same bearer -> 200 {linked:true, c2UserId, weightClass}, exchange used the NATIVE redirect, link written", async () => {
+  it("happy path: same bearer -> 200 {linked:true, c2UserId}, exchange used the NATIVE redirect, link written", async () => {
     const store = makeFakeConcept2Store();
     const client = makeStubClient();
     stubHappyExchange(client);
@@ -1128,10 +1572,13 @@ describe("exchange (POST /api/concept2/exchange) — the native ladder, design �
         .send({ code: "abc123", state }),
     );
     expect(res.status).toBe(200);
+    // No `weightClass` (ruling i): the column it was read from is gone and
+    // `adapters/linkFlow.ts`'s `linked` outcome stopped declaring the field
+    // in the same commit. `toStrictEqual` is what makes this the assertion
+    // that catches a re-added one.
     expect(res.body).toStrictEqual({
       linked: true,
       c2UserId: 2211,
-      weightClass: "H",
     });
     expect(client.exchangeCode).toHaveBeenCalledWith(
       "abc123",
@@ -1302,7 +1749,14 @@ describe("exchange (POST /api/concept2/exchange) — the native ladder, design �
     expect(r1.body).toStrictEqual({ error: "c2_error" });
 
     stubHappyExchange(client);
-    vi.mocked(client.fetchMe).mockResolvedValue({ ok: false });
+    // Neither of this test's callback paths distinguishes the two kinds —
+    // both answer 502 — so the discriminator is set to the retryable one
+    // rather than the 401 that would also flag a grant.
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: false,
+      kind: "c2_error",
+      status: 500,
+    });
     const s2 = await mintAndGetState(app, asA, NATIVE_MINT);
     const r2 = await asA(
       request(app)
@@ -1353,9 +1807,12 @@ describe("createApp wiring (RF24: the seam the router-level tests skip)", () => 
         stores: makeFakeStores(),
         concept2: {
           available: () => true,
+          availableFor: (email: string) =>
+            computeAvailableFor(true, parseAllowlist(userA.email), email),
           store,
           client,
           webRedirectUri: WEB_REDIRECT_URI,
+          logbookBaseUrl: LOGBOOK_BASE_URL,
         },
       }),
     );
@@ -1375,6 +1832,43 @@ describe("createApp wiring (RF24: the seam the router-level tests skip)", () => 
     );
     expect((await store.getLink(userA.id))?.c2UserId).toBe(2211);
   });
+
+  // Wave E per-user gate, at the ONE layer that can see a wiring mistake:
+  // `app.ts` passes `availableFor` from its own deps, and TypeScript's
+  // parameter-bivariance means a typo'd `availableFor: concept2Deps
+  // .available` COMPILES — a zero-arg function is assignable to a one-arg
+  // type. Every other test in this file constructs the router directly and
+  // would stay green through exactly that mistake, with the gate wide open
+  // for everyone the flag admits. This one enters through `createApp`, with
+  // an `availableFor` that admits userA alone, and moves the identity.
+  it("createApp threads availableFor: userB is refused where userA is served", async () => {
+    const app = createApp(
+      baseDeps({
+        sessions: fakeSessionStore(),
+        stores: makeFakeStores(),
+        concept2: {
+          available: () => true,
+          availableFor: (email: string) =>
+            computeAvailableFor(true, parseAllowlist(userA.email), email),
+          store: makeFakeConcept2Store(),
+          client: makeStubClient(),
+          webRedirectUri: WEB_REDIRECT_URI,
+          logbookBaseUrl: LOGBOOK_BASE_URL,
+        },
+      }),
+    );
+
+    const allowed = await asA(request(app).get("/api/concept2/link"));
+    expect(allowed.body).toStrictEqual({ available: true, linked: false });
+
+    const denied = await asB(request(app).get("/api/concept2/link"));
+    expect(denied.body).toStrictEqual({ available: false });
+
+    const deniedMint = await asB(
+      request(app).post("/api/concept2/connect").send(NATIVE_MINT),
+    );
+    expect(deniedMint.status).toBe(403);
+  });
 });
 
 describe("link (GET/DELETE /api/concept2/link)", () => {
@@ -1388,26 +1882,68 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
   // The sent-state contract (spec F8) renders "sent" only when a row's
   // c2_user_id matches the LIVE link's, and the View-on-Concept2 URL is
   // /profile/{c2_user_id}/log/{result_id} — PR2 needs c2UserId off this
-  // response, not just weightClass. Pinned with toStrictEqual so an
-  // accidental extra/renamed field fails loudly.
+  // response. Pinned with toStrictEqual so an accidental extra/renamed
+  // field fails loudly; that strictness is the leak check, so this stays
+  // `toStrictEqual` rather than loosening to `toMatchObject`.
   it("GET: available, linked — carries c2UserId, tokens never serialized", async () => {
     const store = makeFakeConcept2Store();
-    await store.upsertLink(
-      userA.id,
-      freshLink({ weightClass: "L", c2UserId: 4477 }),
-    );
+    await store.upsertLink(userA.id, freshLink({ c2UserId: 4477 }));
     const { app } = buildApp({ store });
     const res = await asA(request(app).get("/api/concept2/link"));
     expect(res.status).toBe(200);
     expect(res.body).toStrictEqual({
       available: true,
       linked: true,
-      weightClass: "L",
       c2UserId: 4477,
+      // `freshLink()` passes no username, and the store's input field is
+      // OPTIONAL — so this asserts the store's own `?? null` default as
+      // well as the response's projection.
+      c2Username: null,
+      logbookBaseUrl: LOGBOOK_BASE_URL,
       needsReauth: false,
+      // Wave E auto-send §3.1: a fresh link is MANUAL with no failure flag.
+      autoSend: false,
+      sendFailedAt: null,
+      sendFailedReason: null,
     });
     expect(JSON.stringify(res.body)).not.toContain(LINK_INPUT.accessToken);
     expect(JSON.stringify(res.body)).not.toContain(LINK_INPUT.refreshToken);
+  });
+
+  it("GET /link names the linked Concept2 username and the logbook origin", async () => {
+    // The username discharges the account-injection detect-identity
+    // treatment (ROADMAP's C2 row: the card "naming which account the link
+    // goes to" ships with PR2). The origin exists because the client cannot
+    // know whether this deployment talks to log.concept2.com or log-dev
+    // (plan observation 5), and a wrong origin 404s the link-out silently.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink({ c2Username: "jamesawesome" }));
+    const { app } = buildApp({ store });
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      available: true,
+      linked: true,
+      c2UserId: 2211,
+      c2Username: "jamesawesome",
+      logbookBaseUrl: LOGBOOK_BASE_URL,
+    });
+    expect(res.body).not.toHaveProperty("accessToken");
+    expect(res.body).not.toHaveProperty("refreshToken");
+  });
+
+  it("GET /link reports a null username rather than omitting the field", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink({ c2Username: null }));
+    const { app } = buildApp({ store });
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.c2Username).toBeNull();
+  });
+
+  it("GET /link leaks neither new field while the flag is off", async () => {
+    const { app } = buildApp({ available: false });
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body).toStrictEqual({ available: false });
   });
 
   it("GET: needsReauth reflects a set needsReauthAt", async () => {
@@ -1420,6 +1956,83 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     const { app } = buildApp({ store });
     const res = await asA(request(app).get("/api/concept2/link"));
     expect(res.body.needsReauth).toBe(true);
+  });
+
+  // Wave E auto-send §3.1: the ONE new write, and the flag on the read.
+  it("PATCH { autoSend: true } -> 204, and the next GET reads autoSend true", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store });
+    const patch = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(patch.status).toBe(204);
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.autoSend).toBe(true);
+    const back = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: false }),
+    );
+    expect(back.status).toBe(204);
+    expect(
+      (await asA(request(app).get("/api/concept2/link"))).body.autoSend,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["a string", { autoSend: "true" }],
+    ["a number", { autoSend: 1 }],
+    ["absent", {}],
+    ["null", { autoSend: null }],
+  ])(
+    "PATCH with autoSend %s -> 400 field-named; the mode is unchanged (A2 fail-closed)",
+    async (_label, body) => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      // Seeded AUTOMATIC, not the default: from MANUAL the `absent` and
+      // `null` rows could not tell a held guard from a bypassed one that
+      // wrote `false` (task review F3).
+      await store.setAutoSend(userA.id, true);
+      const { app } = buildApp({ store });
+      const res = await asA(
+        request(app).patch("/api/concept2/link").send(body),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body).toStrictEqual({
+        error: "autoSend must be a boolean",
+        field: "autoSend",
+      });
+      expect((await store.getLink(userA.id))?.autoSend).toBe(true);
+    },
+  );
+
+  it("PATCH with no link row -> 409 unlinked (the setting has no meaning without one)", async () => {
+    const { app } = buildApp({ store: makeFakeConcept2Store() });
+    const res = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "unlinked" });
+  });
+
+  it("PATCH while the surface is unavailable -> 403, same gate as every other write", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store, available: false });
+    const res = await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    expect(res.status).toBe(403);
+    expect((await store.getLink(userA.id))?.autoSend).toBe(false);
+  });
+
+  it("GET carries the send-failed flag as an ISO instant and the verbatim sub-reason", async () => {
+    const store = makeFakeConcept2Store(() => new Date("2026-09-05T12:00:00Z"));
+    await store.upsertLink(userA.id, freshLink());
+    await store.setSendFailed(userA.id, "unreadable_weight");
+    const { app } = buildApp({ store });
+    const res = await asA(request(app).get("/api/concept2/link"));
+    expect(res.body.sendFailedAt).toBe("2026-09-05T12:00:00.000Z");
+    expect(res.body.sendFailedReason).toBe("unreadable_weight");
   });
 
   it("DELETE: unavailable -> 403", async () => {
@@ -1571,7 +2184,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         .send({ tz: "America/New_York" }),
     );
     expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ resultId: 85557 });
+    expect(res.body).toStrictEqual({
+      resultId: 85557,
+      weightClass: "H",
+      weightClassSource: "declaration",
+    });
     expect(client.postResult).toHaveBeenCalledWith(LINK_INPUT.accessToken, {
       type: "rower",
       date: "2026-08-25 17:42:03",
@@ -1588,6 +2205,43 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     const stored = await logs.get(userA.id, id);
     expect(stored?.c2ResultId).toBe(85557);
     expect(stored?.c2UserId).toBe(LINK_INPUT.c2UserId);
+  });
+
+  // Wave E PR C, the RF24 seam: A (the store) writes machineWorkMeters, B
+  // (buildC2Payload, via toMappingRow) reads it. This test starts at the
+  // stored row — NOT at a hand-built SessionLogRow — so the mutation that
+  // drops the field in `toMappingRow` (leaving the payload to fall back to
+  // workMeters while the app still DISPLAYS the machine number) is caught
+  // here and nowhere else. The number is the walk's own: interval sum 5708,
+  // monitor total 5706; the code was minted over 5706 and verifies against
+  // it live (docs/superpowers/research/2026-09-05-c2-verification-measurement.md).
+  it("posts the monitor's OWN total (machineWorkMeters), not our interval sum, end to end", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 91001,
+    });
+    const { app, logs } = buildApp({ store, client });
+    // A divergent row: our sum 5708, the machine's own total 5706.
+    const id = await seedEligibleLog(logs, userA.id, {
+      workMeters: 5708,
+      machineWorkMeters: 5706,
+    });
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    const posted = vi.mocked(client.postResult).mock.calls[0]![1];
+    // The authoritative number, INDEPENDENT literals (RF21): 5706 posted,
+    // 5708 (our sum) NOT. Reverting buildC2Payload to `workMeters`, or
+    // dropping the field in toMappingRow, posts 5708 and reddens this.
+    expect(posted.distance).toBe(5706);
+    expect(posted.distance).not.toBe(5708);
   });
 
   it("legacy row: persists tz on the first attempt; a failed-then-retried upload from a DIFFERENT zone posts the SAME date (dedup stability)", async () => {
@@ -1727,6 +2381,22 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       freshLink({ expiresAt: new Date(fixedNow.getTime() + 30_000) }),
     );
     const client = makeStubClient();
+    // The stub's default declaration row is dated 2026-09-02, which THIS
+    // test's pinned January clock correctly reads as a FUTURE row and
+    // skips — falling through to an unstubbed `fetchMe`. A test that pins
+    // the clock has to supply a contemporaneous declaration.
+    vi.mocked(client.fetchResults).mockResolvedValue({
+      ok: true,
+      rows: [
+        {
+          id: 85561,
+          type: "rower",
+          weightClass: "H",
+          dateUtc: "2025-12-31 10:00:30",
+          date: "2025-12-31 06:00:30",
+        },
+      ],
+    });
     vi.mocked(client.refreshTokens).mockResolvedValue({
       ok: true,
       tokens: {
@@ -1759,6 +2429,22 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       }),
     );
     const client = makeStubClient();
+    // The stub's default declaration row is dated 2026-09-02, which THIS
+    // test's pinned January clock correctly reads as a FUTURE row and
+    // skips — falling through to an unstubbed `fetchMe`. A test that pins
+    // the clock has to supply a contemporaneous declaration.
+    vi.mocked(client.fetchResults).mockResolvedValue({
+      ok: true,
+      rows: [
+        {
+          id: 85561,
+          type: "rower",
+          weightClass: "H",
+          dateUtc: "2025-12-31 10:00:30",
+          date: "2025-12-31 06:00:30",
+        },
+      ],
+    });
     vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
     const { app, logs } = buildApp({ store, client, now: () => fixedNow });
     const id = await seedEligibleLog(logs, userA.id);
@@ -1776,7 +2462,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     );
   });
 
-  it("a dead refresh grant flags needs_reauth and keeps the link + weightClass (never deletes)", async () => {
+  it("a dead refresh grant flags needs_reauth and keeps the LINK (never deletes)", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(
       userA.id,
@@ -1801,7 +2487,6 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
 
     const link = await store.getLink(userA.id);
     expect(link).not.toBeNull();
-    expect(link?.weightClass).toBe("H");
     expect(link?.needsReauthAt).not.toBeNull();
   });
 
@@ -1934,6 +2619,9 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         .send({ tz: "America/New_York" }),
     );
     expect(third.status).toBe(200);
+    // Bare `{resultId}`: this exit is the already-sent short-circuit, which
+    // resolves NO class (nothing was sent on this request), and inventing
+    // one would be a claim about a send that happened in the past.
     expect(third.body).toStrictEqual({ resultId: 85557 });
     expect(client.postResult).toHaveBeenCalledTimes(2);
   });
@@ -1990,7 +2678,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         .send({ tz: "America/New_York" }),
     );
     expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ resultId: 55 });
+    expect(res.body).toStrictEqual({
+      resultId: 55,
+      weightClass: "H",
+      weightClassSource: "declaration",
+    });
     expect(client.postResult).toHaveBeenCalledTimes(2);
     expect(client.refreshTokens).toHaveBeenCalledTimes(1);
     const calls = vi.mocked(client.postResult).mock.calls;
@@ -2027,7 +2719,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         .send({ tz: "America/New_York" }),
     );
     expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ resultId: 9 });
+    expect(res.body).toStrictEqual({
+      resultId: 9,
+      weightClass: "H",
+      weightClassSource: "declaration",
+    });
     expect(client.refreshTokens).not.toHaveBeenCalled();
     const calls = vi.mocked(client.postResult).mock.calls;
     expect(calls[0][0]).toBe("stale-at");
@@ -2065,7 +2761,6 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
 
     const link = await store.getLink(userA.id);
     expect(link).not.toBeNull();
-    expect(link?.weightClass).toBe("H");
     expect(link?.needsReauthAt).not.toBeNull();
   });
 
@@ -2156,6 +2851,328 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(client.postResult).not.toHaveBeenCalled();
   });
 
+  // ── Wave E auto-send §3.4 (A11): the sticky send-failed flag, one row per
+  // route exit. `no_weight_class` is the ONLY setter; every exit that leaves
+  // the row at Concept2 clears it; `c2_error` and `not_eligible` touch nothing.
+  // Every assertion is a FRESH store read.
+  describe("the send-failed flag (Wave E auto-send A11)", () => {
+    async function flaggedStore() {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      await store.setSendFailed(userA.id, "no_weight");
+      expect((await store.getLink(userA.id))?.sendFailedAt).not.toBeNull();
+      return store;
+    }
+
+    it("no_weight_class SETS the flag with the sub-reason, and posts nothing", async () => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      vi.mocked(client.fetchResults).mockResolvedValue({ ok: true, rows: [] });
+      vi.mocked(client.fetchMe).mockResolvedValue({
+        ok: true,
+        c2UserId: 2211,
+        username: "jmorelli",
+        weight: null,
+        gender: "M",
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      const res = await asA(
+        request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+      );
+      expect(res.status).toBe(422);
+      const link = await store.getLink(userA.id);
+      expect(link?.sendFailedAt).not.toBeNull();
+      expect(link?.sendFailedReason).toBe("no_weight");
+      expect(client.postResult).not.toHaveBeenCalled();
+      // RF24, the seam from the 422 to the wire the You row reads: the same
+      // sub-reason the send answered, carried by GET /link.
+      const read = await asA(request(app).get("/api/concept2/link"));
+      expect(read.status).toBe(200);
+      // The independent literal AND the round-trip: a mutation changing the
+      // sub-reason in both places still fails the literal.
+      expect(read.body.sendFailedReason).toBe("no_weight");
+      expect(read.body.sendFailedReason).toBe(res.body.reason);
+      expect(typeof read.body.sendFailedAt).toBe("string");
+    });
+
+    it("a 200 post CLEARS a set flag", async () => {
+      const store = await flaggedStore();
+      const client = makeStubClient();
+      vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(200);
+      const link = await store.getLink(userA.id);
+      expect(link?.sendFailedAt).toBeNull();
+      expect(link?.sendFailedReason).toBeNull();
+    });
+
+    it("the already-sent short-circuit (200, no wire call) CLEARS a set flag", async () => {
+      const store = await flaggedStore();
+      const client = makeStubClient();
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId);
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(200);
+      expect(client.postResult).not.toHaveBeenCalled();
+      expect((await store.getLink(userA.id))?.sendFailedAt).toBeNull();
+    });
+
+    it("Concept2's 409 duplicate (the row is THERE) CLEARS a set flag — the exit 'on success' missed", async () => {
+      const store = await flaggedStore();
+      const client = makeStubClient();
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: false,
+        kind: "duplicate",
+        resultId: 777,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(409);
+      expect((await store.getLink(userA.id))?.sendFailedAt).toBeNull();
+    });
+
+    it("c2_error LEAVES the flag as it was — set stays set, clear stays clear (ruling 7)", async () => {
+      const store = await flaggedStore();
+      const client = makeStubClient();
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: false,
+        kind: "c2_error",
+        status: 500,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(502);
+      expect((await store.getLink(userA.id))?.sendFailedReason).toBe(
+        "no_weight",
+      );
+      // and on a CLEAR link, c2_error does not set it
+      const clean = makeFakeConcept2Store();
+      await clean.upsertLink(userA.id, freshLink());
+      const { app: app2, logs: logs2 } = buildApp({ store: clean, client });
+      const id2 = await seedEligibleLog(logs2, userA.id);
+      await asA(
+        request(app2)
+          .post(`/api/concept2/results/${id2}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect((await clean.getLink(userA.id))?.sendFailedAt).toBeNull();
+    });
+
+    it("not_eligible LEAVES the flag untouched (a manual row is not a link failure)", async () => {
+      const store = await flaggedStore();
+      const { app, logs } = buildApp({ store });
+      const id = await seedEligibleLog(logs, userA.id, { source: "manual" });
+      const res = await asA(
+        request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+      );
+      expect(res.status).toBe(422);
+      expect(res.body.error).toBe("not_eligible");
+      expect((await store.getLink(userA.id))?.sendFailedReason).toBe(
+        "no_weight",
+      );
+    });
+  });
+
+  // ── Wave E auto-send §3.3 (A10): the per-row in-flight claim. NOT a race
+  // (PR #269's lesson): request 2 is issued only after request 1 has ENTERED
+  // the wire call, and the wire call resolves only when the test says so.
+  describe("the in-flight send claim (Wave E auto-send A10)", () => {
+    function deferredPostResult() {
+      let resolve!: (v: unknown) => void;
+      let reject!: (e: unknown) => void;
+      let entered!: () => void;
+      const enteredOnce = new Promise<void>((r) => {
+        entered = r;
+      });
+      const answer = new Promise<unknown>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return {
+        enteredOnce,
+        resolve,
+        reject,
+        impl: vi.fn(() => {
+          entered();
+          return answer;
+        }),
+      };
+    }
+
+    it("two concurrent sends for ONE row reach Concept2 once, and both callers see the same resultId", async () => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      const d = deferredPostResult();
+      vi.mocked(client.postResult).mockImplementation(
+        d.impl as unknown as typeof client.postResult,
+      );
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+
+      // supertest's Test is LAZY — it fires only on `.then`/`.end` — so the
+      // concurrent requests are started eagerly with `.then(r => r)`; without
+      // that, `enteredOnce` can never resolve and the test times out.
+      const first = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await d.enteredOnce; // request 1 is INSIDE the wire call
+      const second = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      // Let request 2 reach the claim and chain before anything resolves.
+      // A fast-fail, not the gate: the timing-independent gate is the FINAL
+      // `toHaveBeenCalledTimes(1)` after both responses settle (M6 bites on
+      // that one).
+      await new Promise((r) => setTimeout(r, 20));
+      expect(d.impl).toHaveBeenCalledTimes(1);
+
+      d.resolve({ ok: true, resultId: 4242 });
+      const [r1, r2] = await Promise.all([first, second]);
+      expect(r1.status).toBe(200);
+      expect(r2.status).toBe(200);
+      expect(r1.body.resultId).toBe(4242);
+      expect(r2.body.resultId).toBe(4242);
+      expect(d.impl).toHaveBeenCalledTimes(1);
+    });
+
+    it("two spellings of one row's id take ONE claim: `UUID_RE` is /i and Postgres folds uuid case", async () => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      const d = deferredPostResult();
+      vi.mocked(client.postResult).mockImplementation(
+        d.impl as unknown as typeof client.postResult,
+      );
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+      expect(id).not.toBe(id.toUpperCase());
+
+      const first = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await d.enteredOnce;
+      const second = asA(
+        request(app)
+          .post(`/api/concept2/results/${id.toUpperCase()}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await new Promise((r) => setTimeout(r, 20));
+      d.resolve({ ok: true, resultId: 4343 });
+      const [r1, r2] = await Promise.all([first, second]);
+      expect(r1.status).toBe(200);
+      expect(r2.status).toBe(200);
+      expect(r2.body.resultId).toBe(4343);
+      expect(d.impl).toHaveBeenCalledTimes(1);
+    });
+
+    it("a first caller that HANGS UP mid-wire-call still holds the claim: the second send waits, then takes the short-circuit", async () => {
+      // The harden pass's kill-shot on the first build (a middleware
+      // releasing on the response's `finish`/`close`): Express does not stop
+      // a handler when its client goes away, so `close` freed the key while
+      // request 1 was still inside `postResult`, and request 2 ran beside
+      // it — two wire calls. Deterministic arranged sequence, not a race
+      // (PR #269's rule): enter the wire call, abort, issue the second
+      // request, assert the wire count BEFORE releasing. Red on the
+      // middleware build (`called 1 times, but got 2`), green on the wrapper.
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      const d = deferredPostResult();
+      vi.mocked(client.postResult).mockImplementation(
+        d.impl as unknown as typeof client.postResult,
+      );
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+
+      const r1 = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      const first = r1.then((r) => r).catch(() => "aborted" as const);
+      await d.enteredOnce; // request 1 is INSIDE the wire call
+      r1.abort(); // its client hangs up
+      await new Promise((r) => setTimeout(r, 50));
+      const second = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await new Promise((r) => setTimeout(r, 100));
+      // The claim is still held by the running handler.
+      expect(d.impl).toHaveBeenCalledTimes(1);
+
+      d.resolve({ ok: true, resultId: 4242 });
+      const r2 = await second;
+      expect(r2.status).toBe(200);
+      expect(r2.body.resultId).toBe(4242);
+      expect(d.impl).toHaveBeenCalledTimes(1);
+      expect(await first).toBe("aborted");
+    });
+
+    it("a send whose wire call THREW releases the claim: the next send for the same row reaches the wire", async () => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      const d = deferredPostResult();
+      vi.mocked(client.postResult).mockImplementation(
+        d.impl as unknown as typeof client.postResult,
+      );
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+
+      const first = asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      ).then((r) => r);
+      await d.enteredOnce;
+      d.reject(new Error("socket hang up"));
+      const r1 = await first;
+      expect(r1.status).toBeGreaterThanOrEqual(500);
+
+      vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 7 });
+      const r2 = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(r2.status).toBe(200);
+      expect(r2.body.resultId).toBe(7);
+      expect(client.postResult).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("resending after relinking to a DIFFERENT C2 account is allowed and overwrites the pair (plan deviation 5)", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink({ c2UserId: 111 }));
@@ -2176,7 +3193,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         .send({ tz: "America/New_York" }),
     );
     expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ resultId: 5000 });
+    expect(res.body).toStrictEqual({
+      resultId: 5000,
+      weightClass: "H",
+      weightClassSource: "declaration",
+    });
     expect(client.postResult).toHaveBeenCalledTimes(1);
 
     const stored = await logs.get(userA.id, id);
@@ -2184,19 +3205,19 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(stored?.c2UserId).toBe(222);
   });
 
-  // `weightClass`/`c2UserId` for the payload AND for
-  // `recordC2Result` must come from the LOCKED re-read inside
-  // `withLinkLock`, never the earlier UNLOCKED `store.getLink` read — a
-  // relink landing in between would otherwise pair the OLD account's
-  // identity with the NEW account's token.
-  it("sources weightClass and c2UserId from the LOCKED read, not the earlier unlocked getLink", async () => {
+  // The `c2UserId` used for the weight-class read AND for `recordC2Result`
+  // must come from the LOCKED re-read inside `withLinkLock`, never the
+  // earlier UNLOCKED `store.getLink` read — a relink landing in between
+  // would otherwise pair the OLD account's identity with the NEW account's
+  // token. Ruling (i) took `weightClass` off this list: it is no longer on
+  // the link at all, so the remaining half is the account id, which is
+  // still worth a gate.
+  it("sources c2UserId from the LOCKED read, not the earlier unlocked getLink", async () => {
     const store = makeFakeConcept2Store();
-    await store.upsertLink(
-      userA.id,
-      freshLink({ c2UserId: 111, weightClass: "H" }),
-    );
+    await store.upsertLink(userA.id, freshLink({ c2UserId: 111 }));
     const client = makeStubClient();
     const { app, logs } = buildApp({ store, client });
+    const logsSpy = vi.spyOn(logs, "sentC2ResultIds");
     const id = await seedEligibleLog(logs, userA.id);
 
     // Simulate a relink landing BETWEEN the route's initial unlocked
@@ -2207,10 +3228,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     // the locked read — already reflects the new account.
     const staleLink = await store.getLink(userA.id);
     vi.spyOn(store, "getLink").mockResolvedValueOnce(staleLink);
-    await store.upsertLink(
-      userA.id,
-      freshLink({ c2UserId: 222, weightClass: "L" }),
-    );
+    await store.upsertLink(userA.id, freshLink({ c2UserId: 222 }));
 
     vi.mocked(client.postResult).mockResolvedValue({
       ok: true,
@@ -2223,10 +3241,10 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         .send({ tz: "America/New_York" }),
     );
     expect(res.status).toBe(200);
-    expect(client.postResult).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ weight_class: "L" }),
-    );
+    // The declaration read is scoped to the LOCKED account, not the stale
+    // one: a `sentC2ResultIds` call naming 111 would be asking "which rows
+    // did we write to the account we are no longer linked to".
+    expect(logsSpy).toHaveBeenCalledWith(userA.id, 222);
     const stored = await logs.get(userA.id, id);
     expect(stored?.c2UserId).toBe(222);
   });
@@ -2238,20 +3256,14 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
   // already recorded under the NEW account.
   it("duplicate-recovery write sources c2UserId from the LOCKED read, not the earlier unlocked getLink", async () => {
     const store = makeFakeConcept2Store();
-    await store.upsertLink(
-      userA.id,
-      freshLink({ c2UserId: 111, weightClass: "H" }),
-    );
+    await store.upsertLink(userA.id, freshLink({ c2UserId: 111 }));
     const client = makeStubClient();
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
 
     const staleLink = await store.getLink(userA.id);
     vi.spyOn(store, "getLink").mockResolvedValueOnce(staleLink);
-    await store.upsertLink(
-      userA.id,
-      freshLink({ c2UserId: 222, weightClass: "L" }),
-    );
+    await store.upsertLink(userA.id, freshLink({ c2UserId: 222 }));
 
     vi.mocked(client.postResult).mockResolvedValue({
       ok: false,
@@ -2361,5 +3373,595 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(res.body).toStrictEqual({ error: "needs_reauth" });
     expect(client.postResult).toHaveBeenCalledTimes(1);
     expect(client.refreshTokens).toHaveBeenCalledTimes(2);
+  });
+  // -- ruling (i): the weight class comes from Concept2 ---------------------
+
+  it("sends the class the ROWER declared on their own most recent Concept2 row", async () => {
+    // Producer 1. The posted BODY is the only place the claim is
+    // observable, and `fetchMe` never being called is what proves the
+    // profile derivation did not quietly answer instead.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({
+      ok: true,
+      rows: [
+        {
+          id: 85561,
+          type: "rower",
+          weightClass: "L",
+          dateUtc: "2026-09-02 10:00:30",
+          date: "2026-09-02 06:00:30",
+        },
+      ],
+    });
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 41 });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(200);
+    expect(client.postResult).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ weight_class: "L" }),
+    );
+    expect(res.body.weightClassSource).toBe("declaration");
+    expect(client.fetchMe).not.toHaveBeenCalled();
+  });
+
+  it("falls back to OUR derivation from the profile, and says which producer answered", async () => {
+    // Producer 2. `rows: []` is what makes this a profile test rather than
+    // a second declaration test — `makeStubClient`'s default answers a
+    // declaration, so a test that forgets this override silently exercises
+    // the wrong producer.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({ ok: true, rows: [] });
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jmorelli",
+      weight: 7000,
+      gender: "M",
+    });
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 42 });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(200);
+    expect(client.postResult).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ weight_class: "L" }),
+    );
+    expect(res.body).toStrictEqual({
+      resultId: 42,
+      weightClass: "L",
+      weightClassSource: "profile",
+    });
+  });
+
+  // The page the declaration read asks for has TWO consumers: it is what
+  // `pickDeclaredWeightClass` reads a class off, AND it is what the
+  // own-writes exclusion removes our rows from. The exclusion does not
+  // WIDEN it, so the page size is what decides how many consecutive app
+  // sends a rower can make before their own real Concept2 declaration is
+  // pushed off the read for good. These two cases pin both ends of that.
+  //
+  // Both drive `fetchResults` through a stub that SLICES to the requested
+  // count, the way Concept2's `?number=` genuinely does — without that the
+  // page size is unobservable from here and shrinking it could not go red.
+  function pagedClient(page: readonly unknown[]): C2Client {
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockImplementation(
+      async (_token: string, count: number) => ({
+        ok: true as const,
+        rows: page.slice(0, count) as never,
+      }),
+    );
+    return client;
+  }
+
+  // A row THIS APP wrote: indistinguishable from a real declaration in
+  // every projected field except its id (observation 29's whole point).
+  const ourRow = (id: number) => ({
+    id,
+    type: "rower",
+    weightClass: "H",
+    dateUtc: "2026-09-02 10:00:30",
+    date: "2026-09-02 06:00:30",
+  });
+
+  it("finds a declaration sitting under SIX of our own consecutive sends", async () => {
+    // The defect the page width exists to prevent: at a five-row page this
+    // rower's own `L` is off the window from their sixth app send onward,
+    // and every send after that writes our PROFILE-derived `H` onto their
+    // permanent Concept2 record — silently, forever.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = pagedClient([
+      ...[9001, 9002, 9003, 9004, 9005, 9006].map(ourRow),
+      {
+        id: 85561,
+        type: "rower",
+        weightClass: "L",
+        dateUtc: "2026-08-20 10:00:30",
+        date: "2026-08-20 06:00:30",
+      },
+    ]);
+    // The exclusion set itself is stubbed rather than seeded through 51
+    // real sends: this case is about the WINDOW, not about the writer.
+    // "never reads its OWN write back as the rower's declaration on the
+    // next send" is the one that starts upstream of the producer.
+    //
+    // The profile is stubbed to derive the OPPOSITE class on purpose. A
+    // narrower page does not error — it silently answers `H` from the
+    // profile for a rower who declared `L`, which is the production defect
+    // in one line. Without this stub the fallback hits an unstubbed
+    // `fetchMe` and the test would go red on a 500, catching the mutant for
+    // the wrong reason.
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jmorelli",
+      weight: 8200,
+      gender: "M",
+    });
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 51 });
+    const { app, logs } = buildApp({ store, client });
+    vi.spyOn(logs, "sentC2ResultIds").mockResolvedValue(
+      new Set([9001, 9002, 9003, 9004, 9005, 9006]),
+    );
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.weightClassSource).toBe("declaration");
+    expect(client.postResult).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ weight_class: "L" }),
+    );
+    // `fetchMe` never ran: the declaration answered, so no profile
+    // derivation was needed. Without this a mutant that derived `L` some
+    // other way would satisfy the two assertions above.
+    expect(client.fetchMe).not.toHaveBeenCalled();
+  });
+
+  it("a page that is ALL ours falls to the profile, and the 200 says so", async () => {
+    // The residue that survives at fifty, made visible rather than silent:
+    // after 50 consecutive app-written rows with no other declaration among
+    // them, producer 1 legitimately has nothing to read. `weightClassSource`
+    // on this response is where that is answerable — for an OPERATOR, not
+    // for the rower: the 2026-09-04 ruling withdrew the SENT state's
+    // provenance sub-line, so no rower-facing surface names the producer.
+    const ids = Array.from({ length: 50 }, (_, i) => 9001 + i);
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = pagedClient(ids.map(ourRow));
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jmorelli",
+      weight: 7000,
+      gender: "M",
+    });
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 52 });
+    const { app, logs } = buildApp({ store, client });
+    vi.spyOn(logs, "sentC2ResultIds").mockResolvedValue(new Set(ids));
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toStrictEqual({
+      resultId: 52,
+      weightClass: "L",
+      weightClassSource: "profile",
+    });
+    // The whole window really was asked for and really was all ours: the
+    // read requested 50 rows and the profile fallback actually ran.
+    expect(client.fetchResults).toHaveBeenCalledWith(expect.any(String), 50);
+    expect(client.fetchMe).toHaveBeenCalledTimes(1);
+  });
+
+  it("never reads its OWN write back as the rower's declaration on the next send", async () => {
+    // RF24, and the only shape that can catch observation 29: this test
+    // STARTS upstream of the producer. Send 1 writes a row; Concept2 then
+    // echoes that row back on the results list carrying the class we sent;
+    // send 2 must still answer `profile`, because a class we produced is
+    // not a declaration however it comes back to us.
+    //
+    // Two independent observables, because the echoed class necessarily
+    // EQUALS what we sent — the posted body cannot discriminate here, which
+    // is exactly why ruling R2 put the source on the response.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    const page: { rows: unknown[] } = { rows: [] };
+    vi.mocked(client.fetchResults).mockImplementation(async () => ({
+      ok: true as const,
+      rows: page.rows as never,
+    }));
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jmorelli",
+      weight: 7000,
+      gender: "M",
+    });
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 340 });
+    const { app, logs } = buildApp({ store, client });
+    const first = await seedEligibleLog(logs, userA.id);
+    const second = await seedEligibleLog(logs, userA.id);
+
+    const one = await asA(
+      request(app).post(`/api/concept2/results/${first}`).send({ tz: "UTC" }),
+    );
+    expect(one.status).toBe(200);
+    expect(one.body.weightClassSource).toBe("profile");
+
+    // Concept2 now returns OUR row. Nothing on it says so except the id.
+    page.rows = [
+      {
+        id: 340,
+        type: "rower",
+        weightClass: "L",
+        dateUtc: "2026-09-03 11:00:00",
+        date: "2026-09-03 07:00:00",
+      },
+    ];
+    vi.mocked(client.fetchMe).mockClear();
+
+    const two = await asA(
+      request(app).post(`/api/concept2/results/${second}`).send({ tz: "UTC" }),
+    );
+    expect(two.status).toBe(200);
+    expect(two.body.weightClassSource).toBe("profile");
+    // The fallback really RAN, rather than the source string alone being
+    // right for some other reason.
+    expect(client.fetchMe).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a FAILED declaration read as retryable, never as our own guess", async () => {
+    // A failed read is not an empty read. The rower may well have a
+    // declaration; we could not read it. Deriving here would put OUR guess
+    // on a permanent third-party record because of a 500, and the rower
+    // would never know a read had failed at all.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      vi.mocked(client.fetchResults).mockResolvedValue({
+        ok: false,
+        kind: "c2_error",
+        status: 500,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+
+      const res = await asA(
+        request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+      );
+      expect(res.status).toBe(502);
+      expect(res.body).toStrictEqual({ error: "c2_error" });
+      expect(client.fetchMe).not.toHaveBeenCalled();
+      expect(client.postResult).not.toHaveBeenCalled();
+      // The warn line's own half, added with F5's profile twin below: the
+      // two 502s are byte-identical on the wire, so `layer` is the only
+      // thing that separates them, and it is pinned on BOTH sides or on
+      // neither.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(warn.mock.calls[0][0]))).toStrictEqual({
+        event: "c2_weight_class",
+        logId: id,
+        failure: "c2_error",
+        layer: "declaration",
+        status: 500,
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("a FAILED profile read is a 502 whose warn line names the PROFILE layer, not the declaration", async () => {
+    // Whole-branch review F5. The 502 above and the 502 here are the same
+    // response, so the ONLY thing that tells an operator which Concept2
+    // call died is `layer` on the `c2_weight_class` warn line — and until
+    // this test, mutating `layer: "profile"` to `"declaration"` left the
+    // whole unit project green. A diagnostic nothing can falsify is not a
+    // diagnostic.
+    //
+    // The route is reached the way a rower reaches it: they have declared
+    // nothing readable (an EMPTY results page, not a failed one — a failed
+    // one exits at the declaration layer above and never asks for the
+    // profile), and the profile read then fails.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      vi.mocked(client.fetchResults).mockResolvedValue({ ok: true, rows: [] });
+      vi.mocked(client.fetchMe).mockResolvedValue({
+        ok: false,
+        kind: "c2_error",
+        status: 500,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id);
+
+      const res = await asA(
+        request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+      );
+      expect(res.status).toBe(502);
+      expect(res.body).toStrictEqual({ error: "c2_error" });
+      // Both reads ran — otherwise "the PROFILE layer failed" would be true
+      // for the wrong reason.
+      expect(client.fetchResults).toHaveBeenCalledTimes(1);
+      expect(client.fetchMe).toHaveBeenCalledTimes(1);
+      // Nothing was written to Concept2 on a class we could not resolve.
+      expect(client.postResult).not.toHaveBeenCalled();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(warn.mock.calls[0][0]))).toStrictEqual({
+        event: "c2_weight_class",
+        logId: id,
+        failure: "c2_error",
+        layer: "profile",
+        status: 500,
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("refuses with no_weight_class and POSTs nothing to Concept2 when neither producer answers", async () => {
+    // The assertion that matters is the last one: a 422 that still POSTed
+    // would have written a class we invented onto a permanent record.
+    //
+    // Same title correction as its integration twin (whole-branch review
+    // nit): the results endpoint IS reached here — `fetchResults` answers
+    // the empty page below — so "NOT AT ALL", which this title used to say,
+    // claimed more than the test can show.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({ ok: true, rows: [] });
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jmorelli",
+      weight: null,
+      gender: "M",
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(422);
+    expect(res.body).toStrictEqual({
+      error: "no_weight_class",
+      reason: "no_weight",
+    });
+    expect(client.postResult).not.toHaveBeenCalled();
+  });
+
+  it("passes the profile's OWN failure reason through, so an unreadable weight is not reported as an unset one", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({ ok: true, rows: [] });
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: true,
+      c2UserId: 2211,
+      username: "jmorelli",
+      weight: "unreadable",
+      gender: "M",
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.body).toStrictEqual({
+      error: "no_weight_class",
+      reason: "unreadable_weight",
+    });
+  });
+
+  it("flags needs_reauth when the class reads 401 twice, rather than reporting a retryable error forever", async () => {
+    // Observation 25's whole reason: `fetchMe`/`fetchResults` used to
+    // collapse a 401 into an anonymous failure, so a dead grant on the
+    // weight-class read could only ever answer 502 and the rower was never
+    // sent through re-consent.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({
+      ok: false,
+      kind: "auth",
+      status: 401,
+    });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "at-2",
+        refreshToken: "rt-2",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
+    expect(client.postResult).not.toHaveBeenCalled();
+    expect((await store.getLink(userA.id))?.needsReauthAt).not.toBeNull();
+  });
+
+  it("re-reads the DECLARATION on the refreshed token, not just the profile", async () => {
+    // Retrying only the profile would silently demote a rower who HAS a
+    // declaration to our own derivation, purely because their first token
+    // had expired.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults)
+      .mockResolvedValueOnce({ ok: false, kind: "auth", status: 401 })
+      .mockResolvedValueOnce({
+        ok: true,
+        rows: [
+          {
+            id: 85561,
+            type: "rower",
+            weightClass: "L",
+            dateUtc: "2026-09-02 10:00:30",
+            date: "2026-09-02 06:00:30",
+          },
+        ],
+      });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "at-2",
+        refreshToken: "rt-2",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 43 });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.weightClassSource).toBe("declaration");
+    // The SECOND call carried the NEW token, which is what proves the
+    // declaration read re-ran rather than the profile alone.
+    expect(vi.mocked(client.fetchResults).mock.calls[1]?.[0]).toBe("at-2");
+    expect(client.fetchMe).not.toHaveBeenCalled();
+  });
+
+  it("a 401 on the PROFILE read reaches the same needs_reauth flag a 401 on the declaration does", async () => {
+    // The profile is the SECOND wire call in the resolution, and its own
+    // `auth` arm is a separate branch from the declaration read's. A rower
+    // whose grant died between the two calls must not be told "try again"
+    // forever.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({ ok: true, rows: [] });
+    vi.mocked(client.fetchMe).mockResolvedValue({
+      ok: false,
+      kind: "auth",
+      status: 401,
+    });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "at-2",
+        refreshToken: "rt-2",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
+    expect(client.postResult).not.toHaveBeenCalled();
+    expect((await store.getLink(userA.id))?.needsReauthAt).not.toBeNull();
+  });
+
+  it("a class-read 401 whose token reacquisition ALSO fails answers that failure, never a second read", async () => {
+    // The retry's own `acquireAccessToken` can fail on its own terms (a
+    // dead refresh grant). Its status/body wins, and no second declaration
+    // read is attempted on a token we never got.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.fetchResults).mockResolvedValue({
+      ok: false,
+      kind: "auth",
+      status: 401,
+    });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: false,
+      grantDead: true,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
+    expect(client.fetchResults).toHaveBeenCalledTimes(1);
+    expect(client.postResult).not.toHaveBeenCalled();
+  });
+
+  it("resolves the class ONCE per request, so a 401 retry cannot send a different class than the first attempt", async () => {
+    // Ruling R13. `fetchResults` answers "L" then "H"; both POST bodies
+    // must carry "L", because a re-read between two attempts at the same
+    // row is the split-authority defect I4 exists to prevent.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    const declared = ["L", "H"];
+    let call = 0;
+    vi.mocked(client.fetchResults).mockImplementation(async () => ({
+      ok: true as const,
+      rows: [
+        {
+          id: 85561,
+          type: "rower",
+          weightClass: declared[call++] ?? "H",
+          dateUtc: "2026-09-02 10:00:30",
+          date: "2026-09-02 06:00:30",
+        },
+      ],
+    }));
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "at-2",
+        refreshToken: "rt-2",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "auth" })
+      .mockResolvedValueOnce({ ok: true, resultId: 44 });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+
+    const res = await asA(
+      request(app).post(`/api/concept2/results/${id}`).send({ tz: "UTC" }),
+    );
+    expect(res.status).toBe(200);
+    expect(
+      vi
+        .mocked(client.postResult)
+        .mock.calls.map((c) => (c[1] as { weight_class: string }).weight_class),
+    ).toStrictEqual(["L", "L"]);
   });
 });

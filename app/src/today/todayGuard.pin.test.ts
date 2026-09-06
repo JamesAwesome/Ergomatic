@@ -83,10 +83,10 @@ describe("Today's cold-start guard is untouched by Phase 7B (spec §3)", () => {
     // read at effect time — see `monitorEntry`'s own doc comment in
     // Today.tsx for why the MOUNT SNAPSHOT reads through the store instead).
     expect(source).toContain(
-      'import { loadMonitorRun, completeInterruptedRun } from "../monitor/monitorRun";',
+      'import { loadMonitorRun } from "../monitor/monitorRun";',
     );
     expect(source).toContain(
-      'import {\n  commit as commitHandoff,\n  hydrate as hydrateHandoff,\n  read as readHandoff,\n  retire as retireHandoff,\n  type HandoffEntry,\n} from "../monitor/handoffStore";',
+      'import {\n  hydrate as hydrateHandoff,\n  read as readHandoff,\n  type HandoffEntry,\n} from "../monitor/handoffStore";',
     );
     expect(source).not.toMatch(/import\s*\{[^}]*\banyLiveSession\b/);
   });

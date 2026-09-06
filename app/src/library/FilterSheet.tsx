@@ -1,22 +1,18 @@
 import { useRef } from "react";
-import type { DurationBucket } from "../../domain/duration.js";
-import type { Difficulty } from "../../domain/types.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
-import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
-import { DURATION_CHIPS } from "../components/durationChips";
+import { DurationRange } from "../components/DurationRange";
 import {
   RECENCY_BOUNDARY_DAYS,
   clearSheetFilters,
   setLastDone,
   setSource,
-  toggleDifficulty,
-  toggleDuration,
-  togglePainLevel,
+  setDurationRange,
+  toggleEffortLevel,
   type Filters,
 } from "./filters";
 
-const PAIN_LEVELS = [1, 2, 3, 4, 5];
+const EFFORT_LEVELS = [1, 2, 3, 4, 5];
 
 // The one h2 in this sheet — SheetShell points its own `aria-labelledby` at
 // this id rather than taking the title text itself, so it stays completely
@@ -36,7 +32,7 @@ const COUNT_ID = "filter-sheet-count";
 /**
  * The FILTER sheet (Task 4, ui-fix round — DESIGN.md's "Library, second
  * pass"): slides up over the list (not a route — Library.tsx never pushes
- * history for it), holding five filter groups (DIFFICULTY, TIME, PAIN, LAST
+ * history for it), holding four filter groups (TIME, EFFORT, LAST
  * DONE, SOURCE) plus a live-counting L1 button. Operates entirely on a DRAFT
  * copy of Filters that the caller owns (`draft`/`onChangeDraft`) — nothing
  * here writes to the list's actually-applied filters directly. `onApply`
@@ -48,15 +44,14 @@ const COUNT_ID = "filter-sheet-count";
  * the task boundary — spec §2: "The TYPE group leaves `FilterSheet`
  * entirely"). Its chip row now lives above the list (Library.tsx, Task 2's
  * own work) — this sheet has no UI path to filter by type at all, by design.
- * DIFFICULTY (Task 2) joins this sheet in TYPE's old slot: unlike Today's
- * DIFFICULTY group (whose "empty" is impossible — `suggest()` always has
- * SOME difficulty preference), Library's own convention is the same as
- * `durations`/`painLevels` here — empty means no filter, and CLEAR ALL keeps
- * emptying to nothing (spec §1).
+ * Library's own convention for every group here is the same as
+ * `durations`/`effortLevels` — empty means no filter, and CLEAR ALL keeps
+ * emptying to nothing (spec §1). DIFFICULTY left this sheet in Phase DE
+ * PR 1 (the product has no difficulty any more).
  *
  * CLEAR vs. CLEAR ALL (fix round, whole-branch review finding B): this
  * sheet's own CLEAR button (`clearSheetFilters`) resets only the groups
- * rendered IN HERE — DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE — leaving
+ * rendered IN HERE — TIME/EFFORT/LAST DONE/SOURCE — leaving
  * `draft.types` exactly as the rower left it. Before this fix CLEAR called
  * the whole-library `clearFilters()`, silently emptying `types` too even
  * though the sheet shows no TYPE control and gives no indication that
@@ -139,82 +134,65 @@ export default function FilterSheet({
         </button>
       </div>
 
-      <CellGrid
-        label="DIFFICULTY"
-        cells={DIFFICULTY_CHIPS.map(({ value, label }) => ({
-          value,
-          label,
-          pressed: draft.difficulties.includes(value),
-        }))}
-        onToggle={(value) =>
-          onChangeDraft(toggleDifficulty(draft, value as Difficulty))
-        }
-      />
-
-      <CellGrid
+      {/* Phase SF PR2 (spec §3): TIME is a minutes range on one rail —
+          the shared `DurationRange` control, identical on Today's sheet. */}
+      <DurationRange
         label="TIME"
-        cells={DURATION_CHIPS.map(({ bucket, label }) => ({
-          value: bucket,
-          label,
-          pressed: draft.durations.includes(bucket),
-        }))}
-        onToggle={(value) =>
-          onChangeDraft(toggleDuration(draft, value as DurationBucket))
-        }
+        value={draft.durationRange}
+        onChange={(range) => onChangeDraft(setDurationRange(draft, range))}
       />
 
       <CellGrid
-        label="PAIN"
-        cells={PAIN_LEVELS.map((level) => ({
+        label="EFFORT"
+        cells={EFFORT_LEVELS.map((level) => ({
           value: String(level),
           label: String(level),
-          pressed: draft.painLevels.includes(level),
+          pressed: draft.effortLevels.includes(level),
         }))}
         onToggle={(value) =>
-          onChangeDraft(togglePainLevel(draft, Number(value)))
+          onChangeDraft(toggleEffortLevel(draft, Number(value)))
         }
       />
 
-      <div className="filter-sheet-row">
-        <CellGrid
-          className="filter-sheet-group-half"
-          label="LAST DONE"
-          cells={[
-            {
-              value: "under21",
-              label: `<${RECENCY_BOUNDARY_DAYS}D`,
-              pressed: draft.lastDone === "under21",
-            },
-            {
-              value: "over21",
-              label: `${RECENCY_BOUNDARY_DAYS}D+`,
-              pressed: draft.lastDone === "over21",
-            },
-          ]}
-          onToggle={(value) =>
-            onChangeDraft(setLastDone(draft, value as "under21" | "over21"))
-          }
-        />
-        <CellGrid
-          className="filter-sheet-group-half"
-          label="SOURCE"
-          cells={[
-            {
-              value: "global",
-              label: "GLOBAL",
-              pressed: draft.source === "global",
-            },
-            {
-              value: "custom",
-              label: "CUSTOM",
-              pressed: draft.source === "custom",
-            },
-          ]}
-          onToggle={(value) =>
-            onChangeDraft(setSource(draft, value as "global" | "custom"))
-          }
-        />
-      </div>
+      {/* Phase SF PR2 Gate 0 (James: variant B): SOURCE on its own full-width
+          row so ERGOMATIC LIBRARY / MY WORKOUTS sit on one line; LAST DONE
+          takes a full row too, the same width as every other pair. */}
+      <CellGrid
+        label="LAST DONE"
+        cells={[
+          {
+            value: "under21",
+            label: `<${RECENCY_BOUNDARY_DAYS}D`,
+            pressed: draft.lastDone === "under21",
+          },
+          {
+            value: "over21",
+            label: `${RECENCY_BOUNDARY_DAYS}D+`,
+            pressed: draft.lastDone === "over21",
+          },
+        ]}
+        onToggle={(value) =>
+          onChangeDraft(setLastDone(draft, value as "under21" | "over21"))
+        }
+      />
+      <CellGrid
+        label="SOURCE"
+        cells={[
+          {
+            value: "global",
+            label: "ERGOMATIC LIBRARY",
+            pressed: draft.source === "global",
+          },
+          {
+            value: "custom",
+            label: "MY WORKOUTS",
+            pressed: draft.source === "custom",
+          },
+        ]}
+        onToggle={(value) =>
+          onChangeDraft(setSource(draft, value as "global" | "custom"))
+        }
+      />
 
       {/* The live match count, moved off the primary button's own copy
           (now the constant "Apply Filter") onto a small mono caption

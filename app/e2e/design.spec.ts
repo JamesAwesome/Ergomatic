@@ -9,9 +9,10 @@ import { compileProgram } from "../domain/monitor/program.js";
 import type { WorkoutProgram } from "../domain/monitor/program.js";
 import type { IntervalActual } from "../domain/monitor/types.js";
 import { buildDraft, startDraft } from "../src/session/draft";
-import { buildRun } from "../src/session/engine";
+import { advance, buildRun } from "../src/session/engine";
 import { buildLogSeed } from "../src/session/logDraft";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../src/monitor/monitorRun";
+import { RUN_KEY, type SessionRun } from "../src/session/run";
 
 /** Deletes a signed-in user's own (non-global) workout by title, so a
  *  design-sweep test that has to create real data via bulk import doesn't
@@ -129,7 +130,7 @@ async function seedLogs(page: Page, count: number): Promise<void> {
           workoutTitle: `Design Sweep Session ${i + 1}`,
           workoutType: "AT",
           held: i % 2 === 0 ? "held" : "under",
-          pain: 2,
+          effort: 2,
           notes: null,
           steps: [
             {
@@ -174,7 +175,7 @@ async function postFromLogFixture(page: Page): Promise<string> {
           workoutTitle: workout.title,
           workoutType: workout.type,
           held: "held",
-          pain: 2,
+          effort: 2,
           thumbs: "up",
           notes: "Felt strong through the back half.",
           avgSplitSeconds: 124.5,
@@ -234,7 +235,7 @@ async function postJudgmentMixLog(page: Page): Promise<string> {
         deviceName: "PM5 432331249",
         source: "pm5",
         held: "under",
-        pain: 3,
+        effort: 3,
         thumbs: "up",
         notes: null,
         avgSplitSeconds: 119.5,
@@ -383,7 +384,7 @@ async function postTraceLogFixture(
           deviceName: "PM5 432331249",
           source: "pm5",
           held: "held",
-          pain: 2,
+          effort: 2,
           notes: null,
           avgSplitSeconds: 124.5,
           distanceMeters: 5000,
@@ -731,7 +732,7 @@ test.describe("library screen", () => {
   // a sheet `CellGrid` that had `role="group"` + a visible label — axe's
   // own scan above doesn't catch a missing GROUP around otherwise-correctly-
   // named buttons, so this is a dedicated structural pin, mirroring the
-  // sheet's own "DIFFICULTY/TIME/PAIN each expose a role=group" sweep
+  // sheet's own "TIME/EFFORT each expose a role=group" sweep
   // further down this file for `TodayFilterSheet`/`FilterSheet`.
   test("the TYPE chip row exposes a role=group named TYPE", async ({
     page,
@@ -787,10 +788,13 @@ test.describe("library screen", () => {
       .click();
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
+    await dialog
+      .getByRole("group", { name: "EFFORT" })
+      .getByRole("button", { name: "3", exact: true })
+      .click();
     await dialog.getByRole("button", { name: "Apply Filter" }).click();
     await expect(
-      page.locator(".filter-token-label", { hasText: "MEDIUM" }),
+      page.locator(".filter-token-label", { hasText: "EFFORT 3" }),
     ).toBeVisible();
     await assertNoA11yViolations(page);
   });
@@ -1085,7 +1089,7 @@ test.describe("workout detail screen (no baselines, guarded Start Timer)", () =>
     });
     await page.goto("/library/new");
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByRole("button", { name: "Effort 3" }).click();
     await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
     await page.getByRole("button", { name: "Save to library" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -1221,7 +1225,7 @@ test.describe("workout detail screen (personal workout, owner actions)", () => {
     });
     await page.goto("/library/new");
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByRole("button", { name: "Effort 3" }).click();
     await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
     await page.getByRole("button", { name: "Save to library" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -1440,40 +1444,60 @@ test.describe("today screen (plan active, logs present)", () => {
   // matches the server preferences it was derived from on first mount
   // (todayOverrides.ts's own fallback — DESIGN_BASELINES' fixture never
   // touches /api/prefs, so this is the server's own default row: every
-  // difficulty, a 60-min cap's own bucket set, no pain filter) — and the
+  // a 60-min cap's own bucket set, no effort filter) — and the
   // swap chips read the plan's own prescribed type with nothing swapped
   // yet.
   //
-  // Task 3 (2026-08-04 round): DIFFICULTY/TIME/PAIN no longer render inline
+  // Task 3 (2026-08-04 round): TIME/EFFORT no longer render inline
   // — the FILTER ⌄ sheet has to be opened first to reach them; the O2/AN/
   // AT/TR type-swap chips are untouched (they stay on the plan line, never
   // moved into the sheet).
   //
-  // Amendment (2026-08-04 PR #50 round): TIME's default is the bucket SET
-  // `bucketsForCap(60)` derives (the first three buckets), not a single
-  // cap chip.
+  // Phase SF PR2: TIME's default is the range `rangeForCap(60)` derives
+  // ([0, 60] on the two-thumb control), not a set of cells.
   test("the chip row's default aria-pressed state matches the unmodified server preferences", async ({
     page,
   }) => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
-    for (const label of ["EASY", "MEDIUM", "HARD"]) {
-      await expect(
-        dialog.getByRole("button", { name: label, exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
-    }
-    for (const label of ["<30′", "30–45′", "45–60′"]) {
-      await expect(
-        dialog.getByRole("button", { name: label, exact: true }),
-      ).toHaveAttribute("aria-pressed", "true");
-    }
-    await expect(
-      dialog.getByRole("button", { name: "60′+", exact: true }),
-    ).toHaveAttribute("aria-pressed", "false");
-    const painGroup = dialog.getByRole("group", { name: "PAIN" });
+    // Phase DE PR 1: no DIFFICULTY group; EFFORT's default is every cell off.
+    await expect(dialog.getByRole("group", { name: "DIFFICULTY" })).toHaveCount(
+      0,
+    );
     for (const level of ["1", "2", "3", "4", "5"]) {
       await expect(
-        painGroup.getByRole("button", { name: level, exact: true }),
+        dialog
+          .getByRole("group", { name: "EFFORT" })
+          .getByRole("button", { name: level, exact: true }),
+      ).toHaveAttribute("aria-pressed", "false");
+    }
+    // Phase SF PR2: TIME is the two-thumb range; the 60-minute default
+    // cap reads [0, 60] (spec I-12). Both thumbs LAY OUT at ≥44px in
+    // portrait AND landscape — the button's border box, which HTML
+    // hit-tests whole regardless of its transparent paint; the visible
+    // knob is drawn on its ::after (index.css). This measures the layout
+    // box, not the reachable area: at a collapsed range the upper thumb
+    // occludes the lower (delta pass H2), which a rail tap resolves.
+    const shortest = dialog.getByRole("slider", { name: "Shortest" });
+    const longest = dialog.getByRole("slider", { name: "Longest" });
+    await expect(shortest).toHaveAttribute("aria-valuenow", "0");
+    await expect(longest).toHaveAttribute("aria-valuenow", "60");
+    for (const thumb of [shortest, longest]) {
+      const box = (await thumb.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.setViewportSize({ width: 844, height: 390 });
+    for (const thumb of [shortest, longest]) {
+      const box = (await thumb.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    const effortGroup = dialog.getByRole("group", { name: "EFFORT" });
+    for (const level of ["1", "2", "3", "4", "5"]) {
+      await expect(
+        effortGroup.getByRole("button", { name: level, exact: true }),
       ).toHaveAttribute("aria-pressed", "false");
     }
     // Sprint's doneN=0 code is "O2" (SPRINT_WEEKS week 0, index 0) — the O2
@@ -1557,7 +1581,7 @@ test.describe("today screen (plan active, logs present)", () => {
   // ClassificationCard, DESIGN.md's "Identical chip whether the rower is
   // filtering or authoring"), never the flat accent red this used to render
   // (the bug DESIGN.md names explicitly). Every OTHER selection here
-  // (DIFFICULTY/TIME/PAIN) fills ink instead — accent no longer means
+  // (DIFFICULTY/TIME/EFFORT) fills ink instead — accent no longer means
   // "selected" anywhere on this screen.
   //
   // Fix round 1 (F1, James's ruling): TR is asserted explicitly, not just
@@ -1592,42 +1616,40 @@ test.describe("today screen (plan active, logs present)", () => {
   // Task 3 (2026-08-04 round): re-targeted at the FILTER sheet's own cells —
   // the assertion's intent (ink, never accent, on both the cells AND the
   // tokens `--ink` resolves to) is unchanged, only the location moved.
-  test("selected DIFFICULTY/TIME/PAIN chips fill ink, never accent", async ({
+  test("selected TIME/EFFORT chips fill ink, never accent", async ({
     page,
   }) => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
 
-    const easyChip = dialog.getByRole("button", { name: "EASY", exact: true });
-    const easyBg = await easyChip.evaluate(
+    // Phase SF PR2: TIME's selected span is the one ACCENT fill in the
+    // sheet (spec §3.4 — rail --rule-3, span --accent, knob --ink); the
+    // knob's ink lives on the thumb's ::after.
+    const span = dialog.locator(".duration-range-span");
+    const spanBg = await span.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
-    expect(easyBg).toBe("rgb(27, 26, 23)"); // --ink
+    expect(spanBg).toBe("rgb(181, 52, 31)"); // --accent
+    const knobBg = await dialog
+      .getByRole("slider", { name: "Longest" })
+      .evaluate((el) => getComputedStyle(el, "::after").backgroundColor);
+    expect(knobBg).toBe("rgb(27, 26, 23)"); // --ink
 
-    const timeChip = dialog.getByRole("button", {
-      name: "45–60′",
-      exact: true,
-    });
-    const timeBg = await timeChip.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
-    );
-    expect(timeBg).toBe("rgb(27, 26, 23)"); // --ink
-
-    const painCell = dialog
-      .getByRole("group", { name: "PAIN" })
+    const effortCell = dialog
+      .getByRole("group", { name: "EFFORT" })
       .getByRole("button", { name: "3", exact: true });
-    await painCell.click();
-    const painBg = await painCell.evaluate(
+    await effortCell.click();
+    const effortBg = await effortCell.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
-    expect(painBg).toBe("rgb(27, 26, 23)"); // --ink
+    expect(effortBg).toBe("rgb(27, 26, 23)"); // --ink
   });
 
   // Item 4 (DESIGN.md): SHUFFLE stops being "its own species" — 44px chip
   // geometry, transparent fill, mono 11/0.14em ink-1 label, 1px rule-3
   // border, parked right of the header label (unchanged position). Pool is
   // the day's O2 entries from the 300-workout library, unfiltered
-  // (difficulty/cap/pain all at their default, unset state) — comfortably
+  // (difficulty/cap/effort all at their default, unset state) — comfortably
   // >1 member with this describe's fixture, so SHUFFLE is enabled here.
   test("SHUFFLE re-cut to chip geometry: 44px, transparent, mono ink-1 label, rule-3 border", async ({
     page,
@@ -1658,37 +1680,38 @@ test.describe("today screen (plan active, logs present)", () => {
   // DASHED rule-3 border, no grey fill — computed, not just `toBeDisabled`.
   // This describe's fixture is sprint/doneN=0 (O2 for today, DESIGN_
   // BASELINES {k2Seconds:100, k6Seconds:120}). Rebase seed-math note
-  // (2026-08-04): the 300-workout library has ZERO O2/HARD entries at all
-  // (aerobic-base work is never authored "hard" — see library.test.ts's own
-  // PAIN_BY_TYPE/PAIN_BY_DIFF bands), so a natural pool-of-one no longer
-  // exists the way the old 35-starter library's "High Pressure"/"Jet
-  // Stream" pair once provided one. Built here instead: one personal O2/
-  // HARD workout under the 60' cap, via bulk import — with zero global O2/
-  // HARD entries to join it, narrowing to HARD-only + <=60' leaves exactly
-  // this one row.
+  // (2026-08-04): the 300-workout library has ZERO O2 entries above effort 3
+  // (aerobic-base work is never authored that hard — see library.test.ts's
+  // own EFFORT_BY_TYPE band), so a natural pool-of-one no longer exists the
+  // way the old 35-starter library's "High Pressure"/"Jet Stream" pair once
+  // provided one. Built here instead: one personal O2 / effort-4 workout
+  // under the 60' cap, via bulk import — with zero global O2 entries at 4
+  // to join it, narrowing to EFFORT 4 + <=60' leaves exactly this one row.
+  // (Phase DE PR 1: this used to narrow on DIFFICULTY=HARD.)
   test("SHUFFLE disabled (pool of 1): ink-5 label, dashed rule-3 border, no fill", async ({
     page,
   }) => {
     const soloTitle = "Design Sweep Solo O2 Hard";
     await importBulk(
       page,
-      [`${soloTitle} | O2 | hard | 4`, "w 20:00 6k+10 @20"].join("\n"),
+      [`${soloTitle} | O2 | 4`, "w 20:00 6k+10 @20"].join("\n"),
     );
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
 
     // Task 3 (2026-08-04 round): the setup that narrows to this solo
-    // fixture moves through the FILTER sheet — EASY/MEDIUM no longer
-    // render inline. Amendment (2026-08-04 PR #50 round): TIME's default
-    // (bucketsForCap(60) — the first three buckets) already covers this
-    // fixture's 20-min estimate (2026-08-09: no `wu` line any more — a
-    // workout's own displayed/estimated duration is work-only now, per the
-    // warmup-setting spec §5), so no TIME cell needs touching at all to
-    // narrow to HARD alone.
+    // fixture moves through the FILTER sheet. Phase SF PR2: TIME's default
+    // range ([0, 60], `rangeForCap(60)`) already covers this fixture's
+    // 20-min estimate (2026-08-09: no `wu` line any more — a workout's own
+    // displayed/estimated duration is work-only now, per the warmup-setting
+    // spec §5), so no TIME cell needs touching at all to narrow to EFFORT 4
+    // alone.
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "EASY", exact: true }).click();
-    await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
+    await dialog
+      .getByRole("group", { name: "EFFORT" })
+      .getByRole("button", { name: "4", exact: true })
+      .click();
     await page.getByRole("button", { name: "Apply Filter" }).click();
 
     const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
@@ -1728,12 +1751,12 @@ test.describe("today screen (plan active, logs present)", () => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
     await dialog
-      .getByRole("group", { name: "PAIN" })
+      .getByRole("group", { name: "EFFORT" })
       .getByRole("button", { name: "3", exact: true })
       .click();
     await page.getByRole("button", { name: "Apply Filter" }).click();
     await expect(
-      page.locator(".filter-token", { hasText: "PAIN 3" }),
+      page.locator(".filter-token", { hasText: "EFFORT 3" }),
     ).toBeVisible();
     await assertNoA11yViolations(page);
   });
@@ -1752,12 +1775,12 @@ test.describe("today screen (plan active, logs present)", () => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
     await dialog
-      .getByRole("group", { name: "PAIN" })
+      .getByRole("group", { name: "EFFORT" })
       .getByRole("button", { name: "3", exact: true })
       .click();
     await page.getByRole("button", { name: "Apply Filter" }).click();
     await expect(
-      page.locator(".filter-token", { hasText: "PAIN 3" }),
+      page.locator(".filter-token", { hasText: "EFFORT 3" }),
     ).toBeVisible();
     await assertTapTargets(page);
   });
@@ -1773,20 +1796,17 @@ test.describe("today screen (plan active, logs present)", () => {
   // CellGrid.tsx's own `role="group"` + `aria-labelledby` (fix round 1,
   // whole-branch review M3, present at HEAD for this round) restores the
   // accessible group name Today's pre-extraction inline chip groups had —
-  // pinned here now that DIFFICULTY/TIME/PAIN live inside the sheet
+  // pinned here now that TIME/EFFORT live inside the sheet
   // (LAST DONE/SOURCE, Round 2, get the identical treatment from the same
   // CellGrid component, spot-checked in TodayFilterSheet.test.tsx instead
   // of duplicated here).
-  test("DIFFICULTY/TIME/PAIN each expose a role=group with the visible label as its accessible name", async ({
+  test("TIME/EFFORT each expose a role=group with the visible label as its accessible name", async ({
     page,
   }) => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(
-      dialog.getByRole("group", { name: "DIFFICULTY" }),
-    ).toBeVisible();
     await expect(dialog.getByRole("group", { name: "TIME" })).toBeVisible();
-    await expect(dialog.getByRole("group", { name: "PAIN" })).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "EFFORT" })).toBeVisible();
   });
 });
 
@@ -1817,7 +1837,7 @@ test.describe("today screen (unlogged session row)", () => {
     await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
     await page.getByRole("link", { name: "← DONE" }).click();
     await expect(page).toHaveURL(/\/today$/);
-    await expect(page.getByText(/unlogged session/i)).toBeVisible();
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
   });
 
   test.afterEach(async ({ page }) => {
@@ -1834,10 +1854,26 @@ test.describe("today screen (unlogged session row)", () => {
     await assertNoA11yViolations(page);
   });
 
+  // The recovery-specific mobile rule must leave the shared screen inset
+  // intact at the narrowest supported portrait width. A global `.screen`
+  // override here would silently affect every other screen too.
+  test("recovery keeps the shared 20px inline inset at 360px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 844 });
+
+    const insets = await page.locator("main.screen").evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { left: style.paddingLeft, right: style.paddingRight };
+    });
+
+    expect(insets).toStrictEqual({ left: "20px", right: "20px" });
+  });
+
   // The DEFAULT state's own ✕ — outlined, never solid (DEVIATIONS.md #2).
   test("the row's ✕ is 44x44 and accent-outlined at rest", async ({ page }) => {
     const discardBtn = page.getByRole("button", {
-      name: "Discard without logging",
+      name: /Discard Timer workout/,
     });
     const box = (await discardBtn.boundingBox())!;
     expect(box.width).toBe(44);
@@ -1850,28 +1886,23 @@ test.describe("today screen (unlogged session row)", () => {
     expect(styles.borderColor).toBe("rgb(181, 52, 31)"); // --accent
   });
 
-  // Arming swaps the ROW's CONTENTS, not its layout (DESIGN.md's own words):
-  // border -> accent, text -> "Discard {title} without logging?", ✕ ->
-  // solid accent "Tap again" — and the row's own box stays the same size and
-  // position throughout.
-  test("arming swaps the row's contents in place — border to accent, text to the discard question, ✕ to a solid 'Tap again' — without moving the row", async ({
+  // Arming replaces the ROW's CONTENTS with the selected discard question
+  // and solid accent "Tap again" action. The confirmation follows its
+  // content-sized layout; the approved ruling does not promise a fixed row
+  // height, accent border, or unchanged page position.
+  test("arming swaps the row contents for the selected discard question", async ({
     page,
   }) => {
-    const row = page.locator(".today-unlogged-line");
-    const boxBefore = (await row.boundingBox())!;
+    const row = page.locator(".unsaved-row");
 
-    await page.getByRole("button", { name: "Discard without logging" }).click();
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
     await page.mouse.move(0, 0);
 
-    await expect(row).toHaveClass(/today-unlogged-line-armed/);
-    const rowBorderColor = await row.evaluate(
-      (el) => getComputedStyle(el).borderColor,
-    );
-    expect(rowBorderColor).toBe("rgb(181, 52, 31)"); // --accent
+    await expect(row).toHaveClass(/unsaved-row/);
     await expect(
-      page.getByText(`Discard ${title} without logging?`),
+      page.getByText(`Discard ${title} without saving?`),
     ).toBeVisible();
-    const tapAgain = page.getByRole("button", { name: "Tap again" });
+    const tapAgain = page.getByRole("button", { name: "Tap again to discard" });
     const tapAgainStyles = await tapAgain.evaluate((el) => {
       const s = getComputedStyle(el);
       return { background: s.backgroundColor, color: s.color };
@@ -1879,11 +1910,9 @@ test.describe("today screen (unlogged session row)", () => {
     expect(tapAgainStyles.background).toBe("rgb(181, 52, 31)"); // --accent
     expect(tapAgainStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
     // "Log it" is gone while armed — replaced, not merely joined.
-    await expect(page.getByRole("link", { name: "Log it" })).toHaveCount(0);
-
-    const boxAfter = (await row.boundingBox())!;
-    expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
-    expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
+    await expect(page.getByRole("link", { name: /Review & save/ })).toHaveCount(
+      0,
+    );
   });
 
   // Fix round 1 (reviewer M1): the original version of this test asserted
@@ -1901,8 +1930,8 @@ test.describe("today screen (unlogged session row)", () => {
   test("disarms on a REAL blur — not a synthetic event, and faster than the 4s auto-disarm timer could account for", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Discard without logging" }).click();
-    const armed = page.getByRole("button", { name: "Tap again" });
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+    const armed = page.getByRole("button", { name: "Tap again to discard" });
     await expect(armed).toBeVisible();
 
     const armedIsFocused = await armed.evaluate(
@@ -1913,7 +1942,7 @@ test.describe("today screen (unlogged session row)", () => {
     await armed.evaluate((el) => (el as HTMLElement).blur());
 
     await expect(
-      page.getByRole("button", { name: "Discard without logging" }),
+      page.getByRole("button", { name: /Discard Timer workout/ }),
     ).toBeVisible({ timeout: 1000 });
   });
 
@@ -1924,13 +1953,15 @@ test.describe("today screen (unlogged session row)", () => {
   test("arms, waits 4s with no second press, and disarms automatically — with the run record still intact", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Discard without logging" }).click();
-    await expect(page.getByRole("button", { name: "Tap again" })).toBeVisible();
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+    await expect(
+      page.getByRole("button", { name: "Tap again to discard" }),
+    ).toBeVisible();
 
     await page.waitForTimeout(4200);
 
     await expect(
-      page.getByRole("button", { name: "Discard without logging" }),
+      page.getByRole("button", { name: /Discard Timer workout/ }),
     ).toBeVisible();
     const runAfter = await page.evaluate(() =>
       localStorage.getItem("ergomatic.sessionRun"),
@@ -1943,10 +1974,10 @@ test.describe("today screen (unlogged session row)", () => {
   test("a second press while armed fires the discard — the row disappears in place, no navigation, both records cleared, no POST", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Discard without logging" }).click();
-    await page.getByRole("button", { name: "Tap again" }).click();
+    await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+    await page.getByRole("button", { name: "Tap again to discard" }).click();
 
-    await expect(page.getByText(/unlogged session/i)).toHaveCount(0);
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
     // Still on Today — unlike SessionComplete's/the Log screen's own
     // Discard, this one never navigates anywhere.
@@ -2297,9 +2328,7 @@ test.describe("today screen (interrupted connected session row)", () => {
     });
     await seedInterruptedMonitorRun(page);
     await page.goto("/today");
-    await expect(
-      page.getByText(/interrupted connected session\./),
-    ).toBeVisible();
+    await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
   });
 
   // Step 1 (task brief): proves the seed ENGAGES `monitorModeRun`'s gate,
@@ -2312,9 +2341,11 @@ test.describe("today screen (interrupted connected session row)", () => {
   test("Log it stamps the record and opens the log screen with the actuals-derived minutes, not a wall-clock guess", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "Log it" }).click();
+    await page.getByRole("button", { name: /Review & save/ }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
+    await expect(page).toHaveURL(
+      /\/session\/review\?source=monitor&startedAt=/,
+    );
     await expect(
       page.getByRole("heading", { name: "Hoarfrost" }),
     ).toBeVisible();
@@ -2370,7 +2401,7 @@ test.describe("today screen (interrupted connected session row)", () => {
     page,
   }) => {
     const discardBtn = page.getByRole("button", {
-      name: "Discard connected session without logging",
+      name: /Discard PM5 workout/,
     });
     const box = (await discardBtn.boundingBox())!;
     expect(box.width).toBe(44);
@@ -2391,7 +2422,7 @@ test.describe("today screen (interrupted connected session row)", () => {
   test("Log it is >=44x44, sharing the phone-timer row's own pill style", async ({
     page,
   }) => {
-    const logIt = page.getByRole("button", { name: "Log it" });
+    const logIt = page.getByRole("button", { name: /Review & save/ });
     const box = (await logIt.boundingBox())!;
     expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -2414,28 +2445,28 @@ test.describe("today screen (interrupted connected session row)", () => {
   // the phone-timer row's own identical test proves, mirrored here for the
   // twin's own copy ("interrupted connected session" naming, the discard
   // question naming the run's title) and its own distinctly-named ✕.
-  test("arming swaps the row's contents in place — border to accent, text to the discard question, ✕ to a solid 'Tap again' — without moving the row", async ({
+  test("arming swaps the row contents for the selected discard question without moving its top", async ({
     page,
   }) => {
-    const row = page.locator(".today-unlogged-line");
+    const row = page.locator(".unsaved-row");
     const boxBefore = (await row.boundingBox())!;
 
     await page
       .getByRole("button", {
-        name: "Discard connected session without logging",
+        name: /Discard PM5 workout/,
       })
       .click();
     await page.mouse.move(0, 0);
 
-    await expect(row).toHaveClass(/today-unlogged-line-armed/);
+    await expect(row).toHaveClass(/unsaved-row/);
     const rowBorderColor = await row.evaluate(
       (el) => getComputedStyle(el).borderColor,
     );
-    expect(rowBorderColor).toBe("rgb(181, 52, 31)"); // --accent
+    expect(rowBorderColor).toBe("rgb(216, 211, 196)"); // --rule
     await expect(
-      page.getByText("Discard Hoarfrost without logging?"),
+      page.getByText("Discard Hoarfrost without saving?"),
     ).toBeVisible();
-    const tapAgain = page.getByRole("button", { name: "Tap again" });
+    const tapAgain = page.getByRole("button", { name: "Tap again to discard" });
     const tapAgainStyles = await tapAgain.evaluate((el) => {
       const s = getComputedStyle(el);
       return { background: s.backgroundColor, color: s.color };
@@ -2443,11 +2474,12 @@ test.describe("today screen (interrupted connected session row)", () => {
     expect(tapAgainStyles.background).toBe("rgb(181, 52, 31)"); // --accent
     expect(tapAgainStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
     // "Log it" is gone while armed — replaced, not merely joined.
-    await expect(page.getByRole("button", { name: "Log it" })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /Review & save/ }),
+    ).toHaveCount(0);
 
     const boxAfter = (await row.boundingBox())!;
     expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
-    expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
   });
 
   // arm -> tap -> gone: the row disappears in place with no navigation,
@@ -2459,14 +2491,12 @@ test.describe("today screen (interrupted connected session row)", () => {
   }) => {
     await page
       .getByRole("button", {
-        name: "Discard connected session without logging",
+        name: /Discard PM5 workout/,
       })
       .click();
-    await page.getByRole("button", { name: "Tap again" }).click();
+    await page.getByRole("button", { name: "Tap again to discard" }).click();
 
-    await expect(page.getByText(/interrupted connected session/i)).toHaveCount(
-      0,
-    );
+    await expect(page.getByText(/PM5 · .* · Not saved/)).toHaveCount(0);
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
 
@@ -2605,7 +2635,7 @@ test.describe("plan screen (a plan active)", () => {
               "Design Plan Link Sweep, a long custom title that cannot fit one row",
             workoutType: "AT",
             held: null,
-            pain: null,
+            effort: null,
             notes: null,
             steps: [{ label: "Work" }],
             source: "manual",
@@ -2834,7 +2864,7 @@ test.describe("plan screen (a plan active)", () => {
               workoutTitle: "Just Row",
               workoutType: null,
               held: null,
-              pain: null,
+              effort: null,
               notes: null,
               steps: [],
               source: "timer",
@@ -2978,7 +3008,7 @@ test.describe("from-the-log (history list + detail view, §5)", () => {
       await assertNoA11yViolations(page);
     });
 
-    // §5D: "Dashed block (handoff): the answered fields as HELD · PAIN
+    // §5D: "Dashed block (handoff): the answered fields as HELD · EFFORT
     // 3/5 · LIKED segments ... note text beneath" — the dashed border is
     // the one genuinely new visual rule this row adds (index.css's own
     // comment: "only the read-back block and plan footer below are
@@ -3000,7 +3030,7 @@ test.describe("from-the-log (history list + detail view, §5)", () => {
       expect(style.borderColor).toBe("rgb(201, 195, 178)"); // --rule-3
 
       await expect(page.locator(".log-readback-segments")).toHaveText(
-        "HELD · PAIN 2/5 · LIKED",
+        "HELD · EFFORT 2/5 · LIKED",
       );
       const segmentColor = await page
         .locator(".log-readback-segments")
@@ -3043,7 +3073,7 @@ test.describe("from-the-log (history list + detail view, §5)", () => {
     // §5D edit row, read precisely: "four clearable controls, same 46px
     // targets, PLUS Save/Cancel" — the 46px figure names the FOUR
     // reflection-card controls (spec 1's own vetted `.summary-held-chip`/
-    // `.summary-pain-chip`, §8 vetted ground), not Save/Cancel, which the
+    // `.summary-effort-chip`, §8 vetted ground), not Save/Cancel, which the
     // row lists separately with no size figure of their own — so they
     // owe only the house 44px floor (CLAUDE.md's hard requirement),
     // already covered by the tap-target sweep above. Measured live
@@ -3054,19 +3084,19 @@ test.describe("from-the-log (history list + detail view, §5)", () => {
       page,
     }) => {
       const heldChip = page.getByRole("button", { name: "HELD" });
-      const painChip = page.getByRole("button", { name: "Pain 3" });
+      const effortChip = page.getByRole("button", { name: "Effort 3" });
       const save = page.getByRole("button", { name: "Save" });
       const cancel = page.getByRole("button", { name: "Cancel" });
       const heldBox = await heldChip.boundingBox();
-      const painBox = await painChip.boundingBox();
+      const effortBox = await effortChip.boundingBox();
       const saveBox = await save.boundingBox();
       const cancelBox = await cancel.boundingBox();
       expect(heldBox).not.toBeNull();
-      expect(painBox).not.toBeNull();
+      expect(effortBox).not.toBeNull();
       expect(saveBox).not.toBeNull();
       expect(cancelBox).not.toBeNull();
       expect(heldBox!.height).toBeGreaterThanOrEqual(46);
-      expect(painBox!.height).toBeGreaterThanOrEqual(46);
+      expect(effortBox!.height).toBeGreaterThanOrEqual(46);
       expect(saveBox!.height).toBeGreaterThanOrEqual(44);
       expect(cancelBox!.height).toBeGreaterThanOrEqual(44);
     });
@@ -3492,15 +3522,15 @@ test.describe("builder screen", () => {
     ).toHaveAttribute("inputmode", "numeric");
   });
 
-  // The pain level's word ("WORKING") only renders once a level is picked,
+  // The effort level's word ("WORKING") only renders once a level is picked,
   // and it sets in 11px against the label's 10px — so the label row grew
   // taller on first selection and pushed the chips, and everything below
   // them, down under the user's thumb. The label row now reserves its line
   // box, so picking a level moves nothing.
-  test("picking a pain level does not shift the chips below it", async ({
+  test("picking a effort level does not shift the chips below it", async ({
     page,
   }) => {
-    const chip = page.getByRole("button", { name: "Pain 3" });
+    const chip = page.getByRole("button", { name: "Effort 3" });
     const before = await stableBoundingBox(chip);
     await chip.click();
     await expect(page.getByText("WORKING")).toBeVisible();
@@ -3510,31 +3540,31 @@ test.describe("builder screen", () => {
   });
 
   // Same nudge-bug class, mid-phase addition (Task 7): TYPE's own summary
-  // word (TYPE_WORDS) sits opposite its label the same way PAIN's does.
-  // Unlike PAIN, a type is always selected — the word is present on first
+  // word (TYPE_WORDS) sits opposite its label the same way EFFORT's does.
+  // Unlike EFFORT, a type is always selected — the word is present on first
   // paint, so there's no "word appears" transition to reproduce here — but
   // switching between chips swaps in a differently-*wide* word ("LOW & SLOW"
   // vs "COMFORTABLY HARD"), and a width change alone must not shift
   // anything below it either. Asserts both the TYPE chip row itself and the
-  // DIFFICULTY row beneath it hold their y position across the switch.
-  test("picking a different TYPE does not shift the TYPE chips or the DIFFICULTY row below them", async ({
+  // EFFORT row beneath it hold their y position across the switch.
+  test("picking a different TYPE does not shift the TYPE chips or the EFFORT row below them", async ({
     page,
   }) => {
     // A fresh builder defaults to O2 ("LOW & SLOW") — switch to AT
     // ("COMFORTABLY HARD"), the widest of the four words.
     const typeChipRow = page.locator(".classification-chip-row").first();
-    const difficultyRow = page.locator(".classification-chip-row").nth(1);
+    const effortRow = page.locator(".classification-chip-row").nth(1);
     const beforeType = await stableBoundingBox(typeChipRow);
-    const beforeDifficulty = await stableBoundingBox(difficultyRow);
+    const beforeEffort = await stableBoundingBox(effortRow);
 
     await page.getByRole("button", { name: "AT", exact: true }).click();
     await expect(page.getByText("COMFORTABLY HARD")).toBeVisible();
 
     const afterType = await stableBoundingBox(typeChipRow);
-    const afterDifficulty = await stableBoundingBox(difficultyRow);
+    const afterEffort = await stableBoundingBox(effortRow);
 
     expect(afterType?.y).toBe(beforeType?.y);
-    expect(afterDifficulty?.y).toBe(beforeDifficulty?.y);
+    expect(afterEffort?.y).toBe(beforeEffort?.y);
   });
 
   // Same iOS device report as the library screen's callout test: a typed
@@ -3611,29 +3641,21 @@ test.describe("builder screen", () => {
   });
 
   // Task 1 (ui-fix round): DESIGN.md's selected-state fix, Builder's own
-  // half — PAIN's old per-level ramp colour goes ("Builder's gold pain
-  // selection goes"), DIFFICULTY was already ink (ClassificationCard.tsx's
-  // own unit tests cover that structurally); both read ink here too, in a
-  // real browser, alongside PACE (2k/6k/MAX/MIN) and the MIN/M duration
-  // unit toggle — none of them accent.
-  test("selected PAIN/DIFFICULTY/PACE/MIN-M chips fill ink, never accent", async ({
+  // half — EFFORT's old per-level ramp colour goes ("Builder's gold effort
+  // selection goes"); it reads ink here, in a real browser, alongside PACE
+  // (2k/6k/MAX/MIN) and the MIN/M duration unit toggle — none of them
+  // accent. (DIFFICULTY, once checked here too, left in Phase DE PR 1.)
+  test("selected EFFORT/PACE/MIN-M chips fill ink, never accent", async ({
     page,
   }) => {
-    const painChip = page.getByRole("button", { name: "Pain 4" });
-    await painChip.click();
-    const painBg = await painChip.evaluate(
+    const effortChip = page.getByRole("button", { name: "Effort 4" });
+    await effortChip.click();
+    const effortBg = await effortChip.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
-    // --ink. The alternative this rules out was the old per-level pain ramp
-    // (--pain-ramp-4, #a3491f), deleted 2026-08-28 once nothing read it.
-    expect(painBg).toBe("rgb(27, 26, 23)");
-
-    const hardChip = page.getByRole("button", { name: "HARD", exact: true });
-    await hardChip.click();
-    const hardBg = await hardChip.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
-    );
-    expect(hardBg).toBe("rgb(27, 26, 23)"); // --ink
+    // --ink. The alternative this rules out was the old per-level effort ramp
+    // (--effort-ramp-4, #a3491f), deleted 2026-08-28 once nothing read it.
+    expect(effortBg).toBe("rgb(27, 26, 23)");
 
     const sixK = page.getByRole("radio", { name: /pace 6K/i });
     await sixK.click();
@@ -6273,12 +6295,16 @@ test.describe("iOS input zoom guard", () => {
   // 2026-08-01: the builder title field zoomed on focus). Chromium cannot
   // reproduce the zoom itself, so this asserts the mechanism: every
   // input/textarea on every screen computes to >=16px. The signed-in
-  // builder + import screens carry every typed field in the app; You is
-  // stepper-only but swept anyway in case that changes.
+  // builder + import screens carry the typed fields, the Library its search
+  // field; You is stepper-only but swept anyway in case that changes.
   for (const [name, path] of [
     ["builder", "/library/new"],
     ["import", "/library/import"],
     ["you", "/you"],
+    // Phase SF PR3 added SEARCH BY NAME to the Library at 12px and this
+    // sweep never looked there (device report, 2026-09-05: the Library
+    // zoomed on focus — the same defect the guard exists for).
+    ["library", "/library"],
   ] as const) {
     test(`every input on ${name} computes font-size >= 16px`, async ({
       page,
@@ -10018,5 +10044,1232 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
       await expect(page.locator(".onb-screen")).toBeVisible();
       await assertNoFailingInk4Labels(page);
     }
+  });
+});
+
+// Recovery is a stored-record render surface, so these are deliberately
+// direct seeds. The connected writer-to-history journey lives in
+// connected.spec.ts; this suite registers every recovery rendering state.
+test.describe("unlogged recovery render registrations", () => {
+  const longTitle =
+    "A retained PM5 workout with a deliberately long title that must wrap cleanly";
+
+  async function seedRecovery(page: Page, run: MonitorRun): Promise<void> {
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: MONITOR_RUN_KEY,
+      value: JSON.stringify(run),
+    });
+    // `ReviewSession` hydrates its key-filtered store at module load; reload
+    // makes this a real cold retained-storage render, not prior test memory.
+    await page.reload();
+  }
+
+  function buildCompletedTimerRun(workoutId: string): SessionRun {
+    const hoarfrost = library("Hoarfrost");
+    const startedAt = new Date("2026-09-04T12:00:00.000Z");
+    const draft = buildDraft({
+      id: workoutId,
+      title: `${longTitle} timer`,
+      type: hoarfrost.type as WorkoutType,
+      steps: hoarfrost.steps,
+    });
+    let run = buildRun(startDraft(draft), DESIGN_BASELINES, startedAt);
+    for (let hour = 1; run.completedAt === null; hour += 1)
+      run = advance(run, new Date(startedAt.getTime() + hour * 60 * 60 * 1000));
+    return run;
+  }
+
+  test("Today keeps a long-title retained PM5 row reachable in portrait, landscape, and a failed library fetch", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery@e2e.test",
+      name: "Recovery Design Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const run = {
+      ...buildCompletedMonitorRun(workoutId),
+      title: longTitle,
+    };
+    await seedRecovery(page, run);
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/today");
+      const review = page.getByRole("button", {
+        name: `Review & save PM5 workout ${longTitle}`,
+      });
+      await expect(review).toBeVisible();
+      await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
+      await sweep(page);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBe(viewport.width);
+    }
+
+    await page.route("**/api/workouts", (route) =>
+      route.fulfill({ status: 500, body: "library unavailable" }),
+    );
+    await page.reload();
+    await expect(page.getByText("Couldn't load your library.")).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: `Review & save PM5 workout ${longTitle}`,
+      }),
+    ).toBeVisible();
+    await sweep(page);
+  });
+
+  test("review renders missing-type, read-only legacy, and unavailable dispositions without a save affordance leak", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-variants@e2e.test",
+      name: "Recovery Variant Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const base = { ...buildCompletedMonitorRun(workoutId), title: longTitle };
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await seedRecovery(page, {
+        ...base,
+        workoutId: "missing-library-record",
+      });
+      await page.goto(
+        `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
+      );
+      await expect(
+        page.getByRole("combobox", { name: "Workout type" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+      await sweep(page);
+
+      await seedRecovery(page, {
+        ...base,
+        // Explicit legacy shape: a stored programmed recording predating the
+        // frozen log seed cannot safely rebuild a summary and must stay
+        // read-only rather than falling back to a manual form.
+        logSeed: undefined,
+      });
+      await page.goto(
+        `/session/review?source=monitor&startedAt=${encodeURIComponent(base.startedAt)}`,
+      );
+      await expect(
+        page.getByRole("heading", { name: "Can't rebuild this workout." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("textbox", { name: "Recording data" }),
+      ).toHaveAttribute("readonly", "");
+      await expect(
+        page.getByRole("button", { name: "Copy recording" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Keep unsaved" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+      await sweep(page);
+
+      await page.goto(
+        "/session/review?source=monitor&startedAt=missing-record",
+      );
+      await expect(
+        page.getByRole("heading", { name: "Recording unavailable" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Back to Today" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
+      await sweep(page);
+    }
+  });
+
+  test("Today keeps the retained PM5 row reachable while its library request is pending or failed in both orientations", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-fetch@e2e.test",
+      name: "Recovery Fetch Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const run = { ...buildCompletedMonitorRun(workoutId), title: longTitle };
+    await seedRecovery(page, run);
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      let releasePending: (() => void) | undefined;
+      const pending = new Promise<void>((resolve) => {
+        releasePending = resolve;
+      });
+      let resolveHandled: (() => void) | undefined;
+      const handled = new Promise<void>((resolve) => {
+        resolveHandled = resolve;
+      });
+      await page.route("**/api/workouts", async (route) => {
+        await pending;
+        await route.continue();
+        resolveHandled?.();
+      });
+      await page.goto("/today", { waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByRole("button", {
+          name: `Review & save PM5 workout ${longTitle}`,
+        }),
+      ).toBeVisible();
+      await sweep(page);
+      releasePending?.();
+      await handled;
+      await page.unroute("**/api/workouts");
+
+      await page.route("**/api/workouts", (route) =>
+        route.fulfill({ status: 500, body: "library unavailable" }),
+      );
+      await page.goto("/today");
+      await expect(page.getByText("Couldn't load your library.")).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: `Review & save PM5 workout ${longTitle}`,
+        }),
+      ).toBeVisible();
+      await sweep(page);
+      await page.unroute("**/api/workouts");
+    }
+  });
+
+  test("Today renders both retained sources and Connect warns singular then plural in both orientations", async ({
+    page,
+  }) => {
+    const targetTitle = "Recovery warning target";
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-warning@e2e.test",
+      name: "Recovery Warning Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    const monitor = {
+      ...buildCompletedMonitorRun(workoutId),
+      title: longTitle,
+    };
+    await seedRecovery(page, monitor);
+    await importBulk(
+      page,
+      [`${targetTitle} | AN | easy | 1`, "w 1' max"].join("\n"),
+    );
+    const timer = buildCompletedTimerRun(workoutId);
+
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.evaluate((key) => localStorage.removeItem(key), RUN_KEY);
+      await page.reload();
+      await page.goto("/library");
+      await page
+        .locator(".workout-row")
+        .filter({ hasText: targetTitle })
+        .click();
+      await page.getByRole("button", { name: "Connect" }).click();
+      await expect(
+        page.getByRole("heading", { name: "You have an unsaved workout." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "View unsaved" }),
+      ).toBeVisible();
+      await sweep(page);
+      await page.getByRole("button", { name: "Cancel" }).click();
+
+      await page.evaluate(
+        ({ key, value }) => localStorage.setItem(key, value),
+        {
+          key: RUN_KEY,
+          value: JSON.stringify(timer),
+        },
+      );
+      await page.reload();
+      await page.goto("/today");
+      await expect(
+        page.getByRole("heading", { name: "UNSAVED WORKOUTS" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: /Review & save Timer workout/ }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /Review & save PM5 workout/ }),
+      ).toBeVisible();
+      await sweep(page);
+
+      await page.goto("/library");
+      await page
+        .locator(".workout-row")
+        .filter({ hasText: targetTitle })
+        .click();
+      await page.getByRole("button", { name: "Connect" }).click();
+      await expect(
+        page.getByRole("heading", { name: "You have unsaved workouts." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "View unsaved" }),
+      ).toBeVisible();
+      await sweep(page);
+      await page.getByRole("button", { name: "Cancel" }).click();
+    }
+    await cleanupByTitle(page, targetTitle);
+  });
+
+  test("landscape warning reveals the safe View exit above navigation and begins its keyboard flow there", async ({
+    page,
+  }) => {
+    const targetTitle = "Recovery warning safe exit target";
+    await signInViaBackdoor(page, {
+      email: "design-unlogged-recovery-safe-exit@e2e.test",
+      name: "Recovery Safe Exit Tester",
+    });
+    await setBaselines(page);
+    const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+    await seedRecovery(page, buildCompletedMonitorRun(workoutId));
+    await importBulk(
+      page,
+      [`${targetTitle} | AN | easy | 1`, "w 1' max"].join("\n"),
+    );
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: targetTitle }).click();
+    await page.getByRole("button", { name: "Connect" }).click();
+
+    const view = page.getByRole("button", { name: "View unsaved" });
+    const nav = page.getByRole("navigation", { name: "Main" });
+    await expect(view).toBeVisible();
+    const [viewBox, navBox] = await Promise.all([
+      view.boundingBox(),
+      nav.boundingBox(),
+    ]);
+    expect(viewBox).not.toBeNull();
+    expect(navBox).not.toBeNull();
+    expect(viewBox!.y).toBeGreaterThanOrEqual(0);
+    expect(viewBox!.y + viewBox!.height).toBeLessThanOrEqual(navBox!.y);
+    await expect(view).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await cleanupByTitle(page, targetTitle);
+  });
+});
+
+// ── Wave E PR2, Surface 1: the Concept2 card's landscape interior ──────────
+//
+// WHAT THIS PROVES, exactly (RF26 — the strongest claim it may make): that
+// `index.css`'s `@media (orientation: landscape)` rules for
+// `.c2-card-body-split` really move the card's own markup in a real engine,
+// that portrait does not, and that the states the amendment draws SINGLE
+// column stay single column with their hairlines intact.
+//
+// WHICH STATES ARE WHICH IS MEASURED, NOT READ. A script over every
+// `class="frame land"` block in `amendment-2026-09-03.html` reports a
+// two-column grid on 1a, 1c, 1f, 1f-b, 1f-c, 1i and 1j and no grid on 1b, 1d, 1e
+// and 1g, and reports that 1d's landscape frame DRAWS a hairline. A previous
+// revision of this file asserted that no landscape frame draws one and that
+// only 1b and 1g are un-gridded; both were false, and the hairline test here
+// enforced the wrong claim. The fixtures below cover one state of each kind.
+//
+// THE FIXTURES ARE THE COMPONENT'S OWN OUTPUT, and that is gated rather than
+// asserted: `Concept2Card.test.tsx`'s "the e2e fixtures ARE this component's
+// output" compares each committed file against the component's `innerHTML`
+// in full, so any drift at all — a moved `<hr>`, a changed status string, a
+// dropped aria attribute — reddens there. `loadCard` applies the same
+// whitespace normalisation those tests use, so the browser sees the
+// component's exact markup regardless of how the file is formatted on disk;
+// the empty act column in the 1g fixture must stay `:empty` to collapse.
+//
+// WHAT IT DOES NOT PROVE: that the card is reachable from You. Since Wave E
+// PR A the card is NOT on You at all — it is mounted on `/you/concept2`
+// (`you/Concept2Screen.tsx`), behind the CONCEPT2 row You now carries, and
+// `Concept2Screen.test.tsx` pins that mount; the browser walk of it is the
+// "Concept2 surfaces on the real screens" describe below. This stack runs with
+// `C2_LINK_ENABLED` unset (`compose.yml`'s `C2_LINK_ENABLED:
+// ${C2_LINK_ENABLED:-}`, exported by neither `e2e.sh` nor
+// `screenshots.sh`), so the route answers `{available:false}` and the card
+// renders `null` on every screen in this suite. Every case below therefore
+// paints the component's own committed markup instead of visiting /you.
+// The end-to-end version is owed at Task 11.
+//
+// Boxes are read off `.c2-card-tell` and `.c2-card-act`, which are `div`s and
+// therefore block-level; an inline element reports 0 for every box metric,
+// which is the measurement error RF21's own example shipped.
+/** Every box in ONE round trip, for the two Concept2 describes below.
+ *
+ *  WHY IT EXISTS (whole-branch review F1). Two `boundingBox()` calls are two
+ *  protocol round trips, and this app loads three real webfonts, so a face
+ *  landing BETWEEN them relayouts the text under the second read. Measured,
+ *  not reasoned: with the mono faces stalled 1200 ms and
+ *  `document.fonts.ready` awaited between the two reads, the 1g case read
+ *  `body 63` against `tell 62` and went red — the same
+ *  `Expected: 62 / Received: 63` a full-suite run produced under load while
+ *  the same test passed 5/5 alone. One `page.evaluate` makes that window
+ *  structurally unreachable rather than unlikely. `Promise.all` does NOT:
+ *  Playwright serialises the calls on the wire either way, which is why the
+ *  two in-situ cases below were exposed despite using it.
+ *
+ *  Null for a selector that matches nothing OR an element with a zero box,
+ *  which is `boundingBox()`'s own contract ("null if the element is not
+ *  visible") — the callers' "did the fixture render" throws still bite. And
+ *  it THROWS on more than one match, because that is the other half of what
+ *  a Locator was giving these callers for free: Playwright's strict mode
+ *  fails a `boundingBox()` whose selector resolves to two elements, and a
+ *  bare `querySelector` would have silently measured the first. */
+interface DesignBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+async function boxesOf(
+  page: Page,
+  selectors: readonly string[],
+): Promise<(DesignBox | null)[]> {
+  return page.evaluate(
+    (sels) =>
+      sels.map((sel) => {
+        const found = document.querySelectorAll(sel);
+        if (found.length > 1) {
+          throw new Error(
+            `boxesOf: "${sel}" matched ${String(found.length)} elements — ` +
+              `strict mode, same as a Playwright locator`,
+          );
+        }
+        const el = found[0];
+        if (el === undefined) return null;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) return null;
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }),
+    selectors,
+  );
+}
+
+test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)", () => {
+  function fixtureMarkup(fixture: string): string {
+    return readFileSync(path.join(process.cwd(), "e2e/fixtures", fixture), {
+      encoding: "utf-8",
+    }).replace(/>\s+</g, "><");
+  }
+
+  async function paint(page: Page, inner: string): Promise<void> {
+    await page.goto("/", { waitUntil: "load" });
+    await page.waitForFunction(
+      () =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--page")
+          .trim() !== "",
+    );
+    await page.evaluate((html) => {
+      document.body.innerHTML = `<div class="app-shell">${html}</div>`;
+    }, inner);
+    await expect(page.locator(".c2-card")).toBeVisible();
+    // A SETTLED layout, not merely a consistent one (whole-branch review
+    // F1). Awaited AFTER the markup is in the document, because the faces
+    // this markup needs are not requested until it lays out — the two
+    // existing `document.fonts.ready` awaits in this file sit at the same
+    // point, after their figure has rendered.
+    //
+    // NOT THE DECIDING FIX, and saying so keeps it from being read as a
+    // gate that could go red (RF21). The deciding fix is `boxesOf`'s single
+    // round trip; deleting THIS await, with the mono faces stalled 1200 ms,
+    // leaves all six cases in this describe green, because one round trip
+    // reads one layout whether or not the swap has happened. What it buys
+    // is the absolute-literal assertions: `.toBe(48)`/`.toBe(52)`/
+    // `.toBe(44)` are numbers off the amendment, and a box measured against
+    // a fallback face is only accidentally the same box. It is
+    // defence-in-depth on a measured mechanism, not a check.
+    await page.evaluate(() => document.fonts.ready);
+  }
+
+  async function loadCard(page: Page, fixture: string): Promise<void> {
+    await paint(page, fixtureMarkup(fixture));
+  }
+
+  /** Both columns' boxes in one round trip — genuinely one now (F1): this
+   *  used to be two `boundingBox()` calls under a comment claiming
+   *  otherwise. */
+  async function columns(page: Page) {
+    const [tell, act] = await boxesOf(page, [".c2-card-tell", ".c2-card-act"]);
+    if (tell == null || act == null)
+      throw new Error("a column had no box — the fixture did not render");
+    return { tell, act };
+  }
+
+  test("a SPLIT state puts the action column to the right of the tell column in landscape, and stacks in portrait", async ({
+    page,
+  }) => {
+    await page.setViewportSize(PHONE_LANDSCAPE);
+    await loadCard(page, "c2-card-unlinked.html");
+    const land = await columns(page);
+    // Side by side means the action column STARTS to the right of where the
+    // tell column ENDS — stronger than comparing left edges alone, which a
+    // stacked layout with any indent could pass.
+    expect(land.act.x).toBeGreaterThan(land.tell.x + land.tell.width - 1);
+    expect(Math.abs(land.act.y - land.tell.y)).toBeLessThan(land.tell.height);
+
+    await page.setViewportSize(PHONE_PORTRAIT);
+    await loadCard(page, "c2-card-unlinked.html");
+    const port = await columns(page);
+    expect(port.act.x).toBeCloseTo(port.tell.x, 0);
+    expect(port.act.y).toBeGreaterThan(port.tell.y + port.tell.height - 1);
+  });
+
+  test("a SINGLE-column state (1d armed) stays stacked in landscape and keeps its hairline", async ({
+    page,
+  }) => {
+    // 1d is badged UNCHANGED on the page — inherited from the approved board
+    // — and the page draws it single column WITH a hairline in landscape as
+    // well as portrait. This is the assertion that stops the split rule
+    // reaching it.
+    await page.setViewportSize(PHONE_LANDSCAPE);
+    await loadCard(page, "c2-card-armed.html");
+    const land = await columns(page);
+    expect(land.act.x).toBeCloseTo(land.tell.x, 0);
+    expect(land.act.y).toBeGreaterThan(land.tell.y + land.tell.height - 1);
+    await expect(page.locator(".c2-card-hair")).toBeVisible();
+
+    await page.setViewportSize(PHONE_PORTRAIT);
+    await loadCard(page, "c2-card-armed.html");
+    await expect(page.locator(".c2-card-hair")).toBeVisible();
+  });
+
+  test("a SPLIT state drops the hairline in landscape, and keeps it in portrait", async ({
+    page,
+  }) => {
+    // Scoped to the split body only: the 20px column gap has taken over the
+    // job of marking the break, which is why all seven gridded frames
+    // (1a, 1c, 1f, 1f-b, 1f-c, 1i, 1j) draw no hairline in landscape while
+    // 1d does.
+    await page.setViewportSize(PHONE_LANDSCAPE);
+    await loadCard(page, "c2-card-unlinked.html");
+    await expect(page.locator(".c2-card-hair")).toBeHidden();
+
+    await page.setViewportSize(PHONE_PORTRAIT);
+    await loadCard(page, "c2-card-unlinked.html");
+    await expect(page.locator(".c2-card-hair")).toBeVisible();
+  });
+
+  test("every control clears the height its own frame draws, in both orientations", async ({
+    page,
+  }) => {
+    // THE GATE D1 NEEDED AND DID NOT HAVE (fix round 4). The retry button
+    // shipped at 48px for four rounds — 4px shorter than every frame that
+    // draws it — and nothing here would have noticed, because no test
+    // measured a control's box. The reviewer caught it by measuring the
+    // PAGE; this measures the BUILD against the same numbers.
+    //
+    // The numbers are the amendment's own inline styles, transcribed, not
+    // read back off `index.css`: all seven LIVE in-card outline buttons
+    // carry `min-height: 52px`, `.btn-primary` is 48px and `.btn-danger` is
+    // 52px. Independent literals, so retuning the CSS cannot retune the
+    // test with it (RF21).
+    //
+    // "LIVE" corrected at Task 5 fix round 1 (F3): this comment said
+    // "all seven `.btn-outline`s inside a `c2card` frame", and a
+    // nesting-aware scan of the page counts EIGHT. The eighth is the inert,
+    // struck "Cancel" at 44px under "REMOVED FROM THE BOARD, SHOWN STRUCK
+    // FOR THE RECORD" — a drawing of a deleted control, which is why none of
+    // the three cases below moves. An absolute over a mechanical class is a
+    // census, and this one had already gone stale in the round that wrote it.
+    const cases: [string, string, number][] = [
+      ["c2-card-unlinked.html", ".c2-card-primary", 48],
+      // Wave E auto-send: the armed OFF segment spans the control at the
+      // danger button's 52px (Gate 0 amendment 2026-09-05 §2a); at rest each
+      // segment is the row's 44px — measured on the pressed one, which is
+      // the only segment a selector can name once.
+      ["c2-card-armed.html", ".c2-card-mode-armed", 52],
+      ["c2-card-linked.html", '.c2-card-mode-btn[aria-pressed="true"]', 44],
+      ["c2-card-read-failed.html", ".c2-card-retry", 52],
+    ];
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      for (const [fixture, selector, expected] of cases) {
+        await loadCard(page, fixture);
+        const box = await page.locator(selector).boundingBox();
+        if (box === null) throw new Error(`${selector} had no box`);
+        expect(box.height).toBe(expected);
+        // And the house floor, which is the reason any of this matters.
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+    }
+  });
+
+  test("a state with nothing to DO (1g) gives its panel the full card width", async ({
+    page,
+  }) => {
+    // `.c2-card-act:empty { display: none }`, measured on what it actually
+    // buys. The first draft of this test asserted `toBeHidden()` on the act
+    // column and that the tell column spanned the body width, and DELETING
+    // THE RULE LEFT BOTH GREEN (probe M38): 1g is single-column anyway, so
+    // an empty flex child is already full width, and Playwright counts a
+    // zero-height box as hidden. Both assertions were decoration.
+    //
+    // The rule's real effect is the trailing 12px flex GAP an empty child
+    // would add under the panel — so the deciding assertion is the body's
+    // own height against its one visible column's, plus the computed
+    // `display`, which is the property the rule sets.
+    for (const vp of [PHONE_LANDSCAPE, PHONE_PORTRAIT]) {
+      await page.setViewportSize(vp);
+      await loadCard(page, "c2-card-update-required.html");
+      const [tell, body] = await boxesOf(page, [
+        ".c2-card-tell",
+        ".c2-card-body",
+      ]);
+      if (tell == null || body == null) throw new Error("no box");
+      expect(tell.width).toBeCloseTo(body.width, 0);
+      // No trailing gap: the body is exactly as tall as its one column.
+      expect(body.height).toBeCloseTo(tell.height, 0);
+      expect(
+        await page
+          .locator(".c2-card-act")
+          .evaluate((el) => getComputedStyle(el).display),
+      ).toBe("none");
+    }
+  });
+
+  test("the card stands off the title above it on the Concept2 screen, in both orientations", async ({
+    page,
+  }) => {
+    // Wave E PR A (spec 2026-09-04-concept2-walk-fixes §5.1): the card lives
+    // on `/you/concept2` now, under the screen's `.screen-title` h1, and the
+    // Reset-baseline neighbour this test used to compose against is a
+    // screen away. Every other case in this file measures boxes INSIDE the
+    // card; this is the one that measures the card's OWN box against what
+    // sits above it, and it is kept for the reason it was written — a
+    // bordered card butting flush against its neighbour is the defect
+    // nothing else here can see.
+    //
+    // WHAT SUPPLIES THE GAP, measured rather than assumed: the h1's
+    // browser-default bottom margin (0.67em × 31px ≈ 21px), collapsing in
+    // block flow with whatever the card declares — which is nothing, since
+    // PR A removed `.c2-card`'s `margin-top` after a mutation deleting it
+    // changed no measurement on this screen. So the assertion is the
+    // stand-off itself, at the floor every other You block uses (12), as an
+    // INDEPENDENT literal (RF21); the mutation that bites is zeroing the
+    // title's margin (`h1 { margin: 0 }` on `.screen-title`), which drops
+    // the gap to 0.
+    //
+    // THE COMPOSITION is the screen's own sibling chain — `<main
+    // class="screen overlay-screen">`, `BackLink`'s `<a class="back-link">`,
+    // the `<h1 class="screen-title">` — around the committed fixture that
+    // `Concept2Card.test.tsx` pins as the component's output.
+    const inSitu = [
+      `<main class="screen overlay-screen" tabindex="0">`,
+      `<a class="back-link" href="/you">← BACK</a>`,
+      `<h1 class="screen-title">Concept2</h1>`,
+      fixtureMarkup("c2-card-unlinked.html"),
+      `</main>`,
+    ].join("");
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await paint(page, inSitu);
+      const [title, card] = await boxesOf(page, [".screen-title", ".c2-card"]);
+      if (title == null || card == null) {
+        throw new Error("the in-situ composition did not render");
+      }
+      expect(card.y - (title.y + title.height)).toBeGreaterThanOrEqual(12);
+    }
+  });
+});
+
+// ── Wave E PR2, Surface 2: the log-detail Send block's control heights ─────
+//
+// WHAT THIS PROVES, exactly (RF26): that the `.c2-send-action` and
+// `.c2-send-linkout` rules in the shipped `index.css` give those controls
+// the heights the amendment's §2 frames draw, in a real engine, in both
+// orientations — 48px for the outline action (the page's `.btn-outline`
+// default, which is what the Send block's four buttons carry: unlike every
+// `.btn-outline` inside a `c2card`, none of them takes an inline override)
+// and 44px for the link row (`.send-linkrow`).
+//
+// WHY IT EXISTS: D1, one surface over. `.c2-card-retry` shipped at 48px for
+// four review rounds — 4px shorter than every frame that draws it — because
+// nothing measured a control's box. The reviewer found it by measuring the
+// PAGE; this measures the BUILD.
+//
+// The expected numbers are the amendment's own CSS transcribed as
+// INDEPENDENT literals, never read back off `index.css`, so retuning the
+// stylesheet cannot retune the test with it (RF21).
+//
+// THE FIXTURES ARE THE COMPONENT'S OWN OUTPUT, and that is gated rather
+// than asserted: `Concept2SendBlock.test.tsx`'s "the e2e fixtures ARE this
+// block's output" compares each committed file against the component's
+// `innerHTML` in full, so any drift — a renamed class, a moved button, a
+// reworded status — reddens there.
+//
+// WHAT IT DOES NOT PROVE: that the block is reachable on a real log row.
+// It is not, in this stack — `compose.yml`'s `C2_LINK_ENABLED:
+// ${C2_LINK_ENABLED:-}` is exported by neither `e2e.sh` nor
+// `screenshots.sh`, so `GET /api/concept2/link` answers `{available:false}`
+// and this block renders `null` on every screen in this suite. The
+// end-to-end version is owed at Task 11.
+//
+// Boxes are read off `<button>`s, which are not inline (RF21's own
+// measurement error: an inline element reports 0 for every box metric).
+test.describe("Concept2 send block: the boxes §2 draws", () => {
+  function fixtureMarkup(fixture: string): string {
+    return readFileSync(path.join(process.cwd(), "e2e/fixtures", fixture), {
+      encoding: "utf-8",
+    }).replace(/>\s+</g, "><");
+  }
+
+  async function paint(page: Page, html: string): Promise<void> {
+    await page.goto("/", { waitUntil: "load" });
+    await page.waitForFunction(
+      () =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--page")
+          .trim() !== "",
+    );
+    await page.evaluate((inner) => {
+      document.body.innerHTML = `<div class="app-shell">${inner}</div>`;
+    }, html);
+    await expect(page.locator(".c2-send")).toBeVisible();
+    // Same await, same reason and same limit as the card describe's `paint`
+    // above: `boxesOf`'s single round trip is what fixed F1; this settles
+    // the face the two absolute control heights are measured against.
+    await page.evaluate(() => document.fonts.ready);
+  }
+
+  async function loadBlock(page: Page, fixture: string): Promise<void> {
+    await paint(page, fixtureMarkup(fixture));
+  }
+
+  test("every control clears the height its own frame draws, in both orientations", async ({
+    page,
+  }) => {
+    const cases: [string, string, number][] = [
+      // 2a: the outline action, at `.btn-outline`'s own 48px.
+      ["c2-send-idle.html", ".c2-send-action", 48],
+      // 2c: the link row, at `.send-linkrow`'s 44px.
+      ["c2-send-sent.html", ".c2-send-linkout", 44],
+      // 2i draws BOTH. Its `Send again` is the ink outline 2e gives
+      // `Retry send` — the frames drew it as the 44px accent Delete control
+      // and the callout named a treatment 2e does not use, and both were
+      // corrected on the page in this task's fix round 1 (ruling R5). So
+      // this row and the 2a row above pin the SAME expected height, which
+      // is the point: one control class, one number.
+      ["c2-send-no-weight.html", ".c2-send-linkout", 44],
+      ["c2-send-no-weight.html", ".c2-send-action", 48],
+    ];
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      for (const [fixture, selector, expected] of cases) {
+        await loadBlock(page, fixture);
+        const box = await page.locator(selector).boundingBox();
+        if (box === null) throw new Error(`${selector} had no box`);
+        expect(box.height).toBe(expected);
+        // And the house floor, which is the reason any of this matters.
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+    }
+  });
+
+  test("the card stands off the line above it, in both orientations", async ({
+    page,
+  }) => {
+    // THE GAP THE CONTROL CASE ABOVE CANNOT SEE, and it is D1's own shape one
+    // level out: that case measures the two CONTROL boxes, so nothing
+    // measured the BLOCK's own box and a bordered card butting flush against
+    // the "Logged to <plan>" line could not redden anything. It did butt
+    // flush — measured `footer->card = 0` in this engine before this rule
+    // existed, because `.log-plan-footer`'s margin is `20px 0 0` (no bottom)
+    // and `.c2-send` declared none at all.
+    //
+    // 12 is the amendment's own frame gap (`.frame { gap: 12px }`, which
+    // separates every §2 sendcard from the `plan-foot` line above it),
+    // transcribed as an INDEPENDENT literal — retuning `index.css` cannot
+    // retune this (RF21).
+    //
+    // THE COMPOSITION is the log-detail screen's own sibling chain, and only
+    // the two NEIGHBOURS are hand-written: `log-plan-footer` and
+    // `button-l4 log-delete-trigger` are `FromTheLog.tsx`'s own class names
+    // at the slot this block was mounted into, and the block itself is the
+    // committed fixture that `Concept2SendBlock.test.tsx` pins as the
+    // component's literal output. So this test can go stale only if the
+    // SCREEN's two class names change, never if the block's markup does.
+    const inSitu = [
+      `<p class="log-plan-footer">Logged to Foundation · session 4</p>`,
+      fixtureMarkup("c2-send-idle.html"),
+      `<button type="button" class="button-l4 log-delete-trigger">Delete session</button>`,
+    ].join("");
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await paint(page, inSitu);
+      const [footer, card, del] = await boxesOf(page, [
+        ".log-plan-footer",
+        ".c2-send",
+        ".log-delete-trigger",
+      ]);
+      if (footer == null || card == null || del == null) {
+        throw new Error("the in-situ composition did not render");
+      }
+      expect(card.y - (footer.y + footer.height)).toBe(12);
+      // The neighbour below is NOT this block's to set and is asserted only
+      // so a future margin here cannot silently eat it: `.log-delete-trigger`
+      // owns its own `24px 0 0`, and adjacent-sibling collapsing takes the
+      // larger of the two.
+      expect(del.y - (card.y + card.height)).toBe(24);
+    }
+  });
+});
+
+// ── Wave E PR2: both Concept2 surfaces, ON THE REAL SCREENS ────────────────
+//
+// WHAT THIS PROVES, exactly (RF26): that the card and the send block obey
+// this project's structural design rules WHERE THEY ACTUALLY LIVE — inside
+// You's flex column and the log-detail scroll, at the real widths, with the
+// real neighbours — rather than inside a hand-composed `document.body`.
+//
+// WHY IT IS NOT THE SAME TEST AS THE TWO FIXTURE DESCRIBES ABOVE. Those
+// paint the component's committed markup into a bare shell and measure
+// boxes; they are the only way to reach a state the server cannot produce
+// (an update-required card, a read that failed), and they were written when
+// nothing could render either surface in a browser at all. What they cannot
+// do is measure a control whose width comes from a column it is not in, or
+// run an accessibility sweep over a page — a `document.body.innerHTML`
+// replacement leaves no `<main>`, no landmark structure and no heading
+// order, so an axe run over it would be scoring the harness. Task 11's
+// `page.route` fake is what made the real screens reachable, and this is
+// what that buys.
+//
+// The link is faked at the client boundary for the reason
+// `e2e/concept2.spec.ts`'s header states at length: this stack is
+// Concept2-dark by construction and a committed CI test enforces it.
+test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
+  const C2_LINKED = {
+    available: true,
+    linked: true,
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+  };
+
+  async function fakeLink(page: Page, body: unknown): Promise<void> {
+    await page.route(/\/api\/concept2\//, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+    });
+  }
+
+  /** A real finished monitor row through the real route — the ONE shape
+   *  `isSendable` accepts. `deviceName` is required of `source: "pm5"` by
+   *  the route's own `logSourceContradiction`, not decoration. */
+  async function seedSendableRow(page: Page, title: string): Promise<void> {
+    const result = await page.evaluate(async (t) => {
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutId: null,
+          workoutTitle: t,
+          workoutType: "O2",
+          source: "pm5",
+          endedBy: "finished",
+          deviceName: "PM5 432331249",
+          workSeconds: 124,
+          workMeters: 500,
+          avgSplitSeconds: 124,
+          timeSeconds: 124,
+          distanceMeters: 500,
+          held: null,
+          effort: null,
+          notes: null,
+          advancesPlan: false,
+          steps: [
+            {
+              label: "250m @ 2:07.0",
+              targetSplit: 127,
+              actualSplit: 135.8,
+              actualSeconds: 67.9,
+              actualSource: "pm5",
+            },
+          ],
+        }),
+      });
+      return { ok: res.ok, status: res.status, body: await res.text() };
+    }, title);
+    if (!result.ok) {
+      throw new Error(`log seed failed: ${result.status} ${result.body}`);
+    }
+  }
+
+  /** The resolved value of a CSS custom property, read off the document
+   *  root and then resolved to the same `rgb()` form `getComputedStyle`
+   *  returns for a paint property — so the comparison is token-to-token and
+   *  a raw hex that happens to equal the token today still reads as a
+   *  match, while a WRONG token does not. That is the claim: the rules name
+   *  the tokens this design specifies, not that nobody could ever inline a
+   *  colour. */
+  async function tokenColor(page: Page, name: string): Promise<string> {
+    return page.evaluate((token) => {
+      const raw = getComputedStyle(document.documentElement)
+        .getPropertyValue(token)
+        .trim();
+      const probe = document.createElement("span");
+      probe.style.color = raw;
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color;
+      probe.remove();
+      return resolved;
+    }, name);
+  }
+
+  /** The card lives on `/you/concept2` since Wave E PR A; reached the way a
+   *  rower reaches it — through the CONCEPT2 row on You. */
+  async function openYouLinked(page: Page, slug: string): Promise<void> {
+    await signInViaBackdoor(page, {
+      email: `design-c2-${slug}@e2e.test`,
+      name: "Design C2 Tester",
+    });
+    await fakeLink(page, C2_LINKED);
+    await page.goto("/you");
+    await page.getByRole("link", { name: /CONCEPT2/ }).click();
+    await expect(page.locator(".c2-card")).toBeVisible();
+  }
+
+  test("every tappable on the Concept2 screen carrying the card clears 44x44, in both orientations", async ({
+    page,
+  }) => {
+    // The card's own three controls have their HEIGHTS pinned by the
+    // fixture describe above. This is the other half and it could not be
+    // written before Task 11: WIDTH is decided by the column the button
+    // sits in, and on this screen that column is You's flex child, not a
+    // hand-written shell. A landscape run is included because that is where
+    // the act column becomes a grid track and a control's width stops being
+    // the card's width.
+    await openYouLinked(page, "taps");
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      // Wave E auto-send: the three-segment control where Unlink was; every
+      // segment is a tappable this sweep measures in the real column.
+      await expect(page.getByRole("button", { name: "OFF" })).toBeVisible();
+      await assertTapTargets(page);
+    }
+    // And the ARMED state, whose control is a different element with
+    // different text — a sweep of the resting card alone would never
+    // measure it.
+    await page.getByRole("button", { name: "OFF" }).click();
+    await expect(
+      page.getByRole("button", { name: "Tap again to unlink" }),
+    ).toBeVisible();
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations on the Concept2 screen carrying the card", async ({
+    page,
+  }) => {
+    // NOT reachable from a fixture: axe scores a PAGE — landmarks, heading
+    // order, contrast against what is actually painted behind the element.
+    // The card contributes an `<h2>` and an `aria-labelledby` section to a
+    // screen it has never been swept inside.
+    await openYouLinked(page, "a11y");
+    await assertNoA11yViolations(page);
+  });
+
+  test("the pressed mode segment keeps --on-color on --ink while its PATCH is in flight (Wave E auto-send)", async ({
+    page,
+  }) => {
+    // Harden lens 2, finding 1: the `:disabled` colour rule sits later in the
+    // sheet at the same specificity as the pressed rule, so without its
+    // `:not([aria-pressed="true"])` scope the pressed segment read `--ink-3`
+    // on `--ink` — 2.30:1 — for both round trips of every mode write. jsdom
+    // applies no stylesheet, so this is the only gate that can go red on it.
+    await openYouLinked(page, "pressed-disabled");
+    const [ink, onColor] = await Promise.all([
+      tokenColor(page, "--ink"),
+      tokenColor(page, "--on-color"),
+    ]);
+    // Hold the PATCH open; every other Concept2 call falls through to the
+    // link fake registered by `openYouLinked`.
+    await page.route(/\/api\/concept2\/link$/, async (route) => {
+      if (route.request().method() === "PATCH") return; // never answers
+      await route.fallback();
+    });
+    await page.getByRole("button", { name: "AUTOMATIC" }).click();
+    const pressed = page.getByRole("button", { name: "MANUAL" });
+    await expect(pressed).toBeDisabled();
+    expect(await pressed.evaluate((el) => getComputedStyle(el).color)).toBe(
+      onColor,
+    );
+    expect(
+      await pressed.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe(ink);
+  });
+
+  test("the card paints its own tokens, not raw values", async ({ page }) => {
+    // `index.css`'s `.c2-card` block names `--surface`, `--rule` and — for
+    // the panel's REASON line — `--ink-3` rather than the `--ink-4` its
+    // typographic family would otherwise inherit, because `--ink-4` on
+    // `--surface-sunken` measures 4.48:1 and FAILS the 4.5:1 floor while
+    // `--ink-3` measures 6.30:1 (that block's own header). A rule that
+    // quietly reverted to the dimmer token would still LOOK like a card and
+    // would fail WCAG, so the token identity is the assertion.
+    await openYouLinked(page, "tokens");
+    const [surface, rule, ink3] = await Promise.all([
+      tokenColor(page, "--surface"),
+      tokenColor(page, "--rule"),
+      tokenColor(page, "--ink-3"),
+    ]);
+    const card = page.locator(".c2-card");
+    expect(
+      await card.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe(surface);
+    expect(
+      await card.evaluate((el) => getComputedStyle(el).borderTopColor),
+    ).toBe(rule);
+
+    // The panel is only on screen in a failure state, and 1j's refused
+    // unlink is the one this screen can drive with the link fake alone.
+    await page.unroute(/\/api\/concept2\//);
+    await page.route(/\/api\/concept2\//, async (route) => {
+      if (route.request().method() === "DELETE") {
+        await route.fulfill({ status: 500, body: "{}" });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(C2_LINKED),
+      });
+    });
+    // Wave E auto-send: the unlink is the control's OFF segment.
+    await page.getByRole("button", { name: "OFF" }).click();
+    await page.getByRole("button", { name: "Tap again to unlink" }).click();
+    const reason = page.locator(".c2-card-panel-reason");
+    await expect(reason).toBeVisible();
+    expect(await reason.evaluate((el) => getComputedStyle(el).color)).toBe(
+      ink3,
+    );
+  });
+
+  test("every tappable on a log detail carrying the send block clears 44x44, in both orientations", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-c2-send-taps@e2e.test",
+      name: "Design C2 Tester",
+    });
+    await fakeLink(page, C2_LINKED);
+    await seedSendableRow(page, "Design Sea Fret");
+    await page.goto("/today/log");
+    await page
+      .locator(".today-log-row")
+      .filter({ hasText: "Design Sea Fret" })
+      .click();
+    await expect(page.locator(".c2-send")).toBeVisible();
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await expect(
+        page.getByRole("button", { name: "Send to Concept2" }),
+      ).toBeVisible();
+      await assertTapTargets(page);
+    }
+  });
+
+  test("zero WCAG 2A/2AA violations on a log detail carrying the send block", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-c2-send-a11y@e2e.test",
+      name: "Design C2 Tester",
+    });
+    await fakeLink(page, C2_LINKED);
+    await seedSendableRow(page, "Design Sea Fret A11y");
+    await page.goto("/today/log");
+    await page
+      .locator(".today-log-row")
+      .filter({ hasText: "Design Sea Fret A11y" })
+      .click();
+    await expect(page.locator(".c2-send")).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+});
+
+// ── Wave E PR A: /you/concept2 registers here, and You carrying the ROW ────
+//
+// TESTING.md §"structural design assertions": a new screen with no entry
+// here is a screen the a11y/tap-target/token rules are not actually
+// checking — and `design.spec.ts`'s own diagnostics entry above records the
+// last time a new door shipped without one. Exit criterion A11.
+test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
+  const C2_LINKED = {
+    available: true,
+    linked: true,
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-c2-screen@e2e.test",
+      name: "Design C2 Screen Tester",
+    });
+    await page.route(/\/api\/concept2\//, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(C2_LINKED),
+      });
+    });
+    // The ROUTE, typed — this describe registers the screen, not the row.
+    await page.goto("/you/concept2");
+    await expect(
+      page.getByRole("heading", { name: "Concept2", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".c2-card")).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target, in both orientations", async ({
+    page,
+  }) => {
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await expect(page.getByRole("link", { name: /BACK/ })).toBeVisible();
+      await assertTapTargets(page);
+    }
+  });
+
+  test("zero WCAG 2A/2AA violations, in both orientations", async ({
+    page,
+  }) => {
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await assertNoA11yViolations(page);
+    }
+  });
+
+  test("the title is the screen-title token and the body is --page", async ({
+    page,
+  }) => {
+    const bodyBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+    const title = page.getByRole("heading", { name: "Concept2", exact: true });
+    expect(await title.evaluate((el) => getComputedStyle(el).fontSize)).toBe(
+      "31px",
+    );
+  });
+});
+
+test.describe("You carrying the CONCEPT2 row (Wave E PR A)", () => {
+  const C2_UNLINKED = {
+    available: true,
+    linked: false,
+    c2UserId: null,
+    c2Username: null,
+    needsReauth: false,
+    logbookBaseUrl: null,
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-c2-row@e2e.test",
+      name: "Design C2 Row Tester",
+    });
+    await page.route(/\/api\/concept2\//, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(C2_UNLINKED),
+      });
+    });
+    await page.goto("/you");
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+  });
+
+  test("every tappable on a You carrying the row clears 44x44, in both orientations", async ({
+    page,
+  }) => {
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      await assertTapTargets(page);
+    }
+  });
+
+  test("zero WCAG 2A/2AA violations on a You carrying the row", async ({
+    page,
+  }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the two doors read as ONE group: DIAGNOSTICS starts where CONCEPT2 ends, in both orientations (R7)", async ({
+    page,
+  }) => {
+    // Invariant R7 (spec §5.1): exactly one auto top margin separates the
+    // group from the content above it. Two rows each carrying their own
+    // `margin-top: auto` as DIRECT flex children of `.you-screen` would
+    // SPLIT the column's free space between them (CSS Flexbox §8.1) — the
+    // mutation that bites the adjacency line: delete the `.you-doors`
+    // wrapper and put `margin-top: auto` back on `.you-screen .diag-row`;
+    // measured 174.5px apart in portrait. Tolerance 1px for the shared
+    // hairline.
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      const c2 = await stableBoundingBox(
+        page.getByRole("link", { name: /CONCEPT2/ }),
+      );
+      const diag = await stableBoundingBox(
+        page.getByRole("link", { name: /DIAGNOSTICS/ }),
+      );
+      if (c2 == null || diag == null) throw new Error("a door did not render");
+      expect(Math.abs(diag.y - (c2.y + c2.height))).toBeLessThanOrEqual(1);
+      expect(c2.height).toBeGreaterThanOrEqual(44);
+      expect(diag.height).toBeGreaterThanOrEqual(44);
+      // R7's OTHER half: the ONE auto margin pins the group to the FOOT.
+      // Measured against `.you-screen`'s own box, because a mutant that moves
+      // the auto margin onto the rows INSIDE `.you-doors` has no free space
+      // to split (the adjacency assertion above stays green) and instead
+      // lets the whole group float up the screen — measured at the plan's
+      // hardening: group bottom → main bottom went from 20 to 369 with every
+      // other gate green. `.screen`'s 20px bottom padding is the only gap
+      // that may remain (INDEPENDENT literal, RF21).
+      const main = await stableBoundingBox(page.locator("main.you-screen"));
+      if (main == null) throw new Error("the You screen did not render");
+      expect(main.y + main.height - (diag.y + diag.height)).toBeLessThanOrEqual(
+        21,
+      );
+    }
+  });
+
+  test("the row's label and state line paint --ink-3 on --page (6.69:1)", async ({
+    page,
+  }) => {
+    const row = page.getByRole("link", { name: /CONCEPT2/ });
+    expect(await row.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(87, 84, 76)", // --ink-3
+    );
+    expect(
+      await row
+        .locator(".diag-row-state")
+        .evaluate((el) => getComputedStyle(el).color),
+    ).toBe("rgb(87, 84, 76)");
+    expect(
+      await page.evaluate(
+        () => getComputedStyle(document.body).backgroundColor,
+      ),
+    ).toBe("rgb(244, 241, 232)"); // --page
   });
 });

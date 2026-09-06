@@ -10,9 +10,15 @@ import { compileProgram } from "../domain/monitor/program.js";
 import type { WorkoutProgram } from "../domain/monitor/program.js";
 import type { IntervalActual } from "../domain/monitor/types.js";
 import { buildDraft, startDraft } from "../src/session/draft";
-import { buildRun } from "../src/session/engine";
+import { advance, buildRun } from "../src/session/engine";
 import { buildLogSeed } from "../src/session/logDraft";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../src/monitor/monitorRun";
+import { TODAY_PICK_KEY, type TodayPick } from "../src/today/todayPick";
+import {
+  TODAY_OVERRIDES_KEY,
+  type TodayOverrides,
+} from "../src/today/todayOverrides";
+import { RUN_KEY, type SessionRun } from "../src/session/run";
 
 // Committed into docs/screenshots/ for PR bodies. NOT diff-asserted — a
 // human judges these, this spec only judges "did it render" (see
@@ -323,6 +329,83 @@ async function resetPlanProgress(page: Page): Promise<void> {
   }
 }
 
+/** Phase SF PR1: Today's first card is DRAWN at random within the
+ *  least-recently-done tie (spec I-2) and a freestyle day ROLLS its type
+ *  (I-5) — both from `crypto.getRandomValues`, with no seam in the
+ *  production build this stack runs. A committed capture has to be
+ *  reviewable frame to frame, so this writes the day's records the way a
+ *  draw of exactly `title`/`type` would have: the same `todayPick` /
+ *  `todayOverrides` shapes `src/today/todayPick.ts` and
+ *  `src/today/todayOverrides.ts` own, keyed on the real `/api/plan` state
+ *  and the browser's own local date (`todayDateString`'s rule). Pixels are
+ *  identical to a real draw of that outcome; only the dice are removed.
+ *  Must run after sign-in, on the app origin, before `goto("/today")`. */
+async function pinToday(
+  page: Page,
+  opts: { type?: "O2" | "AT" | "TR" | "AN"; title?: string },
+): Promise<void> {
+  const result = await page.evaluate(
+    async ({ type, title, overridesKey, pickKey }) => {
+      const now = new Date();
+      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const planRes = await fetch("/api/plan");
+      if (!planRes.ok) return { ok: false, body: `plan ${planRes.status}` };
+      const plan = (await planRes.json()) as {
+        planKey: string | null;
+        doneN: number;
+      };
+      // The freestyle re-roll key: sessions logged today (local day), 0
+      // with a plan — the same rule `Today.tsx`'s `sessionsLoggedToday`
+      // uses.
+      let session = 0;
+      if (plan.planKey === null) {
+        const logsRes = await fetch("/api/logs?limit=10");
+        if (!logsRes.ok) return { ok: false, body: `logs ${logsRes.status}` };
+        const logs = (await logsRes.json()) as { loggedAt: string }[];
+        session = logs.filter((log) => {
+          const d = new Date(log.loggedAt);
+          const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          return day === date;
+        }).length;
+      }
+      if (type !== undefined) {
+        const record: TodayOverrides = {
+          date,
+          planKey: plan.planKey,
+          doneN: plan.doneN,
+          swapType: type,
+          session,
+        };
+        localStorage.setItem(overridesKey, JSON.stringify(record));
+      }
+      if (title !== undefined) {
+        const res = await fetch("/api/workouts");
+        if (!res.ok) return { ok: false, body: `workouts ${res.status}` };
+        const rows = (await res.json()) as { id: string; title: string }[];
+        const row = rows.find((w) => w.title === title);
+        if (!row) return { ok: false, body: `no workout titled ${title}` };
+        const record: TodayPick = {
+          date,
+          planKey: plan.planKey,
+          doneN: plan.doneN,
+          workoutId: row.id,
+          shownIds: [row.id],
+          shuffled: false,
+          session,
+        };
+        localStorage.setItem(pickKey, JSON.stringify(record));
+      }
+      return { ok: true, body: "" };
+    },
+    {
+      ...opts,
+      overridesKey: TODAY_OVERRIDES_KEY,
+      pickKey: TODAY_PICK_KEY,
+    },
+  );
+  if (!result.ok) throw new Error(`pinToday failed: ${result.body}`);
+}
+
 /** Seeds `count` real logs via `POST /api/logs` so Today's LAST THREE
  *  renders its populated layout, not the "No sessions logged yet." empty
  *  state — duplicated from `e2e/design.spec.ts`'s identical helper. */
@@ -337,7 +420,7 @@ async function seedLogs(page: Page, count: number): Promise<void> {
           workoutTitle: `Screenshot Session ${i + 1}`,
           workoutType: "AT",
           held: i % 2 === 0 ? "held" : "under",
-          pain: 2,
+          effort: 2,
           notes: null,
           steps: [
             {
@@ -395,14 +478,14 @@ test("signin", async ({ page }) => {
 //
 // Task 3 (2026-08-04 round): three captures from one continuous flow — the
 // same "multiple screenshots per test" idiom the "library" test below (and
-// "today-unlogged" above it in history) already uses — now that DIFFICULTY/
-// TIME/PAIN live behind a FILTER ⌄ sheet instead of always-on chip rows.
+// "today-unlogged" above it in history) already uses — now that TIME/EFFORT
+// live behind a FILTER ⌄ sheet instead of always-on chip rows.
 // `today.png` is the REST state (FILTER ⌄ beside SHUFFLE, no chip groups on
 // screen); `today-sheet.png` and `today-filtered.png` mirror
 // `library-sheet.png`/`library-filtered.png`'s own open/applied pair.
 //
-// Round 2 (2026-08-04): `today-sheet.png` now shows all FIVE groups
-// (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE), and the Revision (mid-round)
+// Round 2 (2026-08-04): `today-sheet.png` shows every group (TIME/EFFORT/
+// LAST DONE/SOURCE — DIFFICULTY left in Phase DE PR 1), and the Revision (mid-round)
 // replaced the live-counting primary ("Show N options") with the constant
 // "Apply Filter" plus a small mono count caption above it.
 test("today", async ({ page }) => {
@@ -414,27 +497,28 @@ test("today", async ({ page }) => {
   await seedLogs(page, 3);
   await choosePlan(page, "sprint");
   await resetPlanProgress(page);
+  await pinToday(page, { title: "Sea Fret" });
   await page.goto("/today");
   // Today shows "LOADING…" until all five of its data hooks resolve — wait
   // for the suggested-workout card itself before shooting.
   await page.locator(".today-card").waitFor();
 
-  // REST: FILTER ⌄ beside SHUFFLE, no DIFFICULTY/TIME/PAIN chip groups on
+  // REST: FILTER ⌄ beside SHUFFLE, no TIME/EFFORT chip groups on
   // the screen itself.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today.png"),
   });
 
-  // SHEET: open, all five groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE),
-  // and the constant "Apply Filter" primary with its own live-count caption.
-  // Deselecting HARD is a real, visible DIFFICULTY deviation with zero risk
-  // of a zero-result pool — the 300-workout library's own O2 quota (today's
-  // sprint-plan code) has no HARD entries at all (design.spec.ts's own
-  // SHUFFLE-disabled comment).
+  // SHEET: open, all four groups (TIME/EFFORT/LAST DONE/SOURCE), and the
+  // constant "Apply Filter" primary with its own live-count caption.
+  // Selecting EFFORT 1 is a real, visible EFFORT deviation with zero risk of a
+  // zero-result pool — the pinned Sea Fret is itself a effort-1 O2 workout,
+  // and the library's O2 block opens with eight of them.
   await page.getByRole("button", { name: "FILTER ⌄" }).click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "HARD", exact: true })
+    .getByRole("group", { name: "EFFORT" })
+    .getByRole("button", { name: "1", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Apply Filter" }),
@@ -443,11 +527,81 @@ test("today", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "today-sheet.png"),
   });
 
-  // FILTERED: applied — the DIFFICULTY token ("EASY–MEDIUM") and CLEAR ALL.
+  // Phase SF PR2 Gate 0 (spec §3.5): the TIME range narrowed to 25–35′
+  // by keyboard (the thumbs are role=slider buttons), the live count
+  // moving with it; the same sheet in landscape; then applied, so the
+  // token row shows the range label beside the EFFORT token.
+  const dialog = page.getByRole("dialog");
+  const longest = dialog.getByRole("slider", { name: "Longest" });
+  const shortest = dialog.getByRole("slider", { name: "Shortest" });
+  await longest.focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft"); // 60 -> 35
+  await shortest.focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight"); // 0 -> 25
+  await expect(shortest).toHaveAttribute("aria-valuenow", "25");
+  await expect(longest).toHaveAttribute("aria-valuenow", "35");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-sheet-range.png"),
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-sheet-landscape.png"),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  // FILTERED: applied — the EFFORT token ("EFFORT 1"), the TIME token
+  // ("25–35′") and CLEAR ALL.
   await page.getByRole("button", { name: "Apply Filter" }).click();
-  await expect(page.locator(".filter-token")).toBeVisible();
+  await expect(
+    page.locator(".filter-token", { hasText: "25–35′" }),
+  ).toBeVisible();
+  // Spec exit criterion 4 (a SEAM check, both sides `estimateMinutes`): the
+  // card the range admits prints minutes inside it.
+  const printed = (await page.locator(".today-card-duration").textContent())!;
+  const minutes = Number(printed.replace(/[^0-9]/g, ""));
+  expect(minutes).toBeGreaterThanOrEqual(25);
+  expect(minutes).toBeLessThanOrEqual(35);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-filtered.png"),
+  });
+});
+
+// Freestyle chips (2026-09-04, #296) + Phase SF PR1's daily roll: the
+// no-plan Today lights one chip on the day's first mount (pinned to AT
+// here — see `pinToday`) with that type's card; the second frame is the
+// clear (tap the lit chip → ANY TYPE, the whole library, for the rest of
+// the day); the
+// landscape frame is the rolled state at the 844×390 frame the other
+// landscape captures use, since the chip row is the widest element on
+// the screen.
+test("today-freestyle", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-freestyle@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await seedLogs(page, 3);
+  await pinToday(page, { type: "AT", title: "Occluded Front" });
+  await page.goto("/today");
+  await page.locator(".today-card").waitFor();
+  await expect(page.locator(".today-plan-line-freestyle")).toBeVisible();
+  await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
+  await expect(page.locator(".today-card-title")).toHaveText("Occluded Front");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-freestyle.png"),
+  });
+
+  await page.getByRole("button", { name: "AT", exact: true }).click();
+  await expect(page.locator(".type-word")).toHaveText("ANY TYPE");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-freestyle-cleared.png"),
+  });
+
+  await page.getByRole("button", { name: "AT", exact: true }).click();
+  await expect(page.locator(".type-word")).toHaveText("COMFORTABLY HARD");
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-freestyle-landscape.png"),
   });
 });
 
@@ -523,6 +677,9 @@ test("today-capped", async ({ page }) => {
       "w 2' 6k+6 @22",
     ].join("\n"),
   );
+  // The imported workout is O2; the freestyle day's rolled type must be
+  // O2 too, or SOURCE=CUSTOM under another type is an empty pool.
+  await pinToday(page, { type: "O2" });
   await page.goto("/today");
   await page.locator(".today-card").waitFor();
 
@@ -530,7 +687,7 @@ test("today-capped", async ({ page }) => {
   await page
     .getByRole("dialog")
     .getByRole("group", { name: "SOURCE" })
-    .getByRole("button", { name: "CUSTOM", exact: true })
+    .getByRole("button", { name: "MY WORKOUTS", exact: true })
     .click();
   await page.getByRole("button", { name: "Apply Filter" }).click();
   await expect(page.locator(".today-card-title")).toHaveText(title);
@@ -552,8 +709,8 @@ test("today-capped", async ({ page }) => {
 // already uses for exactly the same reason (no recency race against the
 // 300 seeded globals, no plan/type coupling). A custom import rather than
 // filtering the real global Ostro entry itself: with 300 seeded workouts,
-// no combination of TYPE/DURATION/DIFFICULTY/PAIN filters reliably narrows
-// the pool to that one title (many share type+duration+difficulty), so
+// no combination of TYPE/DURATION/EFFORT filters reliably narrows the pool
+// to that one title (many share type+duration+effort), so
 // SOURCE=CUSTOM stays the only deterministic pick in this account.
 test("today-rolled", async ({ page }) => {
   const title = "Screenshot Today Rolled Workout";
@@ -566,6 +723,7 @@ test("today-rolled", async ({ page }) => {
     page,
     [`${title} | AT | medium | 4`, "x9", "w 1000m 6k+2 @26 r1"].join("\n"),
   );
+  await pinToday(page, { type: "AT" });
   await page.goto("/today");
   await page.locator(".today-card").waitFor();
 
@@ -573,7 +731,7 @@ test("today-rolled", async ({ page }) => {
   await page
     .getByRole("dialog")
     .getByRole("group", { name: "SOURCE" })
-    .getByRole("button", { name: "CUSTOM", exact: true })
+    .getByRole("button", { name: "MY WORKOUTS", exact: true })
     .click();
   await page.getByRole("button", { name: "Apply Filter" }).click();
   await expect(page.locator(".today-card-title")).toHaveText(title);
@@ -772,17 +930,22 @@ test("today-unlogged", async ({ page }) => {
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   await page.getByRole("link", { name: "← DONE" }).click();
   await expect(page).toHaveURL(/\/today$/);
-  await expect(page.getByText(/unlogged session/i)).toBeVisible();
+  await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+  // Recovery intentionally precedes fetch completion; this capture also
+  // needs the suggestion beneath it, not a transient loading frame.
+  await expect(page.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
 
   // DEFAULT: title + "unlogged session.", Log it, and the outlined ✕.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-unlogged.png"),
   });
 
-  // ARMED: the same row's contents swapped in place — border to accent,
-  // the discard question, and a solid "Tap again" replacing Log it/✕.
-  await page.getByRole("button", { name: "Discard without logging" }).click();
-  await expect(page.getByRole("button", { name: "Tap again" })).toBeVisible();
+  // ARMED: the row's content becomes the discard question and solid
+  // "Tap again" action, replacing Log it/✕ in the approved recovery layout.
+  await page.getByRole("button", { name: /Discard Timer workout/ }).click();
+  await expect(
+    page.getByRole("button", { name: "Tap again to discard" }),
+  ).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-unlogged-armed.png"),
   });
@@ -915,13 +1078,327 @@ test("today-interrupted", async ({ page }) => {
     key: MONITOR_RUN_KEY,
     value: JSON.stringify(run),
   });
+  await pinToday(page, { type: "O2", title: "Sea Fret" });
 
   await page.goto("/today");
-  await expect(page.getByText(/interrupted connected session\./)).toBeVisible();
+  await expect(page.getByText(/PM5 · .* · Not saved/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-interrupted.png"),
   });
+});
+
+// Retained-workout recovery captures are direct stored variants; the genuine
+// writer journey is intentionally owned by connected.spec.ts. These images
+// register the recovery controls in both phone orientations for visual review.
+function buildRecoveryScreenshotRun(workoutId: string): MonitorRun {
+  return {
+    ...buildInterruptedMonitorRun(workoutId),
+    title: "Retained PM5 workout with a deliberately long title for recovery",
+    completedAt: "2026-09-04T12:30:00.000Z",
+    endedBy: "finished",
+  };
+}
+
+async function seedRecoveryScreenshotRun(page: Page): Promise<MonitorRun> {
+  const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+  const run = buildRecoveryScreenshotRun(workoutId);
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: MONITOR_RUN_KEY,
+    value: JSON.stringify(run),
+  });
+  return run;
+}
+
+function buildCompletedTimerScreenshotRun(workoutId: string): SessionRun {
+  const hoarfrost = library("Hoarfrost");
+  const startedAt = new Date("2026-09-04T12:00:00.000Z");
+  const draft = buildDraft({
+    id: workoutId,
+    title: "Retained timer workout with a deliberately long title for recovery",
+    type: hoarfrost.type as WorkoutType,
+    steps: hoarfrost.steps,
+  });
+  let run = buildRun(startDraft(draft), MONITOR_FIXTURE_BASELINES, startedAt);
+  for (let hour = 1; run.completedAt === null; hour += 1) {
+    run = advance(run, new Date(startedAt.getTime() + hour * 60 * 60 * 1000));
+  }
+  return run;
+}
+
+test("recovery-today-portrait", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-portrait@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await seedRecoveryScreenshotRun(page);
+  await pinToday(page, { type: "O2", title: "Sea Fret" });
+  await page.goto("/today");
+  await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "recovery-today-portrait.png"),
+  });
+});
+
+test("recovery-today-landscape", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await seedRecoveryScreenshotRun(page);
+  await pinToday(page, { type: "O2", title: "Sea Fret" });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto("/today");
+  await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "recovery-today-landscape.png"),
+  });
+});
+
+test("recovery-review-read-only", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-read-only@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const run = await seedRecoveryScreenshotRun(page);
+  // A cold load makes the review module hydrate this selected stored key.
+  await page.reload();
+  await page.goto(
+    `/session/review?source=monitor&startedAt=${encodeURIComponent(run.startedAt)}`,
+  );
+  await expect(page.getByRole("heading", { name: run.title })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "recovery-review.png"),
+  });
+});
+
+test("recovery-today-both-sources-and-warning-singular-plural", async ({
+  page,
+}) => {
+  const target = "Screenshot recovery warning target";
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-both@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const monitor = await seedRecoveryScreenshotRun(page);
+  if (monitor.workoutId === null) {
+    throw new Error("recovery timer fixture requires its library workout id");
+  }
+  const timer = buildCompletedTimerScreenshotRun(monitor.workoutId);
+  await importBulk(page, [`${target} | AN | easy | 1`, "w 1' max"].join("\n"));
+
+  for (const [name, viewport] of [
+    ["portrait", { width: 390, height: 844 }],
+    ["landscape", { width: 844, height: 390 }],
+  ] as const) {
+    await page.setViewportSize(viewport);
+    await page.goto("/today");
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: target }).click();
+    await page.getByRole("button", { name: "Connect" }).click();
+    await expect(
+      page.getByRole("heading", { name: "You have an unsaved workout." }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-warning-singular-${name}.png`),
+    });
+    if (name === "landscape") {
+      await page
+        .getByRole("button", { name: "View unsaved" })
+        .scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(
+          SCREENSHOTS_DIR,
+          "recovery-warning-singular-landscape-actions.png",
+        ),
+      });
+    }
+    await page.getByRole("button", { name: "Cancel" }).click();
+  }
+
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: RUN_KEY,
+    value: JSON.stringify(timer),
+  });
+  await page.reload();
+  for (const [name, viewport] of [
+    ["portrait", { width: 390, height: 844 }],
+    ["landscape", { width: 844, height: 390 }],
+  ] as const) {
+    await page.setViewportSize(viewport);
+    await page.goto("/today");
+    await expect(
+      page.getByRole("heading", { name: "UNSAVED WORKOUTS" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-today-both-${name}.png`),
+    });
+    await page
+      .getByRole("link", { name: /Review & save Timer workout/ })
+      .evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `recovery-today-both-${name}-timer-actions.png`,
+      ),
+    });
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: target }).click();
+    await page.getByRole("button", { name: "Connect" }).click();
+    await expect(
+      page.getByRole("heading", { name: "You have unsaved workouts." }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-warning-plural-${name}.png`),
+    });
+    if (name === "landscape") {
+      await page
+        .getByRole("button", { name: "View unsaved" })
+        .scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(
+          SCREENSHOTS_DIR,
+          "recovery-warning-plural-landscape-actions.png",
+        ),
+      });
+    }
+    await page.getByRole("button", { name: "Cancel" }).click();
+  }
+  await cleanupByTitle(page, target);
+});
+
+test("recovery-review-missing-type-legacy-and-unavailable", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-fallbacks@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const base = await seedRecoveryScreenshotRun(page);
+  const reviewUrl = (startedAt: string) =>
+    `/session/review?source=monitor&startedAt=${encodeURIComponent(startedAt)}`;
+
+  for (const [name, viewport] of [
+    ["portrait", { width: 390, height: 844 }],
+    ["landscape", { width: 844, height: 390 }],
+  ] as const) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: MONITOR_RUN_KEY,
+      value: JSON.stringify({ ...base, workoutId: "missing-library-record" }),
+    });
+    await page.reload();
+    await page.goto(reviewUrl(base.startedAt));
+    await expect(
+      page.getByRole("combobox", { name: "Workout type" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-missing-type-${name}.png`),
+    });
+    await page
+      .getByRole("combobox", { name: "Workout type" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `recovery-missing-type-${name}-actions.png`,
+      ),
+    });
+
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: MONITOR_RUN_KEY,
+      value: JSON.stringify({ ...base, logSeed: undefined }),
+    });
+    await page.reload();
+    await page.goto(reviewUrl(base.startedAt));
+    await expect(
+      page.getByRole("heading", { name: "Can't rebuild this workout." }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-read-only-${name}.png`),
+    });
+    await page
+      .getByRole("button", { name: "Copy recording" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `recovery-read-only-${name}-copy-actions.png`,
+      ),
+    });
+    await page
+      .getByRole("link", { name: "Keep unsaved" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: path.join(
+        SCREENSHOTS_DIR,
+        `recovery-read-only-${name}-keep-actions.png`,
+      ),
+    });
+
+    await page.goto("/session/review?source=monitor&startedAt=missing-record");
+    await expect(
+      page.getByRole("heading", { name: "Recording unavailable" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-unavailable-${name}.png`),
+    });
+  }
+});
+
+test("recovery-today-pending-and-failed-library-request", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-recovery-fetch@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await seedRecoveryScreenshotRun(page);
+
+  for (const [name, viewport] of [
+    ["portrait", { width: 390, height: 844 }],
+    ["landscape", { width: 844, height: 390 }],
+  ] as const) {
+    await page.setViewportSize(viewport);
+    let releasePending: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      releasePending = resolve;
+    });
+    let resolveHandled: (() => void) | undefined;
+    const handled = new Promise<void>((resolve) => {
+      resolveHandled = resolve;
+    });
+    await page.route("**/api/workouts", async (route) => {
+      await pending;
+      await route.continue();
+      resolveHandled?.();
+    });
+    await page.goto("/today", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-today-pending-${name}.png`),
+    });
+    releasePending?.();
+    await handled;
+    await page.unroute("**/api/workouts");
+
+    await page.route("**/api/workouts", (route) =>
+      route.fulfill({ status: 500, body: "library unavailable" }),
+    );
+    await page.goto("/today");
+    await expect(page.getByText("Couldn't load your library.")).toBeVisible();
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `recovery-today-failed-${name}.png`),
+    });
+    await page.unroute("**/api/workouts");
+  }
 });
 
 // Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1, Gate 0
@@ -1153,7 +1630,7 @@ test("plan-linked", async ({ page }) => {
       workoutTitle: title,
       workoutType: type,
       held: "held",
-      pain: 2,
+      effort: 2,
       avgSplitSeconds: 130,
       timeSeconds: 780,
       distanceMeters: 3000,
@@ -1260,7 +1737,7 @@ test("plan-standin", async ({ page }) => {
         workoutTitle: title,
         workoutType: type,
         held: "held",
-        pain: 2,
+        effort: 2,
         avgSplitSeconds: 130,
         timeSeconds: 780,
         distanceMeters: 3000,
@@ -1334,14 +1811,14 @@ test("library", async ({ page }) => {
   // global, so without authoring one of its own first, no capture below
   // would ever show the badge at all — same reasoning as "workout-detail"'s
   // own builder-authored personal workout further down. Simplest valid
-  // form: title + pain + one row's duration — `newForm()`'s own default
-  // TYPE (O2) and DIFFICULTY (easy) are left untouched, which matters
+  // form: title + effort + one row's duration — `newForm()`'s own default
+  // TYPE (O2) is left untouched, which matters
   // below: the chip-row TYPE filter this flow adds has to actually match
   // this workout, or SOURCE=CUSTOM would narrow to zero instead of one.
   const customTitle = "Screenshot Custom Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(customTitle);
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "Save to library" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -1410,13 +1887,15 @@ test("library", async ({ page }) => {
     .click();
 
   // SHEET: open, with SOURCE=CUSTOM selected but not yet applied — the
-  // DIFFICULTY group (Task 2's own addition, first in the sheet now that
-  // TYPE has left it for the chip row) and the "Apply Filter" primary with
+  // four groups (TIME first, now that TYPE left for the chip row and
+  // DIFFICULTY left in Phase DE PR 1) and the "Apply Filter" primary with
   // its live-counting caption (spec §3, singular-aware: "1 WORKOUT") are
   // the point of this capture.
   await page.getByRole("button", { name: "FILTER ⌄" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "CUSTOM", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "MY WORKOUTS", exact: true })
+    .click();
   await expect(
     dialog.getByRole("button", { name: "Apply Filter" }),
   ).toBeEnabled();
@@ -1424,6 +1903,13 @@ test("library", async ({ page }) => {
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library-sheet.png"),
   });
+  // Phase SF PR2 Gate 0: the same sheet in landscape (the range rail is
+  // the widest control in it).
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-sheet-landscape.png"),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
 
   // FILTERED: applied — the O2 chip still selected with its descriptor
   // word visible, the TYPE token alongside the SOURCE token, the narrowed
@@ -1435,6 +1921,24 @@ test("library", async ({ page }) => {
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library-filtered.png"),
   });
+
+  // Phase SF PR3 Gate 0: SEARCH BY NAME with `fog` typed (the O2 chip and
+  // the SOURCE token cleared first so the search alone narrows), portrait
+  // and landscape.
+  await page.getByRole("button", { name: "CLEAR ALL" }).click();
+  const search = page.getByRole("searchbox", { name: "Search by name" });
+  await search.fill("fog");
+  await expect(page.locator(".workout-row").first()).toBeVisible();
+  // Blur so the capture is the typed state, not the focus ring.
+  await search.blur();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-search.png"),
+  });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-search-landscape.png"),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
 
   await cleanupByTitle(page, customTitle);
 });
@@ -1512,7 +2016,7 @@ test("workout-detail", async ({ page }) => {
   const title = "Screenshot Personal Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(title);
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "DONE" }).click();
 
@@ -1557,7 +2061,7 @@ test("workout-detail-no-target", async ({ page }) => {
   const title = "Screenshot No Target Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(title);
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "Save to library" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -1602,7 +2106,7 @@ test("workout-detail-no-target", async ({ page }) => {
  *  state the screenshot needs to capture. */
 async function fillSampleWorkout(page: Page): Promise<void> {
   await page.getByLabel("Title").fill("Screenshot Intervals");
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
 
   // Row 1: base defaults to 6k (builderState.ts's newRow) — ten clicks on
   // the "slower" stepper reaches "6k +10". "45" digits into the masked
@@ -1783,7 +2287,7 @@ test("plan-badge-unknown", async ({ page }) => {
       workoutTitle: title,
       workoutType: type,
       held: "held",
-      pain: 2,
+      effort: 2,
       advancesPlan: true,
       steps: [{ label: "Work" }],
     });
@@ -2514,10 +3018,10 @@ test("post-workout-summary", async ({ page }) => {
   await expect(prescribedRow.locator(".summary-row-dash")).toHaveText("—");
 
   // Realistic, non-empty state (CLAUDE.md's own "screenshots that capture
-  // empty states" rule): a real Held answer, pain level, and note, not the
+  // empty states" rule): a real Held answer, effort level, and note, not the
   // screen's own just-opened blank form.
   await page.getByRole("button", { name: "HELD" }).click();
-  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page.getByRole("button", { name: "Effort 2" }).click();
   await page.getByLabel("NOTES").fill("Felt strong.");
 
   // Task 4: six rows plus the reflection card no longer fit the 390×844
@@ -2588,7 +3092,7 @@ async function postLog(
     // `justrow-history-chip` seeds one that came through the monitor.
     workoutType: string | null;
     held?: "held" | "under" | "over" | null;
-    pain?: number | null;
+    effort?: number | null;
     thumbs?: "up" | "down" | null;
     notes?: string | null;
     avgSplitSeconds?: number | null;
@@ -2690,6 +3194,12 @@ async function postLog(
     // a fixture omitting it is not a smaller row — it is an impossible one.
     restSeconds?: number | null;
     restMeters?: number | null;
+    // Wave E PR2 Task 11: the RC-1 work pair, which is what
+    // `src/log/concept2Send.ts`'s `isSendable` reads for its third and
+    // fourth clauses. A Concept2 capture whose row omits these renders no
+    // send block at all, so this is not an optional nicety for them.
+    workSeconds?: number | null;
+    workMeters?: number | null;
     // Door PR A (2026-09-02) §1.1: the honest close reason, so a capture can
     // seed a genuinely PARTIAL row. Mirrors `schema.ts`'s `endedByEnum` at
     // the same hand-copied-literal-union fidelity `source` above uses.
@@ -2717,7 +3227,7 @@ async function postLog(
       body: JSON.stringify({
         workoutId: null,
         held: null,
-        pain: null,
+        effort: null,
         notes: null,
         steps: [{ label: "Work" }],
         advancesPlan: false,
@@ -2841,7 +3351,7 @@ async function postV0110Log(page: Page, title: string): Promise<void> {
         workoutTitle: t,
         workoutType: "AT",
         held: "held",
-        pain: 2,
+        effort: 2,
         notes: null,
         steps: [
           {
@@ -2880,7 +3390,7 @@ test("log-history", async ({ page }) => {
     workoutTitle: "Sea Fret",
     workoutType: "O2",
     held: "held",
-    pain: 2,
+    effort: 2,
     avgSplitSeconds: 124.5,
     distanceMeters: 5000,
   });
@@ -2888,7 +3398,7 @@ test("log-history", async ({ page }) => {
     workoutTitle: "Occluded Front",
     workoutType: "AT",
     held: "under",
-    pain: 1,
+    effort: 1,
     avgSplitSeconds: 118.2,
     distanceMeters: 6200,
   });
@@ -2896,7 +3406,7 @@ test("log-history", async ({ page }) => {
     workoutTitle: "Pressure Ridge",
     workoutType: "TR",
     held: "over",
-    pain: 3,
+    effort: 3,
     avgSplitSeconds: 132.7,
     distanceMeters: 4500,
   });
@@ -2955,7 +3465,7 @@ test("log-detail", async ({ page }) => {
     // than door-ambiguous "LOGGED BY HAND".
     deviceName: "PM5 432331249",
     held: "under",
-    pain: 3,
+    effort: 3,
     thumbs: "up",
     // PM gate fix wave: the old note ("Held on through the back half.")
     // narrated a long multi-piece session that no longer exists on this
@@ -3074,7 +3584,7 @@ test("log-detail", async ({ page }) => {
     "4:04 total · plus 242 m coasting in rest",
   );
   await expect(
-    page.getByText("UNDER · FASTER · PAIN 3/5 · LIKED"),
+    page.getByText("UNDER · FASTER · EFFORT 3/5 · LIKED"),
   ).toBeVisible();
   await expect(
     page.getByText("Legs felt fresher on the second one."),
@@ -3222,7 +3732,7 @@ async function seedPartialLogDetail(page: Page): Promise<void> {
     deviceName: "PM5 432331249",
     endedBy: "rower",
     held: "held",
-    pain: 3,
+    effort: 3,
     thumbs: "up",
     notes: "Cut it short. Legs had nothing left after the second one.",
     // The legacy stored-fallback trio — never read on a tier-A row, kept
@@ -3455,7 +3965,7 @@ async function seedPartialTimeLogDetail(page: Page): Promise<void> {
     deviceName: "PM5 432331249",
     endedBy: "rower",
     held: "under",
-    pain: 4,
+    effort: 4,
     thumbs: "down",
     notes: "Third one went nowhere. Stopped a minute and a half in.",
     // The legacy stored-fallback trio, never read on a tier-A row — kept
@@ -3622,7 +4132,7 @@ test("log-detail-partial-link-lost", async ({ page }) => {
     deviceName: "PM5 432331249",
     endedBy: "link-lost",
     held: "held",
-    pain: 2,
+    effort: 2,
     avgSplitSeconds: 112.4,
     timeSeconds: 112,
     distanceMeters: 500,
@@ -3692,7 +4202,7 @@ test("log-history-partial", async ({ page }) => {
     deviceName: "PM5 432331249",
     endedBy: "finished",
     held: "held",
-    pain: 2,
+    effort: 2,
     avgSplitSeconds: 118.0,
     timeSeconds: 1416,
     distanceMeters: 6000,
@@ -3751,7 +4261,7 @@ test("log-delete-confirm", async ({ page }) => {
     workoutTitle: "Sea Fret",
     workoutType: "O2",
     held: "under",
-    pain: 3,
+    effort: 3,
     thumbs: "up",
     notes: "Held on through the back half.",
     avgSplitSeconds: 130,
@@ -3811,7 +4321,7 @@ test("log-delete-confirm", async ({ page }) => {
 // failure #7: `.summary-heroes` must be ABSENT entirely (not present-but-
 // empty, not dashes) — `SummaryHeroesBlock`'s own "every hero undefined
 // → return null" gate (PostWorkoutSummary.tsx) — while the row and the
-// reflection read-back (`held: "held", pain: 2`, no thumbs/notes) render
+// reflection read-back (`held: "held", effort: 2`, no thumbs/notes) render
 // exactly as they do for a current-shape log.
 test("log-detail-legacy", async ({ page }) => {
   await signInViaBackdoor(page, {
@@ -3836,9 +4346,9 @@ test("log-detail-legacy", async ({ page }) => {
   await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
 
   // Rows + reflection read-back still render (storedSummary.ts's
-  // buildReadBack: HELD_READBACK_LABEL.held + "PAIN 2/5").
+  // buildReadBack: HELD_READBACK_LABEL.held + "EFFORT 2/5").
   await expect(page.locator(".summary-row-list .summary-row")).toHaveCount(1);
-  await expect(page.getByText("HELD · PAIN 2/5")).toBeVisible();
+  await expect(page.getByText("HELD · EFFORT 2/5")).toBeVisible();
 
   // Trace-rendering spec (Phase LT spec 3), Task 3, §1's own ABSENT case:
   // a pre-spec-2 row (this fixture's whole point, `postV0110Log`'s own
@@ -3911,7 +4421,7 @@ test("post-workout-summary-manual", async ({ page }) => {
   // rule), same values as the session door's own capture for a fair visual
   // comparison between the two doors.
   await page.getByRole("button", { name: "HELD" }).click();
-  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page.getByRole("button", { name: "Effort 2" }).click();
   await page
     .getByLabel("NOTES")
     .fill("Rowed at the gym, logging it after the fact.");
@@ -4759,7 +5269,7 @@ async function openLogMonitorForm(
   // screenshots" rule), same fill idiom as `post-workout-summary`/
   // `post-workout-summary-manual` above.
   await page.getByRole("button", { name: "HELD" }).click();
-  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page.getByRole("button", { name: "Effort 2" }).click();
   await page
     .getByLabel("NOTES")
     .fill("Rowed against a connected monitor for the first time.");
@@ -5549,7 +6059,7 @@ test("justrow-log", async ({ page }) => {
   await page.getByRole("button", { name: "End session" }).click();
   await page.getByRole("button", { name: "Tap again to end" }).click();
   await expect(page).toHaveURL(/\/justrow\/log$/, { timeout: 15_000 });
-  await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+  await expect(page.getByText("EFFORT", { exact: true })).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "justrow-log.png"),
   });
@@ -5606,7 +6116,7 @@ async function finishJustRowTimer(page: Page): Promise<void> {
 test("justrow-log-timer", async ({ page }) => {
   await openJustRowTimer(page, "screenshots-justrow-log-timer@e2e.test");
   await finishJustRowTimer(page);
-  await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+  await expect(page.getByText("EFFORT", { exact: true })).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "justrow-log-timer.png"),
   });
@@ -5637,7 +6147,7 @@ test("justrow-log-plan", async ({ page }) => {
       workoutTitle: title,
       workoutType: type,
       held: "held",
-      pain: 2,
+      effort: 2,
       avgSplitSeconds: 130,
       timeSeconds: 780,
       distanceMeters: 3000,
@@ -5652,7 +6162,7 @@ test("justrow-log-plan", async ({ page }) => {
     timeout: 10_000,
   });
   await finishJustRowTimer(page);
-  await expect(page.getByText("PAIN", { exact: true })).toBeVisible();
+  await expect(page.getByText("EFFORT", { exact: true })).toBeVisible();
   const lead = page.getByRole("button", {
     name: "Log against plan · SESSION 5 OF 84",
   });
@@ -5682,7 +6192,7 @@ test("justrow-history-chip", async ({ page }) => {
     workoutTitle: "Sea Fret",
     workoutType: "O2",
     held: "held",
-    pain: 2,
+    effort: 2,
     avgSplitSeconds: 124.5,
     distanceMeters: 5000,
   });
@@ -5714,6 +6224,531 @@ test("justrow-history-chip", async ({ page }) => {
   });
 });
 
+// ── Wave E PR2: the Concept2 surfaces, captured for the first time ─────────
+//
+// WHY THESE ARE ROUTED AND NOT SEEDED. This stack is Concept2-DARK by
+// construction — `compose.yml` passes `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`
+// and `screenshots.sh` exports nothing — and a committed CI test enforces
+// that darkness (`scripts/compose-env.test.sh`). So `GET /api/concept2/link`
+// answers `{available:false}` and both surfaces render NOTHING in every
+// artifact this repo has produced to date. The link is faked at the client
+// boundary with `page.route`, exactly as `e2e/concept2.spec.ts` does and for
+// the reasons its header states at length.
+//
+// TWO OF THESE STATES CANNOT BE SEEDED AT ALL, and the reason is worth
+// stating rather than working around. The only writer of `c2_result_id`
+// anywhere in the system is `POST /api/concept2/results/:logId`, and in this
+// stack that route 403s `unavailable` before it does anything. A capture
+// step that says "seed state X" must be able to name a WRITER of X reachable
+// in the environment the capture runs in; here there is none. So the SENT
+// and NO-WEIGHT captures DRIVE the tap against a routed answer instead.
+// (An earlier revision of this note gave a second reason — that a driven
+// send was the only way to show the SENT state's provenance sub-line. That
+// line is withdrawn, James 2026-09-04, so the reason above is now the whole
+// of it: the no-weight state has no stored representation at all, and
+// nothing in this stack can write a `c2_result_id`.)
+//
+// A DUPLICATE (2d) capture is deliberately NOT taken. Same shape as the two
+// above and one step worse: the route records the colliding id before
+// answering, so a seeded-and-reloaded duplicate renders as 2c SENT. Driving
+// it would produce a frame that differs from `log-concept2-sent.png` by one
+// status word and one sentence, which is what `Concept2SendBlock.test.tsx`
+// already pins. Decided: no capture.
+//
+// FULL-PAGE ON THE YOU CAPTURES, unlike the rest of this file. You is
+// taller than a phone viewport once BASELINES, the retest shortcut, Reset
+// baseline setup and the card are all on it, and the card is the LAST thing
+// above DIAGNOSTICS — a viewport capture cuts it off. The Gate 0 question
+// these images exist to answer is specifically about the card's position
+// relative to RESET BASELINE SETUP, so both must be in one frame.
+const C2_SHOT_LINKED = {
+  available: true,
+  linked: true,
+  c2UserId: 2211,
+  c2Username: "jamesawesome",
+  needsReauth: false,
+  logbookBaseUrl: "https://log-dev.concept2.com",
+};
+
+const C2_SHOT_UNLINKED = {
+  available: true,
+  linked: false,
+  c2UserId: null,
+  c2Username: null,
+  needsReauth: false,
+  logbookBaseUrl: "https://log-dev.concept2.com",
+};
+
+/** One route over every `/api/concept2/*` call. `send` is mutable so the two
+ *  driven captures can answer differently without stacking handlers. */
+interface C2ShotFake {
+  link: { status: number; body: unknown };
+  send: { status: number; body: unknown };
+}
+
+async function routeC2(page: Page, fake: C2ShotFake): Promise<void> {
+  await page.route(/\/api\/concept2\//, async (route) => {
+    const answer = route.request().url().includes("/results/")
+      ? fake.send
+      : fake.link;
+    await route.fulfill({
+      status: answer.status,
+      contentType: "application/json",
+      body: JSON.stringify(answer.body),
+    });
+  });
+}
+
+/** A real finished monitor row through the real route — RF3, and the only
+ *  shape `isSendable` accepts. Same walk-2026-08-24 exit-7 numbers the
+ *  `log-detail` capture above seeds, so a reader comparing the two images
+ *  is looking at the same session. */
+async function seedC2Row(page: Page, title: string): Promise<void> {
+  await postLog(page, {
+    workoutTitle: title,
+    workoutType: "O2",
+    source: "pm5",
+    endedBy: "finished",
+    deviceName: "PM5 432331249",
+    workSeconds: 124,
+    workMeters: 500,
+    avgSplitSeconds: 124,
+    timeSeconds: 124,
+    distanceMeters: 500,
+    held: "under",
+    effort: 3,
+    thumbs: "up",
+    notes: "Legs felt fresher on the second one.",
+    steps: [
+      {
+        label: "250m @ 2:07.0",
+        targetSplit: 127,
+        actualSplit: 135.8,
+        actualSeconds: 67.9,
+        actualSource: "pm5",
+        meters: 250,
+        actualMeters: 250,
+        actualSpm: 25,
+      },
+      {
+        label: "250m @ 2:07.0",
+        targetSplit: 127,
+        actualSplit: 112.2,
+        actualSeconds: 56.1,
+        actualSource: "pm5",
+        meters: 250,
+        actualMeters: 250,
+        actualSpm: 28,
+      },
+    ],
+  });
+}
+
+async function openC2LogDetail(page: Page, title: string): Promise<void> {
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: title });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.locator(".c2-send")).toBeVisible();
+  // The send block is the LAST thing above Delete session, so scroll it into
+  // view before shooting — recurring failure #7, whose whole family is
+  // "the capture shows a screen the feature is not on".
+  await page.locator(".c2-send").scrollIntoViewIfNeeded();
+}
+
+/** Baselines set, so the You captures show a real screen rather than the
+ *  no-baselines fallback — and so RESET BASELINE SETUP has real numbers
+ *  above it, which is the comparison the Gate 0 question needs. */
+async function openC2You(page: Page, email: string): Promise<void> {
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await setBaselines(page);
+  await page.goto("/you");
+  // PR A: the sentinel is You's own container plus a control always on it,
+  // never a feature row's class (two `.diag-row`s now — strict mode).
+  await expect(page.locator("main.you-screen")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+}
+
+/** The Concept2 SCREEN behind the row, entered through the row. Its captures
+ *  are VIEWPORT shots, never `fullPage`: `/you/concept2` is `.overlay-screen`
+ *  (`position: fixed; inset: 0`), and this file's own diagnostics captures
+ *  record that `fullPage: true` is useless on that route shape — the fixed
+ *  overlay is exactly one viewport tall whatever the document behind it
+ *  measures. */
+async function openC2Screen(page: Page, email: string): Promise<void> {
+  await openC2You(page, email);
+  await page.getByRole("link", { name: /CONCEPT2/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Concept2", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".c2-card")).toBeVisible();
+}
+
+test("you-concept2-unlinked", async ({ page }) => {
+  // Wave E PR A (spec 2026-09-04-concept2-walk-fixes §5.1): the card is gone
+  // from You; one quiet mono row stands at the foot beside DIAGNOSTICS. This
+  // is decision-table cell 5 — the discovery state most rowers are in — and
+  // the adjacency Gate 0 §8.2/8.4 drew and James approved on 2026-09-04
+  // (CONCEPT2 above DIAGNOSTICS). Full page, so the row's place at the foot
+  // is in the picture.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-unlinked@e2e.test");
+  const row = page.getByRole("link", { name: /CONCEPT2/ });
+  await expect(row.locator(".diag-row-state")).toHaveText("NOT LINKED");
+  await expect(page.locator(".c2-card")).toHaveCount(0);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-unlinked.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-linked", async ({ page }) => {
+  // Cell 7: the door with an answer.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-linked@e2e.test");
+  await expect(
+    page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+  ).toHaveText("LINKED ✓");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-linked.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-send-failed", async ({ page }) => {
+  // Wave E auto-send §3.4, Gate 0 amendment 2026-09-05 §4b: the fifth row
+  // string, at its siblings' weight (`--ink-3`, ruled).
+  const fake: C2ShotFake = {
+    link: {
+      status: 200,
+      body: {
+        ...C2_SHOT_LINKED,
+        autoSend: true,
+        sendFailedAt: "2026-09-05T12:00:00.000Z",
+        sendFailedReason: "no_weight",
+      },
+    },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-send-failed@e2e.test");
+  await expect(
+    page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+  ).toHaveText("SEND FAILED");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-send-failed.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-reconnect", async ({ page }) => {
+  // Cell 9: the pre-emptive warning the row exists for — the server's own
+  // `needs_reauth_at`, on a surface the rower passes anyway, before they
+  // spend a send on it.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: { ...C2_SHOT_LINKED, needsReauth: true } },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-reconnect@e2e.test");
+  await expect(
+    page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+  ).toHaveText("RECONNECT NEEDED");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-reconnect.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-read-failed", async ({ page }) => {
+  // Cell 2b: an account that HAS been told Concept2 exists for it (one good
+  // read, which mints ruling 6's persisted `seen`), whose read then fails.
+  // The row keeps its door so the Retry behind it stays reachable. A 502 on
+  // the FIRST-EVER read would draw NO row (cell 2a) — that is the live
+  // defect this design closes, and it is why the fixture serves one good
+  // read before the failing one.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-read-failed@e2e.test");
+  await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+  fake.link = { status: 502, body: { error: "upstream" } };
+  await page.reload();
+  await expect(page.locator("main.you-screen")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+  ).toHaveText("COULDN'T READ");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-read-failed.png"),
+    fullPage: true,
+  });
+});
+
+test("you-concept2-landscape", async ({ page }) => {
+  // THE SECOND ORIENTATION, which the Gate 0 rule asks for by name: the two
+  // doors at the foot of You, landscape. Viewport, not full page (a fullPage
+  // capture paints the FIXED tab bar at its viewport position across the
+  // middle of the page — measured on the card's landscape capture).
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await openC2You(page, "screenshots-c2-landscape@e2e.test");
+  const row = page.getByRole("link", { name: /CONCEPT2/ });
+  await expect(row.locator(".diag-row-state")).toHaveText("NOT LINKED");
+  await page.locator(".you-doors").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-concept2-landscape.png"),
+  });
+});
+
+test("concept2-screen-unlinked", async ({ page }) => {
+  // The screen behind the row: BackLink, title, and the card exactly as it
+  // was on You (R6). 1a.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2Screen(page, "screenshots-c2-screen-unlinked@e2e.test");
+  await expect(
+    page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+  ).toBeEnabled();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-unlinked.png"),
+  });
+});
+
+test("concept2-screen-linked", async ({ page }) => {
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2Screen(page, "screenshots-c2-screen-linked@e2e.test");
+  await expect(page.locator(".c2-card-identity")).toContainText(
+    "Concept2 jamesawesome · Ergomatic screenshots-c2-screen-linked",
+  );
+  await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
+  // Wave E auto-send: the control where Unlink was, MANUAL pressed for a
+  // fresh link, the mode line beneath (Gate 0 amendment 2026-09-05 §1).
+  await expect(
+    page.getByRole("button", { name: "MANUAL", pressed: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-linked.png"),
+  });
+});
+
+test("concept2-screen-automatic", async ({ page }) => {
+  // Gate 0 amendment 2026-09-05 §1, AUTOMATIC: the promise as the mode line.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: { ...C2_SHOT_LINKED, autoSend: true } },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2Screen(page, "screenshots-c2-screen-automatic@e2e.test");
+  await expect(
+    page.getByRole("button", { name: "AUTOMATIC", pressed: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Finished monitor rows are sent when you save them."),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-automatic.png"),
+  });
+});
+
+test("concept2-screen-send-failed", async ({ page }) => {
+  // Gate 0 amendment 2026-09-05 §4: the pill, the reason line in warn
+  // weight, the profile remedy — the card's half of the sticky flag.
+  const fake: C2ShotFake = {
+    link: {
+      status: 200,
+      body: {
+        ...C2_SHOT_LINKED,
+        autoSend: true,
+        sendFailedAt: "2026-09-05T12:00:00.000Z",
+        sendFailedReason: "no_weight",
+      },
+    },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2Screen(page, "screenshots-c2-screen-send-failed@e2e.test");
+  await expect(page.locator(".c2-card-status")).toHaveText("SEND FAILED");
+  await expect(
+    page.getByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-send-failed.png"),
+  });
+});
+
+test("concept2-screen-armed", async ({ page }) => {
+  // 1d, on the screen it now lives on. The unlink is the mode control's OFF
+  // segment now (Wave E auto-send), and while armed it keeps the old
+  // button's tier, size and two-tap arm (spec §5.1 R8/R9): on a screen whose
+  // only job is this link, the destructive control being the loudest thing
+  // there is correct.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2Screen(page, "screenshots-c2-screen-armed@e2e.test");
+  // Wave E auto-send: OFF is the unlink (Gate 0 amendment 2026-09-05 §2).
+  await page.getByRole("button", { name: "OFF" }).click();
+  await expect(
+    page.getByRole("button", { name: "Tap again to unlink" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("DISARMS ON ITS OWN AFTER 4 SECONDS"),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-armed.png"),
+  });
+});
+
+test("concept2-screen-read-failed", async ({ page }) => {
+  // 1i on the screen: chrome in every state (R5), and the card's own panel
+  // with its Retry. The screen is reached through a row that exists only
+  // after one good read, so this is the same one-good-read-then-502 path as
+  // `you-concept2-read-failed` — cell 2b, one tap deeper.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2You(page, "screenshots-c2-screen-read-failed@e2e.test");
+  await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+  fake.link = { status: 502, body: { error: "upstream" } };
+  await page.reload();
+  await page.getByRole("link", { name: /CONCEPT2/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Concept2", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".c2-card-status")).toHaveText("COULDN'T READ");
+  await expect(page.getByText("REASON: THE SERVER ANSWERED 502")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-read-failed.png"),
+  });
+});
+
+test("concept2-screen-landscape", async ({ page }) => {
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_UNLINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await openC2Screen(page, "screenshots-c2-screen-landscape@e2e.test");
+  await expect(
+    page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+  ).toBeEnabled();
+  await page.locator(".c2-card").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-landscape.png"),
+  });
+});
+
+test("log-concept2-idle", async ({ page }) => {
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await signInViaBackdoor(page, {
+    email: "screenshots-c2-log-idle@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedC2Row(page, "Sea Fret");
+  await openC2LogDetail(page, "Sea Fret");
+  await expect(page.locator(".c2-send-status")).toHaveText("NOT SENT");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-concept2-idle.png"),
+  });
+});
+
+test("log-concept2-sent", async ({ page }) => {
+  // DRIVEN, NEVER SEEDED, for the reason this block's header gives: no
+  // writer of `c2_result_id` is reachable in this stack, so the state has
+  // to be produced by a real tap against a routed answer. The routed 200
+  // still carries the class and its producer — that is the route's real
+  // shape — and the frame below must show neither.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: {
+      status: 200,
+      body: { resultId: 339, weightClass: "H", weightClassSource: "profile" },
+    },
+  };
+  await routeC2(page, fake);
+  await signInViaBackdoor(page, {
+    email: "screenshots-c2-log-sent@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedC2Row(page, "Sea Fret");
+  await openC2LogDetail(page, "Sea Fret");
+  await page.getByRole("button", { name: "Send to Concept2" }).click();
+  await expect(page.locator(".c2-send-status")).toHaveText("SENT");
+  await expect(page.getByText("RESULT 339")).toBeVisible();
+  await expect(page.locator(".c2-send-foot")).toHaveText(["RESULT 339"]);
+  await page.locator(".c2-send").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-concept2-sent.png"),
+  });
+});
+
+test("log-concept2-no-weight", async ({ page }) => {
+  // Amendment 2i, with BOTH its buttons in frame — the link-out that goes
+  // to Concept2 and the `Send again` that lets the rower come back. Driven
+  // for the same reason as the SENT capture, one step stronger: this state
+  // has no stored representation at all, so a seeded reload renders the
+  // idle offer instead.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: {
+      status: 422,
+      body: { error: "no_weight_class", reason: "no_weight" },
+    },
+  };
+  await routeC2(page, fake);
+  await signInViaBackdoor(page, {
+    email: "screenshots-c2-log-noweight@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedC2Row(page, "Sea Fret");
+  await openC2LogDetail(page, "Sea Fret");
+  await page.getByRole("button", { name: "Send to Concept2" }).click();
+  await expect(page.locator(".c2-send-status")).toHaveText("NO WEIGHT CLASS");
+  await expect(
+    page.getByText("REASON: SET YOUR WEIGHT ON CONCEPT2"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send again" })).toBeVisible();
+  await page.locator(".c2-send").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-concept2-no-weight.png"),
+  });
+});
+
 // Phase NF (design spec 2026-09-03, Gate 0 / countable exit 2): the shipped
 // Scan NFC layout in both orientations, with the scripted reader reporting
 // support. RF7: seeded with a real personal workout so the capture shows the
@@ -5734,7 +6769,7 @@ async function captureWorkoutDetailNfc(
   const title = "Screenshot NFC Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(title);
-  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "DONE" }).click();
   await page.getByRole("button", { name: "Save to library" }).click();

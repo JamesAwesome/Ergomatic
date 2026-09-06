@@ -1,5 +1,6 @@
-import { EMPTY_FILTERS, type DurationBucket, type Filters } from "./filters";
-import { isWorkoutType, type Difficulty } from "../../domain/types.js";
+import { EMPTY_FILTERS, type Filters } from "./filters";
+import { clampRange } from "../../domain/duration.js";
+import { isWorkoutType } from "../../domain/types.js";
 import { clearLibraryScroll } from "./libraryScroll";
 
 /** sessionStorage key for Library's active filters. Same lifecycle as
@@ -10,34 +11,33 @@ import { clearLibraryScroll } from "./libraryScroll";
  *  list, which is the filter-BACK bug this file exists to fix. */
 export const LIBRARY_FILTERS_KEY = "ergomatic.libraryFilters";
 
-const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
-const BUCKETS: readonly DurationBucket[] = ["<30", "30-45", "45-60", "60+"];
-const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
+const EFFORT_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
-function isDifficulty(v: unknown): v is Difficulty {
-  return (
-    typeof v === "string" && (DIFFICULTIES as readonly string[]).includes(v)
-  );
-}
-
-function isBucket(v: unknown): v is DurationBucket {
-  return typeof v === "string" && (BUCKETS as readonly string[]).includes(v);
-}
-
-function isPainLevel(v: unknown): v is number {
-  return typeof v === "number" && PAIN_LEVELS.includes(v);
+function isEffortLevel(v: unknown): v is number {
+  return typeof v === "number" && EFFORT_LEVELS.includes(v);
 }
 
 /** Strict shape check — a stored value that predates a future Filters
  *  change (or was hand-edited) must come back `null`, never a Filters with
  *  a hole in it: applyFilters trusts every field. This is also, by
  *  construction, the fix for every prior-shaped record: the pre-Task-4 (v1)
- *  shape's fields were `painMax3`/`recency`/`customOnly`, and the v2 shape
+ *  shape's fields were `effortMax3`/`recency`/`customOnly`, and the v2 shape
  *  (Task 4 through the ui-fix round) used a single `type: WorkoutType |
  *  null` where this checks a `types` array — neither name overlaps this
  *  parser's own field list, so both fail on `types` (v1 has no such field
  *  at all; v2's `type` is a different key) and fall back to EMPTY_FILTERS
  *  whole, never a v3 Filters half-populated from older data. */
+function isRangeShape(v: unknown): v is { min: number; max: number } {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.min === "number" &&
+    Number.isFinite(r.min) &&
+    typeof r.max === "number" &&
+    Number.isFinite(r.max)
+  );
+}
+
 function parseFilters(raw: string): Filters | null {
   let parsed: unknown;
   try {
@@ -50,11 +50,17 @@ function parseFilters(raw: string): Filters | null {
   }
   const f = parsed as Record<string, unknown>;
   if (!Array.isArray(f.types) || !f.types.every(isWorkoutType)) return null;
-  if (!Array.isArray(f.difficulties) || !f.difficulties.every(isDifficulty)) {
-    return null;
-  }
-  if (!Array.isArray(f.durations) || !f.durations.every(isBucket)) return null;
-  if (!Array.isArray(f.painLevels) || !f.painLevels.every(isPainLevel)) {
+  // Phase SF PR2: `durationRange` is REQUIRED (never lenient like
+  // `lastDone`): a bucket-era record has `durations` instead and is
+  // rejected whole — this record lives one BACK round trip, so nothing is
+  // lost (spec §3.3, anchor pass HELD-7).
+  if (!isRangeShape(f.durationRange)) return null;
+  // Phase DE PR 2: renamed from `painLevels` with NO fallback read — this
+  // store is sessionStorage (see LIBRARY_FILTERS_KEY), whose lifetime ends
+  // at app relaunch, so no pre-PR-2 record can reach a new native bundle;
+  // a same-session web bundle swap falls back to EMPTY_FILTERS whole, by
+  // this parser's own design.
+  if (!Array.isArray(f.effortLevels) || !f.effortLevels.every(isEffortLevel)) {
     return null;
   }
   if (
@@ -67,18 +73,22 @@ function parseFilters(raw: string): Filters | null {
   if (f.source !== null && f.source !== "global" && f.source !== "custom") {
     return null;
   }
+  // PR3: `query` is a GENUINELY NEW concept (like lastDone/source were in
+  // Round 2), so its absence upgrades in place to "" rather than failing
+  // the record; a present non-string still fails strict.
+  if (f.query !== undefined && typeof f.query !== "string") return null;
   return {
-    // De-duped defensively: toggleType/toggleDifficulty/toggleDuration/
-    // togglePainLevel can never produce a duplicate, but a tampered/legacy
+    // De-duped defensively: toggleType/toggleDuration/
+    // toggleEffortLevel can never produce a duplicate, but a tampered/legacy
     // stored value could, and .includes-based state plus code/level
     // matching both silently tolerate dupes — better to normalise here
     // than trust storage.
     types: [...new Set(f.types)],
-    difficulties: [...new Set(f.difficulties)],
-    durations: [...new Set(f.durations)],
-    painLevels: [...new Set(f.painLevels)],
+    durationRange: clampRange(f.durationRange),
+    effortLevels: [...new Set(f.effortLevels)],
     lastDone: f.lastDone,
     source: f.source,
+    query: f.query === undefined ? "" : f.query,
   };
 }
 

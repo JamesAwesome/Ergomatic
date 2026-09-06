@@ -71,8 +71,7 @@ function workoutInput(
   return {
     title: "Steady state",
     type: "AT",
-    difficulty: "medium",
-    pain: 2,
+    effort: 2,
     steps: [{ k: "r", minutes: 10 }],
     source: "user",
     ...overrides,
@@ -87,7 +86,7 @@ function logInput(overrides: Partial<LogInput> = {}): LogInput {
     baselineK2: null,
     baselineK6: null,
     held: "held",
-    pain: 2,
+    effort: 2,
     notes: null,
     steps: [],
     // Just Row unconnected spec (2026-09-02): NOT NULL on the row, so the
@@ -237,6 +236,40 @@ export function describeStoreContracts(
     });
 
     describe("workouts", () => {
+      // Phase DE PR 1 (spec §3.2): the product has no difficulty, but the
+      // NOT NULL column stays for one tag cycle so pre-PR-1 builds (which
+      // render `difficulty.toUpperCase()`) never see NULL. Every write site
+      // derives the word from effort; the caller's own word, if any, never
+      // reaches the row. PR 3 deletes this test with the column.
+      it("writes a difficulty DERIVED from effort at create, createMany, update and updateGlobal; a caller-sent word is never stored", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const created = await stores.workouts.create(userId, {
+          ...workoutInput({ title: "Derive create", effort: 2 }),
+          // An old client still sends this; the store must not read it.
+          ...({ difficulty: "hard" } as object),
+        });
+        expect(created.difficulty).toBe("easy");
+        const [many] = await stores.workouts.createMany(userId, [
+          workoutInput({ title: "Derive many", effort: 5 }),
+        ]);
+        expect(many!.difficulty).toBe("hard");
+        const updated = await stores.workouts.update(
+          userId,
+          created.id,
+          workoutInput({ title: "Derive update", effort: 3 }),
+        );
+        expect(updated!.difficulty).toBe("medium");
+        const g = await stores.seedGlobalWorkout(
+          workoutInput({ title: "Derive global", effort: 1, sortOrder: 9001 }),
+        );
+        const gUpdated = await stores.workouts.updateGlobal(g.id, {
+          ...workoutInput({ title: "Derive global", effort: 4 }),
+          sortOrder: 9001,
+        });
+        expect(gUpdated!.difficulty).toBe("hard");
+      });
+
       it("create/list/get round-trip, decorated isGlobal: false", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
@@ -418,16 +451,14 @@ export function describeStoreContracts(
         const updated = await stores.workouts.updateGlobal(g.id, {
           ...workoutInput({
             title: "Converge Me",
-            difficulty: "hard",
-            pain: 5,
+            effort: 5,
           }),
           sortOrder: 7,
         });
         expect(updated).toMatchObject({
           id: g.id,
           title: "Converge Me",
-          difficulty: "hard",
-          pain: 5,
+          effort: 5,
           sortOrder: 7,
           isGlobal: true,
         });
@@ -496,6 +527,47 @@ export function describeStoreContracts(
     });
 
     describe("logs", () => {
+      // Wave E PR2 (observation 29). `sentC2ResultIds` is what stops the
+      // weight-class declaration read from laundering OUR OWN derived guess
+      // back as the rower's declaration on their next send. Both scopes are
+      // load-bearing and neither is visible to `pnpm typecheck` — the fake
+      // ends `as unknown as LogsStore` — so the contract suite is where the
+      // real store and the fake are held to the same answer.
+      it("sentC2ResultIds returns only THIS user's rows for THIS Concept2 account, and never a null result id", async () => {
+        const stores = await makeStores();
+        const mine = await stores.makeUser();
+        const theirs = await stores.makeUser();
+
+        const sentToA = await stores.logs.create(mine, logInput());
+        const sentToB = await stores.logs.create(mine, logInput());
+        const neverSent = await stores.logs.create(mine, logInput());
+        const someoneElses = await stores.logs.create(theirs, logInput());
+
+        await stores.logs.recordC2Result(mine, sentToA.id, 111, 2211);
+        // The SAME user, a DIFFERENT Concept2 account: a row written while
+        // account B was linked says nothing about account A, and excluding
+        // it would silently drop a real declaration out of A's page.
+        await stores.logs.recordC2Result(mine, sentToB.id, 222, 9999);
+        await stores.logs.recordC2Result(theirs, someoneElses.id, 333, 2211);
+
+        expect([
+          ...(await stores.logs.sentC2ResultIds(mine, 2211)),
+        ]).toStrictEqual([111]);
+        expect([
+          ...(await stores.logs.sentC2ResultIds(mine, 9999)),
+        ]).toStrictEqual([222]);
+        expect([
+          ...(await stores.logs.sentC2ResultIds(theirs, 2211)),
+        ]).toStrictEqual([333]);
+        // `neverSent` carries a null `c2_result_id` and must never appear as
+        // an id at all (a `null` in the Set would exclude nothing and read
+        // as a row we wrote).
+        expect(neverSent.id).toBeTruthy();
+        expect(await stores.logs.sentC2ResultIds(mine, 4444)).toStrictEqual(
+          new Set(),
+        );
+      });
+
       it("create bumps plan_state.done_n atomically, verified via planState.get", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
@@ -680,20 +752,20 @@ export function describeStoreContracts(
         expect(await stores.logs.lastDonePerWorkout(userB)).toStrictEqual({});
       });
 
-      // Post-workout-summary spec (2026-08-17), §3: held/pain go nullable,
+      // Post-workout-summary spec (2026-08-17), §3: held/effort go nullable,
       // thumbs is a brand-new nullable column — create() must round-trip
       // null through to `list()` unchanged (not coerced to a default, not
       // dropped from the row).
-      it("create round-trips held: null, pain: null, thumbs: null", async () => {
+      it("create round-trips held: null, effort: null, thumbs: null", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
         const { id } = await stores.logs.create(
           userId,
-          logInput({ held: null, pain: null, thumbs: null }),
+          logInput({ held: null, effort: null, thumbs: null }),
         );
         const list = await stores.logs.list(userId, 10);
         const row = list.find((r) => r.id === id);
-        expect(row).toMatchObject({ held: null, pain: null, thumbs: null });
+        expect(row).toMatchObject({ held: null, effort: null, thumbs: null });
       });
 
       // thumbs is optional on LogInput (undefined ≠ explicit null on the
@@ -1468,15 +1540,15 @@ export function describeStoreContracts(
             userId,
             logInput({
               held: "held",
-              pain: 2,
+              effort: 2,
               notes: "orig",
               thumbs: "up",
             }),
           );
-          const updated = await stores.logs.update(userId, id, { pain: 4 });
+          const updated = await stores.logs.update(userId, id, { effort: 4 });
           expect(updated).toMatchObject({
             held: "held",
-            pain: 4,
+            effort: 4,
             notes: "orig",
             thumbs: "up",
           });
@@ -1496,7 +1568,7 @@ export function describeStoreContracts(
         });
 
         // Task 2 review, LOW 2 fix-round coverage gap: the subset test
-        // above only ever exercises `pain`'s (and, separately, `notes`')
+        // above only ever exercises `effort`'s (and, separately, `notes`')
         // own `"key" in patch` branch directly against the REAL store —
         // `held` and `thumbs` were only ever proven via the fake (through
         // the PATCH route's own tests), leaving those two branches
@@ -1511,14 +1583,19 @@ export function describeStoreContracts(
             const userId = await stores.makeUser();
             const { id } = await stores.logs.create(
               userId,
-              logInput({ held: "held", pain: 2, notes: "orig", thumbs: "up" }),
+              logInput({
+                held: "held",
+                effort: 2,
+                notes: "orig",
+                thumbs: "up",
+              }),
             );
             const updated = await stores.logs.update(userId, id, {
               [field]: value,
             });
             expect(updated).toMatchObject({
               held: field === "held" ? value : "held",
-              pain: 2,
+              effort: 2,
               notes: "orig",
               thumbs: field === "thumbs" ? value : "up",
             });
@@ -1529,7 +1606,7 @@ export function describeStoreContracts(
           const stores = await makeStores();
           const userId = await stores.makeUser();
           expect(
-            await stores.logs.update(userId, NON_EXISTENT_UUID, { pain: 3 }),
+            await stores.logs.update(userId, NON_EXISTENT_UUID, { effort: 3 }),
           ).toBeNull();
         });
 
@@ -2263,7 +2340,7 @@ export function describeStoreContracts(
         const stores = await makeStores();
         const userA = await stores.makeUser();
         const userB = await stores.makeUser();
-        await stores.articleReads.markRead(userA, "pain-scale");
+        await stores.articleReads.markRead(userA, "effort-scale");
         expect(await stores.articleReads.list(userB)).toEqual([]);
       });
 
@@ -2300,11 +2377,11 @@ export function describeStoreContracts(
         const stores = await makeStores();
         const userA = await stores.makeUser();
         const userB = await stores.makeUser();
-        await stores.articleReads.markRead(userA, "pain-scale");
-        await stores.articleReads.markRead(userB, "pain-scale");
-        await stores.articleReads.unmarkRead(userA, "pain-scale");
+        await stores.articleReads.markRead(userA, "effort-scale");
+        await stores.articleReads.markRead(userB, "effort-scale");
+        await stores.articleReads.unmarkRead(userA, "effort-scale");
         expect(await stores.articleReads.list(userA)).toEqual([]);
-        expect(await stores.articleReads.list(userB)).toEqual(["pain-scale"]);
+        expect(await stores.articleReads.list(userB)).toEqual(["effort-scale"]);
       });
     });
   });

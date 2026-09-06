@@ -1,0 +1,1252 @@
+import { expect, test } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
+import { RUN_ID, signInViaBackdoor } from "./helpers";
+
+/**
+ * Wave E PR2, Task 11 — the two Concept2 surfaces driven in a real browser
+ * for the first time.
+ *
+ * WHAT THESE PROVE, AND WHAT THEY DO NOT (RF26, and it is the whole reason
+ * this header exists). The compose stack this suite runs against is
+ * Concept2-DARK by construction: `compose.yml` passes the flag through as
+ * `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}` and neither `scripts/e2e.sh` nor
+ * `scripts/screenshots.sh` exports it, so `GET /api/concept2/link` answers
+ * `{available:false}` and both surfaces render nothing. A committed CI test
+ * enforces that darkness rather than merely observing it
+ * (`scripts/compose-env.test.sh`, the "e2e stack stays dark" check, run by
+ * CI's `scripts` job), so lighting the flag here is not an option and would
+ * not be one even if it were convenient. The per-user gate added a SECOND
+ * lock on the same door and the same check now covers it: `C2_ALLOWED_EMAILS`
+ * is empty here too, and the authed routes answer on `availableFor(email)`,
+ * so even a stack that lit the flag by accident would still refuse every
+ * rower.
+ *
+ * So every case below fakes the SERVER'S ANSWERS at the client boundary with
+ * `page.route` — the precedent is `e2e/onboarding.spec.ts`'s PUT-body
+ * interception and `e2e/log.spec.ts`'s PATCH delay. That makes these tests
+ * evidence about **the client**: its states, its wiring, its copy, its
+ * navigation, and the order in which it reads and re-reads. They are NOT
+ * evidence about the server, the OAuth hop, or the upload seam. The seam is
+ * proved one layer down, by
+ * `server/routes/concept2Send.integration.test.ts` (Task 10), which starts
+ * before the write and reads after it against a real database.
+ *
+ * A real fake-Concept2 SERVICE — a stack that could light the flag and
+ * answer as Concept2 — is a follow-on, not something smuggled in here. It
+ * is OWED a ROADMAP row rather than already carrying one: `grep -in
+ * "fake.*concept2" ROADMAP.md` returns nothing on this branch as of this
+ * commit, and Task 13 is what writes it.
+ *
+ * THE ROWS ARE REAL. Every log this file sends is posted through the real
+ * `POST /api/logs` route with the shape a finished monitor session actually
+ * stores (`source: "pm5"` + a `deviceName`, which the route's own
+ * `logSourceContradiction` requires of that member; `endedBy: "finished"`;
+ * both work columns), so `isSendable`'s four clauses are decided by a
+ * genuine stored row rather than a hand-built minimum (RF3).
+ */
+
+/** The link body the fake answers `GET /api/concept2/link` with. Deliberately
+ *  written as the ROUTE's own JSON rather than the client's `Concept2Link`,
+ *  since the thing under test includes `normalizeLink`. */
+interface LinkBody {
+  available: boolean;
+  linked?: boolean;
+  c2UserId?: number | null;
+  c2Username?: string | null;
+  needsReauth?: boolean;
+  logbookBaseUrl?: string | null;
+  // Wave E auto-send §3.1.
+  autoSend?: boolean;
+  sendFailedAt?: string | null;
+  sendFailedReason?: string | null;
+}
+
+interface Answer {
+  status: number;
+  body?: unknown;
+  /** Serve this as an HTML document instead of JSON — the stubbed OAuth
+   *  landing page the web arm's full-page navigation lands on. */
+  html?: string;
+}
+
+/** The Concept2 origin every fake link body echoes, and the one the
+ *  link-outs are therefore built from. The SANDBOX host on purpose: it is
+ *  what `server/index.ts`'s `C2_BASE_URL` defaults to and what
+ *  `compose.yml` passes through today, so the URLs asserted below are the
+ *  ones this deployment would really open. */
+const C2_ORIGIN = "https://log-dev.concept2.com";
+
+/**
+ * One route over every `/api/concept2/*` call, plus a recorder.
+ *
+ * MUTABLE ON PURPOSE. Three cases here need the server's answer to CHANGE
+ * mid-test without re-registering a route — a Retry that succeeds, an
+ * unlink that lands on the second tap, and the Back case that has to see a
+ * DIFFERENT link than the one it left. Playwright resolves handlers in
+ * reverse registration order, so stacking a second `page.route` over the
+ * same pattern would leave the first one live underneath and make "which
+ * answer did that read get" a question about registration order. One
+ * handler reading one mutable record has no such question.
+ */
+class C2Fake {
+  link: Answer = { status: 200, body: { available: false } };
+  connect: Answer = { status: 200, body: {} };
+  unlink: Answer = { status: 204 };
+  send: Answer = { status: 200, body: {} };
+  /** `PATCH /api/concept2/link` — the sending-mode write (auto-send §3.2). */
+  patch: Answer = { status: 204 };
+
+  /** Reads of `GET /api/concept2/link`. The POSITIVE readiness signal every
+   *  negative assertion in this file waits on: "the card is absent" is only
+   *  meaningful once the read it would have rendered from has happened. */
+  linkReads = 0;
+  /** Every `POST /api/concept2/connect` body, verbatim off the wire — the
+   *  mint carries nothing of the rower's (ruling i) and this is what says
+   *  so. */
+  connectBodies: unknown[] = [];
+  deletes = 0;
+  sends = 0;
+  /** Every PATCH body and its Content-Type, verbatim off the wire. */
+  patches: unknown[] = [];
+  patchHeaders: string[] = [];
+  /** Every send's path, parsed body and Content-Type — the automatic send is
+   *  gated on what the route would RECEIVE, never on a count alone. */
+  sendPaths: string[] = [];
+  sendBodies: unknown[] = [];
+  sendHeaders: string[] = [];
+
+  async install(page: Page): Promise<void> {
+    await page.route(/\/api\/concept2\//, async (route: Route) => {
+      const req = route.request();
+      const url = new URL(req.url());
+      const method = req.method();
+      let answer: Answer;
+      if (url.pathname.endsWith("/api/concept2/link")) {
+        if (method === "DELETE") {
+          this.deletes += 1;
+          answer = this.unlink;
+        } else if (method === "PATCH") {
+          this.patches.push(req.postDataJSON());
+          this.patchHeaders.push(req.headers()["content-type"] ?? "");
+          answer = this.patch;
+        } else {
+          this.linkReads += 1;
+          answer = this.link;
+        }
+      } else if (url.pathname.endsWith("/api/concept2/connect")) {
+        this.connectBodies.push(req.postDataJSON());
+        answer = this.connect;
+      } else if (url.pathname.includes("/api/concept2/results/")) {
+        this.sends += 1;
+        this.sendPaths.push(url.pathname);
+        this.sendBodies.push(req.postDataJSON());
+        this.sendHeaders.push(req.headers()["content-type"] ?? "");
+        answer = this.send;
+      } else {
+        // The stubbed consent landing page: a document inside the app's own
+        // origin, so the web arm's `window.location.assign` really unloads
+        // the SPA and the Back that follows is a real one. Nothing about
+        // the OAuth hop itself is under test.
+        answer = {
+          status: 200,
+          html: "<!doctype html><title>C2 stub</title><p>consent stub</p>",
+        };
+      }
+      if (answer.html !== undefined) {
+        await route.fulfill({
+          status: answer.status,
+          contentType: "text/html",
+          body: answer.html,
+        });
+        return;
+      }
+      await route.fulfill({
+        status: answer.status,
+        contentType: "application/json",
+        body: JSON.stringify(answer.body ?? {}),
+      });
+    });
+  }
+
+  linked(extra: Partial<LinkBody> = {}): void {
+    this.link = {
+      status: 200,
+      body: {
+        available: true,
+        linked: true,
+        c2UserId: 2211,
+        c2Username: "jamesawesome",
+        needsReauth: false,
+        logbookBaseUrl: C2_ORIGIN,
+        ...extra,
+      } satisfies LinkBody,
+    };
+  }
+
+  unlinked(): void {
+    this.link = {
+      status: 200,
+      body: {
+        available: true,
+        linked: false,
+        c2UserId: null,
+        c2Username: null,
+        needsReauth: false,
+        logbookBaseUrl: C2_ORIGIN,
+      } satisfies LinkBody,
+    };
+  }
+
+  unavailable(): void {
+    this.link = { status: 200, body: { available: false } satisfies LinkBody };
+  }
+}
+
+/** A finished monitor row: the ONE shape `isSendable` accepts, posted for
+ *  real. `deviceName` is not decoration — `logSourceContradiction` 400s a
+ *  `source: "pm5"` body without one. */
+async function postMonitorLog(
+  page: Page,
+  title: string,
+): Promise<{ id: string }> {
+  return postLog(page, {
+    workoutTitle: title,
+    workoutType: "O2",
+    source: "pm5",
+    endedBy: "finished",
+    deviceName: "PM5 432331249",
+    // The walk-2026-08-24 exit-7 pair, the same real numbers
+    // `screenshots.spec.ts`'s `log-detail` capture seeds: 250+250 m over
+    // 67.9+56.1 s.
+    workSeconds: 124,
+    workMeters: 500,
+    avgSplitSeconds: 124,
+    timeSeconds: 124,
+    distanceMeters: 500,
+    steps: [
+      {
+        label: "250m @ 2:07.0",
+        targetSplit: 127,
+        actualSplit: 135.8,
+        actualSeconds: 67.9,
+        actualSource: "pm5",
+      },
+      {
+        label: "250m @ 2:07.0",
+        targetSplit: 127,
+        actualSplit: 112.2,
+        actualSeconds: 56.1,
+        actualSource: "pm5",
+      },
+    ],
+  });
+}
+
+/** A phone-timer row: same screen, same door, and NOT sendable — it fails
+ *  `isSendable`'s FIRST clause and its third and fourth as well. */
+async function postTimerLog(
+  page: Page,
+  title: string,
+): Promise<{ id: string }> {
+  return postLog(page, {
+    workoutTitle: title,
+    workoutType: "AT",
+    source: "timer",
+    endedBy: "finished",
+    steps: [
+      {
+        label: "Work",
+        targetSplit: 120,
+        actualSplit: 121,
+        actualSource: "stopwatch",
+      },
+    ],
+  });
+}
+
+interface LogBody {
+  workoutTitle: string;
+  workoutType: string;
+  source: "pm5" | "timer" | "manual" | "no-reading";
+  endedBy?: string | null;
+  deviceName?: string | null;
+  workSeconds?: number | null;
+  workMeters?: number | null;
+  avgSplitSeconds?: number | null;
+  timeSeconds?: number | null;
+  distanceMeters?: number | null;
+  steps: {
+    label: string;
+    targetSplit?: number;
+    actualSplit?: number;
+    actualSeconds?: number;
+    actualSource?: string;
+  }[];
+}
+
+/** Posts one row through the real route with a real in-page fetch — the same
+ *  idiom `log.spec.ts`'s own `postLog` uses, and for the same reason
+ *  `screenshots.spec.ts` states: the api container runs with
+ *  NODE_ENV=production, so the session cookie is `Secure` and Playwright's
+ *  Node-side request context does not send it. */
+async function postLog(page: Page, body: LogBody): Promise<{ id: string }> {
+  const result = await page.evaluate(async (b) => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        held: null,
+        effort: null,
+        notes: null,
+        advancesPlan: false,
+        ...b,
+      }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, body);
+  if (!result.ok) {
+    throw new Error(`postLog failed: ${result.status} ${result.body}`);
+  }
+  return JSON.parse(result.body) as { id: string };
+}
+
+/** Enters the detail door the way a rower does — through the history list —
+ *  rather than deep-linking, so the row under test is the one the list
+ *  actually links to. */
+async function openLogDetail(page: Page, title: string): Promise<void> {
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: title });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+}
+
+/** You is rendered when its own container and a control that is ALWAYS on it
+ *  are on screen. Wave E PR A (spec 2026-09-04-concept2-walk-fixes §6.1, A3):
+ *  this used to be `.diag-row` — "You's LAST child" — and PR A put a second
+ *  `.diag-row` (the CONCEPT2 door) on You, which makes that locator a
+ *  Playwright strict-mode violation. Scoping it (`.nth(0)`, a text filter)
+ *  would fix strict mode and leave the third door to break it again, so the
+ *  sentinel moved to observables that do not depend on which feature rows
+ *  exist. A negative assertion about the Concept2 ROW is still worthless
+ *  until `fake.linkReads` has moved — the row is async and this sentinel is
+ *  not (RF21). */
+async function openYou(page: Page): Promise<void> {
+  await page.goto("/you");
+  await expect(page.locator("main.you-screen")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+}
+
+/** The Concept2 SCREEN, entered the way a rower does — through the row on
+ *  You — so the door under test is the one the row actually opens. The row
+ *  exists only after a successful `available: true` read, so the poll on
+ *  `fake.linkReads` is a precondition, not a readiness nicety. */
+async function openConcept2Screen(page: Page, fake: C2Fake): Promise<void> {
+  await openYou(page);
+  await expect.poll(() => fake.linkReads).toBeGreaterThan(0);
+  await page.getByRole("link", { name: /CONCEPT2/ }).click();
+  await expect(page).toHaveURL(/\/you\/concept2$/);
+  await expect(
+    page.getByRole("heading", { name: "Concept2", exact: true }),
+  ).toBeVisible();
+}
+
+async function signIn(page: Page, slug: string): Promise<C2Fake> {
+  const fake = new C2Fake();
+  await fake.install(page);
+  await signInViaBackdoor(page, {
+    email: `c2-${slug}-${RUN_ID}@e2e.test`,
+    name: "Ergo Tester",
+  });
+  return fake;
+}
+
+test.describe("Concept2 link and send, in a real browser", () => {
+  test("the surface is invisible while the server says unavailable", async ({
+    page,
+  }) => {
+    // THE STATE EVERY DEPLOYMENT IS IN TODAY, which is why it is first: the
+    // flag is unset in production, so this is what a rower sees, and it is
+    // the one case that must never regress. `unavailable()` is also the
+    // fake's DEFAULT, so this test would still be honest if a future edit
+    // forgot the call.
+    const fake = await signIn(page, "dark");
+    fake.unavailable();
+    await postMonitorLog(page, "Dark Row");
+
+    await openYou(page);
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(0);
+    await expect(page.locator(".c2-card")).toHaveCount(0);
+    // PR A: the ROW is the You surface now, and it is absent for the same
+    // reason the card was — `getByText("CONCEPT2")` covers its label too.
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toHaveCount(0);
+    await expect(page.getByText("CONCEPT2")).toHaveCount(0);
+
+    const readsBefore = fake.linkReads;
+    await openLogDetail(page, "Dark Row");
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    await expect(page.locator(".c2-send")).toHaveCount(0);
+    await expect(page.getByText("CONCEPT2")).toHaveCount(0);
+    // The rest of the screen is untouched — an invisible surface is not a
+    // broken one.
+    await expect(
+      page.getByRole("button", { name: "Delete session" }),
+    ).toBeVisible();
+  });
+
+  test("connect asks nothing and hands off", async ({ page }) => {
+    const fake = await signIn(page, "connect");
+    fake.unlinked();
+    fake.connect = {
+      status: 200,
+      body: { authorizeUrl: "/api/concept2/callback?stub=1", state: "s" },
+    };
+
+    await openConcept2Screen(page, fake);
+    const connect = page.getByRole("button", { name: "CONNECT TO CONCEPT2" });
+    // LIVE ON FIRST PAINT (ruling i). Not "eventually enabled" — the card's
+    // only gate on this button is `busy`, and nothing has been tapped.
+    await expect(connect).toBeEnabled();
+
+    // RULING (i), THE VISUAL HALF: the card asks the rower for nothing. The
+    // WEIGHT CLASS section and its two-option control that the board's 1a
+    // drew are gone, so there is no radiogroup and no text field anywhere
+    // inside the card.
+    const card = page.locator(".c2-card");
+    await expect(card.getByRole("radiogroup")).toHaveCount(0);
+    await expect(card.getByRole("radio")).toHaveCount(0);
+    await expect(card.getByRole("textbox")).toHaveCount(0);
+    await expect(card.locator("input, select, textarea")).toHaveCount(0);
+    // AND IT SAYS NOTHING ABOUT THE CLASS EITHER (James, 2026-09-04: "Stop
+    // talking about the weight class"). The helper line that replaced the
+    // control is gone too, so the whole phrase is absent from the card in
+    // its own rendered engine — asserted after `toBeEnabled()` above, so
+    // "absent" cannot mean "not painted yet".
+    await expect(card.getByText(/weight class/i)).toHaveCount(0);
+
+    await connect.click();
+    // The web arm navigates THIS document (`adapters/webNavigate.ts`'s
+    // `navigateWeb` -> `window.location.assign`), so the hand-off is
+    // observable as a URL change, not as a promise.
+    await expect(page).toHaveURL(/\/api\/concept2\/callback\?stub=1$/);
+    // THE MINT BODY IS EMPTY. Ruling (i) in one assertion: nothing about
+    // the rower travels in it, and on web not even the `linkClient`
+    // declaration (which is a claim about a NATIVE build).
+    expect(fake.connectBodies).toEqual([{}]);
+  });
+
+  test("a linked account names itself and unlinks in two taps", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "unlink");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+
+    const email = `c2-unlink-${RUN_ID}@e2e.test`;
+    await expect(page.locator(".c2-card-identity")).toHaveText(
+      `Concept2 jamesawesome · Ergomatic ${email}`,
+    );
+    await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
+
+    // Wave E auto-send: Unlink is the control's OFF segment now (spec §3.2,
+    // RF23 — one affordance for one destructive act).
+    const unlink = page.getByRole("button", { name: "OFF" });
+    await unlink.click();
+    // ONE tap arms and fires nothing. The DELETE count is the assertion,
+    // not the button's label: a card that changed its words while also
+    // sending the request would pass a label-only check.
+    await expect(
+      page.getByRole("button", { name: "Tap again to unlink" }),
+    ).toBeVisible();
+    expect(fake.deletes).toBe(0);
+    await expect(
+      page.getByText("DISARMS ON ITS OWN AFTER 4 SECONDS"),
+    ).toBeVisible();
+
+    fake.unlinked();
+    await page.getByRole("button", { name: "Tap again to unlink" }).click();
+    await expect.poll(() => fake.deletes).toBe(1);
+    // Invariant I1: the card does not infer the unlink from its own tap, it
+    // re-reads. The unlinked chrome appearing is that re-read landing.
+    await expect(
+      page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    ).toBeVisible();
+    await expect(page.locator(".c2-card-identity")).toHaveCount(0);
+  });
+
+  test("a qualifying row offers Send; a timer row does not", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "eligible");
+    fake.linked();
+    await postMonitorLog(page, "Sea Fret");
+    await postTimerLog(page, "Hand Timed");
+
+    await openLogDetail(page, "Sea Fret");
+    await expect(page.locator(".c2-send")).toBeVisible();
+    await expect(page.locator(".c2-send-status")).toHaveText("NOT SENT");
+    await expect(
+      page.getByRole("button", { name: "Send to Concept2" }),
+    ).toBeVisible();
+
+    const readsBefore = fake.linkReads;
+    await openLogDetail(page, "Hand Timed");
+    // Positive readiness before the negative claim: the block's own link
+    // read has happened on THIS screen, so "absent" cannot mean "not yet".
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    // TOTAL absence, not a disabled control: the board's rule is "the block
+    // does not render, ever" for a non-qualifying row.
+    await expect(page.locator(".c2-send")).toHaveCount(0);
+    await expect(page.getByText("CONCEPT2")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Send to Concept2" }),
+    ).toHaveCount(0);
+  });
+
+  test("send -> SENT with the result link", async ({ page }) => {
+    const fake = await signIn(page, "sent");
+    fake.linked();
+    fake.send = {
+      status: 200,
+      body: { resultId: 339, weightClass: "H", weightClassSource: "profile" },
+    };
+    await postMonitorLog(page, "Sea Fret");
+    await openLogDetail(page, "Sea Fret");
+
+    await page.getByRole("button", { name: "Send to Concept2" }).click();
+    await expect(page.locator(".c2-send-status")).toHaveText("SENT");
+    await expect(page.getByText("Accepted by Concept2.")).toBeVisible();
+    await expect(page.getByText("RESULT 339")).toBeVisible();
+    // THE 200 STILL CARRIES THE CLASS AND ITS PRODUCER — see `fake.send`
+    // above, which is the route's real answer — AND THE SCREEN STILL SHOWS
+    // NEITHER (James, 2026-09-04). This is the driven gate on that: the
+    // withdrawn sub-line drew here and nowhere else, so a client that
+    // started reading those two fields again would light it up in a real
+    // browser. Asserted after `RESULT 339` is visible, so the send has
+    // demonstrably landed before the absence is claimed.
+    await expect(page.locator(".c2-send-foot")).toHaveText(["RESULT 339"]);
+    expect(fake.sends).toBe(1);
+
+    // THE LINK-OUT IS DRIVEN, NOT INSPECTED, and the distinction is worth
+    // the extra machinery: `openReadOnlyUrl`'s web arm is
+    // `window.open(url, "_blank", "noopener,noreferrer")`, so asserting a
+    // `data-` attribute or the model's own `c2ResultUrl` would prove the
+    // string and not the plumbing. The real `window.open` runs, the real
+    // browsing context opens, and its URL is read off the context that
+    // actually appeared. `noopener` means the opener gets no handle, which
+    // is why this waits on the CONTEXT's `page` event rather than the
+    // page's `popup` event.
+    //
+    // The Concept2 origin is routed to a stub at the CONTEXT level so the
+    // new page resolves without leaving the machine — this suite makes no
+    // request to a third party.
+    await page.context().route(`${C2_ORIGIN}/**`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>logbook stub</title>",
+      });
+    });
+    const opened = page.context().waitForEvent("page");
+    await page.getByRole("button", { name: "View on Concept2 →" }).click();
+    const logbook = await opened;
+    expect(logbook.url()).toBe(`${C2_ORIGIN}/profile/2211/log/339`);
+    await logbook.close();
+  });
+
+  test("send -> 409 duplicate -> ALREADY THERE", async ({ page }) => {
+    const fake = await signIn(page, "dupe");
+    fake.linked();
+    fake.send = {
+      status: 409,
+      body: { error: "duplicate", c2ResultId: 4102 },
+    };
+    await postMonitorLog(page, "Sea Fret");
+    await openLogDetail(page, "Sea Fret");
+
+    await page.getByRole("button", { name: "Send to Concept2" }).click();
+    await expect(page.locator(".c2-send-status")).toHaveText("ALREADY THERE");
+    await expect(
+      page.getByText(
+        "Concept2 already has this row: same date, time and distance.",
+      ),
+    ).toBeVisible();
+    // The 409's own id is what makes this state useful: it is a duplicate
+    // the rower can go and LOOK at.
+    await expect(page.getByText("RESULT 4102")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "View on Concept2 →" }),
+    ).toBeVisible();
+    // NOT the SENT copy — the two states are one status word apart and must
+    // not read the same.
+    await expect(page.getByText("Accepted by Concept2.")).toHaveCount(0);
+  });
+
+  test("send -> 502 -> SEND FAILED with a REASON and a retry", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "502");
+    fake.linked();
+    fake.send = { status: 502, body: { error: "upstream" } };
+    await postMonitorLog(page, "Sea Fret");
+    await openLogDetail(page, "Sea Fret");
+
+    await page.getByRole("button", { name: "Send to Concept2" }).click();
+    await expect(page.locator(".c2-send-status")).toHaveText("SEND FAILED");
+    await expect(
+      page.getByText("The send didn't reach Concept2."),
+    ).toBeVisible();
+    await expect(page.getByText("REASON: CONCEPT2 ERROR · 502")).toBeVisible();
+
+    // A retry that RETRIES (RF4): the control is invoked and the wire count
+    // is the consequence asserted, never the button's existence.
+    fake.send = { status: 200, body: { resultId: 512 } };
+    await page.getByRole("button", { name: "Retry send" }).click();
+    await expect(page.locator(".c2-send-status")).toHaveText("SENT");
+    await expect(page.getByText("RESULT 512")).toBeVisible();
+    expect(fake.sends).toBe(2);
+    // The retry's 200 is the bare `{resultId}` an older server answers, and
+    // it renders the same single sub-line as the class-bearing 200 above.
+    await expect(page.locator(".c2-send-foot")).toHaveText(["RESULT 512"]);
+  });
+
+  test("send -> 422 no_weight_class -> the account link-out", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "noweight");
+    fake.linked();
+    fake.send = {
+      status: 422,
+      body: { error: "no_weight_class", reason: "no_weight" },
+    };
+    await postMonitorLog(page, "Sea Fret");
+    await openLogDetail(page, "Sea Fret");
+
+    await page.getByRole("button", { name: "Send to Concept2" }).click();
+    await expect(page.locator(".c2-send-status")).toHaveText("NO WEIGHT CLASS");
+    await expect(
+      page.getByText(
+        "Concept2 needs a weight class. Your Concept2 profile has no weight set.",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByText("REASON: SET YOUR WEIGHT ON CONCEPT2"),
+    ).toBeVisible();
+    // The state's own sentence tells the rower to fix something on Concept2
+    // and come back, so it must offer a way back.
+    await expect(
+      page.getByRole("button", { name: "Send again" }),
+    ).toBeVisible();
+
+    await page.context().route(`${C2_ORIGIN}/**`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>profile stub</title>",
+      });
+    });
+    const opened = page.context().waitForEvent("page");
+    await page.getByRole("button", { name: "OPEN CONCEPT2 PROFILE" }).click();
+    const profile = await opened;
+    // NO ID IN THE PATH (observation 28). `/profile/2211` renders a PUBLIC
+    // read-only card with no weight and no form; `/profile` 302s to login
+    // and lands the rower in their own account. The id-bearing URL is the
+    // thing this assertion exists to catch.
+    expect(profile.url()).toBe(`${C2_ORIGIN}/profile`);
+    expect(profile.url()).not.toContain("2211");
+    await profile.close();
+
+    // THE SECOND TOKEN, AND THE REASON THIS CASE IS AN e2e AT ALL: four
+    // server tokens collapse to THREE renderings, and a collapse to one
+    // line would be invisible to a unit test that only ever asserts the
+    // string it passed in. `no_gender` is a profile we could not derive a
+    // class from — that rower's weight is not the broken thing, and the
+    // copy must not send them after it.
+    fake.send = {
+      status: 422,
+      body: { error: "no_weight_class", reason: "no_gender" },
+    };
+    await page.getByRole("button", { name: "Send again" }).click();
+    await expect(
+      page.getByText("REASON: COULDN'T GET A CLASS FROM CONCEPT2"),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Concept2 needs a weight class. We couldn't work one out from your Concept2 profile.",
+      ),
+    ).toBeVisible();
+    // The three things this rendering must NOT say.
+    await expect(page.getByText(/no weight set/)).toHaveCount(0);
+    await expect(page.getByText(/SET YOUR WEIGHT ON CONCEPT2/)).toHaveCount(0);
+    await expect(page.getByText(/logbook/i)).toHaveCount(0);
+  });
+
+  test("a read that fails says so and retries", async ({ page }) => {
+    // Amendment 1i, and the counterpart of the invisibility case: a read
+    // that FAILED is a different answer from a deployment that has no
+    // Concept2, and drawing them the same way tells a rower whose server
+    // does have it that it does not.
+    const fake = await signIn(page, "readfail");
+    // PR A: a 502 on the FIRST-EVER read draws no row at all (decision-table
+    // cell 2a — the first thing a rower hears about Concept2 must not be an
+    // error), so there is no door to open. One good read mints ruling 6's
+    // `seen`; the read that fails AFTER it is cell 2b, and the row keeps its
+    // door. That is the path a real rower takes to this panel now.
+    fake.unlinked();
+    await openYou(page);
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+    fake.link = { status: 502, body: { error: "upstream" } };
+    await page.reload();
+    await openConcept2Screen(page, fake);
+
+    await expect(page.locator(".c2-card")).toBeVisible();
+    await expect(page.locator(".c2-card-status")).toHaveText("COULDN'T READ");
+    await expect(
+      page.getByText("Couldn't reach Concept2 linking."),
+    ).toBeVisible();
+    await expect(
+      page.getByText("REASON: THE SERVER ANSWERED 502"),
+    ).toBeVisible();
+
+    fake.unlinked();
+    await page.getByRole("button", { name: "Retry" }).click();
+    await expect(
+      page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Couldn't reach Concept2 linking."),
+    ).toHaveCount(0);
+  });
+
+  test("an unlink the server refuses says the link is unchanged", async ({
+    page,
+  }) => {
+    // Amendment 1j, and RF25's shape at the UI seam: a lower layer reported
+    // a failure and the caller must not proceed as if it succeeded. The
+    // dangerous reading of a failed destructive action is that it
+    // half-worked.
+    const fake = await signIn(page, "unlinkfail");
+    fake.linked();
+    fake.unlink = { status: 500, body: { error: "boom" } };
+    await openConcept2Screen(page, fake);
+
+    await page.getByRole("button", { name: "OFF" }).click();
+    await page.getByRole("button", { name: "Tap again to unlink" }).click();
+    await expect.poll(() => fake.deletes).toBe(1);
+
+    await expect(page.getByText("UNLINK DIDN'T HAPPEN")).toBeVisible();
+    await expect(
+      page.getByText("Couldn't unlink. Your link is unchanged."),
+    ).toBeVisible();
+    await expect(
+      page.getByText("REASON: THE SERVER ANSWERED 500"),
+    ).toBeVisible();
+    // The link really is unchanged, and the card says the same thing its
+    // panel does.
+    await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
+    await expect(page.locator(".c2-card-identity")).toContainText(
+      "Concept2 jamesawesome",
+    );
+    // The arm is SPENT on every exit, not only the happy one (invariant
+    // I2): a live "Tap again to unlink" sitting under a REASON line is one
+    // stray tap away from a DELETE the rower has not decided to repeat.
+    await expect(page.getByRole("button", { name: "OFF" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Tap again to unlink" }),
+    ).toHaveCount(0);
+  });
+});
+
+/**
+ * COMING BACK FROM CONCEPT2 — AND WHAT THIS CAN AND CANNOT SEE (RF26).
+ *
+ * The web arm's `startLink` UNLOADS this document
+ * (`adapters/webNavigate.ts`'s `window.location.assign`), so the rower's
+ * only way home is Back. Invariant I5 says the card must show the link that
+ * was made while it was away, and the hook holds up TWO halves of that: a
+ * mount read for a browser that rebuilds the page, and a `pageshow`
+ * listener for one that RESTORES it from the back-forward cache and runs no
+ * mount at all.
+ *
+ * THIS TEST PROVES THE FIRST HALF ONLY, and the reason is a measured
+ * property of the harness rather than a choice. Playwright launches
+ * Chromium with `--disable-back-forward-cache` unconditionally
+ * (`playwright-core`'s `chromiumSwitches.ts`: "Avoids surprises like main
+ * request not being intercepted during page.goBack()") — and dropping that
+ * switch with `ignoreDefaultArgs` is NOT enough. Measured 2026-09-03 with a
+ * throwaway spec listening to CDP `Page.backForwardCacheNotUsed` over this
+ * very flow, with the switch removed: the restore is refused
+ * `BrowsingInstanceNotSwapped` + `BackForwardCacheDisabledForDelegate` —
+ * the embedder disables the cache for any page a debugger is attached to,
+ * and Playwright drives every page over CDP. So NO Playwright test in this
+ * repo can observe a bfcache restore, and a green Back case here is
+ * evidence about RE-ENTRY, never about `pageshow`.
+ *
+ * The `pageshow` half is gated where it can actually be driven:
+ * `api/useConcept2Link.test.ts`'s "re-reads on pageshow, which is the ONLY
+ * event a bfcache restore fires" and `you/Concept2Card.test.tsx`'s own
+ * dispatch, both of which fire the real event at the real listener.
+ *
+ * The heap marker below is kept as an INSTRUMENT, not an assertion: it
+ * reports which of the two paths a given run took, so nobody reads a future
+ * green as evidence for the half it cannot reach. Pinning it would be
+ * pinning an engine fact.
+ */
+test.describe("coming back from Concept2", () => {
+  test("Back shows the link that was made while the app was away", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "back");
+    fake.unlinked();
+    fake.connect = {
+      status: 200,
+      body: { authorizeUrl: "/api/concept2/callback?stub=1", state: "s" },
+    };
+    await openConcept2Screen(page, fake);
+
+    // A MARKER IN THE JS HEAP — the instrument this describe's header
+    // names. A back-forward-cache RESTORE preserves this document and
+    // everything in it, so the marker survives; a REBUILD makes a new
+    // document and the marker is gone. Without it, "it passed" and "the
+    // `pageshow` listener fired" are indistinguishable, and only the second
+    // would be evidence for the restore half of I5.
+    await page.evaluate(() => {
+      (window as unknown as Record<string, unknown>).__c2HeapMarker = "alive";
+    });
+
+    await page.getByRole("button", { name: "CONNECT TO CONCEPT2" }).click();
+    await expect(page).toHaveURL(/\/api\/concept2\/callback\?stub=1$/);
+    await expect(page.locator("body")).toContainText("consent stub");
+
+    // The rower approved: the server now answers LINKED. Nothing about the
+    // client knows that yet.
+    fake.linked();
+    await page.goBack();
+
+    // NO RELOAD IS DRIVEN BY THIS TEST — the whole point is what the app
+    // does on its own.
+    await expect(page.locator(".c2-card-status")).toHaveText("LINKED ✓");
+    await expect(page.locator(".c2-card-identity")).toContainText(
+      "Concept2 jamesawesome",
+    );
+
+    const restored = await page.evaluate(
+      () =>
+        (window as unknown as Record<string, unknown>).__c2HeapMarker ?? null,
+    );
+    // Recorded, never asserted: the outcome is a fact about the ENGINE.
+    // Under Playwright it is always REBUILT (see the header's CDP
+    // measurement), so an assertion either way would be pinning a harness
+    // property. Printed so the next reader of a green run knows exactly
+    // which half of I5 it exercised.
+    console.log(
+      `[c2 back] document was ${restored === "alive" ? "RESTORED (bfcache — the pageshow listener is what re-read)" : "RELOADED (a fresh mount read got there first)"}`,
+    );
+  });
+});
+
+// ── Wave E PR A: the CONCEPT2 row on You, and the screen behind it ─────────
+//
+// Spec 2026-09-04-concept2-walk-fixes §5.1 / §6.1. The row shows what the
+// SERVER last said (never attempt state); the screen shows the card as it was.
+// Every negative assertion about the row polls `fake.linkReads` first: the
+// row is async and You's sentinel is not (RF21).
+test.describe("Concept2 row on You (Wave E PR A)", () => {
+  test("an available, unlinked account gets a NOT LINKED row; the row opens the screen; BACK returns to You", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "row-unlinked");
+    fake.unlinked();
+    await openYou(page);
+    const row = page.getByRole("link", { name: /CONCEPT2/ });
+    await expect(row).toBeVisible();
+    await expect(row.locator(".diag-row-state")).toHaveText("NOT LINKED");
+    // No card on You any more (R10).
+    await expect(page.locator(".c2-card")).toHaveCount(0);
+
+    await row.click();
+    await expect(page).toHaveURL(/\/you\/concept2$/);
+    await expect(
+      page.getByRole("heading", { name: "Concept2", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "CONNECT TO CONCEPT2" }),
+    ).toBeEnabled();
+
+    await page.getByRole("link", { name: /BACK/ }).click();
+    await expect(page).toHaveURL(/\/you$/);
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+  });
+
+  test("a healthy link reads LINKED ✓ on the row", async ({ page }) => {
+    const fake = await signIn(page, "row-linked");
+    fake.linked();
+    await openYou(page);
+    await expect(
+      page.getByRole("link", { name: /CONCEPT2/ }).locator(".diag-row-state"),
+    ).toHaveText("LINKED ✓");
+  });
+
+  test("needsReauth reads RECONNECT NEEDED, and a failed re-read does NOT overwrite it (ruling 5, cell 10)", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "row-reauth");
+    fake.linked({ needsReauth: true });
+    await openYou(page);
+    const state = page
+      .getByRole("link", { name: /CONCEPT2/ })
+      .locator(".diag-row-state");
+    await expect(state).toHaveText("RECONNECT NEEDED");
+
+    // The next read fails. `pageshow` is one of the two events the hook
+    // re-reads on (`useConcept2Link`), and it is the one a real return from
+    // the browser fires.
+    const readsBefore = fake.linkReads;
+    fake.link = { status: 502, body: { error: "upstream" } };
+    await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    // Still the sticky, server-set warning — not COULDN'T READ.
+    await expect(state).toHaveText("RECONNECT NEEDED");
+  });
+
+  test("a FIRST-EVER read that fails draws no row; once the account has been told, a failed read draws COULDN'T READ (R4, R11)", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "row-seen");
+    // 2a: fresh account, first read fails — nothing, and no error about a
+    // feature this account may not have.
+    fake.link = { status: 502, body: { error: "upstream" } };
+    await openYou(page);
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(0);
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toHaveCount(0);
+    await expect(page.getByText("COULDN'T READ")).toHaveCount(0);
+
+    // A successful available:true read mints `seen`.
+    fake.unlinked();
+    await page.reload();
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toBeVisible();
+
+    // 2b: the read fails on a later visit — the row keeps its door.
+    fake.link = { status: 502, body: { error: "upstream" } };
+    await page.reload();
+    const row = page.getByRole("link", { name: /CONCEPT2/ });
+    await expect(row.locator(".diag-row-state")).toHaveText("COULDN'T READ");
+    // ...and the screen behind it draws 1i's panel with its Retry (R5).
+    await row.click();
+    await expect(
+      page.getByRole("heading", { name: "Concept2", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("COULDN'T READ CONCEPT2")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  });
+
+  test("a typed /you/concept2 on an account without Concept2 lands back on You (R5)", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "row-typed");
+    fake.unavailable();
+    await page.goto("/you/concept2");
+    await expect(page).toHaveURL(/\/you$/);
+    await expect(page.locator("main.you-screen")).toBeVisible();
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(0);
+    await expect(page.getByRole("link", { name: /CONCEPT2/ })).toHaveCount(0);
+  });
+});
+
+/**
+ * WAVE E AUTO-SEND (spec 2026-09-05; Gate 0 amendment 2026-09-05). The
+ * sending-mode control that replaced Unlink, the sticky SEND FAILED flag on
+ * the row and the card, and the automatic send itself — driven from the
+ * rower's own Save tap on the log form, so the gate starts upstream of the
+ * producer (RF24) and reads the wire body the send route would receive.
+ */
+test.describe("Concept2 auto-send, in a real browser", () => {
+  /** Same in-page-`fetch` idiom as `log.spec.ts`'s own `setBaselines` (e2e
+   *  helpers are copied across files here, not shared). The manual door
+   *  short-circuits to a "Set baselines" stub for a workout whose steps
+   *  resolve against a pace reference; the form under test needs them. */
+  async function setBaselines(page: Page): Promise<void> {
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k2Seconds: 105, k6Seconds: 115 }),
+      });
+      return { ok: res.ok, status: res.status, body: await res.text() };
+    });
+    if (!result.ok) {
+      throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+    }
+  }
+
+  /** Saves ONE row through the manual door's real form — HELD, Pain 3, Save —
+   *  and returns once Today has rendered. This is the producer every
+   *  automatic-send assertion below must start upstream of. */
+  async function saveThroughTheForm(page: Page): Promise<void> {
+    await setBaselines(page);
+    await page.goto("/library");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator("h1.workout-detail-title")).toBeVisible();
+    const workoutId = page.url().match(/\/library\/([^/]+)$/)?.[1];
+    expect(workoutId).toBeTruthy();
+    await page.goto(`/library/${workoutId!}/log`);
+    await expect(page.locator("h1.screen-title")).toBeVisible();
+    await page.getByRole("button", { name: "HELD" }).click();
+    await page.getByRole("button", { name: "Effort 3" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page).toHaveURL(/\/today$/);
+  }
+
+  const control = (page: Page) =>
+    page.getByRole("group", { name: "Sending mode" });
+
+  test("a fresh link is MANUAL: three aria-pressed buttons, Unlink gone, the mode line beneath", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "mode-manual");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    const group = control(page);
+    await expect(group.getByRole("button")).toHaveText([
+      "OFF",
+      "MANUAL",
+      "AUTOMATIC",
+    ]);
+    await expect(group.getByRole("button", { name: "MANUAL" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(
+      group.getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      page.getByText("Send each finished monitor row yourself, from the log."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Unlink Concept2" }),
+    ).toHaveCount(0);
+    // Every segment clears the house floor in the real column.
+    for (const name of ["OFF", "MANUAL", "AUTOMATIC"]) {
+      const box = await group.getByRole("button", { name }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test("AUTOMATIC PATCHes { autoSend: true } as JSON, then the control follows the RE-READ, not the tap", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "mode-auto");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    await expect(
+      control(page).getByRole("button", { name: "MANUAL" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // The server will say AUTOMATIC on the read that follows the write.
+    const readsBefore = fake.linkReads;
+    fake.linked({ autoSend: true });
+    await control(page).getByRole("button", { name: "AUTOMATIC" }).click();
+    await expect.poll(() => fake.patches.length).toBe(1);
+    expect(fake.patches[0]).toEqual({ autoSend: true });
+    expect(fake.patchHeaders[0]).toMatch(/^application\/json/);
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    await expect(
+      control(page).getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByText("Finished monitor rows are sent when you save them."),
+    ).toBeVisible();
+
+    // Back to MANUAL.
+    fake.linked();
+    await control(page).getByRole("button", { name: "MANUAL" }).click();
+    await expect.poll(() => fake.patches.length).toBe(2);
+    expect(fake.patches[1]).toEqual({ autoSend: false });
+    await expect(
+      control(page).getByRole("button", { name: "MANUAL" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("a refused PATCH shows the A7 line and leaves the pressed state on the server's value", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "mode-refused");
+    fake.linked();
+    fake.patch = { status: 500, body: { error: "boom" } };
+    await openConcept2Screen(page, fake);
+    await control(page).getByRole("button", { name: "AUTOMATIC" }).click();
+    await expect.poll(() => fake.patches.length).toBe(1);
+    await expect(
+      page.getByText("Couldn't change this. Try again."),
+    ).toBeVisible();
+    await expect(
+      control(page).getByRole("button", { name: "MANUAL" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      control(page).getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      control(page).getByRole("button", { name: "AUTOMATIC" }),
+    ).toBeEnabled();
+  });
+
+  test("armed OFF spans the control alone; the other segments are hidden until it disarms", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "mode-armed");
+    fake.linked({ autoSend: true });
+    await openConcept2Screen(page, fake);
+    const group = control(page);
+    const groupBox = await group.boundingBox();
+    await group.getByRole("button", { name: "OFF" }).click();
+    const armed = page.getByRole("button", { name: "Tap again to unlink" });
+    await expect(armed).toBeVisible();
+    // A pending confirmation, not a toggle that is on: no pressed state.
+    await expect(armed).toHaveAttribute("aria-pressed", "false");
+    // Gate 0 §7's armed pairing, as independent literals: `--on-color`
+    // #fffdf7 on `--accent` #b5341f (5.94:1).
+    expect(await armed.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(255, 253, 247)",
+    );
+    expect(
+      await armed.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe("rgb(181, 52, 31)");
+    // Gate 0 §2a in a real engine: the CSS that hides the siblings and spans
+    // the armed segment is measured, not read (RF21).
+    await expect(group.getByRole("button", { name: "MANUAL" })).toBeHidden();
+    await expect(group.getByRole("button", { name: "AUTOMATIC" })).toBeHidden();
+    const armedBox = await armed.boundingBox();
+    expect(armedBox?.height).toBe(52);
+    // Spans the control's whole CONTENT width: the group's box less its two
+    // 1px borders (measured 2.016 at 390px; the tolerance is for subpixels).
+    expect(
+      Math.abs((armedBox?.width ?? 0) - ((groupBox?.width ?? -1) - 2)),
+    ).toBeLessThanOrEqual(1);
+    await expect(
+      page.getByText("DISARMS ON ITS OWN AFTER 4 SECONDS"),
+    ).toBeVisible();
+    expect(fake.deletes).toBe(0);
+    expect(fake.patches).toHaveLength(0);
+
+    // A tap on a sibling that is hidden cannot happen; the timer disarms.
+    await expect(group.getByRole("button", { name: "OFF" })).toBeVisible({
+      timeout: 6000,
+    });
+    await expect(
+      group.getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(fake.patches).toHaveLength(0);
+  });
+
+  test("the armed segment keeps its white-on-accent pairing while its own DELETE is in flight", async ({
+    page,
+  }) => {
+    // Whole-branch review B1: the disabled colour rule dimmed the armed
+    // confirmation label to `--ink-3` on `--accent` (1.25:1) for the whole
+    // unlink round trip once OFF stopped carrying `aria-pressed`. Measured
+    // here against a DELETE that never answers; red without the rule's
+    // `:not(.c2-card-mode-armed)` (Expected rgb(255, 253, 247), Received
+    // rgb(87, 84, 76)).
+    const fake = await signIn(page, "armed-disabled");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    await page.route(/\/api\/concept2\/link$/, async (route) => {
+      if (route.request().method() === "DELETE") return; // never answers
+      await route.fallback();
+    });
+    await control(page).getByRole("button", { name: "OFF" }).click();
+    const armed = page.getByRole("button", { name: "Tap again to unlink" });
+    await armed.click();
+    await expect(armed).toBeDisabled();
+    expect(await armed.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(255, 253, 247)",
+    );
+    expect(
+      await armed.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe("rgb(181, 52, 31)");
+  });
+
+  test("SEND FAILED reads on the You row and the card's pill together; the screen names the reason and offers the profile", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "send-failed");
+    fake.linked({
+      autoSend: true,
+      sendFailedAt: "2026-09-05T12:00:00.000Z",
+      sendFailedReason: "no_weight",
+    });
+    await openYou(page);
+    const row = page.getByRole("link", { name: /CONCEPT2/ });
+    await expect(row.locator(".diag-row-state")).toHaveText("SEND FAILED");
+    await row.click();
+    await expect(page.locator(".c2-card-status")).toHaveText("SEND FAILED");
+    await expect(
+      page.getByText(
+        "Rows aren't being sent: Concept2 needs a weight class, and your Concept2 profile has no weight set.",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "OPEN CONCEPT2 PROFILE" }),
+    ).toBeVisible();
+    await expect(
+      control(page).getByRole("button", { name: "AUTOMATIC" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // RECONNECT NEEDED wins over the flag on both surfaces (ruling 5's shape).
+    fake.linked({
+      needsReauth: true,
+      sendFailedAt: "2026-09-05T12:00:00.000Z",
+      sendFailedReason: "no_weight",
+    });
+    await page.getByRole("link", { name: /BACK/ }).click();
+    await expect(row.locator(".diag-row-state")).toHaveText("RECONNECT NEEDED");
+    await row.click();
+    await expect(page.locator(".c2-card-status")).toHaveText(
+      "RECONNECT NEEDED",
+    );
+    await expect(
+      page.getByText("Sends are paused until you reconnect."),
+    ).toBeVisible();
+  });
+
+  test("AUTOMATIC: saving a row through the log form fires ONE send to that row, JSON tz body, without holding Today", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "auto-save");
+    fake.linked({ autoSend: true });
+    fake.send = { status: 200, body: { resultId: 901 } };
+    await saveThroughTheForm(page);
+
+    await expect.poll(() => fake.sends).toBe(1);
+    expect(fake.sendBodies[0]).toMatchObject({ tz: expect.any(String) });
+    expect((fake.sendBodies[0] as { tz: string }).tz.length).toBeGreaterThan(0);
+    expect(fake.sendHeaders[0]).toMatch(/^application\/json/);
+
+    // The row the send named is the row the form just wrote: open the
+    // newest history row and compare ids.
+    const sentId = fake.sendPaths[0]!.match(/\/results\/([^/]+)$/)?.[1];
+    expect(sentId).toBeTruthy();
+    await page.goto("/today/log");
+    await page.locator(".today-log-row").first().click();
+    await expect(page).toHaveURL(new RegExp(`/today/log/${sentId!}$`));
+    // Still ONE: the poll above passes the instant the count reaches 1, so a
+    // duplicate landing afterwards would be invisible to it; re-asserted
+    // after the navigation and detail load that followed (final review I2).
+    expect(fake.sends).toBe(1);
+  });
+
+  test("MANUAL: the same save reads the link and sends nothing", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "manual-save");
+    fake.linked();
+    const readsBefore = fake.linkReads;
+    await saveThroughTheForm(page);
+    // The decision's own read is the positive signal the negative waits on.
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    expect(fake.sends).toBe(0);
+  });
+});

@@ -241,7 +241,6 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
         // Today.test.tsx's own DEFAULT_PREFS shape — the filter tokens
         // read `difficulties.length` unconditionally.
         preferences: {
-          difficulties: ["easy", "medium", "hard"],
           timeCapMinutes: 60,
         },
       }),
@@ -266,10 +265,12 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     );
     // The closed record renders the row (gate 2's free-row widening), the
     // numbers are the machine's own, and Log it is offered (gate 1's).
+    expect(await screen.findByText(/6:34 · 1,396 m/)).toBeInTheDocument();
     expect(
-      await screen.findByText(/6:34 · 1,396 m, not logged\./),
+      screen.getByRole("button", {
+        name: "Review & save PM5 workout Just Row",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Log it" })).toBeInTheDocument();
     todayView.unmount();
 
     // READER 2 — the log door, the same module epoch, reading the store
@@ -299,7 +300,7 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     expect(screen.getByText("6:34")).toBeInTheDocument();
     expect(screen.getByText("1,396 m")).toBeInTheDocument();
     expect(screen.getByText("2:21.0")).toBeInTheDocument();
-    expect(screen.getByText("PAIN")).toBeInTheDocument();
+    expect(screen.getByText("EFFORT")).toBeInTheDocument();
     expect(
       screen.queryByText(/DID YOU HOLD THE TARGETS/),
     ).not.toBeInTheDocument();

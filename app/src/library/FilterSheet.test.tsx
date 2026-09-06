@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EMPTY_FILTERS, type Filters } from "./filters";
 import FilterSheet from "./FilterSheet";
@@ -29,22 +29,20 @@ function renderSheet(
 }
 
 describe("FilterSheet", () => {
-  it("renders as a labelled dialog holding all five groups", () => {
+  it("renders as a labelled dialog holding all four groups", () => {
     renderSheet();
     const dialog = screen.getByRole("dialog", { name: "Filter" });
-    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
-    for (const difficulty of ["EASY", "MEDIUM", "HARD"]) {
-      expect(
-        within(dialog).getByRole("button", { name: difficulty }),
-      ).toBeInTheDocument();
-    }
-    for (const bucket of ["<30′", "30–45′", "45–60′", "60′+"]) {
-      expect(
-        within(dialog).getByRole("button", { name: bucket }),
-      ).toBeInTheDocument();
-    }
+    expect(within(dialog).queryByText("DIFFICULTY")).not.toBeInTheDocument();
+    // Phase SF PR2: TIME is the two-thumb range, not four cells.
+    expect(
+      within(dialog).getByRole("slider", { name: "Shortest" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("slider", { name: "Longest" }),
+    ).toBeInTheDocument();
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
         within(dialog).getByRole("button", { name: level }),
@@ -57,10 +55,10 @@ describe("FilterSheet", () => {
       within(dialog).getByRole("button", { name: "21D+" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "GLOBAL" }),
+      within(dialog).getByRole("button", { name: "ERGOMATIC LIBRARY" }),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByRole("button", { name: "CUSTOM" }),
+      within(dialog).getByRole("button", { name: "MY WORKOUTS" }),
     ).toBeInTheDocument();
   });
 
@@ -85,25 +83,20 @@ describe("FilterSheet", () => {
   it("aria-pressed on each cell reflects the draft prop, not internal state", () => {
     const draft: Filters = {
       ...EMPTY_FILTERS,
-      difficulties: ["medium"],
-      durations: ["45-60"],
-      painLevels: [3, 4],
+      durationRange: { min: 45, max: 60 },
+      effortLevels: [3, 4],
       lastDone: "under21",
       source: "global",
     };
     renderSheet({ draft });
 
-    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
+      "aria-valuenow",
+      "45",
     );
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "45–60′" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
+      "aria-valuenow",
+      "60",
     );
     expect(screen.getByRole("button", { name: "3" })).toHaveAttribute(
       "aria-pressed",
@@ -121,38 +114,31 @@ describe("FilterSheet", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "GLOBAL" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      screen.getByRole("button", { name: "ERGOMATIC LIBRARY" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   // Consumes filters.ts's own `toggleDifficulty` (M-10: the sheet must use
   // the named helper, not an inlined equivalent spread).
-  it("clicking a DIFFICULTY cell reports the toggled draft", async () => {
+
+  it("stepping a TIME thumb reports the new range in the draft", () => {
     const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
+      key: "ArrowLeft",
+    });
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
-      difficulties: ["hard"],
+      durationRange: { min: 0, max: 115 },
     });
   });
 
-  it("clicking a TIME cell reports the toggled draft", async () => {
-    const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "45–60′" }));
-    expect(onChangeDraft).toHaveBeenCalledWith({
-      ...EMPTY_FILTERS,
-      durations: ["45-60"],
-    });
-  });
-
-  it("clicking a PAIN cell reports the toggled draft", async () => {
+  it("clicking a EFFORT cell reports the toggled draft", async () => {
     const { onChangeDraft } = renderSheet();
     await userEvent.click(screen.getByRole("button", { name: "4" }));
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
-      painLevels: [4],
+      effortLevels: [4],
     });
   });
 
@@ -176,7 +162,7 @@ describe("FilterSheet", () => {
 
   it("clicking the CUSTOM SOURCE cell reports the set draft", async () => {
     const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+    await userEvent.click(screen.getByRole("button", { name: "MY WORKOUTS" }));
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
       source: "custom",
@@ -185,7 +171,9 @@ describe("FilterSheet", () => {
 
   it("clicking the GLOBAL SOURCE cell reports the set draft", async () => {
     const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "GLOBAL" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "ERGOMATIC LIBRARY" }),
+    );
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
       source: "global",
@@ -193,7 +181,7 @@ describe("FilterSheet", () => {
   });
 
   // Fix round (whole-branch review, finding B): CLEAR resets exactly the
-  // sheet's OWN groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE) — `types`,
+  // sheet's OWN groups (DIFFICULTY/TIME/EFFORT/LAST DONE/SOURCE) — `types`,
   // the chip row's own group with no control inside this sheet at all, is
   // untouched. Seeding a non-empty `types` here is the point: against the
   // old `clearFilters()` behaviour this draft would have come back with

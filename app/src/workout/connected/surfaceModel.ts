@@ -641,7 +641,7 @@ export interface SurfaceModel {
    *  there isn't. It used to read `NO SPLIT TARGET` beside a dash; both
    *  surfaces now name the phase instead — `Easy`, `Rest`, `All out` for
    *  the phase kinds, and `ALL OUT`/`EASY` for a work phase at an effort
-   *  ref (`domain/pace.ts`'s `effortWord`, caps on purpose — see the `FREE`
+   *  ref (`domain/pace.ts`'s `paceWordLabel`, caps on purpose — see the `FREE`
    *  comment in `session/TimerTargets.tsx`) — so the caption would only
    *  repeat the value above it. Empty is therefore the COMMON case, not the
    *  edge one, and `PaneLive.tsx` renders no element at all for it rather
@@ -1122,7 +1122,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   //
   // THE WORD IS WHATEVER THE PHASE CALLS ITSELF, not a vocabulary this file
   // curates: `Easy`/`Rest`/`All out` for the phase kinds, and `ALL OUT`/
-  // `EASY` (caps, `domain/pace.ts`'s `effortWord`) for a work phase at an
+  // `EASY` (caps, `domain/pace.ts`'s `paceWordLabel`) for a work phase at an
   // effort ref, which is the branch the ruling newly routed here and the
   // one no test or capture had reached (tail review I-1). The caps are
   // deliberate and shared with the timer's UP NEXT strip; the reasoning is

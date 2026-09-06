@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useStagedDiscard } from "../session/useStagedDiscard";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import {
@@ -8,6 +9,7 @@ import {
   type HandoffEntry,
 } from "../monitor/handoffStore";
 import { usePlan, type PlanData } from "../api/usePlan";
+import { completionStamp } from "../session/completionStamp";
 import { useLogForm } from "../session/LogSession";
 import { recordLogDoorEntry } from "../session/logDoorDiagnostics";
 import { clearRun, loadRun, type SessionRun } from "../session/run";
@@ -29,8 +31,8 @@ import { freeRowTotals } from "./totals";
  * badge (`workout_type` is null and an unknown chip would be a fifth fake
  * peer), no intervals table (`steps` is `[]` — an absence, never an empty
  * widget), no DID YOU HOLD THE TARGETS? (a free row was never given one, so
- * the question has no honest answer), and the rating reads **PAIN**, not
- * ACTUAL PAIN — the word ACTUAL exists to contrast with the workout's own
+ * the question has no honest answer), and the rating reads **EFFORT**, not
+ * ACTUAL EFFORT — the word ACTUAL exists to contrast with the workout's own
  * EXPECTED figure beside it, which a free row does not have.
  *
  * **The save stack is the shipped door's own pair** (substitution spec,
@@ -83,7 +85,7 @@ function timerFreeRowRun(): SessionRun | null {
   return run;
 }
 
-type DoorEntry =
+export type DoorEntry =
   { kind: "monitor"; entry: HandoffEntry } | { kind: "timer"; run: SessionRun };
 
 /** The ring `kind` filed when both records exist at once — greppable in a
@@ -138,15 +140,66 @@ function timerElapsedSeconds(run: SessionRun): number | null {
   return actual === undefined ? null : actual.elapsedSeconds;
 }
 
-const PAIN_LEVELS = [1, 2, 3, 4, 5];
+const EFFORT_LEVELS = [1, 2, 3, 4, 5];
 
 export default function JustRowLog() {
-  const navigate = useNavigate();
   // A mount snapshot on purpose, like `LogSession`'s own doors: the record
   // is closed, so nothing enriches it after mount, and re-reading on every
   // render would make a mid-save retire yank the form out from under the
   // rower.
   const [door] = useState(doorEntry);
+  return door === null ? (
+    <Navigate to="/today" replace />
+  ) : (
+    <JustRowSummary door={door} context="legacy" />
+  );
+}
+
+export function JustRowSummary({
+  door,
+  context,
+}: {
+  door: DoorEntry;
+  context: "legacy" | "review";
+}) {
+  const navigate = useNavigate();
+  const discard = useStagedDiscard();
+  const recoveryActions =
+    context === "review" ? (
+      <div className="action-stack">
+        <Link to="/today" className="button-outline">
+          Keep unsaved
+        </Link>
+        <button
+          type="button"
+          className={
+            discard.armed ? "summary-discard-armed" : "summary-discard"
+          }
+          onBlur={discard.disarm}
+          onClick={() => {
+            if (!discard.armed) {
+              discard.arm();
+              return;
+            }
+            discard.disarm();
+            if (door.kind === "monitor")
+              retireHandoff(
+                [
+                  {
+                    sessionKey: door.entry.sessionKey,
+                    revision: door.entry.revision,
+                  },
+                ],
+                "monitor-discard",
+              );
+            else if (loadRun()?.startedAt === door.run.startedAt) clearRun();
+            void navigate("/today");
+          }}
+        >
+          {discard.armed ? "Tap again to discard" : "DISCARD WITHOUT SAVING"}
+        </button>
+      </div>
+    ) : null;
   // The pair's one input beyond the record: `LogSession`'s own rule for
   // which plan the stack may name — a RESOLVED fetch with an active key.
   // Loading and errored both read as "no plan" here, exactly as they do
@@ -158,38 +211,43 @@ export default function JustRowLog() {
     planState.state === "ready" && planState.plan.planKey !== null
       ? planState.plan
       : null;
-  const { held, pain, setPain, notes, setNotes, saving, saveError, submit } =
-    useLogForm(() => {
-      // Each kind clears ITS OWN record and only that one (the lifetime
-      // table's "successful save" clear site for the timer run).
-      if (door?.kind === "monitor") {
-        retireHandoff(
-          [
-            {
-              sessionKey: door.entry.sessionKey,
-              revision: door.entry.revision,
-            },
-          ],
-          "save-success",
-        );
-      } else if (door?.kind === "timer") {
-        clearRun();
-      }
-      void navigate("/today/log");
-    });
+  const {
+    held,
+    effort,
+    setEffort,
+    notes,
+    setNotes,
+    saving,
+    saveError,
+    submit,
+  } = useLogForm(() => {
+    // Each kind clears ITS OWN record and only that one (the lifetime
+    // table's "successful save" clear site for the timer run).
+    if (door?.kind === "monitor") {
+      retireHandoff(
+        [
+          {
+            sessionKey: door.entry.sessionKey,
+            revision: door.entry.revision,
+          },
+        ],
+        "save-success",
+      );
+    } else if (door?.kind === "timer") {
+      if (loadRun()?.startedAt === door.run.startedAt) clearRun();
+    }
+    void navigate("/today/log");
+  });
   void held; // the targets question does not exist here; see the header.
-
-  if (door === null) {
-    return <Navigate to="/today" replace />;
-  }
 
   if (door.kind === "timer") {
     return (
       <TimerDoor
+        recoveryActions={recoveryActions}
         run={door.run}
         plan={plan}
-        pain={pain}
-        setPain={setPain}
+        effort={effort}
+        setEffort={setEffort}
         notes={notes}
         setNotes={setNotes}
         saving={saving}
@@ -267,6 +325,12 @@ export default function JustRowLog() {
           : {}),
         ...(run.series !== undefined ? { series: run.series } : {}),
         ...(run.endedBy !== undefined ? { endedBy: run.endedBy } : {}),
+        // Wave E PR2 Task 6: the app's OTHER `source: "pm5"` producer, so
+        // it posts the same pair the programmed monitor door does — the
+        // run's own close stamp plus this device's zone. A free row that
+        // ends `finished` is as uploadable as any other, and without this
+        // its Concept2 date would be the moment Save was tapped.
+        ...completionStamp(run),
       },
       { advancesPlan },
     );
@@ -322,8 +386,8 @@ export default function JustRowLog() {
       )}
 
       <Reflection
-        pain={pain}
-        setPain={setPain}
+        effort={effort}
+        setEffort={setEffort}
         notes={notes}
         setNotes={setNotes}
       />
@@ -334,6 +398,7 @@ export default function JustRowLog() {
         disabled={saving || totals === null}
         onSave={handleSave}
       />
+      {recoveryActions}
     </main>
   );
 }
@@ -344,20 +409,22 @@ export default function JustRowLog() {
  *  alone — no DISTANCE cell, no AVG SPLIT cell, and no dash standing in for
  *  either. Save is disabled only when the run carries no actual. */
 function TimerDoor({
+  recoveryActions,
   run,
   plan,
-  pain,
-  setPain,
+  effort,
+  setEffort,
   notes,
   setNotes,
   saving,
   saveError,
   onSave,
 }: {
+  recoveryActions: ReactNode;
   run: SessionRun;
   plan: PlanData | null;
-  pain: number | null;
-  setPain: (pain: number | null) => void;
+  effort: number | null;
+  setEffort: (effort: number | null) => void;
   notes: string;
   setNotes: (notes: string) => void;
   saving: boolean;
@@ -386,8 +453,8 @@ function TimerDoor({
       )}
 
       <Reflection
-        pain={pain}
-        setPain={setPain}
+        effort={effort}
+        setEffort={setEffort}
         notes={notes}
         setNotes={setNotes}
       />
@@ -400,6 +467,7 @@ function TimerDoor({
           if (elapsed !== null) onSave(elapsed, advancesPlan);
         }}
       />
+      {recoveryActions}
     </main>
   );
 }
@@ -443,15 +511,15 @@ function SaveStack({
   );
 }
 
-/** PAIN + NOTES, shared by both kinds — one markup, one set of labels. */
+/** EFFORT + NOTES, shared by both kinds — one markup, one set of labels. */
 function Reflection({
-  pain,
-  setPain,
+  effort,
+  setEffort,
   notes,
   setNotes,
 }: {
-  pain: number | null;
-  setPain: (pain: number | null) => void;
+  effort: number | null;
+  setEffort: (effort: number | null) => void;
   notes: string;
   setNotes: (notes: string) => void;
 }) {
@@ -459,17 +527,17 @@ function Reflection({
     <>
       <div className="summary-reflection-group">
         <div className="summary-reflection-label-row">
-          <p className="summary-reflection-label">PAIN</p>
+          <p className="summary-reflection-label">EFFORT</p>
         </div>
-        <div className="summary-pain-row">
-          {PAIN_LEVELS.map((level) => (
+        <div className="summary-effort-row">
+          {EFFORT_LEVELS.map((level) => (
             <button
               key={level}
               type="button"
-              className="summary-pain-chip"
-              aria-pressed={pain === level}
-              aria-label={`Pain ${level}`}
-              onClick={() => setPain(pain === level ? null : level)}
+              className="summary-effort-chip"
+              aria-pressed={effort === level}
+              aria-label={`Effort ${level}`}
+              onClick={() => setEffort(effort === level ? null : level)}
             >
               {level}
             </button>

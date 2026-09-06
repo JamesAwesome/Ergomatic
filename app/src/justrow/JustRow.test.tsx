@@ -63,6 +63,27 @@ function unloggedTimerSession(): SessionRun {
 }
 
 describe("JustRow door", () => {
+  it.each(["Start Timer", "Connect"])(
+    "%s warning sends View unsaved to Today without replacing the recording",
+    async (action) => {
+      saveRun(unloggedTimerSession());
+      const bytes = localStorage.getItem(RUN_KEY);
+      render(
+        <MemoryRouter initialEntries={["/justrow"]}>
+          <Routes>
+            <Route path="/justrow" element={<JustRow />} />
+            <Route path="/today" element={<h1>Today</h1>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: action }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "View unsaved" }),
+      );
+      expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
+      expect(localStorage.getItem(RUN_KEY)).toBe(bytes);
+    },
+  );
   beforeEach(() => {
     localStorage.clear();
     resetHandoffStoreForTests();
@@ -146,7 +167,9 @@ describe("JustRow door", () => {
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(
-      screen.getByText("You have an unlogged session. Connecting discards it."),
+      screen.getByText(
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
+      ),
     ).toBeInTheDocument();
     // Still on the door: the press was intercepted, not passed through.
     expect(
@@ -167,7 +190,7 @@ describe("JustRow door", () => {
     // test pinned the false promise as if it were the design.
     expect(
       screen.queryByText(
-        "You have an unlogged session. Connecting discards it.",
+        /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
       ),
     ).not.toBeInTheDocument();
     expect(
@@ -244,7 +267,7 @@ describe("JustRow door: Start Timer", () => {
     // The detail's own Start Timer sentence — the verb names THIS press.
     expect(
       screen.getByText(
-        "You have an unlogged session. Starting a new one discards it.",
+        /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
       ),
     ).toBeInTheDocument();
     expect(

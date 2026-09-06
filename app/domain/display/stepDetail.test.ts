@@ -159,7 +159,7 @@ describe("pieceList", () => {
       "at 2k −4",
       null, // the MAX piece: effort word only, no ref text at all
     ]);
-    expect(rows[6].effortText).toBe("ALL OUT");
+    expect(rows[6].paceWordText).toBe("ALL OUT");
   });
 
   it("property: not one split-ref row in the whole 300-workout library renders a bare offset — every one names its base", () => {
@@ -186,7 +186,7 @@ describe("pieceList", () => {
     expect(Object.keys(rows[0])).not.toContain("refTextCompact");
   });
 
-  it("effort pieces: word in effortText, no split, no off", () => {
+  it("effort pieces: word in paceWordText, no split, no off", () => {
     const steps: Step[] = [
       {
         k: "w",
@@ -201,11 +201,11 @@ describe("pieceList", () => {
     ];
     const rows = pieceList(steps, B);
     expect(rows[0]).toMatchObject({
-      effortText: "ALL OUT",
+      paceWordText: "ALL OUT",
       split: null,
       off: null,
     });
-    expect(rows[1].effortText).toBe("EASY");
+    expect(rows[1].paceWordText).toBe("EASY");
   });
 
   it("distance pieces put meters in the duration slot and price the split", () => {
@@ -238,7 +238,7 @@ describe("pieceList", () => {
     expect(rows[1]).toMatchObject({
       duration: "All out",
       refTextFull: null,
-      effortText: null,
+      paceWordText: null,
       split: null,
     });
   });

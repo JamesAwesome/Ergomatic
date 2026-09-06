@@ -67,7 +67,15 @@ requirements).
   main checkout despite being told not to; the check catches it, the
   instruction alone does not. **No PR merges without James's explicit
   approval** — green CI and a clean final review are necessary but not
-  sufficient; present the review verdict and stop. Subagents never merge,
+  sufficient; present the review verdict and stop. **Inline implementation
+  is an accepted shape when the plan author paste-tests every block
+  (James, 2026-09-04, Phase SF PR1 #297: "shape is fine"):** the
+  controller may implement in task-sized commits with failing tests
+  first and dispatch only the REVIEW half — a two-stage branch review
+  plus the PM gate where the triad applies — since a fresh subagent
+  transcribing already-committed code adds nothing. The review half is
+  not optional, the PR body says which shape was used, and the fast-path
+  rule below is unchanged. Subagents never merge,
   close, or approve PRs and never remove worktrees; main is PR-only, no merge
   commits. **After creating a worktree, run `pnpm install` at the worktree
   root AND in `app/`, then verify hooks actually fire** (e.g. a deliberate
@@ -969,6 +977,20 @@ often they recur.
     main --limit 5` is part of every release gate (RELEASING.md step 0)
     and every phase-close gate, and the post-merge ritual says which
     conclusion main's run reached, not just that the PR's did.
+
+29. **Leaving dead code behind with no ROADMAP row to remove it (James,
+    2026-09-04).** `openExternalUrl`'s native arm lost its last caller when
+    PR1.75b moved the account link to `ASWebAuthenticationSession`. The
+    Task 2 review of PR2 flagged it, the ruling was "decide at the
+    whole-branch review", the whole-branch review never returned to it, and
+    it shipped — with `@capacitor/browser` still a dependency for a code path
+    nothing could reach. It was found again only because the walk-fixes spec
+    happened to need that same arm. **When a change makes code
+    unreachable — an arm, a helper, a plugin, a CSS block — the same PR adds
+    a ROADMAP row naming what is dead, why, and what removes it.** A
+    "decide later" ruling is not a row; it lives in a PR body, which is a
+    presentation (RF14). Deleting the consumer and leaving the dependency is
+    RF5 with a package name.
 
 ## Commands
 

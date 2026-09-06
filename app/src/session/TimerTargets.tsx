@@ -14,12 +14,12 @@ import type { EnginePhase } from "./engine";
  *
  *  THE EFFORT WORD IS NOT ONE OF THOSE and is deliberately NOT title-cased:
  *  a work phase at `MAX`/`MIN` labels itself from `domain/pace.ts`'s
- *  `effortWord`, which is `ALL OUT`/`EASY` in caps, and that literal is what
+ *  `paceWordLabel`, which is `ALL OUT`/`EASY` in caps, and that literal is what
  *  the split slot beside this one shows for it (tail review I-1, measured
  *  2026-08-13 against `Fog Bow` and `Rear Flank`). Caps because the same
  *  field feeds the strip directly above the card (`Timer.tsx`'s
  *  `phaseAnnouncement` -> `WORK ALL OUT`), `StepRow`'s library rows, and
- *  `logDraft.ts`, which reads it back through `effortFromWord` on a cast —
+ *  `logDraft.ts`, which reads it back through `paceWordFromLabel` on a cast —
  *  title-casing it for this one card would disagree with its own neighbour
  *  and break the round-trip. The mixed case is the vocabulary saying which
  *  KIND of thing it names: a phase kind, or the effort the rower asked for.

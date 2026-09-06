@@ -46,8 +46,7 @@ const WORKOUT: LibraryWorkout = {
   id: "w1",
   title: "NFC Test Piece",
   type: "O2",
-  difficulty: "medium",
-  pain: 3,
+  effort: 3,
   steps: [
     {
       k: "w",

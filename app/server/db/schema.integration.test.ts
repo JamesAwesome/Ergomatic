@@ -158,18 +158,15 @@ describe("migration 0008: the workouts wu-strip", () => {
         ref: { effort: "max" },
       },
     ];
-    const [row] = await db
-      .insert(workouts)
-      .values({
-        userId: u.id,
-        title: "Legacy warm-up workout",
-        type: "AT",
-        difficulty: "medium",
-        pain: 2,
-        source: "user",
-        steps: legacySteps,
-      })
-      .returning();
+    const inserted = await db.execute<{ id: string }>(
+      // Raw SQL against the PRE-0024 table: the column is still `pain` here
+      // (0024 renames it), so the typed insert helper cannot be used.
+      sql`insert into "workouts"
+          ("user_id", "title", "type", "difficulty", "pain", "source", "steps")
+          values (${u.id}, 'Legacy warm-up workout', 'AT', 'easy', 2, 'user', ${JSON.stringify(legacySteps)}::jsonb)
+          returning "id"`,
+    );
+    const row = inserted.rows[0]!;
 
     // The real, full folder — this is the boot-time migrate() call that
     // ships 0008. Only 0008 is new (0000-0007's hashes already match what
@@ -233,10 +230,11 @@ describe("migration 0008: the workouts wu-strip", () => {
         userId: u.id,
         title: "No warm-up here",
         type: "O2",
+        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
         difficulty: "easy",
-        pain: 1,
+        effort: 1,
         source: "user",
-        steps,
+        steps: steps,
       })
       .returning();
 
@@ -283,8 +281,9 @@ describe("migration 0008: the workouts wu-strip", () => {
         userId: u.id,
         title: "Legacy wu-only workout",
         type: "O2",
+        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
         difficulty: "easy",
-        pain: 1,
+        effort: 1,
         source: "user",
         steps: [{ k: "wu", minutes: 10 }],
       })
@@ -328,11 +327,11 @@ describe("migration 0008: the workouts wu-strip", () => {
   });
 });
 
-// Post-workout-summary spec (2026-08-17), §3: `held`/`pain` DROP NOT NULL
+// Post-workout-summary spec (2026-08-17), §3: `held`/`effort` DROP NOT NULL
 // and `thumbs` is a new nullable column — both loosening/additive changes,
 // so unlike migration 0008's steps-rewrite, no existing row's DATA needs
 // to change at all. This suite proves that directly: a "legacy" row is
-// seeded (with real held/pain values, the only shape possible before this
+// seeded (with real held/effort values, the only shape possible before this
 // migration existed) against a database migrated only through 0008, then
 // 0009 runs — same ordering proof as the 0008 suite above, but the
 // assertion is "nothing moved" rather than "the shape rewrote."
@@ -359,7 +358,7 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // A migrations folder containing only 0000-0008, so migrate() below
-    // cannot possibly apply 0009 — the legacy row (held/pain both required,
+    // cannot possibly apply 0009 — the legacy row (held/effort both required,
     // no thumbs column at all) gets seeded against exactly the schema a
     // real pre-Task-3 deploy would have.
     tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0009-"));
@@ -393,7 +392,7 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
     await container.stop().catch(() => {});
   });
 
-  it("keeps an existing row's held/pain values, and reads thumbs back as null, after 0009 applies", async () => {
+  it("keeps an existing row's held/effort values, and reads thumbs back as null, after 0009 applies", async () => {
     const [u] = await db
       .insert(users)
       .values({
@@ -403,7 +402,8 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
       })
       .returning();
 
-    // Seeded against the PRE-0009 schema (held/pain both NOT NULL, no
+    // Seeded against the PRE-0009 schema (held/pain both NOT NULL — the
+    // column is `pain` until 0024 renames it, so raw SQL names it; no
     // thumbs column exists yet) — the only shape a real row could have had
     // before this migration. Raw SQL, not the typed `sessionLogs` insert
     // helper: drizzle's insert builder always lists EVERY column the TS
@@ -431,11 +431,11 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
       .from(sessionLogs)
       .where(eq(sessionLogs.id, row.id));
     expect(after.held).toBe("under");
-    expect(after.pain).toBe(3);
+    expect(after.effort).toBe(3);
     expect(after.thumbs).toBeNull();
   });
 
-  it("accepts a NEW row with held/pain/thumbs all null once 0009 has applied", async () => {
+  it("accepts a NEW row with held/effort/thumbs all null once 0009 has applied", async () => {
     const [u] = await db
       .insert(users)
       .values({
@@ -455,7 +455,7 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
         workoutTitle: "Skipped reflection",
         workoutType: "O2",
         held: null,
-        pain: null,
+        effort: null,
         thumbs: null,
         steps: [],
         source: "manual",
@@ -467,7 +467,7 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
       .from(sessionLogs)
       .where(eq(sessionLogs.id, row.id));
     expect(after.held).toBeNull();
-    expect(after.pain).toBeNull();
+    expect(after.effort).toBeNull();
     expect(after.thumbs).toBeNull();
   });
 });
@@ -587,7 +587,7 @@ describe("migration 0010: hero numbers and plan linkage", () => {
       .from(sessionLogs)
       .where(eq(sessionLogs.id, preMigrationRowId));
     expect(after.held).toBe("held");
-    expect(after.pain).toBe(2);
+    expect(after.effort).toBe(2);
     expect(after.avgSplitSeconds).toBeNull();
     expect(after.distanceMeters).toBeNull();
     expect(after.timeSeconds).toBeNull();
@@ -615,7 +615,7 @@ describe("migration 0010: hero numbers and plan linkage", () => {
         workoutTitle: "Full hero row",
         workoutType: "AT",
         held: null,
-        pain: null,
+        effort: null,
         thumbs: null,
         steps: [],
         source: "manual",
@@ -739,7 +739,7 @@ describe("migration 0011: the series column", () => {
       .from(sessionLogs)
       .where(eq(sessionLogs.id, preMigrationRowId));
     expect(after.held).toBe("held");
-    expect(after.pain).toBe(2);
+    expect(after.effort).toBe(2);
     expect(after.series).toBeNull();
   });
 
@@ -768,7 +768,7 @@ describe("migration 0011: the series column", () => {
         workoutTitle: "Series row",
         workoutType: "AT",
         held: null,
-        pain: null,
+        effort: null,
         steps: [],
         source: "manual",
         series,
@@ -887,7 +887,7 @@ describe("migration 0012: the ended_by column", () => {
       .from(sessionLogs)
       .where(eq(sessionLogs.id, preMigrationRowId));
     expect(after.held).toBe("held");
-    expect(after.pain).toBe(2);
+    expect(after.effort).toBe(2);
     expect(after.endedBy).toBeNull();
   });
 
@@ -918,7 +918,7 @@ describe("migration 0012: the ended_by column", () => {
           workoutTitle: `ended_by ${endedBy}`,
           workoutType: "AT",
           held: null,
-          pain: null,
+          effort: null,
           steps: [],
           source: "manual",
           endedBy,
@@ -1212,7 +1212,7 @@ describe("migration 0016: the machine summary columns", () => {
       .from(sessionLogs)
       .where(eq(sessionLogs.id, preMigrationRowId));
     expect(after.held).toBe("held");
-    expect(after.pain).toBe(2);
+    expect(after.effort).toBe(2);
     expect(after.machineWorkSeconds).toBeNull();
     expect(after.machineWorkMeters).toBeNull();
     expect(after.machineSummary).toBeNull();
@@ -1248,7 +1248,7 @@ describe("migration 0016: the machine summary columns", () => {
         workoutTitle: "Machine summary row",
         workoutType: "AT",
         held: null,
-        pain: null,
+        effort: null,
         steps: [],
         source: "manual",
         machineWorkSeconds: 24.3,
@@ -1390,43 +1390,28 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
         "access_token",
         "refresh_token",
         "expires_at",
-        "weight_class",
+        "c2_username",
         "needs_reauth_at",
         "created_at",
         "updated_at",
       ]),
     );
+    // Wave E PR2 (migration 0023): `arrayContaining` cannot assert an
+    // ABSENCE — dropping `"weight_class"` from the list above asserts
+    // nothing on its own. Absence holds only transitively today (keeping
+    // either column kills `migrate()` on the `DROP TYPE`), and that
+    // transitive proof evaporates the moment some future migration keeps
+    // the type. Say it directly.
+    expect(linkColNames).not.toContain("weight_class");
 
     const attemptCols = await db.execute(
       sql`select column_name from information_schema.columns where table_name = 'concept2_auth_attempts'`,
     );
     const attemptColNames = attemptCols.rows.map((r) => r.column_name);
     expect(attemptColNames).toStrictEqual(
-      expect.arrayContaining([
-        "nonce",
-        "user_id",
-        "weight_class",
-        "created_at",
-      ]),
+      expect.arrayContaining(["nonce", "user_id", "created_at"]),
     );
-  });
-
-  it("rejects a weight_class value outside the enum at the DB layer", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "bad-weight-class-user",
-        email: "bad-weight-class@migrate.test",
-        name: "Bad Weight Class",
-      })
-      .returning();
-
-    await expect(
-      pool.query(
-        `insert into "concept2_auth_attempts" ("nonce", "user_id", "weight_class") values ('n1', $1, 'M')`,
-        [u.id],
-      ),
-    ).rejects.toThrow(/invalid input value for enum weight_class/);
+    expect(attemptColNames).not.toContain("weight_class");
   });
 
   it("reads a pre-0018 row's existing fields unchanged, and all four new columns as null, after 0018 applies (never-migrate contract)", async () => {
@@ -1435,7 +1420,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
       .from(sessionLogs)
       .where(eq(sessionLogs.id, preMigrationRowId));
     expect(after.held).toBe("held");
-    expect(after.pain).toBe(2);
+    expect(after.effort).toBe(2);
     expect(after.c2ResultId).toBeNull();
     expect(after.c2UserId).toBeNull();
     expect(after.completedAt).toBeNull();
@@ -1460,7 +1445,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
         workoutTitle: "Concept2-linked row",
         workoutType: "AT",
         held: null,
-        pain: null,
+        effort: null,
         steps: [],
         source: "manual",
         c2ResultId: 4242,
@@ -1498,7 +1483,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
       accessToken: "access-tok",
       refreshToken: "refresh-tok",
       expiresAt,
-      weightClass: "H",
+      c2Username: "jamesawesome",
       needsReauthAt,
     });
 
@@ -1510,7 +1495,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
     expect(link.accessToken).toBe("access-tok");
     expect(link.refreshToken).toBe("refresh-tok");
     expect(link.expiresAt).toStrictEqual(expiresAt);
-    expect(link.weightClass).toBe("H");
+    expect(link.c2Username).toBe("jamesawesome");
     expect(link.needsReauthAt).toStrictEqual(needsReauthAt);
   });
 
@@ -1527,7 +1512,6 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
     await db.insert(concept2AuthAttempts).values({
       nonce: "nonce-1",
       userId: u.id,
-      weightClass: "L",
     });
 
     const [attempt] = await db
@@ -1535,7 +1519,6 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
       .from(concept2AuthAttempts)
       .where(eq(concept2AuthAttempts.nonce, "nonce-1"));
     expect(attempt.userId).toBe(u.id);
-    expect(attempt.weightClass).toBe("L");
   });
 });
 
@@ -1752,34 +1735,144 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
         name: "Other",
       })
       .returning();
-    await db.insert(concept2Links).values({
-      userId: seededUserId,
-      c2UserId: 2211,
-      accessToken: "at",
-      refreshToken: "rt",
-      expiresAt: new Date("2026-10-01T00:00:00Z"),
-      weightClass: "H",
-    });
-    // The typed query builder wraps the underlying pg error in a
-    // `DrizzleQueryError` whose OWN `.message` is just "Failed query: ..."
-    // (drizzle-orm/errors.js) — the real Postgres text, which names the
-    // violated constraint, is on `.cause`, not `.message`. `toThrow(regex)`
-    // only reads `.message`, so it cannot see the constraint name here (the
-    // brief's original assertion form was written for the raw `pool.query`
-    // calls above, where pg's own error IS the top-level `.message`).
+    // RAW SQL, the same treatment (and for the same reason) this block's
+    // `surface` inserts above already carry: Drizzle's typed
+    // `.insert(concept2Links)` builder emits EVERY declared column,
+    // including ones the call never names — and this database is capped at
+    // 0021, where `c2_username` (added by 0023) does not exist yet, and
+    // `weight_class` still does and is NOT NULL. The typed form would fail
+    // on the missing column and, once that was worked around, on the
+    // not-null one — neither of which is what this test is about.
+    await pool.query(
+      `insert into "concept2_links" ("user_id", "c2_user_id", "access_token", "refresh_token", "expires_at", "weight_class") values ($1, 2211, 'at', 'rt', '2026-10-01T00:00:00Z', 'H')`,
+      [seededUserId],
+    );
+    // Raw `pool.query` throws pg's own error DIRECTLY, so the Postgres text
+    // naming the violated constraint IS the top-level `.message` and
+    // `toThrow(regex)` reads it — matching the `surface` precedent a few
+    // lines above. (Through the typed builder the same error arrives wrapped
+    // in a `DrizzleQueryError` whose own `.message` is just "Failed query:
+    // ...", with the real text on `.cause`; that is why this assertion used
+    // to be a `toMatchObject({ cause: … })` and no longer is.)
     await expect(
-      db.insert(concept2Links).values({
-        userId: other.id,
-        c2UserId: 2211,
-        accessToken: "at2",
-        refreshToken: "rt2",
-        expiresAt: new Date("2026-10-01T00:00:00Z"),
-        weightClass: "L",
+      pool.query(
+        `insert into "concept2_links" ("user_id", "c2_user_id", "access_token", "refresh_token", "expires_at", "weight_class") values ($1, 2211, 'at2', 'rt2', '2026-10-01T00:00:00Z', 'L')`,
+        [other.id],
+      ),
+    ).rejects.toThrow(/concept2_links_c2_user_id_unique/);
+  });
+});
+
+// Phase DE PR 2 (spec §4.2, TRIAD): migration 0024 renames both `pain`
+// columns and their CHECKs and moves the pain-scale article's read rows to
+// effort-scale. Truncated-folder pattern (as 0008-0021 above): seed against
+// the real pre-0024 schema, run the full folder, assert what 0024 did.
+describe("migration 0024: pain → effort, and the article slug", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number; tag: string }[] };
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0024-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const e of journal.entries.filter((e) => e.idx <= 23)) {
+      const idx = String(e.idx).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${e.tag}.sql`),
+        path.join(tempDir, `${e.tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 23),
       }),
-    ).rejects.toMatchObject({
-      cause: {
-        message: expect.stringMatching(/concept2_links_c2_user_id_unique/),
-      },
-    });
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("renames both columns and CHECKs, keeps the 1..5 rule under the new name, and moves pain-scale reads to effort-scale without violating the (user_id, slug) key", async () => {
+    // Seeded against the PRE-0024 schema: the columns are still `pain`, and
+    // two rowers have read the pain-scale article — one of them (B) somehow
+    // also holds an effort-scale row, the case the UPDATE's NOT EXISTS
+    // guard and the trailing DELETE exist for.
+    const inserted = await db.execute<{ id: string }>(
+      sql`insert into "users" ("google_sub", "email", "name")
+          values ('pre-0024-a', 'a@0024.test', 'A'), ('pre-0024-b', 'b@0024.test', 'B')
+          returning "id"`,
+    );
+    const [a, b] = inserted.rows.map((r) => r.id) as [string, string];
+    await db.execute(
+      sql`insert into "article_reads" ("user_id", "slug") values
+          (${a}, 'pain-scale'), (${b}, 'pain-scale'), (${b}, 'effort-scale'), (${a}, 'baselines')`,
+    );
+    const before = await db.execute<{ column_name: string }>(
+      sql`select column_name from information_schema.columns
+          where table_name in ('workouts', 'session_logs') and column_name in ('pain', 'effort')`,
+    );
+    expect(before.rows.map((r) => r.column_name).sort()).toStrictEqual([
+      "pain",
+      "pain",
+    ]);
+
+    // The real, full folder — the boot-time migrate() that ships 0024.
+    await migrate(db, { migrationsFolder: "drizzle" });
+
+    const cols = await db.execute<{ table_name: string; column_name: string }>(
+      sql`select table_name, column_name from information_schema.columns
+          where table_name in ('workouts', 'session_logs') and column_name in ('pain', 'effort')
+          order by table_name`,
+    );
+    expect(
+      cols.rows.map((r) => `${r.table_name}.${r.column_name}`),
+    ).toStrictEqual(["session_logs.effort", "workouts.effort"]);
+    const checks = await db.execute<{ conname: string }>(
+      sql`select conname from pg_constraint
+          where conname in ('workouts_pain_check', 'workouts_effort_check', 'session_logs_pain_check', 'session_logs_effort_check')
+          order by conname`,
+    );
+    expect(checks.rows.map((r) => r.conname)).toStrictEqual([
+      "session_logs_effort_check",
+      "workouts_effort_check",
+    ]);
+    // The rule survived the rename: 6 is rejected by the renamed constraint
+    // (drizzle wraps the pg error; the constraint name rides on `cause`).
+    let caught: unknown;
+    try {
+      await db.execute(
+        sql`insert into "workouts" ("user_id", "title", "type", "difficulty", "effort", "source", "steps")
+            values (${a}, 'Too hard', 'AN', 'hard', 6, 'user', '[]'::jsonb)`,
+      );
+    } catch (e) {
+      caught = e;
+    }
+    const cause = (caught as { cause?: { constraint?: string } } | undefined)
+      ?.cause;
+    expect(cause?.constraint).toBe("workouts_effort_check");
+
+    const reads = await db.execute<{ user_id: string; slug: string }>(
+      sql`select user_id, slug from "article_reads" order by user_id, slug`,
+    );
+    const byUser = (id: string) =>
+      reads.rows.filter((r) => r.user_id === id).map((r) => r.slug);
+    expect(byUser(a)).toStrictEqual(["baselines", "effort-scale"]);
+    expect(byUser(b)).toStrictEqual(["effort-scale"]);
+    expect(reads.rows.some((r) => r.slug === "pain-scale")).toBe(false);
   });
 });

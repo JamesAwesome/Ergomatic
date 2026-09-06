@@ -10,22 +10,22 @@ import { LIBRARY_SCROLL_KEY, saveLibraryScroll } from "./libraryScroll";
 
 const FULL: Filters = {
   types: ["AT", "O2"],
-  difficulties: ["easy", "hard"],
-  durations: ["30-45", "60+"],
-  painLevels: [4, 5],
+  durationRange: { min: 30, max: 120 },
+  effortLevels: [4, 5],
   lastDone: "over21",
   source: "custom",
+  query: "fog",
 };
 
 // The pre-Task-4 (v1) shape, kept verbatim as a fixture rather than reused
-// from filters.ts (which has never exported `painMax3`/`recency`/
+// from filters.ts (which has never exported `effortMax3`/`recency`/
 // `customOnly` — those three names predate any shape this file's own types
 // have ever described) — this is exactly the record a rower's browser
 // could still be holding in sessionStorage from before that round shipped.
 const V1_RECORD = {
   type: "AT",
   durations: ["30-45", "60+"],
-  painMax3: true,
+  effortMax3: true,
   recency: "not-recent",
   customOnly: true,
 };
@@ -40,24 +40,23 @@ const V1_RECORD = {
 const V2_RECORD = {
   type: "O2",
   durations: [],
-  painLevels: [],
+  effortLevels: [],
   lastDone: null,
   source: null,
 };
 
-// A record that is otherwise fully v3-shaped (has `difficulties`,
-// `durations`, `painLevels`, `lastDone`, `source` all present and valid)
-// but still carries the RENAMED field under its old name (`type`, not
-// `types`) — unlike `V2_RECORD`, which is missing `difficulties` too, this
-// is rejected by ONE check alone (`!Array.isArray(f.types)`), isolating
-// that check from every other field's own validation (whole-branch review
-// I-5: `V2_RECORD`'s rejection can't tell the `types`-presence check apart
-// from the `difficulties`-presence check, since it fails both).
+// A record that is otherwise fully v3-shaped (`durations`, `effortLevels`,
+// `lastDone`, `source` all present and valid) but still carries the
+// RENAMED field under its old name (`type`, not `types`), so it is
+// rejected by ONE check alone (`!Array.isArray(f.types)`), isolating that
+// check from every other field's own validation (whole-branch review
+// I-5). Since Phase DE PR 1 removed the `difficulties` check it is
+// shaped identically to `V2_RECORD`; it stays a separate name because the
+// two tests that use it pin different claims.
 const HALF_MIGRATED_RECORD = {
   type: "O2",
-  difficulties: [],
   durations: [],
-  painLevels: [],
+  effortLevels: [],
   lastDone: null,
   source: null,
 };
@@ -65,6 +64,17 @@ const HALF_MIGRATED_RECORD = {
 describe("libraryFilters", () => {
   beforeEach(() => {
     sessionStorage.clear();
+  });
+
+  // Phase DE PR 1: a pre-PR-1 record carries `difficulties`; the key is
+  // unknown now and ignored, and the record's OTHER fields still parse
+  // strictly (the wrong-shape table below is unchanged).
+  it("parses a stored record that still carries difficulties, dropping the key", () => {
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, difficulties: ["easy", "hard"] }),
+    );
+    expect(loadLibraryFilters()).toStrictEqual(FULL);
   });
 
   it("round-trips a fully-populated Filters", () => {
@@ -118,38 +128,49 @@ describe("libraryFilters", () => {
         JSON.stringify({ ...FULL, types: [2] }),
       ],
       [
-        "difficulties not an array",
-        JSON.stringify({ ...FULL, difficulties: "easy" }),
+        "durationRange missing (a bucket-era record: `durations` instead)",
+        JSON.stringify({
+          ...FULL,
+          durationRange: undefined,
+          durations: ["60+"],
+        }),
       ],
       [
-        "difficulties contains an unknown value",
-        JSON.stringify({ ...FULL, difficulties: ["extreme"] }),
+        "durationRange not an object",
+        JSON.stringify({ ...FULL, durationRange: "60+" }),
       ],
       [
-        "difficulties contains a wrong-shaped member",
-        JSON.stringify({ ...FULL, difficulties: [1] }),
-      ],
-      ["durations not an array", JSON.stringify({ ...FULL, durations: "60+" })],
-      [
-        "unknown duration bucket",
-        JSON.stringify({ ...FULL, durations: ["25-30"] }),
-      ],
-      ["painLevels not an array", JSON.stringify({ ...FULL, painLevels: 4 })],
-      [
-        "painLevels contains an out-of-range level",
-        JSON.stringify({ ...FULL, painLevels: [0] }),
+        "durationRange with a non-number member",
+        JSON.stringify({ ...FULL, durationRange: { min: "0", max: 60 } }),
       ],
       [
-        "painLevels contains a non-integer",
-        JSON.stringify({ ...FULL, painLevels: [4.5] }),
+        "durationRange missing max",
+        JSON.stringify({ ...FULL, durationRange: { min: 0 } }),
+      ],
+      [
+        "effortLevels not an array",
+        JSON.stringify({ ...FULL, effortLevels: 4 }),
+      ],
+      // Phase DE PR 2: NO fallback from `painLevels` — this store is
+      // sessionStorage, so a pre-PR-2 record has no native producer; the
+      // wrong shape falls back to EMPTY_FILTERS whole, by design.
+      [
+        "a pre-PR-2 record (painLevels, no effortLevels)",
+        JSON.stringify({ ...FULL, effortLevels: undefined, painLevels: [1] }),
+      ],
+      ["effortLevels null", JSON.stringify({ ...FULL, effortLevels: null })],
+      [
+        "effortLevels contains an out-of-range level",
+        JSON.stringify({ ...FULL, effortLevels: [0] }),
+      ],
+      [
+        "effortLevels contains a non-integer",
+        JSON.stringify({ ...FULL, effortLevels: [4.5] }),
       ],
       ["unknown lastDone", JSON.stringify({ ...FULL, lastDone: "today" })],
       ["lastDone wrong shape", JSON.stringify({ ...FULL, lastDone: 21 })],
       ["unknown source", JSON.stringify({ ...FULL, source: "book" })],
-      [
-        "missing field",
-        JSON.stringify({ types: [], difficulties: [], durations: [] }),
-      ],
+      ["missing field", JSON.stringify({ types: [], durations: [] })],
       // The pre-Task-4 (v1) shape: none of its fields overlap the current
       // validator's own field names, so it's rejected wholesale — the
       // point of the strict, per-field check rather than a partial merge.
@@ -160,6 +181,21 @@ describe("libraryFilters", () => {
     });
   });
 
+  // Phase SF PR3: `query` is a NEW concept — a record from before it
+  // upgrades in place to "" (the lastDone/source precedent), while a
+  // present non-string still fails strict.
+  it("upgrades a record with no query field to query: '' rather than rejecting it, and rejects a non-string query", () => {
+    const { query: _q, ...noQuery } = FULL;
+    void _q;
+    sessionStorage.setItem(LIBRARY_FILTERS_KEY, JSON.stringify(noQuery));
+    expect(loadLibraryFilters()).toStrictEqual({ ...FULL, query: "" });
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, query: 7 }),
+    );
+    expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
+  });
+
   it("de-dupes duplicated types from a tampered value", () => {
     sessionStorage.setItem(
       LIBRARY_FILTERS_KEY,
@@ -168,28 +204,31 @@ describe("libraryFilters", () => {
     expect(loadLibraryFilters().types).toStrictEqual(["AT", "O2"]);
   });
 
-  it("de-dupes duplicated difficulties from a tampered value", () => {
+  it("clamps and orders a tampered durationRange (fractions round, out-of-bounds clamp, a crossed pair collapses)", () => {
     sessionStorage.setItem(
       LIBRARY_FILTERS_KEY,
-      JSON.stringify({ ...FULL, difficulties: ["easy", "easy", "hard"] }),
+      JSON.stringify({ ...FULL, durationRange: { min: 500, max: -3.4 } }),
     );
-    expect(loadLibraryFilters().difficulties).toStrictEqual(["easy", "hard"]);
+    expect(loadLibraryFilters().durationRange).toStrictEqual({
+      min: 0,
+      max: 0,
+    });
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, durationRange: { min: 24.6, max: 999 } }),
+    );
+    expect(loadLibraryFilters().durationRange).toStrictEqual({
+      min: 25,
+      max: 120,
+    });
   });
 
-  it("de-dupes duplicated duration buckets from a tampered value", () => {
+  it("de-dupes duplicated effort levels from a tampered value", () => {
     sessionStorage.setItem(
       LIBRARY_FILTERS_KEY,
-      JSON.stringify({ ...FULL, durations: ["60+", "60+", "30-45"] }),
+      JSON.stringify({ ...FULL, effortLevels: [5, 5, 4] }),
     );
-    expect(loadLibraryFilters().durations).toStrictEqual(["60+", "30-45"]);
-  });
-
-  it("de-dupes duplicated pain levels from a tampered value", () => {
-    sessionStorage.setItem(
-      LIBRARY_FILTERS_KEY,
-      JSON.stringify({ ...FULL, painLevels: [5, 5, 4] }),
-    );
-    expect(loadLibraryFilters().painLevels).toStrictEqual([5, 4]);
+    expect(loadLibraryFilters().effortLevels).toStrictEqual([5, 4]);
   });
 
   // L5 (whole-branch review): libraryScroll's own saved position was

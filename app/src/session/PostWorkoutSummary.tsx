@@ -32,18 +32,18 @@ const HELD_OPTIONS: { value: HeldResult; label: string }[] = [
   { value: "over", label: "OVER · SLOWER" },
 ];
 
-const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
+const EFFORT_LEVELS = [1, 2, 3, 4, 5] as const;
 
-/** §2D's ACTUAL PAIN caption: `TAP TO RATE` unselected, else the row's own
+/** §2D's ACTUAL EFFORT caption: `TAP TO RATE` unselected, else the row's own
  *  three-way read of the chosen level (1 -> easier, 2 -> as planned, 3-5 ->
  *  harder) — the design's own literal words, not a re-derivation of
- *  ClassificationCard.tsx's PAIN_WORDS (that card's own EXPECTED-pain
+ *  ClassificationCard.tsx's EFFORT_WORDS (that card's own EXPECTED-effort
  *  vocabulary answers a different question, "how hard did you expect this
  *  to be", not "how did the actual compare to the plan"). */
-function painCaption(pain: number | null): string {
-  if (pain === null) return "TAP TO RATE";
-  if (pain === 1) return "EASIER THAN PLANNED";
-  if (pain === 2) return "AS PLANNED";
+function effortCaption(effort: number | null): string {
+  if (effort === null) return "TAP TO RATE";
+  if (effort === 1) return "EASIER THAN PLANNED";
+  if (effort === 2) return "AS PLANNED";
   return "HARDER THAN PLANNED";
 }
 
@@ -396,34 +396,34 @@ export function SummaryIntervalsBlock({
  *  `FromTheLog.tsx`'s Edit affordance can swap in the exact SAME four
  *  clearable controls the live door uses (this spec's own binding
  *  preamble: "Edit swaps in spec 1's reflection card"), rather than a
- *  second hand-rolled copy of the HELD/pain roving-button groups
+ *  second hand-rolled copy of the HELD/effort roving-button groups
  *  (CLAUDE.md's own recurring-failure #8). No behavior change to the live
  *  door below, which now renders this component in place of the
  *  identical inline JSX it used to carry directly. */
 export function SummaryReflectionCard({
   hint,
-  expectedPain,
+  expectedEffort,
   held,
   onHeld,
-  pain,
-  onPain,
+  effort,
+  onEffort,
   thumbs,
   onThumbs,
   notes,
   onNotes,
 }: {
   hint: string | undefined;
-  expectedPain: number | null;
+  expectedEffort: number | null;
   held: HeldResult | null;
   onHeld: (value: HeldResult | null) => void;
-  pain: number | null;
-  onPain: (value: number | null) => void;
+  effort: number | null;
+  onEffort: (value: number | null) => void;
   thumbs: Thumbs | null;
   onThumbs: (value: Thumbs | null) => void;
   notes: string;
   onNotes: (value: string) => void;
 }) {
-  const painWord = painCaption(pain);
+  const effortWord = effortCaption(effort);
   return (
     <div className="summary-reflection-card">
       <div className="summary-reflection-group">
@@ -471,26 +471,26 @@ export function SummaryReflectionCard({
 
       <div className="summary-reflection-group">
         <div className="summary-reflection-label-row">
-          <p className="summary-reflection-label">ACTUAL PAIN</p>
-          {expectedPain !== null && (
-            <p className="summary-hint">EXPECTED {expectedPain}/5</p>
+          <p className="summary-reflection-label">ACTUAL EFFORT</p>
+          {expectedEffort !== null && (
+            <p className="summary-hint">EXPECTED {expectedEffort}/5</p>
           )}
         </div>
-        <div className="summary-pain-row">
-          {PAIN_LEVELS.map((level) => (
+        <div className="summary-effort-row">
+          {EFFORT_LEVELS.map((level) => (
             <button
               key={level}
               type="button"
-              className="summary-pain-chip"
-              aria-pressed={pain === level}
-              aria-label={`Pain ${level}`}
-              onClick={() => onPain(pain === level ? null : level)}
+              className="summary-effort-chip"
+              aria-pressed={effort === level}
+              aria-label={`Effort ${level}`}
+              onClick={() => onEffort(effort === level ? null : level)}
             >
               {level}
             </button>
           ))}
         </div>
-        <p className="summary-pain-caption">{painWord}</p>
+        <p className="summary-effort-caption">{effortWord}</p>
       </div>
 
       <div className="summary-reflection-group">
@@ -524,11 +524,11 @@ export interface PostWorkoutSummaryProps {
    *  single-target rule the connected door does (`LogSession.tsx`'s own
    *  comment at that call site). */
   hint: string | undefined;
-  expectedPain: number | null;
+  expectedEffort: number | null;
   held: HeldResult | null;
   onHeld: (value: HeldResult | null) => void;
-  pain: number | null;
-  onPain: (value: number | null) => void;
+  effort: number | null;
+  onEffort: (value: number | null) => void;
   thumbs: Thumbs | null;
   onThumbs: (value: Thumbs | null) => void;
   notes: string;
@@ -581,6 +581,8 @@ export interface PostWorkoutSummaryProps {
    *  contained ReactNode this screen only places" idiom as `discardSlot`
    *  above. `undefined` renders nothing extra, same as `children`. */
   stripSlot?: ReactNode;
+  beforeSaveSlot?: ReactNode;
+  saveDisabled?: boolean;
   /** The diagnostics rows (MONITOR LOG · COPY / RECORDING · DOWNLOAD) —
    *  §2F: "SURVIVE below the stack." Rendered as children rather than a
    *  named slot: both are self-contained, state-owning components in
@@ -601,11 +603,11 @@ export default function PostWorkoutSummary({
   model,
   pacesOffCaption,
   hint,
-  expectedPain,
+  expectedEffort,
   held,
   onHeld,
-  pain,
-  onPain,
+  effort,
+  onEffort,
   thumbs,
   onThumbs,
   notes,
@@ -620,6 +622,8 @@ export default function PostWorkoutSummary({
   series,
   backFallback = "/today",
   stripSlot,
+  beforeSaveSlot,
+  saveDisabled = false,
   children,
 }: PostWorkoutSummaryProps) {
   const { meta, heroes, rows, caption } = model;
@@ -664,7 +668,7 @@ export default function PostWorkoutSummary({
           : "summary-save-secondary"
       }
       onClick={onSaveWithoutLogging}
-      disabled={saving}
+      disabled={saving || saveDisabled}
     >
       {plan === null ? "Save" : "Save without logging"}
     </button>
@@ -678,7 +682,7 @@ export default function PostWorkoutSummary({
           demoteForOnboarding ? "summary-save-secondary" : "summary-save-lead"
         }
         onClick={onLogAgainstPlan}
-        disabled={saving}
+        disabled={saving || saveDisabled}
       >
         {logAgainstPlanLabel}
       </button>
@@ -713,11 +717,11 @@ export default function PostWorkoutSummary({
 
       <SummaryReflectionCard
         hint={hint}
-        expectedPain={expectedPain}
+        expectedEffort={expectedEffort}
         held={held}
         onHeld={onHeld}
-        pain={pain}
-        onPain={onPain}
+        effort={effort}
+        onEffort={onEffort}
         thumbs={thumbs}
         onThumbs={onThumbs}
         notes={notes}
@@ -739,6 +743,7 @@ export default function PostWorkoutSummary({
           duplicated here. */}
       <TraceChart series={series} />
 
+      {beforeSaveSlot}
       <div className="action-stack summary-save-stack">
         {saveError !== null && <p className="field-error">{saveError}</p>}
         {saveButtons}

@@ -197,7 +197,7 @@ describe("TimerTargets (component)", () => {
   // the engine actually built, and the connected surface had newly started
   // routing effort work through the same word). `Fog Bow` is 30' at 6k+12,
   // 5' at MIN, 25' at 6k+10; `Rear Flank` is 5 x (1'/2'/3' at MAX). The
-  // engine stamps `label` from `domain/pace.ts`'s `effortWord`, so the card
+  // engine stamps `label` from `domain/pace.ts`'s `paceWordLabel`, so the card
   // shows CAPS — deliberately, since the timer's own UP NEXT strip above it
   // reads `WORK ALL OUT` off the same field.
   it("renders the effort WORD in the domain's own caps for a real library effort phase, never the estimate behind it", () => {

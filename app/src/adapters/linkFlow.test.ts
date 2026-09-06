@@ -76,7 +76,7 @@ describe("startLink on native", () => {
   it("mints with linkClient webauth-1, opens an EPHEMERAL session on the bare scheme, exchanges {code, state}, and reports the link", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
     const { calls } = mockApi(MINT_OK, () =>
-      jsonResponse(200, { linked: true, c2UserId: 2211, weightClass: "H" }),
+      jsonResponse(200, { linked: true, c2UserId: 2211 }),
     );
     const start = vi.fn(async () => ({
       callbackUrl:
@@ -87,10 +87,13 @@ describe("startLink on native", () => {
     const { startLink, LINK_CALLBACK_SCHEME, LINK_CLIENT } =
       await import("./linkFlow");
 
-    const outcome = await startLink({ weightClass: "H" });
+    const outcome = await startLink();
 
     expect(JSON.parse(String(calls[0]!.init!.body))).toStrictEqual({
-      weightClass: "H",
+      // Ruling (i), James 2026-09-03: "I don't want that set in our app."
+      // `linkClient` is a claim about THIS BUILD's capability, not about
+      // the rower, so it is what remains. `toStrictEqual` is what makes
+      // this the assertion that catches a re-added field.
       linkClient: LINK_CLIENT,
     });
     expect(start).toHaveBeenCalledExactlyOnceWith({
@@ -114,7 +117,6 @@ describe("startLink on native", () => {
     expect(outcome).toStrictEqual({
       kind: "linked",
       c2UserId: 2211,
-      weightClass: "H",
       stateEchoed: true,
     });
   });
@@ -122,7 +124,7 @@ describe("startLink on native", () => {
   it("exchanges the MINT's state, not the callback's, when the callback omits state (the echo-independence case)", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
     const { calls } = mockApi(MINT_OK, () =>
-      jsonResponse(200, { linked: true, c2UserId: 2211, weightClass: "L" }),
+      jsonResponse(200, { linked: true, c2UserId: 2211 }),
     );
     mockPlugin(
       vi.fn(async () => ({
@@ -132,7 +134,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    const outcome = await startLink({ weightClass: "L" });
+    const outcome = await startLink();
 
     expect(JSON.parse(String(calls[1]!.init!.body))).toStrictEqual({
       code: "CODE2",
@@ -141,7 +143,6 @@ describe("startLink on native", () => {
     expect(outcome).toStrictEqual({
       kind: "linked",
       c2UserId: 2211,
-      weightClass: "L",
       stateEchoed: false,
     });
   });
@@ -161,7 +162,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    const outcome = await startLink({ weightClass: "H" });
+    const outcome = await startLink();
 
     expect(outcome).toStrictEqual({ kind: "stateMismatch" });
     expect(api).toHaveBeenCalledExactlyOnceWith(
@@ -186,7 +187,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "declined",
       stateEchoed: true,
     });
@@ -210,7 +211,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "declined",
       stateEchoed: true,
     });
@@ -230,15 +231,38 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "malformed",
       stateEchoed: false,
     });
   });
 
+  it("the PLUGIN's busy names its own source, so the card can tell it from the JS guard's", async () => {
+    // Pulled out of the `it.each` table below: that block shares ONE
+    // `toStrictEqual({ kind })` assertion across its rows, which cannot
+    // express the extra `source` field without breaking the others.
+    // linkFlow.ts's own `case "busy"` comment requires the two sources to
+    // render differently; before PR2 the union could not say which was which.
+    vi.doMock("../platform", () => ({ isNative: () => true }));
+    mockApi(MINT_OK);
+    mockPlugin(
+      vi.fn(async () => {
+        const err = new Error("rejected") as Error & { code: string };
+        err.code = "busy";
+        throw err;
+      }),
+    );
+    vi.resetModules();
+    const { startLink } = await import("./linkFlow");
+
+    expect(await startLink()).toStrictEqual({
+      kind: "busy",
+      source: "sheet",
+    });
+  });
+
   it.each([
     ["cancelled", "cancelled"],
-    ["busy", "busy"],
     ["abandoned", "abandoned"],
     ["noWindow", "noWindow"],
     ["noContext", "noContext"],
@@ -258,7 +282,7 @@ describe("startLink on native", () => {
       vi.resetModules();
       const { startLink } = await import("./linkFlow");
 
-      expect(await startLink({ weightClass: "H" })).toStrictEqual({ kind });
+      expect(await startLink()).toStrictEqual({ kind });
     },
   );
 
@@ -277,7 +301,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "pluginError",
       code: "cannotStart",
       message: "the system will not start one",
@@ -292,7 +316,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "updateRequired",
     });
     expect(start).not.toHaveBeenCalled();
@@ -310,7 +334,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "mintFailed",
       status: 409,
       error: null,
@@ -333,7 +357,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "pluginError",
       code: "unknown",
       // `String({})`'s answer, asserted rather than avoided: there is no
@@ -355,7 +379,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "exchangeFailed",
       status: 403,
       error: "principal_mismatch",
@@ -385,7 +409,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "serverError",
       status: 404,
       stateEchoed: true,
@@ -410,7 +434,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "serverError",
       status: 500,
       stateEchoed: true,
@@ -432,7 +456,6 @@ describe("startLink on native", () => {
       return jsonResponse(200, {
         linked: true,
         c2UserId: 2211,
-        weightClass: "H",
       });
     });
     vi.doMock("../api", () => ({ api }));
@@ -444,17 +467,16 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "networkError",
       message: "Load failed",
     });
     expect(start).not.toHaveBeenCalled();
 
     // The guard released: the next tap gets past `linkInFlight` and completes.
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "linked",
       c2UserId: 2211,
-      weightClass: "H",
       stateEchoed: true,
     });
   });
@@ -473,7 +495,7 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "networkError",
       message: "the tunnel went away",
     });
@@ -483,7 +505,7 @@ describe("startLink on native", () => {
   it("refuses a SECOND concurrent call with `busy` without minting again (the UX guard; the plugin is the authority)", async () => {
     vi.doMock("../platform", () => ({ isNative: () => true }));
     const { api } = mockApi(MINT_OK, () =>
-      jsonResponse(200, { linked: true, c2UserId: 1, weightClass: "H" }),
+      jsonResponse(200, { linked: true, c2UserId: 1 }),
     );
     // ONE RESOLVER PER PLUGIN CALL. Every `WebAuth.start()` returns a fresh
     // never-resolved promise, so a single `release` variable cannot release the
@@ -501,10 +523,10 @@ describe("startLink on native", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    const first = startLink({ weightClass: "H" });
-    const second = await startLink({ weightClass: "H" });
+    const first = startLink();
+    const second = await startLink();
 
-    expect(second).toStrictEqual({ kind: "busy" });
+    expect(second).toStrictEqual({ kind: "busy", source: "guard" });
     expect(api).toHaveBeenCalledOnce();
 
     // `await startLink()` above yields ONE microtask; the first attempt is
@@ -520,7 +542,7 @@ describe("startLink on native", () => {
     // And the guard RELEASES: a third call after the first settles mints again.
     // The wait is on the SECOND resolver being armed, which is the observable
     // that the third attempt got past `linkInFlight` and reached the plugin.
-    const third = startLink({ weightClass: "H" });
+    const third = startLink();
     await vi.waitFor(() => expect(releases).toHaveLength(2));
     expect(
       api.mock.calls.filter((c) => c[0] === "/api/concept2/connect"),
@@ -543,11 +565,12 @@ describe("startLink on web", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    const outcome = await startLink({ weightClass: "L" });
+    const outcome = await startLink();
 
-    expect(JSON.parse(String(calls[0]!.init!.body))).toStrictEqual({
-      weightClass: "L",
-    });
+    // Web mints carry NOTHING: not a null class, not a conditionally
+    // omitted one. `{}` is the whole body, and there is no code path that
+    // can put a person in it.
+    expect(JSON.parse(String(calls[0]!.init!.body))).toStrictEqual({});
     expect(openExternalUrl).toHaveBeenCalledExactlyOnceWith(
       "https://log-dev.concept2.com/oauth/authorize?client_id=1&state=abc",
     );
@@ -563,7 +586,7 @@ describe("startLink on web", () => {
     vi.resetModules();
     const { startLink } = await import("./linkFlow");
 
-    expect(await startLink({ weightClass: "H" })).toStrictEqual({
+    expect(await startLink()).toStrictEqual({
       kind: "mintFailed",
       status: 403,
       error: "unavailable",

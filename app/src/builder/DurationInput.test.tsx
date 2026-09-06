@@ -134,7 +134,7 @@ describe("DurationInput", () => {
     expect(onChange).toHaveBeenCalledWith({ value: "10:00", unit: "min" });
   });
 
-  // Mirrors PaceRefInput.test.tsx's (and the deleted PainPicker.test.tsx's)
+  // Mirrors PaceRefInput.test.tsx's (and the deleted EffortPicker.test.tsx's)
   // roving-tabIndex and arrow-key suites for this control's own
   // radiogroup — only two chips (MIN/M), so "wraps" and "moves
   // forward/back" collapse into the same transition, but the handler is

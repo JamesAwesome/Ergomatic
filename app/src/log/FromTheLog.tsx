@@ -10,6 +10,7 @@ import {
   SummaryReflectionCard,
 } from "../session/PostWorkoutSummary";
 import { resolveBackTarget } from "../shell/BackLink";
+import Concept2SendBlock from "./Concept2SendBlock";
 import { buildStoredSummary, type StoredLog } from "./storedSummary";
 import TraceChart from "./TraceChart";
 
@@ -191,7 +192,7 @@ function useLogFetch(id: string | undefined): FetchState {
 
 interface EditFields {
   held: HeldResult | null;
-  pain: number | null;
+  effort: number | null;
   thumbs: Thumbs | null;
   notes: string;
 }
@@ -213,7 +214,7 @@ function buildPatch(
   const patch: Record<string, HeldResult | number | Thumbs | string | null> =
     {};
   if (edit.held !== row.held) patch.held = edit.held;
-  if (edit.pain !== row.pain) patch.pain = edit.pain;
+  if (edit.effort !== row.effort) patch.effort = edit.effort;
   if (edit.thumbs !== row.thumbs) patch.thumbs = edit.thumbs;
   const normalizedNotes = edit.notes.trim().length > 0 ? edit.notes : null;
   if (normalizedNotes !== row.notes) patch.notes = normalizedNotes;
@@ -261,7 +262,7 @@ export default function FromTheLog() {
   // from an earlier abandoned edit.
   const [editing, setEditing] = useState(false);
   const [held, setHeld] = useState<HeldResult | null>(null);
-  const [pain, setPain] = useState<number | null>(null);
+  const [effort, setEffort] = useState<number | null>(null);
   const [thumbs, setThumbs] = useState<Thumbs | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -270,7 +271,7 @@ export default function FromTheLog() {
   function enterEdit() {
     if (row === null) return;
     setHeld(row.held);
-    setPain(row.pain);
+    setEffort(row.effort);
     setThumbs(row.thumbs);
     setNotes(row.notes ?? "");
     setSaveError(null);
@@ -284,7 +285,7 @@ export default function FromTheLog() {
 
   async function save() {
     if (row === null) return;
-    const patch = buildPatch(row, { held, pain, thumbs, notes });
+    const patch = buildPatch(row, { held, effort, thumbs, notes });
     if (Object.keys(patch).length === 0) {
       // Nothing actually changed — an honest no-op, no PATCH sent (§3's
       // own empty-patch precedent is a no-op READ; sending an empty-diff
@@ -481,11 +482,11 @@ export default function FromTheLog() {
             <>
               <SummaryReflectionCard
                 hint={undefined}
-                expectedPain={null}
+                expectedEffort={null}
                 held={held}
                 onHeld={setHeld}
-                pain={pain}
-                onPain={setPain}
+                effort={effort}
+                onEffort={setEffort}
                 thumbs={thumbs}
                 onThumbs={setThumbs}
                 notes={notes}
@@ -560,6 +561,14 @@ export default function FromTheLog() {
           {view.planFooter !== undefined && (
             <p className="log-plan-footer">{view.planFooter}</p>
           )}
+
+          {/* Wave E PR2, Surface 2. Board: "end of the log-detail scroll,
+              after the 'Logged to <plan>' line"; the delete affordance's
+              own rule immediately below is "bottom of the view, below the
+              plan footer" — both hold only in this order, so the send
+              block sits between them. Reads `row` directly, never the view
+              model, the same constraint `MachineConfirmedBlock` carries. */}
+          <Concept2SendBlock row={row} />
 
           {/* §1 Placement: "Bottom of the view, below the plan footer —
               last, quiet, away from Edit." Copy is a pure function of

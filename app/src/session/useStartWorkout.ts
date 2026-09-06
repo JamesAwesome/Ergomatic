@@ -36,6 +36,7 @@ export interface UseStartWorkoutResult {
   /** `null` while the plain Start control should render; non-null while the
    *  staged replace-confirmation panel has taken over. */
   replaceStage: StartReplaceStage;
+  unsavedCount: number;
   /** Set only when `saveDraft` itself fails (quota, private-mode Safari) —
    *  surfaced inline rather than navigating to the countdown with nothing
    *  behind it. */
@@ -79,6 +80,7 @@ export function useStartWorkout(
 ): UseStartWorkoutResult {
   const [startError, setStartError] = useState<string | null>(null);
   const [replaceStage, setReplaceStage] = useState<StartReplaceStage>(null);
+  const [unsavedCount, setUnsavedCount] = useState(0);
   const navigate = useNavigate();
 
   // Builds and saves the session draft, then hands off straight to the
@@ -146,11 +148,15 @@ export function useStartWorkout(
   // invisible here.
   function handleStart() {
     const existingRun = loadRun();
+    const existingMonitorEntry = currentUnretiredHandoff();
+    setUnsavedCount(
+      Number(existingRun !== null && existingRun.completedAt !== null) +
+        Number(existingMonitorEntry !== null),
+    );
     if (existingRun !== null && existingRun.completedAt !== null) {
       setReplaceStage("unlogged");
       return;
     }
-    const existingMonitorEntry = currentUnretiredHandoff();
     if (existingMonitorEntry !== null) {
       // Always "unlogged", never "in-progress" (queue item 3, mirroring
       // `connectGuardStage`'s own F6 spec 2b fix): a MonitorRun visible at
@@ -189,6 +195,7 @@ export function useStartWorkout(
 
   return {
     replaceStage,
+    unsavedCount,
     startError,
     handleStart,
     confirmReplace,

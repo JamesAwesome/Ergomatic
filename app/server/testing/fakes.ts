@@ -1,4 +1,6 @@
 import { vi } from "vitest";
+import type { WeightClassFailure } from "../concept2/mapping.js";
+import { derivedDifficulty, type Difficulty } from "../compat/difficulty.js";
 import { isFreeRow } from "../../domain/types.js";
 import type { SessionStore } from "../auth/sessions.js";
 import type { UserStore } from "../auth/users.js";
@@ -49,6 +51,9 @@ import {
 // ---------------------------------------------------------------------------
 
 interface WorkoutRow extends WorkoutInput {
+  // Phase DE PR 1: the real column is NOT NULL and derived from effort at
+  // every write site (server/compat/difficulty.ts); the fake mirrors it.
+  difficulty: Difficulty;
   id: string;
   userId: string | null;
   source: "starter" | "user";
@@ -93,6 +98,9 @@ function newWorkoutRow(
   insertionSeq += 1;
   return {
     ...input,
+    // After the spread on purpose: an old client's `difficulty` in `input`
+    // must never win over the derived word (mirrors the real store).
+    difficulty: derivedDifficulty(input.effort),
     sortOrder: input.sortOrder ?? null,
     seq: insertionSeq,
     id: crypto.randomUUID(),
@@ -229,7 +237,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       if (!existing) return null;
       assertWorkoutType(input.type);
       // Mirror the real store's UPDATE exactly (app/server/stores/
-      // workouts.ts): only title/type/difficulty/pain/steps/updatedAt are
+      // workouts.ts): only title/type/effort/steps/updatedAt (plus the derived difficulty) are
       // ever set — sortOrder (and every other column) is left alone. Built
       // from an explicit field list, NOT `{ ...existing, ...input }` (M1):
       // `input` is the same object reference as the request body at
@@ -240,8 +248,8 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
         ...existing,
         title: input.title,
         type: input.type,
-        difficulty: input.difficulty,
-        pain: input.pain,
+        difficulty: derivedDifficulty(input.effort),
+        effort: input.effort,
         steps: input.steps,
         updatedAt: new Date(),
       };
@@ -273,8 +281,8 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
         ...existing,
         title: input.title,
         type: input.type,
-        difficulty: input.difficulty,
-        pain: input.pain,
+        difficulty: derivedDifficulty(input.effort),
+        effort: input.effort,
         steps: input.steps,
         sortOrder: input.sortOrder,
         updatedAt: new Date(),
@@ -550,7 +558,10 @@ function makeFakeLogsStore(
     // store's `WHERE user_id = $userId` gives.
     async get(userId: string, id: string) {
       const rows = byUser.get(userId) ?? [];
-      const found = rows.find((r) => r.id === id);
+      // Case-insensitive, as Postgres compares `uuid` — the send route's
+      // claim folds its key for the same reason, and a fake that matched
+      // bytes would 404 the upper-cased spelling the real store finds.
+      const found = rows.find((r) => r.id.toLowerCase() === id.toLowerCase());
       if (!found) return null;
       const { seq: _seq, ...row } = found;
       return row;
@@ -567,7 +578,7 @@ function makeFakeLogsStore(
       const updated = { ...existing };
       if ("thumbs" in patch) updated.thumbs = patch.thumbs ?? null;
       if ("held" in patch) updated.held = patch.held ?? null;
-      if ("pain" in patch) updated.pain = patch.pain ?? null;
+      if ("effort" in patch) updated.effort = patch.effort ?? null;
       if ("notes" in patch) updated.notes = patch.notes ?? null;
       rows[idx] = updated;
       byUser.set(userId, rows);
@@ -772,11 +783,29 @@ function makeFakeLogsStore(
       c2UserId: number,
     ) {
       const rows = byUser.get(userId) ?? [];
-      const idx = rows.findIndex((r) => r.id === id);
+      const idx = rows.findIndex(
+        (r) => r.id.toLowerCase() === id.toLowerCase(),
+      );
       if (idx === -1) return false;
       rows[idx] = { ...rows[idx], c2ResultId, c2UserId };
       byUser.set(userId, rows);
       return true;
+    },
+    // Wave E PR2 (observation 29): mirrors the real store's owner-scoped
+    // AND account-scoped read (stores/logs.ts's own comment) — a row
+    // written while a DIFFERENT Concept2 account was linked says nothing
+    // about this one, so it must not be excluded from this account's
+    // declaration read. The null is a TYPE NARROWING and not a claimed
+    // guard, mirroring the real store's own shape for the reason its
+    // comment gives.
+    async sentC2ResultIds(userId: string, c2UserId: number) {
+      const rows = byUser.get(userId) ?? [];
+      return new Set(
+        rows
+          .filter((r) => r.c2UserId === c2UserId)
+          .map((r) => r.c2ResultId)
+          .filter((id): id is number => id !== null),
+      );
     },
     // Wave E PR1 Task 6, plan deviation 2: mirrors the real store's
     // `tz IS NULL` guard (stores/logs.ts's own comment) — a row that
@@ -959,11 +988,23 @@ export function makeFakeConcept2Store(
       links.set(userId, {
         userId,
         c2UserId: link.c2UserId,
+        // Wave E PR2: mirrors the real store's own `?? null` — the input
+        // field is OPTIONAL and the stored column is required-and-nullable
+        // (stores/concept2.ts's `upsertLink` comment records the asymmetry).
+        c2Username: link.c2Username ?? null,
         accessToken: link.accessToken,
         refreshToken: link.refreshToken,
         expiresAt: link.expiresAt,
-        weightClass: link.weightClass,
         needsReauthAt: null,
+        // Mirrors the real store's two split rules (Wave E auto-send §3.1):
+        // the MODE survives a same-account reconnect and resets on an account
+        // switch; the FAILURE flag clears on every relink.
+        autoSend:
+          existing !== undefined && existing.c2UserId === link.c2UserId
+            ? existing.autoSend
+            : false,
+        sendFailedAt: null,
+        sendFailedReason: null,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       });
@@ -971,6 +1012,34 @@ export function makeFakeConcept2Store(
 
     async deleteLink(userId: string) {
       links.delete(userId);
+    },
+
+    async setAutoSend(userId: string, autoSend: boolean) {
+      const existing = links.get(userId);
+      if (!existing) return false;
+      links.set(userId, { ...existing, autoSend, updatedAt: clock() });
+      return true;
+    },
+
+    async setSendFailed(userId: string, reason: WeightClassFailure) {
+      const existing = links.get(userId);
+      if (!existing) return;
+      links.set(userId, {
+        ...existing,
+        sendFailedAt: clock(),
+        sendFailedReason: reason,
+        updatedAt: clock(),
+      });
+    },
+
+    async clearSendFailed(userId: string) {
+      const existing = links.get(userId);
+      if (!existing || existing.sendFailedAt === null) return;
+      links.set(userId, {
+        ...existing,
+        sendFailedAt: null,
+        sendFailedReason: null,
+      });
     },
 
     async withLinkLock(userId, fn) {
@@ -1034,7 +1103,6 @@ export function makeFakeConcept2Store(
       if (!row) return null;
       return {
         userId: row.userId,
-        weightClass: row.weightClass,
         surface: row.surface,
       };
     },
@@ -1054,7 +1122,7 @@ export function makeFakeConcept2Store(
       }
       attempts.delete(nonce);
       const ageMs = clock().getTime() - row.createdAt.getTime();
-      return { weightClass: row.weightClass, fresh: ageMs <= maxAgeMs };
+      return { fresh: ageMs <= maxAgeMs };
     },
 
     async deleteExpiredAttempts(maxAgeMs: number) {

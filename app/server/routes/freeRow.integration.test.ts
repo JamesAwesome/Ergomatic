@@ -89,7 +89,7 @@ describe("POST/GET /api/logs: a FREE ROW round-trips, and advances the plan only
       workoutTitle: "Just Row",
       workoutType: null,
       held: null,
-      pain: null,
+      effort: null,
       notes: null,
       steps: [],
       advancesPlan: true,

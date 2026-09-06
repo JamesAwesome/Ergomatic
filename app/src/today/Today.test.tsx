@@ -16,13 +16,63 @@ import type { PlanData, PlanSequenceItem } from "../api/usePlan";
 import type { RecentLog } from "../api/useRecentLogs";
 import type { WorkoutType } from "../../domain/types.js";
 import { phases } from "../../domain/expand.js";
+import { compileProgram } from "../../domain/monitor/program.js";
+import { buildLogSeed } from "../session/logDraft";
 import { buildDraft, type SessionDraft, DRAFT_KEY } from "../session/draft";
 import { advance, buildFreeRowRun, buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
 import { MONITOR_RUN_KEY, type MonitorRun } from "../monitor/monitorRun";
 import { elapsedSinceStart } from "./Today";
-import { TODAY_PICK_KEY, todayDateString } from "./todayPick";
+import { TODAY_PICK_KEY, todayDateString, type TodayPick } from "./todayPick";
 import { TODAY_OVERRIDES_KEY, type TodayOverrides } from "./todayOverrides";
+import {
+  TODAY_FILTERS_KEY,
+  type FilterSet,
+  type TodayFilterKey,
+  type TodayFilters,
+} from "./todayFilters";
+
+// Phase SF PR1: the client rng is a module the test scripts. The queue is
+// consumed one draw per call; an EMPTY queue yields 0, which makes every
+// draw pick the FIRST candidate — the least-recently-done head for the
+// first card (exactly pre-PR1's deterministic pick, so every older test
+// keeps its expectations) and O2 for the daily type roll. Tests that
+// exercise randomness push explicit draws.
+const rngQueue: number[] = [];
+// The `limit` Today passes to useRecentLogs, recorded by mockReady's mock so
+// the widened fetch (10, so a fourth logged session still re-keys) is
+// pinned rather than a green-either-way constant (scoped re-review LOW-2).
+let recentLogsLimit = 0;
+vi.mock("./rng", () => ({
+  clientRng: () => (rngQueue.length > 0 ? rngQueue.shift()! : 0),
+}));
+
+/** The per-type memory as stored: the set under `key`, or undefined when
+ *  that key has never been written. */
+function storedFilters(key: TodayFilterKey): FilterSet | undefined {
+  const raw = localStorage.getItem(TODAY_FILTERS_KEY);
+  if (raw === null) return undefined;
+  return (JSON.parse(raw) as TodayFilters).byKey[key];
+}
+
+function seedFilters(byKey: Partial<Record<TodayFilterKey, FilterSet>>): void {
+  const store: TodayFilters = { v: 2, byKey };
+  localStorage.setItem(TODAY_FILTERS_KEY, JSON.stringify(store));
+}
+
+/** A freestyle day record with nothing lit — the state after the rower
+ *  cleared the rolled chip today (or nothing could be rolled). A record
+ *  present means the roll does not run again today. */
+function seedClearedFreestyleDay(): void {
+  const record: TodayOverrides = {
+    date: todayDateString(),
+    planKey: null,
+    doneN: 0,
+    swapType: null,
+    session: 0,
+  };
+  localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(record));
+}
 
 // Realistic fixtures, per repo convention: real library workouts
 // (app/server/seed/library/), not hand-built minimums.
@@ -43,8 +93,7 @@ function libraryEntry(
     id,
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
-    pain: w.pain,
+    effort: w.effort,
     steps: w.steps,
     isGlobal: true,
     lastDoneDaysAgo,
@@ -67,8 +116,7 @@ function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
     id,
     title: w.title,
     type: w.type,
-    difficulty: w.difficulty,
-    pain: w.pain,
+    effort: w.effort,
     steps: w.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -109,7 +157,6 @@ const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 // distance branch died with it).
 const ONLY_K6_BASELINE = { k2Seconds: null, k6Seconds: 122 };
 const DEFAULT_PREFS = {
-  difficulties: ["easy", "medium", "hard"],
   timeCapMinutes: 60,
 };
 
@@ -183,7 +230,7 @@ const LOGS: RecentLog[] = [
     workoutType: "AT",
     loggedAt: "2026-07-25T12:00:00.000Z",
     held: "held",
-    pain: 2,
+    effort: 2,
     thumbs: null,
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -212,7 +259,7 @@ const LOGS: RecentLog[] = [
     workoutType: "O2",
     loggedAt: "2026-07-20T12:00:00.000Z",
     held: "under",
-    pain: 1,
+    effort: 1,
     thumbs: "up",
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -234,7 +281,7 @@ const LOGS: RecentLog[] = [
     workoutType: "AN",
     loggedAt: "2026-07-10T12:00:00.000Z",
     held: "over",
-    pain: 4,
+    effort: 4,
     thumbs: null,
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -282,7 +329,10 @@ function mockReady(overrides?: {
     usePreferences: () => ({ state: "ready", preferences }),
   }));
   vi.doMock("../api/useRecentLogs", () => ({
-    useRecentLogs: () => ({ state: "ready", logs }),
+    useRecentLogs: (limit: number) => {
+      recentLogsLimit = limit;
+      return { state: "ready", logs };
+    },
   }));
 }
 
@@ -344,7 +394,7 @@ function cardLinkTo(id: string): HTMLElement | undefined {
     .find((a) => a.getAttribute("href") === `/library/${id}`);
 }
 
-// Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN moved off the screen and
+// Task 2 (2026-08-04 round): DIFFICULTY/TIME/EFFORT moved off the screen and
 // into TodayFilterSheet — every assertion that used to read a chip's
 // `aria-pressed` straight off the page now has to open the sheet first.
 async function openFilterSheet() {
@@ -354,6 +404,7 @@ async function openFilterSheet() {
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
+  rngQueue.length = 0;
 });
 
 describe("Today (plan mode)", () => {
@@ -444,6 +495,44 @@ describe("Today (freestyle mode)", () => {
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
   });
 
+  it("a freestyle chip tap narrows the pool to that type, persists with planKey null, and a second tap clears it", async () => {
+    mockReady({ plan: FREESTYLE_PLAN });
+    await renderToday();
+    expect(screen.getByText(/FREESTYLE/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+
+    // AT pool: Occluded (10d) / Stationary (20d) / Pressure Ridge (15d) —
+    // least recently done is Stationary Front, not the O2 Sea Fret (30d).
+    await userEvent.click(screen.getByRole("button", { name: "AT" }));
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    // The plan line never grows a swap arrow — there is no plan call to
+    // swap away from.
+    expect(screen.getByText("FREESTYLE")).toBeVisible();
+    expect(screen.queryByText(/→ AT/)).not.toBeInTheDocument();
+    const stored = JSON.parse(
+      localStorage.getItem(TODAY_OVERRIDES_KEY)!,
+    ) as TodayOverrides;
+    expect(stored.swapType).toBe("AT");
+    expect(stored.planKey).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "AT" }));
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .swapType,
+    ).toBeNull();
+  });
+
   it("treats a plan with no sequence entry at doneN the same as freestyle, rather than crashing", async () => {
     // A completed plan (doneN reached the end of the 84-session sequence,
     // each advancing log having incremented it) — this pins the fallback
@@ -466,7 +555,13 @@ describe("Today (SHUFFLE)", () => {
     return stored.workoutId;
   }
 
-  it("cycles through the FULL 3-member pool in order and wraps back to the start", async () => {
+  // Phase SF PR1: SHUFFLE draws at random from the UNSHOWN pool. With the
+  // scripted rng returning 0 the draw is always the first unshown member
+  // in least-recently-done order, which reproduces the pre-PR1 walk
+  // exactly — so this test keeps its expectations and now proves the
+  // no-repeat walk plus the reset; the randomness itself is scripted in
+  // the Phase SF describe at the bottom of this file.
+  it("walks the FULL 3-member pool without repeating (scripted rng 0) and wraps back to the start once exhausted", async () => {
     // Pool sorted by least-recently-done: Stationary Front (20d) -> Pressure Ridge
     // (15d) -> Occluded Front (10d). A 3-item pool (not 2) is deliberate: on a
     // 2-item pool, a missing "% pool.length" bug still lands back on the
@@ -555,152 +650,117 @@ describe("Today (SHUFFLE)", () => {
 });
 
 describe("Today (overrides: init from preferences)", () => {
-  // Amendment (2026-08-04 PR #50 round): TIME's default is now a bucket
-  // SET (`bucketsForCap`), not a single cap chip — each row names which
-  // buckets should be pressed and which shouldn't at that preference cap.
+  // Phase SF PR2 (spec I-12): the TIME default is `[0, cap]`, the cap
+  // rounded DOWN to the 5-minute step and clamped at 120 (= no upper
+  // bound). Literals, not `rangeForCap` (RF21).
   it.each([
-    [60, ["<30′", "30–45′", "45–60′"], ["60′+"]],
-    [45, ["<30′", "30–45′"], ["45–60′", "60′+"]],
-    [100, ["<30′", "30–45′", "45–60′", "60′+"], []],
-    [30, ["<30′"], ["30–45′", "45–60′", "60′+"]],
+    [60, 60],
+    [45, 45],
+    [47, 45],
+    [100, 100],
+    [30, 30],
+    [300, 120],
   ] as const)(
-    "derives bucketsForCap(%i) as the default pressed TIME cells (no stored overrides)",
-    async (timeCapMinutes, pressed, notPressed) => {
+    "derives [0, %i → %i] as the default TIME range (no stored memory)",
+    async (timeCapMinutes, max) => {
       mockReady({ preferences: { ...DEFAULT_PREFS, timeCapMinutes } });
       await renderToday();
       await openFilterSheet();
-      for (const label of pressed) {
-        expect(screen.getByRole("button", { name: label })).toHaveAttribute(
-          "aria-pressed",
-          "true",
-        );
-      }
-      for (const label of notPressed) {
-        expect(screen.getByRole("button", { name: label })).toHaveAttribute(
-          "aria-pressed",
-          "false",
-        );
-      }
+      expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
+        "aria-valuenow",
+        "0",
+      );
+      expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
+        "aria-valuenow",
+        String(max),
+      );
     },
   );
 
-  it("defaults difficulties to every preference value and every pain cell to off", async () => {
+  it("defaults every effort cell to off", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
-        within(painGroup).getByRole("button", { name: level }),
+        within(effortGroup).getByRole("button", { name: level }),
       ).toHaveAttribute("aria-pressed", "false");
     }
   });
 });
 
 describe("Today (overrides: stored record wins over preferences)", () => {
-  it("uses the stored difficulties/durations/pain instead of the preference-derived default", async () => {
-    const stored: TodayOverrides = {
-      date: todayDateString(),
-      planKey: "sprint",
-      doneN: 11,
-      swapType: null,
-      difficulties: ["hard"],
-      durations: ["<30"],
-      painLevels: [1, 2, 3],
-      lastDone: null,
-      source: null,
-    };
-    localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(stored));
+  it("uses the stored durations/effort instead of the preference-derived default", async () => {
+    // Phase SF PR1: the memory is per type and UNDATED — the plan's own
+    // call today is AT, so the AT key is what this mount reads.
+    seedFilters({
+      AT: {
+        durationRange: { min: 0, max: 30 },
+        effortLevels: [4, 5],
+        lastDone: null,
+        source: null,
+      },
+    });
     mockReady();
     await renderToday();
     await openFilterSheet();
 
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
+      "aria-valuenow",
+      "30",
     );
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "<30′" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "30–45′" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    for (const level of ["1", "2", "3"]) {
-      expect(
-        within(painGroup).getByRole("button", { name: level }),
-      ).toHaveAttribute("aria-pressed", "true");
-    }
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
     for (const level of ["4", "5"]) {
       expect(
-        within(painGroup).getByRole("button", { name: level }),
+        within(effortGroup).getByRole("button", { name: level }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
+    for (const level of ["1", "2", "3"]) {
+      expect(
+        within(effortGroup).getByRole("button", { name: level }),
       ).toHaveAttribute("aria-pressed", "false");
     }
-    // Every fixture workout is "easy" difficulty (see the fixtures' own
-    // comment) — none match the stored "hard"-only filter, so the fellback
-    // reason proves the STORED record drove suggest(), not the 60-min/
-    // easy-medium-hard preference default DEFAULT_PREFS would have produced.
+    // Every AT fixture workout is effort 2 (see the fixtures' own comment) —
+    // none match the stored 4–5 effort filter, so the fellback reason proves
+    // the STORED record drove suggest(), not the 60-min / effort-off
+    // preference default DEFAULT_PREFS would have produced.
     expect(screen.getByText(/Nothing fit your/)).toBeVisible();
   });
 });
 
-// Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline chip
+// Task 2 (2026-08-04 round): DIFFICULTY/TIME/EFFORT's three inline chip
 // groups are gone — narrowing now happens inside TodayFilterSheet against
 // a DRAFT, committed only by its own "Apply Filter" button (Revision,
 // mid-Round-2: the count that used to live in this button's own copy now
 // lives in a caption above it). A second,
-// richer AT pool (Occluded Front/Stationary Front both pain 2, Filling Low
-// pain 3 — a real library fixture, `fromWorkout`-style, per this repo's
-// realistic-fixtures convention) lets a PAIN filter narrow the pool to
+// richer AT pool (Occluded Front/Stationary Front both effort 2, Filling Low
+// effort 3 — a real library fixture, `fromWorkout`-style, per this repo's
+// realistic-fixtures convention) lets a EFFORT filter narrow the pool to
 // exactly one entry without tripping suggest.ts's fellBack rule (which
 // reverts to the full type-matched list whenever a filter would otherwise
-// leave zero matches — the two pain-2 fixtures alone would trigger it).
+// leave zero matches — the two effort-2 fixtures alone would trigger it).
 const FILLING_LOW = libraryEntry("Filling Low", "w-fillinglow-2", 5);
 
 describe("Today (FILTER sheet)", () => {
   it("chips are gone at rest; FILTER ⌄ is the only control on the header's right besides SHUFFLE", async () => {
     mockReady();
     await renderToday();
-    for (const label of [
-      "EASY",
-      "MEDIUM",
-      "HARD",
-      "<30′",
-      "30–45′",
-      "45–60′",
-      "60′+",
-    ]) {
+    for (const label of ["EASY", "MEDIUM", "HARD"]) {
       expect(
         screen.queryByRole("button", { name: label }),
       ).not.toBeInTheDocument();
     }
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("group", { name: "PAIN" }),
+      screen.queryByRole("group", { name: "EFFORT" }),
     ).not.toBeInTheDocument();
     const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
     expect(filterButton).toBeVisible();
     expect(filterButton).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("opens on FILTER ⌄ click, holding DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE seeded from the applied overrides", async () => {
+  it("opens on FILTER ⌄ click, holding TIME/EFFORT/LAST DONE/SOURCE seeded from the applied overrides", async () => {
     mockReady();
     await renderToday();
     const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
@@ -708,32 +768,24 @@ describe("Today (FILTER sheet)", () => {
 
     expect(filterButton).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("dialog", { name: "Filter" })).toBeVisible();
-    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(screen.getByText(label)).toBeVisible();
     }
-    // Seeded from DEFAULT_PREFS (every difficulty, a 60-min cap's own
-    // bucketsForCap set, no pain filter) — the same values the "init from
-    // preferences" describe pins.
-    for (const label of ["EASY", "MEDIUM", "HARD"]) {
-      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-    }
-    for (const label of ["<30′", "30–45′", "45–60′"]) {
-      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-    }
-    expect(screen.getByRole("button", { name: "60′+" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
+    expect(screen.queryByText("DIFFICULTY")).not.toBeInTheDocument();
+    // Seeded from DEFAULT_PREFS (a 60-min cap's own [0, 60] range, no effort
+    // filter) — the same values the "init from preferences" describe pins.
+    expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
+      "aria-valuenow",
+      "0",
+    );
+    expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
+      "aria-valuenow",
+      "60",
     );
     // Round 2 (2026-08-04): both new dims default to null — neither cell
     // of either pair starts pressed (no account preference seeds them, per
     // Today.tsx's own fresh-day initial state).
-    for (const label of ["<21D", "21D+", "GLOBAL", "CUSTOM"]) {
+    for (const label of ["<21D", "21D+", "ERGOMATIC LIBRARY", "MY WORKOUTS"]) {
       expect(screen.getByRole("button", { name: label })).toHaveAttribute(
         "aria-pressed",
         "false",
@@ -743,7 +795,7 @@ describe("Today (FILTER sheet)", () => {
 
   // Round 2 (2026-08-04): SOURCE=CUSTOM narrows the pool to personal
   // (non-global) entries only — a real, provable pick swap, mirroring the
-  // existing PAIN-filter integration test's own "a real title swap" style.
+  // existing EFFORT-filter integration test's own "a real title swap" style.
   it("applying SOURCE=CUSTOM narrows the pool to the personal fixture alone, swapping the recommendation", async () => {
     mockReady({ workouts: [ISOBAR, WARM_FRONT, PERSONAL_GRADIENT] });
     await renderToday();
@@ -757,7 +809,7 @@ describe("Today (FILTER sheet)", () => {
     await openFilterSheet();
     const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
     await userEvent.click(
-      within(sourceGroup).getByRole("button", { name: "CUSTOM" }),
+      within(sourceGroup).getByRole("button", { name: "MY WORKOUTS" }),
     );
     expect(screen.getByText("1 OPTION")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
@@ -765,10 +817,8 @@ describe("Today (FILTER sheet)", () => {
     expect(
       screen.getByRole("heading", { name: "Gradient Wind" }),
     ).toBeVisible();
-    expect(screen.getByText("CUSTOM")).toBeVisible();
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({ source: "custom" });
+    expect(screen.getByText("MY WORKOUTS")).toBeVisible();
+    expect(storedFilters("AT")).toMatchObject({ source: "custom" });
   });
 
   it("applying LAST DONE=21D+ excludes a recent entry, keeps a stale one, and swaps the recommendation; the token clears it back to null", async () => {
@@ -796,17 +846,13 @@ describe("Today (FILTER sheet)", () => {
       screen.getByRole("heading", { name: "Barometric Low" }),
     ).toBeVisible();
     expect(screen.getByText("21D+")).toBeVisible();
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({ lastDone: "over21" });
+    expect(storedFilters("AT")).toMatchObject({ lastDone: "over21" });
 
     await userEvent.click(
       screen.getByRole("button", { name: "Remove 21D+ filter" }),
     );
     expect(screen.queryByText("21D+")).not.toBeInTheDocument();
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({ lastDone: null });
+    expect(storedFilters("AT")).toMatchObject({ lastDone: null });
   });
 
   it("draft edits inside the sheet don't touch the applied overrides until Apply", async () => {
@@ -818,10 +864,10 @@ describe("Today (FILTER sheet)", () => {
     expect(screen.getByText(/Least recently done/)).toBeVisible();
 
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    await userEvent.click(screen.getByRole("button", { name: "5" }));
+    expect(screen.getByRole("button", { name: "5" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
 
     // The card underneath is untouched by the mid-edit draft — still the
@@ -830,30 +876,30 @@ describe("Today (FILTER sheet)", () => {
       screen.getByRole("heading", { name: "Stationary Front" }),
     ).toBeVisible();
     expect(screen.getByText(/Least recently done/)).toBeVisible();
-    // No record has ever been written at all yet (this mount never applied
-    // a type swap or the sheet) — the draft edit above didn't create one
-    // either, the strongest proof it never touched storage.
-    expect(localStorage.getItem(TODAY_OVERRIDES_KEY)).toBeNull();
+    // No memory has ever been written at all yet (this mount never applied
+    // the sheet) — the draft edit above didn't create one either, the
+    // strongest proof it never touched storage.
+    expect(localStorage.getItem(TODAY_FILTERS_KEY)).toBeNull();
   });
 
   it("dismissing (Escape) drops the draft — reopening the sheet shows the untouched, previously-applied overrides", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    await userEvent.click(screen.getByRole("button", { name: "5" }));
+    expect(screen.getByRole("button", { name: "5" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
 
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(localStorage.getItem(TODAY_OVERRIDES_KEY)).toBeNull();
+    expect(localStorage.getItem(TODAY_FILTERS_KEY)).toBeNull();
 
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "5" })).toHaveAttribute(
       "aria-pressed",
-      "true",
+      "false",
     );
   });
 
@@ -861,26 +907,26 @@ describe("Today (FILTER sheet)", () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    const easyChip = screen.getByRole("button", { name: "EASY" });
-    await userEvent.click(easyChip);
+    await userEvent.click(screen.getByRole("button", { name: "5" }));
 
     const primary = screen.getByRole("button", { name: "Apply Filter" });
     await userEvent.click(primary);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // Same pick (the fellback pool is still the full AT list, sorted the
-    // same way — every fixture here is "easy") — the REASON narrows to say
-    // nothing matched, and the change is now the SAVED record.
+    // same way — every fixture here is effort 2, none is a 5) — the REASON
+    // narrows to say nothing matched, and the change is now the SAVED record.
     expect(
       screen.getByRole("heading", { name: "Stationary Front" }),
     ).toBeVisible();
-    expect(screen.getByText(/Nothing fit your difficulty/)).toBeVisible();
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({ difficulties: ["medium", "hard"] });
+    expect(screen.getByText(/Nothing fit your time\/effort/)).toBeVisible();
+    expect(storedFilters("AT")).toMatchObject({ effortLevels: [5] });
 
     await openFilterSheet();
-    expect(easyChip).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "5" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   // m5 (final fix wave, 2026-08-04 round final review): both existing
@@ -898,26 +944,25 @@ describe("Today (FILTER sheet)", () => {
     mockReady();
     await renderToday();
 
-    // First apply: drop HARD, keep EASY/MEDIUM. This is now the one and
-    // only saved record until something else writes it.
+    // First apply: EFFORT 2 on (the fixtures' own level, so the pool is
+    // unchanged). This is now the one and only saved record until something
+    // else writes it.
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "2" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({ difficulties: ["easy", "medium"] });
+    expect(storedFilters("AT")).toMatchObject({ effortLevels: [2] });
 
-    // Reopen and edit the draft further — drop EASY too — but never apply
+    // Reopen and edit the draft further — add EFFORT 3 too — but never apply
     // this second edit.
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
-    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    await userEvent.click(screen.getByRole("button", { name: "3" }));
+    expect(screen.getByRole("button", { name: "3" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
 
     // Dismiss (Escape) instead of Apply.
@@ -925,24 +970,18 @@ describe("Today (FILTER sheet)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     // The saved record is still the FIRST apply's state — not the second
-    // draft (["medium"] only, EASY dropped too) and not `filterDefaults`
-    // (all three difficulties, CLEAR ALL's own reset shape).
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({ difficulties: ["easy", "medium"] });
+    // draft ([2, 3]) and not `filterDefaults` (effort off, CLEAR ALL's own
+    // reset shape).
+    expect(storedFilters("AT")).toMatchObject({ effortLevels: [2] });
 
     // Reopening confirms the sheet re-seeds from that same untouched
     // record too, not from the discarded second draft.
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "3" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -958,13 +997,13 @@ describe("Today (FILTER sheet)", () => {
     expect(filterButton).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("PAIN cells are a multi-select union inside the sheet, independent of DIFFICULTY/TIME", async () => {
+  it("EFFORT cells are a multi-select union inside the sheet, independent of DIFFICULTY/TIME", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    const cell1 = within(painGroup).getByRole("button", { name: "1" });
-    const cell2 = within(painGroup).getByRole("button", { name: "2" });
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    const cell1 = within(effortGroup).getByRole("button", { name: "1" });
+    const cell2 = within(effortGroup).getByRole("button", { name: "2" });
     expect(cell1).toHaveAttribute("aria-pressed", "false");
     expect(cell2).toHaveAttribute("aria-pressed", "false");
 
@@ -987,83 +1026,52 @@ describe("Today (FILTER sheet)", () => {
   // Amendment (2026-08-04 PR #50 round): TIME unifies on the Library's own
   // bucket UNION — the old cap single-select is gone, so a cell toggles
   // independently and multiple can be active (or none) at once.
-  it("TIME cells are a multi-select union, independent of DIFFICULTY/PAIN", async () => {
+  it("TIME is a range: stepping a thumb moves only that end of the draft, independent of EFFORT", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    // Default (60-min preference cap): the first three buckets pressed,
-    // 60′+ not.
-    expect(screen.getByRole("button", { name: "45–60′" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "60′+" })).toHaveAttribute(
+    const longest = () => screen.getByRole("slider", { name: "Longest" });
+    const shortest = () => screen.getByRole("slider", { name: "Shortest" });
+    expect(longest()).toHaveAttribute("aria-valuenow", "60");
+
+    fireEvent.keyDown(longest(), { key: "ArrowRight" });
+    expect(longest()).toHaveAttribute("aria-valuenow", "65");
+    expect(shortest()).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
 
-    // Deselecting one bucket leaves the others untouched — a union, not a
-    // single-select swap.
-    await userEvent.click(screen.getByRole("button", { name: "45–60′" }));
-    expect(screen.getByRole("button", { name: "45–60′" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "<30′" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-
-    // Adding 60′+ doesn't clear anything else either.
-    await userEvent.click(screen.getByRole("button", { name: "60′+" }));
-    expect(screen.getByRole("button", { name: "60′+" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "<30′" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    fireEvent.keyDown(shortest(), { key: "PageUp" });
+    expect(shortest()).toHaveAttribute("aria-valuenow", "15");
+    expect(longest()).toHaveAttribute("aria-valuenow", "65");
   });
 
-  // Fix round 1 (whole-branch review M3): restores the accessible-group-
-  // name assertion this test originally made — CellGrid (Task 1's
-  // extraction) initially rendered each group's label as a plain visible
-  // `<span>` with no ARIA `role="group"`/`aria-labelledby` pairing at all
-  // (matching Library's own FilterSheet groups, which never needed one),
-  // a real regression versus Today's pre-Task-2 hand-rolled chip groups
-  // (fix round 2, whole-branch review M4, which added `role="group"`
-  // specifically for Today). M3 puts `role="group"` + `aria-labelledby`
-  // back on `CellGrid` itself (additive — no Library test queries a group
-  // role), so this asserts the real accessible name again, not just DOM
-  // containment via the visible label.
   it("each sheet group has a visible group label wired to an accessible group name", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
 
-    const difficultyGroup = screen.getByRole("group", { name: "DIFFICULTY" });
-    expect(screen.getByText("DIFFICULTY")).toBeVisible();
     expect(
-      within(difficultyGroup).getByRole("button", { name: "EASY" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("group", { name: "DIFFICULTY" }),
+    ).not.toBeInTheDocument();
 
     const timeGroup = screen.getByRole("group", { name: "TIME" });
     expect(screen.getByText("TIME")).toBeVisible();
     expect(
-      within(timeGroup).getByRole("button", { name: "45–60′" }),
+      within(timeGroup).getByRole("slider", { name: "Shortest" }),
     ).toBeInTheDocument();
 
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    expect(screen.getByText("PAIN")).toBeVisible();
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    expect(screen.getByText("EFFORT")).toBeVisible();
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
-        within(painGroup).getByRole("button", { name: level }),
+        within(effortGroup).getByRole("button", { name: level }),
       ).toBeInTheDocument();
     }
   });
 
-  // A richer pool (see FILLING_LOW's own comment above) lets a PAIN filter
+  // A richer pool (see FILLING_LOW's own comment above) lets a EFFORT filter
   // narrow to exactly ONE entry without suggest.ts's fellBack rule
   // reverting it back to the full list — proves the live count caption AND
   // the singular copy AND that the card the count promised is the card
@@ -1075,12 +1083,12 @@ describe("Today (FILTER sheet)", () => {
       await renderToday();
       await openFilterSheet();
 
-      const painGroup = screen.getByRole("group", { name: "PAIN" });
+      const effortGroup = screen.getByRole("group", { name: "EFFORT" });
       await userEvent.click(
-        within(painGroup).getByRole("button", { name: "3" }),
+        within(effortGroup).getByRole("button", { name: "3" }),
       );
 
-      // Singular-aware caption copy — Filling Low (pain 3) is the sole
+      // Singular-aware caption copy — Filling Low (effort 3) is the sole
       // survivor. The button itself is the constant "Apply Filter"
       // regardless of count.
       expect(screen.getByText("1 OPTION")).toBeVisible();
@@ -1096,7 +1104,7 @@ describe("Today (FILTER sheet)", () => {
   });
 
   // Domain note (suggest.ts's own fellBack rule): narrowing difficulties/
-  // pain to a combination that matches nothing among the current TYPE
+  // effort to a combination that matches nothing among the current TYPE
   // never actually zeros the pool on its own — it falls back to the full
   // type-matched list instead (a real, if functionally inert, "nothing
   // fit your filters" state). The only way the pool genuinely reaches zero
@@ -1129,76 +1137,80 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     mockReady();
     await renderToday();
 
-    // Two deviations at once: DIFFICULTY narrowed AND a PAIN filter set.
+    // Two deviations at once: TIME widened AND a EFFORT filter set.
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
+      key: "End",
+    });
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    await userEvent.click(
+      within(effortGroup).getByRole("button", { name: "2" }),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
 
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
-    expect(screen.getByText("PAIN 2")).toBeVisible();
+    expect(screen.getByText("ANY LENGTH")).toBeVisible();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
 
-    // Clearing PAIN's own token only resets painLevels — DIFFICULTY's own
+    // Clearing EFFORT's own token only resets effortLevels — TIME's own
     // deviation (and its token) survives untouched.
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove PAIN 2 filter" }),
+      screen.getByRole("button", { name: "Remove EFFORT 2 filter" }),
     );
-    expect(screen.queryByText("PAIN 2")).not.toBeInTheDocument();
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({ difficulties: ["easy", "medium"], painLevels: [] });
-  });
-
-  it("clearing a DIFFICULTY token resets only difficulties, leaving a co-existing TIME deviation untouched", async () => {
-    mockReady();
-    await renderToday();
-
-    // HARD off (a DIFFICULTY deviation) and 60′+ on (widens the default
-    // three-bucket set to all four — a real TIME deviation, per the
-    // Amendment's "all-four vs. a narrower default IS a deviation" rule).
-    await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
-    await userEvent.click(screen.getByRole("button", { name: "60′+" }));
-    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
-    expect(screen.getByText("<30′–60′+")).toBeVisible();
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Remove EASY–MEDIUM filter" }),
-    );
-    expect(screen.queryByText("EASY–MEDIUM")).not.toBeInTheDocument();
-    expect(screen.getByText("<30′–60′+")).toBeVisible();
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({
-      difficulties: ["easy", "medium", "hard"],
-      durations: ["<30", "30-45", "45-60", "60+"],
+    expect(screen.queryByText("EFFORT 2")).not.toBeInTheDocument();
+    expect(screen.getByText("ANY LENGTH")).toBeVisible();
+    expect(storedFilters("AT")).toMatchObject({
+      effortLevels: [],
     });
   });
 
-  it("clearing a TIME (durations) token resets only durations, leaving a co-existing difficulty deviation untouched", async () => {
+  it("clearing a EFFORT token resets only effortLevels, leaving a co-existing TIME deviation untouched", async () => {
+    mockReady();
+    await renderToday();
+
+    // EFFORT 2 on (a EFFORT deviation) and the Longest thumb at End (widens the
+    // default [0, 60] to the unbounded range — a real TIME deviation, per
+    // the Amendment's "unbounded vs. a narrower default IS a deviation"
+    // rule).
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "2" }));
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
+      key: "End",
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
+    expect(screen.getByText("ANY LENGTH")).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove EFFORT 2 filter" }),
+    );
+    expect(screen.queryByText("EFFORT 2")).not.toBeInTheDocument();
+    expect(screen.getByText("ANY LENGTH")).toBeVisible();
+    expect(storedFilters("AT")).toMatchObject({
+      effortLevels: [],
+      durationRange: { min: 0, max: 120 },
+    });
+  });
+
+  it("clearing a TIME (durations) token resets only durations, leaving a co-existing effort deviation untouched", async () => {
     mockReady();
     await renderToday();
 
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
-    await userEvent.click(screen.getByRole("button", { name: "60′+" }));
+    await userEvent.click(screen.getByRole("button", { name: "2" }));
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
+      key: "End",
+    });
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
-    expect(screen.getByText("<30′–60′+")).toBeVisible();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
+    expect(screen.getByText("ANY LENGTH")).toBeVisible();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove <30′–60′+ filter" }),
+      screen.getByRole("button", { name: "Remove ANY LENGTH filter" }),
     );
-    expect(screen.queryByText("<30′–60′+")).not.toBeInTheDocument();
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({
-      difficulties: ["easy", "medium"],
-      durations: ["<30", "30-45", "45-60"],
+    expect(screen.queryByText("ANY LENGTH")).not.toBeInTheDocument();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
+    expect(storedFilters("AT")).toMatchObject({
+      durationRange: { min: 0, max: 60 },
     });
   });
 
@@ -1206,29 +1218,26 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
   // `source: null` — Today.tsx's `resetFilterGroup`'s own final `else`
   // branch (the LAST DONE branch is exercised by the SOURCE=CUSTOM
   // integration test's own "Remove 21D+ filter" step above).
-  it("clearing a SOURCE token resets only source, leaving a co-existing difficulty deviation untouched", async () => {
+  it("clearing a SOURCE token resets only source, leaving a co-existing effort deviation untouched", async () => {
     mockReady();
     await renderToday();
 
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "2" }));
     const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
     await userEvent.click(
-      within(sourceGroup).getByRole("button", { name: "GLOBAL" }),
+      within(sourceGroup).getByRole("button", { name: "ERGOMATIC LIBRARY" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
-    expect(screen.getByText("GLOBAL")).toBeVisible();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
+    expect(screen.getByText("ERGOMATIC LIBRARY")).toBeVisible();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove GLOBAL filter" }),
+      screen.getByRole("button", { name: "Remove ERGOMATIC LIBRARY filter" }),
     );
-    expect(screen.queryByText("GLOBAL")).not.toBeInTheDocument();
-    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
-    expect(
-      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
-    ).toMatchObject({
-      difficulties: ["easy", "medium"],
+    expect(screen.queryByText("ERGOMATIC LIBRARY")).not.toBeInTheDocument();
+    expect(screen.getByText("EFFORT 2")).toBeVisible();
+    expect(storedFilters("AT")).toMatchObject({
       source: null,
     });
   });
@@ -1238,10 +1247,13 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     await renderToday();
 
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
-    await userEvent.click(screen.getByRole("button", { name: "60′+" }));
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
+      key: "End",
+    });
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    await userEvent.click(
+      within(effortGroup).getByRole("button", { name: "2" }),
+    );
     // Round 2 (2026-08-04): push LAST DONE/SOURCE off-default too — CLEAR
     // ALL's own null/null reset (Today.tsx's clearAllFilters) has to cover
     // these two exactly like the pre-existing three.
@@ -1251,14 +1263,14 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     );
     const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
     await userEvent.click(
-      within(sourceGroup).getByRole("button", { name: "GLOBAL" }),
+      within(sourceGroup).getByRole("button", { name: "ERGOMATIC LIBRARY" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(
       screen.getByRole("button", { name: "CLEAR ALL" }),
     ).toBeInTheDocument();
     expect(screen.getByText("<21D")).toBeVisible();
-    expect(screen.getByText("GLOBAL")).toBeVisible();
+    expect(screen.getByText("ERGOMATIC LIBRARY")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
 
@@ -1266,41 +1278,25 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     expect(
       screen.queryByRole("button", { name: "CLEAR ALL" }),
     ).not.toBeInTheDocument();
-    const saved = JSON.parse(
-      localStorage.getItem(TODAY_OVERRIDES_KEY)!,
-    ) as TodayOverrides;
-    expect(saved.difficulties).toStrictEqual(
-      expect.arrayContaining(["easy", "medium", "hard"]),
-    );
-    expect(saved.difficulties).toHaveLength(3);
-    // bucketsForCap(DEFAULT_PREFS.timeCapMinutes) — 60 keeps the first
-    // three buckets, excluding 60+.
-    expect(saved.durations).toStrictEqual(
-      expect.arrayContaining(["<30", "30-45", "45-60"]),
-    );
-    expect(saved.durations).toHaveLength(3);
-    expect(saved.painLevels).toStrictEqual([]);
+    const saved = storedFilters("AT")!;
+    // rangeForCap(DEFAULT_PREFS.timeCapMinutes) — [0, 60].
+    expect(saved.durationRange).toStrictEqual({ min: 0, max: 60 });
+    expect(saved.effortLevels).toStrictEqual([]);
     expect(saved.lastDone).toBeNull();
     expect(saved.source).toBeNull();
 
     await openFilterSheet();
-    for (const label of ["EASY", "MEDIUM", "HARD"]) {
-      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+    for (const level of ["1", "2", "3", "4", "5"]) {
+      expect(screen.getByRole("button", { name: level })).toHaveAttribute(
         "aria-pressed",
-        "true",
+        "false",
       );
     }
-    for (const label of ["<30′", "30–45′", "45–60′"]) {
-      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-    }
-    expect(screen.getByRole("button", { name: "60′+" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
+    expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
+      "aria-valuenow",
+      "60",
     );
-    for (const label of ["<21D", "21D+", "GLOBAL", "CUSTOM"]) {
+    for (const label of ["<21D", "21D+", "ERGOMATIC LIBRARY", "MY WORKOUTS"]) {
       expect(screen.getByRole("button", { name: label })).toHaveAttribute(
         "aria-pressed",
         "false",
@@ -1316,11 +1312,10 @@ describe("Today (overrides: persistence and invalidation)", () => {
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
-    // Every difficulty is active by default (DEFAULT_PREFS), so this
-    // deselects HARD rather than selecting it — the change under test,
-    // applied via the sheet (Task 2 — HARD is no longer a top-level chip).
+    // EFFORT 1 on — Sea Fret's own level, so the pick is unchanged and only
+    // the memory is under test — applied via the sheet.
     await openFilterSheet();
-    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "1" }));
     await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
@@ -1335,9 +1330,9 @@ describe("Today (overrides: persistence and invalidation)", () => {
     ).toBeVisible();
     expect(screen.getByText("SESSION 12 OF 84 · AT → O2")).toBeVisible();
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "1" })).toHaveAttribute(
       "aria-pressed",
-      "false",
+      "true",
     );
   });
 
@@ -1375,20 +1370,31 @@ describe("Today (overrides: persistence and invalidation)", () => {
 });
 
 describe("Today (type-swap chips)", () => {
-  it("hides the type-swap chips in freestyle mode but keeps the FILTER sheet available", async () => {
+  // Freestyle chips (James, 2026-09-04: "i want it to look similar to how
+  // it does right now when you DO have a plan selected"). With no plan
+  // there is nothing to swap FROM, so the row starts with NO chip lit and
+  // the word row reads ANY TYPE; a tap narrows the suggestion to that type,
+  // and tapping the lit chip again clears it.
+  it("renders the four type chips in freestyle mode with none pressed once today's roll was cleared, and keeps the FILTER sheet available", async () => {
+    // Phase SF PR1 (I-5): a fresh freestyle day ROLLS a chip; "none
+    // pressed" is the cleared-today state, which the day record holds.
+    seedClearedFreestyleDay();
     mockReady({ plan: FREESTYLE_PLAN });
     await renderToday();
     for (const type of ["O2", "AT", "TR", "AN"] as const) {
-      expect(
-        screen.queryByRole("button", { name: type }),
-      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: type })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
     }
+    expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
     await openFilterSheet();
-    expect(screen.getByRole("button", { name: "EASY" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "45–60′" })).toBeInTheDocument();
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
     expect(
-      within(painGroup).getByRole("button", { name: "1" }),
+      screen.getByRole("slider", { name: "Shortest" }),
+    ).toBeInTheDocument();
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    expect(
+      within(effortGroup).getByRole("button", { name: "1" }),
     ).toBeInTheDocument();
   });
 
@@ -1517,10 +1523,10 @@ describe("Today (type-swap chips)", () => {
     // inert/disabled (only the primary button itself disables, at a
     // genuinely empty count — see the "Today (FILTER sheet)" describe).
     await openFilterSheet();
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
-    const painCell = within(painGroup).getByRole("button", { name: "1" });
-    await userEvent.click(painCell);
-    expect(painCell).toHaveAttribute("aria-pressed", "true");
+    const effortGroup = screen.getByRole("group", { name: "EFFORT" });
+    const effortCell = within(effortGroup).getByRole("button", { name: "1" });
+    await userEvent.click(effortCell);
+    expect(effortCell).toHaveAttribute("aria-pressed", "true");
   });
 
   // Pins suggest.ts's own pick-lookup fallback (suggest.ts:117-120,
@@ -1669,6 +1675,12 @@ describe("Today (plan checkpoint prescription)", () => {
     // and the live pick beats the prescription (suggest.ts's own rule).
     expect(screen.getByRole("heading", { name: "Dust Whirl" })).toBeVisible();
     expect(screen.getByText(/YOUR PICK/)).toBeVisible();
+    // Phase SF PR1 (review F4): the escape is a real draw — the shown list
+    // starts at the drawn id and never contains the pin (it is never a
+    // candidate, so it is never drawn).
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_PICK_KEY)!) as TodayPick).shownIds,
+    ).toStrictEqual(["w-dustwhirl"]);
   });
 });
 
@@ -1710,7 +1722,8 @@ describe("Today (type descriptor word)", () => {
     expect(screen.getByText("SPEED WORK")).toBeInTheDocument();
   });
 
-  it("does not render in freestyle mode — there are no type-swap chips to reinforce", async () => {
+  it("reads ANY TYPE in freestyle mode with no chip lit (cleared today), and the tapped chip's word once one is", async () => {
+    seedClearedFreestyleDay();
     mockReady({ plan: FREESTYLE_PLAN });
     await renderToday();
     for (const word of [
@@ -1721,6 +1734,11 @@ describe("Today (type descriptor word)", () => {
     ]) {
       expect(screen.queryByText(word)).not.toBeInTheDocument();
     }
+    expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "TR" }));
+    expect(screen.getByText("HARD INTERVALS")).toBeInTheDocument();
+    expect(screen.queryByText("ANY TYPE")).not.toBeInTheDocument();
   });
 
   // The chips already convey the selected type to assistive tech via each
@@ -1738,14 +1756,14 @@ describe("Today (type descriptor word)", () => {
 
 describe("Today (LAST THREE)", () => {
   // docs/design/README.md:185's row format, literally: date (not
-  // days-ago) · the plain word (not a glyph) · pain, e.g. "JUL 25 · HELD ·
+  // days-ago) · the plain word (not a glyph) · effort, e.g. "JUL 25 · HELD ·
   // 2/10" — "/5" here, not the handoff's literal "/10", because
   // docs/design/DEVIATIONS.md's first row already establishes Ergomatic's
-  // pain scale is 1-5 everywhere else in the app (PainBar, WorkoutDetail,
-  // Library's own 1-5 PAIN filter cells); matching the handoff's "/10"
+  // effort scale is 1-5 everywhere else in the app (EffortBar, WorkoutDetail,
+  // Library's own 1-5 EFFORT filter cells); matching the handoff's "/10"
   // verbatim would contradict that already-decided, already-documented
   // deviation.
-  it("renders title, calendar date, the held/under/over word, and pain /5 per log", async () => {
+  it("renders title, calendar date, the held/under/over word, and effort /5 per log", async () => {
     mockReady();
     await renderToday();
 
@@ -1776,7 +1794,7 @@ describe("Today (LAST THREE)", () => {
 
   // R-A (docs/superpowers/specs/2026-08-17-post-workout-summary-design.md):
   // the null-tolerant read that must ship before any code can write a null
-  // held/pain. Today.tsx used to do `log.held.toUpperCase()` unconditionally
+  // held/effort. Today.tsx used to do `log.held.toUpperCase()` unconditionally
   // with no error boundary in the app - a null `held` white-screened this
   // whole route. Locks in the exact byte-identical string for a full row
   // (not just per-segment regexes, which would pass even if the joiner or
@@ -1793,7 +1811,7 @@ describe("Today (LAST THREE)", () => {
     expect(within(row).getByText("JUL 25 · HELD · 2/5")).toBeVisible();
   });
 
-  it("renders without throwing and reads the date alone when held and pain are both null", async () => {
+  it("renders without throwing and reads the date alone when held and effort are both null", async () => {
     mockReady({
       logs: [
         {
@@ -1803,7 +1821,7 @@ describe("Today (LAST THREE)", () => {
           workoutType: "AT",
           loggedAt: "2026-07-25T12:00:00.000Z",
           held: null,
-          pain: null,
+          effort: null,
           thumbs: null,
           avgSplitSeconds: null,
           timeSeconds: null,
@@ -1830,7 +1848,7 @@ describe("Today (LAST THREE)", () => {
     expect(within(row).queryByText(/·/)).not.toBeInTheDocument();
   });
 
-  it("omits only the missing segment when held is null but pain is present", async () => {
+  it("omits only the missing segment when held is null but effort is present", async () => {
     mockReady({
       logs: [
         {
@@ -1840,7 +1858,7 @@ describe("Today (LAST THREE)", () => {
           workoutType: "AT",
           loggedAt: "2026-07-25T12:00:00.000Z",
           held: null,
-          pain: 2,
+          effort: 2,
           thumbs: null,
           avgSplitSeconds: null,
           timeSeconds: null,
@@ -2422,9 +2440,7 @@ describe("Today (F2: session resume / unlogged)", () => {
     expect(
       screen.queryByRole("button", { name: /discard/i }),
     ).not.toBeInTheDocument();
-    expect(
-      document.querySelector(".today-unlogged-line"),
-    ).not.toBeInTheDocument();
+    expect(document.querySelector(".unsaved-row")).not.toBeInTheDocument();
   });
 
   it("shows a quieter line naming the workout, with a real Log it action, when the run is already complete (completed-but-unlogged)", async () => {
@@ -2439,12 +2455,15 @@ describe("Today (F2: session resume / unlogged)", () => {
     await renderToday();
 
     expect(screen.getByText("Filling Low")).toBeVisible();
-    expect(screen.getByText(/unlogged session/i)).toBeVisible();
+    expect(screen.getByText(/UNSAVED WORKOUT/)).toBeVisible();
     // Phase 6C Task 2: the placeholder copy ("6C will log it here") is
     // replaced by a real link to the screen that now exists.
-    const logLink = screen.getByRole("link", { name: "Log it" });
+    const logLink = screen.getByRole("link", { name: /Review & save/ });
     expect(logLink).toBeVisible();
-    expect(logLink).toHaveAttribute("href", "/session/log");
+    expect(logLink).toHaveAttribute(
+      "href",
+      `/session/review?source=timer&startedAt=${encodeURIComponent(run.startedAt)}`,
+    );
     // Quieter than the resume card, per the brief: no "SESSION IN PROGRESS"
     // banner, no Resume-session link.
     expect(screen.queryByText("SESSION IN PROGRESS")).not.toBeInTheDocument();
@@ -2472,10 +2491,13 @@ describe("Today (F2: session resume / unlogged)", () => {
     mockReady();
     await renderToday();
 
-    expect(screen.getByText(/unlogged session/i)).toBeVisible();
+    expect(screen.getByText(/UNSAVED WORKOUT/)).toBeVisible();
     expect(screen.getByText("Just Row")).toBeVisible();
-    const logLink = screen.getByRole("link", { name: "Log it" });
-    expect(logLink).toHaveAttribute("href", "/justrow/log");
+    const logLink = screen.getByRole("link", { name: /Review & save/ });
+    expect(logLink).toHaveAttribute(
+      "href",
+      `/session/review?source=timer&startedAt=${encodeURIComponent(run.startedAt)}`,
+    );
   });
 
   it("renders neither the resume card nor the unlogged line when there is no run record at all", async () => {
@@ -2483,7 +2505,7 @@ describe("Today (F2: session resume / unlogged)", () => {
     await renderToday();
 
     expect(screen.queryByText("SESSION IN PROGRESS")).not.toBeInTheDocument();
-    expect(screen.queryByText(/unlogged session/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/UNSAVED WORKOUT/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Resume session" }),
     ).not.toBeInTheDocument();
@@ -2493,7 +2515,7 @@ describe("Today (F2: session resume / unlogged)", () => {
 // Task 3 (ui-fix round): the unlogged line's own staged Discard —
 // DESIGN.md's "Today's unlogged row" — a 44×44 accent-outlined ✕ that arms
 // IN PLACE (border → accent, text → "Discard {title} without logging?", ✕
-// → solid accent "Tap again"), fires with no navigation, and must never
+// → solid accent "Tap again to discard"), fires with no navigation, and must never
 // disturb the suggestion card underneath.
 function unloggedRunFor(startedAt: Date, completedAt: Date): SessionRun {
   const built = liveRunFor(startedAt);
@@ -2505,6 +2527,27 @@ function unloggedRunFor(startedAt: Date, completedAt: Date): SessionRun {
 }
 
 describe("Today (Task 3: unlogged row's staged Discard)", () => {
+  it("a timer row cannot discard a newer timer or newly queued draft", async () => {
+    const run = unloggedRunFor(
+      new Date("2026-09-04T11:00:00.000Z"),
+      new Date("2026-09-04T11:30:00.000Z"),
+    );
+    localStorage.setItem(RUN_KEY, JSON.stringify(run));
+    mockReady();
+    await renderToday();
+    const nextRun = { ...run, startedAt: "newer-key" };
+    const nextDraft = buildDraft(WARM_FRONT);
+    localStorage.setItem(RUN_KEY, JSON.stringify(nextRun));
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(nextDraft));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+    expect(localStorage.getItem(RUN_KEY)).toBe(JSON.stringify(nextRun));
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(JSON.stringify(nextDraft));
+  });
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -2522,22 +2565,24 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     expect(cardBefore).toBeTruthy();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     );
 
     // The row's contents swap — title, ✕, and "Log it" are all replaced by
     // the armed copy, not merely joined by it.
-    expect(document.querySelector(".today-unlogged-text")?.textContent).toBe(
-      "Discard Filling Low without logging?",
+    expect(document.querySelector(".unsaved-warning-copy")?.textContent).toBe(
+      "Discard Filling Low without saving?",
     );
     expect(
-      screen.getByRole("button", { name: "Tap again" }),
+      screen.getByRole("button", { name: "Tap again to discard" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Log it" }),
+      screen.queryByRole("link", { name: /Review & save/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Discard without logging" }),
+      screen.queryByRole("button", {
+        name: "Discard Timer workout Filling Low",
+      }),
     ).not.toBeInTheDocument();
 
     // The suggestion card is byte-identical — arming the row re-rendered
@@ -2570,15 +2615,15 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     await renderToday();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     );
-    const armed = screen.getByRole("button", { name: "Tap again" });
+    const armed = screen.getByRole("button", { name: "Tap again to discard" });
     expect(document.activeElement).toBe(armed);
 
     act(() => armed.blur());
 
     expect(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     ).toBeInTheDocument();
     expect(localStorage.getItem(RUN_KEY)).not.toBeNull();
   });
@@ -2594,16 +2639,16 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     vi.useFakeTimers();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     );
     expect(
-      screen.getByRole("button", { name: "Tap again" }),
+      screen.getByRole("button", { name: "Tap again to discard" }),
     ).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(4000));
 
     expect(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     ).toBeInTheDocument();
   });
 
@@ -2623,14 +2668,16 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
       ?.getAttribute("href");
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "Discard Timer workout Filling Low" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Tap again" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
 
     // Gone in place — no "unlogged session" line, no armed controls, and
     // still on Today (no navigation at all, unlike the post-workout
     // summary's own Discard, which leaves the screen).
-    expect(screen.queryByText(/unlogged session/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/UNSAVED WORKOUT/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /discard/i }),
     ).not.toBeInTheDocument();
@@ -2664,6 +2711,119 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
 // DIFFERENT rower's-in-progress-phone-timer concern this row must never
 // touch), and the null-`workoutId` latent (no Log it at all).
 describe("Today (2b): the interrupted connected session row", () => {
+  it("a refused interrupted close opens unavailable without claiming or changing the newer open revision", async () => {
+    const run = makeMonitorRun({ completedAt: null });
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
+    mockReady();
+    const { default: Today } = await import("./Today");
+    const { default: ReviewSession } = await import("../session/ReviewSession");
+    const store = await import("../monitor/handoffStore");
+    const receipts: unknown[] = [];
+    store.setReceiptChannel((receipt) => receipts.push(receipt));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    render(
+      <MemoryRouter initialEntries={["/today"]}>
+        <Routes>
+          <Route path="/today" element={<Today />} />
+          <Route path="/session/review" element={<ReviewSession />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const newer = { ...run, title: "Still open, newer revision" };
+    store.commit(run.startedAt, 0, newer);
+    expect(store.read()?.revision).toBe(1);
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Review & save PM5 workout Stationary Front",
+      }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Recording unavailable" }),
+    ).toBeVisible();
+    expect(store.read()?.run).toStrictEqual(newer);
+    expect(
+      receipts.filter((r) => (r as { kind: string }).kind === "claim"),
+    ).toHaveLength(0);
+    expect(
+      fetchSpy.mock.calls.filter(([, init]) => init?.method === "POST"),
+    ).toHaveLength(0);
+  });
+  it.each([
+    ["useWorkouts", "workouts", []],
+    ["useBaselines", "baselines", BASELINES],
+    ["usePlan", "plan", FREESTYLE_PLAN],
+    ["usePreferences", "preferences", DEFAULT_PREFS],
+    ["useRecentLogs", "logs", []],
+  ] as const)(
+    "keeps recovery mounted through %s loading, error, Retry and ready",
+    async (hook, field, value) => {
+      localStorage.setItem(
+        MONITOR_RUN_KEY,
+        JSON.stringify(
+          makeMonitorRun({ completedAt: "2026-09-04T12:30:00.000Z" }),
+        ),
+      );
+      let state: Record<string, unknown> = { state: "loading" };
+      const retry = vi.fn(() => {
+        state = { state: "ready", [field]: value };
+      });
+      vi.doMock("../api/useWorkouts", () => ({
+        useWorkouts: () =>
+          hook === "useWorkouts"
+            ? state
+            : { state: "ready", workouts: [WARM_FRONT] },
+      }));
+      vi.doMock("../api/useBaselines", () => ({
+        useBaselines: () =>
+          hook === "useBaselines"
+            ? state
+            : { state: "ready", baselines: BASELINES },
+      }));
+      vi.doMock("../api/usePlan", () => ({
+        usePlan: () =>
+          hook === "usePlan" ? state : { state: "ready", plan: FREESTYLE_PLAN },
+      }));
+      vi.doMock("../api/usePreferences", () => ({
+        usePreferences: () =>
+          hook === "usePreferences"
+            ? state
+            : { state: "ready", preferences: DEFAULT_PREFS },
+      }));
+      vi.doMock("../api/useRecentLogs", () => ({
+        useRecentLogs: () =>
+          hook === "useRecentLogs" ? state : { state: "ready", logs: [] },
+      }));
+      const { default: Today } = await import("./Today");
+      const view = () => (
+        <MemoryRouter>
+          <Today />
+        </MemoryRouter>
+      );
+      const result = render(view());
+      expect(
+        screen.getByRole("button", {
+          name: "Review & save PM5 workout Stationary Front",
+        }),
+      ).toBeVisible();
+      state = { state: "error", retry };
+      result.rerender(view());
+      await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await userEvent.click(
+        screen.getByRole("button", {
+          name: "Discard PM5 workout Stationary Front",
+        }),
+      );
+      result.rerender(view());
+      expect(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      ).toBeVisible();
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      );
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    },
+  );
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -2677,15 +2837,17 @@ describe("Today (2b): the interrupted connected session row", () => {
     await renderToday();
 
     const row = screen
-      .getByText(/interrupted connected session\./)
-      .closest(".today-unlogged-line");
+      .getByText(/PM5 · .* · Not saved/)
+      .closest(".unsaved-row");
     if (!row) throw new Error("row not found");
     const rowScope = within(row as HTMLElement);
     expect(rowScope.getByText("Stationary Front")).toBeVisible();
-    expect(rowScope.getByRole("button", { name: "Log it" })).toBeVisible();
+    expect(
+      rowScope.getByRole("button", { name: /Review & save/ }),
+    ).toBeVisible();
     expect(
       rowScope.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     ).toBeVisible();
   });
@@ -2693,23 +2855,63 @@ describe("Today (2b): the interrupted connected session row", () => {
   it("shows no row when there is no MonitorRun record at all", async () => {
     mockReady();
     await renderToday();
-    expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/PM5 · .* · Not saved/)).not.toBeInTheDocument();
   });
 
-  it("shows no row for a completed MonitorRun — a completed-but-unlogged monitor record is ruled OUT of 2b", async () => {
-    localStorage.setItem(
-      MONITOR_RUN_KEY,
-      JSON.stringify(makeMonitorRun({ completedAt: new Date().toISOString() })),
+  it("reviews a completed programmed PM5 from Today without posting or opening manual entry", async () => {
+    const built = buildRun(
+      buildDraft(WARM_FRONT),
+      BASELINES,
+      new Date("2026-09-04T12:00:00.000Z"),
     );
+    const program = compileProgram(built.phases);
+    if ("code" in program) throw new Error(program.message);
+    const run = makeMonitorRun({
+      program,
+      logSeed: buildLogSeed(built.phases, BASELINES),
+      actuals: [
+        {
+          index: 0,
+          elapsedSeconds: 120,
+          distanceMeters: 450,
+          avgSplit: 133.3,
+          avgSpm: 24,
+          avgHeartRateBpm: null,
+          restDistanceMeters: 0,
+        },
+      ],
+      completedAt: "2026-09-04T12:30:00.000Z",
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run));
     mockReady();
-    await renderToday();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const { default: Today } = await import("./Today");
+    const { default: ReviewSession } = await import("../session/ReviewSession");
+    render(
+      <MemoryRouter initialEntries={["/today"]}>
+        <Routes>
+          <Route path="/today" element={<Today />} />
+          <Route path="/session/review" element={<ReviewSession />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Review & save PM5 workout Stationary Front",
+      }),
+    );
     expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
+      await screen.findByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    expect(screen.getByText(/PM5 \(test\)/)).toBeVisible();
+    expect(screen.queryByText("NO MONITOR READING")).not.toBeInTheDocument();
+    expect(
+      fetchSpy.mock.calls.filter(([, init]) => init?.method === "POST"),
+    ).toHaveLength(0);
+    expect(JSON.parse(localStorage.getItem(MONITOR_RUN_KEY)!)).toMatchObject({
+      completedAt: "2026-09-04T12:30:00.000Z",
+    });
   });
-
   it("Log it stamps the interrupted door and lands on the monitor log route", async () => {
     localStorage.setItem(
       MONITOR_RUN_KEY,
@@ -2723,17 +2925,19 @@ describe("Today (2b): the interrupted connected session row", () => {
       <MemoryRouter initialEntries={["/today"]}>
         <Routes>
           <Route path="/today" element={<Today />} />
-          <Route path="/library/:id/log" element={<LogRouteProbe />} />
+          <Route path="/session/review" element={<LogRouteProbe />} />
         </Routes>
       </MemoryRouter>,
     );
     await screen.findByRole("heading", { name: "Today" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Log it" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Review & save/ }),
+    );
 
     expect(
       await screen.findByText(
-        "LOG ROUTE PROBE id=w-warmfront search=?from=monitor",
+        `LOG ROUTE PROBE id= search=?source=monitor&startedAt=${encodeURIComponent(JSON.parse(localStorage.getItem(MONITOR_RUN_KEY)!).startedAt)}`,
       ),
     ).toBeVisible();
 
@@ -2790,17 +2994,19 @@ describe("Today (2b): the interrupted connected session row", () => {
     await renderToday();
 
     const row = screen
-      .getByText(/interrupted connected session\./)
-      .closest(".today-unlogged-line");
+      .getByText(/PM5 · .* · Not saved/)
+      .closest(".unsaved-row");
     if (!row) throw new Error("row not found");
     const rowScope = within(row as HTMLElement);
 
     await userEvent.click(
       rowScope.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     );
-    await userEvent.click(rowScope.getByRole("button", { name: "Tap again" }));
+    await userEvent.click(
+      rowScope.getByRole("button", { name: "Tap again to discard" }),
+    );
 
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
     // The wrong records — Discard clears the MONITOR record only.
@@ -2811,9 +3017,7 @@ describe("Today (2b): the interrupted connected session row", () => {
     );
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(rowedLog);
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/PM5 · .* · Not saved/)).not.toBeInTheDocument();
     // No navigation: still on Today.
     expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
   });
@@ -2828,17 +3032,17 @@ describe("Today (2b): the interrupted connected session row", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     );
-    const armed = screen.getByRole("button", { name: "Tap again" });
+    const armed = screen.getByRole("button", { name: "Tap again to discard" });
     expect(document.activeElement).toBe(armed);
 
     act(() => armed.blur());
 
     expect(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     ).toBeInTheDocument();
     expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
@@ -2855,23 +3059,23 @@ describe("Today (2b): the interrupted connected session row", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     );
     expect(
-      screen.getByRole("button", { name: "Tap again" }),
+      screen.getByRole("button", { name: "Tap again to discard" }),
     ).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(4000));
 
     expect(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     ).toBeInTheDocument();
   });
 
-  it("an anonymous run (workoutId null) gets the row without Log it — unreachable today (only WorkoutDetail programs), latent per spec", async () => {
+  it("an anonymous programmed run still offers source-bound review", async () => {
     localStorage.setItem(
       MONITOR_RUN_KEY,
       JSON.stringify(makeMonitorRun({ completedAt: null, workoutId: null })),
@@ -2879,13 +3083,11 @@ describe("Today (2b): the interrupted connected session row", () => {
     mockReady();
     await renderToday();
 
-    expect(screen.getByText(/interrupted connected session\./)).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "Log it" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText(/PM5 · .* · Not saved/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Review & save/ })).toBeVisible();
     expect(
       screen.getByRole("button", {
-        name: "Discard connected session without logging",
+        name: "Discard PM5 workout Stationary Front",
       }),
     ).toBeVisible();
   });
@@ -2943,7 +3145,7 @@ describe("Today (§10 row 9): a memory-only unlogged row, present before reload 
       </MemoryRouter>,
     );
     await screen.findByRole("heading", { name: "Today" });
-    expect(screen.getByText(/interrupted connected session\./)).toBeVisible();
+    expect(screen.getByText(/PM5 · .* · Not saved/)).toBeVisible();
     // Unmount before the second render — RTL does not auto-clean between
     // two renders inside the SAME test, only between tests.
     before.unmount();
@@ -2961,9 +3163,7 @@ describe("Today (§10 row 9): a memory-only unlogged row, present before reload 
       </MemoryRouter>,
     );
     await screen.findByRole("heading", { name: "Today" });
-    expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/PM5 · .* · Not saved/)).not.toBeInTheDocument();
 
     // §9.5, stated plainly (review correction): `receipts` was captured
     // via `setReceiptChannel` on the PRE-reload module instance, and this
@@ -2974,7 +3174,7 @@ describe("Today (§10 row 9): a memory-only unlogged row, present before reload 
     // all, so nothing the reloaded process does could ever appear here
     // either way). THE GATE for "the vanish is real" is the pair of DOM
     // assertions above: the row visible before reload
-    // (`screen.getByText(/interrupted connected session\./)`,
+    // (`screen.getByText(/PM5 · .* · Not saved/)`,
     // pre-`unmount()`) and absent after
     // (`queryByText(...).not.toBeInTheDocument()`, post-reload) — that
     // pair is what a broken hydrate() or a broken reload would actually
@@ -3349,7 +3549,7 @@ describe("Today (piece region)", () => {
     expect(rows[0].querySelector(".today-piece-spm-line")?.textContent).toBe(
       "30 SPM",
     );
-    // Effort rows carry no offset at all — zero tint, same as before rolling.
+    // PaceWord rows carry no offset at all — zero tint, same as before rolling.
     expect(document.querySelector(".today-piece-peak")).toBeNull();
     expect(document.querySelector(".today-piece-more")).toBeNull();
     expect(document.querySelector(".today-piece-foot-count")).toBeNull();
@@ -3699,13 +3899,13 @@ describe("Today (JR): the free row's recovery row", () => {
       <MemoryRouter initialEntries={["/today"]}>
         <Routes>
           <Route path="/today" element={<Today />} />
-          <Route path="/justrow/log" element={<p>JUSTROW LOG DOOR</p>} />
+          <Route path="/session/review" element={<p>JUSTROW LOG DOOR</p>} />
         </Routes>
       </MemoryRouter>,
     );
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Log it" }),
+      await screen.findByRole("button", { name: /Review & save/ }),
     );
     expect(await screen.findByText("JUSTROW LOG DOOR")).toBeInTheDocument();
     // Exit criterion 5's third member, asserted on the FREE row rather
@@ -3731,7 +3931,9 @@ describe("Today (JR): the free row's recovery row", () => {
     mockReady();
     await renderToday();
 
-    expect(await screen.findByRole("button", { name: "Log it" })).toBeVisible();
+    expect(
+      await screen.findByRole("button", { name: /Review & save/ }),
+    ).toBeVisible();
   });
 
   it("carries the numbers and no word implying the row can be resumed", async () => {
@@ -3744,16 +3946,14 @@ describe("Today (JR): the free row's recovery row", () => {
 
     // The board's copy, verbatim: the numbers ON the row, so "Log it"
     // visibly means "keep these". 620 s → 10:20; 2,480 m.
-    expect(
-      await screen.findByText(/10:20 · 2,480 m, not logged\./),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/10:20 · 2,480 m/)).toBeInTheDocument();
     // The monitor stops advertising while a Just Row is open, so nothing
     // here may suggest reconnection (capture finding N1).
     expect(screen.queryByText(/resume/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/reconnect/i)).not.toBeInTheDocument();
   });
 
-  it("a completed PROGRAMMED record stays ruled out of the row — the widening is free-row only", async () => {
+  it("a completed programmed record also retains its review action", async () => {
     localStorage.setItem(
       MONITOR_RUN_KEY,
       JSON.stringify(makeMonitorRun({ completedAt: new Date().toISOString() })),
@@ -3761,9 +3961,453 @@ describe("Today (JR): the free row's recovery row", () => {
     mockReady();
     await renderToday();
 
+    expect(screen.queryByText(/PM5 · .* · Not saved/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Review & save/ })).toBeVisible();
+  });
+});
+
+// Phase SF PR1 (spec §2.7): the random draws, the day-scoped clear, the per-type
+// memory, and SHUFFLE without repeats. Every draw is scripted through the
+// mocked `./rng` (see `rngQueue` at the top of this file), so each branch
+// is reached deterministically; randomness itself is the domain's business
+// (domain/suggest.test.ts) and the e2e two-run check.
+describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repeat SHUFFLE)", () => {
+  // Two never-done AT entries: a genuine tie class of size two, so the
+  // first draw has a choice to make. TAILWIND (15 days) is the third pool
+  // member and never in the tie.
+  const ND_ONE = libraryEntry("Occluded Front", "w-nd1", null);
+  const ND_TWO = libraryEntry("Pressure Ridge", "w-nd2", null);
+
+  function storedPick(): TodayPick {
+    return JSON.parse(localStorage.getItem(TODAY_PICK_KEY)!) as TodayPick;
+  }
+
+  it("draws the day's first card at random WITHIN the tie class, writes it, and a remount (the seam test: starting upstream of the producer) shows the same card with the honest reason", async () => {
+    rngQueue.push(1); // second tie member
+    mockReady({ workouts: [ND_ONE, ND_TWO, TAILWIND] });
+    const first = await renderToday();
     expect(
-      screen.queryByText(/interrupted connected session/),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Log it" })).toBeNull();
+      screen.getByRole("heading", { name: "Pressure Ridge" }),
+    ).toBeVisible();
+    expect(screen.getByText("Least recently done (never done).")).toBeVisible();
+    expect(screen.queryByText(/YOUR PICK/)).not.toBeInTheDocument();
+    expect(storedPick()).toMatchObject({
+      workoutId: "w-nd2",
+      shownIds: ["w-nd2"],
+      shuffled: false,
+    });
+
+    first.unmount();
+    // An empty queue draws 0 — which would pick Occluded Front if the
+    // remount drew again. It must read the record instead.
+    await renderToday();
+    expect(
+      screen.getByRole("heading", { name: "Pressure Ridge" }),
+    ).toBeVisible();
+  });
+
+  it("keeps the first card stable under storage denial: a failed write goes to the session fallback, so a remount does not redraw", async () => {
+    rngQueue.push(1);
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+    try {
+      mockReady({ workouts: [ND_ONE, ND_TWO, TAILWIND] });
+      const first = await renderToday();
+      expect(
+        screen.getByRole("heading", { name: "Pressure Ridge" }),
+      ).toBeVisible();
+      expect(localStorage.getItem(TODAY_PICK_KEY)).toBeNull();
+      first.unmount();
+      await renderToday();
+      expect(
+        screen.getByRole("heading", { name: "Pressure Ridge" }),
+      ).toBeVisible();
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it("SHUFFLE draws from the unshown pool minus the card on screen, says YOUR PICK, and resets the shown list once the pool is exhausted", async () => {
+    // Pool (least-recently-done first): Stationary Front 20d, Pressure
+    // Ridge 15d, Occluded Front 10d. Single-member tie, so the first card
+    // is Stationary Front with no draw consumed.
+    mockReady();
+    await renderToday();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    expect(storedPick()).toMatchObject({
+      workoutId: "w-warmfront",
+      shownIds: ["w-warmfront"],
+      shuffled: false,
+    });
+
+    rngQueue.push(1); // candidates [Pressure Ridge, Occluded Front] -> Occluded
+    await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+    expect(
+      screen.getByRole("heading", { name: "Occluded Front" }),
+    ).toBeVisible();
+    expect(screen.getByText(/YOUR PICK/)).toBeVisible();
+    expect(storedPick()).toMatchObject({
+      workoutId: "w-isobar",
+      shownIds: ["w-warmfront", "w-isobar"],
+      shuffled: true,
+    });
+
+    rngQueue.push(5); // only Pressure Ridge is unshown; no choice, rng unconsumed
+    await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+    expect(
+      screen.getByRole("heading", { name: "Pressure Ridge" }),
+    ).toBeVisible();
+    expect(storedPick().shownIds).toStrictEqual([
+      "w-warmfront",
+      "w-isobar",
+      "w-tailwind",
+    ]);
+    expect(rngQueue).toStrictEqual([5]);
+    rngQueue.length = 0;
+
+    // Exhausted: the shown list resets and the draw is from the pool minus
+    // the card on screen — [Stationary Front, Occluded Front]; 1 -> Occluded.
+    rngQueue.push(1);
+    await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+    expect(
+      screen.getByRole("heading", { name: "Occluded Front" }),
+    ).toBeVisible();
+    expect(storedPick().shownIds).toStrictEqual(["w-isobar"]);
+  });
+
+  it("freestyle rolls a type on the day's first mount among types with a non-empty pool, lights it, and a remount keeps it", async () => {
+    // Fixture pools: O2 (Sea Fret), AT (three). TR/AN empty, never
+    // candidates. Draw 1 of [O2, AT] -> AT.
+    rngQueue.push(1);
+    mockReady({ plan: FREESTYLE_PLAN });
+    const first = await renderToday();
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText("COMFORTABLY HARD")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .swapType,
+    ).toBe("AT");
+
+    first.unmount();
+    await renderToday(); // queue empty: a re-roll would light O2
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("does not roll with a plan active (the plan's call is the type)", async () => {
+    rngQueue.push(1);
+    mockReady();
+    await renderToday();
+    // No roll, so no day record is written at all, and the draw is never
+    // consumed (the plan's AT pool has a single-member tie, so the first
+    // pick has no choice to make either).
+    expect(localStorage.getItem(TODAY_OVERRIDES_KEY)).toBeNull();
+    expect(storedPick()).toMatchObject({ workoutId: "w-warmfront" });
+    expect(rngQueue).toStrictEqual([1]);
+  });
+
+  it("neither rolls nor draws while the doors card shows (no baselines: no chip row, no card)", async () => {
+    rngQueue.push(1);
+    mockReady({ plan: FREESTYLE_PLAN, baselines: NO_BASELINES });
+    await renderToday();
+    expect(localStorage.getItem(TODAY_OVERRIDES_KEY)).toBeNull();
+    expect(localStorage.getItem(TODAY_PICK_KEY)).toBeNull();
+    expect(rngQueue).toStrictEqual([1]);
+  });
+
+  it("tapping the lit freestyle chip clears to ANY TYPE for the REST OF TODAY (a remount does not re-roll); tapping a chip lights it again", async () => {
+    rngQueue.push(1);
+    mockReady({ plan: FREESTYLE_PLAN });
+    const first = await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "AT" }));
+    expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .swapType,
+    ).toBeNull();
+    // I-1 (stable day): the card drawn under AT is still a member of the
+    // whole-library pool, so clearing the type keeps it on screen rather
+    // than jumping to the pool head — the type changed, the day did not.
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+
+    first.unmount();
+    rngQueue.push(1); // a re-roll would light AT again and consume this
+    await renderToday();
+    for (const type of ["O2", "AT", "TR", "AN"] as const) {
+      expect(screen.getByRole("button", { name: type })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    }
+    expect(rngQueue).toStrictEqual([1]);
+    rngQueue.length = 0;
+
+    await userEvent.click(screen.getByRole("button", { name: "TR" }));
+    expect(screen.getByRole("button", { name: "TR" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("remembers filters PER TYPE: a deviation applied under AT is absent under O2 and back again under AT, and the store holds one set per key", async () => {
+    mockReady({ workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND] });
+    await renderToday();
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "5" }));
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
+    expect(screen.getByText("EFFORT 5")).toBeVisible();
+    expect(storedFilters("AT")?.effortLevels).toStrictEqual([5]);
+    expect(storedFilters("O2")).toBeUndefined();
+
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+    expect(screen.queryByText("EFFORT 5")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "AT" }));
+    expect(screen.getByText("EFFORT 5")).toBeVisible();
+    expect(storedFilters("O2")).toBeUndefined();
+  });
+
+  it("a newer draw that FAILED to persist beats an older stored one on remount (review F1: partial storage denial mid-session)", async () => {
+    mockReady();
+    const first = await renderToday();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    rngQueue.push(1); // -> Occluded Front, written fine
+    await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+    expect(
+      screen.getByRole("heading", { name: "Occluded Front" }),
+    ).toBeVisible();
+    expect(storedPick().workoutId).toBe("w-isobar");
+
+    // Storage fills up: the next SHUFFLE's write fails, the fallback holds
+    // it. A remount must show THAT card, not the stale stored one, and
+    // must carry its shown list (or the next draw could repeat).
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+    try {
+      rngQueue.push(0); // only Pressure Ridge is unshown
+      await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+      expect(
+        screen.getByRole("heading", { name: "Pressure Ridge" }),
+      ).toBeVisible();
+      expect(storedPick().workoutId).toBe("w-isobar"); // storage is stale
+      first.unmount();
+      await renderToday();
+      expect(
+        screen.getByRole("heading", { name: "Pressure Ridge" }),
+      ).toBeVisible();
+    } finally {
+      setItem.mockRestore();
+    }
+    // Storage healthy again: the next write lands AND clears the fallback,
+    // so a later remount reads storage, not a stale fallback.
+    rngQueue.push(0); // exhausted -> reset -> [Stationary, Occluded] -> Stationary
+    await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    expect(storedPick().workoutId).toBe("w-warmfront");
+  });
+
+  it("does not roll a type whose remembered filters match nothing (a fell-back pool is not a suggestion) — review F2", async () => {
+    // Under AT, remember EFFORT 5 only: all three AT fixtures are effort 2, so
+    // AT's pool falls back to the whole type. O2 stays a candidate. Draw 0
+    // of [O2] -> O2; draw 1 would have been AT if AT were a candidate, so
+    // script 1 and expect O2 anyway.
+    seedFilters({
+      AT: {
+        durationRange: { min: 0, max: 60 },
+        effortLevels: [5],
+        lastDone: null,
+        source: null,
+      },
+    });
+    rngQueue.push(1);
+    mockReady({ plan: FREESTYLE_PLAN });
+    await renderToday();
+    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    // A singleton candidate list never consults the rng.
+    expect(rngQueue).toStrictEqual([1]);
+  });
+
+  it("writes today's record even when no type can be rolled, so the roll is not recomputed on every mount", async () => {
+    // Every type's remembered filters match nothing: no candidate, no
+    // chip lit, and STILL a record for today.
+    const hardOnly: FilterSet = {
+      durationRange: { min: 0, max: 60 },
+      effortLevels: [5],
+      lastDone: null,
+      source: null,
+    };
+    seedFilters({ O2: hardOnly, AT: hardOnly, TR: hardOnly, AN: hardOnly });
+    rngQueue.push(1);
+    mockReady({ plan: FREESTYLE_PLAN });
+    await renderToday();
+    expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .swapType,
+    ).toBeNull();
+    expect(rngQueue).toStrictEqual([1]);
+  });
+
+  it("rolls again on the next local day, including the day after a clear (spec exit criterion 2; no sticky clear — James, Gate 0)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date(2026, 8, 4, 9, 0, 0));
+      rngQueue.push(1); // [O2, AT] -> AT
+      mockReady({ plan: FREESTYLE_PLAN });
+      const dayOne = await renderToday();
+      expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      dayOne.unmount();
+
+      vi.setSystemTime(new Date(2026, 8, 5, 9, 0, 0));
+      rngQueue.push(0); // a fresh roll: [O2, AT] -> O2
+      const dayTwo = await renderToday();
+      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(rngQueue).toStrictEqual([]);
+
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      expect(screen.getByText("ANY TYPE")).toBeInTheDocument();
+      dayTwo.unmount();
+
+      vi.setSystemTime(new Date(2026, 8, 6, 9, 0, 0));
+      rngQueue.push(1); // day three rolls afresh: [O2, AT] -> AT
+      await renderToday();
+      expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(rngQueue).toStrictEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a session LOGGED today re-keys the freestyle day: the next mount rolls a fresh type and draws a fresh card (James: 'logged only')", async () => {
+    rngQueue.push(1); // [O2, AT] -> AT
+    mockReady({ plan: FREESTYLE_PLAN, logs: [] });
+    const before = await renderToday();
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .session,
+    ).toBe(0);
+    before.unmount();
+
+    // One log dated TODAY (local) lands in the recent-logs fetch. A remount
+    // reads the records under session 1, finds none, and rolls again.
+    const loggedToday: RecentLog = {
+      ...LOGS[0],
+      id: "log-today",
+      loggedAt: new Date().toISOString(),
+    };
+    rngQueue.push(0); // a fresh roll: [O2, AT] -> O2
+    // A fresh module registry so the second mockReady's hook mocks bind
+    // (Today is already imported above with the first mocks); storage and
+    // the rng queue are outside the registry and carry over.
+    vi.resetModules();
+    mockReady({ plan: FREESTYLE_PLAN, logs: [loggedToday] });
+    await renderToday();
+    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(rngQueue).toStrictEqual([]);
+    const stored = JSON.parse(
+      localStorage.getItem(TODAY_OVERRIDES_KEY)!,
+    ) as TodayOverrides;
+    expect(stored.session).toBe(1);
+    expect(storedPick().session).toBe(1);
+    expect(storedPick().shownIds).toHaveLength(1);
+    expect(recentLogsLimit).toBe(10);
+  });
+
+  it("a COMPLETED plan (doneN past the sequence) re-keys on a logged session like freestyle — the same predicate the roll uses", async () => {
+    const loggedToday: RecentLog = {
+      ...LOGS[0],
+      id: "log-today",
+      loggedAt: new Date().toISOString(),
+    };
+    rngQueue.push(1);
+    mockReady({
+      plan: { planKey: "sprint", doneN: 84, sequence: buildSequence(11, "AT") },
+      logs: [loggedToday],
+    });
+    await renderToday();
+    expect(screen.getByText(/FREESTYLE/)).toBeVisible();
+    expect(storedPick().session).toBe(1);
+    expect(
+      (JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides)
+        .session,
+    ).toBe(1);
+  });
+
+  it("a saved-but-unlogged session and a plan-mode log do NOT re-key: no log row, or the plan's doneN already carries it", async () => {
+    // Plan mode: the log fixtures are July dates, but even one dated today
+    // leaves `session` at 0 with a plan — doneN is the plan's own re-key.
+    const loggedToday: RecentLog = {
+      ...LOGS[0],
+      id: "log-today",
+      loggedAt: new Date().toISOString(),
+    };
+    mockReady({ logs: [loggedToday] });
+    await renderToday();
+    expect(storedPick().session).toBe(0);
+  });
+
+  it("CLEAR ALL resets only the current key; the other key's memory survives", async () => {
+    seedFilters({
+      AT: {
+        durationRange: { min: 0, max: 60 },
+        effortLevels: [5],
+        lastDone: null,
+        source: null,
+      },
+      O2: {
+        durationRange: { min: 0, max: 60 },
+        effortLevels: [5],
+        lastDone: null,
+        source: null,
+      },
+    });
+    mockReady();
+    await renderToday();
+    expect(screen.getByText("EFFORT 5")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
+    expect(storedFilters("AT")?.effortLevels).toStrictEqual([]);
+    expect(storedFilters("O2")?.effortLevels).toStrictEqual([5]);
   });
 });

@@ -296,7 +296,7 @@ describe("StepEditor", () => {
     expect(screen.getByLabelText("Row 1 stroke rate value")).toHaveValue("");
 
     const { toSteps, newForm } = await import("./builderState");
-    const form = { ...newForm(), title: "t", pain: 3, rows: [clearedRow] };
+    const form = { ...newForm(), title: "t", effort: 3, rows: [clearedRow] };
     const result = toSteps(form);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected toSteps to succeed");
@@ -429,7 +429,7 @@ describe("StepEditor", () => {
 
   // Task 4: an effort row's TARGET reads the effort word, in the SAME
   // target-value element a resolved (exact) split renders in — Builder's
-  // splitLabelFor is what actually resolves refEffort to effortWord(...)
+  // splitLabelFor is what actually resolves refEffort to paceWordLabel(...)
   // (deliberately without needing baselines, unlike the split branch above);
   // this component does no pace math of its own and just renders whatever
   // string it's handed, so passing "ALL OUT"/"EASY" here is exactly what a

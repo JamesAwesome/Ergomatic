@@ -24,6 +24,7 @@ const webAuth = read("src/native/webAuth.ts");
 const linkFlow = read("src/adapters/linkFlow.ts");
 const routes = read("server/routes/concept2.ts");
 const probe = read("src/monitor/Concept2LinkProbe.tsx");
+const linkHook = read("src/api/useConcept2Link.ts");
 const plist = read("ios/App/App/Info.plist");
 const js = webAuth + linkFlow;
 
@@ -80,7 +81,14 @@ function handledCodes(source: string): string[] {
  *  a sentence. */
 function linkResponseKeys(routesSource: string): string[] {
   const start = routesSource.indexOf('router.get(\n    "/api/concept2/link"');
-  const end = routesSource.indexOf("router.delete(", start);
+  // The GET handler ends where the next registration begins — the PATCH
+  // (auto-send) sits between GET and DELETE now, so the window is the
+  // nearest of the two, never "everything until the DELETE".
+  const end = Math.min(
+    ...["router.patch(", "router.delete("]
+      .map((needle) => routesSource.indexOf(needle, start))
+      .filter((i) => i > start),
+  );
   const handler = routesSource.slice(start, end).replace(/\/\/[^\n]*/g, "");
   const keys = [...handler.matchAll(/res\.json\(\{([^{}]*)\}\)/g)].flatMap(
     (m) => matchAll(m[1]!, /(?:^|[{,])\s*([A-Za-z_$][\w$]*)\s*:/gm),
@@ -89,10 +97,27 @@ function linkResponseKeys(routesSource: string): string[] {
 }
 
 /** The keys `Concept2LinkProbe.tsx`'s `LinkStatus` DECLARES, optional marker
- *  and all. */
+ *  and all. Does NOT strip comments — the interface's own doc comment says so
+ *  and tells the next person adding a field where the explanation goes. */
 function linkStatusKeys(probeSource: string): string[] {
   const body = /interface LinkStatus \{([^}]*)\}/.exec(probeSource)?.[1] ?? "";
   return [...new Set(matchAll(body, /([A-Za-z_$][\w$]*)\??:/g))].sort();
+}
+
+/** The keys `src/api/useConcept2Link.ts`'s `Concept2Link` DECLARES — the
+ *  PRODUCT reader's shape, as opposed to the dev probe's.
+ *
+ *  Comments are stripped first, block and line alike, because this interface
+ *  carries a doc comment and two `//` explanations INSIDE its braces (which
+ *  is right — it is product code, and the rationale belongs beside the
+ *  field). Stripping is what lets it, where `linkStatusKeys` above cannot. */
+function productLinkKeys(hookSource: string): string[] {
+  const body =
+    /export interface Concept2Link \{([^}]*)\}/.exec(hookSource)?.[1] ?? "";
+  const stripped = body
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+  return [...new Set(matchAll(stripped, /([A-Za-z_$][\w$]*)\??:/g))].sort();
 }
 
 describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
@@ -195,13 +220,38 @@ describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
     // as the reject-codes test above: without it, deleting a key from BOTH
     // files at once would keep the set equality green.
     expect(emitted).toStrictEqual([
+      "autoSend",
       "available",
       "c2UserId",
+      "c2Username",
       "linked",
+      "logbookBaseUrl",
       "needsReauth",
-      "weightClass",
+      "sendFailedAt",
+      "sendFailedReason",
     ]);
     expect(linkStatusKeys(probe)).toStrictEqual(emitted);
+  });
+
+  it("the PRODUCT hook's Concept2Link names exactly the keys GET /api/concept2/link emits", () => {
+    // The sibling gate above pins the DEV PROBE's copy of this response — a
+    // type no rower's screen ever reads. `normalizeLink` in
+    // `src/api/useConcept2Link.ts` is the reader every rower actually gets,
+    // and until this test nothing bound it to the route at all: it already
+    // parsed two keys the handler did not emit, and TypeScript compares the
+    // two files never (the hook casts `res.json()`'s `unknown`).
+    //
+    // The production symptom of the gap, and the reason this is a gate and
+    // not a nicety: rename the handler's key to `c2username` and the card's
+    // identity line reads `account #2211` forever while the
+    // View-on-Concept2 button never renders — every suite green.
+    //
+    // Set equality both ways, so a key the route emits and the hook cannot
+    // read, AND a key the hook parses that the route never sends, each fail
+    // here. No independent literal list on this one: the sibling test above
+    // already pins the emitted set as a literal, and a second copy of the
+    // same nine strings would go stale rather than add a check.
+    expect(productLinkKeys(linkHook)).toStrictEqual(linkResponseKeys(routes));
   });
 
   it("the callback scheme is one registration spelled in three places", () => {

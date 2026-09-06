@@ -3,16 +3,17 @@ import {
   EMPTY_FILTERS,
   RECENCY_BOUNDARY_DAYS,
   applyFilters,
-  bucketFor,
   hasActiveFilters,
   isTypeSelected,
   clearFilters,
   isRecent,
   setLastDone,
   setSource,
-  toggleDifficulty,
-  toggleDuration,
-  togglePainLevel,
+  setDurationRange,
+  setQuery,
+  normalizeQuery,
+  clearSheetFilters,
+  toggleEffortLevel,
   toggleType,
   type Filters,
 } from "./filters";
@@ -37,8 +38,7 @@ function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
   return {
     title: "T",
     type: "O2",
-    difficulty: "easy",
-    pain: 2,
+    effort: 2,
     // A plain 10' work step at the 6k baseline: `estimateMinutes` prices
     // it to 10 minutes, which is all any duration-bucket fixture here
     // needs. (Every fixture in this file was a `wu` row until 2026-08-09's
@@ -60,15 +60,14 @@ function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
 
 // Realistic fixture (recurring-failure #3): the real 300-workout global
 // library, not a hand-built minimum — the "composes" test below needs
-// real co-occurring type/difficulty/pain combinations to prove the
+// real co-occurring type/difficulty/effort combinations to prove the
 // predicates actually intersect rather than each independently matching
 // everything.
 const WORKOUTS: LibraryWorkout[] = LIBRARY_WORKOUTS.map((seed, i) => ({
   id: `lib-${i}`,
   title: seed.title,
   type: seed.type,
-  difficulty: seed.difficulty,
-  pain: seed.pain,
+  effort: seed.effort,
   steps: seed.steps,
   isGlobal: true,
   lastDoneDaysAgo: null,
@@ -81,22 +80,18 @@ describe("chip/cell state transitions", () => {
     expect(toggleType(f, "AT").types).toStrictEqual(["O2"]);
   });
 
-  it("accumulates difficulties (multi-select union) and removes on repeat", () => {
-    const f = toggleDifficulty(toggleDifficulty(EMPTY_FILTERS, "easy"), "hard");
-    expect(f.difficulties).toStrictEqual(["easy", "hard"]);
-    expect(toggleDifficulty(f, "easy").difficulties).toStrictEqual(["hard"]);
+  it("sets the TIME range as a whole (a two-thumb control has no toggle)", () => {
+    const f = setDurationRange(EMPTY_FILTERS, { min: 25, max: 35 });
+    expect(f.durationRange).toStrictEqual({ min: 25, max: 35 });
+    expect(
+      setDurationRange(f, { min: 0, max: 120 }).durationRange,
+    ).toStrictEqual({ min: 0, max: 120 });
   });
 
-  it("accumulates duration buckets (multi-select union) and removes on repeat", () => {
-    const f = toggleDuration(toggleDuration(EMPTY_FILTERS, "<30"), "60+");
-    expect(f.durations).toStrictEqual(["<30", "60+"]);
-    expect(toggleDuration(f, "<30").durations).toStrictEqual(["60+"]);
-  });
-
-  it("accumulates pain levels (multi-select union) and removes on repeat", () => {
-    const f = togglePainLevel(togglePainLevel(EMPTY_FILTERS, 1), 4);
-    expect(f.painLevels).toStrictEqual([1, 4]);
-    expect(togglePainLevel(f, 1).painLevels).toStrictEqual([4]);
+  it("accumulates effort levels (multi-select union) and removes on repeat", () => {
+    const f = toggleEffortLevel(toggleEffortLevel(EMPTY_FILTERS, 1), 4);
+    expect(f.effortLevels).toStrictEqual([1, 4]);
+    expect(toggleEffortLevel(f, 1).effortLevels).toStrictEqual([4]);
   });
 
   it("makes under21 and over21 mutually exclusive", () => {
@@ -127,23 +122,14 @@ describe("chip/cell state transitions", () => {
   it("clears every filter at once", () => {
     const busy: Filters = {
       types: ["AN"],
-      difficulties: ["hard"],
-      durations: ["<30"],
-      painLevels: [4, 5],
+      durationRange: { min: 0, max: 30 },
+      effortLevels: [4, 5],
       lastDone: "under21",
       source: "custom",
+      query: "",
     };
     expect(clearFilters()).toStrictEqual(EMPTY_FILTERS);
     expect(busy).not.toStrictEqual(EMPTY_FILTERS);
-  });
-});
-
-describe("bucketFor", () => {
-  it("puts boundary durations in the handoff's buckets", () => {
-    expect(bucketFor(29)).toBe("<30");
-    expect(bucketFor(30)).toBe("30-45");
-    expect(bucketFor(45)).toBe("45-60");
-    expect(bucketFor(60)).toBe("60+");
   });
 });
 
@@ -169,31 +155,6 @@ describe("applyFilters", () => {
     expect(kept.map((r) => r.id)).toStrictEqual(["a"]);
   });
 
-  it("difficulties: empty means no filter; a selection excludes the rest", () => {
-    // Compared against WORKOUTS.length directly, not against a second
-    // EMPTY_FILTERS-shaped call — EMPTY_FILTERS already has
-    // `difficulties: []`, so comparing two calls that are the same input
-    // would pass even if the guard this test exists to pin were dropped
-    // (whole-branch review I-3).
-    expect(
-      applyFilters(WORKOUTS, { ...EMPTY_FILTERS, difficulties: [] }, baselines),
-    ).toHaveLength(WORKOUTS.length);
-    const easy = applyFilters(
-      WORKOUTS,
-      { ...EMPTY_FILTERS, difficulties: ["easy"] },
-      baselines,
-    );
-    expect(easy.length).toBeGreaterThan(0);
-    expect(easy.every((r) => r.difficulty === "easy")).toBe(true);
-    const easyMed = applyFilters(
-      WORKOUTS,
-      { ...EMPTY_FILTERS, difficulties: ["easy", "medium"] },
-      baselines,
-    );
-    expect(easyMed.length).toBeGreaterThan(easy.length);
-    expect(easyMed.every((r) => r.difficulty !== "hard")).toBe(true);
-  });
-
   it("types: empty means all; a two-type selection is their union", () => {
     expect(
       applyFilters(WORKOUTS, { ...EMPTY_FILTERS, types: [] }, baselines),
@@ -217,22 +178,20 @@ describe("applyFilters", () => {
     expect(both.every((r) => r.type === "O2" || r.type === "AT")).toBe(true);
   });
 
-  it("composes: difficulty AND type AND pain narrow together against the real library", () => {
+  it("composes: type AND effort narrow together against the real library", () => {
     // Verified against the real 300-workout seed (not guessed): types
-    // {O2,AT} ∩ difficulties {easy,medium} ∩ pain {1,2,3} = 126 rows, a
+    // {O2,AT} ∩ difficulties {easy,medium} ∩ effort {1,2,3} = 126 rows, a
     // proper subset of both types+difficulties alone (140) and of either
     // predicate alone — see the inspection this test's assertions encode.
     const filters: Filters = {
       ...EMPTY_FILTERS,
       types: ["O2", "AT"],
-      difficulties: ["easy", "medium"],
-      painLevels: [1, 2, 3],
+      effortLevels: [1, 2, 3],
     };
     const expected = WORKOUTS.filter(
       (r) =>
         (r.type === "O2" || r.type === "AT") &&
-        (r.difficulty === "easy" || r.difficulty === "medium") &&
-        (r.pain === 1 || r.pain === 2 || r.pain === 3),
+        (r.effort === 1 || r.effort === 2 || r.effort === 3),
     );
     expect(expected.length).toBeGreaterThan(0);
     expect(expected.length).toBeLessThan(WORKOUTS.length);
@@ -241,26 +200,35 @@ describe("applyFilters", () => {
     expect(result.map((r) => r.id)).toStrictEqual(expected.map((r) => r.id));
   });
 
-  it("unions duration buckets", () => {
+  it("keeps only rows whose printed minutes fall inside the TIME range, both ends inclusive, 120 meaning no upper bound", () => {
     const short = w({ id: "short", steps: [timeWork(10)] });
+    const mid = w({ id: "mid", steps: [timeWork(35)] });
     const long = w({ id: "long", steps: [timeWork(70)] });
-    const f = toggleDuration(EMPTY_FILTERS, "<30");
+    const rows = [short, mid, long];
+    const upTo30 = setDurationRange(EMPTY_FILTERS, { min: 0, max: 30 });
     expect(
-      applyFilters([short, long], f, baselines).map((r) => r.id),
+      applyFilters(rows, upTo30, baselines).map((r) => r.id),
     ).toStrictEqual(["short"]);
-    const both = toggleDuration(f, "60+");
+    const twentyFiveTo35 = setDurationRange(EMPTY_FILTERS, {
+      min: 25,
+      max: 35,
+    });
     expect(
-      applyFilters([short, long], both, baselines).map((r) => r.id),
-    ).toStrictEqual(["short", "long"]);
+      applyFilters(rows, twentyFiveTo35, baselines).map((r) => r.id),
+    ).toStrictEqual(["mid"]);
+    const sixtyPlus = setDurationRange(EMPTY_FILTERS, { min: 60, max: 120 });
+    expect(
+      applyFilters(rows, sixtyPlus, baselines).map((r) => r.id),
+    ).toStrictEqual(["long"]);
   });
 
-  it("unions pain levels — a non-contiguous selection still matches every level named", () => {
+  it("unions effort levels — a non-contiguous selection still matches every level named", () => {
     const rows = [
-      w({ id: "p1", pain: 1 }),
-      w({ id: "p3", pain: 3 }),
-      w({ id: "p4", pain: 4 }),
+      w({ id: "p1", effort: 1 }),
+      w({ id: "p3", effort: 3 }),
+      w({ id: "p4", effort: 4 }),
     ];
-    const f = togglePainLevel(togglePainLevel(EMPTY_FILTERS, 1), 4);
+    const f = toggleEffortLevel(toggleEffortLevel(EMPTY_FILTERS, 1), 4);
     expect(applyFilters(rows, f, baselines).map((r) => r.id)).toStrictEqual([
       "p1",
       "p4",
@@ -287,7 +255,7 @@ describe("applyFilters", () => {
 
   it("skips duration filtering when baselines are unknown rather than hiding everything", () => {
     const rows = [w({ id: "a" }), w({ id: "b" })];
-    const f = toggleDuration(EMPTY_FILTERS, "<30");
+    const f = setDurationRange(EMPTY_FILTERS, { min: 0, max: 30 });
     expect(applyFilters(rows, f, null).map((r) => r.id)).toStrictEqual([
       "a",
       "b",
@@ -296,11 +264,11 @@ describe("applyFilters", () => {
 
   it("intersects different filter kinds", () => {
     const rows = [
-      w({ id: "match", type: "AT", pain: 2 }),
-      w({ id: "wrongtype", type: "O2", pain: 2 }),
-      w({ id: "toopainful", type: "AT", pain: 5 }),
+      w({ id: "match", type: "AT", effort: 2 }),
+      w({ id: "wrongtype", type: "O2", effort: 2 }),
+      w({ id: "toopainful", type: "AT", effort: 5 }),
     ];
-    const f = togglePainLevel(toggleType(EMPTY_FILTERS, "AT"), 2);
+    const f = toggleEffortLevel(toggleType(EMPTY_FILTERS, "AT"), 2);
     expect(applyFilters(rows, f, baselines).map((r) => r.id)).toStrictEqual([
       "match",
     ]);
@@ -348,6 +316,50 @@ describe("source", () => {
   });
 });
 
+// Phase SF PR3 (spec §4, I-14): SEARCH BY NAME.
+describe("query", () => {
+  it("matches a case-insensitive, trimmed substring of the title, AND-ed with the other filters", () => {
+    const rows = [
+      w({ id: "fog", type: "O2", title: "River Fog" }),
+      w({ id: "bow", type: "AT", title: "Fog Bow" }),
+      w({ id: "calm", type: "O2", title: "Dead Calm" }),
+    ];
+    const ids = (f: Filters) =>
+      applyFilters(rows, f, baselines).map((r) => r.id);
+    expect(ids(setQuery(EMPTY_FILTERS, "FOG"))).toStrictEqual(["fog", "bow"]);
+    expect(ids(setQuery(EMPTY_FILTERS, "  fog  "))).toStrictEqual([
+      "fog",
+      "bow",
+    ]);
+    expect(ids(setQuery(EMPTY_FILTERS, "bow"))).toStrictEqual(["bow"]);
+    expect(ids(setQuery(toggleType(EMPTY_FILTERS, "O2"), "fog"))).toStrictEqual(
+      ["fog"],
+    );
+    expect(ids(setQuery(EMPTY_FILTERS, "   "))).toStrictEqual([
+      "fog",
+      "bow",
+      "calm",
+    ]);
+    expect(ids(setQuery(EMPTY_FILTERS, "zzz"))).toStrictEqual([]);
+  });
+
+  it("normalizes by trimming and lower-casing", () => {
+    expect(normalizeQuery("  Fog Bow ")).toBe("fog bow");
+    expect(normalizeQuery("")).toBe("");
+  });
+
+  it("counts as active only when non-blank, and the sheet's CLEAR leaves it alone", () => {
+    expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "fog"))).toBe(true);
+    expect(hasActiveFilters(setQuery(EMPTY_FILTERS, "   "))).toBe(false);
+    const both = setQuery(toggleEffortLevel(EMPTY_FILTERS, 2), "fog");
+    expect(clearSheetFilters(both)).toStrictEqual({
+      ...EMPTY_FILTERS,
+      query: "fog",
+    });
+    expect(clearFilters().query).toBe("");
+  });
+});
+
 describe("hasActiveFilters", () => {
   // The reason this exists: `filterTokens(f).length > 0` used to be the
   // equivalent test, and it stopped being one when TYPE lost its token
@@ -364,9 +376,8 @@ describe("hasActiveFilters", () => {
 
   it("is true for every other group on its own", () => {
     const cases: Partial<Filters>[] = [
-      { difficulties: ["easy"] },
-      { durations: ["<30"] },
-      { painLevels: [3] },
+      { durationRange: { min: 0, max: 30 } },
+      { effortLevels: [3] },
       { lastDone: "under21" },
       { source: "custom" },
     ];

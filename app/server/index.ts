@@ -5,7 +5,7 @@ import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
 import { createNativeVerifier } from "./auth/nativeVerify.js";
 import { createSessionStore } from "./auth/sessions.js";
 import { createUserStore } from "./auth/users.js";
-import { computeAvailable } from "./concept2/availability.js";
+import { c2Gate } from "./concept2/availability.js";
 import { createC2Client } from "./concept2/client.js";
 import { createDb } from "./db/index.js";
 import { checkDb } from "./db/pool.js";
@@ -109,26 +109,51 @@ const stores: Stores = {
 };
 
 // Wave E PR1 Task 7 (task-7-brief.md): the concept2 broker is wired ALWAYS
-// (never behind a runtime `if`) — `computeAvailable` gates BEHAVIOR (every
-// concept2 route re-checks `available()`), never mounting. With
+// (never behind a runtime `if`) — the gate below governs BEHAVIOR (every
+// concept2 route re-checks `available()` or `availableFor()`), never
+// mounting. With
 // `C2_LINK_ENABLED` unset in production: no new capability; `GET /api/logs`
 // rows carry four always-null fields (`c2ResultId`, `c2UserId`,
 // `completedAt`, `tz`); one new unauthenticated route
 // (`GET /api/concept2/callback`) answers 403 dark rather than not existing —
 // the spec's own "safe end state" (task-7-brief.md's "Produces" line).
-const c2BaseUrl = process.env.C2_BASE_URL ?? "https://log-dev.concept2.com";
+// `||`, not `??` (Wave E PR2): `C2_BASE_URL=""` in a deploy env is a
+// STRING and survives `??`, and an empty origin builds a RELATIVE
+// View-on-Concept2 URL that opens on Ergomatic's own domain. Absent and
+// empty are the same non-answer here, and both take the default.
+const c2BaseUrl = process.env.C2_BASE_URL || "https://log-dev.concept2.com";
 const c2ClientId = process.env.C2_CLIENT_ID ?? "";
 const c2ClientSecret = process.env.C2_CLIENT_SECRET ?? "";
 const c2LinkEnabled = process.env.C2_LINK_ENABLED;
-const c2Available = computeAvailable(c2LinkEnabled, c2ClientId, c2ClientSecret);
-if (c2LinkEnabled === "1" && !c2Available) {
-  console.warn(
-    "WARNING: C2_LINK_ENABLED=1 but C2_CLIENT_ID / C2_CLIENT_SECRET not fully set — Concept2 linking is DISABLED",
-  );
-} else if (c2LinkEnabled !== "1" && c2ClientId && c2ClientSecret) {
-  console.warn(
-    "WARNING: C2_CLIENT_ID / C2_CLIENT_SECRET are set but C2_LINK_ENABLED is not '1' — Concept2 linking stays DISABLED",
-  );
+// Wave E per-user gate: a SECOND, per-request check on top of the boot-time
+// one, so the Concept2 surface can be live for one account (a real link, a
+// real row, the logbook read back) while the rest of `ALLOWED_EMAILS` never
+// meets it. Same primitive as the sign-in allowlist, deliberately — it is
+// already tested, case-insensitive and comma-separated. Unset or empty
+// means NOBODY.
+//
+// This file COMPOSES NOTHING (F1, fix rounds 1 and 2). It used to parse
+// `C2_ALLOWED_EMAILS` into a `Set<string>` and build `availableFor` here,
+// which put two identically-typed Sets in one scope; and after that it
+// still hand-wired the two finished checks, where `availableFor:
+// c2.available` typechecked clean and left 1878 unit tests green with every
+// gated route open to every signed-in user. Nothing in this file can be
+// tested (it opens a real Postgres at import time), so nothing could have
+// caught either.
+//
+// `c2Gate` takes the raw strings and returns the finished gate. What is
+// STILL untested here is NOT "four env var names" — the honest census, with
+// each claim's measurement, is the numbered list on `c2Gate` in
+// `concept2/availability.ts`. Read it before trusting this file.
+const c2 = c2Gate({
+  linkEnabledFlag: c2LinkEnabled,
+  clientId: c2ClientId,
+  clientSecret: c2ClientSecret,
+  allowedEmails: process.env.C2_ALLOWED_EMAILS,
+});
+for (const line of c2.bootLines) {
+  if (line.level === "warn") console.warn(line.message);
+  else console.log(line.message);
 }
 // Google precedent (index.ts:69, above): the WEB callback path is fixed and
 // derived from the same siteUrl every other redirect uses. The NATIVE
@@ -137,7 +162,16 @@ if (c2LinkEnabled === "1" && !c2Available) {
 // portal: a cutover step beside write approval).
 const c2WebRedirectUri = new URL("/api/concept2/callback", siteUrl).href;
 const concept2 = {
-  available: () => c2Available,
+  // SPREAD, never two named assignments (fix round 2). `available` and
+  // `availableFor` are mutually assignable — TypeScript's parameter
+  // bivariance lets a zero-arg function satisfy a one-arg type — so writing
+  // `availableFor: c2.available` here typechecked clean and left all 1878
+  // unit tests green while opening every gated route to every signed-in
+  // user (measured before this line was a spread). Nothing in this file is
+  // reachable from a test, so no gate could have gone red on it. Spreading
+  // means this file never writes either name, and the swap has nowhere to
+  // be written.
+  ...c2.gate,
   store: createConcept2Store(db),
   client: createC2Client({
     baseUrl: c2BaseUrl,
@@ -145,6 +179,11 @@ const concept2 = {
     clientSecret: c2ClientSecret,
   }),
   webRedirectUri: c2WebRedirectUri,
+  // Wave E PR2: the SAME origin the client is configured against, echoed
+  // to the app on `GET /api/concept2/link` so it can build the
+  // View-on-Concept2 link-out without guessing which Concept2 this
+  // deployment talks to.
+  logbookBaseUrl: c2BaseUrl,
 };
 
 const port = Number(process.env.PORT ?? 8080);

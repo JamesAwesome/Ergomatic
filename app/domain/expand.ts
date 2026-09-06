@@ -1,9 +1,9 @@
 import { fmtSplit } from "./format.js";
 import { needsBaselines } from "./needsBaselines.js";
 import {
-  effortWord,
+  paceWordLabel,
   estimationSplit,
-  isEffortRef,
+  isPaceWordRef,
   resolveSplit,
 } from "./pace.js";
 import type { Baselines, PaceRef, Step } from "./types.js";
@@ -18,6 +18,8 @@ export interface Phase {
   // Work phases (resolved, nudge excluded — session nudges are applied by
   // callers).
   targetSplit?: number;
+  // "effort" here is the PACE WORD kind (MAX/MIN), a runtime discriminant
+  // frozen by Phase DE PR 2 — not the 1..5 effort figure.
   targetKind?: "split" | "effort"; // work phases only; set on every work phase
   // The raw ref a "split" targetKind phase was resolved from — set ONLY
   // for that case (an effort phase's target is words, never a number to
@@ -150,7 +152,7 @@ export function phases(steps: Step[], baselines: Baselines | null): Phase[] {
         break;
       case "w": {
         let base: Phase;
-        if (isEffortRef(s.ref)) {
+        if (isPaceWordRef(s.ref)) {
           // Phase 6I: with null baselines this is `null` (no number to
           // resolve to — the timer only ever shows the effort word for
           // these), so `targetSplit` ends up `undefined`, matching its
@@ -161,7 +163,7 @@ export function phases(steps: Step[], baselines: Baselines | null): Phase[] {
             targetKind: "effort",
             targetSplit,
             spm: s.spm,
-            label: effortWord(s.ref.effort),
+            label: paceWordLabel(s.ref.effort),
             set,
             originalStepIndex,
           };

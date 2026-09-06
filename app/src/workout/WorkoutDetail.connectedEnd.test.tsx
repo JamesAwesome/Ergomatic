@@ -81,7 +81,6 @@ vi.mock("../api/useBaselines", () => ({
 const READY_PREFS = {
   state: "ready",
   preferences: {
-    difficulties: [],
     timeCapMinutes: 60,
     countdownSeconds: 10,
   },
@@ -96,8 +95,7 @@ const WORKOUT = {
   id: "w-conn",
   title: "Filling Low",
   type: "AT" as const,
-  difficulty: "medium" as const,
-  pain: 3,
+  effort: 3,
   steps: [
     {
       k: "w" as const,

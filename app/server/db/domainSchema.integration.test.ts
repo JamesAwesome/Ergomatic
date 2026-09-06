@@ -50,18 +50,23 @@ describe("domain schema against real Postgres", () => {
     );
   });
 
-  it("rejects a workout with pain outside 1..5", async () => {
+  it("rejects a workout with effort outside 1..5", async () => {
     const [u] = await db
       .insert(users)
-      .values({ googleSub: "pain-check", email: "pain@x.com", name: "Pain" })
+      .values({
+        googleSub: "effort-check",
+        email: "effort@x.com",
+        name: "Effort",
+      })
       .returning();
     await expect(
       db.insert(workouts).values({
         userId: u.id,
-        title: "Bad pain",
+        title: "Bad effort",
         type: "AN",
+        // raw Drizzle insert: the NOT NULL column needs a literal here (PR 3 drops it)
         difficulty: "easy",
-        pain: 6,
+        effort: 6,
         source: "user",
         steps: [],
       }),
@@ -115,13 +120,13 @@ describe("domain schema against real Postgres", () => {
     expect(row2.planKey).toBeNull();
   });
 
-  it("rejects a session log with pain outside 1..5", async () => {
+  it("rejects a session log with effort outside 1..5", async () => {
     const [u] = await db
       .insert(users)
       .values({
-        googleSub: "pain-check-log",
+        googleSub: "effort-check-log",
         email: "painlog@x.com",
-        name: "PainLog",
+        name: "EffortLog",
       })
       .returning();
     await expect(
@@ -130,7 +135,7 @@ describe("domain schema against real Postgres", () => {
         workoutTitle: "Frozen title",
         workoutType: "AN",
         held: "held",
-        pain: 0,
+        effort: 0,
         steps: [],
         source: "manual",
       }),
@@ -153,8 +158,9 @@ describe("domain schema against real Postgres", () => {
         userId: u.id,
         title: "Cascade workout",
         type: "AN",
+        // raw Drizzle insert: the NOT NULL column needs a literal here (PR 3 drops it)
         difficulty: "easy",
-        pain: 3,
+        effort: 3,
         source: "user",
         steps: [],
       })
@@ -166,7 +172,7 @@ describe("domain schema against real Postgres", () => {
       workoutTitle: w.title,
       workoutType: w.type,
       held: "held",
-      pain: 3,
+      effort: 3,
       steps: [],
       source: "manual",
     });
@@ -216,8 +222,9 @@ describe("domain schema against real Postgres", () => {
         userId: u.id,
         title: "To be deleted",
         type: "O2",
-        difficulty: "medium",
-        pain: 2,
+        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
+        difficulty: "easy",
+        effort: 2,
         source: "user",
         steps: [],
       })
@@ -231,7 +238,7 @@ describe("domain schema against real Postgres", () => {
         workoutTitle: w.title,
         workoutType: w.type,
         held: "under",
-        pain: 2,
+        effort: 2,
         steps: [],
         source: "manual",
       })

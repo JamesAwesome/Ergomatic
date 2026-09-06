@@ -1,5 +1,17 @@
 # PR1.75b — the native Concept2 link, on device (walk card)
 
+> **RECORD, not an instruction — do not re-run this card as written.** The
+> walk it describes was performed on 2026-09-02 and PASSED
+> (`docs/monitor/sessions/walk-2026-09-02-c2-native/`). One string it tells
+> you to read no longer exists: the probe's `not available (C2_LINK_ENABLED
+> is off)` became `not available (C2_LINK_ENABLED off, or not on
+> C2_ALLOWED_EMAILS)` when the per-user gate landed on 2026-09-04
+> (`docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md`), because
+> the flag is no longer the only reason a server answers `{available:false}`.
+> The card is left as it was run rather than rewritten: editing a finished
+> walk's instructions would make the record disagree with the evidence it
+> produced.
+
 **What this proves:** that a real Concept2 consent, completed on the phone,
 comes back into the app and writes a link. Nothing in this repo's own gates
 can reach that code: the plugin is Swift with no test target, `src/native/**`

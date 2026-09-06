@@ -29,7 +29,7 @@ function makeLog(id: string, overrides: Partial<RecentLog> = {}): RecentLog {
     workoutType: SEA_FRET.type,
     loggedAt: "2026-07-25T12:00:00.000Z",
     held: null,
-    pain: null,
+    effort: null,
     thumbs: null,
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -93,11 +93,13 @@ function baseStoredRow(overrides: Partial<StoredLog> = {}): StoredLog {
     workoutType: SEA_FRET.type,
     loggedAt: "2026-08-18T18:57:00.000Z",
     held: null,
-    pain: null,
+    effort: null,
     notes: null,
     thumbs: null,
     deviceName: "PM5 432331249",
     source: "pm5",
+    c2ResultId: null,
+    c2UserId: null,
     steps: [],
     avgSplitSeconds: null,
     timeSeconds: null,
@@ -181,14 +183,14 @@ describe("HistoryList", () => {
   });
 
   // §5G, the row idiom + the hero snippet's own literal example.
-  it("renders title, calendar date, the held/pain meta line, and the AVG/DISTANCE hero snippet", () => {
+  it("renders title, calendar date, the held/effort meta line, and the AVG/DISTANCE hero snippet", () => {
     mockUseLogHistory.mockReturnValue(
       readyState([
         makeLog("log-1", {
           workoutTitle: OCCLUDED_FRONT.title,
           workoutType: OCCLUDED_FRONT.type,
           held: "held",
-          pain: 2,
+          effort: 2,
           avgSplitSeconds: 124.5,
           distanceMeters: 5000,
         }),
@@ -275,7 +277,7 @@ describe("HistoryList", () => {
           workoutTitle: "Steady State",
           workoutType: "AT",
           held: "held",
-          pain: 2,
+          effort: 2,
           // avgSplitSeconds/timeSeconds/distanceMeters/planKey/planIndex
           // all null — exactly what a v0.11.0 client's POST (no hero
           // keys) reads back as.

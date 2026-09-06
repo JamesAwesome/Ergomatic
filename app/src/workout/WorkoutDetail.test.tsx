@@ -37,8 +37,7 @@ const WORKOUT: LibraryWorkout = {
   id: "w1",
   title: "Ladder Sets",
   type: "AT",
-  difficulty: "medium",
-  pain: 3,
+  effort: 3,
   steps: [
     {
       k: "w",
@@ -71,8 +70,7 @@ const WORKOUT_WITH_REPS: LibraryWorkout = {
   id: "w2",
   title: "Rep City",
   type: "AN",
-  difficulty: "hard",
-  pain: 4,
+  effort: 4,
   steps: [
     { k: "reps", count: 4 },
     {
@@ -93,8 +91,7 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
   id: "w3",
   title: "My Own Session",
   type: "O2",
-  difficulty: "easy",
-  pain: 2,
+  effort: 2,
   steps: [
     {
       k: "w",
@@ -116,10 +113,9 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
 // seed no longer carries either.
 const EFFORT_ONLY_WORKOUT: LibraryWorkout = {
   id: "w-effort",
-  title: "Effort Only Row",
+  title: "PaceWord Only Row",
   type: "O2",
-  difficulty: "easy",
-  pain: 2,
+  effort: 2,
   steps: [
     {
       k: "w",
@@ -193,7 +189,6 @@ function mockHooks(
     usePreferences: () => ({
       state: "ready",
       preferences: {
-        difficulties: [],
         timeCapMinutes: 60,
         countdownSeconds: 10,
       },
@@ -211,6 +206,30 @@ async function renderDetail(initialPath = "/library/w1") {
     </MemoryRouter>,
   );
 }
+
+it("Start warning opens Today without replacing the retained run or draft", async () => {
+  mockHooks(BASELINES);
+  const draft = buildDraft(WORKOUT);
+  saveDraft(draft);
+  const run = completedRunFor(draft);
+  saveRun(run);
+  const { default: WorkoutDetail } = await import("./WorkoutDetail");
+  render(
+    <MemoryRouter initialEntries={["/library/w1"]}>
+      <Routes>
+        <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/today" element={<h1>Today</h1>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Start Timer" }),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "View unsaved" }));
+  expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
+  expect(loadRun()).toStrictEqual(run);
+  expect(loadDraft()).toStrictEqual(draft);
+});
 
 // Renders WorkoutDetail alongside sibling links to other /library/:id
 // paths, all matched by the SAME <Route>, so clicking one changes just the
@@ -380,11 +399,11 @@ describe("WorkoutDetail", () => {
     expect(screen.getByText(/22 spm/)).toBeInTheDocument();
   });
 
-  it("shows the difficulty in the meta line with no catalogue number", async () => {
+  it("shows no difficulty word and no catalogue number in the meta line (Phase DE PR 1)", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
-    expect(screen.getByText("MEDIUM")).toBeInTheDocument();
+    expect(screen.queryByText("MEDIUM")).not.toBeInTheDocument();
     expect(screen.queryByText(/NO\.\s*\d+/i)).not.toBeInTheDocument();
   });
 
@@ -700,7 +719,7 @@ describe("WorkoutDetail", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Starting a new one discards it.",
+          /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(
@@ -813,7 +832,7 @@ describe("WorkoutDetail", () => {
       expect(loadMonitorRun()).toStrictEqual(connected);
       expect(
         screen.getByText(
-          "You have an unlogged session. Starting a new one discards it.",
+          /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(loadDraft()).toBeNull();
@@ -868,7 +887,7 @@ describe("WorkoutDetail", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Starting a new one discards it.",
+          /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(
@@ -922,7 +941,7 @@ describe("WorkoutDetail", () => {
       );
       expect(
         screen.getByText(
-          "You have an unlogged session. Starting a new one discards it.",
+          /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
 
@@ -1309,12 +1328,12 @@ describe("custom badge on the detail screen", () => {
   // list, so an opened custom workout showed nothing marking it yours.
   it("shows CUSTOM beside the type badge for a personal workout", async () => {
     await renderDetail("/library/w3"); // PERSONAL_WORKOUT, isGlobal: false
-    expect(screen.getByText("CUSTOM")).toBeInTheDocument();
+    expect(screen.getByText("MY WORKOUTS")).toBeInTheDocument();
   });
 
   it("shows no CUSTOM tag for a seeded global workout", async () => {
     await renderDetail("/library/w1"); // WORKOUT, isGlobal: true
-    expect(screen.queryByText("CUSTOM")).not.toBeInTheDocument();
+    expect(screen.queryByText("MY WORKOUTS")).not.toBeInTheDocument();
   });
 });
 
@@ -1694,7 +1713,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       expect(loadMonitorRun()).toStrictEqual(connected);
       expect(
         screen.getByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
@@ -1839,7 +1858,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
       expect(
         screen.getByText(
-          "You have an unlogged session. Connecting discards it.",
+          /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
         ),
       ).toBeInTheDocument();
       expect(

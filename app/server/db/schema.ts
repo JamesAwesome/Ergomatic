@@ -126,7 +126,7 @@ export const workouts = pgTable(
     title: text("title").notNull(),
     type: workoutTypeEnum("type").notNull(),
     difficulty: difficultyEnum("difficulty").notNull(),
-    pain: integer("pain").notNull(),
+    effort: integer("effort").notNull(), // renamed from `pain` by 0024 (Phase DE PR 2)
     source: workoutSourceEnum("source").notNull(),
     steps: jsonb("steps").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -138,7 +138,7 @@ export const workouts = pgTable(
   },
   (t) => [
     index("workouts_user_id_idx").on(t.userId),
-    check("workouts_pain_check", sql`${t.pain} between 1 and 5`),
+    check("workouts_effort_check", sql`${t.effort} between 1 and 5`),
   ],
 );
 
@@ -175,7 +175,7 @@ export const sessionLogs = pgTable(
     // `workoutTypeEnum` above (that types `workouts.type`); this column
     // holds OUR intensity axis only and carries no index, CHECK or FK.
     // R-A ordered: the null-tolerant read side ships in this same PR, the
-    // same shape migration 0009 used for `held`/`pain`.
+    // same shape migration 0009 used for `held`/`pain` (now `effort`, 0024).
     workoutType: text("workout_type"),
     loggedAt: timestamp("logged_at", { withTimezone: true })
       .notNull()
@@ -185,7 +185,7 @@ export const sessionLogs = pgTable(
     // Post-workout-summary spec (2026-08-17), §3 "Stored shapes": nullable
     // now (`DROP NOT NULL`, migration 0009) — the redesigned reflection card
     // makes every answer optional (James's ruling), so a rower who skips the
-    // HELD question entirely must be storable, not just one who skips PAIN
+    // HELD question entirely must be storable, not just one who skips EFFORT
     // (which was already impossible before this migration: both were
     // required together). R-A ordered this: the null-tolerant READ side
     // (`RecentLog.held`, src/api/useRecentLogs.ts) shipped and tagged
@@ -193,12 +193,12 @@ export const sessionLogs = pgTable(
     // client white-screens on one.
     held: heldResultEnum("held"),
     // Same ruling as `held` above — nullable, `DROP NOT NULL`. The
-    // `session_logs_pain_check` CHECK below is left untouched: Postgres
+    // `session_logs_effort_check` CHECK below (renamed by 0024) is left untouched: Postgres
     // passes a CHECK constraint on NULL by definition (NULL is neither TRUE
     // nor FALSE, and a CHECK only ever REJECTS an explicit FALSE), so an
-    // absent pain value satisfies `pain between 1 and 5` unchanged — no
+    // absent effort value satisfies `effort between 1 and 5` unchanged — no
     // migration edit needed for the constraint itself.
-    pain: integer("pain"),
+    effort: integer("effort"), // renamed from `pain` by 0024 (Phase DE PR 2)
     notes: text("notes"),
     steps: jsonb("steps").notNull(),
     // Phase 7C Task 3 (spec §5/§6): session-scoped provenance for a
@@ -378,20 +378,36 @@ export const sessionLogs = pgTable(
     c2UserId: integer("c2_user_id"),
     // completedAt: the client's MonitorRun.completedAt — C2's `date` is
     // the END of the workout and logged_at is save-time, minutes-to-hours
-    // later (anchor K3). tz: the client's IANA zone; posted at save from
-    // PR2 on, or written by the upload route's first legacy send (plan
-    // deviation 2 — the payload's date must be stable across retries
-    // because C2's dedup key is second-granular).
+    // later (anchor K3). tz: the client's IANA zone.
+    //
+    // WHO WRITES THEM, as of Wave E PR2 (this comment used to say "posted
+    // at save from PR2 on", which was a requirement addressed to a future
+    // PR; it is now a description of the code). The producer is
+    // `src/session/completionStamp.ts`'s `completionStamp()`, spread into
+    // the save body at BOTH monitor doors — `session/LogSession.tsx` and
+    // `justrow/JustRowLog.tsx` — so every row saved by this build or later
+    // carries both fields. An unrecognised zone DEGRADES to null on
+    // `POST /api/logs` (routes/data.ts) rather than refusing the save: a
+    // Concept2 field can never cost a rower their row.
+    //
+    // Rows saved BEFORE that build read both back null, permanently — the
+    // close instant was never recorded, so no backfill is possible.
+    // `completed_at IS NULL` is what distinguishes them in the database.
+    // For those rows the upload route derives the date from logged_at and
+    // PERSISTS the upload request's own zone onto this column on first use
+    // (plan deviation 2 — the payload's date must be stable across retries
+    // because C2's dedup key is second-granular), which is the only way
+    // this column is ever written server-side.
     completedAt: timestamp("completed_at", { withTimezone: true }),
     tz: text("tz"),
   },
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),
     // LEFT ALONE by the post-workout-summary migration (0009): NULL passes
-    // a Postgres CHECK constraint by rule (see the `pain` column's own
-    // comment above) — the constraint doesn't need to change for `pain` to
+    // a Postgres CHECK constraint by rule (see the `effort` column's own
+    // comment above) — the constraint doesn't need to change for `effort` to
     // become nullable, only the column's `NOT NULL` does.
-    check("session_logs_pain_check", sql`${t.pain} between 1 and 5`),
+    check("session_logs_effort_check", sql`${t.effort} between 1 and 5`),
   ],
 );
 
@@ -499,9 +515,6 @@ export const articleReads = pgTable(
 
 // --- Wave E PR1 / PR1.75a: Concept2 stored shapes ------------------------
 
-// Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes, TRIAD).
-export const weightClassEnum = pgEnum("weight_class", ["H", "L"]);
-
 // Wave E PR1.75a (2026-09-02-concept2-pr175-app-bind-design.md §1-§3, TRIAD):
 // which surface MINTED an attempt, derived server-side from which credential
 // `requireUser` resolved (bearer -> native, cookie -> web) — never a
@@ -513,8 +526,9 @@ export const linkSurfaceEnum = pgEnum("link_surface", ["native", "web"]);
 // at-rest encryption with the key in the same process env is a lock taped
 // to its own key — attacked at the anchor; held). Tokens are never
 // serialized to any client response — `routes/concept2.ts` returns
-// {available, linked, weightClass, c2UserId, needsReauth}, the account's
-// numeric id but never a token (PR2's sent-state/View-on-Concept2 needs).
+// {available, linked, c2UserId, c2Username, logbookBaseUrl, needsReauth},
+// the account's numeric id and name but never a token (PR2's sent-state/
+// View-on-Concept2 needs).
 export const concept2Links = pgTable("concept2_links", {
   userId: uuid("user_id")
     .primaryKey()
@@ -528,20 +542,54 @@ export const concept2Links = pgTable("concept2_links", {
   // violation to `Concept2LinkConflictError`; both completion routes answer
   // 409.
   c2UserId: integer("c2_user_id").notNull().unique(),
+  // Wave E PR2 (Gate 0 amendment 1c, ruling ii): the linked account's
+  // Concept2 username, captured at exchange from the same `GET
+  // /api/users/me` response `c2_user_id` comes from. NULLABLE and no
+  // backfill: Concept2 documents `username` as optional (PR1.75a plan
+  // observation 3 measured it PRESENT on log-dev, 2026-09-02, but the
+  // field is read as optional and the card falls back to `account #<id>`).
+  // Exists because the You card's identity line is the account-injection
+  // residual's detect-identity treatment (ROADMAP's C2 row), and a numeric
+  // id is not an identity a rower recognises.
+  c2Username: text("c2_username"),
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  weightClass: weightClassEnum("weight_class").notNull(),
   // Set (never deleteLink) by any AUTOMATIC path when C2's token endpoint
   // answers 400/401 on a refresh: C2 documents those statuses for OUR
   // malformed request and OUR client credentials too (their 400 example
   // says `Check the "client_secret" parameter`), so an automatic delete
-  // would destroy links — and re-ask the one PII question — on a server
-  // bug or a rotated C2_CLIENT_SECRET. With this flag a misclassified
-  // status costs a re-consent prompt, never the stored weight_class.
+  // would destroy links on a server bug or a rotated C2_CLIENT_SECRET.
+  // With this flag a misclassified status costs a re-consent prompt,
+  // never the link itself. (Wave E PR2, ruling i: it used to cost the
+  // stored weight class as well. There is no stored class any more — it is
+  // read FROM CONCEPT2 at send time, the rower's own most recent
+  // declaration first and the profile's weight+gender only as a fallback
+  // (this comment used to name the profile alone, which is the wrong
+  // producer) — so re-consent is the whole cost now.)
   // Cleared by the callback's upsert on successful relink. Measured
   // grounds: docs/monitor/c2-crossconnect-2026-09/refresh-probe-2026-08-31.md.
   needsReauthAt: timestamp("needs_reauth_at", { withTimezone: true }),
+  // Wave E auto-send (spec 2026-09-05-concept2-auto-send-design §3.1). The
+  // rower's SENDING MODE: false = MANUAL (today's per-row Send), true =
+  // AUTOMATIC (a finished monitor row is sent the moment it saves). `NOT NULL
+  // DEFAULT false` is ruling 3 — a fresh link lands in MANUAL — and is also
+  // what makes every existing link MANUAL with no backfill. Reset to false by
+  // `upsertLink` when the conflict path lands a DIFFERENT `c2_user_id` (an
+  // account switch must not carry AUTOMATIC onto another Concept2 account);
+  // a reconnect of the same account keeps it.
+  autoSend: boolean("auto_send").notNull().default(false),
+  // The sticky "sends are failing" flag (rulings 6, 7). Set by the send
+  // route ONLY when an eligible send fails with `no_weight_class`; the reason
+  // column carries the route's SUB-reason — `no_weight` | `unreadable_weight`
+  // | `implausible_weight` | `no_gender`, `WeightClassFailure` in
+  // `server/concept2/mapping.ts`, which the store's `setSendFailed` is typed
+  // to — the key the rower-facing sentence is chosen by.
+  // Cleared on every outcome that leaves the row at Concept2 (200 post, 200
+  // already-sent short-circuit, 409 duplicate) and on every relink. `c2_error`
+  // never sets it: transient, and its rows keep their Send button.
+  sendFailedAt: timestamp("send_failed_at", { withTimezone: true }),
+  sendFailedReason: text("send_failed_reason"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -584,7 +632,6 @@ export const concept2AuthAttempts = pgTable("concept2_auth_attempts", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" })
     .unique(),
-  weightClass: weightClassEnum("weight_class").notNull(),
   surface: linkSurfaceEnum("surface").notNull().default("web"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

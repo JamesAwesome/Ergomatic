@@ -376,11 +376,11 @@ export default function Timer() {
   const [run, setRun] = useState<SessionRun | null>(() => loadRun());
   const [now, setNow] = useState<Date>(() => new Date());
   const [endStaged, setEndStaged] = useState(false);
-  // Whether tapping END was the thing that paused the run (vs. the rower
-  // having already paused it themselves beforehand) — see `handleEndTap`/
-  // `handleKeepGoing`'s own comments (fix round, spec review F1): the two
-  // must be exact inverses, and that requires remembering which case this
-  // was.
+  // Whether a programmed workout's END was the thing that paused the run
+  // (vs. the rower having already paused it themselves beforehand) — see
+  // `handleEndTap`/`handleKeepGoing`'s own comments (fix round, spec review
+  // F1): the two must be exact inverses, and that requires remembering which
+  // case this was. Just Row uses the shared finish latch below.
   const [pausedByEndTap, setPausedByEndTap] = useState(false);
   const [suspect, setSuspect] = useState(false);
   // The distance phase's elapsed seconds AT THE MOMENT NEXT was tapped and
@@ -389,17 +389,16 @@ export default function Timer() {
   // deliberation window, and re-measuring after that window inflates the
   // recorded split by however long the rower spent deciding.
   const [stagedElapsed, setStagedElapsed] = useState<number | null>(null);
-  // A staged confirm before ▶ ends the run on the FINAL phase (fix round,
-  // spec review F5): completion is a documented one-way door (engine.ts's
-  // own `isComplete` comment), so the affordance that triggers it must be
-  // deliberate, not a single stray tap under an unassuming "Next phase"
-  // aria-label.
+  // A staged finish confirm from ▶ or phone-timed Just Row END ends the run
+  // on the FINAL phase (fix round, spec review F5): completion is a
+  // documented one-way door (engine.ts's own `isComplete` comment), so each
+  // affordance that triggers it must be deliberate.
   const [finishStaged, setFinishStaged] = useState(false);
-  // Whether ▶ was the thing that paused a FREE-ROW run when it staged the
-  // finish confirm (Just Row without the monitor, ⟨F10⟩) — END's own
-  // `pausedByEndTap` latch, for the finish panel: `handleCancelFinish`
-  // must be the exact inverse of `handleNext`, resuming only a pause ▶
-  // itself took and never one the rower chose beforehand.
+  // Whether ▶ or END was the thing that paused a FREE-ROW run when it staged
+  // the finish confirm (Just Row without the monitor, ⟨F10⟩) — this finish
+  // latch is for the shared finish panel: `handleCancelFinish` must be the
+  // exact inverse of the triggering action, resuming only a pause that
+  // action took and never one the rower chose beforehand.
   const [pausedByFinishTap, setPausedByFinishTap] = useState(false);
 
   // Keep-awake spans the screen's whole lifetime (spec: "on during
@@ -533,6 +532,16 @@ export default function Timer() {
   const hasEstimate = hasRemainingEstimate(currentRun.phases, currentRun.index);
 
   function handleEndTap() {
+    // A confirmation owns the decision surface: repeated END presses are
+    // idempotent and must not replace the finish latch or stack panels.
+    if (endStaged || finishStaged) return;
+    // A phone-timed Just Row has no programmed workout to abandon. Route its
+    // END press through the existing final-phase finish state machine so the
+    // same freeze, Keep going, and Finish session behavior is shared with ▶.
+    if (isFreeRow) {
+      handleNext();
+      return;
+    }
     // Pausing before staging the confirm means the phase clock can't
     // silently auto-advance (or complete the run) while the rower is still
     // deciding — `tick()` still fires every second in the background
@@ -586,7 +595,7 @@ export default function Timer() {
       // deliberate act, not a single tap under an unassuming "Next phase"
       // label (fix round, spec review F5).
       if (isFreeRow) {
-        // ▶ FREEZES THE CLOCK on a free row (spec 2026-09-02 ⟨F10⟩): the
+        // ▶ or END FREEZES THE CLOCK on a free row (spec 2026-09-02 ⟨F10⟩): the
         // elapsed at this instant is what `handleConfirmFinish` records,
         // and the deliberation over "Finish this session?" must not bank
         // into the row — the same reason `handleDistanceNext` freezes
@@ -606,9 +615,9 @@ export default function Timer() {
   }
 
   function handleCancelFinish() {
-    // The exact inverse of `handleNext`'s free-row branch (the
-    // `handleKeepGoing` rule, F1): resume ONLY if ▶ was what paused the
-    // run — a pause the rower chose before tapping ▶ stays theirs.
+    // The exact inverse of the free-row finish trigger (the
+    // `handleKeepGoing` rule, F1): resume ONLY if ▶ or END was what paused
+    // the run — a pause the rower chose beforehand stays theirs.
     if (pausedByFinishTap) apply(resume);
     setPausedByFinishTap(false);
     setFinishStaged(false);
@@ -619,7 +628,7 @@ export default function Timer() {
   }
 
   function handleConfirmFinish() {
-    // Shared by ▶'s own last-phase staging (a workout's non-distance phase
+    // Shared by ▶/END's last-phase staging (a workout's non-distance phase
     // — plain `advance`, nothing to record), NEXT's last-phase staging (fix
     // round, spec review F6 — distance, records the FROZEN elapsed exactly
     // like `handleKeepSplit` does, for the identical F3 reason: deliberating
@@ -633,7 +642,8 @@ export default function Timer() {
     // `elapsedSeconds(r, at)` reads the FROZEN clock: `handleNext` paused
     // the run when it staged this panel ⟨F10⟩ (or the rower had already),
     // so `pausedAt`, not `at`, is the right edge — the seconds recorded
-    // are the seconds at ▶, however long this panel sat on screen.
+    // are the seconds at the finish trigger, however long this panel sat on
+    // screen.
     if (isFreeRow) {
       apply((r, at) => {
         const actual: PhaseActual = {
@@ -704,9 +714,9 @@ export default function Timer() {
     }
     if (isLastPhase) {
       // F6: NEXT ending the session on the final phase is exactly the same
-      // one-way-door risk ▶ already had (fixed as F5) — a single tap
+      // one-way-door risk ▶/END already have (fixed as F5) — a single tap
       // shouldn't complete the run, suspect or not. Reuses the SAME
-      // `finishStaged` panel/copy ▶ stages ("Finish this session?"), not a
+      // `finishStaged` panel/copy they stage ("Finish this session?"), not a
       // distance-specific one; only `handleConfirmFinish`'s OWN behavior
       // differs by phase kind. Elapsed is frozen here for the identical
       // F3 reason the suspect path freezes it — the split is fine now, but
@@ -960,10 +970,11 @@ export default function Timer() {
           </div>
         </div>
       ) : finishStaged ? (
-        // Non-distance only (only the ▶ control, absent in distance mode,
-        // ever sets `finishStaged`). Same BaselineEditor-idiom panel END's
-        // own confirm uses — a staged confirm, not a modal — with its own
-        // copy/handlers (fix round, spec review F5).
+        // ▶ and Just Row END stage this for a final non-distance phase; the
+        // final distance phase can stage it through `handleDistanceNext` too.
+        // Same BaselineEditor-idiom panel as the programmed END confirm uses
+        // — a staged confirm, not a modal — with its own copy/handlers (fix
+        // round, spec review F5).
         <div className="timer-end-confirm">
           <p className="timer-end-copy">Finish this session?</p>
           <div className="timer-end-actions">

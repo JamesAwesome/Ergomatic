@@ -4694,3 +4694,353 @@ added the first photo of these walks while claiming v1 (which bans photos)
 stands unchanged. And RF13 again: the Flipper's `Pages read: N of 42` — the one
 observation separating "PM5 dark" from "NDEF-layer fault" — is evidenced only
 by a saved `.nfc` file, never by anyone seeing that screen.
+## 2026-09-03 — Correct Resume: need before mechanism
+
+- **James accepted DEFER, not a cheaper reconnect.** After asking whether
+  PR #287's spec was YAGNI, he accepted the PM/controller recommendation by
+  saying "Log the decision". The design and rendered Gate 0 remain research;
+  their earlier approval does not authorize implementation or make reconnect
+  a Wave F exit gate. At James's follow-up request, ROADMAP's explicit Icebox
+  owns the item and its reopen trigger. Wave F has no scheduled implementation
+  left; final closeout review is distinct from building another feature.
+- **Evidence of need is different from evidence that a design is safe.**
+  `docs/monitor/sessions/walk-2026-08-28-codebase-audit/README.md` records
+  a deliberate Bluetooth-off test that kept one completed interval for save;
+  its camera gap recovered without disconnect. The 2026-08-27 lock walk and
+  `walk-2026-09-03-resume-edge/README.md` also record resumed streams. These
+  examples do not establish the incidence of natural unexpected BLE drops,
+  nor prove that those drops never happen. Finishing a roadmap checkbox and
+  sunk design/review effort are not evidence of current product value.
+- **Accepted cost:** after a genuine drop, today's received actuals and
+  eligible held partial remain available through End/save, but subsequent
+  work is not collected into that same record. This is incomplete capture,
+  not whole-workout recovery. Source: `useMonitorSession`'s `disconnected`
+  handler, `endSession` and `closeRecord`; no new recovery capability ships.
+- **Reopen with a real incident, then re-scope.** A diagnostic-backed natural
+  authoritative mid-row drop must demonstrate material inadequacy of that
+  fallback. Mere silence, lock/resume gaps and deliberate radio-off probes
+  do not meet the demand trigger. If reconnect becomes worthwhile, its
+  lifecycle/identity/continuity/no-write safeguards remain essential; stored
+  `MISSED`, explicit trace-break representation, pre-pull and Just Row
+  coverage require their own scope justification. Existing trace time is not
+  wall time, so the three-second split heuristic alone does not prove an
+  explicit discontinuity redundant. No safeguards are waived by deferral.
+
+## 2026-09-03 — Unlogged-session door
+
+"Unlogged" is a reachability contract, not a promise that every loadable
+MonitorRun can be auto-logged. A retained programmed row can reuse the PM5
+door only when its route identity and frozen seed satisfy that door's gate;
+deleted-workout, null-id non-Just-Row and legacy/invalid-seed records need an
+honest recovery decision, never silent manual fallback. A warning that can
+cover phone and monitor records must navigate to a generic non-destructive
+review surface, not pretend its boolean guard identifies one recording.
+Evidence: `LogSession.tsx`'s `monitorModeEntry` and pre-monitor library gate;
+`Today.tsx`'s completed-programmed exclusion; phase-open PM source review
+at c5015c2e. James opened this existing item, not Correct Resume.
+
+## 2026-09-04 — Wave F closed on the narrowed contract
+
+- **GO: archive after the docs-only closeout; no new release needed.** The
+  [native exit walk](../../docs/monitor/sessions/walk-2026-09-04-wave-f/README.md)
+  on reported v0.36.1 preserved a complete, machine-confirmed interval after
+  a pre-pull lock. A typed Bluetooth-disabled event then preserved an
+  accepted actual and eligible partial through End/save, visibly incomplete.
+  The prior mid-piece resume record and composed failed-write gates supply
+  the other exit evidence; no redundant rowing was required.
+- **Deliberate radio-off proves the fallback, not reconnect demand.** It
+  does not measure natural-drop incidence. Continuous hidden sampling and
+  trace-head recovery are not claimed; same-row reattachment remains in the
+  Icebox. Reload after denied writes and later eviction retain James's
+  explicit accepted boundary. Closing the phase does not silently ship or
+  authorize any of these capabilities.
+
+## 2026-09-04 — Phase SF open: run the exit criteria against main first
+
+Spec `docs/superpowers/specs/2026-09-04-shuffle-and-filters-design.md`.
+Verdict OPEN WITH CONDITIONS; all folded into revision 1.
+
+- **Run every exit criterion against current main before accepting it.**
+  SF's criterion 1 ("twelve SHUFFLE taps show twelve distinct titles; a
+  reload keeps the twelfth") was GREEN on the unfixed code: `handleShuffle`
+  steps `(currentIndex + 1) % pool.length` and `saveTodayPick` persists, so
+  a strict cycle satisfies it exactly. A criterion written from the FIX's
+  description tends to describe the fix's happy path, which the bug often
+  already produces. RF21 in exit-criterion form: for each criterion, name
+  the current behaviour that would fail it. If none exists, rewrite it.
+- **A fail-whole storage precedent does not transfer from a DATED record to
+  an UNDATED one.** SF justified discarding a `todayFilters` v1 record from
+  `todayOverrides`'s history — but that record is per-day and dies every
+  midnight, so fail-whole costs nothing there and costs permanent memory
+  here. When a spec cites a validation precedent, check the cited record's
+  LIFETIME, not its parser.
+- **Grep `app/server/` yourself before believing a spec's "no server
+  consumer".** SF §3.2 asserted `routes/data.ts` matched only a label;
+  it imports `bucketsForCap` and calls it in the server-side `/api/today`
+  suggestion — a retiring domain API with a live server caller, which also
+  changes the PR's file scope.
+- **Count a rename's copy sites in the rendered UI, not in the sheet.**
+  SF named four (`FilterSheet`, `filterTokens`, `TodayFilterSheet`,
+  `todayFilterTokens`) and missed `WorkoutRow.tsx`'s CUSTOM badge,
+  `Library.tsx`'s empty-state prose, and four e2e selectors. A rename
+  that reaches the filter and not the row ships two words for one thing.
+- **A daily roll needs an off switch.** "Randomize the type each day" plus
+  "ANY TYPE is never rolled" means a rower who wants the unfiltered library
+  must clear the chip every day forever. Any per-day auto-selection gets an
+  explicit-clear-is-sticky rule, or the owner rules that it does not.
+- **A quoted owner line whose resolution reads as its opposite is a scope
+  question, not a decision.** SF's list carried "Library doesn't remember"
+  beside "Library memory out of scope". The controller confirms the line
+  was James's answer to the Library-memory question (it was), and the spec
+  now says so; the technique stands: when a quote and its ruling can be
+  read two ways, write the question it answered next to it.
+- **Third exception to stranger-first ordering, counted** (30 unchecked
+  items; Wave A, the front door, still next in the slate). Defensible here:
+  two of the five items are stranger-comprehension work. Say the count,
+  then let James rule.
+
+## 2026-09-04 — Phase SF PR1 final gate: tick a criterion's CLAUSES, not the criterion
+
+- **An exit criterion is a list of clauses; tick each one.** SF's criterion 2
+  reads "reloaded three times shows one lit chip; **the next local day rolls**;
+  a clear stays ANY TYPE across a reload AND the next day". Two clauses were
+  proven, one ("the next day rolls") was asserted nowhere and inferred from a
+  dated record reading null — and the criterion's own named oracle ("a stubbed
+  clock") was not what shipped (record removal). A criterion read as one unit
+  reads as GREEN. Read the verbs. (Landed in the same round: a
+  `vi.setSystemTime` test across three local days.)
+- **A dead route stops being merely dead when the client stops agreeing with
+  it.** `/api/today` has no client caller and needed no edit, so it was filed
+  as a later dead-route decision. But PR1 made the client draw at random while
+  the route still returns the deterministic head: the route is now WRONG, not
+  idle. When a change moves a computation client-side, ask whether the server
+  copy became divergent — that is a register row, not a housekeeping note.
+- **Difference is not distribution.** A two-run "the sequences differ" e2e goes
+  red against a deterministic cycle and green against any non-deterministic
+  draw, biased or not. It is a sound gate for the bug and an unsound one for
+  "random". State both: the e2e proves not-deterministic, the domain sweep
+  proves uniform. (RF26 in exit-criterion form.)
+- **Fold: 246 words / 7 bullets / longest 43 — FAIL.** Series: #228 274 ·
+  #230 266 · #268 186 · door PR B 121 · **SF PR1 246.** The regression came
+  from a required Gate 0 paragraph (61 words) plus proof clauses inside
+  product bullets. The Gate 0 block is not exempt; move its evidence half down
+  and keep its ruling half.
+- **Open for James: the inline-implementation shape on TRIAD work.** The
+  controller implemented in task commits and dispatched only the REVIEW half,
+  arguing the paste-test rule makes the plan author the implementer. The five
+  fast-path criteria do not hold (domain files, two stored shapes, five product
+  files), so CLAUDE.md's letter required the full cycle. Honest disclosure, in
+  the Record block. Whichever way he rules, the resolution is a CLAUDE.md edit —
+  the rule as written and the practice have diverged.
+
+## 2026-09-05 — Phase SF PR2 final gate: the before/after of a MEMBERSHIP change is the DEFAULT count
+
+- **A demo pair is not a before/after.** PR2 headlined "78 OPTIONS → 32 for
+  `[25,35]`" as its number-change evidence. That compares the new control
+  against itself and cannot move if the predicate's meaning were unchanged.
+  The real pair was already committed and unnamed: main's `today-sheet.png`
+  reads **71 OPTIONS**, the branch's reads **78** — same account, same pool,
+  no user action. **For a change to what a filter ADMITS, the design gate's
+  number is the DEFAULT state's count on both sides; a narrowed demo shows
+  the control, not the meaning.** RF11's shape in Gate 0 form.
+- **A criterion naming `(e2e)` is satisfied by an assertion, not a capture.**
+  SF's criterion 4 ("`[25,35]` yields a card whose printed minutes are within
+  25–35, e2e") shipped with an e2e asserting the TOKEN and a screenshot that
+  happens to show `25′`. Second gate running on this phase's criteria (PR1:
+  tick the clauses). Read the criterion's parenthesis as a contract too.
+- **Retiring a symbol: sweep comments that DESCRIBE the retired control, not
+  only comments that NAME it.** `git grep DurationBucket` came back to one
+  retirement comment — clean — while two `design.spec.ts` comments still
+  explained TIME's default as "bucketsForCap(60), the first three buckets"
+  beside code that reads a range. A grep on the symbol cannot find prose
+  about the thing.
+- **A rename can collide with a NAVIGATION label.** GLOBAL→LIBRARY puts the
+  word on the tab bar and on a SOURCE cell meaning "not yours", on the same
+  screen. Before approving a rename, grep the candidate word against the
+  tab labels and screen titles, not only the surface being renamed.
+- **Fold: 109 words / 6 bullets / longest 20 — PASS, and the self-count was
+  right.** Series: #268 186 · door PR B 121 · SF PR1 246 · **SF PR2 109.**
+
+## 2026-09-05 — Phase SF close: nine criteria, nine proven, and the two that needed a label
+
+Phase closed CLOSE WITH CONDITIONS (CI green on #301, notes before the tag,
+the `/api/today` ruling). v0.38.0 recommended.
+
+- **A phase's criteria are only as good as the gate that reads them, and this
+  phase proved the gate three times.** PR1's gate caught an unticked CLAUSE,
+  PR2's caught a demo pair standing in for a before/after AND an `(e2e)`
+  parenthesis satisfied by a screenshot, and the close caught nothing new —
+  which is what a working per-PR gate looks like at close. When the close gate
+  finds nothing, say so; it is evidence about the earlier gates, not slack.
+- **Label a criterion SEAM or STRUCTURAL at close, not just PROVEN.** SF's 3
+  ("after a day change") is true by construction because the store carries no
+  date, and 4 reads `estimateMinutes` on both sides. Both are sound; neither
+  is external. A close report that prints nine PROVENs hides which two would
+  survive the app being wrong about itself (RF11 in close-report form).
+- **A dead route is deletable when `git log -S` says no client EVER called
+  it.** SF's `/api/today` had no caller in the whole history, and the sibling
+  route already exposed the field its isolation tests probed — so the delete
+  costs a test re-point, not coverage. Check history, not just head, before
+  pricing a route removal: "no caller today" and "no caller ever" price
+  differently because shipped native builds carry old bundles.
+- **A stored-shape migration written between two untagged merges has no
+  users.** SF's `todayFilters` v1→v2 map only ever meets a record created
+  between #297 and #300, and no tag went out in that window — so the mapping
+  is insurance the TestFlight cohort will never exercise. Before pricing
+  migration risk, ask which TAGS bracket the old shape's lifetime; a shape
+  born and retired inside one release has exactly one holder, the web
+  prototype.
+- **Deploy-day churn gets inoculated by a feature sentence, never by a
+  warning.** SF's one-time redraw and re-roll are indistinguishable from the
+  feature working; the only bad reading (the app overrode my chip) is killed
+  by the note that says Today picks a type each morning and how to change it.
+  A "you may notice a one-time change" note manufactures the anxiety it
+  answers.
+- **Inline build + dispatched review, three PRs in: HELD.** Both fix-then-
+  approve rounds found SITES and PRECEDENCE, not design. The discriminator
+  for the next phase is the class of the find — a review round returning a
+  DESIGN error means the implementer half was skipped, not merged into the
+  author, and that class of work goes back to the full cycle.
+
+## 2026-09-05 — Phase DE open gate: a deleted axis takes invariants with it
+
+- **A test asserting ORDER on the axis you are deleting is product behaviour,
+  not a fixture detail.** DE's spec scoped "library.test.ts and variety.test.ts
+  lose their difficulty assertions" as bookkeeping. `library.test.ts:300`
+  asserts "orders each type block easy→hard (difficulty never decreases)" —
+  the guarantee a rower gets scrolling a type block. It had to be RESTATED on
+  the surviving axis (effort), not deleted; only the `PAIN_BY_DIFF` pairing
+  test (`:276`) genuinely dies with the axis. **When a spec removes a field,
+  list every test that asserts a RELATION over it (ordering, monotonicity,
+  pairing, coverage) and rule on each separately from the tests that merely
+  mention it.** The two read identically in a census.
+- **"Every device is on the new build" is not confirmable, so do not make it
+  a trigger.** DE's PR 3 (drop compat) was specced to wait on James confirming
+  the cohort had updated — unknowable, since TestFlight auto-update says
+  nothing about a phone nobody opened. Replaced with a server-side count on
+  the legacy-keyed write path that PR 3 deletes anyway, and a trigger of
+  zero legacy-keyed writes for seven days after the tag. **Any compat-drop
+  PR's trigger is a measurement the compat layer itself takes, not a human's
+  belief about a fleet.** The tag cycle itself was upheld as real, not
+  ceremony: without the dual field a stale build's log save 400s, which is
+  Wave F's durability class.
+- **A phase split across a tag cycle must forbid a tag INSIDE it.** DE's
+  three PRs are correctly split (deletion, rename, drop — three rollback
+  stories; the rename alone is not rollback-safe), but nothing stopped a
+  release between PR 1 and PR 2, which would ship a half-rename and create a
+  SECOND stale-build generation for the compat layer to serve. **When a
+  phase's PRs share one compat contract, the ROADMAP section names which PRs
+  ride one tag.**
+- **Rename PRs collide worst with unmerged rewrites, and `gh pr list` does
+  not show them.** DE PR 2 renames pain→effort across `LogSession.tsx` while
+  `Ergomatic-wt-aud016` had already rewritten that file (+229) with no PR
+  open. **At any phase open, check `git worktree list` and diff each branch
+  against main — not just open PRs — before sequencing a rename or a wide
+  sweep.**
+- **A phase that jumps the slate says why, in the ROADMAP, in one line.** DE
+  was inserted ahead of Wave A, which the roadmap's own text calls "the single
+  largest gap between this app and a stranger using it". The justification
+  (a stranger reading `PAIN 4/5` is itself a north-star failure; the rename
+  only gets more expensive) existed nowhere in the file.
+
+## 2026-09-05 — Phase DE PR 1 final gate: a re-sort is a WRITE to every row it moves
+
+- **Reordering seeded content is a deploy-time UPDATE, and it drags every
+  derived field with it.** `seed.ts`'s `contentEqual` compares
+  `(type, pain, sortOrder, steps)`, so a stable re-sort flipped 38 rows out of
+  equality, sent each through `updateGlobal`, and let the new compat helper
+  rewrite their stored `difficulty` — 27 `medium`→`hard` on rows a pre-PR-1
+  build still renders and filters. The change edited no difficulty value
+  anywhere. **Before pricing a content re-order, read the converge's equality
+  tuple and list everything the UPDATE path writes that the diff did not.**
+- **A compat layer's "old builds are unaffected" claim is scoped by which ROWS
+  the deploy touches, not by which FIELDS the change edits.** §3.2's exemption
+  ("seeded rows are never rewritten") was true when written and falsified by a
+  later task in the same PR. When a PR adds a task after its spec is vetted,
+  re-read the spec's exemptions against it.
+- **The one-tag rule contains the CLIENT half only.** Server changes land at
+  merge; a phase whose PRs share a compat contract must say which effects are
+  live between the two merges, not just which build ships.
+- **A PM condition can create scope, and that is the PM's to price.** Condition
+  2 (restate the ordering invariant on the surviving axis) forced the re-sort,
+  because the data did not satisfy the invariant the deleted axis had held. When
+  imposing "restate, do not delete", ask at the open gate whether the surviving
+  axis already satisfies the relation — the answer is a `sort` one-liner.
+- **Fold: 209 words / 7 bullets / longest 41 — FAIL.** Series: #228 274 ·
+  #230 266 · #268 186 · door PR B 121 · SF PR1 246 · SF PR2 109 · **DE PR1 209.**
+  Regression source: compat mechanism explained above the fold (41-word bullet).
+  The compat story is a Record item; the fold owes only "installed builds keep
+  working".
+
+## 2026-09-05 — Phase DE PR 2 final gate: a rename's own grep cannot see camelCase
+
+- **`\bpain\b` cannot match `setPain`, and a rename PR is exactly where that
+  matters.** DE's §4.1 invariant said the word appears "nowhere an agent can
+  grep it in product code"; exit criterion 1 tested it with `\bpain\b`, which
+  returned clean against ≈55 lines carrying 9 live identifiers (`setPain`,
+  `onPain`, `expectedPain`, `onPainChange`, `togglePainLevel`, `isPainLevel`,
+  `collapsePain`, `PAIN_SCALE_TITLE`) across 14 files including `LogSession`
+  and `PostWorkoutSummary`. **When a criterion greps for a WORD in a codebase
+  that spells it in camelCase, the word boundary is the bug.** RF21 in
+  exit-criterion form, and the third DE/SF gate to catch a criterion's own
+  instrument rather than its subject.
+- **A compat exemption swallows the survivor census.** The finishing grep was
+  read as clean because every hit was "in the compat adapters" — true of the
+  hits the grep could see. Enumerate the exempt FILES by name and grep the
+  rest with no pattern narrowing.
+- **The PR-1 lesson applied cleanly and the negative is worth recording.**
+  PR 2's seed diff is rename-only (0 changed `title:` lines, `sortOrder`
+  untouched), so `contentEqual` flips no rows and this deploy writes nothing —
+  the check that caught PR 1's 38-row re-sort took two minutes and came back
+  empty.
+- **Deferring a code-hygiene gap past a MEASURED trigger is not deferral.**
+  PR 3 waits on seven clean days of `compat.pain_write`; anything parked there
+  sits half-done for a week-plus with the close gate reading green. Park work
+  behind a date, never behind a measurement.
+- **Fold: 122 words / 6 bullets / longest 20 — PASS.** Series: #228 274 ·
+  #230 266 · #268 186 · door PR B 121 · SF PR1 246 · SF PR2 109 · DE PR1 209 ·
+  **DE PR2 122.**
+
+## 2026-09-05 — Wave E auto-send final gate: check the MERGE, not just the branch
+
+- **A migration index is a claim about main, and main moved during the phase.**
+  The branch minted `0024` off `85a0de9c`; main took `0024_pain_to_effort` from
+  Phase DE PR 2 the same day. `git merge-tree --write-tree <head> origin/main`
+  is a ten-second read-only check that returns the whole conflict set, and it
+  belongs in every final gate on a branch carrying a stored shape. The tell is
+  not the number: it is that main's 0024 is a hand-written RENAME while the
+  branch's generated snapshot still describes the pre-rename schema, so a
+  hand-resolved journal ships a snapshot chain production contradicts.
+- **A numbered rollback claim inverts silently when the number is reused.**
+  The fold and `docs/RELEASING.md` both said "migration 0024 is additive, not a
+  rollback floor" — four lines from main's own 0024 row marked
+  FORWARD-FIX-ONLY. **Never let a PR body or a RELEASING row identify a
+  migration by index alone while the index is still unmerged**; renumber and
+  grep the digits, not the prose.
+- **A dispatch's release premise is a roadmap status line wearing a brief.**
+  This gate was briefed "the release has been HELD since PR B (#298); PR A
+  (#303) and PR C (#307) are also unreleased." `git merge-base --is-ancestor`
+  put #298 and #303 inside v0.38.0, whose notes comment accounts for both.
+  Verify a release-state claim against `merge-base` and `releaseNotes.ts`
+  before reasoning from it, even when it arrives in the task.
+- **A ruling that names one mode can be widened by its own spec.** James's
+  ruling 6 said failures "under AUTOMATIC" surface on the You row; §3.4
+  extended the flag to manual failures ("a manual failure means sends are
+  failing too"). Sound, but no Gate 0 frame drew MANUAL + SEND FAILED. **When
+  a spec generalises a ruling's scope, the design gate owes the frame for the
+  case the ruling did not name.**
+- **A sticky warning needs its clear path drawn, not just its set path.**
+  SEND FAILED clears only on the next successful send, so a rower who repairs
+  their Concept2 profile keeps the warning until they row again. Correct by
+  design, invisible in every capture, and the first thing a walk meets.
+- **Two owed live verifications on the same gate are one trip.** PR C owes a
+  confirming production send; auto-send owes one AUTOMATIC save. Both need the
+  same `C2_LINK_ENABLED` flip and the same erg. File the combined walk as the
+  FLAG-FLIP gate in ROADMAP, never as two PR-body lines (RF14).
+- **Fold: 214 words / 6 bullets / longest 44 — FAIL.** Series: door PR B 121 ·
+  SF PR1 246 · SF PR2 109 · **auto-send 214**. Same regression as SF PR1: two
+  pure-Record bullets (`Gates`, `Ceremony`) above the fold, both with fuller
+  versions already in the Record block. The #277 check caught the other half —
+  "which line would be false if the flag never flipped?" — and it was
+  `Nothing changes at save time`, falsified by the new per-save `GET /link`
+  that fires for every rower, cohort or not.

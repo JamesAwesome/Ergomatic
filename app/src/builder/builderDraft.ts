@@ -29,8 +29,7 @@ export function formFingerprint(f: BuilderForm): string {
   return JSON.stringify([
     f.title,
     f.type,
-    f.difficulty,
-    f.pain,
+    f.effort,
     f.reps,
     f.rows.map((r) => [
       r.kind,
@@ -57,7 +56,6 @@ function isBuilderForm(value: unknown): value is BuilderForm {
   return (
     typeof value.title === "string" &&
     typeof value.type === "string" &&
-    typeof value.difficulty === "string" &&
     Array.isArray(value.rows) &&
     value.rows.every(
       (r: unknown) => isPlainRecord(r) && typeof r.id === "string",
@@ -92,10 +90,29 @@ export function loadBuilderDraft(): BuilderDraft | null {
     const raw = localStorage.getItem(BUILDER_DRAFT_KEY);
     if (raw === null) return null;
     const parsed: unknown = JSON.parse(raw);
-    return isBuilderDraft(parsed) ? parsed : null;
+    if (!isBuilderDraft(parsed)) return null;
+    // Phase DE PR 2 (spec §4.2): a pre-PR-2 draft carries `pain` on BOTH
+    // halves. Builder.tsx fingerprints `baseline` against a fresh
+    // fromWorkout(); a missing `effort` there stringifies as null and would
+    // silently discard an edit-mode draft, so both halves are reconstructed.
+    // PR 3 deletes this.
+    return {
+      ...parsed,
+      form: adoptEffortField(parsed.form),
+      baseline: adoptEffortField(parsed.baseline),
+    };
   } catch {
     return null;
   }
+}
+
+function adoptEffortField(form: BuilderForm): BuilderForm {
+  const legacy: Record<string, unknown> = { ...form };
+  if ("effort" in legacy || !("pain" in legacy)) return form;
+  const pain = legacy.pain;
+  delete legacy.pain;
+  legacy.effort = typeof pain === "number" ? pain : null;
+  return legacy as unknown as BuilderForm;
 }
 
 export function clearBuilderDraft(): void {

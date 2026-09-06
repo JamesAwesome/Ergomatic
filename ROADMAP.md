@@ -47,7 +47,7 @@ plan in `docs/superpowers/plans/`) when it starts.
 | Name              | **Ergomatic** in UI and docs (design files say "Erg Log")                                                                                                                                                                                                                                                 |
 | Architecture      | Server-backed SPA: React 19 + Vite 8 client, Express 5 API, TypeScript, ESM, pnpm                                                                                                                                                                                                                         |
 | Data              | PostgreSQL 18 + Drizzle ORM; per-user data throughout                                                                                                                                                                                                                                                     |
-| Offline           | Active session (timer state, in-progress log) persists in localStorage; reload or dropped connection never loses a workout; log save syncs to the API                                                                                                                                                     |
+| Offline           | Active session state persists locally when the durable write succeeds; a rejected connected hand-off write keeps the measured row in memory while the process lives. Reload after a rejected write and later WebKit/localStorage eviction are instrumented, accepted residuals; no surface may pretend either was durable. Log save syncs to the API. |
 | Auth              | Google OAuth (authorization code flow) only at launch; self-hosted cookie sessions in Postgres; no auth SaaS. **Sign-up is deny-by-default against `ALLOWED_EMAILS` — Wave A changes this, and it is the single largest gap between this app and a stranger using it**                                    |
 | Deployment        | Full CD: push to main → self-hosted runner → SSH deploy script → health-gated auto-rollback (nataliesawacritter pattern)                                                                                                                                                                                  |
 | Hosting           | Docker Compose (hardened: read_only, cap_drop ALL, non-root) fronted by a Cloudflare tunnel behind a compose profile                                                                                                                                                                                      |
@@ -98,14 +98,15 @@ in any form: an open front door, in-app account deletion, a database backup,
 and any signal at all when a stranger's app breaks. A phase named for an
 outcome is not evidence the outcome is covered.
 
-**The order, and why it is not strict north-star ranking.** Wave F ships before
-the front door on purpose. Opening the door to strangers while a phone in a
-pocket silently eats a rowed piece is worse than opening it a week later.
+**The order, and why it is not strict north-star ranking.** Wave F shipped
+before the front door on purpose and closed on 2026-09-04. Preserving received
+work and making incomplete capture visible came before opening to strangers;
+same-row Bluetooth reattachment remains in the Icebox, not a front-door gate.
 
 ## Active audit overlay — Codebase integrity
 
-**Status:** COMPLETE. Read-only overlay; it is not a seventh product wave and
-does not displace Wave F. The fixed-baseline audit is governed by the
+**Status:** COMPLETE. Read-only overlay; it was not a seventh product wave.
+The fixed-baseline audit is governed by the
 [approved spec](docs/superpowers/specs/2026-08-28-codebase-integrity-audit-design.md)
 and [execution plan](docs/superpowers/plans/2026-08-28-codebase-integrity-audit.md).
 
@@ -114,13 +115,12 @@ and [execution plan](docs/superpowers/plans/2026-08-28-codebase-integrity-audit.
       exactly one live ROADMAP owner before handoff; the audit report is not a
       second backlog.
 
-The phase-close gate transfers actionable items into Wave F, Wave A, and the
+The phase-close gate transferred actionable items into Wave F, Wave A, and the
 open-item register below. P3 and unsupported-trigger results stay in the risk
 register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 | Wave  | What it is                  | Size | Tester sees                                 |
 | ----- | --------------------------- | ---- | ------------------------------------------- |
-| **F** | Lifecycle: stop losing rows | L    | Yes, and it is the most valuable thing here |
 | **A** | The front door              | L    | Yes, immediately                            |
 | **D** | The toolbox                 | M    | Nothing                                     |
 | **B** | Backups and telemetry       | M    | Nothing                                     |
@@ -384,10 +384,11 @@ two headline numbers are safe. **Two capture findings re-open design,
 though, and they must be settled before PR 1 tags its enum** (both are
 written up in the spec's own CLOSED section):
 
-- **The PM5 does not advertise while a Just Row is open**, so the app cannot
-  connect mid-row and cannot reconnect after a mid-row link drop. The spec's
-  "already mid-Just-Row at connect" path is struck; the Today recovery row can
-  only mean "log what we have", never "resume".
+- **The PM5 does not advertise while a Just Row is open**, so a generic scan
+  cannot discover it mid-row. The spec's "already mid-Just-Row at connect"
+  path remains struck. Deferred Correct Resume research considers a retained
+  same-device route after a proven drop, not a scan. That capability is not
+  shipped or scheduled; today the rower can End and log what the app has.
 - **Nothing was observed closing a free row the rower walked away from** — the workout stayed
   active for 896.8 s after the rower stopped, with frames still arriving and
   no auto-terminate — a BOUNDED observation, since the operator ended the
@@ -441,551 +442,89 @@ fixed.
 
 ---
 
-## Wave F — Lifecycle: the app stops losing rows
 
-**Status:** OPEN and shipping — three of its items are struck (#228 in
-v0.27.0, #239 in v0.30.0, and the ring-recovery item struck unrecoverable on
-2026-08-31); the lifecycle spec is WRITTEN
-(`docs/superpowers/specs/2026-08-31-lifecycle-design.md`, four PRs), and
-correct resume and the `door` column remain beside it. **TRIAD** (stored
-shapes: the `door` column, and the lifecycle spec's fifth `CloseReason`).
-**L.** Absorbs the rest of Phase LM, whose PR 1 shipped as #198 / v0.24.0.
+## Phase DE — Difficulty out, effort in
 
-**Goal:** a phone in a pocket, a phone that locks, and a link that drops all
-stop costing the rower the row they actually did.
+**Status: OPEN 2026-09-05 — spec merged (#308); PR 1 MERGED as #309
+(2026-09-05); PR 2 in flight (worktree `Ergomatic-wt-de2`); release HELD
+until PR 2 merges (one tag for both).** **TRIAD** (stored shape).
+**M.** Spec:
+`docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
 
-**Why it is first:** the pocketed-phone row loss is reproduced on hardware, in
-production, this week. It is the only defect in this file that destroys a
-rower's work silently.
+**Goal:** a rower sees one figure for how hard a workout is, called EFFORT,
+on every row, filter, picker, log and article. EASY / MEDIUM / HARD goes
+(across all 300 seeded workouts it was a coarse copy of the 1–5 figure:
+easy always 1–2, hard always 4–5, medium 2–4), and the 1–5 figure formerly
+called PAIN is renamed. Nothing about what the number means changes;
+nothing here reaches the PM5 or the pace math, so no hardware walk.
 
-- [ ] **The pocketed-phone row: a whole piece rowed and nothing kept.
-      RE-DIAGNOSED at the phase-open anchor pass, 2026-08-28.** The outcome is
-      real (James's row, walk leg 4, v0.25.0 build 759, production), but this
-      item's original mechanism — "stays `phase=ready`, opens no record, End
-      silently discards" — was FALSE by its own cited ring: the record OPENED
-      at machine elapsed 43.04 s (`rowing-active-fallback`'s single emit site
-      is inside the branch that calls `createMonitorRun`,
-      `useMonitorSession.ts:1909`; `phase=live` by seq 35), and a late open
-      costs only the series trace's head, never the interval actual — that is
-      the machine's own 0x0037/0x0038 pair stored verbatim
-      (`parse.ts:653-676`). **The proven chain: the fallback opened the
-      record late; the erg then dropped its own program mid-row (seq 37,
-      RC-37's readback signature, no Menu press); and the hook ignores
-      `programDropped` whenever `phase` is not `programming`/`ready`
-      (`useMonitorSession.ts:2319-2320`, its own comment conceding the live
-      case was "left alone rather than guessed at"). That the ignored drop
-      is what cost the row — no boundary afterwards, zero actuals stored —
-      is the LEADING HYPOTHESIS, not proven: the committed ring is a curated
-      excerpt that omits what End stored, so it cannot prove an absence
-      (James's PR #225 review).** Deliberately not claimed in v0.26.0's
-      notes. Its three work items are the next three entries. **M**
-      **SPECCED 2026-08-31: `docs/superpowers/specs/2026-08-31-lifecycle-design.md`
-      §0.1, which carries this chain and keeps link 3→4 labelled a
-      hypothesis. The hypothesis is now PERMANENTLY unprovable — see the
-      struck ring item below — so the spec is written around it rather than
-      waiting on it.** The cited hook line numbers moved with PR #239; the
-      handler is `useMonitorSession.ts`'s `programDropped` case, found by
-      name rather than by line.
-- [x] **Handle `programDropped` while a run is live** (from the
-      pocketed-phone re-diagnosis above). Small and deterministic, warranted
-      whatever the full ring says — the detector already fires; only the
-      live arm swallows it, and that arm has NO test
-      (`useMonitorSession.test.ts` covers only `ended`). The spec says what
-      the rower sees and what the record keeps. **S**
-      **SPECCED as `2026-08-31-lifecycle-design.md` §1, and it is that
-      spec's PR 1, shipping alone.** The scoping premise that justified
-      ignoring a live drop — the handler's own "the walk's trigger is READY,
-      never a live session" — is FALSIFIED: the 2026-08-28 walk produced the
-      same signature with no Menu press, after a 67 s background. Closes as
-      a normal ended session with a fifth `CloseReason`,
-      `"program-dropped"` (James, 2026-08-31), and hands off to the log.
-      **Carries a server migration** — `ended_by` is a Postgres `pgEnum`, a
-      hard 400 validator names the five values, and the server's `EndedBy`
-      union is a hand-copied mirror; all three widen in one commit, gated by
-      a `POST /api/logs` seam test (this row said "no migration" until
-      James's rev-2 review; that was the client-side story only). **TRIAD**
-      (stored close reason + the enum migration). Gate 0 CLEARED in full
-      (2026-08-31, with the spec PR's merge word).
-      **SHIPS as the live-drop PR from spec §1, 2026-08-31** — all five
-      tasks committed (union widened end to end + migration; the hook's
-      live arm publishing `closeReason`; the real-driver seam test; the
-      two Gate-0 surfaces; this composition drive-through). **PR #248**,
-      PM final gate GO-WITH-CONDITIONS 2026-08-31.
-- [x] **~~The pocketed-phone window's two co-producers~~ — §4 CLOSED
-      2026-09-03: UNREPRODUCED and INSTRUMENTED (James's ruling at the
-      resume-edge walk).** `pause-declared` at 66 spm while rowing was
-      owned by `2026-08-31-lifecycle-design.md` §4 and waited on that
-      spec's §3 instrument, which shipped in #267. The walk that used it
-      (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`) performed the
-      exact gesture — locked mid-row for 35.5 s, kept rowing, unlocked —
-      and **declared no pause at all in the 22.4 s that followed**. The
-      post-resume inter-arrival gaps were `[84,180,90]` ms; the one
-      genuine `pause-declared`, seven seconds into a deliberate mid-work
-      stop, carried `[90,90,180]` ms. **Timing does not discriminate on
-      this device, and there was nothing to discriminate.** Designing a
-      predicate on a defect an instrumented capture of its own gesture
-      cannot reproduce would be inventing a mechanism, so the instrument
-      stays and the item closes — the same posture as F-1 (6-MIN). The
-      next occurrence arrives with `gapsMs` and `sinceResumeMs` already on
-      it; a design starts from those numbers or not at all. One device,
-      one run: this is not a claim that the defect cannot happen.
-      **TWD 52→0→64 m non-monotonic is CORRECT BEHAVIOUR and leaves this
-      item:** `continuity.ts`'s `check` convicts a reset only when TWD,
-      elapsed AND distance all read backward together — TWD alone is the
-      documented F2a false kill that rule exists to prevent, and it rightly
-      returns `"continuation"`. What that comment does confess is re-filed
-      to the open-item register: the distance-goal suppression covers all
-      six committed captures, so the F2b count bound has been compared on
-      ZERO pairs ("clean but VACUOUS", its own words). **S**
-      **§3 SHIPS in Wave F PR 2**, alongside §2 and §6
-      (`useMonitorSession.ts`): every resume edge records `resume-first-frame`
-      (the arrival gap, whether the first post-resume frame repeats the
-      pre-background `freezeKey` triple, the raw `rowingState` byte); a
-      repeating run is then tracked as `resume-stale-run` and closed with a
-      consecutive-identical count by one of FOUR closers, each named in the
-      entry's own `endedBy=`: a differing frame (`changed`), a second resume
-      edge arriving while it is still open (`resumed`), a per-run reset
-      (`reset`), or teardown (`teardown`). §4's wait is now on the next
-      natural occurrence producing a reading through it, not on unbuilt
-      plumbing.
-- [x] **~~Recover the full ring before the lifecycle spec is written~~ —
-      STRUCK 2026-08-31: it is UNRECOVERABLE, and the loss was ours.**
-      `ergomatic:last-session-log` is written UNCONDITIONALLY on every
-      connected teardown including failed pairings and connect-then-cancel,
-      one key with no history, so every later session overwrote it —
-      and the production connected-row count went 16 (08-28) → 18 (08-30),
-      which counts only the sessions that saved a row. Ruled unrecoverable
-      by James, 2026-08-31; the lifecycle spec is written around the
-      ambiguity. **The excerpt's six gaps were never a lossy instrument:**
-      they are INTERIOR (seq 21-39, missing 22/26/31/33/36/38) while the
-      ring is capacity-500 and tail-keeping, so it can only ever lose a
-      contiguous head — and at seq 39 the cap never fired. The whole ring
-      was in hand and 13 of ~39 entries were hand-picked into the committed
-      file. Replaced by the ring-durability work in
-      `2026-08-31-lifecycle-design.md` §2, which is now a PREREQUISITE:
-      the ring is the only instrument that reaches production, and today it
-      can only be read by destroying it.
-      **§2 SHIPS in Wave F PR 2** (the ring chunk; PR number filled in at
-      merge): a three-slot history beside the single perishable key (the last
-      three LOGICAL connected sessions' exports all survive at once, one entry
-      per logical session, `src/monitor/sessionLogHistory.ts`) and the ungated
-      door that lists and copies them (You → DIAGNOSTICS → Monitor logs,
-      `src/you/Diagnostics.tsx`/`MonitorLogs.tsx`, Gate 0 approved 2026-09-01) —
-      exactly the fix that would have saved the pocketed-phone ring, now in
-      place for the next one. The same PR also ships §3 (the resume-edge frame
-      instrument) and §6 (the RC-29 latch counter, see that register row).
+**Why it runs before Wave A:** a stranger reading `PAIN 4/5` on their first
+log is itself a north-star failure, and a rename only gets more expensive
+as surfaces accumulate; this is M-sized and touches no auth.
 
-- [ ] **Correct resume** (was LM PR 2). James's ruling, 2026-08-20:
-      **"CORRECT RESUME, not a background mode."** **Unblocked 2026-08-26** —
-      it was gated on a probe James cancelled, so the probe will never report.
-      The newest walks read `framesWhileHidden=1` (2026-08-27) and `1`/`0`
-      (2026-08-28) — the older `=2` was walk-2026-08-26b's number; the
-      conclusion (suspended, not throttled) is unchanged. **This is a
-      build-from-zero item:** `framesWhileHiddenRef`'s sole read is string
-      interpolation into a diagnostic line (`useMonitorSession.ts:3072-3079`),
-      and `decideResumeLatch`'s latch does nothing that recovers — there is
-      no existing resume mechanism to extend. **M**
-      **DELIBERATELY EXCLUDED from `2026-08-31-lifecycle-design.md`** (its
-      §0.6, skip spoken not silent): build-from-zero, its own M, and the
-      pocketed-phone chain does not need it — the late open cost the series
-      trace's head, never the interval actuals. Stays a separate Wave F
-      item.
-      **IT NOW OWNS A SECOND THING, from door PR B (2026-09-03).** The
-      in-flight reading that PR banks is held in a per-run ref that
-      `connect()` and `teardown()` clear defensively, and those two clears
-      are unreachable today only because no surface offers Connect with a
-      run open. `useMonitorSession.ts`'s own comment at the ref says it:
-      **"ROADMAP's R10 reconnect would arm both `connect()`/`teardown()`
-      clears, and then these clears are what lose the metres."** So this
-      item must decide what a resumed run does with a held reading before
-      it arms either path — otherwise it silently reintroduces the loss
-      door PR B just closed.
-- [ ] **RC-29 — LEFT WAVE F on 2026-08-31, same day it was folded in.** It
-      was folded in carrying a measured false-positive rate — "9 banners in
-      288 s over a link that never dropped (`walk-2026-08-26/`)" — that
-      `2026-08-27-link-authority-design.md` revision 4 had ALREADY retired:
-      `decideResumeLatch` shipped in v0.24.0 and killed exactly that, and
-      the build-759 ring from the next day
-      (`walk-2026-08-27/lock-phone-ring.json`) shows ONE latch for one
-      39.4 s lock with `silent=true` — the watchdog behaving correctly.
-      v0.24.0's own release note tells testers so. **Nobody has measured the
-      rate since, so there is no defect number to design against**
-      (recurring failure 16's second corollary: a sourced premise true when
-      written and false when used). Ruled out of the spec by James,
-      2026-08-31. It returns to the open-item register as UNMEASURED on the
-      current build; `2026-08-31-lifecycle-design.md` §6 ships a latch
-      counter so ordinary use produces the number, and no threshold moves
-      until it does.
-- [x] **The `door` item — RE-SCOPED 2026-09-02, spec
-      `docs/superpowers/specs/2026-09-02-door-partial-design.md`.** The
-      column itself SHIPPED as `session_logs.source` (`pm5 | timer |
-      manual`) in #268 / migration 0020 on 2026-09-02, so "which door" is
-      delivered; what this item still owes is split into two PRs by risk
-      model, and the phase-open anchor pass (2026-09-02, ledger entry) broke
-      two of its four founding decisions before the spec was written:
-      - **PR A — the stored WORD (TRIAD).** PARTIAL as a stored-state read
-        (no new column): connected row, steps present, at least one step
-        never measured, and `endedBy` in the five-value allowlist (never
-        `!= finished`: legacy rows store `null` and would all read partial;
-        the steps-present clause is what excludes a connected Just Row); a
-        short step on a `finished` row is measurement loss, not a partial.
-        The count in the marker is intervals MEASURED, the lost banner's own
-        rule; the shipped `LINK LOST` line keeps its trigger and gains a
-        suffix; the other four words render only when PARTIAL holds. A fourth
-        `log_source` member `no-reading` (NO device name — the first draft
-        required one and reversed a recorded PM ruling), rendering
-        `NO MONITOR READING` in the log as on the live screen, with the
-        `timeLabel` gate re-derived as an allowlist. RC-18's fallback
-        becomes the literal `MONITOR` (nothing uppercases that line),
-        fix-forward only — and with it, the deviceName-band guard stops
-        storing a nameless erg's session as `manual`: it keeps `pm5` and
-        substitutes the caption. Carries the three riders below. **The
-        `source` SUNSET is NO LONGER PART OF PR A** — it shipped on its own
-        as #273 / v0.35.0 on 2026-09-02 (its own row above is reconciled).
-        **Gate 0-A** on the rendered saved row + list chip.
-        **SHIPPED as door PR A (2026-09-02), every clause above:** the
-        four-clause PARTIAL predicate with its five-word marker table
-        (`storedSummary.ts`'s `partialCloseReason`/`buildCloseLine`);
-        `STOPPED EARLY · N of M intervals measured` on the session detail,
-        above the heroes, and a `.log-partial-chip` on the History row,
-        both words from one table so the two surfaces cannot disagree;
-        `LINK LOST` keeping its own ungated, steps-independent trigger and
-        shortened to `LINK LOST · the app lost the monitor` so the combined
-        line fits; the list's boolean derived in SQL from the same four
-        clauses (no new column) with an agreement test holding the two
-        copies equal; `log_source` gaining `no-reading` (migration 0022, no
-        backfill, no device name) so a connected arrival that measured
-        nothing reads `NO MONITOR READING` with its wall-clock time rather
-        than `LOGGED BY HAND` with none; `timeLabel` re-derived as a
-        positive three-member allowlist; RC-18's fallback becoming the
-        literal `MONITOR` at all seven sites, with the deviceName-band
-        guard now keeping the `pm5` door for a nameless erg instead of
-        storing the session as by-hand. All three riders below are ticked.
-        Gate 0-A was APPROVED by James on 2026-09-02 before any task ran.
-        **PR B (the stored NUMBER) is IMPLEMENTED on branch
-        `wave-f-door-b`, 2026-09-03** — the item below carries what it
-        shipped as **PR #279**.
-      - **PR B — the stored NUMBER (TRIAD).** Lifecycle spec §5: the
-        in-flight interval's metres in NEW step keys (`partialMeters`/
-        `partialSeconds`), never `actualMeters` — an older server drops
-        unknown keys silently, so number-plus-marker in the old keys
-        would persist the number without the marker. Five invariants
-        (never on `finished`; never an `IntervalActual`; rowing-state only;
-        stale under-counts; no summing reader sees it). Owns the "N
-        intervals kept" vocabulary and the lost banner. **Gate 0-B**.
-      - The four sub-items this row used to list — PARTIAL, RC-18, LM's
-        `LOGGED BY HAND`, the `timeLabel` gate — are all in PR A; the
-        stored-row analysis in `docs/history/phase-lm.md` is discharged by
-        the spec's §1.1 authority statement.
+Three PRs, in order; **PR 1 and PR 2 ride ONE tag — no release between
+them** (a tag after PR 1 alone ships a half-move and a second stale-build
+generation):
 
-      **S/M each; A lands before B; B's plan gets a FULL antagonist pass
-      (novel stored shape + session-scoped ref).**
+- [x] **PR 1 — remove difficulty (#309).** No migration: the column, enum and
+      `preferences.difficulties` stay as read-only compat until PR 3, and
+      the server writes a difficulty DERIVED from effort on every insert
+      (1–2 easy, 3 medium, 4–5 hard) so pre-PR-1 builds — which call
+      `difficulty.toUpperCase()` in three renderers — never see a NULL. The
+      chip, both filter groups, the preference, the builder radiogroup, the
+      seed field and the bulk-header column go. Bulk header becomes
+      `title | TYPE | effort`; the 4- and 5-field legacy headers still parse
+      with difficulty ignored. Today's suggestion filters on type, time and
+      effort only. `library.test.ts`'s within-type ordering invariant is
+      re-expressed over effort, not deleted — which required a stable
+      re-sort of the AT and TR seed blocks (38 rows move; the seeder's
+      converge then rewrites their stored difficulty at merge, 27 of them
+      medium→hard as pre-PR-1 builds see it). **Gate 0 captures** (row, Today
+      card, both sheets, classification card) before implementation.
+      Reconciles the DEVIATIONS "Difficulty" row, the "picking a workout"
+      article's false "easy and a 4" example, `library-moves.ts`, both
+      skills' pasteable headers.
+- [x] **PR 2 — rename pain → effort (#310).** HAND-WRITTEN migration (drizzle has
+      never generated a RENAME here; its non-TTY fallback is DROP+ADD):
+      column renames on `workouts` and `session_logs` plus an
+      `article_reads.slug` UPDATE. NOT rollback-safe and `deploy.sh`'s
+      health-gated auto-rollback crosses it unattended — PR 2 adds its tag
+      as a RELEASING.md § Rollback-constraints floor row, FORWARD-FIX ONLY.
+      API serves both `pain` and `effort` (nine response sites) and accepts
+      either on write (three inbound sites; both present and unequal → 400);
+      every `pain`-keyed write emits a `compat.pain_write` log line. Three
+      localStorage keys read the old key as a fallback for one release.
+      `PainBar` → `EffortBar`; article slug `pain-scale` → `effort-scale`
+      with the old slug still resolving. The pace-word identifier FAMILY
+      (~20 names: `Effort`, `EffortRef`, `isEffortRef`, `effortWord`, …) →
+      `PaceWord*`, **stored key `{effort: "max"}` untouched.** Gate 0 is the
+      word list (spec §4.4), no captures; the committed filter-sheet
+      screenshots are refreshed in the PR. (An earlier "waits for AUD-016"
+      condition here was void: AUD-016 shipped as #239 and was struck in
+      #240; `Ergomatic-wt-aud016` is a stale pre-#239 spec branch.)
+- [ ] **PR 3 — drop compat. SCHEDULED: Saturday 2026-09-12** (James,
+      2026-09-05: "We have like five users let's just schedule the work for
+      Saturday"). The earlier zero-`compat.pain_write`-for-seven-days
+      MEASUREMENT is struck: the cohort is five household testers who all
+      update, and `docker logs` only covers the current container, which
+      every deploy recreates — so the gate was both overkill and
+      unsatisfiable. The log line survives the week as a tripwire to grep,
+      not a gate. Drop `workouts.difficulty` + its enum + `preferences.difficulties`
+      and the derived write; drop `pain`/`difficulty`/`difficulties` from
+      the API and the log line; delete the three localStorage fallbacks.
+      Legacy bulk headers are kept on purpose. Own RELEASING.md floor row.
 
-      **TICKED 2026-09-03 — nothing remains under this item.** The column
-      shipped in #268; PR A shipped the stored WORD in #276 (`e6f456ce`);
-      PR B ships the stored NUMBER and is the last thing this item scoped.
-      Two things people have asked about here are NOT owed by this item and
-      have their own rows: the spec's §4 riders, all three ticked under PR A
-      above, and **correct resume**, which now also owns what a resumed run
-      does with a held in-flight reading. **The only thing still to write in
-      is PR B's number**, in the two places already marked for it — the PR A
-      sub-item's closing line just above, and the in-flight metres item just
-      below — and nowhere else.
-
-- [x] **The in-flight interval's metres are discarded on a mid-row link loss.**
-      **DONE — door PR B (branch `wave-f-door-b`), 2026-09-03.** A close that
-      catches the rower mid-interval banks that interval's last reading in two
-      NEW step keys and the row shows it beside the dash; no hero, tier, total
-      or "N intervals kept" moves (I-B2/I-B5). The five replay legs drive real
-      wire bytes from three committed captures. Gate 0-B approved 2026-09-02.
-      **PR #279.**
-      On a single-interval workout — the tester's own 2000 m "Beam Sea" — any
-      mid-row loss gives `kept = 0`, which was the MAJORITY outcome of walk
-      leg B, not an oddity. **The spec states explicitly whether correct resume
-      recovers those metres — and the answer is that it does NOT:** correct
-      resume must first stop clearing the reading, because `connect()` and
-      `teardown()` both clear it today (see the correct-resume item above).
-      Discharged 2026-09-03 rather than struck: the sentence bound
-      independently of the tick. **S**
-      **SPECCED as `2026-08-31-lifecycle-design.md` §5, and SEQUENCED BEHIND
-      THE `door` COLUMN above.** The live-drop arm (§1) inherits this
-      directly: banking "what was rowed" banks nothing when no boundary was
-      reached. A stored partial is the machine's own frame reading with OUR
-      attribution to the in-flight interval, never an interval pair the
-      machine reported — there is none mid-interval — so it can never be
-      tier A, and
-      `measuredIntervalCount` correctly will not count it toward
-      "N intervals kept." That is the PARTIAL vocabulary's job, which is why
-      this lands with or after that migration and its summary copy is part
-      of that item's Gate 0, never before.
-      **SPECCED 2026-09-02 as door PR B**
-      (`2026-09-02-door-partial-design.md` §5): new step keys, five
-      invariants, a lifetime table for the in-flight reading, its own Gate
-      0-B, and one replay owed before its plan (when `IntervalActual` N
-      arrives — work→rest boundary or end of rest).
-- [x] **`rowingActive` is falsified but not dangerous — DONE in this PR
-      (2026-09-03, `2026-09-03-rowing-active-design.md`).** Owed: (a) one
-      test pinning `midSessionMirror`'s byte half (`surfaceModel.test.ts` —
-      cited by symbol, not the stale `surfaceModel.ts:915`) — the
-      measurement below was itself stale; RE-MEASURED on `c2182ef5`:
-      deleting `frame.rowingActive === false &&` gives `Test Files 1 failed
-      | 230 passed (231)`, caught only by
-      `ConnectedSurface.screens.test.tsx`'s RC-24 snapshot as an HTML diff,
-      which is why the explicit model-layer pin was still owed; (b) a
-      reconciled comment — ALREADY DONE, at `types.ts`'s `restSeconds`
-      block, narrowed at its own site by #280's walk; (c) a diagnostic
-      carrying the raw byte, since `parse.ts:608`'s strict
-      `rowingState === 1` makes any non-1 read `false` and the next
-      occurrence would otherwise still not say which — DONE, `driver.ts`
-      now logs a `raw-rowing-state` ring entry on the driver's first frame
-      and on every change after (spec §2, invariants I-2/I-3). No
-      behaviour change. **S**
-      **(d) SETTLED 2026-09-03 at the resume-edge walk
-      (`docs/monitor/sessions/walk-2026-09-03-resume-edge/`): the clock
-      RUNS through a mid-work stop.** With the rower sitting still, elapsed
-      went 80.52 s → 92.11 s (+11.6 s) while distance went 247.1 → 249.6 m
-      (coast, then nothing). So `MonitorFrame.state`'s own "no paused state
-      on the wire" note holds for the mid-WORK
-      case and `types.ts:134`'s "FREEZES whenever `rowingActive` goes
-      false" is correct only for its own measured REST — corrected at its
-      site by this walk. Door PR B's `partialSeconds` is therefore interval
-      elapsed INCLUDING idle time, exactly as `2026-09-02-door-partial-design.md`
-      §5.1 concluded; no shipped behaviour changes. **(c) is now DONE too —
-      this PR's `driver.ts` ring carries the raw byte on the first frame and
-      on every change, so the next occurrence will say which value it
-      was.** The original text, for the
-      record: `domain/monitor/types.ts:134` claims `MonitorFrame.elapsedSeconds`
-      "FREEZES whenever `rowingActive` goes false", measured through a REST;
-      `types.ts:189-191` says the wire has no paused state at all; and
-      `PAUSED_FRAME_HOLD`'s comment records that the byte's behaviour through
-      a mid-piece stop has NEVER been observed. Door PR B's stored pair is
-      elapsed time, so the mid-WORK case is the one that matters. The
-      observation: on a DISTANCE interval, stop pulling mid-interval for
-      ≥10 s, keep the program running, then End. The recording then carries
-      both the clock and the byte through the same stop and the loser of
-      those two comments is corrected at its own site. Spec
-      `2026-09-02-door-partial-design.md` §5.1 carries the full reading.
-- [x] **The machine's own totals have NEVER reached a saved row. TRIAD — a
-      change to what a stored number MEANS, and it lands alone.** Found by
-      James on production TestFlight 2026-08-28; the ring is
-      `docs/monitor/sessions/walk-2026-08-28/summary-never-stored-ring.json`
-      and that walk's README §"Leg 5" carries the full reading. - **The wire half is finished.** 0x0039, 0x003A and 0x003F all arrive
-      and decode, and `driver.ts:4181`'s `split-won` branch emits
-      `summary-observations` carrying the verification bytes. **A theory
-      that the native BLE arm never subscribed was raised and FALSIFIED by
-      that capture** — do not re-derive it. - **The break is the READER.** `LogSession.tsx:1487` snapshots the run
-      with `useState(() => monitorModeRun(...))` at mount — no setter, never
-      refreshed. The burst's localStorage write lands ~270 ms later and
-      succeeds; nothing reads it again. **The ordering is FIXED, not racy** —
-      navigation is what starts teardown and its linger — which is why this
-      is "never once" rather than "sometimes". - **It is not a missing box, it is a wrong number.**
-      `storedSummary.ts:617-621` gates tier A on the same two columns the
-      POST omits, so **every stored connected row's three heroes are our own
-      arithmetic, including AVG SPLIT** — while v0.23.0's note told testers
-      "those three numbers come straight from the erg… We show the
-      monitor's, not ours." - **No backfill exists.** `LogPatch` (`server/stores/logs.ts:222-227`)
-      is thumbs/held/pain/notes only and the columns are write-once at
-      create, so every row saved since v0.22.0 is permanently tier B. - **COUNTED ON PRODUCTION, 2026-08-28: 0 of 16.** Sixteen connected rows
-      (`device_name is not null`), and **not one** carries
-      `machine_work_seconds`. "Never once" is now a measured fact, not an
-      inference from one screenshot — so the note corrections say _never_,
-      without hedging, and there is no partial-success case to explain. - **Still owed before the fix is designed:** a client test that mounts
-      `LogSession` WITHOUT `summaryTotals`, lands the late write, then
-      saves. Red today, needs no erg and no build, and becomes the permanent
-      gate. - **THE SHAPE IS DECIDED (James, 2026-08-28): HOLD THE HAND-OFF for the
-      burst as well as the split.** The rejected alternative was re-reading
-      storage at save time, which keeps the navigation instant but lets a
-      row gain its numbers a moment after the screen is already up. His
-      reasoning: waiting is _more correct_, and ~0.3 s on the connected
-      screen is an acceptable price. **The spec designs the hold, not the
-      choice** — how long to wait, what happens when the burst never comes,
-      and whether the rower sees anything during it. - **Owed with it:** the three note corrections in the register row
-      below, and a receipt entry in the hook's handler, so the one link in
-      this chain with no instrument finally gets one. **M/L**
-      - **SHIPPED: PR #228, released in v0.27.0 (2026-08-30).** This bullet
-        read "not yet merged/released" until 2026-08-31, when the item was
-        struck to match it. Spec:
-        `docs/superpowers/specs/2026-08-29-machine-summary-hold-design.md`.
-        The hold now owes two independent conditions (split, burst) across
-        all three burst-eligible `ended` arms (machine finish, Menu
-        terminate, user End) and releases only when neither remains owed;
-        the burst's own receipt (`summary-recorded` /
-        `summary-append-rejected` / `summary-no-run`) is the instrument
-        this item asked for. Gated by `summaryHoldReplay.test.ts`'s three
-        permanent-gate legs (Menu terminate, user End, timeout — each
-        replaying a real committed wire capture through the real driver
-        into the real hook, never a storage-seeded fixture) plus
-        `useMonitorSession.test.ts`'s receipt-instrument unit tests. The
-        production re-count was waived as #228's merge gate, then
-        **DISCHARGED 2026-08-30: James ran the query on prod — 0 of 18**
-        (two more connected rows since the 2026-08-28 0-of-16 baseline,
-        still none machine-confirmed), and the v0.27.0 notes' "never"
-        claim rests on that fresh count. **The note corrections this item
-        owed shipped in the same tag** (v0.27.0 items 3 and 4).
-        **ONE OBLIGATION SURVIVES THE STRIKE and is lifted to the
-        open-item register: the FIELD PROOF.** Every gate here is still the
-        app agreeing with the app (RF11); the fix is only proven when a row
-        saved on James's phone from v0.27.0 or later comes back
-        machine-confirmed. Re-run the prod count after the next TestFlight
-        build reaches him — the first nonzero is the proof, and a second
-        0-of-N is a live defect, not a null result. **DISCHARGED
-        2026-08-31: the first machine-confirmed prod row landed** (5x750m
-        /1:30r, `CODE 050E-273C 1B69-9691` on both the PM5 and the phone);
-        the register entry below carries the evidence.
-
-- [x] **Audit AUD-016 — measured connected work survives storage failure.**
-      **SHIPPED: PR #239, merged 2026-08-31 (`89006404`).** A completed PM5
-      interval retained in memory could reach Log as `NO MONITOR READING`
-      after rejected monitor-run writes. One store
-      (`app/src/monitor/handoffStore.ts`) now owns the connected record —
-      every create, save and destroy goes through it with a receipt; a failed
-      durable write holds in the Gate-0-approved
-      `COULD NOT KEEP THE RECORD ON THIS PHONE.` state with Retry / Log it
-      anyway; a memory-only record has a door on Today and both connect guards
-      see it. It also fixed a proven main defect en route: a failed close write
-      let the finish grace re-open the record from stale storage and truncate
-      saved actuals 3→1. Design:
-      `docs/superpowers/specs/2026-08-30-handoff-protocol-design.md` (rev 4,
-      James-approved 2026-08-30). **Per the STRIKE CONTRACT set at #239's PM
-      gate, this same commit removed the Task 1-6 progress narration that stood
-      here** (the file's own head rule: a struck item does not keep its progress
-      log) **and lifted its forward-looking residuals into the open-item
-      register first** — the memory-only reload gap, the three surviving legacy
-      reads, and the store's standing tier-precedence probe. The full record
-      lives in PR #239 and moves to `docs/history/` when Wave F closes.
-- [x] **Audit AUD-011/AUD-015 — storage denial is recoverable before work — DONE in PR #282.**
-      Guard getter denial on every persisted loader, and never leave Countdown
-      for Timer unless the active run is durable. One local-storage recovery
-      PR may own both, with separate regression tests; the visible Retry state
-      gets rendered Gate 0 first. **P1, Confirmed. M**
-      **RESHAPED by the approved hand-off store protocol (2026-08-30, its
-      §8):** the store's accessor wraps the localStorage GETTER
-      (`SecurityError` fails every access — WHATWG PRIMARY, in the
-      antagonist ledger) and absorbs the `loadMonitorRun` loader on day
-      one, so THIS chunk owns three loaders, not four (`loadRun`,
-      `loadDraft`, `loadTodayPick`). The earlier #230-gate `removeItem`
-      spec condition is SUPERSEDED: `removeItem` carries no throw
-      condition per the same PRIMARY, and the store's `retire` wraps its
-      durable removal regardless.
-      **Corrected at the anchor pass (2026-08-28): the audit's four-loader
-      list named the wrong fourth loader.** `loadTodayOverrides` is already
-      guarded (`todayOverrides.ts:211`, getter inside its try); the real
-      unguarded set is `loadRun`, `loadDraft`, `loadMonitorRun`, and
-      `loadTodayPick` (`todayPick.ts:53`) — the audit's mounted-Today probe
-      never reached it because `loadRun` (`Today.tsx:280`) throws first. Three
-      spec conditions from the anchor: (1) a Today fixture that actually
-      reaches the `loadTodayPick` call (needs a plan and a pool); (2) one
-      COMPOSED denial-then-Start test — **CORRECTED at the spec's antagonist
-      DELTA pass (2026-09-03): this composition never happens.** A denied
-      getter fails EVERY storage access on that origin, not the run key
-      alone, so `saveDraft` (Countdown's own mount effect, called before
-      `saveRun`) throws first and Countdown never mounts at all — there is
-      no "Start proceeds, then `saveRun === false`" path for AUD-011's fix
-      to create. The blocked-start state this spec actually builds is
-      produced by QUOTA at the run key specifically (the draft write
-      succeeds, only the run write is over budget), not by getter denial —
-      see the spec's §3 legs (a)/(b)/(c). (3) the
-      Retry surface needs a non-retry exit — a Retry under a still-denied
-      getter is a loop. Open research line for the spec: whether the getter
-      can throw in a Capacitor WKWebView on its own origin (the WHATWG
-      authority is vetted; the native-layer reachability is not).
-      **NARROWED AGAIN by the hand-off store's final fix round
-      (2026-08-30, adversarial F-2): `loadMonitorRun`'s SELF-CLEAR is gone
-      — the read now returns `null` and leaves malformed bytes for the
-      store's §8 deferred clear.** That was a genuine defect on this
-      branch, not a residual: `Today.tsx`'s mount effect calls the loader,
-      so opening Today destroyed a malformed record the store was
-      deliberately preserving.
-      **CLOSED FOR THIS LOADER at PR #239's review round 1 (item 1):
-      `loadMonitorRun`'s `localStorage.getItem` now sits INSIDE its own
-      `try`, so a denied getter reads as absent instead of escaping
-      `Today.tsx`'s mount effect.** Gated at both layers — the loader
-      (`monitorRun.test.ts`, "the storage GETTER itself throws") and the
-      composed screen (`Today.test.tsx`, "survives a DENIED storage getter
-      on the monitor key"), the latter key-scoped because a blanket denial
-      still dies at `loadRun` first. **So this chunk's unguarded set is now
-      exactly three loaders — `loadRun`, `loadDraft`, `loadTodayPick` —
-      matching the §8 reshaping above; `loadMonitorRun` is off the list.**
-      **SPECCED 2026-09-03 as
-      `docs/superpowers/specs/2026-09-03-storage-denial-design.md`, and the
-      research line is CLOSED.** The getter CANNOT throw on the phone:
-      WebKit's `localStorage` getter has exactly one throw, gated on
-      `canAccessResource(LocalStorage) == No`, whose three routes are an
-      opaque origin, a `file://`-equivalent origin, and
-      `StorageBlockingPolicy::BlockAll` — and our `capacitor://localhost`
-      (no `server` block; a `WKURLSchemeHandler` serves it) is none of
-      them, with the blocking policy embedder-set and unset by Capacitor
-      and by us. Full citations:
-      `docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md`.
-      **James's ruling on that evidence (2026-09-03): the three guards ship
-      as WEB-ARM hardening — the dev loop, the e2e harness, the browser
-      fallback, where a user CAN block site data — and the Retry SURFACE
-      for a denied getter does NOT ship**, so anchor condition (3) is
-      retired with it. AUD-015's Countdown durability keeps its visible
-      state and is where the one Gate 0 goes, because a failed WRITE is
-      reachable everywhere. Anchor conditions (1) and (2) survive. Two
-      corrections the spec carries: the audit's second loader lives in
-      `session/draft.ts`, not `logDraft.ts`; and the catch must be BARE,
-      since the getter's non-throwing failure surfaces as a `TypeError`.
-      **Tripwire:** the whole argument rests on `server.iosScheme` being
-      unset — setting it to `"file"` makes the origin local and the throw
-      immediately reachable.
-
-**Riding this wave because it touches `app/server/` and `app/domain/`:**
-
-**RULED by James, 2026-08-31: all three ride the `door` COLUMN's migration
-PR** — which is **door PR A** (`2026-09-02-door-partial-design.md` §4) since
-the re-scope — not a branch of their own and not the lifecycle spec's PRs. They carry
-none of that migration's risk, so bundling them costs a reviewer nothing and
-saves three round trips.
-
-- [x] **`ALTER TABLE "preferences" DROP COLUMN "warmup";`** — one line, safe
-      once no deployed image reads it. **DONE (door PR A, migration 0022,
-      Task 1):** the column is dropped and the `preferences.warmup` Drizzle
-      field is removed from `server/db/schema.ts` in the same commit
-      (comment now at `:423-432`). Its trigger fired long ago: Phase WU set
-      it at "the first server-touching phase after TWO tags have shipped",
-      deliberately countable, and ten tags had shipped by the time this
-      rider rode.
-- [x] **Remove the legacy warm-up guards on the persisted `LogSeed.steps[].kind`
-      union.** **PARTLY DONE (door PR A, Task 6, amended at the whole-branch
-      review): the union is NARROWED, the GUARD is KEPT behind a cast for
-      the residual population.** `LogSeed.steps[].kind` is now the literal
-      `"work"` — per the binding sub-ruling from WU, never widened to
-      `string`. `buildMonitorLogSteps`'s skip survives as an explicit
-      legacy-population read, `(seedStep.kind as string) === "warmup"`, the
-      identical shape `summaryModel.ts`'s `warmupIndex` already uses over
-      the same records: an unlogged `MonitorRun` authored before warm-up
-      removal (PR #150, v0.16.0) still carries the string at runtime, and
-      deleting the guard would move that row's AVG SPLIT between the live
-      and stored doors. NO NUMBER MOVES. Owed removal, now for BOTH readers
-      together: when that population is provably gone.
-- [x] **RC-12's last unreconciled comment.** **DONE (door PR A, Task 6):**
-      `domain/monitor/types.ts`'s `onDisconnect` doc block no longer claims
-      "the phone's Bluetooth stack resetting" or "iOS backgrounding" as
-      causes. Both are struck as UNSOURCED and UNMEASURED, not as disproven
-      — what the walks establish is the absence of OUR OWN evidence (the
-      capture-corpus grep is empty), never the radio's behaviour
-      (`docs/history/phase-rc.md:2054-2056`). Wording softened at door
-      PR A's PM gate.
-
-**Exit:** a phone locked before the first pull, a phone backgrounded mid-piece,
-and a link dropped mid-piece each produce a stored row that matches what the
-machine did, and the row says which door it came in by **(the door clause is
-DELIVERED by `session_logs.source` — pm5 | timer | manual, NOT NULL,
-backfilled — landing in the unconnected-JR PR, 2026-09-02; what remains of
-it for this wave is the no-reading row's own WORD, which posts and
-backfills `manual` today: `storedSummary.ts`'s header carries the history).** **Fourth clause, added
-at the phase-open gate (2026-08-28) so the durability chunks are inside the
-exit they build toward:** a connected row carries the erg's own summary
-numbers whenever the erg spoke them, and a storage failure never silently
-downgrades a measured session to a hand-logged one.
-
----
+**Exit:** the two phase-close greps in spec §6 (no `pain`/`difficult`; and
+`effort` means one thing) pasted into the close gate; e2e and screenshots
+green with refreshed captures; the by-hand stale-build check (a `v0.38.1`
+web build against the post-PR-2 server saves `pain: 3`, reads back
+`effort: 3`, and a workout it creates carries a derived difficulty)
+recorded in PR 2's body; release note in rower words (spec §6.6).
 
 ## Wave A — The front door
 
-**Status:** After F. **TRIAD** (auth). **L.**
+**Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
+closeout. **TRIAD** (auth). **L.**
 
 **Goal:** someone you have never met installs the build, gets an account, rows,
 and can delete everything from inside the app.
@@ -1111,12 +650,27 @@ while we are in here.
       2026-07-29 and covers 7 domain modules against today's 29. Either make
       a current full run a real enforced gate with an owned cadence, or keep
       it on-demand and retire the stale baseline as evidence. **S/M**
-- [ ] **The 23 dangling `.superpowers/` citations across 11 tracked files.**
+- [ ] **The 23 dangling `.superpowers/` citations across 14 tracked files.**
       That directory is git-excluded and unreachable to anyone but the session
       that wrote it. _"A dangling citation is worse than no citation, because it
-      reads as evidence."_ Affected: `driver.test.ts`, `docs/TESTING.md`,
-      `pm5-interface-notes.md`, and eight plans and specs. **Do NOT create
-      `docs/superpowers/sdd/` to make the paths resolve.** **S**
+      reads as evidence."_ Affected: `app/src/monitor/driver.test.ts`,
+      `docs/monitor/pm5-interface-notes.md`, and twelve files under
+      `docs/superpowers/` (seven plans, four specs, one research note).
+      **Do NOT create `docs/superpowers/sdd/` to make the paths resolve.** **S**
+      **Counted 2026-09-04, not carried** — the citation count was right and
+      the FILE count read 11 and was wrong:
+      `git grep -ln "\.superpowers/[A-Za-z0-9]" 2f258006 -- . ':!*.html'
+      ':!CLAUDE.md' ':!ROADMAP.md' ':!.claude/agents/pm-ledger.md'` lists the
+      fourteen, and the same grep without `-l` counts the twenty-three. Two
+      choices in that command are what make the number mean what the row says:
+      the pattern requires a character AFTER the slash, so a bare mention of
+      the directory is not counted as a citation into it; and the three
+      excluded files DISCUSS this debt rather than cite into it. `docs/TESTING.md`
+      and two `docs/history/` files mention the directory and are therefore
+      NOT in the fourteen — an earlier version of this row named the first of
+      them. The per-user-gate branch briefly took the count to 27 and
+      re-pointed its own four at a tracked spec before merge, so that work
+      leaves the debt unchanged.
 - [ ] **An e2e fixture that exercises a REST.** The `est-left` spec's criterion
       6 is HALF MET: no fixture drives `state: "resting"` with a scripted rest
       value. **S**
@@ -1159,18 +713,12 @@ for a stranger — no backup, and no idea when their app breaks.
       trigger enters above every seam we own is invisible to every gate we
       have. Carries its own privacy answer, and that answer changes what Wave C
       declares. **M**
-      **A worked example arrived 2026-08-28, and this item owns it.** The
-      monitor's connection-log ring is reachable ONLY by an undocumented
-      triple-tap during the live session (`ConnectedSurface.tsx:315`), and
-      `MonitorLogRow` renders only on the SAVE screen gated on
-      `?from=monitor`. `session_logs` has no diagnostics column, so once a row
-      is saved its diagnostics are gone forever. That is why the Wave F
-      summary defect survived five hardware walks and a phase close: a rower
-      can never report it, and James caught it only by looking before saving.
-      **The evidence already survives the process kill** —
-      `useMonitorSession.ts` writes `ergomatic:last-session-log` to
-      localStorage unconditionally, its own comment citing "no console on
-      iOS". **PARTIALLY DISCHARGED by Wave F PR 2 (#258, 2026-09-01):** the
+      **A worked example arrived 2026-08-28, and this item owns it.** At
+      that time, the connection-log ring's live door required an undocumented
+      triple-tap, and its save-screen reader required `?from=monitor`.
+      A saved row had no diagnostics door; James caught the Wave F summary
+      defect by looking before saving. **PARTIALLY DISCHARGED by Wave F
+      PR 2 (#258, 2026-09-01):** the
       gesture-free half is done — a three-slot history and the You →
       DIAGNOSTICS → Monitor logs door give any of the last three connected
       sessions' logs a reader and a COPY, no gesture, no erg. The SAVED-ROW
@@ -1401,7 +949,9 @@ closed with zero Concept2 contact.
       soft bounds the C2 account-injection register row names:
       `UNIQUE(user_id)` + one atomic upsert at mint (one live attempt per
       user, ENFORCED at 1.75a); `ALLOWED_EMAILS`-as-revocation is a
-      separate admission-model question, not bundled here. Sequenced
+      separate admission-model question, not bundled here — see the
+      per-clause disposition below, where the per-user gate answers part
+      of it. Sequenced
       PR1.5 → PR1.75 → PR2; gates `C2_LINK_ENABLED=1` on any real cohort
       (`2026-09-01-concept2-pr15-gate.md` §6). **M**
       **Status 2026-09-02: COMPLETE across two PRs. Per-clause disposition
@@ -1416,17 +966,30 @@ closed with zero Concept2 contact.
       Concept2's approval of the native `redirect_uri` — log-dev DONE
       2026-09-02, **live portal STILL OWED**; dual-route identity tests —
       DONE (1.75a); `UNIQUE(user_id)` + one atomic upsert at mint — DONE
-      (1.75a); `ALLOWED_EMAILS`-as-revocation — explicitly NOT bundled,
-      still a separate admission-model question. **PR1.5's `Browser.open` +
+      (1.75a); `ALLOWED_EMAILS`-as-revocation — **PARTLY ANSWERED
+      2026-09-04 by the per-user gate below, which is why this no longer
+      reads "explicitly NOT bundled, still a separate admission-model
+      question":** removing an email from `C2_ALLOWED_EMAILS` DOES close
+      the Concept2 surface for that rower at the next recreate, on every
+      authed route except unlink. It does NOT delete their link row or its
+      tokens, and it says nothing about the sign-in allowlist, whose
+      admission-only behaviour (`signin.ts:30-36`) is untouched — so the
+      general question stands, one capability narrower. **PR1.5's `Browser.open` +
       `browserFinished` return arm was RETIRED at 1.75b** (the callback now
-      arrives in a promise); `@capacitor/browser` stays for PR2's read-only
-      link-out. Device walk:
+      arrives in a promise). **This row used to say `@capacitor/browser`
+      stays for PR2's read-only link-out; that is false after PR B
+      (2026-09-04), which removed the package entirely** — the read-only
+      link-out now shares the OAuth hop's own `window.open` arm
+      (`adapters/externalBrowser.ts`), walked signed in on the phone's
+      default browser (`docs/monitor/sessions/walk-2026-09-04-c2-linkout/`).
+      Device walk:
       `docs/monitor/sessions/walk-2026-09-02-c2-native/`. **Still owed
       after both PRs:** the `C2_LINK_ENABLED` flag flip on a real cohort,
       gated on Concept2's write approval; live-portal registration of the
       native redirect under the application name "Ergomatic" (log-dev is
       registered under James's own name — D3 pre-check observation,
-      `94b83c84`); PR2's surface + its Gate 0 identity-copy amendment; the
+      `94b83c84`); the weight-unit desk reading that bounds the fallback
+      producer (PR2's row below); the
       `describeStoreContracts` gap named at 1.75a
       (`2026-09-02-concept2-pr175a-server.md:44`); and a decision for
       James, not made here: whether to promote the app-wide bearer/cookie
@@ -1434,15 +997,188 @@ closed with zero Concept2 contact.
       that this walk measured 42/42 native requests cookie-free. Until
       decided, the app-wide path only logs `auth_disagreement` and
       `/api/concept2/*` alone refuses.
-- [ ] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
-      (Connect + H/L ask + Unlink) and the log row's Send action with
+- [x] **PR2 — the rower-facing surface, behind Gate 0.** You's Concept2 card
+      (Connect + Unlink; it asks nothing) and the log row's Send action with
       sent/duplicate/failed states and a View-on-Concept2 link-out. **M**
-- [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open: the
-      `weight_class` gate is answered by the link flow (RULED — a binary H/L
-      asked only at C2 link time, never at onboarding, and it is PII); the
+      Also carries the 2026-09-03 weight-class ruling: migration 0023 drops
+      `weight_class` from both Concept2 tables and the send path READS the
+      class from Concept2 on every send — the rower's own most recent
+      DECLARATION first (Concept2's help: "you must designate L or H for
+      every piece that you enter"), our derivation from the profile's
+      `weight`+`gender` as a fallback, a 422 the rower can act on when
+      neither answers. Never stored, never cached, and **since the
+      2026-09-04 ruling ("Stop talking about the weight class") no
+      rower-facing surface names the class or its producer** — this line
+      used to say the SENT state did; the class and `weightClassSource` stay
+      on the route's 200 and in the send's log line, for an operator.
+      **TRIAD** (stored shape + what a number means on a third party's
+      record).
+      **Follow-ons this PR names, recorded here rather than in its body
+      (RF14):**
+      - **A real fake-Concept2 service for e2e** — declined by ruling (v).
+        The e2e stack is C2-dark by construction and a committed CI test
+        enforces it (`scripts/compose-env.test.sh`), so PR2's browser flows
+        fake the server's answers with Playwright `page.route`: they prove
+        the CLIENT's states, never the web OAuth hop. A compose service, its
+        image and an OAuth-shaped fake are a PR of their own.
+      - **The weight-unit DESK leg, and the logged-in glance with it.** The
+        FALLBACK producer derives from a `weight` field whose UNIT is an
+        inference; the plausibility band refuses four of the six wrong
+        readings but cannot catch hundredths-of-a-pound. Two readings settle
+        it (the profile's unit preference on kg, then on lb), and the same
+        session answers which Concept2 page actually carries the weight and
+        weight-class fields — 2i's link-out target is provisional until it
+        does. **No erg, no phone: a desk step, and it gates the FLAG FLIP,
+        not this merge.** Stated as an exit criterion below as well.
+      - **Delete versus sent, unstated to the rower** (Task 7's RF23
+        enumeration). Deleting a row that is already on Concept2 leaves the
+        Concept2 row standing. That matches the unlink copy's position, and
+        nothing says so at the delete confirm.
+      - **Rows saved before PR2 carry `completed_at IS NULL`, permanently.**
+        They will always upload with their SAVE clock as Concept2's date.
+        There is no backfill and there cannot be one — the close instant was
+        never recorded. A known property of pre-PR2 rows, not a bug.
+- [x] **The per-user gate — `C2_ALLOWED_EMAILS`.** The Concept2 surface can
+      now be live for ONE account while the rest of `ALLOWED_EMAILS` never
+      meets it: the mint, the exchange, `GET /link` and the send answer on
+      `availableFor(email)` (`available()` AND the email is on a second
+      allowlist, parsed with the same `parseAllowlist`/`isAllowed` pair as
+      sign-in). Unset or empty means NOBODY. **Two routes are deliberately
+      different, both settled at fix round 1 and both against the shape this
+      row first carried:** the web callback takes the global check first
+      (it has no principal yet) and `availableFor` at step 3b once it has
+      resolved one — an attempt lives fifteen minutes, so gating only the
+      mint would let a rower removed mid-window finish the hop holding live
+      tokens; and `DELETE /link` stays on the global check, because a
+      capability gate closes USE, not a rower's ability to disconnect their
+      own account and stop leaving live tokens behind. **This CHANGES THE
+      SHAPE OF THE CUTOVER named above:** `C2_LINK_ENABLED=1` no longer
+      admits a cohort by itself, so James can walk a real link and a real
+      send on his own account against log-dev before Concept2's write
+      approval lands, and the live flip becomes "widen the list" rather
+      than "flip a flag for everyone at once". `docs/deploy.md` carries the
+      operator half, including the boot-log count and the psql remedy for
+      revoking a link on someone's behalf. Design and rulings:
+      `docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md`. **S**
+- [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open and
+      RE-RULED 2026-09-03: the `weight_class` gate is answered by Concept2,
+      not by the link flow. James: "I don't want that set in our app. I want
+      it to be set on Concept2's side." This SUPERSEDES the 2026-08-22 ruling
+      ("a binary H/L asked only at C2 link time"). The app asks nothing and
+      stores nothing. **Corrected the same day, after an antagonist pass:**
+      the send path does not merely derive from the profile — Concept2's own
+      help says the class is the rower's per-piece DECLARATION, so the send
+      reads their most recent one first and derives only as a fallback.
+      Measured 2026-09-03 on log-dev: a result POSTed without `weight_class`
+      is refused 422; `GET /api/users/me` carries `weight` and `gender` but
+      no `weight_class`; and `GET /api/users/me/results` returns every result
+      carrying `weight_class`, date-descending, in ~220 ms for a small page.
+      **Corrected once more by the code-reading lens, and it is the standing
+      warning printed immediately below:** that list contains the rows
+      Ergomatic itself posted, Concept2's 201 echoes back the class we sent,
+      and no field marks a row as ours — so reading it unfiltered is a
+      MIRROR, and a derived guess would have come back as the rower's own
+      declaration on the very next send. The read now excludes every result
+      id this app wrote (`session_logs.c2_result_id`), and a page whose only
+      rows are ours counts as no declaration at all. The class is never
+      cached, and a FAILED read is retryable rather than a silent
+      fall-through to the guess.
+      The
       per-interval `rest_time` gate is NOT answered this wave — RC-1 stored the
       session-level split only, `LogStep` carries no per-interval rest, so the
       `intervals` array is out of scope and rides the auto-upload follow-on.
+- [ ] **PR B — the link-outs leave the app.** The read-only Concept2
+      link-outs (`View on Concept2 →`, `OPEN CONCEPT2 PROFILE`) drop the
+      native `SFSafariViewController` sheet and its isolated cookie jar —
+      the defect a 2026-09-03 walk found (a sent row opened Concept2's
+      "the user has made this result private" page instead of the row) —
+      for the same `window.open` arm the web platform already used.
+      `@capacitor/browser` loses its last consumer and is removed.
+      **Ordered FIRST** (James, 2026-09-04): it repairs a real defect and
+      its own gate is a walk that is happening anyway. Not TRIAD: no
+      stored shape, no number's meaning, no auth. Walked twice — plugin
+      present (build 860) and plugin-free (build 862) — both signed in on
+      the actual result, both W1-W4 identical
+      (`docs/monitor/sessions/walk-2026-09-04-c2-linkout/`). Spec:
+      `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md` §5.2.
+      **Reconciliation (comments, this row, the phrase sweep) done at
+      Task 6; PR not yet opened.**
+- [x] **PR A — Concept2 becomes a row on You, and a screen behind it.** The
+      whole Connect/Send card leaves the You tab; one quiet mono row takes
+      its place and everything the card does moves to `/you/concept2`
+      behind it — the shape DIAGNOSTICS already uses. **Ordered SECOND.**
+      Not TRIAD. Needs its own Gate 0 (rendered frames, both orientations,
+      the row's own contrast numbers) before any implementation task
+      starts. Spec: `docs/superpowers/specs/2026-09-04-concept2-walk-fixes.md`
+      §5.1. **Done, Tasks 1-7, head `b3655de0` plus this reconciliation
+      commit: lint/typecheck/format:check/unit/client/e2e/screenshots all
+      green, no hardware walk (not TRIAD).** Captures under
+      `docs/screenshots/`: `you-concept2-*` (You, doors group) and
+      `concept2-screen-*` (the screen); each set covers unlinked, linked,
+      reconnect/armed, read-failed and landscape.
+- [ ] **PR C — send the number the verification code was minted over.**
+      SETTLED 2026-09-05 by a live API test: posting the PM5's own code with
+      distance 5706 (the monitor's 0x0039 total, already stored as
+      `machine_work_meters`) verified; 5708 (our interval sum, `work_meters`,
+      what we send today) did not. The app already DISPLAYS the machine total;
+      only the send is the outlier. Fix: `buildC2Payload` posts
+      `machineWorkMeters`/`machineWorkSeconds` when present, falling back to our
+      totals. **TRIAD (a number's meaning on the wire)** — full antagonist on
+      the spec, PM gate on the PR. Spec:
+      `docs/superpowers/specs/2026-09-05-concept2-verification.md`; the C1
+      research is `docs/superpowers/research/2026-09-05-c2-verification-code.md`
+      and the live result is `…/2026-09-05-c2-verification-measurement.md`.
+      **OWED after merge (one clean confirming send, to close the
+      log-dev-vs-production edge):** either a fresh 5708 API POST — which needs
+      the real log-dev row 85921 deleted first, a destructive step James rules
+      on — or a production hardware send of a divergent interval row once the
+      server ships. Not required to settle which number is authoritative (the
+      5706/5707 API test did); required only to confirm production behaves as
+      log-dev did.
+- [ ] **Auto-send — OFF · MANUAL · AUTOMATIC.** A per-rower sending mode:
+      OFF is the unlinked state, MANUAL is today's per-row Send, AUTOMATIC
+      sends an eligible finished monitor row the moment it saves, silently —
+      the Send button pressed for you, outcome on the row's block. One
+      boolean on the link row (`auto_send`, default false: a fresh link lands
+      in MANUAL), one `PATCH /api/concept2/link`, the control replaces the
+      card's Unlink button (OFF arms the two-tap unlink). Client-side after
+      the save (`useLogForm`'s 201 path), same route as the button. **TRIAD**
+      (stored shape + a number leaving on a trigger nobody tapped): full
+      antagonist on the spec, PM gate on the PR, and a **Gate 0** for the
+      redrawn card. Rulings (James, 2026-09-05): off = unlinked; silent;
+      default manual; no backlog send. Spec:
+      `docs/superpowers/specs/2026-09-05-concept2-auto-send-design.md`.
+      **Gate 0 APPROVED 2026-09-05** (amendment
+      `docs/design/handoffs/2026-08-31-concept2-connect/amendment-2026-09-05-autosend.html`,
+      one fix on sight: armed OFF spans the control). **BUILT on
+      `wave-e-c2-autosend`, 2026-09-05** — spec rev 4 records the two
+      implementation departures (§3.3: the fresh read is one direct
+      `fetchLink()` after the 201, not a mounted hook; the in-flight claim is
+      a wait-then-rerun chain, not a stored response). Ticks at merge.
+      **PM final gate PASSED WITH CONDITIONS (2026-09-05), all folded on the
+      branch:** main's `0024_pain_to_effort` landed first, so the migration
+      is `0025_classy_red_ghost`. Two behaviours the rulings did not name,
+      filed here rather than in the PR body (RF14): (i) **SEND FAILED is
+      sticky past the fix** — it clears only on the next send that leaves
+      the row at Concept2, so a rower who repairs their profile keeps the
+      warning until they row again (self-heals on the next AUTOMATIC save;
+      under MANUAL it waits for a tap); accepted, and the first thing the
+      walk will meet. (ii) **SEND FAILED reaches a MANUAL rower too** —
+      ruling 6 named AUTOMATIC, spec §3.4 widened it to any eligible
+      failure (the condition is account-level); sound, but no Gate 0 frame
+      drew MANUAL + SEND FAILED — owed at the next Concept2 design touch.
+      **The flag-flip gate is ONE trip:** the AUTOMATIC save this PR owes on
+      the phone and PR C's owed confirming send both need the same
+      `C2_LINK_ENABLED` flip on James's own account against log-dev; walk
+      them together, never as two PR-body lines.
+- [ ] **Verification code: hide it, say "verified".** James, 2026-09-05: like
+      Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
+      16-digit code by default; once Concept2 has accepted the code for that
+      row, show "verified"; a debug reveal shows the raw code when needed.
+      **PARKED until the confirming send proves PR C's codes verify on new
+      rows** (the row above). Needs a way to learn `verified` from Concept2
+      (re-read the result, or our own send carrying the code once the
+      byte→code transform is known — PR C spec §8).
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
@@ -1459,12 +1195,30 @@ rejects or does not return, never for a field we chose not to send. Plus,
 from the widened scope: a linked user sends an eligible row from the app ON
 THE PHONE and C2's result id is stored on it, with the duplicate (409) and
 failure states each observed for real at least once; the link flow's
-request bodies carry exactly ONE new user attribute, `weight_class` (the
-countable form of minimal-PII); and the dedup-granularity, `state`-echo and
+request bodies carry NO new user attribute (the countable form of
+minimal-PII, STRENGTHENED by the 2026-09-03 ruling — it used to read
+"exactly ONE new user attribute, `weight_class`"); **the UNIT of Concept2's
+`weight` field is measured on James's log-dev profile before the flag
+flips — a DESK step, not a walk step, and it takes TWO readings** (the
+profile's unit preference on kg, then on lb, because the profile carries no
+unit field and one reading cannot detect a per-user display unit). The same
+desk session answers two more questions no status code can: which Concept2
+page carries the weight and weight-class fields (2i's link-out target is
+provisional until then), and whether a non-rower result carries a class.
+**It gates less than it used to:** with the declaration as the primary
+producer the unit only matters for a rower who has declared nothing, and
+the derivation's plausibility band already refuses four of the SIX wrong
+unit readings — the two it admits are hundredths-of-a-kilogram, which is
+the assumed-correct reading, and hundredths-of-a-pound, a 2.2x error no
+band can exclude, which is exactly what the second reading settles. Plus
+the
+dedup-granularity, `state`-echo and
 zero-rest-post questions each carry a measured answer in PR0's report —
 "unknown" leaves the wave open. (RC-9(b)'s live ring verdict moved OUT to
 the open-item register at the PM open gate: no shared mechanism, PR, or
 risk model with this wave.)
+
+---
 
 ---
 
@@ -1547,20 +1301,22 @@ X" is a real disposition — most of these are single files.
   then and is false of it now. Evidence:
   `app/src/monitor/useMonitorSession.ts` (`LogicalSession`, and `stash()`'s
   single read of it), `app/src/monitor/sessionLogHistory.ts`, spec §0.3.
-- **RC-29 — the 2.5 s banner, UNMEASURED on the current build.** Returned here
+- **RC-29 — the 2.5 s banner, ordinary-use rate still UNMEASURED.** Returned here
   from Wave F on 2026-08-31, the same day it was folded in, because the number
   it carried was pre-fix: `decideResumeLatch` (v0.24.0) killed the nine-banner
   rate, and the next day's build-759 ring shows one correct latch for one
   39.4 s lock. No threshold moves until ordinary use produces a fresh rate —
   `2026-08-31-lifecycle-design.md` §6's latch counter is what produces it.
-  **§6 SHIPS in Wave F PR 2**: `stash()` records `latch-count
+  **§6 SHIPPED in Wave F PR 2 (#258)**: `stash()` records `latch-count
   latches=<n> resumes=<n>` into every teardown's own ring export, so the
-  count is available from ordinary use once the build reaches a phone —
-  this row's own clause is now ARMED, not just written. **Still no
+  count is available on the phone. Both controlled 2026-09-04 walk rings
+  report one latch / one resume; deliberate locks do not establish an
+  ordinary-use false-positive rate. **Still no
   threshold moves until that first ordinary-use rate lands here**; this
   row stays open until it does. Evidence:
   `docs/superpowers/specs/2026-08-27-link-authority-design.md` rev 4,
-  `docs/monitor/sessions/walk-2026-08-27/lock-phone-ring.json`.
+  `docs/monitor/sessions/walk-2026-08-27/lock-phone-ring.json`, and
+  [the 2026-09-04 walk](docs/monitor/sessions/walk-2026-09-04-wave-f/README.md).
 - **The continuity count bound has never been exercised unsuppressed.**
   `continuity.ts`'s F2b interval-count bound runs under the same distance-goal
   suppression as the three-axis signature, and that suppression covers **every
@@ -1600,36 +1356,26 @@ X" is a real disposition — most of these are single files.
   the live verdict is left. **Rides the next PR touching the driver area.**
   Evidence: docs/history/phase-rc.md (RC-9), the oracle corpus test.
 
-- **DUE NOW — the store SHIPPED (#239, merged 2026-08-31): at the first
-  tester report on v0.30.0, decode the ring for
-  `commit-accepted{verdict:"failed"}` before anything else** (#239's PM gate,
-  2026-08-30). The defect AUD-016's fix addresses has zero observed instances;
-  the store's receipts are the first instrument that can see a rejected write,
-  and they shipped WITH the fix rather than ahead of it. **Status
-  2026-08-31: the first post-release row (the field-proof row above) saved
-  durably and reached Log with its summary — no symptom, so the ring was
-  not decoded; this item stands for the first report that carries one, or
-  the next time James copies a connection log for any reason.** Evidence:
-  `handoffStore.ts`'s receipt ring (stashed to sessionStorage at teardown),
-  decoded via the connection log sheet.
-- **The hand-off store's three residuals, lifted here by #239's STRIKE
+- **The store's first copied-ring check — DISCHARGED 2026-09-04.** #239's
+  PM gate required the next supplied ring to be decoded for
+  `commit-accepted{verdict:"failed"}`. Both v0.36.1 walk rings were decoded:
+  all 11 commit receipts say `saved` (Lock revisions 0–4, Drop 0–5), none
+  `failed`. `storage-persist: denied` is not a failed write. This checks the
+  supplied evidence, not the incidence of rejected writes; any future failed
+  receipt still warrants investigation. Evidence:
+  [walk record and complete rings](docs/monitor/sessions/walk-2026-09-04-wave-f/README.md).
+- **The hand-off store's two open residuals, lifted here by #239's STRIKE
   CONTRACT (2026-08-31)** when the AUD-016 item was struck. They are real and
-  unscheduled; none is a defect the store introduced.
-  1. **A memory-only record vanishes on reload, indistinguishably from a
-     durable one.** When the durable write is denied, Today shows the row and
-     both connect guards see it — but a reload takes it with no trace, and
-     nothing tells the rower the difference between a record that was kept and
-     one that never was. The store's receipts see it; the rower does not.
-     **Rides the next PR touching the connected surface**, and it wants copy,
-     so a rendered Gate 0 comes with it.
-  2. **Three legacy reads survive**: `monitorRunState()` and `anyLiveSession()`
+  unscheduled; neither is a defect the store introduced. The former
+  memory-only-reload item moved to Accepted on James's 2026-09-03 ruling.
+  1. **Three legacy reads survive**: `monitorRunState()` and `anyLiveSession()`
      (`monitorRun.ts`) and `Today.tsx`'s stale-draft-discard guard still call
      `loadMonitorRun()` rather than the store. Deliberately left with a citing
      comment each — `anyLiveSession()` has zero production callers, and
      deleting them would orphan the cross-file anti-pattern documentation that
      names them (`todayGuard.pin.test.ts`'s binding pin). **Whoever next
      touches these functions owns the decision**, per the close-out's own flag.
-  3. **The store's standing probe is row 11's tier-precedence COMPOUND
+  2. **The store's standing probe is row 11's tier-precedence COMPOUND
      mutation**, not the single-line reorder — that one is a genuine non-bite.
      Remove the `if (hydrated) return` re-entrancy guard together with forcing
      the population guard true: 6 files / 40 tests fail, including
@@ -1738,6 +1484,12 @@ X" is a real disposition — most of these are single files.
 
 ## Needs a decision from James
 
+- _(none open)_ — the `/api/today` row that sat here from Phase SF PR1
+  closed 2026-09-05: James ruled DELETE, and the route, its unit block and
+  the isolation test's dependence on it left in the same PR (the "done is
+  per-user" proof now reads `/api/workouts`' `lastDoneDaysAgo`, the oracle
+  the Library and Today actually use).
+
 **Cleared 2026-08-31.** James settled every open row in one sitting; each one
 left this table for an owner, and the dispositions are recorded where the work
 now lives, not here. RC-29 and the PARTIAL complaint went into Wave F (the
@@ -1746,8 +1498,8 @@ connected-surface table below with a fix-13-instrument-14 ruling; "Run it
 again" was declined; RC-38 was pulled forward and the rest of Phase PROTO
 held; the axis-quantity question opened the "say which number this is" design
 pass below; AUD-006 got its fix shape. **This table now holds two rows, both
-closed as records rather than live questions — plus, since 2026-09-02, ONE
-LIVE row (the app-wide `ambiguous_auth` promotion, below): RC-30 (declined at the RC close)
+closed as records rather than live questions (the app-wide `ambiguous_auth`
+promotion row was LIVE from 2026-09-02 and was RULED KEEP on 2026-09-03): RC-30 (declined at the RC close)
 and the C2 account injection row — RULED by James at PR1.5's design gate
 (2026-09-01): ACCEPT the bounded residual for the dark plumbing; fully
 authenticated option (g) — attempt-surface binding AND identity-checked
@@ -1767,8 +1519,8 @@ question, not a re-raised one.
 | Item                      | What                                                                                                                                                                                                                                                                                                                                                              | Evidence      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
-| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by two FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
-| **App-wide `ambiguous_auth` promotion** | LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
+| **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by THREE FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window; and, since 2026-09-04, the per-user `C2_ALLOWED_EMAILS` gate — the VICTIM must be on that list for the callback to complete at all, because the hop re-checks `availableFor(user.email)` at step 3b after resolving its principal, so on a one-account rollout the population that can be victimised is one) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**; and since 2026-09-04 "a real cohort" is itself gated on `C2_ALLOWED_EMAILS`, so the flag flip alone no longer admits one) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
+| **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
@@ -1857,32 +1609,71 @@ in both orientations.**
   Evidence: the 2026-08-31 Log-detail photograph; `traceModel.ts`'s own
   header ("NEITHER `t` NOR `d` IS A WORK-ONLY QUANTITY").
 
-## The unlogged-session door (post-Wave F, unopened)
+## The unlogged-session door
 
-**Status:** filed by James on 2026-09-01, on the phone; NOT in Wave F, which
-is in motion. Opens after Wave F, with a design gate (user-visible copy and
-layout). **S–M.** Not triad unless (b) below changes when a record retires.
+**Status:** OPEN at James's request, 2026-09-03. Normal Today/warning design
+approved 2026-09-03; additional recovery-case designs approved 2026-09-04.
+Gate 0 and both task reviews are complete; browser recovery proof and generated
+captures include the initial landscape safe exit. Automated gates pass.
+James's approved September 4 follow-up resolved the final verification-byte
+admission gap; scoped review found no new findings. The antagonist cleared
+the proposed one-minute protocol's structural coverage. On build 875, James
+confirmed native recovery, successful Save and removal from Today; three
+phone screenshots are recorded. PM phase-close review passed that bounded
+native-door criterion, not every proposed protocol observation. James then
+authorized "Merge when green". Main `2f258006` is integrated; combined-tree
+verification and scoped integration review passed. PR CI remains the merge gate.
+This is separate from Wave F, whose dependency cleared on 2026-09-04; that
+closeout does not substitute for this feature's own approvals or acceptance.
+[Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)
+and [comparison](docs/superpowers/specs/2026-09-03-unlogged-session-gate.html).
+**S–M.** Full cycle; non-TRIAD only while retirement, stored shapes and
+recorded-number semantics remain unchanged.
 
 **What and why:** Connect showed "You have an unlogged session. Connecting
 discards it." and the dialog offered Cancel and Connect anyway — nothing to
 VIEW what the session holds, and no way to log it. A rower who does not want
 to lose the row has no move except to walk away.
 
-- [ ] **A rower with an unlogged session can only discard it.** What the
-      code offers today: the guard dialog (`ConnectAction.tsx:159`) never
-      says WHERE the session lives; Today renders a recovery row for a
-      finished `SessionRun` (`UnloggedRow`) and for an OPEN or Just Row
-      `MonitorRun` (`UnloggedMonitorRow`), but a COMPLETED, PROGRAMMED
-      `MonitorRun` is ruled out of that row on the theory that "7C's own log
-      path already owns" it (`Today.tsx:647-651`) — a path that exists only
-      on the arrival WorkoutDetail navigates to at finish, so after a reload
-      or a navigation away that record has no door at all (INFERENCE from
-      those comments; not reproduced on hardware). Owed: (a) establish which
-      record James's dialog was staged on — `connectGuardStage`
-      (`monitorRun.ts:1544`) stages the same sentence for three shapes;
-      (b) a way to see the unlogged session's contents and log it, from the
-      dialog or from Today, for every shape the guard can stage; (c) the
-      dialog names the way there instead of a bare Cancel.
+- [x] **Approve the normal rendered recovery path.** James: "approved",
+      2026-09-03. Today exposes retained work
+      above suggestions; Start/Connect/Just Row warnings offer View unsaved
+      without discarding. Both orientations, long titles and both phone and
+      monitor records. No new queue or automatic save.
+- [x] **Close the completed-programmed PM5 hole.** At c5015c2e,
+      `Today.tsx:1529` hides these records while guards protect them;
+      `Today.test.tsx:2701` explicitly pins the omission. Re-enter the PM5
+      summary, never the manual form. James's precise retained record remains
+      uncaptured; the source/test-confirmed gap is sufficient to open repair,
+      not proof of that incident's exact record shape.
+- [x] **Resolve every other guarded shape honestly.** Deleted library
+      workouts, null-id non-Just-Row records and legacy/invalid frozen seeds
+      cannot use the existing save route. Approved: explicit type choice for
+      valid retained measurements without library metadata; read-only full
+      recording/copy/keep for data that cannot safely rebuild a summary.
+      James approved these extra screens on 2026-09-04 ("Approve").
+- [x] **Keep the recovery destination usable.** Local records must remain
+      visible when Today's unrelated requests stall/fail (`Today.tsx:437`).
+      Two retained Just Row sources must each open the selected recording,
+      not the current newer-timestamp choice (`JustRowLog.tsx:108`). The
+      second is a defensive coexistence case, not an observed normal flow.
+      The error/loading treatment and selection lifetime were approved with
+      the additional recovery cases on 2026-09-04.
+- [x] **Prove preservation across the browser path.** Production writer to warning
+      to Today to PM5 summary to saved history; failed-save retry, cold-start
+      hydration, both records, and View canceling Connect's staged replacement.
+      The 844×390 mounted warning puts the focused View safe exit and its
+      keyboard follow-on above Main nav. Preserve existing save/discard/
+      replacement retirement. Native walk and phase-close review remain required
+      before exit. Evidence:
+      `docs/testing/2026-09-04-unlogged-session-evidence.md`.
+- [x] **Close final review's verification-byte admission gap.** The selected
+      programmed route must refuse arrays outside the existing server contract
+      (1–32 integers, each 0–255) before mounting Save. Empty/out-of-range
+      integer arrays previously passed and produced a rejected Save. Keep the
+      recording in the approved read-only treatment; no repair or byte dropping.
+      James approved one focused follow-up after the final-wave limit on
+      September 4; its scoped review cleared the tested fix with no new findings.
 
 ---
 
@@ -1890,7 +1681,7 @@ to lose the row has no move except to walk away.
 
 | Item                                       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Evidence                     |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| **RC-8**                                   | Correct the fake's contradictions of the real wire. **3 of 5 corrected** in #182 T1 (`ergMachineType`, `intervalRestTimeSeconds`, `splitIntervalType`); the other two read as already conditional and want verification. Residual: `fake.ts`'s `toMachineIndex` is resting-conditional while `intervalIndex.ts`'s `toActualIndex` is unconditional. **Merged with LL's reconnect precondition — one piece of fake work, and specced apart it gets done twice** | `phase-rc.md`, `phase-ll.md` |
+| **RC-8**                                   | Correct the fake's contradictions of the real wire. **3 of 5 corrected** in #182 T1 (`ergMachineType`, `intervalRestTimeSeconds`, `splitIntervalType`); the other two read as already conditional and want verification. Residual: `fake.ts`'s `toMachineIndex` is resting-conditional while `intervalIndex.ts`'s `toActualIndex` is unconditional. **Merged with LL's reconnect precondition — one piece of fake work, and specced apart it gets done twice** | `phase-rc.md`, `phase-ll.md`, `docs/testing/2026-09-04-unlogged-session-evidence.md` |
 | **RC-13**                                  | The avg-pace verdict zero-fires on a rapid re-arm: `program()` inside `FINISH_GRACE_MS` cancels the pending deadline instead of draining it. **James, 2026-08-31: FIX IT here** — drain the deadline rather than cancel. Not covered by the close-out corpus (no committed capture re-arms inside 3 s; closest pieces are 148.1 s apart), so the gate is a synthetic replay with a stated mutation                                                             | `phase-rc.md`                |
 | **RC-14**                                  | The avg-pace verdict zero-fires on an ORDINARY finish (walk 2026-08-25, W-2). **Distinct from RC-13; do not fold.** Replay through the walk's own commit `c219ee0` DOES produce the verdict, eliminating the wire, the driver's response and ring eviction; **two survivors — it threw, or something outside the driver dropped the entry.** **James, 2026-08-31: do NOT hunt it; INSTRUMENT it** so the next occurrence names which survivor it was, instead of another silent zero. Per RF19, the instrument ships in the same change | `phase-rc.md`                |
 | **RC-38**                                  | Transcribe `OBJ_WORKOUTTYPE_T` — see Phase PROTO above. Pulled forward alone by James on 2026-08-31 while the rest of the sweep is held                                                                                                                                                                                                                                                                                                                       | `phase-rc.md`                |
@@ -1902,17 +1693,37 @@ to lose the row has no move except to walk away.
 | **The landscape gutter**                   | The phone timer's landscape gutter absorbs no left inset                                                                                                                                                                                                                                                                                                                                                                                                       | `phase-cr2.md`               |
 | **iOS 26 `100dvh`**                        | Under `viewport-fit=cover`. Wave D's native fake flag is what makes this answerable at a desk                                                                                                                                                                                                                                                                                                                                                                  | `phase-cr2.md`               |
 | **`PULL TO RESUME`**                       | James, 2026-08-17: _"we never got rid of the pull to resume screen."_ CR2 2a task 5 only re-worded it; **the screen was supposed to go, not get politer.** §2b's suspected mechanism was FALSIFIED (zero PAUSED firings across six captures) and the flash's real mechanism is unexplained. Pairs with the stale-while-armed observation                                                                                                                       | `phase-cr2.md`               |
-| **Reconnect's three preconditions**        | Plus the prerequisite from #183's gate: any reconnect design must reset or quarantine `lastContinuityRef`'s count axis across a re-subscribe, or the first post-resubscribe 0x0033 convicts a healthy row on a stale register                                                                                                                                                                                                                                  | `phase-ll.md`                |
-| **Three declined CR questions**            | Projected finish split; **reconnect backfill** (the grid assumes yes — if not, those rows need the `— · MISSED` treatment); distance intervals with a rate cap. Each waits on a hardware fact                                                                                                                                                                                                                                                                  | `phase-cr.md`                |
+| **Reconnect's three preconditions**        | Constraints on the deferred Correct Resume entry, not separate scheduled work. #183's gate requires a reconnect design to reset or quarantine `lastContinuityRef`'s count axis across a re-subscribe; preserving the old baseline without that policy is unresolved. | Correct Resume research, "Status: deferred, not an implementation contract" |
+| **Two declined CR questions**              | Projected finish split; distance intervals with a rate cap. Each waits on a hardware fact. Reconnect belongs to the deferred Correct Resume entry, not this row; its research does not authorize backfill or a MISSED writer. | `phase-cr.md`                |
 | **LL-F4**                                  | The `disconnected` handler records no liveness snapshot where `fail()` does, so a retry's ring has one fewer data point                                                                                                                                                                                                                                                                                                                                        | `phase-ll.md`                |
 | **Connection-log text is unselectable**    | `user-select: none` inherits into the sheet (`index.css:85`, `:5799`); COPY LOG is the only route out                                                                                                                                                                                                                                                                                                                                                          | `phase-cs.md`                |
 | **The bar's two axes**                     | The connected bar's fill and its notches are two axes on DISTANCE work; EST LEFT holds still 6.6 s and 20.8 s at handovers. **The obvious repair was replayed and does not work.** Accepted and documented. **TRIAD** when it is taken                                                                                                                                                                                                                         | `phase-cr2.md`               |
 
 ## Accepted, pinned, and not being fixed
 
+- **Suggestion helpers are pure over the id arrays they are handed (Phase SF
+  PR1, lifted at close 2026-09-05).** James: the library may lazy-load one
+  day. `domain/suggest.ts`'s `drawOne`/`nextShuffle` and Today's draw
+  initializers never assume the pool is the whole library, never cache a
+  sorted copy across renders, and never key on `library.length`; a stored
+  pick outside the current pool falls through to the pool head, and
+  `suggest()`'s reason strings ("Your library is empty", "No {type}
+  sessions in your library") assert library-wide facts a paging phase must
+  re-scope first. Spec §2.4. Pinned so a paging phase inherits an
+  invariant, not a rewrite.
+
 Known-wrong and deliberately left. They are here so nobody rediscovers them as
 new.
 
+- **Connected hand-off durability stops at the live process when a write was
+  rejected.** The memory tier keeps the measured row and the receipts record
+  the failed durability attempt, but reload destroys that memory-only row.
+  Separately, WebKit or the operating system may later evict a successful
+  localStorage write. Correct Resume cannot cross either process/storage loss:
+  it retains in-memory connection state, not a second durable store. James
+  accepted both on 2026-09-03 because neither has occurred in this app and the
+  shipped receipt/ring instrumentation will identify the first occurrence.
+  Reopen from that evidence, not a hypothetical mitigation.
 - **TIER B2 residual** — `buildMonitorLogSteps` never produces a step for a
   null-index actual, so the row under-counts. **Ongoing population:** link-lost,
   program-failed and interrupted closes can never carry the work pair.
@@ -2005,9 +1816,10 @@ Each needs erg time or a deliberate recording session.
   **CORRECTED AND DOWNGRADED 2026-08-28.** This row sat under "owed captures
   and walk items" saying the burst "is not caught 100% of the time", implying
   it needed erg time to characterise. The 2026-08-28 production ring shows the
-  burst caught, decoded and emitted perfectly — **the loss is entirely
-  downstream, in the reader, and Wave F owns it.** The rate at the wire is
-  fine; the rate at the ROW was 0%. What survives here is only the narrow
+  burst caught, decoded and emitted perfectly — **that loss was downstream,
+  in the reader, fixed by #228 with native field proof on 2026-08-31** (the
+  machine-summary FIELD PROOF above). The rate at the ROW was then 0%.
+  What survives here is only the narrow
   admission-check edge, which still wants no erg: it is reachable from a
   replay.
 - **The C′ rider** — the continuity-reset close skips the backward-bucket ring
@@ -2035,6 +1847,110 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **`data.test.ts`'s 401 route table is short four routes** (found by the
+  review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
+  and the three `/api/article-reads` routes have no row, so a session-guard
+  regression on any of them has no gate. Add the rows; rides the next PR
+  touching that file.
+- **FILED, and it is TRIAD (James's walk, 2026-09-04): our work distance is the
+  SUM OF OUR INTERVALS, the monitor reports a different total, and Concept2
+  verifies against the monitor — so a verification code cannot validate.**
+  Measured on hardware, three artefacts in one sitting:
+  - PM5 View Detail, `v12:30/3:00r...3`, Sep 04 2026: total row **25:00.0 /
+    5706 m**; interval rows 2837 + 1953 + 918 = **5708 m**; rests 357 + 168 + 0
+    = 525 m, 3:00 + 2:00 = 5:00. **The monitor's own total disagrees with the
+    sum of its own intervals by 2 m.**
+  - What we sent: work **5,708** m / 25:00.0, rest 525 / 5:00, so Concept2's
+    overall reads **6,233** where the monitor's own is 5706 + 525 = **6231**.
+  - Concept2, on entering the code `D9BD-F964-32E2-7F18` (which matches the
+    monitor and our own display exactly): *"This workout cannot be verified.
+    Please check your date, time and distance exactly match the monitor."*
+  **Mechanism:** `monitorRun.ts`'s `workMeters` is
+  `actuals.reduce((sum, a) => sum + a.distanceMeters, 0)`. Every gate we own
+  compares that sum against our own intervals, so all of them agree with each
+  other and none of them can see this — RF11 exactly, and the same
+  "an oracle that shares your definition is a mirror" shape that retired
+  `recordTwdVerdict`.
+  **Consequence, unhedged:** the verification code is ROADMAP's own "whole point
+  of the phase", and it cannot succeed today for an interval row whose totals
+  differ. Unknown and worth measuring: whether a single-interval or JustRow row
+  verifies fine (the two numbers coincide there), which would explain why
+  nothing caught it.
+  **Owed before any fix:** decide which number is authoritative and say why —
+  the monitor's own summary total, or our sum — then send that one, and gate it
+  with a replay whose expected value comes from the CAPTURE's summary frame
+  rather than from our own accumulator. **M/L**
+
+- **FILED (PR2 PM gate, 2026-09-04): three PR2 items whose only home was a plan
+  or a PR body.** A plan is a record of intent, not a live register (RF14).
+  (1) **The Concept2 card's container gap is gated on a hand-composed screen,
+  not on `/you`** — the e2e case paints the sibling chain itself, so it stays
+  green if `You.tsx`'s order or `ResetBaselineSetup`'s markup changes. Closes
+  when the surface can render in a browser artifact. (2) **The client/server
+  eligibility parity test proves PREDICATE PARITY, not route enforcement** —
+  deleting the route's `422 not_eligible` branch leaves
+  `concept2Send.integration.test.ts` green; `concept2.test.ts` catches it one
+  file over. Nobody should read the parity file as the enforcement gate.
+  (3) **Bare `.c2-card-status` (5.29:1, passing) is on no screen either axe
+  sweep covers** — the linked card always overrides it with `-status-on`, so
+  the passing pairing is unswept. **XS**
+
+- **FILED (PR2 Task 4 review, 2026-09-03): `e2e/retest.spec.ts` fails under
+  full-suite load, and the first recorded diagnosis was wrong.** Seen four
+  times across three PR2 tasks, always green when the spec runs in isolation
+  (`pnpm e2e e2e/retest.spec.ts` -> 3 passed), so it is load- or
+  order-dependent, not a broken test. **Corrected signature:** every captured
+  failure is downstream, and every snapshot shows Today ALREADY carrying the
+  saved log row **and** `SET UP YOUR BASELINE` — i.e. the save landed and the
+  post-save baseline offer never rendered. It is NOT the test-auth backdoor
+  returning non-ok under load: that stack came from a bare
+  `pnpm exec playwright test`, which bypasses the worktree's stack, and was an
+  artifact of the wrong command rather than the flake.
+  **Three occurrences, two different assertions, one mechanism.** Two failed
+  at `getByText('SESSION SAVED')` (`retest.spec.ts:51`); the third, captured
+  2026-09-03 during Task 4 fix round 2, failed at
+  `getByRole('heading', {name: 'Set your 2k baseline?'})`
+  (`retest.spec.ts:121`). Both locators belong to the same prompt, so the
+  signature is the PROMPT not rendering, not either assertion.
+  **MEASURED mechanism:** in `LogSession.tsx`'s `useLogForm` callback, a null
+  `pendingOfferRef.current` takes the `navigate("/today")` branch instead of
+  rendering `PostTestPrompt` — exactly "saved row on Today, no prompt". That
+  ref comes from `postTestOffer(...)`, which returns null on any of four
+  conditions (no measured `avgSplitSeconds`; the workout not the global
+  designated test; `completedFullDistance` false; the split outside the
+  60..240 s band). **INFERENCE, not confirmed:** both tests reach Save via
+  `page.clock.install()` + `fastForward("08:00")`, and the two conditions a
+  timing race can flip are `completedFullDistance` and the band — a
+  fast-forward that has not taken effect yields an implausibly fast split the
+  band rejects. Instrument the offer's four inputs to settle which fires.
+  **"State pollution between the file's two tests" is NOT supported** and was
+  this entry's own first guess: each test signs in with its own address
+  (`retest-6k-`/`retest-2k-`/`retest-decline-` + `RUN_ID`), so the accounts
+  are always distinct, and `SET UP YOUR BASELINE` is simply what a fresh
+  account renders. Traces:
+  `app/test-results/retest-Phase-BL-the-You-re-5b0d3-*/error-context.md` and
+  `.../retest-Phase-BL-the-You-re-cbcae-*/error-context.md` (local, not
+  committed — capture again before re-running, since `pnpm e2e` overwrites
+  `test-results/`). **Unrelated to Wave E PR2:** the Concept2 card has no
+  importer on this branch until Task 8, and every added selector is `.c2-card*`.
+  Owed: root-cause before treating any future red `retest.spec.ts` as noise.
+  **S**
+
+- **FILED (PR2 copy pass, 2026-09-03): the four device-open link failures
+  now reach no diagnosis on a plain build.** James's copy ruling made every
+  rendered string mechanical, which removed the wire token from
+  `describeFailure`'s reason line — so `noWindow`, `noContext`,
+  `contextInvalid` and `pluginError` all read "THIS DEVICE COULDN'T OPEN
+  CONCEPT2" with no code. On dev and walk builds `Concept2LinkProbe`'s
+  `outcomeDetail` still prints the kind, the plugin `code` and its
+  `message`; on a TestFlight build the probe is not compiled in and, per
+  that component's own header, those values "reach no server log". Accepted
+  for PR2: these are plumbing failures a rower cannot act on differently,
+  and the copy ruling is explicit. Owed: the last link failure surfaced in
+  the Diagnostics door (`app/src/you/Diagnostics.tsx`, whose header already
+  calls itself "the extensible home for every diagnostic tool that
+  follows"), or the same detail attached to a send/link server log. Rides
+  the next PR touching the Concept2 surface or Diagnostics. **XS**
 - **FILED (door PR A's PM gate, 2026-09-02): the server tsconfig now
   includes a client file, and no lint fence stops `server/` importing
   `src/`.** `app/tsconfig.server.json`'s `include` reads
@@ -2173,6 +2089,39 @@ Each needs erg time or a deliberate recording session.
   negotiation for two reserved strings was considered and declined as
   disproportionate.
 
+- **AMENDED 2026-09-03 (Wave E PR2 Task 6): the two flakes are ONE flake, and
+  it lives in `server/routes/data.test.ts`.** Measured at ~1 in 12 runs of that
+  file alone, on a DIFFERENT test each time — `deleting the terminal
+  plan-linked log un-counts`, `two sequential advancing saves stamp
+  consecutive indexes`, `returns the full row, steps included, for the owner` —
+  and — in every instance observed AT THE TIME, an absolute the amendment
+  immediately below FALSIFIES — with the same signature, a response-body
+  field reading `undefined` (`expected undefined to match object
+  {planKey: 'head', planIndex: 0}` at the `list.body.find(...)` on line 2585
+  is the fullest capture of that signature). **Reproduced at 1/25 against
+  `3a294bd7`'s own copies of `data.ts` and `data.test.ts`**, so it predates
+  that task and is not Wave E's. The shared shape of THESE THREE is a LIST or
+  GET read coming back WITHOUT the row a POST just created, which points at
+  the fake store's insertion ordering rather than at any one test —
+  narrowing, but not choosing, between the two theories below. Three named
+  instances, where the entry below has two.
+- **AMENDED AGAIN 2026-09-03 (Wave E PR2 Task 7, fix round 2): the "always"
+  in the entry above is FALSIFIED — a SECOND signature exists, and it is a
+  STATUS CODE rather than a body field.** Found when a full
+  `--project unit --project client` run came back `1 failed | 6684 passed`
+  and the immediate re-run was clean. Characterised the same way the entry
+  above was, by running `server/routes/data.test.ts` alone:
+  **3 failures in 26 runs (~1 in 9)**, a DIFFERENT test each time —
+  `rejects a bad pain value with 400, POST's exact message`, `rejects a
+  splitSeconds outside the baseline band (60..240), naming the field`,
+  `400s machineSummary.verificationBytes as a negative byte` — and every one
+  a validation test that got `expected 401 to be 400` (once) or
+  `expected 403 to be 400` (twice). Not one read `undefined`. 401 and 403
+  are MIDDLEWARE refusals that land before the handler validates anything,
+  so this half looks like per-test auth/availability state rather than the
+  fake store's insertion ordering — NAMED, not chosen, per this entry's own
+  standard. What both signatures share is a request seeing state that some
+  other test owns.
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
   clears thumbs previously set to a real value`, then `GET/PUT /api/prefs` >
@@ -2317,11 +2266,27 @@ Each needs erg time or a deliberate recording session.
 
 ---
 
+# Icebox
+
+Not scheduled in any wave. Reconsider only when the recorded trigger fires;
+an iceboxed item is not a phase-close requirement.
+
+- **Correct Resume — deferred by James, 2026-09-03.** **Trigger:** a
+  diagnostic-backed, naturally occurring authoritative mid-row link drop
+  demonstrates that today's End/save fallback materially fails the rower.
+  Lock/resume gaps and deliberate radio-off probes do not establish demand.
+  Rationale and accepted incomplete-capture cost: `.claude/agents/pm-ledger.md`,
+  "Correct Resume: need before mechanism". The former spec
+  `docs/superpowers/specs/2026-09-03-correct-resume-design.md` and Gate 0 are
+  retained research, not implementation authority; re-scope and approve afresh
+  at the trigger. Not gated on Wave A finishing if the incident arrives sooner.
+
+---
+
 # After the strangers
 
 Deferred, not killed. One line and one trigger each. No exits and no sizes — a
 trigger is the whole entry.
-
 - **Phase PS — personal stats.** The app's stated purpose, and it matters most
   at day 30 and least at day 1: a stranger has no history to trend. **Trigger:**
   a tester has enough history for a trend to be honest. Carries a live hazard
@@ -2523,6 +2488,8 @@ trigger is the whole entry.
 One row each. The body is in `docs/history/`, archived verbatim, and it is a
 RECORD — do not cite it for a live question.
 
+- **Phase SF** — SHUFFLE actually shuffles, Today rolls a type and keeps its filters per type, TIME is a minutes range, the sources read ERGOMATIC LIBRARY / MY WORKOUTS, the Library is searchable by name · closed 2026-09-05 · #296, #297, #300, #301 · released v0.38.0 · [detail](docs/history/phase-sf.md)
+- **Wave F** — received work survives lifecycle interruptions; true link loss has an honest End/save fallback · closed 2026-09-04 · [detail](docs/history/wave-f.md) · [native exit walk](docs/monitor/sessions/walk-2026-09-04-wave-f/README.md)
 - **Phase 0** — the repo where bad code cannot be committed: pnpm, TS strict, Vitest 3-project, husky, CI · closed 2026-07-27 · #1 · [detail](docs/history/phase-0.md)
 - **Phase 1** — every push to main lands on a real URL with health-gated auto-rollback · closed 2026-07-28 · #6, #7, #8 · [detail](docs/history/phase-1.md)
 - **Phase 2** — Google OAuth sign-in, per-user data isolation, the You screen's first row · closed 2026-07-28 · #9, #10 · [detail](docs/history/phase-2.md)

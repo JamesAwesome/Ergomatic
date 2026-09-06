@@ -22,8 +22,7 @@ function fromSeed(
     id: `w-${title}`,
     title: seed.title,
     type: seed.type,
-    difficulty: seed.difficulty,
-    pain: seed.pain,
+    effort: seed.effort,
     steps: seed.steps,
     isGlobal: true,
     lastDoneDaysAgo: null,
@@ -40,8 +39,7 @@ const HOARFROST: LibraryWorkout = {
   id: "w-hoarfrost",
   title: "Hoarfrost",
   type: "O2",
-  difficulty: "easy",
-  pain: 2,
+  effort: 2,
   steps: [
     { k: "reps", count: 2 },
     {
@@ -109,7 +107,7 @@ describe("WorkoutRow", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByText("CUSTOM")).toBeInTheDocument();
+      expect(screen.getByText("MY WORKOUTS")).toBeInTheDocument();
     });
 
     it("omits the CUSTOM badge for a real seeded library workout", () => {
@@ -119,17 +117,17 @@ describe("WorkoutRow", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.queryByText("CUSTOM")).not.toBeInTheDocument();
+      expect(screen.queryByText("MY WORKOUTS")).not.toBeInTheDocument();
     });
 
-    it("adds ', custom workout' to the row's accessible name only for customs", () => {
+    it("adds ', one of my workouts' to the row's accessible name only for the rower's own workouts", () => {
       const { rerender } = render(
         <MemoryRouter>
           <WorkoutRow workout={HOARFROST} durationMinutes={20} />
         </MemoryRouter>,
       );
       expect(screen.getByRole("link")).not.toHaveAccessibleName(
-        /, custom workout/,
+        /, one of my workouts/,
       );
 
       rerender(
@@ -137,7 +135,9 @@ describe("WorkoutRow", () => {
           <WorkoutRow workout={CUSTOM} durationMinutes={20} />
         </MemoryRouter>,
       );
-      expect(screen.getByRole("link")).toHaveAccessibleName(/, custom workout/);
+      expect(screen.getByRole("link")).toHaveAccessibleName(
+        /, one of my workouts/,
+      );
     });
   });
 

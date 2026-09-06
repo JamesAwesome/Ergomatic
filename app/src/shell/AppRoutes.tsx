@@ -27,10 +27,12 @@ import LogSession from "../session/LogSession";
 import Timer from "../session/Timer";
 import JustRow from "../justrow/JustRow";
 import JustRowLog from "../justrow/JustRowLog";
+import ReviewSession from "../session/ReviewSession";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
 import Diagnostics from "../you/Diagnostics";
+import Concept2Screen from "../you/Concept2Screen";
 import MonitorLogs from "../you/MonitorLogs";
 import type { Me } from "../useMe";
 import TabBar from "./TabBar";
@@ -226,6 +228,7 @@ export default function AppRoutes({
         <Route path="/session/run" element={<Timer />} />
         <Route path="/session/complete" element={<CompleteRedirect />} />
         <Route path="/session/log" element={<LogSession />} />
+        <Route path="/session/review" element={<ReviewSession />} />
         {JustRowObserver && (
           <Route
             path="/justrow/observe"
@@ -250,6 +253,15 @@ export default function AppRoutes({
                 note as /library/import, /news/releases above), though
                 react-router doesn't require the ordering here either. */}
             <Route path="/you/diagnostics" element={<Diagnostics />} />
+            {/* Wave E PR A (spec 2026-09-04-concept2-walk-fixes §5.1): the
+                Concept2 screen behind You's CONCEPT2 row. Flat, a sibling of
+                /you like /you/diagnostics, and inside this signed-in fragment
+                because the card's identity line needs `user.email`. NOT in
+                HIDDEN_TABBAR_PREFIXES — the tab bar stays, as on Diagnostics. */}
+            <Route
+              path="/you/concept2"
+              element={<Concept2Screen email={user.email} />}
+            />
             <Route
               path="/you/diagnostics/monitor-logs"
               element={<MonitorLogs />}

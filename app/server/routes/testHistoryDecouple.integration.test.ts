@@ -63,7 +63,7 @@ describe("POST /api/test-history against real Postgres (Phase BL PR B)", () => {
         workoutTitle: "2K Test",
         workoutType: "AN",
         held: null,
-        pain: null,
+        effort: null,
         notes: null,
         steps: [
           { label: "2000m @ MAX", actualSplit: 118, actualSource: "pm5" },

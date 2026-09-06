@@ -10,6 +10,8 @@
 // scope is Required:Yes on every token call including refresh — measured
 // live in docs/monitor/c2-crossconnect-2026-09/refresh-probe-2026-08-31.md).
 
+import type { C2ProfileWeight, C2ResultRow } from "./mapping.js";
+
 export interface C2ClientConfig {
   baseUrl: string;
   clientId: string;
@@ -41,6 +43,50 @@ export type C2PostResult =
 
 const SCOPE = "user:read,results:write";
 
+// Every wire call in this module is BOUNDED. Concept2 is a third party on the
+// far side of the public internet, and an unbounded `fetch` holds an Express
+// handler — and, on the upload path, a rower watching a SENDING state — for as
+// long as the socket stays open. `AbortSignal.timeout` rejects the fetch with a
+// `TimeoutError`, which every call site below already catches into its own
+// RETRYABLE failure (`grantDead: false` / `kind: "c2_error"`), so a timeout is
+// reported as exactly what it is: something to try again, never a dead grant.
+//
+// The value comes from this path's own measured latency rather than habit:
+// against log-dev from a dev laptop, 5 samples each, medians on 2026-09-03 —
+// `GET /api/users/me/results?number=1` 216 ms, `?number=5` 221 ms,
+// `GET /api/users/me` 220 ms. 10 s is roughly 45x that, so it cannot clip a
+// slow-but-working call. (Measured from a laptop, NOT from the deploy host;
+// the deploy host's own latency to Concept2 is unmeasured.)
+//
+// WHAT IT BOUNDS, counted rather than felt. The send path's longest chain is
+// NINE bounded calls, not three: refreshTokens, fetchResults, fetchMe,
+// refreshTokens, fetchResults, fetchMe, postResult, refreshTokens,
+// postResult. 90 s is therefore the arithmetic ceiling on that chain. The
+// ceiling a TIMEOUT can actually reach is far lower, because a timeout
+// classifies as `c2_error` and no `c2_error` on this route is retried: the
+// nine-call chain requires the failures to be fast 401s. Nothing else caps
+// SENDING — there is no client-side abort on the send fetch, no
+// `server.requestTimeout`/`headersTimeout`, and no proxy timeout in-repo.
+const C2_TIMEOUT_MS = 10_000;
+
+// The vendor NUMBER's three states, kept apart rather than folded (see
+// `fetchMe`). A finite numeric STRING is accepted because this API is Laravel
+// and the read field is undocumented; anything else PRESENT is reported as
+// `"unreadable"` so the caller can say so instead of saying "not set".
+function readProfileWeight(value: unknown): C2ProfileWeight {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : "unreadable";
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return "unreadable";
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : "unreadable";
+  }
+  return "unreadable";
+}
+
 // Every JSON parse in this module goes through here: a malformed or
 // non-JSON body must classify as a typed failure, never throw past this
 // module's boundary (brief: "no method ever throws on a non-2xx").
@@ -63,6 +109,7 @@ export function createC2Client(
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body,
+        signal: AbortSignal.timeout(C2_TIMEOUT_MS),
       });
     } catch {
       return { ok: false, grantDead: false };
@@ -157,29 +204,171 @@ export function createC2Client(
     // username: MEASURED present (string) on log-dev GET /api/users/me,
     // 2026-09-02, live response; read as optional so a missing field can
     // never render "undefined" (the route falls back to #<id>).
-    async fetchMe(
-      accessToken: string,
-    ): Promise<
-      { ok: true; c2UserId: number; username: string | null } | { ok: false }
+    //
+    // `weight` and `gender` are read here because the send path's FALLBACK
+    // producer derives Concept2's required `weight_class` from them when the
+    // rower has made no declaration we can read (`mapping.ts`'s
+    // `deriveWeightClass`). We ask the rower nothing and store nothing.
+    //
+    // `weight` has THREE states on the wire and this method reports all three
+    // (`C2ProfileWeight`): absent -> null; a finite number or a finite numeric
+    // STRING -> that number; anything else present -> `"unreadable"`. The
+    // string arm is not defensive padding: this API is Laravel (its 422 body
+    // is Laravel's exact validation shape) and the read field is undocumented
+    // — the docs' own `GET /api/users/me` example lists 13 fields and omits
+    // `weight` entirely — so `"7500"` is a live possibility, and folding it
+    // into "not set" would tell a rower who HAS set a weight to go and set it,
+    // forever, with nothing in the response saying why.
+    //
+    // The failure shape carries `kind` AND `status` because the caller's
+    // correct answer differs: a 401 means the grant may be dead and must reach
+    // the same `needs_reauth` flag a rejected `postResult` does, while a 500,
+    // a timeout or a thrown fetch is retryable and must not send a rower back
+    // through re-consent over a blip — and a 403 (Concept2's answer for
+    // insufficient scope, and our grant is exactly `user:read,results:write`)
+    // must not read as an anonymous "couldn't reach Concept2" with a retry
+    // that can never work. `status` is `number | null` rather than
+    // `postResult`'s older optional key so that "no status" is a value and not
+    // an omission; `postResult`'s shape is left alone by this PR.
+    async fetchMe(accessToken: string): Promise<
+      | {
+          ok: true;
+          c2UserId: number;
+          username: string | null;
+          weight: C2ProfileWeight;
+          gender: string | null;
+        }
+      | { ok: false; kind: "auth" | "c2_error"; status: number | null }
     > {
       let res: Response;
       try {
         res = await fetchImpl(new URL("/api/users/me", cfg.baseUrl), {
           headers: { authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(C2_TIMEOUT_MS),
         });
       } catch {
-        return { ok: false };
+        return { ok: false, kind: "c2_error", status: null };
       }
-      if (!res.ok) return { ok: false };
+      if (res.status === 401) {
+        return { ok: false, kind: "auth", status: 401 };
+      }
+      if (!res.ok) {
+        return { ok: false, kind: "c2_error", status: res.status };
+      }
       const parsed = await safeJson(res);
       const data = (
-        parsed as { data?: { id?: unknown; username?: unknown } } | undefined
+        parsed as
+          | {
+              data?: {
+                id?: unknown;
+                username?: unknown;
+                weight?: unknown;
+                gender?: unknown;
+              };
+            }
+          | undefined
       )?.data;
       const id = data?.id;
-      if (typeof id !== "number") return { ok: false };
+      if (typeof id !== "number") {
+        return { ok: false, kind: "c2_error", status: res.status };
+      }
       const username =
         typeof data?.username === "string" ? data.username : null;
-      return { ok: true, c2UserId: id, username };
+      const gender = typeof data?.gender === "string" ? data.gender : null;
+      return {
+        ok: true,
+        c2UserId: id,
+        username,
+        weight: readProfileWeight(data?.weight),
+        gender,
+      };
+    },
+
+    // The PRIMARY producer of `weight_class` (mapping.ts's block comment):
+    // Concept2's own help says the rower designates L or H for every piece,
+    // so their most recent designation is the authority, and the profile
+    // weight is only a fallback.
+    //
+    // MEASURED 2026-09-03 against log-dev (user 2211, a token whose scope is
+    // this module's own `SCOPE` constant, so no scope widening is implied):
+    // `GET /api/users/me/results?number=1` -> 200, one result; every result in
+    // the list carries `weight_class`; the list is DATE-descending (id 85561
+    // dated `2026-09-02 10:00:30` sorted ahead of id 85562 dated
+    // `2026-09-02 10:00:00`), and `meta.pagination` carries `total`, `count`,
+    // `per_page`, `current_page`, `total_pages` and `links.next`.
+    //
+    // This projects FOUR fields per row and keeps nothing else. The rower's
+    // other logbook rows are not ours to hold, log or render, and each of the
+    // four earns its place in the DECISION rather than being carried along:
+    //
+    //   `id`         so the caller can exclude the rows THIS APP wrote.
+    //                Without it, a class we derived comes back on the next
+    //                send wearing the rower's name (observation 29) — and
+    //                nothing else on the row distinguishes ours: the 201
+    //                echoes our `weight_class` and reports `source` as the
+    //                rower's own name.
+    //   `type`       because Concept2 requires a class only on some types
+    //                ("Required if type is rower, dynamic or slides"), and
+    //                its own documented example shows a `skierg` row
+    //                carrying one anyway — an unmeasured value, not a
+    //                designation.
+    //   `date_utc` / `date`
+    //                so a row dated in the FUTURE cannot pin "newest"
+    //                forever. `date_utc` is NULLABLE (both rows of the
+    //                vendor's own example carry null), hence the pair.
+    //
+    // One page only — the caller never walks `links.next` (a rower with no
+    // usable declaration in the recent page falls through to the profile,
+    // which is cheaper and quieter than paging a stranger's history).
+    async fetchResults(
+      accessToken: string,
+      count: number,
+    ): Promise<
+      | { ok: true; rows: C2ResultRow[] }
+      | { ok: false; kind: "auth" | "c2_error"; status: number | null }
+    > {
+      const url = new URL("/api/users/me/results", cfg.baseUrl);
+      url.searchParams.set("number", String(count));
+      let res: Response;
+      try {
+        res = await fetchImpl(url, {
+          headers: { authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(C2_TIMEOUT_MS),
+        });
+      } catch {
+        return { ok: false, kind: "c2_error", status: null };
+      }
+      if (res.status === 401) {
+        return { ok: false, kind: "auth", status: 401 };
+      }
+      if (!res.ok) {
+        return { ok: false, kind: "c2_error", status: res.status };
+      }
+      const parsed = await safeJson(res);
+      const rows = (parsed as { data?: unknown } | undefined)?.data;
+      if (!Array.isArray(rows)) {
+        return { ok: false, kind: "c2_error", status: res.status };
+      }
+      return {
+        ok: true,
+        rows: rows.map((entry) => {
+          const row = entry as {
+            id?: unknown;
+            type?: unknown;
+            weight_class?: unknown;
+            date_utc?: unknown;
+            date?: unknown;
+          } | null;
+          return {
+            id: typeof row?.id === "number" ? row.id : null,
+            type: typeof row?.type === "string" ? row.type : null,
+            weightClass:
+              typeof row?.weight_class === "string" ? row.weight_class : null,
+            dateUtc: typeof row?.date_utc === "string" ? row.date_utc : null,
+            date: typeof row?.date === "string" ? row.date : null,
+          };
+        }),
+      };
     },
 
     async postResult(
@@ -195,6 +384,7 @@ export function createC2Client(
             "content-type": "application/json",
           },
           body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(C2_TIMEOUT_MS),
         });
       } catch {
         return { ok: false, kind: "c2_error" };

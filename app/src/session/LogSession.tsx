@@ -13,7 +13,7 @@ import { usePlan } from "../api/usePlan";
 import type { PlanData } from "../api/usePlan";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
-import { isEffortRef } from "../../domain/pace.js";
+import { isPaceWordRef } from "../../domain/pace.js";
 import { needsBaselines } from "../../domain/needsBaselines.js";
 import type {
   Baselines,
@@ -56,9 +56,15 @@ import {
   measuredIntervalCount,
   type SummaryModel,
 } from "./summaryModel";
+import { completionStamp } from "./completionStamp";
 import { postTestOffer, type PostTestOffer } from "./postTestOffer";
 import PostTestPrompt from "./PostTestPrompt";
+import MissingWorkoutType from "./MissingWorkoutType";
+import { clearSelectedTimer } from "./clearSelectedTimer";
+import ReadOnlyRecording from "./ReadOnlyRecording";
+import { requireFiniteRecording, validWorkoutType } from "./recoveryValidation";
 import { recordTestResult } from "../api/testHistory";
+import { autoSendAfterSave } from "../log/concept2Send";
 
 // Hand-off store design spec (rev 4), §8/§1: this route's own hydration
 // boundary. `monitorModeEntry`/`connectedArrivalWithNoRecord` below are both
@@ -148,7 +154,7 @@ function lockedBaseline(
     if (
       step === undefined ||
       step.k !== "w" ||
-      isEffortRef(step.ref) ||
+      isPaceWordRef(step.ref) ||
       step.ref.base !== base
     ) {
       continue;
@@ -231,7 +237,7 @@ function manualLockedBaseline(
 ): number | null {
   const referenced = steps.some(
     (step) =>
-      step.k === "w" && !isEffortRef(step.ref) && step.ref.base === base,
+      step.k === "w" && !isPaceWordRef(step.ref) && step.ref.base === base,
   );
   return referenced
     ? base === "2k"
@@ -537,7 +543,7 @@ function recordPostSacrifice(status: number): void {
 
 // The part of the POST body that genuinely differs per door — where the
 // workout identity/steps come FROM (a frozen `SessionRun` vs a fetched
-// `LibraryWorkout`). `held`/`pain`/`notes` are NOT here: those are the
+// `LibraryWorkout`). `held`/`effort`/`notes` are NOT here: those are the
 // shared form state `useLogForm` itself owns and merges in below.
 export interface LogFormFields {
   workoutId: string | null;
@@ -643,10 +649,15 @@ export interface LogFormFields {
   machineSummary?: {
     verificationBytes?: readonly number[];
   } & Partial<MachineSummaryDetail>;
+  // Concept2 save provenance is meaningful only for PM5 completions. The
+  // paired fields are produced by the completed run itself, never by the
+  // later Save tap; other doors leave both absent.
+  completedAt?: string | null;
+  tz?: string;
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
- *  ~45 lines of verbatim-duplicated behaviour (the held/pain/notes state
+ *  ~45 lines of verbatim-duplicated behaviour (the held/effort/notes state
  *  quintet, body assembly, and — the part that actually carries the app's
  *  rules — the `field === "workoutId"` 400-retry policy and the error
  *  string). This hook makes it structurally impossible for the two doors'
@@ -699,9 +710,9 @@ export interface LogFormFields {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useLogForm(onSaved: (logId: string | null) => void) {
   const [held, setHeld] = useState<HeldResult | null>(null);
-  const [pain, setPain] = useState<number | null>(null);
+  const [effort, setEffort] = useState<number | null>(null);
   // Post-workout-summary spec (2026-08-17), §3: `thumbs` joins the
-  // held/pain/notes quintet — clearable the same way (tap the selected
+  // held/effort/notes quintet — clearable the same way (tap the selected
   // option again to return to null), same reason as its siblings: it must
   // survive a failed save without forcing the rower to re-pick it.
   const [thumbs, setThumbs] = useState<Thumbs | null>(null);
@@ -715,8 +726,8 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
   ) {
     // Post-workout-summary spec (2026-08-17), §3: the reflection card is
     // now entirely optional (James's ruling) — Save is never gated on
-    // held/pain/thumbs being chosen (both save buttons' `disabled` prop
-    // now reads only `saving`). held/pain go on the wire as their raw
+    // held/effort/thumbs being chosen (both save buttons' `disabled` prop
+    // now reads only `saving`). held/effort go on the wire as their raw
     // state, null included; the server stores null the same way it already
     // does for `notes`/`deviceName`.
     setSaving(true);
@@ -724,7 +735,7 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
     const body: Record<string, unknown> = {
       ...fields,
       held,
-      pain,
+      effort,
       thumbs,
       notes: notes.trim().length > 0 ? notes : null,
     };
@@ -856,11 +867,22 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
         let logId: string | null = null;
         try {
           const parsed = (await res.json()) as { id?: unknown };
-          if (typeof parsed.id === "string") logId = parsed.id;
+          // `""` is no more a row than an absent id (harden lens 2: the
+          // absent / empty / valued read this call site had skipped).
+          if (typeof parsed.id === "string" && parsed.id !== "") {
+            logId = parsed.id;
+          }
         } catch {
           logId = null;
         }
         onSaved(logId);
+        // Wave E auto-send §3.3: AFTER the door has navigated, and not
+        // awaited — the save is done, the rower is on Today, and whether
+        // Concept2 gets the row is the row's own business from here
+        // (`log/concept2Send.ts`'s `autoSendAfterSave` reads the link fresh
+        // and decides). A null id (an unreadable 201 body) sends nothing:
+        // there is no row to name.
+        if (logId !== null) void autoSendAfterSave(logId);
         return;
       }
       setSaveError("Couldn't save this session. Try again.");
@@ -874,8 +896,8 @@ export function useLogForm(onSaved: (logId: string | null) => void) {
   return {
     held,
     setHeld,
-    pain,
-    setPain,
+    effort,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -1227,9 +1249,24 @@ function MonitorLogRow() {
  *  would silently mislabel every one of those otherwise. A mismatch passes
  *  `null` through, engaging each function's own documented fallback. */
 function SessionDoorLog() {
+  const [run] = useState<SessionRun | null>(() => loadRun());
+  return run === null ? (
+    <Navigate to="/today" replace />
+  ) : (
+    <TimerSummary run={run} context="legacy" />
+  );
+}
+
+export function TimerSummary({
+  run,
+  context,
+}: {
+  run: SessionRun;
+  context: "legacy" | "review";
+}) {
   const navigate = useNavigate();
   const [draft] = useState<SessionDraft | null>(() => loadDraft());
-  const [run] = useState<SessionRun | null>(() => loadRun());
+  const [chosenType, setChosenType] = useState<WorkoutType | null>(null);
   const workoutsState = useWorkouts();
   const planState = usePlan();
   // Phase 8A (James's ruling 5): the save stack derives which button leads
@@ -1256,6 +1293,9 @@ function SessionDoorLog() {
   // alternative to closing over a const declared later in this body.
   const pendingOfferRef = useRef<PostTestOffer | null>(null);
 
+  const matchedDraft =
+    draft !== null && draft.workoutId === run.workoutId ? draft : null;
+
   // Only ever clears the draft/run records on a genuine 201 (`onSaved`
   // fires after that, never on a failed save) — a network error, a real
   // validation 400, or a 500 leaves both intact so the rower can retry
@@ -1263,8 +1303,8 @@ function SessionDoorLog() {
   const {
     held,
     setHeld,
-    pain,
-    setPain,
+    effort,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -1273,8 +1313,11 @@ function SessionDoorLog() {
     saveError,
     submit,
   } = useLogForm((logId) => {
-    clearDraft();
-    clearRun();
+    if (context === "review") clearSelectedTimer(run, matchedDraft);
+    else {
+      clearDraft();
+      clearRun();
+    }
     const offer = pendingOfferRef.current;
     if (offer !== null) {
       // James's ruling (spec rev 2): every designated-test session with a
@@ -1313,9 +1356,6 @@ function SessionDoorLog() {
     return <Navigate to="/today" replace />;
   }
 
-  const matchedDraft =
-    draft !== null && draft.workoutId === run.workoutId ? draft : null;
-
   // Must-fix minor (whole-branch review): `resolveWorkoutType`'s fallback
   // chain only needs a library lookup when there's no matched draft to read
   // `type` from directly (see its own doc comment's numbered priority
@@ -1338,7 +1378,11 @@ function SessionDoorLog() {
   // genuine no-plan or plan-error state, so the toggle simply appears once
   // (and only once) the fetch resolves with an active plan — the form
   // itself never waits on it.
-  if (matchedDraft === null && workoutsState.state === "loading") {
+  if (
+    context === "legacy" &&
+    matchedDraft === null &&
+    workoutsState.state === "loading"
+  ) {
     return (
       <main className="screen">
         <p className="mono-status">LOADING…</p>
@@ -1397,28 +1441,50 @@ function SessionDoorLog() {
       ? library.find((w) => w.id === run.workoutId)
       : undefined;
 
-  const workoutType = resolveWorkoutType(run, matchedDraft, library);
-  const expectedPain = libraryWorkout?.pain ?? null;
-  const logSteps = buildLogSteps(run, matchedDraft);
-  const k2 = lockedBaseline("2k", run, matchedDraft);
-  const k6 = lockedBaseline("6k", run, matchedDraft);
-  const pacesText = pacesLockedText(k2, k6);
+  const workoutType =
+    context === "legacy"
+      ? resolveWorkoutType(run, matchedDraft, library)
+      : (chosenType ??
+        validWorkoutType(matchedDraft?.type) ??
+        validWorkoutType(libraryWorkout?.type));
+  const expectedEffort = libraryWorkout?.effort ?? null;
   // TS narrowing from the `run === null` guard above doesn't survive into a
   // function DECLARED later in this component (the arrow function passed
   // to `submit`, below) — a separately-typed `const` alias is the standard
   // fix, not a non-null assertion at each use site.
   const activeRun: SessionRun = run;
 
-  // Post-workout-summary spec §2B: the summary's own heroes/rows/meta come
-  // straight from `buildSummaryModel` — this door never re-derives a
-  // number. The timer door never throws (`summaryModel.ts`'s own header:
-  // only the monitor door's internal `buildMonitorLogSteps` call can), so
-  // no try/catch is needed here the way the monitor branch below needs one.
-  const model = buildSummaryModel({
-    door: "timer",
-    run: activeRun,
-    steps: logSteps,
-  });
+  let logSteps: LogStep[];
+  let model: SummaryModel;
+  let pacesText: string | null;
+  try {
+    logSteps = buildLogSteps(run, matchedDraft);
+    pacesText = pacesLockedText(
+      lockedBaseline("2k", run, matchedDraft),
+      lockedBaseline("6k", run, matchedDraft),
+    );
+    model = buildSummaryModel({
+      door: "timer",
+      run: activeRun,
+      steps: logSteps,
+    });
+    if (context === "review") {
+      requireFiniteRecording(run);
+      requireFiniteRecording(model);
+      requireFiniteRecording(logSteps);
+      if (logSteps.some((step) => typeof step.label !== "string"))
+        throw new Error("Unreadable labels");
+    }
+  } catch (error) {
+    if (context === "legacy") throw error;
+    return (
+      <ReadOnlyRecording
+        run={run}
+        source="Timer"
+        onDiscard={() => clearSelectedTimer(run, matchedDraft)}
+      />
+    );
+  }
 
   // Phase BL PR B: is this session a designated test whose measured
   // result earns the post-save offer? All four conditions live in
@@ -1435,6 +1501,7 @@ function SessionDoorLog() {
   const offer = postTestOffer({
     workoutTitle: activeRun.title,
     workoutIsGlobal: libraryWorkout?.isGlobal ?? false,
+    linkedWorkoutTitle: libraryWorkout?.title ?? null,
     avgSplitSeconds: model.heroes.avgSplitSeconds,
     completedFullDistance: isComplete(activeRun),
   });
@@ -1446,7 +1513,9 @@ function SessionDoorLog() {
         stored={
           baselinesState.state === "ready" ? baselinesState.baselines : null
         }
-        onDone={() => navigate("/today")}
+        onDone={() => {
+          void navigate("/today");
+        }}
       />
     );
   }
@@ -1456,6 +1525,7 @@ function SessionDoorLog() {
   // `submit` above — this is only what genuinely differs for this door:
   // WHERE the workout identity/steps come from (the frozen `SessionRun`).
   function handleSave(opts: { advancesPlan?: boolean } = {}) {
+    if (workoutType === null) return;
     // Phase BL PR B: stamp the offer (or its absence) for the onSaved
     // callback above — set at the tap, so it always reflects the render
     // the rower actually saved from.
@@ -1480,7 +1550,10 @@ function SessionDoorLog() {
   // the shared discard and navigates.
   function handleDiscardClick() {
     if (discard.armed) {
-      discard.fire();
+      if (context === "review") {
+        discard.disarm();
+        clearSelectedTimer(run, matchedDraft);
+      } else discard.fire();
       navigate("/today");
     } else {
       discard.arm();
@@ -1493,11 +1566,11 @@ function SessionDoorLog() {
       model={model}
       pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
       hint={singleTargetHint(logSteps)}
-      expectedPain={expectedPain}
+      expectedEffort={expectedEffort}
       held={held}
       onHeld={setHeld}
-      pain={pain}
-      onPain={setPain}
+      effort={effort}
+      onEffort={setEffort}
       thumbs={thumbs}
       onThumbs={setThumbs}
       notes={notes}
@@ -1505,6 +1578,13 @@ function SessionDoorLog() {
       plan={plan}
       accountBaselines={accountBaselines}
       saving={saving}
+      saveDisabled={workoutType === null}
+      beforeSaveSlot={
+        context === "review" &&
+        (workoutType === null || chosenType !== null) ? (
+          <MissingWorkoutType value={chosenType} onChange={setChosenType} />
+        ) : undefined
+      }
       saveError={saveError}
       onLogAgainstPlan={() => void handleSave()}
       onSaveWithoutLogging={() => void handleSave(saveWithoutLoggingOpts)}
@@ -1647,23 +1727,11 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // top, so a subsequent BACK skips straight past this route entirely
   // (landing on whatever came before it, e.g. the workout's detail screen)
   // rather than re-mounting this form.
-  // Phase BL PR B: the two branches below (monitor mode and plain manual)
-  // share this one `useLogForm` call, so the branch-local offer travels
-  // through a ref each save handler sets right before `submit` — the
-  // monitor branch computes a real offer from its own model; the plain
-  // manual branch pins null (a manual log has no measured number,
-  // `buildManualModel` returns no heroes — spec M1, and the You editor
-  // stays the honest path for a remembered one).
-  const pendingOfferRef = useRef<PostTestOffer | null>(null);
-  const [postSaveOffer, setPostSaveOffer] = useState<PostTestOffer | null>(
-    null,
-  );
-
   const {
     held,
     setHeld,
-    pain,
-    setPain,
+    effort,
+    setEffort,
     thumbs,
     setThumbs,
     notes,
@@ -1671,42 +1739,8 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     saving,
     saveError,
     submit,
-  } = useLogForm((logId) => {
-    // Hand-off store design spec (rev 4), §5/§6, plan Task 4 (BINDING):
-    // save-success retires the CLAIMED key/revision, never a fresh re-read
-    // — `retire`'s own "save-success" reason is EXEMPT from rejection by
-    // construction (§1/§6): a richer store revision at this exact moment
-    // (the claim race, §10 row 3) still retires and is counted via
-    // `handoff-dropped reason=richer-at-save`, never refused.
-    if (monitorEntry !== null) {
-      retireHandoff(
-        [
-          {
-            sessionKey: monitorEntry.sessionKey,
-            revision: monitorEntry.revision,
-          },
-        ],
-        "save-success",
-      );
-    }
-    const offer = pendingOfferRef.current;
-    if (offer !== null) {
-      // James's ruling (spec rev 2): the record fires on the SAVE, before
-      // the prompt renders — accept or decline changes nothing about it.
-      if (logId !== null) {
-        recordTestResult({
-          distance: offer.distance,
-          splitSeconds: offer.splitSeconds,
-          logId,
-        });
-      }
-      // The prompt renders in place (below, ahead of both branches); its
-      // onDone performs this same replace-navigation, so the BACK
-      // dup-save guard survives the detour.
-      setPostSaveOffer(offer);
-    } else {
-      navigate("/today", { replace: true });
-    }
+  } = useLogForm(() => {
+    void navigate("/today", { replace: true });
   });
 
   // Fix round 2 (whole-branch review, M1/M2): `planState` no longer joins
@@ -1800,252 +1834,12 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // replaces BOTH branches' forms (the monitor record is already cleared,
   // and re-rendering a fillable form behind the prompt would resurrect
   // the double-save hazard the replace-navigation guard exists for).
-  if (postSaveOffer !== null) {
-    return (
-      <PostTestPrompt
-        offer={postSaveOffer}
-        stored={
-          baselinesState.state === "ready" ? baselinesState.baselines : null
-        }
-        onDone={() => navigate("/today", { replace: true })}
-      />
-    );
-  }
-
   if (monitorEntry !== null) {
-    // Hand-off store design spec (rev 4), §6: `monitorRun` here is the
-    // SNAPSHOT's own run — the exact object `monitorModeEntry` returned at
-    // mount, never re-read from the store. Everything below this line is
-    // UNCHANGED from before the store rewrite (still a plain `MonitorRun`
-    // local, same name) other than this one derivation; the render/save
-    // body posts this reference (§6: "Save posts the SNAPSHOT").
-    const monitorRun = monitorEntry.run;
-    // Same narrowing idiom as `activeWorkout`/`activeRun` elsewhere in this
-    // file: TS narrowing from the `monitorEntry !== null` guard above
-    // doesn't survive into a function DECLARED later in this block
-    // (`handleMonitorDiscardClick`, below) — a separately-typed `const`
-    // alias is the fix, not a non-null assertion at each use site.
-    const activeMonitorEntry: HandoffEntry = monitorEntry;
-    // 7C spec §4: the monitor mode's own render — `buildMonitorLogSteps`
-    // never throws here (`monitorModeRun` already proved it wouldn't, by
-    // calling it once itself; this is the SAME pure function against the
-    // SAME immutable record, so a second call is deterministic, not a
-    // second chance to fail).
-    const logSteps = buildMonitorLogSteps(monitorRun);
-    // PACES LOCKED renders from the frozen seed, never `manualLockedBaseline`
-    // (spec §4: "the manual recovery path cannot run here") — `logSeed` is
-    // optional only so a pre-7C `MonitorRun` still type-checks;
-    // `monitorModeRun`'s own alignment check is what guarantees a REAL one
-    // exists for any record that reaches this branch.
-    const k2 = monitorRun.logSeed?.paces.k2 ?? null;
-    const k6 = monitorRun.logSeed?.paces.k6 ?? null;
-    const pacesText = pacesLockedText(k2, k6);
-    // Same narrowing idiom as `activeWorkout`/`activeRun` below/above: TS
-    // narrowing from the `!workout` guard doesn't survive into a closure
-    // declared later in this component.
-    const activeWorkout: LibraryWorkout = workout;
-
-    // Post-workout-summary spec §2B/`summaryModel.ts`'s own header: this is
-    // the ONE call site that CAN throw (`MonitorLogSeedError`, when
-    // `logSeed` is missing or misaligned with `program.intervals`) — but
-    // `monitorModeRun` (computed at this component's own mount) already
-    // called the identical pure `buildMonitorLogSteps` against this exact
-    // immutable record and proved it wouldn't. This try/catch exists only
-    // because that module's own header requires every consumer to handle
-    // the error explicitly, not because it is reachable here in practice;
-    // on the (unreachable) catch, this door has nothing better to do than
-    // the same disqualification `monitorModeRun` itself performs — bounce
-    // to `/today` rather than render a screen built on a record neither
-    // gate trusts.
-    let model: SummaryModel;
-    try {
-      model = buildSummaryModel({ door: "monitor", run: monitorRun });
-    } catch (err) {
-      if (err instanceof MonitorLogSeedError) {
-        return <Navigate to="/today" replace />;
-      }
-      throw err;
-    }
-    // Phase BL PR B: the connected door's own offer. Completeness (spec
-    // M2, binding) is the machine's own WORKOUTEND — `endedBy ===
-    // "finished"` is the only close reason that proves the programmed
-    // distance completed ("rower"/"link-lost"/"program-failed"/
-    // "program-dropped"/"interrupted"/absent all mean it did not, or
-    // cannot be shown to have), so an interrupted run's real-but-partial
-    // average split is never offered as a full-distance test result.
-    const monitorOffer = postTestOffer({
-      workoutTitle: activeWorkout.title,
-      workoutIsGlobal: activeWorkout.isGlobal,
-      avgSplitSeconds: model.heroes.avgSplitSeconds,
-      completedFullDistance: monitorRun.endedBy === "finished",
-    });
-
-    // Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1,
-    // Gate 0 CLEARED 2026-08-31): the DURABLE record's own `endedBy`, never
-    // the session's `closeReason` (that field dies with the session at
-    // navigation — the spec's own correction of its rev-2 draft, "the
-    // record is the only authority that survives the navigation"). `kept`
-    // is `summaryModel.ts`'s shared `measuredIntervalCount` rule, the same
-    // one the connected surface's own drop copy and the LOST THE MONITOR
-    // banner read — never a second notion of "kept" invented here.
-    const monitorDropped = monitorRun.endedBy === "program-dropped";
-    const droppedKept = measuredIntervalCount(monitorRun.actuals);
-    const droppedStrip = !monitorDropped ? undefined : (
-      <div className="log-dropped-strip">
-        <p className="log-dropped-title">THE ERG DROPPED THE WORKOUT.</p>
-        <p className="log-dropped-body">
-          {droppedKept === 0 ? (
-            "You had not finished an interval yet."
-          ) : (
-            <>
-              <b>{`${droppedKept} ${droppedKept === 1 ? "interval" : "intervals"} kept.`}</b>{" "}
-              The row below is what the erg measured before it stopped.
-            </>
-          )}
-        </p>
-      </div>
-    );
-
-    const handleMonitorSave = (opts: { advancesPlan?: boolean } = {}) => {
-      pendingOfferRef.current = monitorOffer;
-      return submit(
-        {
-          workoutId: activeWorkout.id,
-          workoutTitle: activeWorkout.title,
-          workoutType: activeWorkout.type,
-          steps: logSteps,
-          deviceName: monitorRun.deviceName,
-          source: "pm5",
-          avgSplitSeconds: model.heroes.avgSplitSeconds,
-          timeSeconds: model.heroes.timeSeconds,
-          distanceMeters: model.heroes.distanceMeters,
-          series: monitorRun.series,
-          endedBy: monitorRun.endedBy,
-          workSeconds: monitorRun.workSeconds,
-          workMeters: monitorRun.workMeters,
-          restSeconds: monitorRun.restSeconds,
-          restMeters: monitorRun.restMeters,
-          // RC-3 (storage-spine design spec §2, PR 1 Task 7): same
-          // optional-key idiom as `workSeconds` etc. above — spread
-          // straight from `monitorRun.summaryTotals`/`summaryDetail`/
-          // `verificationBytes` (Tasks 2-4), never re-derived here.
-          ...(monitorRun.summaryTotals !== undefined
-            ? {
-                machineWorkSeconds: monitorRun.summaryTotals.workElapsedSeconds,
-                machineWorkMeters: Math.round(
-                  monitorRun.summaryTotals.workDistanceMeters,
-                ),
-                machineSummary: {
-                  ...(monitorRun.verificationBytes !== undefined
-                    ? { verificationBytes: [...monitorRun.verificationBytes] }
-                    : {}),
-                  // A real build-738-era record can carry `summaryTotals`
-                  // (and maybe `verificationBytes`) with no `summaryDetail`
-                  // — that build's `appendSummaryObservations` never wrote
-                  // the field (it didn't exist on that build's
-                  // `MonitorRun` at all; `git show
-                  // v0.21.0:app/src/monitor/monitorRun.ts`). An unsaved
-                  // run from that build, saved through this code after the
-                  // update, reaches here and posts a bytes-only
-                  // `machineSummary` — correct, not a bug. Same shape the
-                  // server-side integration test names "a build-738-era
-                  // record's honest shape."
-                  ...(monitorRun.summaryDetail ?? {}),
-                },
-              }
-            : {}),
-        },
-        opts,
-      );
-    };
-
-    // Same two-tap shape as `SessionDoorLog`'s own `handleDiscardClick`
-    // (spec §4: "in the session door's idiom") — deliberately does NOT
-    // call `discard.fire()`, which would also clear `./draft`/`./run` (this
-    // door's own hard constraint, header comment above): `disarm()` resets
-    // the armed state, and the retire below is this branch's own, narrower
-    // destruction. Navigates back to the workout's OWN detail screen (spec
-    // §4: "navigates back to the detail"), not `/today` — the session
-    // door's discard lands on `/today` because it has no other natural
-    // home; this one does.
-    //
-    // Hand-off store design spec (rev 4), §5, plan Task 4: routes through
-    // `retire()` — key-bound to the SNAPSHOT's own `{sessionKey, revision}`
-    // (§5's census row: "monitor discard | the claim's key (M+D) | two-tap
-    // arm"), never a direct `clearMonitorRun()`. `activeMonitorEntry` is
-    // the same narrowed alias `activeWorkout` uses above, needed here for
-    // the identical reason (a nested function declaration doesn't inherit
-    // the enclosing `if`'s narrowing). Task 3's own I1 finding named the OLD
-    // direct `clearMonitorRun()` call here as the cause of the row-5
-    // resurrection regression (a late producer burst racing this discard
-    // would find no tombstone and write the record straight back); routing
-    // through `retire()` is the fix, since a post-retire commit for this
-    // key is now refused (`reason:"retired"`), receipted.
-    function handleMonitorDiscardClick() {
-      if (discard.armed) {
-        discard.disarm();
-        retireHandoff(
-          [
-            {
-              sessionKey: activeMonitorEntry.sessionKey,
-              revision: activeMonitorEntry.revision,
-            },
-          ],
-          "monitor-discard",
-        );
-        navigate(`/library/${workoutId}`);
-      } else {
-        discard.arm();
-      }
-    }
-
     return (
-      <PostWorkoutSummary
-        title={workout.title}
-        model={model}
-        pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
-        hint={singleTargetHint(logSteps)}
-        expectedPain={workout.pain}
-        held={held}
-        onHeld={setHeld}
-        pain={pain}
-        onPain={setPain}
-        thumbs={thumbs}
-        onThumbs={setThumbs}
-        notes={notes}
-        onNotes={setNotes}
-        plan={plan}
-        accountBaselines={accountBaselines}
-        saving={saving}
-        saveError={saveError}
-        onLogAgainstPlan={() => void handleMonitorSave()}
-        onSaveWithoutLogging={() =>
-          void handleMonitorSave(saveWithoutLoggingOpts)
-        }
-        // Trace-rendering spec (Phase LT spec 3), §1: the live door's own
-        // source — straight off the loaded `MonitorRun.series`, the same
-        // record `handleMonitorSave` above already spreads onto the POST
-        // body (spec 2). The timer door and the manual door below both
-        // omit this prop entirely (neither has a PM5), which is the
-        // "absent" case `PostWorkoutSummary`'s own doc comment names.
-        series={monitorRun.series}
-        stripSlot={droppedStrip}
-        discardSlot={
-          <button
-            type="button"
-            className={
-              discard.armed ? "summary-discard-armed" : "summary-discard"
-            }
-            onClick={handleMonitorDiscardClick}
-            onBlur={discard.disarm}
-          >
-            {discard.armed ? "Tap again to discard" : "DISCARD WITHOUT SAVING"}
-          </button>
-        }
-      >
-        <MonitorLogRow />
-        <RecordingDownloadRow />
-      </PostWorkoutSummary>
+      <ProgrammedMonitorSummary
+        entry={monitorEntry}
+        context={{ kind: "legacy", workout }}
+      />
     );
   }
 
@@ -2156,7 +1950,6 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     // no heroes), so a hand-logged "2K Test" saves and navigates exactly
     // as any other manual log. Pinned explicitly so a stale ref from an
     // earlier monitor-branch render can never leak into this branch.
-    pendingOfferRef.current = null;
     return submit(
       {
         workoutId: activeWorkout.id,
@@ -2247,11 +2040,11 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       // so this arrival gets the rule the connected door itself uses, and
       // shows no hint at all when the workout has no single target.
       hint={connectedNoRecord ? singleTargetHint(logSteps) : "BY FEEL"}
-      expectedPain={workout.pain}
+      expectedEffort={workout.effort}
       held={held}
       onHeld={setHeld}
-      pain={pain}
-      onPain={setPain}
+      effort={effort}
+      onEffort={setEffort}
       thumbs={thumbs}
       onThumbs={setThumbs}
       notes={notes}
@@ -2273,6 +2066,339 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
             discard.armed ? "summary-discard-armed" : "summary-discard"
           }
           onClick={handleManualDiscardClick}
+          onBlur={discard.disarm}
+        >
+          {discard.armed ? "Tap again to discard" : "DISCARD WITHOUT SAVING"}
+        </button>
+      }
+    >
+      <MonitorLogRow />
+      <RecordingDownloadRow />
+    </PostWorkoutSummary>
+  );
+}
+
+/** Shared programmed PM5 summary; the adapter supplies the selected snapshot. */
+export function ProgrammedMonitorSummary({
+  entry: monitorEntry,
+  context,
+}: {
+  entry: HandoffEntry;
+  context:
+    | { kind: "legacy"; workout: LibraryWorkout }
+    | { kind: "review"; workout: LibraryWorkout | undefined };
+}) {
+  const navigate = useNavigate();
+  const { workout } = context;
+  const workoutId =
+    context.kind === "review" ? monitorEntry.run.workoutId : context.workout.id;
+  const title =
+    context.kind === "review" ? monitorEntry.run.title : context.workout.title;
+  const [chosenType, setChosenType] = useState<WorkoutType | null>(null);
+  const workoutType = chosenType ?? validWorkoutType(workout?.type);
+  const baselinesState = useBaselines();
+  const planState = usePlan();
+  const discard = useStagedDiscard();
+  const pendingOfferRef = useRef<PostTestOffer | null>(null);
+  const [postSaveOffer, setPostSaveOffer] = useState<PostTestOffer | null>(
+    null,
+  );
+  useEffect(() => {
+    if (context.kind === "review")
+      claimHandoff(monitorEntry.sessionKey, monitorEntry.revision);
+  }, [monitorEntry, context.kind]);
+  const {
+    held,
+    setHeld,
+    effort,
+    setEffort,
+    thumbs,
+    setThumbs,
+    notes,
+    setNotes,
+    saving,
+    saveError,
+    submit,
+  } = useLogForm((logId) => {
+    retireHandoff(
+      [
+        {
+          sessionKey: monitorEntry.sessionKey,
+          revision: monitorEntry.revision,
+        },
+      ],
+      "save-success",
+    );
+    const offer = pendingOfferRef.current;
+    if (offer !== null) {
+      if (logId !== null)
+        recordTestResult({
+          distance: offer.distance,
+          splitSeconds: offer.splitSeconds,
+          logId,
+        });
+      setPostSaveOffer(offer);
+    } else void navigate("/today", { replace: true });
+  });
+  const plan =
+    planState.state === "ready" && planState.plan.planKey !== null
+      ? planState.plan
+      : null;
+  const saveWithoutLoggingOpts: { advancesPlan?: boolean } =
+    planState.state === "ready" ? { advancesPlan: false } : {};
+  const accountBaselines: Baselines | null =
+    baselinesState.state === "ready" &&
+    baselinesState.baselines.k2Seconds !== null &&
+    baselinesState.baselines.k6Seconds !== null
+      ? {
+          k2Seconds: baselinesState.baselines.k2Seconds,
+          k6Seconds: baselinesState.baselines.k6Seconds,
+        }
+      : null;
+  if (postSaveOffer !== null)
+    return (
+      <PostTestPrompt
+        offer={postSaveOffer}
+        stored={
+          baselinesState.state === "ready" ? baselinesState.baselines : null
+        }
+        onDone={() => {
+          void navigate("/today", { replace: true });
+        }}
+      />
+    );
+  // Hand-off store design spec (rev 4), §6: `monitorRun` here is the
+  // SNAPSHOT's own run — the exact object `monitorModeEntry` returned at
+  // mount, never re-read from the store. Everything below this line is
+  // UNCHANGED from before the store rewrite (still a plain `MonitorRun`
+  // local, same name) other than this one derivation; the render/save
+  // body posts this reference (§6: "Save posts the SNAPSHOT").
+  const monitorRun = monitorEntry.run;
+  // Same narrowing idiom as `activeWorkout`/`activeRun` elsewhere in this
+  // file: TS narrowing from the `monitorEntry !== null` guard above
+  // doesn't survive into a function DECLARED later in this block
+  // (`handleMonitorDiscardClick`, below) — a separately-typed `const`
+  // alias is the fix, not a non-null assertion at each use site.
+  const activeMonitorEntry: HandoffEntry = monitorEntry;
+  // 7C spec §4: the monitor mode's own render — `buildMonitorLogSteps`
+  // never throws here (`monitorModeRun` already proved it wouldn't, by
+  // calling it once itself; this is the SAME pure function against the
+  // SAME immutable record, so a second call is deterministic, not a
+  // second chance to fail).
+  const logSteps = buildMonitorLogSteps(monitorRun);
+  // PACES LOCKED renders from the frozen seed, never `manualLockedBaseline`
+  // (spec §4: "the manual recovery path cannot run here") — `logSeed` is
+  // optional only so a pre-7C `MonitorRun` still type-checks;
+  // `monitorModeRun`'s own alignment check is what guarantees a REAL one
+  // exists for any record that reaches this branch.
+  const k2 = monitorRun.logSeed?.paces.k2 ?? null;
+  const k6 = monitorRun.logSeed?.paces.k6 ?? null;
+  const pacesText = pacesLockedText(k2, k6);
+  // Same narrowing idiom as `activeWorkout`/`activeRun` below/above: TS
+  // narrowing from the `!workout` guard doesn't survive into a closure
+  // declared later in this component.
+
+  // Post-workout-summary spec §2B/`summaryModel.ts`'s own header: this is
+  // the ONE call site that CAN throw (`MonitorLogSeedError`, when
+  // `logSeed` is missing or misaligned with `program.intervals`) — but
+  // `monitorModeRun` (computed at this component's own mount) already
+  // called the identical pure `buildMonitorLogSteps` against this exact
+  // immutable record and proved it wouldn't. This try/catch exists only
+  // because that module's own header requires every consumer to handle
+  // the error explicitly, not because it is reachable here in practice;
+  // on the (unreachable) catch, this door has nothing better to do than
+  // the same disqualification `monitorModeRun` itself performs — bounce
+  // to `/today` rather than render a screen built on a record neither
+  // gate trusts.
+  let model: SummaryModel;
+  try {
+    model = buildSummaryModel({ door: "monitor", run: monitorRun });
+  } catch (err) {
+    if (err instanceof MonitorLogSeedError) {
+      return <Navigate to="/today" replace />;
+    }
+    throw err;
+  }
+  // Phase BL PR B: the connected door's own offer. Completeness (spec
+  // M2, binding) is the machine's own WORKOUTEND — `endedBy ===
+  // "finished"` is the only close reason that proves the programmed
+  // distance completed ("rower"/"link-lost"/"program-failed"/
+  // "program-dropped"/"interrupted"/absent all mean it did not, or
+  // cannot be shown to have), so an interrupted run's real-but-partial
+  // average split is never offered as a full-distance test result.
+  const monitorOffer = postTestOffer({
+    workoutTitle: title,
+    workoutIsGlobal: workout?.isGlobal ?? false,
+    linkedWorkoutTitle: workout?.title ?? null,
+    avgSplitSeconds: model.heroes.avgSplitSeconds,
+    completedFullDistance: monitorRun.endedBy === "finished",
+  });
+
+  // Wave F PR 1 Task 4 (design spec 2026-08-31-lifecycle-design.md §1,
+  // Gate 0 CLEARED 2026-08-31): the DURABLE record's own `endedBy`, never
+  // the session's `closeReason` (that field dies with the session at
+  // navigation — the spec's own correction of its rev-2 draft, "the
+  // record is the only authority that survives the navigation"). `kept`
+  // is `summaryModel.ts`'s shared `measuredIntervalCount` rule, the same
+  // one the connected surface's own drop copy and the LOST THE MONITOR
+  // banner read — never a second notion of "kept" invented here.
+  const monitorDropped = monitorRun.endedBy === "program-dropped";
+  const droppedKept = measuredIntervalCount(monitorRun.actuals);
+  const droppedStrip = !monitorDropped ? undefined : (
+    <div className="log-dropped-strip">
+      <p className="log-dropped-title">THE ERG DROPPED THE WORKOUT.</p>
+      <p className="log-dropped-body">
+        {droppedKept === 0 ? (
+          "You had not finished an interval yet."
+        ) : (
+          <>
+            <b>{`${droppedKept} ${droppedKept === 1 ? "interval" : "intervals"} kept.`}</b>{" "}
+            The row below is what the erg measured before it stopped.
+          </>
+        )}
+      </p>
+    </div>
+  );
+
+  const handleMonitorSave = (opts: { advancesPlan?: boolean } = {}) => {
+    if (workoutType === null) return;
+    pendingOfferRef.current = monitorOffer;
+    return submit(
+      {
+        workoutId,
+        workoutTitle: title,
+        workoutType,
+        steps: logSteps,
+        deviceName: monitorRun.deviceName,
+        source: "pm5",
+        avgSplitSeconds: model.heroes.avgSplitSeconds,
+        timeSeconds: model.heroes.timeSeconds,
+        distanceMeters: model.heroes.distanceMeters,
+        series: monitorRun.series,
+        endedBy: monitorRun.endedBy,
+        ...completionStamp(monitorRun),
+        workSeconds: monitorRun.workSeconds,
+        workMeters: monitorRun.workMeters,
+        restSeconds: monitorRun.restSeconds,
+        restMeters: monitorRun.restMeters,
+        // RC-3 (storage-spine design spec §2, PR 1 Task 7): same
+        // optional-key idiom as `workSeconds` etc. above — spread
+        // straight from `monitorRun.summaryTotals`/`summaryDetail`/
+        // `verificationBytes` (Tasks 2-4), never re-derived here.
+        ...(monitorRun.summaryTotals !== undefined
+          ? {
+              machineWorkSeconds: monitorRun.summaryTotals.workElapsedSeconds,
+              machineWorkMeters: Math.round(
+                monitorRun.summaryTotals.workDistanceMeters,
+              ),
+              machineSummary: {
+                ...(monitorRun.verificationBytes !== undefined
+                  ? { verificationBytes: [...monitorRun.verificationBytes] }
+                  : {}),
+                // A real build-738-era record can carry `summaryTotals`
+                // (and maybe `verificationBytes`) with no `summaryDetail`
+                // — that build's `appendSummaryObservations` never wrote
+                // the field (it didn't exist on that build's
+                // `MonitorRun` at all; `git show
+                // v0.21.0:app/src/monitor/monitorRun.ts`). An unsaved
+                // run from that build, saved through this code after the
+                // update, reaches here and posts a bytes-only
+                // `machineSummary` — correct, not a bug. Same shape the
+                // server-side integration test names "a build-738-era
+                // record's honest shape."
+                ...(monitorRun.summaryDetail ?? {}),
+              },
+            }
+          : {}),
+      },
+      opts,
+    );
+  };
+
+  // Same two-tap shape as `SessionDoorLog`'s own `handleDiscardClick`
+  // (spec §4: "in the session door's idiom") — deliberately does NOT
+  // call `discard.fire()`, which would also clear `./draft`/`./run` (this
+  // door's own hard constraint, header comment above): `disarm()` resets
+  // the armed state, and the retire below is this branch's own, narrower
+  // destruction. Navigates back to the workout's OWN detail screen (spec
+  // §4: "navigates back to the detail"), not `/today` — the session
+  // door's discard lands on `/today` because it has no other natural
+  // home; this one does.
+  //
+  // Hand-off store design spec (rev 4), §5, plan Task 4: routes through
+  // `retire()` — key-bound to the SNAPSHOT's own `{sessionKey, revision}`
+  // (§5's census row: "monitor discard | the claim's key (M+D) | two-tap
+  // arm"), never a direct `clearMonitorRun()`. `activeMonitorEntry` is
+  // the same narrowed alias `activeWorkout` uses above, needed here for
+  // the identical reason (a nested function declaration doesn't inherit
+  // the enclosing `if`'s narrowing). Task 3's own I1 finding named the OLD
+  // direct `clearMonitorRun()` call here as the cause of the row-5
+  // resurrection regression (a late producer burst racing this discard
+  // would find no tombstone and write the record straight back); routing
+  // through `retire()` is the fix, since a post-retire commit for this
+  // key is now refused (`reason:"retired"`), receipted.
+  function handleMonitorDiscardClick() {
+    if (discard.armed) {
+      discard.disarm();
+      retireHandoff(
+        [
+          {
+            sessionKey: activeMonitorEntry.sessionKey,
+            revision: activeMonitorEntry.revision,
+          },
+        ],
+        "monitor-discard",
+      );
+      navigate(context.kind === "review" ? "/today" : `/library/${workoutId}`);
+    } else {
+      discard.arm();
+    }
+  }
+
+  return (
+    <PostWorkoutSummary
+      title={title}
+      model={model}
+      pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
+      hint={singleTargetHint(logSteps)}
+      expectedEffort={workout?.effort ?? null}
+      held={held}
+      onHeld={setHeld}
+      effort={effort}
+      onEffort={setEffort}
+      thumbs={thumbs}
+      onThumbs={setThumbs}
+      notes={notes}
+      onNotes={setNotes}
+      plan={plan}
+      accountBaselines={accountBaselines}
+      saving={saving}
+      saveDisabled={workoutType === null}
+      beforeSaveSlot={
+        workoutType === null || chosenType !== null ? (
+          <MissingWorkoutType value={chosenType} onChange={setChosenType} />
+        ) : undefined
+      }
+      saveError={saveError}
+      onLogAgainstPlan={() => void handleMonitorSave()}
+      onSaveWithoutLogging={() =>
+        void handleMonitorSave(saveWithoutLoggingOpts)
+      }
+      // Trace-rendering spec (Phase LT spec 3), §1: the live door's own
+      // source — straight off the loaded `MonitorRun.series`, the same
+      // record `handleMonitorSave` above already spreads onto the POST
+      // body (spec 2). The timer door and the manual door below both
+      // omit this prop entirely (neither has a PM5), which is the
+      // "absent" case `PostWorkoutSummary`'s own doc comment names.
+      series={monitorRun.series}
+      stripSlot={droppedStrip}
+      discardSlot={
+        <button
+          type="button"
+          className={
+            discard.armed ? "summary-discard-armed" : "summary-discard"
+          }
+          onClick={handleMonitorDiscardClick}
           onBlur={discard.disarm}
         >
           {discard.armed ? "Tap again to discard" : "DISCARD WITHOUT SAVING"}

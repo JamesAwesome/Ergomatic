@@ -381,8 +381,8 @@ describe("buildLogSteps", () => {
   // exactly the production shape Task 2's guard loosening actually
   // reaches. Before this task, `run.actuals[i]`'s measured stopwatch
   // reading was dropped for EVERY effort phase unconditionally (wrapped
-  // in `if (!isEffort)`); now a genuine measurement survives regardless
-  // of `isEffort` — only the ASSUMED case (nothing recorded, "held the
+  // in `if (!isPaceWord)`); now a genuine measurement survives regardless
+  // of `isPaceWord` — only the ASSUMED case (nothing recorded, "held the
   // target") stays effort-gated, since there's no `targetSplit` to
   // assume held.
   // (Fixture swapped from "Dust Storm" to "Heat Lightning": the
@@ -572,7 +572,7 @@ describe("buildLogSteps", () => {
   });
 
   describe("fallback path (no usable draft — module header's FALLBACK paragraph)", () => {
-    it("draft null: an effort phase STILL reaches the chip via effortFromWord's inverse (F1's original fix, still load-bearing when there is truly no draft)", () => {
+    it("draft null: an effort phase STILL reaches the chip via paceWordFromLabel's inverse (F1's original fix, still load-bearing when there is truly no draft)", () => {
       const { run } = runFor("Fork Lightning", {
         completedAt: NOW.toISOString(),
       });
@@ -1634,7 +1634,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     const effortStep = workStepFrom("Fork Lightning");
     const draft = buildDraft({
       id: "id-effort-actual",
-      title: "Effort Actual",
+      title: "PaceWord Actual",
       type: "AN",
       steps: [effortStep],
     });

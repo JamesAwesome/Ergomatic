@@ -68,8 +68,7 @@ const WORKOUT: LibraryWorkout = {
   id: "w-p2a-recovery",
   title: "P2a Recovery Row",
   type: "O2",
-  difficulty: "easy",
-  pain: 2,
+  effort: 2,
   steps: [
     {
       k: "w",
@@ -123,7 +122,7 @@ vi.mock("../api/useBaselines", () => ({
 vi.mock("../api/usePreferences", () => ({
   usePreferences: () => ({
     state: "ready",
-    preferences: { difficulties: [], timeCapMinutes: 60, countdownSeconds: 10 },
+    preferences: { timeCapMinutes: 60, countdownSeconds: 10 },
   }),
 }));
 // LogSession's own dependency, mocked to the same "no active plan" shape
@@ -160,9 +159,11 @@ vi.mock("../adapters/monitorTransport", () => ({
 }));
 
 function parsedBodies(fn: typeof apiFn): Record<string, unknown>[] {
-  return fn.mock.calls.map(([, init]) =>
-    JSON.parse((init as RequestInit).body as string),
-  );
+  // Only the log POSTs: since Wave E auto-send a 201 is followed by a
+  // body-less `GET /api/concept2/link`.
+  return fn.mock.calls
+    .filter(([path]) => path === "/api/logs")
+    .map(([, init]) => JSON.parse((init as RequestInit).body as string));
 }
 
 beforeEach(() => {
@@ -293,7 +294,7 @@ describe("WorkoutDetail -> real connected recovery -> LogSession (James's PR #23
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: "HELD" }));
-    await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Effort 2" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(apiFn).toHaveBeenCalled());

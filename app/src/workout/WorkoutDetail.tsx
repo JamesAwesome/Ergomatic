@@ -15,7 +15,7 @@ import {
   type WorkoutProgram,
 } from "../../domain/monitor/program.js";
 import { needsBaselines } from "../../domain/needsBaselines.js";
-import { isEffortRef, resolveSplit } from "../../domain/pace.js";
+import { isPaceWordRef, resolveSplit } from "../../domain/pace.js";
 import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import { buildNudgedDraft, saveDraft, startDraft } from "../session/draft";
@@ -54,6 +54,7 @@ import type {
 } from "../../domain/monitor/types.js";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { useStartWorkout } from "../session/useStartWorkout";
+import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
@@ -306,6 +307,7 @@ function WorkoutDetailView({
     handleStart,
     confirmReplace,
     cancelReplace,
+    unsavedCount,
   } = useStartWorkout(workout, nudges);
   const navigate = useNavigate();
   // Whatever origin THIS screen was itself entered from (Today's suggestion
@@ -600,12 +602,12 @@ function WorkoutDetailView({
       if (!baselines || step.k !== "w") {
         return { ...prev, [index]: current + delta };
       }
-      // Effort refs do not have a resolved split; guard against accidentally
+      // PaceWord refs do not have a resolved split; guard against accidentally
       // calling resolveSplit with them. (Review finding L2: structural
       // defense-in-depth to prevent future nudge paths from introducing an
       // unguarded call; StepRow.tsx:155 already prevents nudge buttons from
       // rendering for efforts, but Phase 6's timer may add other nudge paths.)
-      if (isEffortRef(step.ref)) {
+      if (isPaceWordRef(step.ref)) {
         return { ...prev, [index]: current + delta };
       }
       const base = resolveSplit(baselines, step.ref, 0);
@@ -624,13 +626,12 @@ function WorkoutDetailView({
             read as yours here too — the list badge alone left the detail
             screen unmarked (device report, 2026-08-01). */}
         {!workout.isGlobal && (
-          <span className="workout-row-custom">CUSTOM</span>
+          <span className="workout-row-custom">MY WORKOUTS</span>
         )}
-        <span className="mono-status">{workout.difficulty.toUpperCase()}</span>
       </div>
       <h1 className="workout-detail-title">{workout.title}</h1>
       <p className="mono-status">
-        {minutesLabel} · PAIN {workout.pain}/5 · {daysLabel}
+        {minutesLabel} · EFFORT {workout.effort}/5 · {daysLabel}
       </p>
       <p className="workout-detail-note">PREVIEW · NUDGE ANY TARGET</p>
       <div className="step-list">
@@ -695,12 +696,22 @@ function WorkoutDetailView({
           <button type="button" className="button-l2" onClick={handleStart}>
             Start Timer
           </button>
+        ) : replaceStage === "unlogged" ? (
+          <UnsavedWorkoutWarning
+            count={unsavedCount}
+            replacement="Starting a new one"
+            replaceLabel="Replace session"
+            onReplace={confirmReplace}
+            onCancel={cancelReplace}
+            onView={() => {
+              cancelReplace();
+              void navigate("/today");
+            }}
+          />
         ) : (
           <div className="baseline-confirm">
             <p className="baseline-confirm-line">
-              {replaceStage === "unlogged"
-                ? "You have an unlogged session. Starting a new one discards it."
-                : "A session is in progress. Replace it?"}
+              A session is in progress. Replace it?
             </p>
             <div className="baseline-actions">
               <button

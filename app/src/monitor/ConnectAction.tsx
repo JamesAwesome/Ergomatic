@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
 import type { NfcCapability } from "../adapters/nfcReader";
+import { loadRun } from "../session/run";
+import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 import { mintAttemptId } from "./nfc/attemptIdMint";
 import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
 import {
@@ -155,6 +158,27 @@ export default function ConnectAction({
   // The pending intent: minted at the press, kept while the confirm panel
   // is up so "Connect anyway" resumes the SAME kind and attempt ID.
   const [pending, setPending] = useState<ConnectionEntryIntent | null>(null);
+  const [unsavedCount, setUnsavedCount] = useState(0);
+  const navigate = useNavigate();
+  // Phase NF: the confirm panel's Cancel discards ONLY this attempt's staged
+  // receipt (compare-by-attempt-ID), then returns both hardware buttons.
+  function cancel() {
+    if (pending !== null) {
+      discardStagedRetireHandoff(pending.attemptId);
+    }
+    setPending(null);
+    setStage(null);
+  }
+  // "Connect anyway" resumes the SAME intent; `stage` is only ever set
+  // together with `pending`, so a null here is unreachable and proceeds
+  // nothing rather than minting an ID `stageRetire` never saw (lens 2).
+  function proceedPending() {
+    if (pending === null) return;
+    const intent = pending;
+    setPending(null);
+    setStage(null);
+    onProceed(intent);
+  }
 
   // Task 5 review fix round: stages the AUTHORIZATION in the STORE, not
   // local state — `handoffStore.ts`'s own `stagedRetireSet` doc comment
@@ -173,6 +197,11 @@ export default function ConnectAction({
   function handleEntry(kind: ConnectionEntryIntent["kind"]) {
     const attemptId = mintAttemptId();
     const monitorEntry = currentUnretiredHandoff();
+    const run = loadRun();
+    setUnsavedCount(
+      Number(run !== null && run.completedAt !== null) +
+        Number(monitorEntry !== null),
+    );
     stageRetireHandoff(
       monitorEntry !== null
         ? [
@@ -193,13 +222,26 @@ export default function ConnectAction({
     onProceed({ kind, attemptId });
   }
 
+  if (stage === "unlogged")
+    return (
+      <UnsavedWorkoutWarning
+        count={unsavedCount}
+        replacement="Connecting"
+        replaceLabel="Connect anyway"
+        onReplace={proceedPending}
+        onCancel={cancel}
+        onView={() => {
+          cancel();
+          void navigate("/today");
+        }}
+      />
+    );
+
   if (stage !== null) {
     return (
       <div className="baseline-confirm">
         <p className="baseline-confirm-line">
-          {stage === "unlogged"
-            ? "You have an unlogged session. Connecting discards it."
-            : "A session is in progress. Replace it?"}
+          A session is in progress. Replace it?
         </p>
         <div className="baseline-actions">
           {/* Task 5 re-review (F-3, 2026-08-30): a refused confirm must
@@ -207,17 +249,7 @@ export default function ConnectAction({
               unrelated Connect press to inherit — `discardStagedRetire`
               is a no-op when `handleConnect` staged nothing (the common
               case), and receipted when it discards something real (F-4). */}
-          <button
-            type="button"
-            className="button-outline"
-            onClick={() => {
-              if (pending !== null) {
-                discardStagedRetireHandoff(pending.attemptId);
-              }
-              setPending(null);
-              setStage(null);
-            }}
-          >
+          <button type="button" className="button-outline" onClick={cancel}>
             Cancel
           </button>
           {/* Task 5 review fix round: straight to `onProceed`, with no
@@ -230,16 +262,7 @@ export default function ConnectAction({
           <button
             type="button"
             className="button-primary"
-            onClick={() => {
-              // `stage` is only ever set together with `pending`; a
-              // fallback mint here would produce an ID `stageRetire` never
-              // saw and orphan the authorization (lens 2).
-              if (pending === null) return;
-              const intent = pending;
-              setPending(null);
-              setStage(null);
-              onProceed(intent);
-            }}
+            onClick={proceedPending}
           >
             Connect anyway
           </button>

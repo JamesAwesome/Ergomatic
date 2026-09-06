@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Correct Resume · Deferred research</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:wght@400;500&display=swap"
+    />
+    <script>
+      const frame = new URLSearchParams(location.search).get("frame");
+      if (frame) document.documentElement.className = "is-frame";
+    </script>
+    <link rel="stylesheet" href="../../../app/src/theme/tokens.css" />
+    <link rel="stylesheet" href="../../../app/src/index.css" />
+    <style>
+      :root {
+        --board-ground: #e8e4d8;
+        --board-rule: #b7b09f;
+        --board-green: #245f39;
+      }
+      html.is-frame,
+      html.is-frame body,
+      html.is-frame .app-shell {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+      }
+      html.is-frame .app-shell {
+        padding: 0;
+      }
+      html:not(.is-frame) body {
+        background: var(--board-ground);
+      }
+      .board {
+        width: min(calc(100% - 32px), 1320px);
+        max-width: none;
+        margin: 0 auto;
+        padding: 42px 0 88px;
+      }
+      .board h1,
+      .board h2,
+      .board h3,
+      .board p {
+        margin-top: 0;
+      }
+      .board h1,
+      .board h2 {
+        font-family: var(--font-serif);
+        font-weight: 500;
+      }
+      .board h1 {
+        max-width: 18ch;
+        margin-bottom: 10px;
+        font-size: clamp(38px, 6vw, 62px);
+        line-height: 0.98;
+      }
+      .board h2 {
+        margin: 52px 0 8px;
+        font-size: 30px;
+      }
+      .board-lede,
+      .board-note {
+        max-width: 76ch;
+        color: var(--ink-2);
+      }
+      .board-lede {
+        font-size: 17px;
+      }
+      .board-note {
+        margin-bottom: 18px;
+        font-size: 14px;
+      }
+      .decision {
+        max-width: 900px;
+        margin: 26px 0 14px;
+        padding: 18px 20px;
+        border-left: 4px solid var(--judge-slower);
+        background: var(--surface);
+      }
+      .decision strong,
+      .mono {
+        font-family: var(--font-mono);
+      }
+      .decision p:last-child {
+        margin-bottom: 0;
+      }
+      .state-block {
+        padding: 22px 0 28px;
+        border-top: 1px solid var(--board-rule);
+      }
+      .state-block h3 {
+        margin-bottom: 5px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+      }
+      .state-block > p {
+        max-width: 80ch;
+        margin-bottom: 16px;
+        color: var(--ink-3);
+        font-size: 13px;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: 390px minmax(0, 844px);
+        gap: 20px;
+        align-items: start;
+      }
+      .frame-shell {
+        min-width: 0;
+      }
+      .frame-label {
+        margin-bottom: 7px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: var(--ink-3);
+      }
+      iframe {
+        display: block;
+        border: 1px solid var(--board-rule);
+        border-radius: 3px;
+        background: var(--page);
+      }
+      iframe.portrait {
+        width: 390px;
+        height: 844px;
+      }
+      iframe.landscape {
+        width: 844px;
+        max-width: 100%;
+        height: 390px;
+      }
+      .checks {
+        width: min(100%, 900px);
+        border-collapse: collapse;
+        background: var(--surface);
+      }
+      .checks th,
+      .checks td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--rule-2);
+        text-align: left;
+        vertical-align: top;
+      }
+      .checks th {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: var(--ink-3);
+      }
+      .checks td {
+        font-size: 13px;
+      }
+      .pass {
+        color: var(--board-green);
+        font-weight: 600;
+      }
+      @media (max-width: 1279px) {
+        .pair {
+          grid-template-columns: 1fr;
+        }
+        iframe.landscape {
+          max-width: none;
+        }
+        .frame-shell {
+          overflow-x: auto;
+          padding-bottom: 8px;
+        }
+      }
+
+      /* Gate-only proposal CSS. All unqualified classes come from the real app stylesheet. */
+      .correct-resume-lost {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 12px;
+        align-items: center;
+      }
+      .correct-resume-lost .connected-lost-copy {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .correct-resume-action {
+        min-width: 116px;
+        min-height: 44px;
+        padding: 0 12px;
+        border: 1px solid var(--surface);
+        border-radius: var(--radius);
+        background: var(--surface);
+        color: var(--judge-slower);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        white-space: nowrap;
+      }
+      .correct-resume-action:disabled {
+        border-color: var(--surface);
+        background: transparent;
+        color: var(--surface);
+        cursor: not-allowed;
+      }
+      .correct-resume-interstitial .connected-status-label {
+        color: var(--judge-slower);
+      }
+      .correct-resume-interstitial .resume-same-device {
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        color: var(--ink-2);
+      }
+      .correct-resume-interstitial .button-l1:disabled {
+        border: 1px solid var(--rule-3);
+      }
+      .summary-gate {
+        width: 100%;
+        max-width: 480px;
+        height: 100%;
+        margin: 0 auto;
+        overflow: hidden;
+        padding: 24px 20px;
+      }
+      .summary-gate .screen-title {
+        margin: 4px 0;
+      }
+      .summary-gate-meta,
+      .summary-gate-kicker,
+      .summary-gate-heading {
+        font-family: var(--font-mono);
+        color: var(--ink-3);
+      }
+      .summary-gate-kicker {
+        margin: 0;
+        font-size: 10px;
+        letter-spacing: 0.13em;
+      }
+      .summary-gate-meta {
+        margin: 0 0 18px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+      }
+      .summary-gate-rule {
+        margin: 0 0 22px;
+        border: 0;
+        border-top: 2px solid var(--ink);
+      }
+      .summary-gate-heading {
+        margin: 0 0 6px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+      }
+      .summary-row-missed {
+        flex: 0 0 auto;
+        text-align: right;
+        white-space: nowrap;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        color: var(--marker);
+      }
+      .connected-grid-missed {
+        color: var(--ink-3);
+      }
+      .connected-grid-missed .connected-grid-num,
+      .connected-grid-missed-label {
+        color: var(--marker);
+      }
+      .connected-grid-missed-label {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+      }
+      @media (orientation: landscape) {
+        .correct-resume-lost {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: center;
+          padding-top: 0;
+          padding-bottom: 0;
+        }
+        .correct-resume-lost .connected-lost-copy {
+          flex-direction: row;
+          align-items: baseline;
+          gap: 12px;
+        }
+        .correct-resume-action {
+          height: 44px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      const actionButton = (label) => {
+        if (!label) return "";
+        const disabled = label === "CONNECTING…" ? " disabled" : "";
+        return `<button type="button" class="correct-resume-action"${disabled}>${label}</button>`;
+      };
+
+      const lostBanner = (label, kept = "1 interval kept.") => `
+        <div class="connected-lost${label ? " correct-resume-lost" : ""}" role="status">
+          <span class="connected-lost-copy">
+            <span class="connected-lost-title">LOST THE MONITOR</span>
+            ${kept ? `<span class="connected-lost-body">${kept}</span>` : ""}
+          </span>
+          ${actionButton(label)}
+        </div>`;
+
+      const control = `
+        <nav class="connected-control" aria-label="Connected panes">
+          <button type="button" class="connected-control-half connected-control-half-active" aria-current="page" aria-label="Live pane"><span aria-hidden="true">LIVE</span></button>
+          <button type="button" class="connected-control-half" aria-label="Grid pane"><span aria-hidden="true">GRID</span></button>
+        </nav>`;
+
+      const gridControl = `
+        <nav class="connected-control" aria-label="Connected panes">
+          <button type="button" class="connected-control-half" aria-label="Live pane"><span aria-hidden="true">LIVE</span></button>
+          <button type="button" class="connected-control-half connected-control-half-active" aria-current="page" aria-label="Grid pane"><span aria-hidden="true">GRID</span></button>
+        </nav>`;
+
+      const programmedLive = (label) => `
+        <main class="screen connected-surface">
+          <div class="connected-header">
+            <div class="connected-line"><span class="connected-line-mark connected-line-mark-hollow" aria-hidden="true"></span><span class="connected-line-device">PM5 432331249 · LOST</span></div>
+            <span class="connected-line-trailing">2 OF 5 · WORK</span>
+            <button type="button" class="connected-end" aria-label="End session">END</button>
+          </div>
+          ${lostBanner(label)}
+          <div class="connected-surface-body"><div class="connected-pane connected-pane-live">
+            <div class="connected-progress-row"><div class="connected-progress" aria-hidden="true"><div class="connected-progress-track"><div class="connected-progress-seg connected-progress-seg-done" style="flex:480 0 0"></div><div class="connected-progress-seg connected-progress-seg-active" style="flex:684 0 0"></div><div class="connected-progress-seg connected-progress-seg-upcoming" style="flex:684 0 0"></div><div class="connected-progress-seg connected-progress-seg-upcoming" style="flex:684 0 0"></div><div class="connected-progress-seg connected-progress-seg-upcoming" style="flex:684 0 0"></div></div></div><span class="connected-progress-meters connected-progress-meters-stale">2,705m</span></div>
+            <div class="connected-heroes">
+              <div class="connected-hero connected-hero-split"><span class="connected-hero-label">LAST SEEN</span><span class="connected-hero-value timer-card-actual-stale">1:57<span class="connected-hero-tenths">.8</span></span><div class="connected-hero-target"><span class="connected-hero-target-value">2:06.0</span><span class="connected-hero-target-ref">6K +4</span></div></div>
+              <span class="connected-hero-divider" aria-hidden="true"></span>
+              <div class="connected-hero connected-hero-rate"><span class="connected-hero-label">LAST SEEN</span><span class="connected-hero-value timer-card-actual-stale">21</span><div class="connected-hero-target"><span class="connected-hero-target-value">22</span><span class="connected-hero-rate-unit">SPM</span></div></div>
+            </div>
+            <div class="connected-band"><div class="connected-band-upnext"><span class="connected-band-upnext-label">UP NEXT</span><span class="connected-band-upnext-value"><span class="connected-band-upnext-next">NEXT · </span>REST 3:00</span></div><div class="connected-band-cell"><span class="connected-band-cell-label">EST LEFT</span><span class="connected-band-cell-value">42:11</span></div></div>
+          </div></div>
+          <div class="connected-surface-footer"></div>
+          ${control}
+        </main>`;
+
+      const programmedReady = (label) => `
+        <main class="screen connected-surface">
+          <div class="connected-header">
+            <div class="connected-line"><span class="connected-line-mark connected-line-mark-hollow" aria-hidden="true"></span><span class="connected-line-device">PM5 432331249 · LOST</span></div>
+            <span class="connected-line-trailing">1 OF 4 · READY</span>
+            <button type="button" class="connected-end" aria-label="End session">END</button>
+          </div>
+          ${lostBanner(label, "")}
+          <div class="connected-surface-body"><div class="connected-pane connected-pane-live">
+            <div class="connected-progress-row"><div class="connected-progress" aria-hidden="true"><div class="connected-progress-track"><div class="connected-progress-seg connected-progress-seg-upcoming" style="flex:684 0 0"></div><div class="connected-progress-seg connected-progress-seg-upcoming" style="flex:684 0 0"></div><div class="connected-progress-seg connected-progress-seg-upcoming" style="flex:684 0 0"></div><div class="connected-progress-seg connected-progress-seg-upcoming" style="flex:684 0 0"></div></div></div><span class="connected-progress-meters connected-progress-meters-stale">0m</span></div>
+            <div class="connected-heroes">
+              <div class="connected-hero connected-hero-split"><span class="connected-hero-value timer-card-actual-stale connected-hero-ghost">2:06<span class="connected-hero-tenths">.0</span></span><div class="connected-hero-target"><span class="connected-hero-target-value">2:06.0</span><span class="connected-hero-target-ref">6K +4</span></div></div>
+              <span class="connected-hero-divider" aria-hidden="true"></span>
+              <div class="connected-hero connected-hero-rate"><span class="connected-hero-value timer-card-actual-stale">0</span><div class="connected-hero-target"><span class="connected-hero-target-value">22</span><span class="connected-hero-rate-unit">SPM</span></div></div>
+            </div>
+            <div class="connected-band"><div class="connected-band-upnext"><span class="connected-band-upnext-label">UP NEXT</span><span class="connected-band-upnext-value"><span class="connected-band-upnext-next">NEXT · </span>WORK 2000m · 2:06.0 @22</span></div><div class="connected-band-cell"><span class="connected-band-cell-label">EST LEFT</span><span class="connected-band-cell-value">45:36</span></div></div>
+          </div></div>
+          <div class="connected-surface-footer"></div>
+          ${control}
+        </main>`;
+
+      const justRowLive = (label) => `
+        <main class="screen connected-surface">
+          <div class="connected-header">
+            <div class="connected-line"><span class="connected-line-mark connected-line-mark-hollow" aria-hidden="true"></span><span class="connected-line-device">PM5 432331249 · LOST</span></div>
+            <span class="connected-line-trailing">JUST ROW</span>
+            <button type="button" class="connected-end" aria-label="End session">END</button>
+          </div>
+          ${lostBanner(label, "")}
+          <div class="connected-surface-body"><div class="connected-pane connected-pane-live">
+            <div class="connected-progress-row"><div class="connected-progress" aria-hidden="true"><div class="connected-progress-track"><div class="connected-progress-fill" style="width:36%"></div></div></div><span class="connected-progress-meters connected-progress-meters-stale">76m</span></div>
+            <div class="connected-heroes">
+              <div class="connected-hero connected-hero-split"><span class="connected-hero-label">LAST SEEN</span><span class="connected-hero-value timer-card-actual-stale">1:23<span class="connected-hero-tenths">.3</span></span><div class="connected-hero-target"><span class="connected-hero-target-value connected-value-absent">Free</span><span class="connected-hero-avg-label">AVG</span><span class="connected-hero-avg-value timer-card-actual-stale">1:45.3</span></div></div>
+              <span class="connected-hero-divider" aria-hidden="true"></span>
+              <div class="connected-hero connected-hero-rate"><span class="connected-hero-label">LAST SEEN</span><span class="connected-hero-value timer-card-actual-stale">26</span><div class="connected-hero-target"><span class="connected-hero-target-value connected-value-absent">Free</span><span class="connected-hero-rate-unit">SPM</span></div></div>
+            </div>
+            <div class="connected-band"><div class="connected-band-cell"><span class="connected-band-cell-label">ELAPSED</span><span class="connected-band-cell-value">0:16</span></div></div>
+          </div></div>
+          <div class="connected-surface-footer"></div>
+        </main>`;
+
+      const interstitial = (kind, label) => {
+        const justRow = kind === "justrow";
+        if (!label) {
+          if (justRow)
+            return `
+            <main class="screen connected-interstitial">
+              <div class="connected-interstitial-body"><p class="connected-status-label">JUST ROW</p><h1 class="connected-serif-line">Lost the monitor</h1></div>
+              <div class="action-stack connected-interstitial-actions"><button type="button" class="button-l1">Try again</button><button type="button" class="button-l2">Cancel</button></div>
+            </main>`;
+          return `
+            <main class="screen connected-interstitial">
+              <div class="connected-interstitial-body"><p class="connected-status-label">PM5 432331249</p><p class="connected-serif-line">The link to the monitor failed.</p><p class="connected-reassurance">YOUR WORKOUT AND NUDGES ARE KEPT</p><div class="connected-detail-panel"><p class="connected-detail-title">DETAIL</p><p class="connected-detail-line">DISCONNECTED</p><p class="connected-detail-line">The link to the monitor failed.</p></div></div>
+              <div class="action-stack connected-interstitial-actions"><button type="button" class="button-l1">Try again</button><button type="button" class="button-l2">Row on the phone timer instead</button><button type="button" class="button-l2">View connection log</button><button type="button" class="button-l2">Cancel</button></div>
+            </main>`;
+        }
+        const disabled = label === "CONNECTING…" ? " disabled" : "";
+        return `
+          <main class="screen connected-interstitial correct-resume-interstitial">
+            <div class="connected-interstitial-body"><p class="connected-status-label">${justRow ? "JUST ROW · " : ""}PM5 432331249 · LOST</p><h1 class="connected-serif-line">Lost the monitor</h1><p class="resume-same-device">Reconnect to this PM5.</p></div>
+            <div class="action-stack connected-interstitial-actions"><button type="button" class="button-l1"${disabled}>${label}</button><button type="button" class="button-l2">Cancel</button></div>
+          </main>`;
+      };
+
+      const summaryRow = (index, status) => {
+        if (status === "measured")
+          return `<li class="summary-row"><span class="summary-row-index">${index}</span><span class="summary-row-time">3:00</span><span class="summary-row-target">1:58.0</span><span class="summary-row-pace timer-card-actual-within">1:58.4</span><span class="summary-row-spm">24 <span class="summary-row-spm-target">/ 24</span></span><span class="summary-row-bar-track"></span><span class="summary-row-dev"></span></li>`;
+        return `<li class="summary-row"><span class="summary-row-index">${index}</span><span class="summary-row-duration">3:00</span><span class="summary-row-target">1:58.0</span><span class="summary-row-offset">6K +1</span>${status === "missed" ? `<span class="summary-row-missed">— · MISSED</span>` : `<span class="summary-row-dash">—</span>`}</li>`;
+      };
+
+      const summary = (status) => `
+        <main class="summary-gate">
+          <div class="summary-gate-head"><p class="summary-gate-kicker">FROM YOUR LOG</p><h1 class="screen-title">Trough</h1><p class="summary-gate-meta">SEP 3 · 18:42 · PM5 432331249</p><hr class="summary-gate-rule" /></div>
+          <div class="summary-gate-table"><p class="summary-gate-heading">INTERVALS</p><ol class="summary-row-list">${summaryRow(1, "measured")}${summaryRow(2, status)}${summaryRow(3, "measured")}${summaryRow(4, "measured")}</ol></div>
+        </main>`;
+
+      const grid = () => `
+        <main class="screen connected-surface">
+          <div class="connected-header"><div class="connected-line"><span class="connected-line-mark"></span><span class="connected-line-device">PM5 432331249</span></div><span class="connected-line-trailing">3 OF 4 · <span class="connected-header-countdown">0:57 LEFT</span></span><button type="button" class="connected-end">END</button></div>
+          <div class="connected-surface-body"><div class="connected-pane connected-pane-grid">
+            <div class="connected-grid-head"><span class="connected-grid-num">#</span><span class="connected-grid-time">TIME</span><span class="connected-grid-meters">METERS</span><span class="connected-grid-pace">/500M</span><span class="connected-grid-spm">SPM</span><span class="connected-grid-hr">HR</span><span class="connected-grid-rest">REST</span></div>
+            <div class="connected-grid-rows">
+              <div class="connected-grid-row connected-grid-completed"><span class="connected-grid-num">1</span><span class="connected-grid-time">0:29</span><span class="connected-grid-meters">100</span><span class="connected-grid-pace timer-card-actual-within">2:23.5</span><span class="connected-grid-spm">25</span><span class="connected-grid-hr">—</span><span class="connected-grid-rest">0:30</span></div>
+              <div class="connected-grid-row connected-grid-completed connected-grid-missed"><span class="connected-grid-num">2</span><span class="connected-grid-time">—</span><span class="connected-grid-meters">100</span><span class="connected-grid-pace connected-grid-missed-label">MISSED</span><span class="connected-grid-spm">—</span><span class="connected-grid-hr">—</span><span class="connected-grid-rest">—</span></div>
+              <div class="connected-grid-row connected-grid-active"><span class="connected-grid-num"><span class="connected-grid-marker"></span>3</span><span class="connected-grid-time">0:28</span><span class="connected-grid-meters connected-grid-countdown">18</span><span class="connected-grid-pace timer-card-actual-faster">2:21.0</span><span class="connected-grid-spm">27</span><span class="connected-grid-hr">—</span><span class="connected-grid-rest">0:30</span></div>
+              <div class="connected-grid-row connected-grid-upcoming"><span class="connected-grid-num">4</span><span class="connected-grid-time">—</span><span class="connected-grid-meters">100</span><span class="connected-grid-pace">2:09.0</span><span class="connected-grid-spm">22</span><span class="connected-grid-hr">—</span><span class="connected-grid-rest">—</span></div>
+            </div>
+            <p class="connected-grid-caption">ROW 2 · FINAL ACTUAL MISSED DURING RECONNECT</p>
+          </div></div><div class="connected-surface-footer"></div>${gridControl}
+        </main>`;
+
+      const frames = {
+        "program-live-silence": () => programmedLive(""),
+        "program-live-ready": () => programmedLive("RECONNECT"),
+        "program-live-busy": () => programmedLive("CONNECTING…"),
+        "program-live-retry": () => programmedLive("TRY AGAIN"),
+        "program-ready-silence": () => programmedReady(""),
+        "program-ready-ready": () => programmedReady("RECONNECT"),
+        "program-ready-busy": () => programmedReady("CONNECTING…"),
+        "program-ready-retry": () => programmedReady("TRY AGAIN"),
+        "justrow-live-silence": () => justRowLive(""),
+        "justrow-live-ready": () => justRowLive("RECONNECT"),
+        "justrow-live-busy": () => justRowLive("CONNECTING…"),
+        "justrow-live-retry": () => justRowLive("TRY AGAIN"),
+        "program-pre-before": () => interstitial("program", ""),
+        "program-pre-ready": () => interstitial("program", "RECONNECT"),
+        "program-pre-busy": () => interstitial("program", "CONNECTING…"),
+        "program-pre-retry": () => interstitial("program", "TRY AGAIN"),
+        "justrow-pre-before": () => interstitial("justrow", ""),
+        "justrow-pre-ready": () => interstitial("justrow", "RECONNECT"),
+        "justrow-pre-busy": () => interstitial("justrow", "CONNECTING…"),
+        "justrow-pre-retry": () => interstitial("justrow", "TRY AGAIN"),
+        "summary-before": () => summary("unmeasured"),
+        "summary-after": () => summary("missed"),
+        grid,
+      };
+
+      const root = document.getElementById("root");
+      if (frame) {
+        root.className = "app-shell";
+        root.innerHTML = frames[frame]?.() ?? "Unknown frame";
+      } else {
+        const pair = (id, title, note) => `
+          <section class="state-block">
+            <h3>${title}</h3><p>${note}</p>
+            <div class="pair">
+              <div class="frame-shell"><p class="frame-label">PORTRAIT · 390×844</p><iframe class="portrait" title="${title}, portrait" src="?frame=${id}"></iframe></div>
+              <div class="frame-shell"><p class="frame-label">LANDSCAPE · 844×390</p><iframe class="landscape" title="${title}, landscape" src="?frame=${id}"></iframe></div>
+            </div>
+          </section>`;
+
+        root.innerHTML = `
+          <main class="board">
+            <h1>Correct Resume · Deferred research</h1>
+            <p class="board-lede">One explicit tap watches the same PM5 again after the operating system or Bluetooth transport has confirmed the link is down. The row stays open. The app never reprograms the erg and never claims to recover frames it did not receive.</p>
+            <div class="decision">
+              <p><strong>DEFERRED by James, 2026-09-03.</strong> These are research mockups, not shipped capabilities or implementation authorization. The reopen trigger lives in ROADMAP under “Icebox”; Wave F no longer requires reconnect.</p>
+              <p><strong>Gate 0 APPROVED by James, 2026-09-03.</strong> <span class="mono">RECONNECT → CONNECTING… → TRY AGAIN</span> uses the existing lost treatment, and <span class="mono">— · MISSED</span> appears only for an interval final actual the app missed during an authorized same-run reconnect gap when a later normalized interval actual was accepted.</p>
+              <p><strong>Not eligible:</strong> backgrounding, a resume gap, or frame silence without an authoritative disconnect. Those cases keep today’s warning with no button. <span class="mono">MISSED</span> never means the rower skipped an interval; an actual wins, then a partial wins, and only a marker with neither may render the word.</p>
+            </div>
+
+            <h2>Programmed · row in progress</h2>
+            <p class="board-note">The production device caption, status, End control, progress, heroes, SPM placement, Up Next, Est Left, and Live/Grid control remain in place.</p>
+            ${pair("program-live-silence", "SILENCE ONLY · UNCHANGED", "The current warning remains static. No reconnect action appears because the transport has not confirmed a disconnect.")}
+            ${pair("program-live-ready", "AUTHORITATIVE DISCONNECT · READY", "The same red warning gains one 44px action. End remains available in the header.")}
+            ${pair("program-live-busy", "ONE TAP · CONNECTING", "The button keeps its place and is disabled while the same-device attempt is in flight.")}
+            ${pair("program-live-retry", "ATTEMPT FAILED · RETRY", "Failure changes only the action label. The preserved row remains visible and End remains available.")}
+
+            <h2>Programmed · before the first pull</h2>
+            <p class="board-note">Both current pre-pull routes are covered: the numbers-open zero-kept surface below, and the ready interstitial after it. Reconnect never sends the workout again.</p>
+            ${pair("program-ready-silence", "ZERO KEPT · SILENCE ONLY · UNCHANGED", "Ready status and Est Left remain visible. Silence alone still offers no reconnect.")}
+            ${pair("program-ready-ready", "ZERO KEPT · DISCONNECT · READY", "The title-only lost banner gains Reconnect. End remains in the header.")}
+            ${pair("program-ready-busy", "ZERO KEPT · CONNECTING", "Connecting is disabled and occupies the same 44px target.")}
+            ${pair("program-ready-retry", "ZERO KEPT · RETRY", "Try Again repeats the same-device reattach; it does not scan or program.")}
+            ${pair("program-pre-before", "READY INTERSTITIAL · SHIPS TODAY", "Today this route falls into the generic failure card and its generic Try Again path.")}
+            ${pair("program-pre-ready", "READY INTERSTITIAL · RECONNECT", "The replacement names the lost PM5 and offers only same-device reconnect plus the existing exit.")}
+            ${pair("program-pre-busy", "READY INTERSTITIAL · CONNECTING", "The reconnect button is disabled during the attempt. Cancel stays available.")}
+            ${pair("program-pre-retry", "READY INTERSTITIAL · RETRY", "A failed attempt becomes Try Again without changing or re-sending the armed workout.")}
+
+            <h2>Just Row · row in progress</h2>
+            <p class="board-note">Just Row keeps its own anatomy: no Grid control, no interval count, no Up Next, and an Elapsed band instead of Est Left.</p>
+            ${pair("justrow-live-silence", "JUST ROW · SILENCE ONLY · UNCHANGED", "The title-only warning remains static when the frame stream is merely quiet.")}
+            ${pair("justrow-live-ready", "JUST ROW · DISCONNECT · READY", "A confirmed disconnect gains the same one-tap action without inventing an interval count.")}
+            ${pair("justrow-live-busy", "JUST ROW · CONNECTING", "Connecting is disabled while the preserved free row stays visible.")}
+            ${pair("justrow-live-retry", "JUST ROW · RETRY", "Try Again repeats the same-device attempt. End remains available.")}
+
+            <h2>Just Row · before the first pull</h2>
+            <p class="board-note">The existing Just Row interstitial stays visually distinct from a programmed workout and retains Cancel as its pre-row exit.</p>
+            ${pair("justrow-pre-before", "JUST ROW INTERSTITIAL · SHIPS TODAY", "Today’s generic Try Again does not promise a same-device reattach.")}
+            ${pair("justrow-pre-ready", "JUST ROW INTERSTITIAL · RECONNECT", "The replacement keeps Just Row in the status line and names the same lost PM5.")}
+            ${pair("justrow-pre-busy", "JUST ROW INTERSTITIAL · CONNECTING", "The reconnect action is disabled during the attempt. Cancel stays available.")}
+            ${pair("justrow-pre-retry", "JUST ROW INTERSTITIAL · RETRY", "Try Again repeats the same-device reattach and never begins another free row.")}
+
+            <h2>The unseen interval</h2>
+            <p class="board-note">A missing index is not enough. <span class="mono">MISSED</span> appears only when this logical session recorded an authorized disconnect/reattach gap and then accepted a later normalized actual. An ambiguous or trailing unmeasured interval keeps the bare dash.</p>
+            ${pair("summary-before", "SAVED SUMMARY · TODAY", "The unmeasured row ends in the existing bare dash.")}
+            ${pair("summary-after", "SAVED SUMMARY · PROPOSED", "The same row geometry distinguishes the proven reconnect gap as — · MISSED. It carries no invented pace, time, rate, or distance.")}
+            ${pair("grid", "LIVE GRID · PROPOSED", "When the same proven gap is visible before save, the pace cell says MISSED in the existing grid. Other measurement cells remain dashes.")}
+
+            <h2>Checks</h2>
+            <table class="checks"><thead><tr><th>Element</th><th>Token pair</th><th>Ratio</th><th>Result</th></tr></thead><tbody>
+              <tr><td>Lost title/body and disabled Connecting</td><td><span class="mono">--surface</span> on <span class="mono">--judge-slower</span></td><td>7.94:1</td><td class="pass">PASS</td></tr>
+              <tr><td>Reconnect and Try Again</td><td><span class="mono">--judge-slower</span> on <span class="mono">--surface</span></td><td>7.94:1</td><td class="pass">PASS</td></tr>
+              <tr><td>Missed label</td><td><span class="mono">--marker</span> on <span class="mono">--page</span></td><td>5.85:1</td><td class="pass">PASS</td></tr>
+              <tr><td>Existing quiet dash</td><td><span class="mono">--ink-4</span> on <span class="mono">--page</span></td><td>4.76:1</td><td class="pass">PASS</td></tr>
+            </tbody></table>
+            <p class="board-note" style="margin-top:14px"><strong>Touch target:</strong> every banner action is at least 116×44px; interstitial actions retain the existing 56px primary height. <strong>State:</strong> Reconnect and Try Again are enabled; Connecting is disabled. <strong>Exit:</strong> End remains actionable on live and numbers-open surfaces; Cancel remains actionable on pre-pull interstitials. <strong>Motion:</strong> none. <strong>Copy:</strong> no “caught up,” backfill, or recovered-reading claim.</p>
+          </main>`;
+      }
+    </script>
+  </body>
+</html>

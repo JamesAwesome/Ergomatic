@@ -1,13 +1,12 @@
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TodayFilterSheet, { type TodayFilterDraft } from "./TodayFilterSheet";
 
 const EMPTY_DRAFT: TodayFilterDraft = {
-  difficulties: [],
-  durations: ["<30", "30-45", "45-60"],
-  painLevels: [],
+  durationRange: { min: 0, max: 60 },
+  effortLevels: [],
   lastDone: null,
   source: null,
 };
@@ -77,24 +76,23 @@ function renderSheet(
 }
 
 describe("TodayFilterSheet", () => {
-  it("renders as a labelled dialog holding all five groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE), and no TYPE group", () => {
+  it("renders as a labelled dialog holding all four groups (TIME/EFFORT/LAST DONE/SOURCE), and no TYPE or DIFFICULTY group", () => {
     renderSheet();
     const dialog = screen.getByRole("dialog", { name: "Filter" });
     expect(dialog).toBeInTheDocument();
-    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(screen.getByText(label)).toBeVisible();
     }
-    for (const label of ["EASY", "MEDIUM", "HARD"]) {
-      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-    }
-    for (const label of ["<30′", "30–45′", "45–60′", "60′+"]) {
-      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-    }
+    expect(screen.queryByText("DIFFICULTY")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("slider", { name: "Shortest" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Longest" })).toBeInTheDocument();
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(screen.getByRole("button", { name: level })).toBeInTheDocument();
     }
     // Round 2 (2026-08-04): the Library's own LAST DONE/SOURCE pair.
-    for (const label of ["<21D", "21D+", "GLOBAL", "CUSTOM"]) {
+    for (const label of ["<21D", "21D+", "ERGOMATIC LIBRARY", "MY WORKOUTS"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
     // No TYPE group — the type-swap chips stay on the plan line, untouched
@@ -109,19 +107,19 @@ describe("TodayFilterSheet", () => {
   // hand-rolled chip groups had (fix round 2, M4).
   it("each group exposes an accessible name matching its own visible label", () => {
     renderSheet();
-    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "EFFORT", "LAST DONE", "SOURCE"]) {
       expect(screen.getByRole("group", { name: label })).toBeInTheDocument();
     }
     expect(
-      within(screen.getByRole("group", { name: "DIFFICULTY" })).getByRole(
-        "button",
-        { name: "EASY" },
-      ),
-    ).toBeInTheDocument();
+      screen.queryByRole("group", { name: "DIFFICULTY" }),
+    ).not.toBeInTheDocument();
     expect(
-      within(screen.getByRole("group", { name: "PAIN" })).getByRole("button", {
-        name: "3",
-      }),
+      within(screen.getByRole("group", { name: "EFFORT" })).getByRole(
+        "button",
+        {
+          name: "3",
+        },
+      ),
     ).toBeInTheDocument();
     expect(
       within(screen.getByRole("group", { name: "LAST DONE" })).getByRole(
@@ -132,7 +130,7 @@ describe("TodayFilterSheet", () => {
     expect(
       within(screen.getByRole("group", { name: "SOURCE" })).getByRole(
         "button",
-        { name: "CUSTOM" },
+        { name: "MY WORKOUTS" },
       ),
     ).toBeInTheDocument();
   });
@@ -140,40 +138,19 @@ describe("TodayFilterSheet", () => {
   it("aria-pressed on each cell reflects the draft prop, not internal state", () => {
     renderSheet({
       draft: {
-        difficulties: ["easy", "hard"],
-        durations: ["30-45", "60+"],
-        painLevels: [2, 4],
+        durationRange: { min: 30, max: 120 },
+        effortLevels: [2, 4],
         lastDone: "under21",
         source: "global",
       },
     });
-    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    expect(screen.getByRole("slider", { name: "Shortest" })).toHaveAttribute(
+      "aria-valuenow",
+      "30",
     );
-    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "30–45′" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "<30′" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "45–60′" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "60′+" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    expect(screen.getByRole("slider", { name: "Longest" })).toHaveAttribute(
+      "aria-valuenow",
+      "120",
     );
     expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
       "aria-pressed",
@@ -195,11 +172,10 @@ describe("TodayFilterSheet", () => {
       "aria-pressed",
       "false",
     );
-    expect(screen.getByRole("button", { name: "GLOBAL" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "CUSTOM" })).toHaveAttribute(
+    expect(
+      screen.getByRole("button", { name: "ERGOMATIC LIBRARY" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "MY WORKOUTS" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -208,23 +184,23 @@ describe("TodayFilterSheet", () => {
   describe("DIFFICULTY (multi-select)", () => {
     it("clicking an unselected cell adds it to the draft", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, difficulties: ["easy"] },
+        draft: { ...EMPTY_DRAFT },
       });
-      await userEvent.click(screen.getByRole("button", { name: "MEDIUM" }));
+      await userEvent.click(screen.getByRole("button", { name: "3" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        difficulties: ["easy", "medium"],
+        effortLevels: [3],
       });
     });
 
-    it("clicking an already-selected cell removes it (deselecting every difficulty is allowed)", async () => {
+    it("clicking an already-selected cell removes it (deselecting every effort level is allowed)", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, difficulties: ["easy"] },
+        draft: { ...EMPTY_DRAFT, effortLevels: [2] },
       });
-      await userEvent.click(screen.getByRole("button", { name: "EASY" }));
+      await userEvent.click(screen.getByRole("button", { name: "2" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        difficulties: [],
+        effortLevels: [],
       });
     });
   });
@@ -232,82 +208,55 @@ describe("TodayFilterSheet", () => {
   // Amendment (2026-08-04 PR #50 round): TIME unifies on the Library's own
   // bucket UNION — the old cap single-select ("exactly one always active")
   // is gone; clicking a cell now toggles it independently, same union
-  // semantics as DIFFICULTY/PAIN above.
-  describe("TIME (multi-select union)", () => {
-    it("clicking an unselected bucket adds it to the union", async () => {
+  // semantics as DIFFICULTY/EFFORT above.
+  describe("TIME (a minutes range)", () => {
+    it("stepping the upper thumb reports the new range in the draft, other groups untouched", () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, durations: ["<30"] },
+        draft: { ...EMPTY_DRAFT, durationRange: { min: 0, max: 30 } },
       });
-      await userEvent.click(screen.getByRole("button", { name: "60′+" }));
+      fireEvent.keyDown(screen.getByRole("slider", { name: "Longest" }), {
+        key: "End",
+      });
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        durations: ["<30", "60+"],
+        durationRange: { min: 0, max: 120 },
       });
     });
 
-    it("clicking an already-selected bucket removes it (deselecting every bucket is allowed — TIME off)", async () => {
+    it("stepping the lower thumb reports the new range too, and the thumbs cannot cross", () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, durations: ["<30"] },
+        draft: { ...EMPTY_DRAFT, durationRange: { min: 25, max: 30 } },
       });
-      await userEvent.click(screen.getByRole("button", { name: "<30′" }));
+      fireEvent.keyDown(screen.getByRole("slider", { name: "Shortest" }), {
+        key: "PageUp",
+      });
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        durations: [],
-      });
-    });
-
-    it("selecting every bucket leaves all four active — a real (if functionally inert) union", async () => {
-      const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, durations: ["<30", "30-45", "45-60"] },
-      });
-      await userEvent.click(screen.getByRole("button", { name: "60′+" }));
-      expect(onChangeDraft).toHaveBeenCalledWith({
-        ...EMPTY_DRAFT,
-        durations: ["<30", "30-45", "45-60", "60+"],
-      });
-    });
-
-    // Fix round (L2): adding out of canonical order used to append the
-    // newly-toggled bucket to the end of the array
-    // (`[...draft.durations, bucket]`), so selecting 60′+ BEFORE <30′
-    // stored `["60+", "<30"]` — a non-canonical sequence that only
-    // resolved back to order on the NEXT load (todayOverrides.ts's own
-    // parser re-sorts on the way in). Toggling now normalises to
-    // DURATION_BUCKETS' own canonical order immediately, so the draft
-    // (and therefore whatever gets saved) never holds that sequence even
-    // transiently.
-    it("adding a bucket out of canonical order normalises the draft to DURATION_BUCKETS' own order", async () => {
-      const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, durations: ["60+"] },
-      });
-      await userEvent.click(screen.getByRole("button", { name: "<30′" }));
-      expect(onChangeDraft).toHaveBeenCalledWith({
-        ...EMPTY_DRAFT,
-        durations: ["<30", "60+"],
+        durationRange: { min: 30, max: 30 },
       });
     });
   });
 
-  describe("PAIN (multi-select union)", () => {
+  describe("EFFORT (multi-select union)", () => {
     it("clicking an unselected level adds it, sorted", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, painLevels: [4] },
+        draft: { ...EMPTY_DRAFT, effortLevels: [4] },
       });
       await userEvent.click(screen.getByRole("button", { name: "2" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        painLevels: [2, 4],
+        effortLevels: [2, 4],
       });
     });
 
     it("clicking an already-selected level removes it", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, painLevels: [2, 4] },
+        draft: { ...EMPTY_DRAFT, effortLevels: [2, 4] },
       });
       await userEvent.click(screen.getByRole("button", { name: "2" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        painLevels: [4],
+        effortLevels: [4],
       });
     });
   });
@@ -353,7 +302,9 @@ describe("TodayFilterSheet", () => {
       const { onChangeDraft } = renderSheet({
         draft: { ...EMPTY_DRAFT, source: "global" },
       });
-      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "MY WORKOUTS" }),
+      );
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
         source: "custom",
@@ -364,7 +315,9 @@ describe("TodayFilterSheet", () => {
       const { onChangeDraft } = renderSheet({
         draft: { ...EMPTY_DRAFT, source: "custom" },
       });
-      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "MY WORKOUTS" }),
+      );
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
         source: null,
@@ -373,7 +326,9 @@ describe("TodayFilterSheet", () => {
 
     it("clicking GLOBAL sets it", async () => {
       const { onChangeDraft } = renderSheet();
-      await userEvent.click(screen.getByRole("button", { name: "GLOBAL" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "ERGOMATIC LIBRARY" }),
+      );
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
         source: "global",
@@ -459,9 +414,9 @@ describe("TodayFilterSheet", () => {
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
-    it("moves focus into the sheet on open — the first control, EASY", () => {
+    it("moves focus into the sheet on open — the first control, the TIME rail's Shortest thumb (DIFFICULTY left in Phase DE PR 1)", () => {
       renderSheet();
-      expect(screen.getByRole("button", { name: "EASY" })).toHaveFocus();
+      expect(screen.getByRole("slider", { name: "Shortest" })).toHaveFocus();
     });
 
     // The one genuinely different wiring vs. Library's FilterSheet.tsx:

@@ -650,18 +650,18 @@ button:disabled {
   text-align: center;
 }
 
-.pain-bar {
+.effort-bar {
   display: flex;
   gap: 2px;
   align-items: flex-end;
 }
 
-.pain-bar-segment {
+.effort-bar-segment {
   display: block;
   width: 3px;
   height: 11px;
   border-radius: 1px;
-  background: var(--pain-empty);
+  background: var(--effort-empty);
 }
 
 .library-header {
@@ -784,7 +784,7 @@ button:disabled {
 
 /* One token per active GROUP (filterTokens.ts), not per band — type-colored
    for a TYPE token (inline style, per-instance — same idiom as
-   TypeBadge.tsx/PainBar.tsx/ClassificationCard.tsx's own TYPE chip), `--ink`
+   TypeBadge.tsx/EffortBar.tsx/ClassificationCard.tsx's own TYPE chip), `--ink`
    fill for every other kind via this class's own default background. */
 .filter-token {
   display: inline-flex;
@@ -896,21 +896,12 @@ button:disabled {
   gap: 7px;
 }
 
-.filter-sheet-group-half {
-  flex: 1;
-}
-
 .filter-sheet-group-label {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.16em;
   color: var(--ink-3);
-}
-
-.filter-sheet-row {
-  display: flex;
-  gap: 6px;
 }
 
 /* Today's own FILTER sheet only (Round 2, 2026-08-04) — the live pool count,
@@ -955,7 +946,8 @@ button:disabled {
    `cells.length`, for CellGrid.test.tsx's own assertion) supplying
    `grid-template-columns: repeat(N, 1fr)` — but only `-2`/`-4`/`-5`
    existed (the Library's own five groups' cell counts), so Today's
-   3-cell DIFFICULTY group (Task 2, 2026-08-04 round) matched no rule at
+   3-cell DIFFICULTY group (Task 2, 2026-08-04 round; the group itself left
+   in Phase DE PR 1) matched no rule at
    all and fell back to an implicit single column: three stacked
    full-width bars instead of one row of three, caught live (jsdom has no
    opinion on layout, only a real render does). The half-width LAST DONE/
@@ -1060,26 +1052,22 @@ button:disabled {
      sibling — review fix I-1: it once wasn't, on Library, see that rule's
      own comment.
 
-     Fix round (whole-branch review comment, not a finding): this dependency
-     is CURRENTLY satisfied on both screens, by two different mechanisms —
-     Library's own `.type-word-row` is unconditionally mounted (I-1, below),
-     Today's is conditional on `effectiveType !== null` (Today.tsx) but that
-     condition is always true whenever the chip row itself renders (a plan
-     being active implies an effective type). If a future Today change ever
-     makes that condition possibly false while the chip row still renders,
-     this 4px will silently reproduce the exact ~34px jump I-1 fixed on
-     Library — the fix would be the SAME one Library already got (mount
-     `.type-word-row` unconditionally there too), not a change to this rule. */
+     Both screens now satisfy it the same way: Library's `.type-word-row`
+     is unconditionally mounted (I-1, below), and since the freestyle chips
+     (2026-09-04) so is Today's — it reads ANY TYPE while no chip is lit
+     rather than unmounting, which is exactly the fix this comment used to
+     prescribe for the day Today's `effectiveType` could be null while the
+     chip row still rendered. That day arrived with freestyle chips. */
   margin-bottom: 4px;
 }
 
 /* The effective type's descriptor word (James's request, 2026-08-08 round)
    — same reserved-line-box fix as `.classification-type-label-row`
-   (index.css, above). On Today a type is ALWAYS selected whenever this
-   renders, so the word never toggles in and out the way it would if it
-   could — the reserved box was originally kept here for parity with that
-   established pattern alone, not because Today's own row could shift
-   height in practice.
+   (index.css, above). On Today the row is always mounted — a type's word
+   with a plan or a lit freestyle chip, ANY TYPE otherwise (freestyle
+   chips, 2026-09-04) — so the word never toggles in and out; the reserved
+   box was originally kept here for parity with that established pattern
+   alone, not because Today's own row could shift height in practice.
 
    Extracted to this screen-neutral name (library-filter-unification round,
    Task 2, spec finding 2 — was `.today-type-word-row`): Library's own
@@ -1113,10 +1101,11 @@ button:disabled {
 }
 
 /* Classification card (Task 4, docs/design/builder-redesign/README.md §3):
-   one card holding TYPE, DIFFICULTY and EXPECTED PAIN. Deliberately its own
+   one card holding TYPE and EXPECTED EFFORT (DIFFICULTY left in Phase DE PR 1).
+   Deliberately its own
    `.classification-chip*` class family rather than reusing `.chip` above —
    at the time this was written, `.chip[aria-pressed="true"]` filled
-   --accent unconditionally, which is exactly the treatment DIFFICULTY must
+   --accent unconditionally, which is exactly the treatment EFFORT must
    NOT get (the handoff moves it to ink so accent stays reserved for the
    in-row unit/pace toggles and Save). A shared base class would have made
    "don't inherit the accent fill" a thing every future reader has to
@@ -1131,7 +1120,7 @@ button:disabled {
    style, so the same "unreachable either way" conclusion still holds, now
    for a simpler reason. The separation this comment explains stays the
    right call regardless: nothing here depends on the deleted rule's
-   specific behaviour, only on DIFFICULTY/PAIN never inheriting `.chip`'s
+   specific behaviour, only on EFFORT never inheriting `.chip`'s
    base at all.) */
 .classification-card {
   display: flex;
@@ -1161,22 +1150,22 @@ button:disabled {
   color: var(--ink-3);
 }
 
-/* EXPECTED PAIN's label row only: space-between, label left, the current
+/* EXPECTED EFFORT's label row only: space-between, label left, the current
    level's word on the right (design doc §3). */
-.classification-pain-label-row {
+.classification-effort-label-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   /* The level word renders only once a level is picked, and it sets 1px
      larger than the label — so the row used to grow on first tap and push
-     the pain chips (and everything below them) down under the user's thumb.
+     the effort chips (and everything below them) down under the user's thumb.
      Reserving more height than either state needs makes the row's height
      constant, whether or not the word is there. Locked by design.spec.ts
-     ("picking a pain level does not shift the chips below it"). */
+     ("picking a effort level does not shift the chips below it"). */
   min-height: 18px;
 }
 
-.classification-pain-word {
+.classification-effort-word {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1185,11 +1174,11 @@ button:disabled {
 }
 
 /* TYPE's label row (Task 7, mid-phase addition): same reserved-line-box fix
-   as `.classification-pain-label-row` above, and for the same reason — the
+   as `.classification-effort-label-row` above, and for the same reason — the
    summary word (TYPE_WORDS) sets 1px larger than the label, so without a
    reserved min-height the row's height would depend on whether the word is
    there. A type is always selected (there's no "nothing picked" state the
-   way pain has), so the word never actually toggles in and out here — this
+   way effort has), so the word never actually toggles in and out here — this
    is the belt-and-suspenders half of that guarantee, not the load-bearing
    half; see ClassificationCard.tsx's doc comment. */
 .classification-type-label-row {
@@ -1233,37 +1222,23 @@ button:disabled {
   letter-spacing: 0.06em;
 }
 
-.classification-chip-difficulty {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-}
-
-/* DIFFICULTY's own selected-state fill — ink, never accent. Lives entirely
-   in CSS (no inline style): unlike TYPE (which still needs a per-instance
-   colour set inline in ClassificationCard.tsx, one of four possible type
-   colours), DIFFICULTY only ever fills one colour. */
-.classification-chip-difficulty[aria-pressed="true"] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--on-color);
-}
-
-.classification-chip-pain {
+.classification-chip-effort {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-4);
 }
 
-/* Task 1 (ui-fix round): PAIN's selected fill moves off its own per-level
-   ramp colour (DESIGN.md: "Builder's gold pain selection goes") onto the
-   SAME plain ink fill as DIFFICULTY — ClassificationCard.tsx no longer sets
-   any inline style for a selected PAIN chip at all, so this is now the
-   pain group's own version of the rule immediately above. This comment used
-   to add that --pain-ramp-1..5 stayed defined because LogSession.tsx was
+/* Task 1 (ui-fix round): EFFORT's selected fill moves off its own per-level
+   ramp colour (DESIGN.md: "Builder's gold effort selection goes") onto the
+   same plain ink fill the (since-removed) DIFFICULTY chips used —
+   ClassificationCard.tsx no longer sets any inline style for a selected
+   EFFORT chip at all. Lives entirely in CSS (no inline style): unlike TYPE
+   (which still needs a per-instance colour set inline, one of four type
+   colours), EFFORT only ever fills one colour. This comment used
+   to add that --effort-ramp-1..5 stayed defined because LogSession.tsx was
    still a consumer; it was not, the ramp had no consumer at all, and the
    tokens were deleted 2026-08-28. */
-.classification-chip-pain[aria-pressed="true"] {
+.classification-chip-effort[aria-pressed="true"] {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--on-color);
@@ -1872,7 +1847,7 @@ button.back-link:disabled,
    .today-card below it. --on-color on --accent throughout is the same
    pairing .type-badge/.button-primary already use — computed 5.94:1
    (#fffdf7 on #b5341f), clearing the 4.5:1 AA floor. This used to cite the
-   --pain-ramp-5 comment for that ratio; those tokens were deleted
+   --effort-ramp-5 comment for that ratio; those tokens were deleted
    2026-08-28, so the measurement is stated directly rather than borrowed. */
 .today-resume-card {
   display: flex;
@@ -1934,48 +1909,129 @@ button.back-link:disabled,
    real, small "Log it" action (Phase 6C Task 2; F2's original placeholder
    copy, "6C will log it here," is what that action replaces), and — Task 3
    (ui-fix round) — a 44×44 accent-outlined ✕ that arms a staged Discard.
-   Bordered and height-fixed (min-height, not padding-derived) so arming
-   (`.today-unlogged-line-armed`) only recolors the border and swaps the
-   row's own children (Today.tsx's `UnloggedRow`) — never its size or its
-   position in the page, per DESIGN.md's own "row height and position don't
-   move." Fix round 1 (reviewer, row chrome vs mockup.html:164-178):
-   `--surface-sunken` fill (the mockup's own `#efeade`, an exact match) and
-   a 52px min-height — this task's own first pass used 64px and the page
-   background, neither of which the mockup actually specifies. */
-.today-unlogged-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 52px;
-  background: var(--surface-sunken);
+   Arming replaces the row's content with the confirmation question and
+   second tap; its layout follows that content rather than promising a fixed
+   height, border recolor, or page position. Fix round 1 (reviewer, row
+   chrome vs mockup.html:164-178): `--surface-sunken` fill (the mockup's own
+   `#efeade`, an exact match) and a 52px minimum action height — this task's
+   own first pass used 64px and the page background, neither of which the
+   mockup actually specifies. */
+.unsaved-group {
+  margin: 0 0 20px;
+}
+.unsaved-heading {
+  margin: 0 0 8px;
+  font: 12px var(--font-mono);
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+}
+.unsaved-row {
+  padding: 12px;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  padding: 8px 12px;
-  margin: 0 0 16px;
+  background: var(--surface-sunken);
+  margin: 0 0 8px;
 }
-
-/* Task 3: arming — border only, same accent the L4-armed button system
-   fills solid elsewhere; this row stays outlined even armed, since filling
-   it solid would compete with the suggestion card right below for
-   attention the way DEVIATIONS.md's #2 already ruled out for L4 itself. */
-.today-unlogged-line-armed {
+.unsaved-title {
+  font-size: 16px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.unsaved-meta {
+  font-size: 13px;
+  margin: 6px 0 12px;
+  color: var(--ink-3);
+}
+.unsaved-actions {
+  display: flex;
+  gap: 8px;
+}
+.unsaved-actions .today-unlogged-link {
+  flex: 1;
+}
+.unsaved-warning-title {
+  font-size: 17px;
+  margin: 0 0 8px;
+}
+.unsaved-warning-copy {
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0 0 12px;
+  color: var(--ink-2);
+}
+.unsaved-review {
+  text-decoration: none;
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 16px var(--font-sans);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.unsaved-secondary {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.unsaved-secondary button {
+  flex: 1;
+}
+.unsaved-secondary .unsaved-replace {
+  color: var(--accent);
   border-color: var(--accent);
 }
-
-.today-unlogged-text {
-  font-size: 13px;
-  color: var(--ink-3);
-  margin: 0;
+.recovery-panel {
+  margin: 20px 0;
+  padding: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule);
 }
-
-.today-unlogged-actions {
-  display: flex;
-  align-items: center;
+.recovery-panel p {
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.recovery-panel label {
+  display: block;
+  margin-bottom: 8px;
+}
+.recovery-panel select,
+.recovery-panel textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px;
+  border: 1px solid var(--ink-3);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: 16px var(--font-sans);
+}
+.recovery-panel textarea {
+  height: 150px;
+  resize: vertical;
+  margin-bottom: 12px;
+}
+.recovery-stack {
+  display: grid;
   gap: 8px;
-  flex-shrink: 0;
 }
-
+.recovery-stack button {
+  min-height: 44px;
+}
+.recovery-stack .unsaved-replace {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.recovery-stack button:disabled {
+  opacity: 1;
+  color: var(--ink-3);
+  background: var(--surface-sunken);
+  border-color: var(--ink-3);
+}
 /* Fix round 1 (reviewer, row chrome vs mockup.html:164-178): "Log it"
    is the row's OWN L2-geometry control — ink-bordered, surface-filled,
    44px (the mockup's own literal cell, not this app's full-width 52px
@@ -3092,7 +3148,7 @@ button.back-link:disabled,
 
 /* §3 Classification card: `.builder-classification-wrap` (Builder.tsx) is a
    plain, unstyled wrapper around ClassificationCard.tsx — present only so a
-   failed Save can `.focus()` it when `pain` is the first invalid field.
+   failed Save can `.focus()` it when `effort` is the first invalid field.
    ClassificationCard has no single focusable root of its own (chip rows,
    no radiogroup), same "wrap it, focus the wrapper" idiom StepEditor.tsx's
    own `.step-editor-pace` wrapper uses for PaceRefInput. Deliberately no
@@ -3532,7 +3588,7 @@ button.back-link:disabled,
 }
 
 /* Toggled via aria-checked (the same radio pattern the deleted
-   PainPicker.tsx used) since these are mutually-exclusive radios, not
+   EffortPicker.tsx used) since these are mutually-exclusive radios, not
    independent pressed toggles. `flex: 1` (Task 6 — was a fixed 48px per
    the handoff's original two-chip spec) so the four segments share
    `.pace-ref-bases`'s full stretched width evenly; `min-width: 44px` keeps
@@ -9065,7 +9121,7 @@ section:not(.news-pinned) .news-row:last-of-type {
      ink on page (the title, non-lead hero values) 15.41:1
      ink-2 on surface-sunken (unselected reflection chips) 9.16:1
      on-color on ink (a selected HELD chip, ↑ MORE LIKE THIS selected) 17.11:1
-     on-color on accent (a selected PAIN chip, ↓ selected, the lead save
+     on-color on accent (a selected EFFORT chip, ↓ selected, the lead save
        button, a selected DISCARD-armed button) 5.94:1
      judge-faster on page (a faster row's pace/deviation/bar) 7.43:1
      judge-slower on page (a slower row's pace/deviation/bar) 7.15:1
@@ -9354,12 +9410,12 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--on-color);
 }
 
-.summary-pain-row {
+.summary-effort-row {
   display: flex;
   gap: 8px;
 }
 
-.summary-pain-chip {
+.summary-effort-chip {
   flex: 1;
   min-height: 46px;
   display: flex;
@@ -9374,13 +9430,13 @@ section:not(.news-pinned) .news-row:last-of-type {
   cursor: pointer;
 }
 
-.summary-pain-chip[aria-pressed="true"] {
+.summary-effort-chip[aria-pressed="true"] {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-color);
 }
 
-.summary-pain-caption {
+.summary-effort-caption {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -9996,7 +10052,6 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 .diag-row {
-  margin-top: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -10011,18 +10066,38 @@ section:not(.news-pinned) .news-row:last-of-type {
   text-decoration: none;
 }
 
-/* M-3: pins the row above — `.diag-row` is used ONLY on the You screen
-   (grep confirmed, single JSX site), so this lives on the row's own rule
-   rather than a separate wrapper div; `margin-top: auto` on a flex-column
-   item pushes it to the end of the main axis, absorbing whatever space
-   `.you-screen`'s min-height leaves above it (the short-content case the
-   gate artifact shows). Overrides the plain `12px` `margin-top` above via
-   specificity, in EVERY case, not conditionally — when BASELINES content
-   already fills or exceeds that min-height, a flex `auto` margin resolves
-   to `0`, not back to `12px`; the row's own `border-top` still supplies
-   the visual separation in that case, so nothing collapses illegibly. */
-.you-screen .diag-row {
+/* THE DOORS GROUP (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1
+   R7; Gate 0 amendment §8.2/8.4). Two `.diag-row`s — CONCEPT2 above
+   DIAGNOSTICS — sit at the foot of You inside ONE wrapper, and the wrapper
+   carries the ONE `margin-top: auto` that pins the group to the bottom of
+   `.you-screen`'s flex column. This used to live on `.diag-row` itself
+   (`.you-screen .diag-row { margin-top: auto }`, "single JSX site, grep
+   confirmed"); with two rows that rule would have given EACH row an auto
+   margin, and CSS Flexbox §8.1 splits positive free space equally between
+   auto margins on the main axis — two rows floating apart, not a second row
+   under the first. `auto` resolves to 0 when BASELINES content already fills
+   the column, exactly as before; each row's own `border-top` is then the
+   only separation, on purpose (the rows carry no `margin-top` of their own
+   any more — the 12px `.diag-row` used to declare was overridden to `auto`
+   at its only site, so it never painted). The CONCEPT2 row is absent on any
+   deployment or account without Concept2, and the group is then one row,
+   drawn exactly as the lone DIAGNOSTICS row was. */
+.you-doors {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The CONCEPT2 row's right-hand side: the state line (one of the four
+   strings the card already renders — `you/Concept2Row.tsx`) and the
+   chevron. `--ink-3` on `--page` = 6.69:1 for all four values (Gate 0
+   §8.1's optional `--ink`/600 distinction for RECONNECT NEEDED was drawn
+   and NOT adopted: the word is the distinction). 12px gap matches the
+   approved frames' `.door-right`. */
+.diag-row-end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .diag-caption {
@@ -10117,6 +10192,468 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
   font-size: 13px;
   margin: 8px 0 0;
+}
+
+/* Wave E PR2, Surface 1 (board 1a-1e + Gate 0 amendment 1f-1j). House card
+   idiom: --surface ground, 1px --rule, 2px radius, 16px padding, 12px gap
+   — the board's own values, which are tokens.css's verbatim.
+
+   Contrast, computed (WCAG relative luminance), NOT eyeballed (RF6):
+   --ink on --surface 17.11:1 · --ink-2 on --surface 10.81:1 · --ink-3 on
+   --surface 7.43:1 · --ink-4 on --surface 5.29:1 · --ink on
+   --surface-sunken 14.50:1 · --ink-3 on --surface-sunken 6.30:1 ·
+   --accent on --surface 5.94:1 · --on-color on --accent 5.94:1 ·
+   --on-color on --ink 17.11:1. All clear the 4.5:1 AA floor.
+
+   THE ONE VALUE THIS BLOCK REFUSES: --ink-4 on --surface-sunken measures
+   4.48:1 and FAILS. The panel's muted line (.c2-card-panel-reason) is
+   therefore --ink-3, not the --ink-4 every other muted line on this card
+   uses. Anything added to .c2-card-panel later inherits that constraint.
+
+   NO `margin-top` OF ITS OWN any more (Wave E PR A, spec
+   2026-09-04-concept2-walk-fixes §5.1). Task 8 gave this card `margin: 12px
+   0 0` on You, where it stood under RESET BASELINE SETUP and measured
+   `reset -> card = 0` without it. PR A moved the card to `/you/concept2`,
+   where its only neighbour above is the `.screen-title` h1, whose
+   browser-default bottom margin (0.67em of 31px ≈ 21px) collapses with any
+   top margin here in block flow (`.overlay-screen` is not a flex column) —
+   so a 12px here painted NOTHING and could not be gated (a mutation deleting
+   it left every measurement identical). The stand-off on the screen is the
+   h1's own, and `e2e/design.spec.ts`'s "the card stands off the title above
+   it on the Concept2 screen" measures it there. Bottom stays 0: the next
+   sibling is the dev-only link probe or nothing, and `.overlay-screen` pads
+   for the tab bar. */
+.c2-card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.c2-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+/* THE TELL / ACT PAIR (fix round 1, R1). One rule, not five special cases:
+   what the card TELLS the rower is `.c2-card-tell`, what it ASKS them to DO
+   is `.c2-card-act`, and the pair is in the DOM in every state so the
+   landscape rule at the foot of this block is structural rather than
+   per-state guesswork.
+
+   Portrait is deliberately IDENTICAL to what these children rendered as
+   direct flex children of `.c2-card`: three nested 12px-gap flex columns
+   compose to the same single 12px rhythm, so nothing about the approved
+   portrait frames moves. `.c2-card-head` stays OUTSIDE the pair — every
+   frame in the amendment draws it full width above the split. */
+.c2-card-body,
+.c2-card-tell,
+.c2-card-act {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 1b and 1g have nothing to DO — an OPENING or UPDATE NEEDED panel and no
+   control at all — so their act column renders with no child node and would
+   otherwise contribute a stray 12px flex gap under the panel, in BOTH
+   orientations. That gap is this rule's whole job. React emits no text node
+   for a false branch, so the div is genuinely `:empty` in those states.
+
+   It is NOT what keeps those two panels full width in landscape; `-split`
+   does, by not being applied to them. An earlier revision justified
+   `grid-auto-flow: column` on the grounds that "one declaration serves both
+   shapes" — one column when act is empty, two when it is not — and that
+   argument counted the wrong shapes. 1d and 1e are single-column on the
+   page too, and BOTH have a non-empty act column, so auto-flow could never
+   have produced their layout; meanwhile the two states it did handle are
+   handled by `-split` anyway. The landscape grid is now the page's own
+   literal `1fr 1fr`. */
+.c2-card-act:empty {
+  display: none;
+}
+
+.c2-card-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.c2-card-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+.c2-card-status-on {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Gate 0 amendment 1c. `overflow-wrap: anywhere` for the same reason
+   `.you-identity` carries `min-width: 0` (You.tsx's own comment): a long
+   address must not push this card a whole line taller. */
+.c2-card-identity {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.c2-card-explain {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.c2-card-foot {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+
+.c2-card-hair {
+  margin: 0;
+  border: 0;
+  height: 1px;
+  background: var(--rule-2);
+}
+
+.c2-card-panel {
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.c2-card-panel-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.c2-card-panel-line {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* --ink-3, NOT --ink-4: see this block's own header. 6.30:1 on
+   --surface-sunken, against 4.48:1 for the value it would otherwise
+   inherit from .c2-card-foot's family. */
+.c2-card-panel-reason {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.c2-card-primary {
+  min-height: 48px;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--on-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+/* Reachable from ONE condition only: `busy`, an attempt already in flight
+   (Concept2Card.tsx's Connect and RECONNECT both read `disabled={busy}`).
+   The board's original "until a class is picked, Connect is dimmed and
+   inert" is retired — ruling (i), 2026-09-03, removed the question, so
+   Connect is live on first paint and this rule paints a tap that is
+   already working, never a control waiting on an answer.
+   The LABEL carries the state as well as the border, because a
+   border-only distinction would be a 1.73:1 signal (--rule-3 on
+   --surface); --ink-3 on --surface is 7.43:1. */
+.c2-card-primary:disabled {
+  background: transparent;
+  border-color: var(--rule-3);
+  color: var(--ink-3);
+}
+
+/* The page's outline button as the FRAMES draw it, 52px and 15px.
+
+   MEASURED (fix round 4, D1), because the previous revision of this comment
+   got it backwards from the page's prose instead of its markup: every LIVE
+   `.btn-outline` inside a `c2card` frame carries an inline
+   `min-height: 52px` — SEVEN of them, four "Try again" and three "Retry",
+   with zero bare ones.
+
+   CORRECTED (Task 5 fix round 1, F3): the word "live" is load-bearing and
+   was missing. A nesting-aware scan counts EIGHT `.btn-outline`s inside a
+   `c2card`, not seven. The eighth is the inert, struck "Cancel" at 44px in
+   the 1b/1d block the page marks "REMOVED FROM THE BOARD, SHOWN STRUCK FOR
+   THE RECORD" — a drawing of a control that no longer exists, so it changes
+   nothing about this rule, but "SEVEN of them" was an absolute over a
+   mechanical class and the class already had an eighth member. Written, of
+   all rounds, in the one whose subject was a census going stale.
+
+   The other `.btn-outline`s on the page are the You-row "Sign out" chips —
+   THIRTEEN of them, each carrying its OWN inline `min-height: 44px`, so
+   "unstyled" was the wrong word for them and this comment used it three
+   words before quoting that number — and Surface 2's Send block, which
+   genuinely carries none. All outside the card. So the class's own 48px
+   default never reaches a Concept2 card button, and shipping
+   `min-height: 48px` here made 1e's Try again 4px shorter than every frame
+   that draws it.
+   `.c2-card-retry-tall` existed to carry the 52px for 1i alone and is
+   deleted with the premise that invented it.
+
+   §4's summary prose said "Retry 48, 1i's Retry 52". No frame draws a 48px
+   Retry, so that sentence had no referent — and it is what this rule got
+   aligned to instead of the drawings. Corrected on the page in the same
+   commit; the frames are the authority, a summary sentence is not.
+
+   15px 600-weight is NOT WCAG "large text" (that needs 18.66px bold or
+   24px), so the 4.5:1 floor still applies and is met: --ink on --surface,
+   17.11:1. No input is involved, so the 16px iOS-zoom rule does not. */
+.c2-card-retry {
+  min-height: 52px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Wave E auto-send (spec 2026-09-05 §3.2; Gate 0 amendment 2026-09-05 §1,
+   §2, §7). The sending-mode control, OFF · MANUAL · AUTOMATIC, where the
+   `Unlink Concept2` button stood (`.c2-card-danger` and `-armed` were
+   deleted with it — RF5). Three `aria-pressed` buttons on one grid, one
+   hairline border shared, each segment the row's 44px and a third of the
+   act column (≥ 104px in portrait).
+
+   NO NEW TIER: the pressed segment is the primary button's fill (`--ink`,
+   `--on-color` on it 17.11:1) and the unpressed one its outline (`--ink` on
+   `--surface` 17.11:1). The armed OFF is the danger button's own fill moved
+   onto the segment — `--on-color` on `--accent` 5.94:1, 52px, 15px sans
+   600, spanning the control — so `--accent` gains no new use. Disabled
+   (a PATCH in flight, both round trips): the UNPRESSED segments drop to
+   `--ink-3` on `--surface` 7.43:1; the PRESSED one KEEPS `--on-color` on
+   `--ink` 17.11:1; the ARMED OFF, disabled for its own DELETE's round trip,
+   KEEPS `--on-color` on `--accent` 5.94:1. The disabled colour rule is
+   therefore scoped `:not([aria-pressed="true"]):not(.c2-card-mode-armed)`,
+   and both exclusions are load-bearing: unscoped, it outranks the pressed
+   fill (2.30:1 — harden lens 2, finding 1), and without the armed exclusion
+   it dims the confirmation label to 1.25:1 on the accent fill for the whole
+   unlink (whole-branch review B1, after the armed OFF stopped carrying
+   `aria-pressed`). Both pairings are measured in a real engine
+   (`e2e/design.spec.ts`, `e2e/concept2.spec.ts`). All ≥ 4.5. */
+.c2-card-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0;
+  border: 1px solid var(--ink);
+}
+
+.c2-card-mode-btn {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+.c2-card-mode-btn:first-child {
+  border-left: 0;
+}
+
+.c2-card-mode-btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--on-color);
+  font-weight: 600;
+}
+
+.c2-card-mode-btn:disabled {
+  border-color: var(--rule-3);
+}
+
+.c2-card-mode-btn:disabled:not([aria-pressed="true"]):not(.c2-card-mode-armed) {
+  color: var(--ink-3);
+}
+
+/* Armed OFF spans the control as today's full-width "Tap again to unlink"
+   (Gate 0 §2a, ruled on sight: the segments' mono caps wrapped and sat
+   off-centre). The sibling segments are hidden, not disabled — the pressed
+   state has not committed, and a disarm brings them back reading the
+   server's mode. The armed OFF carries `aria-pressed="false"` (a pending
+   confirmation is not a toggle that is on), so the pressed rule above never
+   matches it; this rule is written at the same (0,2,0) specificity and
+   later, which is what wins the fill. */
+.c2-card-mode-is-armed {
+  border-color: var(--accent);
+}
+
+.c2-card-mode-btn.c2-card-mode-armed {
+  grid-column: 1 / -1;
+  min-height: 52px;
+  background: var(--accent);
+  color: var(--on-color);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  border-left: 0;
+}
+
+.c2-card-mode-is-armed > .c2-card-mode-btn:not(.c2-card-mode-armed) {
+  display: none;
+}
+
+/* The line beneath the control (Gate 0 §1a, §3, §4a). `--ink-3` at rest,
+   `--ink` when it carries the send-failed reason — the same two steps the
+   card's helper and explain lines already use, no new colour. */
+.c2-card-mode-line {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.c2-card-mode-line-warn {
+  color: var(--ink);
+}
+
+/* A7: a refused or thrown PATCH. Plain `--ink` at the explain size — it is
+   a sentence, not a panel; the pressed segment already shows the truth. */
+.c2-card-mode-error {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* The block's remedy on the card (Gate 0 amendment 2026-09-05 §4a, drawn
+   in the frame's `.linkrow`): `--ink` on `--surface` 17.11:1 (§7's "remedy
+   link-out" row), mono caps at the row's 44px. NOT the block's own
+   `.c2-send-linkout` accent — §7 rules that `--accent` gains no new use
+   beyond the armed OFF, and DEVIATIONS' link-out row stays scoped to
+   Surface 2. */
+.c2-card-linkout {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-align: left;
+}
+
+/* Landscape: the two-column card interior, for the SEVEN frames the
+   amendment draws that way and no others (fix round 2, F1; census refreshed
+   in fix round 4, D2).
+
+   MEASURED over the page, not read off it. A script over every
+   `class="frame land"` block reports `grid-template-columns: 1fr 1fr;
+   gap: 20px` on 1a, 1c, 1f, 1f-b, 1f-c, 1i and 1j, and NO grid on 1b, 1d, 1e
+   and 1g — four un-gridded frames, not two. It also reports that 1d's
+   landscape frame DRAWS A HAIRLINE. A previous revision of this block
+   asserted the opposite of both, and shipped 1d and 1e as two columns with
+   1d's hairline suppressed; 1d is badged UNCHANGED on the page, i.e.
+   inherited from the approved board, so that was a silent redraw of approved
+   work. A later one said SIX and went stale the day 1f-c was drawn — a
+   census in a comment is a measurement with an expiry date, so re-run the
+   script when a frame is added.
+
+   Everything here is therefore scoped to `.c2-card-body-split`, which the
+   component applies from a predicate over state, not a list of frame ids
+   (`Concept2Card.tsx`'s `singleColumn` and its comment: single column iff
+   the rower is armed to unlink, or is unlinked and an attempt has just
+   opened, failed, or hit a build too old to link). The scoping is what keeps
+   1b, 1d, 1e and 1g single-column and 1d's hairline visible.
+
+   `grid-template-columns: 1fr 1fr` — the page's own declaration, verbatim.
+   The earlier `grid-auto-flow: column` + `grid-auto-columns: 1fr` was there
+   to serve the empty-act states as one column, but every state that needs
+   one column is now excluded from this rule outright, and two of the four
+   (1d, 1e) have a NON-empty act column that auto-flow could never have
+   collapsed. There is nothing left for it to do.
+
+   BARE `@media (orientation: landscape)`: this file's only landscape idiom.
+   `grep -n "@media" src/index.css` shows six blocks, none with a width or
+   height clause. `padding`/`gap` are NOT overridden here — the page has no
+   landscape override at all and renders `.c2card` at 16px/12px in both
+   orientations; an earlier revision shipped 14px/16px and 10px, which were
+   invented (F7).
+
+   THE INNER GAPS, with one departure stated as one (fix round 4, D3). The
+   10px act gap IS the page's, uniformly: every landscape act wrapper it
+   draws (1a, 1f, 1f-b, 1f-c) is 10px. The 8px tell gap is the page's in FOUR
+   of five — 1c, 1f-b, 1f-c and 1j — while 1a's tell wrapper is 10px, and
+   1f and 1i have no tell wrapper at all (a bare panel). We ship 8px for
+   every split state, so 1a's telling column is 2px tighter than its frame.
+   Taken deliberately rather than matched: reproducing it needs a per-state
+   gap rule, which is the per-frame special-casing this scoping exists to
+   avoid, for a 2px difference between two lines of text. Cheap to overrule —
+   one rule keyed off the unlinked-idle state — if a reviewer wants the frame
+   exactly.
+
+   `align-items: center` uniformly, including 1a, which is the one gridded
+   frame without it. Reviewed and closed with no action: the page's act
+   column carries `justify-content: center`, and with no background, border
+   or divider on either column the painted result is identical.
+
+   Hairlines are hidden only INSIDE a split body, where the 20px column gap
+   already marks the break. 1d keeps its hairline because 1d is never split.
+
+   NO NEW COLOUR PAIRING. Layout only — no `color`, no `background`, no
+   `border` — so every ratio in this block's own header still holds. */
+@media (orientation: landscape) {
+  .c2-card-body-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .c2-card-body-split .c2-card-tell {
+    gap: 8px;
+  }
+
+  .c2-card-body-split .c2-card-act {
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .c2-card-body-split .c2-card-hair {
+    display: none;
+  }
 }
 
 /* ── PHASE JR PR 2: THE FREE ROW ─────────────────────────────────────────
@@ -10226,4 +10763,341 @@ section:not(.news-pinned) .news-row:last-of-type {
   .connected-pane-live .connected-band:has(.connected-band-cell:only-child) {
     justify-content: flex-end;
   }
+}
+
+/* Wave E PR2, Surface 2 (board 2a-2e + Gate 0 amendment 2f/2h/2i). Same
+   house card as `.c2-card`, at the amendment's own `.sendcard` values:
+   14px/16px padding, 10px gap, `--surface` ground, 1px `--rule`,
+   `--radius`.
+
+   Contrast, computed (RF6) with the WCAG relative-luminance formula over
+   tokens.css's own hexes, never eyeballed:
+     --ink   on --surface 17.11:1  (CONCEPT2 label, lit status)
+     --ink-2 on --surface 10.81:1  (the send lines)
+     --ink-3 on --surface  7.43:1  (helper, REASON, disabled action label)
+     --ink-4 on --surface  5.29:1  (the RESULT foot, dim status)
+     --accent on --surface  5.94:1 (both link-outs)
+   All clear the 4.5:1 AA floor. Nothing on this block sits on
+   `--surface-sunken`, so the `--ink-4` 4.48:1 failure that forces
+   `.c2-card-panel-reason` up to `--ink-3` does not reach here.
+
+   THE TWO LINK-OUTS ARE ACCENT'S FIFTH JOB, outside the four
+   docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md names — and this is the
+   surface that actually paints it (the `.c2-card` block above cites the
+   same exception for THIS rule, not for one of its own). To be given a
+   DEVIATIONS row rather than its own token, per Gate 0 amendment §5 and
+   James's ruling: the four-meaning rule exists to stop accent meaning
+   "selected" or a fifth workout type, and one link-out row on one screen
+   is a different exception. The row is owed by this PR's Task 13 and does
+   NOT exist yet — `docs/design/DEVIATIONS.md` mentions Concept2 nowhere
+   (grepped, zero hits). Do not read this paragraph as the record.
+
+   `margin: 12px 0 0` — FIX ROUND 2, and the number is the page's, not a
+   guess. Every §2 frame separates the sendcard from the `Logged to <plan>`
+   line above it by `.frame { gap: 12px }`, and the frames are the
+   authority.
+
+   The rule exists because it was MISSING and nothing could say so. This
+   block declared no margin; its preceding sibling on a plan row,
+   `.log-plan-footer`, is `margin: 20px 0 0` with no bottom; both are block
+   children of the same `<main>`. Measured in the real engine before the
+   fix: `footer -> card = 0`. A bordered card touched the plan line. That
+   is D1's own shape one level out — the height gate measures the two
+   CONTROL boxes, so nothing measured the CONTAINER's, and `e2e/design.
+   spec.ts`'s "the card stands off the line above it" is the assertion that
+   closes it.
+
+   NOT the screen's own 20/24px section rhythm (`.summary-intervals` and
+   `.trace-figure` are both `margin: 0 0 24px`). 24 would be defensible and
+   is a Gate 0 decision rather than an implementer's, so it goes to James
+   as a question in the PR rather than being chosen here.
+
+   Bottom stays 0 on purpose: `.log-delete-trigger` below owns `24px 0 0`,
+   and adjacent-sibling margins collapse to the larger, so a bottom margin
+   here would be either dead or a silent override of a neighbour's spacing.
+   The e2e assertion pins that 24 too, for exactly that reason. */
+.c2-send {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.c2-send-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.c2-send-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.c2-send-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+/* Carried by every state from 2c on — NOT by 2b SENDING, which the page
+   draws as a bare `.c2status` exactly like 2a. See the component's own
+   `statusLit`. */
+.c2-send-status-on {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.c2-send-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.c2-send-helper {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.c2-send-reason {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.c2-send-foot {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+
+/* 48px, which is the class's OWN default and not an oversight: the
+   amendment's `.btn-outline` rule is `min-height: 48px`, and — unlike
+   every `.btn-outline` inside a `c2card`, which carries an inline
+   `min-height: 52px` — the four Send-block buttons the page draws
+   (`Send to Concept2`, `Sending to Concept2 …`, `Retry send`,
+   `Send again`) carry no inline override at all. `.c2-card`'s own block
+   comment already records that measurement. D1 one surface over was a 4px
+   error nothing measured; the e2e height gate on these two classes is why
+   this one cannot repeat.
+
+   `Send again` JOINED that list in this task's fix round 1, and the page
+   moved rather than this rule (ruling R5). §2i's frames drew it as
+   `.btn-l4` — 44px, accent border, accent label: the control that page
+   gives Delete session on the same screen — while §2i's own callout called
+   it "the level-4 button 2e already uses for Retry send", which 2e does
+   not use. Both were corrected on the artifact: a non-destructive re-send
+   must not wear a delete's vocabulary, and --accent already has its one
+   declared job on this surface (the link-out, amendment §5), so a second
+   accent control here would be the drift that section exists to stop.
+
+   15px 600-weight is NOT WCAG "large text" (18.66px bold / 24px), so the
+   4.5:1 floor applies and is met: --ink on --surface, 17.11:1. */
+.c2-send-action {
+  min-height: 48px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Reachable from ONE condition: the send in flight (2b). The LABEL carries
+   the state as well as the border, because a border-only distinction would
+   be a 1.73:1 signal (--rule-3 on --surface); --ink-3 on --surface is
+   7.43:1. */
+.c2-send-action:disabled {
+  border-color: var(--rule-3);
+  color: var(--ink-3);
+}
+
+/* The page's `.send-linkrow`, at its own 44px. A BUTTON styled as a link,
+   not an anchor — see the component for why. Left-aligned and full width,
+   so the whole row is the target rather than just the words. */
+.c2-send-linkout {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+/* Phase SF PR2 (spec §3.4): the TIME range — one rail, two thumbs, the
+   values printed above each end. The thumb's hit box is the full 44px
+   `--tap` square (WCAG 2.5.5, the repo's hard requirement; the e2e design
+   sweep measures the button); the visible knob is the 24px circle drawn on
+   its ::after so the rail reads as a rail, not a row of buttons. Rail
+   `--rule-3`, selected span `--accent`, knob `--ink` (computed contrast
+   in the PR's Gate 0). Sits inside `.filter-sheet-group` like every other
+   sheet group, so the label idiom is shared. */
+.duration-range {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Half a thumb of side padding so a thumb at 0 or 120 never overhangs
+     the sheet's own edge. */
+  padding: 0 calc(var(--tap) / 2);
+}
+
+.duration-range-values {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
+.duration-range-rail {
+  position: relative;
+  height: var(--tap);
+  /* The rail line itself is drawn on ::before so the thumbs' 44px boxes
+     are centred on a 4px line without stretching the tap area. */
+  touch-action: none;
+}
+
+.duration-range-rail::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 2px);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rule-3);
+}
+
+.duration-range-span {
+  position: absolute;
+  top: calc(50% - 2px);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.duration-range-thumb {
+  position: absolute;
+  top: 0;
+  width: var(--tap);
+  height: var(--tap);
+  margin-left: calc(var(--tap) / -2);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.duration-range-thumb::after {
+  content: "";
+  position: absolute;
+  left: calc(50% - 12px);
+  top: calc(50% - 12px);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid var(--page);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+.duration-range-thumb:focus-visible {
+  outline: none;
+}
+
+.duration-range-thumb:focus-visible::after {
+  box-shadow:
+    0 0 0 1px var(--ink),
+    0 0 0 4px var(--accent);
+}
+
+/* Phase SF PR3 (spec §4): the Library's SEARCH BY NAME field. 44px tall
+   (`--tap`), mono like the tokens and count beside it, the same 1px
+   `--rule-3` border the sheet cells wear; the placeholder is `--ink-4`
+   (4.76:1 on --page, computed in the PR's Gate 0 — the same token the
+   builder's `.split-input::placeholder` uses, opacity 1 so Firefox does not
+   fade it under 4.5). The native `type=search` cancel button is suppressed
+   so the clear control is ours: a 44px `✕` inside the field's right edge,
+   rendered only while there is text to clear. */
+.library-search {
+  position: relative;
+}
+
+.library-search-input {
+  width: 100%;
+  height: var(--tap);
+  padding: 0 var(--tap) 0 12px;
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--font-mono);
+  /* 16px, never 12: the iOS zoom guard at the top of this file. The field
+     shipped at 12px in Phase SF PR3 and the phone zoomed the whole Library
+     on focus (device report, 2026-09-05); the guard's design sweep now
+     covers /library so it cannot come back. Tracking tightens so a 16px
+     placeholder does not crowd the field. */
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.library-search-input::-webkit-search-cancel-button,
+.library-search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.library-search-input::placeholder {
+  color: var(--ink-4);
+  opacity: 1;
+  letter-spacing: 0.04em;
+}
+
+.library-search-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.library-search-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--tap);
+  height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
 }

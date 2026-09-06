@@ -83,7 +83,7 @@ function libraryFixture(title: string, leadStep: Step | null) {
 }
 
 /** The 8:00 EASY opener, the authored step that replaced Phase WU's
- *  deleted warm-up setting in this file's fixtures. Effort-ref, so the
+ *  deleted warm-up setting in this file's fixtures. PaceWord-ref, so the
  *  compiler programs it with no target (`compileProgram` nulls an effort
  *  phase's `targetSplit`) — the same target-less leading interval every
  *  assertion in this file has always been written against. */
@@ -123,7 +123,7 @@ const WARMUP_WITH_REST = libraryFixture("Filling Low", {
  *  effort work through `phase.label` with nothing exercising it).
  *
  *  Two real library workouts rather than one, because the two effort words
- *  are two different literals from `domain/pace.ts`'s `effortWord` and a
+ *  are two different literals from `domain/pace.ts`'s `paceWordLabel` and a
  *  fixture that only ever saw `max` would not notice a mapping that always
  *  returned it:
  *  - `Fog Bow` (O2) is 30' at 6k+12, 5' at MIN, 25' at 6k+10 — the EASY
@@ -1327,7 +1327,7 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
   it("work, distance, effort target, no spm -> WORK {meters}m · {label word}, no rate", () => {
     // "2K Test" (onboarding): 2000m at MAX effort, no spm at all — the one
     // real production shape with an effort target AND no spm (see
-    // `EFFORT_METERS_NO_SPM`'s own comment). `effortWord("max")` is
+    // `EFFORT_METERS_NO_SPM`'s own comment). `paceWordLabel("max")` is
     // `"ALL OUT"`.
     expect(connectedNextText(EFFORT_METERS_NO_SPM, -1)).toBe(
       "WORK 2000m · ALL OUT",
@@ -1340,7 +1340,7 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
     // warm-up phase's own `label` ("Easy"). The union has no warm-up
     // member, so the kind word is `WORK`, and the phase these fixtures
     // build is an authored EASY effort step whose `label` is
-    // `effortWord`'s own uppercase `EASY`. The COMPOSITION is unchanged —
+    // `paceWordLabel`'s own uppercase `EASY`. The COMPOSITION is unchanged —
     // still `${kind} ${extent} · ${label}` read straight off the phase.
     expect(connectedNextText(WARMUP_METERS.phases, -1)).toBe(
       "WORK 2000m · EASY",
@@ -1643,11 +1643,11 @@ describe("live", () => {
   // THE EFFORT WORK PHASE (tail review I-1). An effort target's split is an
   // ESTIMATE `compileProgram` deliberately never programs, so this slot has
   // no number either — and since 2026-08-13 it names the phase like every
-  // other no-target case. The word is `domain/pace.ts`'s `effortWord`, which
+  // other no-target case. The word is `domain/pace.ts`'s `paceWordLabel`, which
   // is CAPS, and caps is what ships: `phase.label` for an effort phase is
   // that literal everywhere else in the app too (the timer's UP NEXT strip
   // one row above this slot, `StepRow`'s library rows, and `logDraft.ts`,
-  // which reads it back through `effortFromWord` on a cast). Title-casing it
+  // which reads it back through `paceWordFromLabel` on a cast). Title-casing it
   // here alone would put `All out` in the card and `WORK ALL OUT` in the
   // strip beside it. See the FREE comment in `session/TimerTargets.tsx`.
   it("an EFFORT work phase names its effort in the target slot, in the domain's own caps, greyed and unjudged", () => {

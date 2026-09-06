@@ -6,7 +6,6 @@ import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import type { NewWorkoutInput } from "../stores/workouts.js";
 import type { WorkoutInput } from "../../domain/types.js";
 import { PLANS } from "../../domain/plans.js";
-import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { PREFERENCES_DEFAULTS } from "../stores/preferences.js";
 import { makeFakeStores } from "../testing/fakes.js";
 import { createDataRouter, type Stores } from "./data.js";
@@ -101,8 +100,7 @@ function validWorkoutBody(overrides: Partial<WorkoutInput> = {}): WorkoutInput {
   return {
     title: "Steady State",
     type: "AT",
-    difficulty: "medium",
-    pain: 2,
+    effort: 2,
     steps: [
       { k: "r", minutes: 10 },
       {
@@ -156,7 +154,6 @@ describe("data router: auth guard", () => {
     ["put", "/api/prefs"],
     ["get", "/api/test-history"],
     ["post", "/api/test-history"],
-    ["get", "/api/today"],
   ];
 
   it.each(routes)("401s %s %s without a session", async (method, path) => {
@@ -400,7 +397,7 @@ describe("POST /api/test-history (Phase BL PR B: the recording decouple)", () =>
     workoutTitle: "2K Test",
     workoutType: "AN",
     held: null,
-    pain: null,
+    effort: null,
     notes: null,
     steps: [
       {
@@ -519,6 +516,23 @@ describe("workouts CRUD", () => {
     const res = await asA(request(appFor(makeStores())).get("/api/workouts"));
     expect(res.status).toBe(200);
     expect(res.body).toStrictEqual([]);
+  });
+
+  // Phase DE PR 1 (spec §3.3): old builds send `difficulty` and render the
+  // word they get back with `.toUpperCase()`. The route ignores what they
+  // send and serves the derived word — never NULL, never the client's.
+  it("ignores a client-sent difficulty on create and serves the derived word (old-build compat)", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/workouts")).send({
+      ...validWorkoutBody({ title: "Old client", effort: 2 }),
+      // The old client's own word — must never reach the row.
+      difficulty: "hard",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.difficulty).toBe("easy");
+    const list = await asA(request(app).get("/api/workouts"));
+    const row = list.body.find((w: { id: string }) => w.id === created.body.id);
+    expect(row.difficulty).toBe("easy");
   });
 
   it("POST creates a workout and it appears in the list", async () => {
@@ -726,7 +740,7 @@ describe("workouts CRUD", () => {
     );
     const res = await asA(
       request(app).put(`/api/workouts/${created.body.id}`),
-    ).send(validWorkoutBody({ pain: 99 }));
+    ).send(validWorkoutBody({ effort: 99 }));
     expect(res.status).toBe(400);
   });
 
@@ -798,8 +812,7 @@ describe("GET /api/workouts: lastDoneDaysAgo", () => {
     const workout = await stores.workouts.create(userA.id, {
       title: "Zephyr",
       type: "O2",
-      difficulty: "easy",
-      pain: 2,
+      effort: 2,
       steps: [{ k: "r", minutes: 10 }],
       source: "user",
     });
@@ -816,8 +829,7 @@ describe("GET /api/workouts: lastDoneDaysAgo", () => {
     await stores.workouts.create(userA.id, {
       title: "Squall",
       type: "AT",
-      difficulty: "hard",
-      pain: 4,
+      effort: 4,
       steps: [{ k: "r", minutes: 10 }],
       source: "user",
     });
@@ -989,14 +1001,14 @@ describe("POST /api/workouts/bulk", () => {
     });
 
     const res = await asA(request(app).put(`/api/workouts/${legacy.id}`)).send(
-      validWorkoutBody({ title: "2K Test", type: "AN", pain: 4 }),
+      validWorkoutBody({ title: "2K Test", type: "AN", effort: 4 }),
     );
     expect(res.status).toBe(400);
     expect(res.body.field).toBe("title");
   });
 
   it("reports domain validation failures for syntactically-valid but out-of-bounds workouts, creating nothing", async () => {
-    const text = `1 | Bad Pain | AT | medium | 9\nwu 10\nw 1' 6k @20`;
+    const text = `1 | Bad Effort | AT | medium | 9\nwu 10\nw 1' 6k @20`;
     const res = await asA(
       request(appFor(makeStores())).post("/api/workouts/bulk"),
     ).send({ text });
@@ -1010,13 +1022,13 @@ describe("POST /api/workouts/bulk", () => {
   // above. `toStrictEqual` on the one real entry a validation failure
   // produces pins both keys and their exact values, structurally.
   it("a validation-failure error entry has the exact {line, message} shape the route's own API surface promises", async () => {
-    const text = `1 | Bad Pain | AT | medium | 9\nwu 10\nw 1' 6k @20`;
+    const text = `1 | Bad Effort | AT | medium | 9\nwu 10\nw 1' 6k @20`;
     const res = await asA(
       request(appFor(makeStores())).post("/api/workouts/bulk"),
     ).send({ text });
     expect(res.body.created).toHaveLength(0);
     expect(res.body.errors).toStrictEqual([
-      { line: null, message: 'workout "Bad Pain": pain must be 1..5' },
+      { line: null, message: 'workout "Bad Effort": effort must be 1..5' },
     ]);
   });
 
@@ -1099,7 +1111,7 @@ describe("GET/POST /api/logs", () => {
     workoutTitle: "Steady State",
     workoutType: "AT",
     held: "held",
-    pain: 2,
+    effort: 2,
     notes: null,
     steps: [
       {
@@ -1129,7 +1141,7 @@ describe("GET/POST /api/logs", () => {
     workoutTitle: "Steady State",
     workoutType: "AT",
     held: "held",
-    pain: 2,
+    effort: 2,
     notes: null,
     steps: [
       {
@@ -1327,10 +1339,10 @@ describe("GET/POST /api/logs", () => {
   });
 
   // Post-workout-summary spec (2026-08-17), §3: the redesigned reflection
-  // card makes every answer optional — a POST with NO held/pain/thumbs at
+  // card makes every answer optional — a POST with NO held/effort/thumbs at
   // all (not even present as null) must still 201, and the stored row
   // reads back null for all three, not a fabricated default.
-  it("POST with no held/pain/thumbs at all → 201, and the row reads back all null", async () => {
+  it("POST with no held/effort/thumbs at all → 201, and the row reads back all null", async () => {
     const app = appFor(makeStores());
     const res = await asA(request(app).post("/api/logs")).send({
       workoutId: null,
@@ -1344,21 +1356,21 @@ describe("GET/POST /api/logs", () => {
 
     const list = await asA(request(app).get("/api/logs"));
     const row = list.body.find((r: { id: string }) => r.id === res.body.id);
-    expect(row).toMatchObject({ held: null, pain: null, thumbs: null });
+    expect(row).toMatchObject({ held: null, effort: null, thumbs: null });
   });
 
-  // The v0.10.0/v0.10.1 client shape (held+pain always present, no thumbs
+  // The v0.10.0/v0.10.1 client shape (held+effort always present, no thumbs
   // key at all on the wire) must keep working byte-identically — this is
   // additive-compatible, per the spec's own "between-tags API discipline"
   // rule (docs/RELEASING.md).
-  it("POST in the old shape (held+pain present, no thumbs key) still 201s and stores the values, thumbs null", async () => {
+  it("POST in the old shape (held+effort present, no thumbs key) still 201s and stores the values, thumbs null", async () => {
     const app = appFor(makeStores());
     const res = await asA(request(app).post("/api/logs")).send(validLogBody());
     expect(res.status).toBe(201);
 
     const list = await asA(request(app).get("/api/logs"));
     const row = list.body.find((r: { id: string }) => r.id === res.body.id);
-    expect(row).toMatchObject({ held: "held", pain: 2, thumbs: null });
+    expect(row).toMatchObject({ held: "held", effort: 2, thumbs: null });
   });
 
   // From-the-log spec (2026-08-18), §2/§7 exit criterion 2: the v0.11.0
@@ -1926,9 +1938,11 @@ describe("GET/POST /api/logs", () => {
   // Wave E PR1 Task 2 (2026-08-31-concept2-logbook-design.md §Stored
   // shapes, TRIAD): `completedAt`/`tz`, optional/nullable, same
   // additive-only-between-tags posture as every other field on this
-  // route. `completedAt` is the run's own close stamp (C2's `date` is the
-  // END of the workout — spec anchor K3); `tz` is checked for IANA
-  // membership, not merely "Intl accepts it" (see `tzError`'s own
+  // route. `completedAt` is the run's own close stamp — Concept2's own
+  // words on the `date` parameter (same spec, §Research record, the "POST
+  // results" bullet): "this should be the date as stored in the monitor,
+  // which is the end of the workout, NOT the beginning". `tz` is checked
+  // for IANA membership, not merely "Intl accepts it" (see `tzError`'s own
   // comment in data.ts).
   it("accepts a valid completedAt + tz and round-trips both through GET", async () => {
     const app = appFor(makeStores());
@@ -2080,6 +2094,15 @@ describe("GET/POST /api/logs", () => {
     expect(res.status).toBe(201);
   });
 
+  // Wave E PR2 Task 6 (TRIAD). THE INVARIANT: a Concept2 field can never
+  // cost a rower their row. This block used to assert the opposite — a 400
+  // naming `tz` — and was REPLACED, not deleted, when both monitor doors
+  // started sending the field on every save. `tzError` reads THIS SERVER
+  // IMAGE's zone list, a phone's tzdata and a server image's legitimately
+  // disagree across a release, and the disagreeing list is ours. Do not
+  // restore the refusal: the strict check lives on the UPLOAD route
+  // (`routes/concept2.ts`), where a 400 costs one Concept2 send and leaves
+  // the rower's own record intact.
   it.each([
     ["an unknown zone name", "Not/AZone"],
     ["a raw UTC offset, not a zone name", "+05:00"],
@@ -2089,18 +2112,23 @@ describe("GET/POST /api/logs", () => {
     // unrecognized string. This case pins that ordinary rejection, not a
     // looser-than-IANA acceptance the validator has to narrow.
     ["a string Intl itself rejects outright, same as an unknown zone", "GMT+5"],
+    // The empty string is a STRING, so a bare `?? null` would store it and
+    // the column would hold a value that is not a zone. `tzError` is what
+    // rejects it (`IANA_ZONES.has("")` is false) and the degrade turns that
+    // rejection into a stored null.
+    ["the empty string, which survives a bare ?? null", ""],
   ])(
-    "rejects an invalid tz (%s) with 400, field named",
+    "degrades an invalid tz (%s) to null and SAVES the row",
     async (_label, value) => {
-      const res = await asA(
-        request(appFor(makeStores())).post("/api/logs"),
-      ).send({
+      const app = appFor(makeStores());
+      const res = await asA(request(app).post("/api/logs")).send({
         ...validLogBody(),
         tz: value,
       });
-      expect(res.status).toBe(400);
-      expect(res.body.field).toBe("tz");
-      expect(res.body.error).toBe("tz must be an IANA timezone name or null");
+      expect(res.status).toBe(201);
+
+      const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+      expect(got.body.tz).toBeNull();
     },
   );
 
@@ -2124,22 +2152,22 @@ describe("GET/POST /api/logs", () => {
     expect(res.status).toBe(201);
   });
 
-  it("rejects an invalid pain value with 400, still naming the field, when pain is present", async () => {
+  it("rejects an invalid effort value with 400, still naming the field, when effort is present", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {
         ...validLogBody(),
-        pain: 99,
+        effort: 99,
       },
     );
     expect(res.status).toBe(400);
-    expect(res.body.field).toBe("pain");
+    expect(res.body.field).toBe("effort");
   });
 
-  it("accepts pain: null", async () => {
+  it("accepts effort: null", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {
         ...validLogBody(),
-        pain: null,
+        effort: null,
       },
     );
     expect(res.status).toBe(201);
@@ -3075,7 +3103,7 @@ describe("GET/POST /api/logs", () => {
     workoutTitle: "Steady State",
     workoutType: "AT",
     held: "held",
-    pain: 2,
+    effort: 2,
     notes: null,
     steps: [
       {
@@ -3411,7 +3439,7 @@ describe("GET/POST /api/logs", () => {
       workoutTitle: "Steady State",
       workoutType: "AT",
       held: "held",
-      pain: 2,
+      effort: 2,
       notes: null,
       steps: [
         {
@@ -3612,18 +3640,18 @@ describe("GET/POST /api/logs", () => {
       const created = await asA(request(app).post("/api/logs")).send({
         ...validLogBody(),
         held: "held",
-        pain: 2,
+        effort: 2,
         notes: "orig note",
         thumbs: "up",
       });
 
       const res = await asA(
         request(app).patch(`/api/logs/${created.body.id}`),
-      ).send({ pain: 4 });
+      ).send({ effort: 4 });
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
         held: "held",
-        pain: 4,
+        effort: 4,
         notes: "orig note",
         thumbs: "up",
       });
@@ -3631,7 +3659,7 @@ describe("GET/POST /api/logs", () => {
       const fetched = await getLogById(app, created.body.id);
       expect(fetched.body).toMatchObject({
         held: "held",
-        pain: 4,
+        effort: 4,
         notes: "orig note",
         thumbs: "up",
       });
@@ -3639,7 +3667,7 @@ describe("GET/POST /api/logs", () => {
 
     it.each([
       ["held", "held"],
-      ["pain", 3],
+      ["effort", 3],
       ["thumbs", "up"],
       ["notes", "some note"],
     ])(
@@ -3665,7 +3693,7 @@ describe("GET/POST /api/logs", () => {
       const created = await asA(request(app).post("/api/logs")).send({
         ...validLogBody(),
         held: "held",
-        pain: 2,
+        effort: 2,
         notes: "keep me",
         thumbs: "down",
       });
@@ -3674,10 +3702,10 @@ describe("GET/POST /api/logs", () => {
         request(app).patch(`/api/logs/${created.body.id}`),
       ).send({ notes: "changed" });
       expect(res.status).toBe(200);
-      // held/pain/thumbs were never named in the PATCH body — untouched.
+      // held/effort/thumbs were never named in the PATCH body — untouched.
       expect(res.body).toMatchObject({
         held: "held",
-        pain: 2,
+        effort: 2,
         thumbs: "down",
         notes: "changed",
       });
@@ -3702,7 +3730,7 @@ describe("GET/POST /api/logs", () => {
 
     // Series capture spec (2026-08-19), §3: "PATCH does not accept
     // series" — no new code path, PATCH's own accepted-key set
-    // (thumbs/held/pain/notes) simply never grew one. `series` is an
+    // (thumbs/held/effort/notes) simply never grew one. `series` is an
     // ordinary unknown key here, same fate as `banana`/`steps` above; the
     // row's own `series` (set at POST time) survives byte-identical.
     it("PATCH ignores an attempt to rewrite series — not in its accepted set, row unchanged", async () => {
@@ -3768,7 +3796,7 @@ describe("GET/POST /api/logs", () => {
     // same exact message, one copy.
     it.each([
       ["held", "sideways", "held must be one of held|under|over or null"],
-      ["pain", 99, "pain must be an integer 1..5 or null"],
+      ["effort", 99, "effort must be an integer 1..5 or null"],
       ["thumbs", "left", "thumbs must be one of up|down or null"],
       ["notes", 12345, "notes must be a string or null"],
     ])(
@@ -3799,14 +3827,14 @@ describe("GET/POST /api/logs", () => {
     it("404s on a malformed (non-uuid) id", async () => {
       const res = await asA(
         request(appFor(makeStores())).patch("/api/logs/not-a-uuid"),
-      ).send({ pain: 3 });
+      ).send({ effort: 3 });
       expect(res.status).toBe(404);
     });
 
     it("404s on a well-formed but absent id", async () => {
       const res = await asA(
         request(appFor(makeStores())).patch(`/api/logs/${NON_EXISTENT_UUID}`),
-      ).send({ pain: 3 });
+      ).send({ effort: 3 });
       expect(res.status).toBe(404);
     });
 
@@ -4118,7 +4146,7 @@ describe("GET/PUT /api/plan", () => {
       workoutTitle: "X",
       workoutType: "AT",
       held: "held",
-      pain: 1,
+      effort: 1,
       notes: null,
       steps: [
         {
@@ -4149,7 +4177,7 @@ describe("GET/PUT /api/plan", () => {
       workoutTitle: "X",
       workoutType: "AT",
       held: "held",
-      pain: 1,
+      effort: 1,
       notes: null,
       steps: [
         {
@@ -4179,7 +4207,7 @@ describe("GET/PUT /api/plan", () => {
       workoutTitle: "X",
       workoutType: "AT",
       held: "held",
-      pain: 1,
+      effort: 1,
       notes: null,
       steps: [
         {
@@ -4438,211 +4466,179 @@ describe("GET /api/test-history", () => {
 });
 
 describe("GET /api/today", () => {
-  it("422s with baselines_required when baselines are unset", async () => {
+  // Removed 2026-09-05 (James's ruling, ROADMAP "Needs a decision"): no
+  // client ever called it, and since #297 the screen draws its first card
+  // at random while this route returned the deterministic head. Pinned as
+  // absent so a stray re-add has to argue with this test.
+  it("is gone: 404 for a signed-in rower", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/today"));
-    expect(res.status).toBe(422);
-    expect(res.body).toStrictEqual({ error: "baselines_required" });
+    expect(res.status).toBe(404);
+  });
+});
+
+// Phase DE PR 2 (spec §4.3): the store speaks `effort`; the API speaks both
+// for one tag cycle. Every site the census command lists is driven here.
+describe("Phase DE PR 2 dual-field compat", () => {
+  const validLogBody = () => ({
+    workoutId: null,
+    workoutTitle: "2K Test",
+    workoutType: "AN",
+    held: null,
+    notes: null,
+    steps: [
+      { label: "2000m @ MAX", actualSplit: 118, actualSource: "stopwatch" },
+    ],
+    source: "timer",
   });
 
-  it("422s when only one baseline is set", async () => {
+  it("serves both pain and effort on every workout and log response (nine sites, both PATCH exits)", async () => {
     const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({ k2Seconds: 120 });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(422);
-  });
-
-  it("with no active plan, falls back to the sprint plan at doneN 0 but reports planKey: null", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({
-      todayCode: PLANS.sprint.sessions[0].type,
-      doneN: 0,
-      planKey: null,
-    });
-  });
-
-  it("recommends a matching-type workout from the library", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const todayCode = PLANS.sprint.sessions[0].type;
     const created = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({
-        type: todayCode as "AN" | "O2" | "AT" | "TR",
-      }),
+      validWorkoutBody({ effort: 4 }),
     );
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.body.recommendation).toBe(created.body.id);
-    expect(res.body.pool).toContain(created.body.id);
+    expect(created.body).toMatchObject({ effort: 4, pain: 4 });
+    const list = await asA(request(app).get("/api/workouts"));
+    expect(list.body[0]).toMatchObject({ effort: 4, pain: 4 });
+    const one = await asA(request(app).get(`/api/workouts/${created.body.id}`));
+    expect(one.body).toMatchObject({ effort: 4, pain: 4 });
+    const put = await asA(
+      request(app).put(`/api/workouts/${created.body.id}`),
+    ).send(validWorkoutBody({ effort: 1 }));
+    expect(put.body).toMatchObject({ effort: 1, pain: 1 });
+    const bulk = await asA(request(app).post("/api/workouts/bulk")).send({
+      text: "Bulk Both | AN | 2\nw 10' 6k+4 @20",
+    });
+    expect(bulk.body.created[0]).toMatchObject({ effort: 2, pain: 2 });
+
+    const log = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      effort: 3,
+    });
+    expect(log.status).toBe(201);
+    const logs = await asA(request(app).get("/api/logs"));
+    expect(logs.body[0]).toMatchObject({ effort: 3, pain: 3 });
+    const detail = await asA(request(app).get(`/api/logs/${log.body.id}`));
+    expect(detail.body).toMatchObject({ effort: 3, pain: 3 });
+    const patched = await asA(
+      request(app).patch(`/api/logs/${log.body.id}`),
+    ).send({ effort: 5 });
+    expect(patched.body).toMatchObject({ effort: 5, pain: 5 });
+    // The PATCH route's OTHER exit: an empty patch returns the row — aliased too.
+    const noop = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send(
+      { unknownKey: 1 },
+    );
+    expect(noop.body).toMatchObject({ effort: 5, pain: 5 });
   });
 
-  it("reports no recommendation when the library has no matching-type workout", async () => {
+  it("accepts an old client's pain on create, PUT and PATCH, stores it as effort, and logs compat.pain_write once per request that carried the key", async () => {
+    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
     const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
+    const { effort: _drop, ...noEffort } = validWorkoutBody();
+    const w = await asA(request(app).post("/api/workouts")).send({
+      ...noEffort,
+      pain: 2,
     });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.body.recommendation).toBeNull();
-    expect(res.body.pool).toStrictEqual([]);
-  });
-
-  it("the pool spans globals: a global workout of the matching type appears in poolIds", async () => {
-    const stores = makeStores();
-    const app = appFor(stores);
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
+    expect(w.status).toBe(201);
+    expect(w.body).toMatchObject({ effort: 2, pain: 2 });
+    const put = await asA(request(app).put(`/api/workouts/${w.body.id}`)).send({
+      ...noEffort,
+      pain: 5,
     });
-    const todayCode = PLANS.sprint.sessions[0].type;
-    // Seeded via the same test-only seam data.test.ts's "global starter
-    // library" block uses — no personal workout created at all here, so if
-    // the global didn't show up in the pool, it could only be because
-    // stores.workouts.list()/today's library-building step failed to span
-    // globals.
-    const g = seedGlobalWorkout(stores, {
-      sortOrder: 900,
-      title: "Global Pool Entry",
-      type: todayCode as "AN" | "O2" | "AT" | "TR",
+    expect(put.body).toMatchObject({ effort: 5, pain: 5 });
+    const log = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      pain: 3,
     });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body.pool).toContain(g.id);
-    expect(res.body.recommendation).toBe(g.id);
-  });
-
-  // Controller addendum (Phase 6I Task 7, design spec's "invisible outside
-  // onboarding" rule): the designated onboarding workout is never
-  // suggested to an account that already has real baselines set — this
-  // route 422s before ever reaching the suggestion pool for a brand-new
-  // account (the only account these workouts are actually FOR), so the
-  // only account this exclusion can be observed against is a returning one
-  // that happens to still have "6K Test" in its library.
-  it("excludes the designated onboarding workout from the pool/recommendation, even at a matching type", async () => {
-    const stores = makeStores();
-    const app = appFor(stores);
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
+    expect(log.status).toBe(201);
+    const p = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({
+      pain: 4,
     });
-    const todayCode = PLANS.sprint.sessions[0].type;
-    const onboarding = seedGlobalWorkout(stores, {
-      sortOrder: 900,
-      title: ONBOARDING_TITLES.k6,
-      type: todayCode,
+    expect(p.body).toMatchObject({ effort: 4, pain: 4 });
+    // Agreeing keys still CARRY the old key: counted, value not used.
+    await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({
+      pain: 4,
+      effort: 4,
     });
-    const real = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ title: "A Real Workout", type: todayCode }),
+    const lines = spy.mock.calls.filter((c) =>
+      String(c[0]).includes("compat.pain_write"),
     );
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body.pool).not.toContain(onboarding.id);
-    expect(res.body.pool).toContain(real.body.id);
-    expect(res.body.recommendation).toBe(real.body.id);
+    expect(lines).toHaveLength(5);
+    spy.mockRestore();
   });
 
-  // Final-review fix: the exclusion must key off isGlobal, not title alone
-  // — a rower's own custom workout that happens to be named "6K Test"
-  // (the POST route's own "personal workout sharing a global's title" case,
-  // pinned above) is a real, ownable workout, not a stray collision with
-  // the seeded pair. Excluding it by title alone would orphan it from
-  // /api/today's suggestion pool with no way back.
-  it("a CUSTOM workout named the same as a designated onboarding title stays in the pool — only the GLOBAL row is excluded", async () => {
-    const stores = makeStores();
-    const app = appFor(stores);
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
-    });
-    const todayCode = PLANS.sprint.sessions[0].type;
-    const onboarding = seedGlobalWorkout(stores, {
-      sortOrder: 900,
-      title: ONBOARDING_TITLES.k6,
-      type: todayCode,
-    });
-    // Seeded through the STORE, not the route: since the 2026-08-31
-    // reservation ALL THREE workout-writing routes (POST, PUT, bulk —
-    // the PM gate caught bulk unguarded) reject the designated titles,
-    // so the only remaining producer of a personal row with one is
-    // history — rows created before the check. This test now guards exactly that
-    // legacy class: such a row STAYS suggestable, and only the GLOBAL is
-    // excluded from the pool.
-    const custom = await stores.workouts.create("user-a", {
-      ...validWorkoutBody({ title: ONBOARDING_TITLES.k6, type: todayCode }),
-      source: "user",
-    });
-    expect(custom.isGlobal).toBe(false);
-
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body.pool).not.toContain(onboarding.id);
-    expect(res.body.pool).toContain(custom.id);
-    expect(res.body.recommendation).toBe(custom.id);
-  });
-
-  it("uses the selected plan and doneN, not the fallback, and reports the real planKey", async () => {
+  it("a PATCH carrying neither key leaves effort untouched (presence contract)", async () => {
     const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
+    const log = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      effort: 3,
     });
-    await asA(request(app).put("/api/plan")).send({ planKey: "head" });
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.body.todayCode).toBe(PLANS.head.sessions[0].type);
-    expect(res.body.planKey).toBe("head");
+    const p = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({
+      held: "held",
+    });
+    expect(p.body).toMatchObject({ effort: 3, pain: 3 });
   });
 
-  // Amendment fix round (L1): pins bucketsForCap's own derivation at the
-  // route level, not just in the client-side unit/client suites —
-  // PREFERENCES_DEFAULTS.timeCapMinutes is 60, and bucketsForCap(60)
-  // (domain/duration.ts) keeps only the first three buckets, excluding
-  // "60+". A workout estimated at EXACTLY 60 minutes buckets as "60+"
-  // (bucketFor's own <60 rule: minutes<60 is false at exactly 60), so it
-  // must be excluded from the pool — the precise boundary this round's
-  // cap-to-bucket derivation turns on. A second, shorter workout of the
-  // same type stays in the filtered pool (non-empty), which is what keeps
-  // suggest()'s own fellBack rule from masking the exclusion by falling
-  // back to the unfiltered type list.
-  it("excludes a workout estimated at exactly the account's 60-min cap from the pool (the bucketsForCap boundary)", async () => {
+  it("400s when pain and effort are both non-null and disagree, naming effort; a pain-keyed bad value still names pain", async () => {
     const app = appFor(makeStores());
-    await asA(request(app).put("/api/baselines")).send({
-      k2Seconds: 120,
-      k6Seconds: 130,
+    const log = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      effort: 3,
     });
-    const todayCode = PLANS.sprint.sessions[0].type;
-    const short = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({
-        title: "Well Under The Cap",
-        type: todayCode as "AN" | "O2" | "AT" | "TR",
-      }),
-    );
-    // r 10' + a 50' work step (fixed `duration: {kind: "time"}`, so its
-    // seconds don't depend on baselines/pace) = exactly 60 minutes total.
-    const atCap = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({
-        title: "Exactly At The Cap",
-        type: todayCode as "AN" | "O2" | "AT" | "TR",
-        steps: [
-          { k: "r", minutes: 10 },
-          {
-            k: "w",
-            duration: { kind: "time", minutes: 50 },
-            ref: { base: "2k", off: 10 },
-          },
-        ],
-      }),
-    );
-    const res = await asA(request(app).get("/api/today"));
-    expect(res.status).toBe(200);
-    expect(res.body.pool).toContain(short.body.id);
-    expect(res.body.pool).not.toContain(atCap.body.id);
-    expect(res.body.recommendation).toBe(short.body.id);
+    const bad = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({
+      pain: 2,
+      effort: 4,
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.field).toBe("effort");
+    const badOld = await asA(
+      request(app).patch(`/api/logs/${log.body.id}`),
+    ).send({ pain: 9 });
+    expect(badOld.status).toBe(400);
+    expect(badOld.body).toStrictEqual({
+      error: "pain must be an integer 1..5 or null",
+      field: "pain",
+    });
+    const badNew = await asA(
+      request(app).patch(`/api/logs/${log.body.id}`),
+    ).send({ effort: 9 });
+    expect(badNew.body).toStrictEqual({
+      error: "effort must be an integer 1..5 or null",
+      field: "effort",
+    });
+  });
+
+  it("POST /api/logs with a bad pain-keyed value names pain in the error, the way the old client expects", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      pain: 7,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({
+      error: "pain must be an integer 1..5 or null",
+      field: "pain",
+    });
+  });
+
+  it("a non-object body on POST /api/workouts is still a 400, not a 500", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/workouts"))
+      .set("content-type", "text/plain")
+      .send("pain");
+    expect(res.status).toBe(400);
+  });
+
+  it("article reads: an old client's pain-scale is listed, marked and unmarked as effort-scale", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).put("/api/article-reads/pain-scale"));
+    const list = await asA(request(app).get("/api/article-reads"));
+    expect([...list.body.slugs].sort()).toStrictEqual([
+      "effort-scale",
+      "pain-scale",
+    ]);
+    await asA(request(app).delete("/api/article-reads/pain-scale"));
+    const after = await asA(request(app).get("/api/article-reads"));
+    expect(after.body.slugs).not.toContain("effort-scale");
+    expect(after.body.slugs).not.toContain("pain-scale");
   });
 });

@@ -160,7 +160,7 @@ export interface StoredLog {
   workoutType: WorkoutType | null;
   loggedAt: string;
   held: HeldResult | null;
-  pain: number | null;
+  effort: number | null;
   notes: string | null;
   thumbs: Thumbs | null;
   deviceName: string | null;
@@ -266,13 +266,24 @@ export interface StoredLog {
   // `restSeconds`/`restMeters` above.
   workSeconds: number | null;
   workMeters: number | null;
+  // Wave E PR1 (spec §Stored shapes): C2's own result id, and WHICH
+  // Concept2 account accepted it. Both server-written at upload, never
+  // client input (`server/stores/logs.ts`'s own comment: "c2ResultId/
+  // c2UserId are NEVER client input"). Required-and-nullable, the same
+  // convention as `machineWorkSeconds` above: `GET /api/logs/:id` returns
+  // `db.select()` over every column (`stores/logs.ts`'s `get()`), so
+  // "absent" is not a shape this row can carry; `null` is the common case.
+  // PR2 is the first reader — the sent state renders only when
+  // `c2UserId` matches the LIVE link's (spec anchor F8).
+  c2ResultId: number | null;
+  c2UserId: number | null;
 }
 
 /** §5D: the read-back's own three pieces. `empty` is the "all four null"
- *  gate (thumbs/held/pain/notes) — when true, neither `segmentLine` nor
+ *  gate (thumbs/held/effort/notes) — when true, neither `segmentLine` nor
  *  `note` is ever set, and the screen renders the Edit affordance's
  *  `Add how it felt` empty-state copy instead of this block at all.
- *  `segmentLine` is present only when at least one of thumbs/held/pain is
+ *  `segmentLine` is present only when at least one of thumbs/held/effort is
  *  non-null (a notes-only log has `note` set with `segmentLine`
  *  undefined — no empty segment line renders above the note). */
 export interface StoredReadBack {
@@ -1015,7 +1026,7 @@ const HELD_READBACK_LABEL: Record<HeldResult, string> = {
 };
 
 // Thumbs read-back words: "LIKED" for `up` is the design spec's own
-// literal example (§5D: "HELD · PAIN 3/5 · LIKED"). The spec never names
+// literal example (§5D: "HELD · EFFORT 3/5 · LIKED"). The spec never names
 // a `down` word — James's copy ruling (fix round, 2026-08-18): "LESS LIKE
 // THIS", reusing the live door's own control vocabulary verbatim
 // (`PostWorkoutSummary.tsx`'s thumbs-down button carries `aria-label="Less
@@ -1031,13 +1042,13 @@ function buildReadBack(row: StoredLog): StoredReadBack {
   const empty =
     row.thumbs === null &&
     row.held === null &&
-    row.pain === null &&
+    row.effort === null &&
     noteText === undefined;
   if (empty) return { empty: true };
 
   const segments = [
     row.held !== null ? HELD_READBACK_LABEL[row.held] : null,
-    row.pain !== null ? `PAIN ${row.pain}/5` : null,
+    row.effort !== null ? `EFFORT ${row.effort}/5` : null,
     row.thumbs !== null ? thumbsReadBackLabel(row.thumbs) : null,
   ].filter((s): s is string => s !== null);
 

@@ -3,8 +3,7 @@
  *  "Today's sheet gains the Library's LAST DONE and SOURCE groups") so
  *  `domain/suggest.ts`'s own LAST DONE predicate can share the IDENTICAL
  *  boundary/rule Today's filter sheet and the Library's both render cells
- *  for — the same domain-ward move `DurationBucket`/`bucketFor` made for
- *  TIME (see `domain/duration.ts`'s own doc comment for the full reasoning):
+ *  for — the same domain-ward move TIME's `DurationRange`/`inRange` made (see `domain/duration.ts`'s own doc comment for the full reasoning):
  *  `domain/` never imports client code, while `src/library/filters.ts`
  *  already imports from `domain/`, so a client module importing FROM
  *  `domain/` is the established direction — `filters.ts` re-exports both

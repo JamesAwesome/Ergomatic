@@ -23,7 +23,7 @@ function makeLog(id: string, overrides: Partial<RecentLog> = {}): RecentLog {
     workoutType: SEA_FRET.type,
     loggedAt: "2026-07-25T12:00:00.000Z",
     held: null,
-    pain: null,
+    effort: null,
     thumbs: null,
     avgSplitSeconds: null,
     timeSeconds: null,

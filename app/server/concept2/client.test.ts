@@ -308,18 +308,20 @@ describe("createC2Client", () => {
   });
 
   describe("fetchMe", () => {
-    it("200 {data:{id, username}} -> c2UserId + username", async () => {
-      const fetchImpl = vi
-        .fn()
-        .mockResolvedValue(
-          jsonResponse(200, { data: { id: 2211, username: "jmorelli" } }),
-        );
+    it("200 {data:{id, username, weight, gender}} -> c2UserId + username + the two derivation inputs", async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          data: { id: 2211, username: "jmorelli", weight: 8200, gender: "M" },
+        }),
+      );
       const client = createC2Client(cfg, fetchImpl);
       const result = await client.fetchMe("some-access-token");
       expect(result).toStrictEqual({
         ok: true,
         c2UserId: 2211,
         username: "jmorelli",
+        weight: 8200,
+        gender: "M",
       });
 
       const [url, init] = fetchImpl.mock.calls[0] as [URL, RequestInit];
@@ -330,8 +332,9 @@ describe("createC2Client", () => {
     });
 
     // No committed capture carries `username` (plan observation 3): the
-    // field is read as OPTIONAL and a non-string reads as absent.
-    it("200 {data:{id}} without a username -> username null, still ok", async () => {
+    // field is read as OPTIONAL and a non-string reads as absent. Same for
+    // `gender`; `weight` has its own three-state reader below.
+    it("200 {data:{id}} without a username, gender or weight -> nulls, still ok", async () => {
       const fetchImpl = vi
         .fn()
         .mockResolvedValue(
@@ -342,35 +345,246 @@ describe("createC2Client", () => {
         ok: true,
         c2UserId: 2211,
         username: null,
+        weight: null,
+        gender: null,
       });
     });
 
-    it("PROBE 401 invalid-access-token body -> {ok:false}, never throws", async () => {
+    it("reads a finite numeric STRING as a weight, and anything else PRESENT as unreadable", async () => {
+      // Wave E PR2. This API is Laravel and the read field is undocumented,
+      // so `"7500"` is a live possibility. Folding it into "not set" would
+      // tell a rower who HAS set a weight to go and set it, forever, with
+      // nothing in the response saying why — hence three states, not two.
+      const cases: unknown[] = ["7500", " 7500 ", "", "heavy", {}, NaN, 8200];
+      const seen: unknown[] = [];
+      for (const weight of cases) {
+        const fetchImpl = vi
+          .fn()
+          .mockResolvedValue(jsonResponse(200, { data: { id: 2211, weight } }));
+        const client = createC2Client(cfg, fetchImpl);
+        const result = await client.fetchMe("t");
+        seen.push(result.ok ? result.weight : "FAILED");
+      }
+      expect(seen).toStrictEqual([
+        7500,
+        7500,
+        "unreadable",
+        "unreadable",
+        "unreadable",
+        "unreadable",
+        8200,
+      ]);
+    });
+
+    it("PROBE 401 invalid-access-token body -> {ok:false, kind:'auth'}, never throws", async () => {
+      // The 401 discriminator is the whole reason `kind` exists: the send
+      // path must reach the same `needs_reauth` flag a rejected postResult
+      // does, and must NOT do so for a 500 or a timeout.
       const fetchImpl = vi
         .fn()
         .mockResolvedValue(jsonResponse(401, PROBE_401_ME_BODY));
       const client = createC2Client(cfg, fetchImpl);
       await expect(client.fetchMe("expired-token")).resolves.toStrictEqual({
         ok: false,
+        kind: "auth",
+        status: 401,
       });
     });
 
-    it("a rejected fetch -> {ok:false}, never throws", async () => {
+    it("a 403 (insufficient scope) -> c2_error carrying the status, never 'auth'", async () => {
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(403, { message: "Forbidden" }));
+      const client = createC2Client(cfg, fetchImpl);
+      await expect(client.fetchMe("t")).resolves.toStrictEqual({
+        ok: false,
+        kind: "c2_error",
+        status: 403,
+      });
+    });
+
+    it("a rejected fetch -> c2_error with a NULL status, never throws", async () => {
       const fetchImpl = vi.fn().mockRejectedValue(new Error("ECONNRESET"));
       const client = createC2Client(cfg, fetchImpl);
       await expect(client.fetchMe("some-token")).resolves.toStrictEqual({
         ok: false,
+        kind: "c2_error",
+        status: null,
       });
     });
 
-    it("a 200 with a malformed body (no data.id) -> {ok:false}, never throws", async () => {
+    it("a 200 with a malformed body (no data.id) -> c2_error, never throws", async () => {
       const fetchImpl = vi
         .fn()
         .mockResolvedValue(jsonResponse(200, { data: {} }));
       const client = createC2Client(cfg, fetchImpl);
       await expect(client.fetchMe("some-token")).resolves.toStrictEqual({
         ok: false,
+        kind: "c2_error",
+        status: 200,
       });
+    });
+  });
+
+  describe("fetchResults", () => {
+    it("projects the four decision fields per row, in Concept2's own order, and asks for the page size it was given", async () => {
+      // Shape MEASURED 2026-09-03 against log-dev: the list is
+      // DATE-descending and every row carries `weight_class`. Only four
+      // fields are kept — the rower's other logbook data is not ours to
+      // hold, log or render.
+      const fetchImpl = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          data: [
+            {
+              id: 85561,
+              type: "rower",
+              weight_class: "H",
+              date_utc: "2026-09-02 10:00:30",
+              date: "2026-09-02 06:00:30",
+              distance: 2000,
+              comments: "a private note",
+            },
+            { id: 85562, type: "skierg", weight_class: null, date_utc: null },
+          ],
+        }),
+      );
+      const client = createC2Client(cfg, fetchImpl);
+      const result = await client.fetchResults("some-access-token", 5);
+      expect(result).toStrictEqual({
+        ok: true,
+        rows: [
+          {
+            id: 85561,
+            type: "rower",
+            weightClass: "H",
+            dateUtc: "2026-09-02 10:00:30",
+            date: "2026-09-02 06:00:30",
+          },
+          {
+            id: 85562,
+            type: "skierg",
+            weightClass: null,
+            dateUtc: null,
+            date: null,
+          },
+        ],
+      });
+
+      const [url, init] = fetchImpl.mock.calls[0] as [URL, RequestInit];
+      expect(String(url)).toBe(
+        "https://log-dev.concept2.com/api/users/me/results?number=5",
+      );
+      expect((init.headers as Record<string, string>).authorization).toBe(
+        "Bearer some-access-token",
+      );
+    });
+
+    it("401 -> auth; 500 -> c2_error with the status; a rejected fetch -> c2_error with a null status", async () => {
+      const outcomes = [];
+      for (const answer of [
+        () => jsonResponse(401, PROBE_401_ME_BODY),
+        () => jsonResponse(500, { message: "boom" }),
+        null,
+      ]) {
+        const fetchImpl =
+          answer === null
+            ? vi.fn().mockRejectedValue(new Error("ECONNRESET"))
+            : vi.fn().mockResolvedValue(answer());
+        const client = createC2Client(cfg, fetchImpl);
+        outcomes.push(await client.fetchResults("t", 5));
+      }
+      expect(outcomes).toStrictEqual([
+        { ok: false, kind: "auth", status: 401 },
+        { ok: false, kind: "c2_error", status: 500 },
+        { ok: false, kind: "c2_error", status: null },
+      ]);
+    });
+
+    it("a 200 whose data is not an array -> c2_error, never throws", async () => {
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { data: { id: 1 } }));
+      const client = createC2Client(cfg, fetchImpl);
+      await expect(client.fetchResults("t", 5)).resolves.toStrictEqual({
+        ok: false,
+        kind: "c2_error",
+        status: 200,
+      });
+    });
+  });
+
+  describe("the timeout every wire call carries", () => {
+    it("passes an abort signal to every one of the four calls", async () => {
+      // Wave E PR2. An unbounded fetch holds an Express handler — and a
+      // rower watching SENDING — for as long as the socket stays open.
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, PROBE_200_BODY));
+      const client = createC2Client(cfg, fetchImpl);
+      await client.refreshTokens("rt");
+      const meImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { data: { id: 2211 } }));
+      const meClient = createC2Client(cfg, meImpl);
+      await meClient.fetchMe("t");
+      const listImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { data: [] }));
+      const listClient = createC2Client(cfg, listImpl);
+      await listClient.fetchResults("t", 5);
+      const postImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(201, RAW_201_BODY));
+      const postClient = createC2Client(cfg, postImpl);
+      await postClient.postResult("t", { type: "rower" });
+
+      const signals = [fetchImpl, meImpl, listImpl, postImpl].map((impl) => {
+        const [, init] = impl.mock.calls[0] as [URL, RequestInit];
+        return init.signal instanceof AbortSignal;
+      });
+      expect(signals).toStrictEqual([true, true, true, true]);
+    });
+
+    it("bounds every wire call at ten seconds, pinned with a literal rather than the constant it gates", async () => {
+      const timeout = vi.spyOn(AbortSignal, "timeout");
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { data: { id: 2211 } }));
+      const client = createC2Client(cfg, fetchImpl);
+      await client.fetchMe("t");
+      expect(timeout).toHaveBeenCalledWith(10_000);
+      const [, init] = fetchImpl.mock.calls[0] as [URL, RequestInit];
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+      timeout.mockRestore();
+    });
+
+    it("classifies an aborted call as RETRYABLE, never as a dead grant", async () => {
+      // `AbortSignal.timeout` rejects the fetch with a TimeoutError, which
+      // every call site catches into its own retryable failure. A timeout
+      // must never send a rower back through re-consent.
+      const abort = () => {
+        const err = new Error("The operation was aborted due to timeout");
+        err.name = "TimeoutError";
+        return err;
+      };
+      const tokenClient = createC2Client(
+        cfg,
+        vi.fn().mockRejectedValue(abort()),
+      );
+      const meClient = createC2Client(cfg, vi.fn().mockRejectedValue(abort()));
+      const postClient = createC2Client(
+        cfg,
+        vi.fn().mockRejectedValue(abort()),
+      );
+      expect([
+        await tokenClient.refreshTokens("rt"),
+        await meClient.fetchMe("t"),
+        await postClient.postResult("t", {}),
+      ]).toStrictEqual([
+        { ok: false, grantDead: false },
+        { ok: false, kind: "c2_error", status: null },
+        { ok: false, kind: "c2_error" },
+      ]);
     });
   });
 

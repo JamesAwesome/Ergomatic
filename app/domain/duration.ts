@@ -1,83 +1,92 @@
 import type { WorkDuration } from "./types.js";
 
-/** The four duration buckets a workout's estimated minutes falls into —
- *  originally `src/library/filters.ts`'s own `DurationBucket`/`bucketFor`,
- *  moved here (Amendment, 2026-08-04 PR #50 round: "TIME unifies on the
- *  Library's bucket ranges") so `domain/suggest.ts`'s own duration
- *  predicate can consume the SAME bucket definition Today's filter sheet
- *  and the Library's both render cells for. The move runs domain-ward, not
- *  library-ward: `domain/` never imports client code (`src/`), while
- *  `src/library/filters.ts` already imports `estimateMinutes` from
- *  `domain/expand.js`, so a client module importing FROM `domain/` is the
- *  established direction — `filters.ts` re-exports both names unchanged so
- *  its own (and every other pre-existing) importer needs no update. */
-export type DurationBucket = "<30" | "30-45" | "45-60" | "60+";
+/** Phase SF PR2 (spec §3): TIME is a minutes RANGE, not four buckets. `min`
+ *  and `max` are whole minutes; `min` from 0 and `max` to
+ *  `DURATION_RANGE_MAX` (120), where 0 means "no lower bound" and 120 means
+ *  "no upper bound" — `[0, 120]` is the no-filter (unbounded) state and the
+ *  two-thumb control steps by `DURATION_STEP` (5). Stored on both screens'
+ *  filter records; the server's `/api/today` derives its own from the
+ *  account cap via `rangeForCap`. The old `DurationBucket` union
+ *  (`<30/30-45/45-60/60+`) is retired — `rangeFromBuckets` maps a stored v1
+ *  union to a range once, on load. */
+export interface DurationRange {
+  min: number;
+  max: number;
+}
 
-// Canonical bucket order — what "contiguous" means for a token's range
-// collapse (src/components/durationTokenLabel.ts) and the order
-// `bucketsForCap` (todayOverrides.ts) returns buckets in.
-export const DURATION_BUCKETS: readonly DurationBucket[] = [
-  "<30",
-  "30-45",
-  "45-60",
-  "60+",
-];
-
-// A bucket's own lower bound in minutes, indexed by DURATION_BUCKETS —
-// `bucketsForCap` (todayOverrides.ts) compares a preference cap against
-// this to decide which buckets that cap's default set includes.
-export const DURATION_LOWER_BOUND: Record<DurationBucket, number> = {
-  "<30": 0,
-  "30-45": 30,
-  "45-60": 45,
-  "60+": 60,
+export const DURATION_RANGE_MAX = 120;
+export const DURATION_STEP = 5;
+export const UNBOUNDED_RANGE: DurationRange = {
+  min: 0,
+  max: DURATION_RANGE_MAX,
 };
 
-// Boundaries per the handoff: <30, 30-45, 45-60, 60+ — the lower bucket owns
-// its upper boundary (29 is "<30", exactly 30 is "30-45").
-export function bucketFor(minutes: number): DurationBucket {
-  if (minutes < 30) return "<30";
-  if (minutes < 45) return "30-45";
-  if (minutes < 60) return "45-60";
-  return "60+";
+/** True when the range admits everything (min at 0, max at the top). */
+export function isUnbounded(range: DurationRange): boolean {
+  return range.min <= 0 && range.max >= DURATION_RANGE_MAX;
 }
 
-/** Maps a raw preference cap (the account's own `preferences.timeCapMinutes`)
- *  to the set of TIME buckets that cap implies as a default: every bucket
- *  whose own LOWER bound sits below the cap survives — a 60-min cap keeps
- *  the first three (`<30/30-45/45-60`, excluding `60+`); anything over 60
- *  keeps all four (effectively unfiltered); a cap at or under 30 keeps only
- *  `<30`. There is no bucket boundary for every possible preference value,
- *  so this is a deliberate approximation, not an exact re-derivation of
- *  "estMinutes <= pref" at the boundary — the same rounding trade-off the
- *  single-value `snapCap` chip this replaces (Amendment, 2026-08-04 PR #50
- *  round) always made.
- *
- *  Lives in `domain/` rather than `src/today/todayOverrides.ts` (which
- *  re-exports it) because it turned out to have TWO real callers needing
- *  the identical derivation: the client's own Today screen (seeding a
- *  fresh day's TIME defaults) and `server/routes/data.ts`'s `/api/today`
- *  route (building `SuggestPrefs` server-side from the same preference
- *  column) — the same "domain has no client dependencies, both sides can
- *  import it" reasoning `DurationBucket`/`bucketFor` themselves moved here
- *  for. */
-export function bucketsForCap(pref: number): DurationBucket[] {
-  return DURATION_BUCKETS.filter((b) => DURATION_LOWER_BOUND[b] < pref);
+/** Membership: `min ≤ minutes ≤ max`, with a `max` at the top meaning no
+ *  upper bound at all (a 200-minute workout passes `[60, 120]`). Both ends
+ *  are inclusive — read against the SAME integer the card prints
+ *  (`estimateMinutes(...).minutes`), never a float, so the card and the
+ *  filter can never disagree by rounding (spec §3.6). */
+export function inRange(minutes: number, range: DurationRange): boolean {
+  if (minutes < range.min) return false;
+  if (range.max >= DURATION_RANGE_MAX) return true;
+  return minutes <= range.max;
 }
 
-/** The house time format is elastic positional: seconds are always present,
- *  the hour group appears only when nonzero, and the leading group is never
- *  zero-padded — `0:45`, `20:00`, `1:05:00`, `3:00:00`. Because the rightmost
- *  pair is ALWAYS seconds, a bare `1:30` can only mean 90 seconds anywhere in
- *  the app.
- *
- *  Researched, not chosen: ECMA-402's Intl.DurationFormat defines a `digital`
- *  style and documents it as the right one for durations under a day; Android's
- *  DateUtils.formatElapsedTime documents `MM:SS` or `H:MM:SS`, adding the hour
- *  group only when there is one; Apple's Music/Fitness convention drops the
- *  leading zero, and this app is iOS-first. Totals deliberately do NOT use this
- *  format — they keep unit labels ("302 MIN"), which is what keeps a colon
- *  value's meaning unambiguous. See the Phase 5F spec. */
+/** The account's `timeCapMinutes` (validated 10..300 by the server) as a
+ *  default range: `[0, cap]` with the cap rounded DOWN to the step so
+ *  nothing longer than the cap is admitted (47 → 45), and clamped at the
+ *  top (≥ 120 → unbounded). Spec I-12. */
+export function rangeForCap(cap: number): DurationRange {
+  const snapped = Math.floor(cap / DURATION_STEP) * DURATION_STEP;
+  return { min: 0, max: Math.max(0, Math.min(DURATION_RANGE_MAX, snapped)) };
+}
+
+/** Clamps and orders an arbitrary pair into a valid range: integers, within
+ *  `[0, DURATION_RANGE_MAX]`, `min ≤ max` (a crossed pair collapses to a
+ *  point at the lower of the two). Parsers use it after validating that
+ *  both members are finite numbers. Deliberately NOT snapped to
+ *  `DURATION_STEP`: the control only ever produces step values, and a
+ *  hand-edited record holding 27 is honoured as 27 (the thumb prints `27′`
+ *  and arrows walk 27 → 32 …) rather than silently moved — a tolerated
+ *  non-invariant, not a promise (PM final gate, PR2). */
+export function clampRange(range: DurationRange): DurationRange {
+  const clamp = (n: number) =>
+    Math.min(DURATION_RANGE_MAX, Math.max(0, Math.round(n)));
+  const a = clamp(range.min);
+  const b = clamp(range.max);
+  return a <= b ? { min: a, max: b } : { min: b, max: b };
+}
+
+/** v1 → v2 mapping for a stored bucket union (spec §3.3, PM finding: a
+ *  permanent memory is MAPPED, never discarded). A bucket IS a range, so
+ *  the union becomes `[lowest lower bound, highest upper bound]` with
+ *  `60+` reaching the top; unknown strings are ignored; an empty union (or
+ *  nothing recognisable) returns null so the caller can use its default. */
+export function rangeFromBuckets(
+  buckets: readonly unknown[],
+): DurationRange | null {
+  const bounds: Record<string, [number, number]> = {
+    "<30": [0, 30],
+    "30-45": [30, 45],
+    "45-60": [45, 60],
+    "60+": [60, DURATION_RANGE_MAX],
+  };
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const b of buckets) {
+    if (typeof b !== "string" || !(b in bounds)) continue;
+    const [lo, hi] = bounds[b];
+    if (lo < min) min = lo;
+    if (hi > max) max = hi;
+  }
+  if (!Number.isFinite(min)) return null;
+  return { min, max };
+}
 
 // Lenient by construction: the minutes and seconds groups may overflow
 // (`1:70`), because the masked field can produce that transiently and

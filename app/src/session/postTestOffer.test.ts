@@ -18,6 +18,7 @@ function eligible(overrides: Partial<Parameters<typeof postTestOffer>[0]>) {
   return postTestOffer({
     workoutTitle: K2_SEED.title,
     workoutIsGlobal: true,
+    linkedWorkoutTitle: K2_SEED.title,
     avgSplitSeconds: 118.4,
     completedFullDistance: true,
     ...overrides,
@@ -34,7 +35,11 @@ describe("postTestOffer (Phase BL PR B: who gets the post-save baseline offer)",
 
   it("a completed global 6K Test offers its split as the 6k", () => {
     expect(
-      eligible({ workoutTitle: K6_SEED.title, avgSplitSeconds: 130.2 }),
+      eligible({
+        workoutTitle: K6_SEED.title,
+        linkedWorkoutTitle: K6_SEED.title,
+        avgSplitSeconds: 130.2,
+      }),
     ).toStrictEqual({ distance: "6k", splitSeconds: 130.2 });
   });
 
@@ -61,6 +66,25 @@ describe("postTestOffer (Phase BL PR B: who gets the post-save baseline offer)",
   // whose shape (and therefore whose average split) can be anything.
   it("a rower's own custom workout that shares the test's title is not the designated test", () => {
     expect(eligible({ workoutIsGlobal: false })).toBeNull();
+  });
+
+  it("rejects a global linked row when its title disagrees with the retained designated title", () => {
+    const ordinary = LIBRARY_WORKOUTS.find(
+      (workout) => workout.title === "Stationary Front",
+    )!;
+    expect(eligible({ linkedWorkoutTitle: ordinary.title })).toBeNull();
+  });
+
+  it("rejects a designated linked row when the retained title disagrees", () => {
+    const ordinary = LIBRARY_WORKOUTS.find(
+      (workout) => workout.title === "Stationary Front",
+    )!;
+    expect(
+      eligible({
+        workoutTitle: ordinary.title,
+        linkedWorkoutTitle: K2_SEED.title,
+      }),
+    ).toBeNull();
   });
 
   // The split band is the baselines band (60..240 server-side): a number
