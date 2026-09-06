@@ -76,6 +76,15 @@ describe("adoptEffortKey (spec §4.3: presence-preserving, effort wins, disagree
     });
     expect(b.effort).toBe(3);
   });
+  it("two nulls are a clear, not a disagreement, and the null pain key did not win", () => {
+    const b: Record<string, unknown> = { pain: null, effort: null };
+    expect(adoptEffortKey(b)).toStrictEqual({
+      ok: true,
+      sawPainKey: true,
+      usedPainKey: false,
+    });
+    expect(b.effort).toBeNull();
+  });
   it("rejects two non-null values that disagree, naming effort", () => {
     const b: Record<string, unknown> = { pain: 2, effort: 4 };
     expect(adoptEffortKey(b)).toStrictEqual({

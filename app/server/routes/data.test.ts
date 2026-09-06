@@ -4607,6 +4607,19 @@ describe("Phase DE PR 2 dual-field compat", () => {
     });
   });
 
+  it("POST /api/logs with a bad pain-keyed value names pain in the error, the way the old client expects", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      pain: 7,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({
+      error: "pain must be an integer 1..5 or null",
+      field: "pain",
+    });
+  });
+
   it("a non-object body on POST /api/workouts is still a 400, not a 500", async () => {
     const app = appFor(makeStores());
     const res = await asA(request(app).post("/api/workouts"))
