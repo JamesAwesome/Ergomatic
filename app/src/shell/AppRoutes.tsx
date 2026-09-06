@@ -36,7 +36,6 @@ import Diagnostics from "../you/Diagnostics";
 import Concept2Screen from "../you/Concept2Screen";
 import MonitorLogs from "../you/MonitorLogs";
 import type { Me } from "../useMe";
-import { useKeyboardOpen } from "./keyboardOpen";
 import TabBar from "./TabBar";
 
 const monitorInstrumentEnabled =
@@ -147,13 +146,6 @@ export default function AppRoutes({
   onSignedOut?: () => void;
 } = {}) {
   const location = useLocation();
-  // Gate 0, 2026-09-06: the bar goes while the software keyboard is up.
-  // Decided HERE, beside the route rule, so the two reasons a tab bar is
-  // absent live in one place and neither can cancel the other.
-  // `.app-shell` keeps its tab-bar padding either way, so nothing under the
-  // rower's finger moves when the bar leaves. See `keyboardOpen.ts` for why
-  // hiding is the only option and repositioning is not.
-  const keyboardOpen = useKeyboardOpen();
   return (
     <div className="app-shell">
       <Routes>
@@ -286,7 +278,7 @@ export default function AppRoutes({
         )}
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Routes>
-      {!hidesTabBar(location.pathname) && !keyboardOpen && <TabBar />}
+      {!hidesTabBar(location.pathname) && <TabBar />}
     </div>
   );
 }

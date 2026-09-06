@@ -1,20 +1,23 @@
 # The software-keyboard harness (2026-09-06)
 
-`useKeyboardOpen` (`app/src/shell/keyboardOpen.ts`) reads a quantity **no
-gate this repo owns can produce**: the height iOS's software keyboard takes
-off the visual viewport. Playwright runs desktop Chromium with no keyboard,
-jsdom has no layout at all, and the client tests install a fake
-`visualViewport` — which tests the fake. Recurring failure 19 says that when
-the answer to "which instrument would catch this if it were wrong" is none,
-the instrument ships with the change. This file is that instrument: a
-recipe, not live code, because the harness needs a `vite` entry and an Xcode
-build that would otherwise have to earn their keep in CI for a check that
-runs by hand a few times a year.
+`.tabbar::after` (`app/src/index.css`) exists because of a quantity **no
+gate this repo owns can produce**: the band iOS paints behind its floating
+input-accessory bar with the software keyboard up. Playwright runs desktop
+Chromium with no keyboard, and jsdom has no layout at all, so the strip this
+fix covers cannot be rendered by any automated check we have. The e2e suite
+asserts the fill EXISTS, is anchored to the bar's bottom edge, carries the
+bar's surface and costs the document no height; that it actually covers the
+strip is verified here, by hand.
 
-It renders the **shipped** hook and the **shipped** `TabBar`, composed the
-way `AppRoutes` composes them, in the **real** Capacitor WKWebView. No auth
-and no API: that is the whole point — the defect lives in the shell, not in
-any screen's data.
+Recurring failure 19 says that when the answer to "which instrument would
+catch this if it were wrong" is none, the instrument ships with the change.
+This file is that instrument: a recipe, not live code, because the harness
+needs a `vite` entry and an Xcode build that would otherwise have to earn
+their keep in CI for a check that runs by hand a few times a year.
+
+It renders the **shipped** `TabBar` and the **shipped** stylesheet in the
+**real** Capacitor WKWebView. No auth and no API: that is the whole point —
+the defect lives in the shell, not in any screen's data.
 
 ## What it measured, 2026-09-06 (iPhone 17 Pro simulator, iOS 26.5)
 
@@ -32,6 +35,19 @@ input-accessory bar, which is excluded from that viewport while the page
 still paints behind it. Repositioning was tried against these numbers and
 moved nothing.
 
+**A withdrawn candidate, recorded so it is not re-proposed.** The first fix
+hid the tab bar whenever `innerHeight - visualViewport.height` passed a
+150px threshold. It was approved at Gate 0 and withdrawn at the branch
+review for two reasons. `visualViewport.height` is reported in CSS pixels,
+so a pinch-zoom shrinks it exactly the way a keyboard does — measured in
+Chromium at a 390x874 viewport, a 1.21x zoom produced a 151.7px delta and
+removed the whole main navigation with no keyboard anywhere (correctable by
+multiplying by `visualViewport.scale`, which the candidate did not read).
+And the tab bar is genuinely usable with the keyboard up — it sits ABOVE the
+accessory bar — so hiding it removed an affordance `e2e/builder.spec.ts`
+already tests ("typed content survives a tab-bar exit and return"). Painting
+the band needs no runtime state and has neither failure mode.
+
 ## Running it
 
 1. `xcrun simctl boot "iPhone 17 Pro"` and `open -a Simulator`.
@@ -48,7 +64,10 @@ moved nothing.
    then `xcrun simctl launch booted haus.waffle.ergomatic`
 8. `xcrun simctl io booted screenshot shot.png` after ~10s. The harness
    focuses the field and scrolls on its own.
-9. `rm -rf app/kbd-harness app/dist/client` when done.
+9. `rm -rf app/kbd-harness app/dist/client app/ios/App/App/public` when
+   done. The third path matters: step 5's `cap sync` already copied the
+   harness bundle into the native project, and removing only the first two
+   leaves the app serving the harness until the next `ios:build`.
 
 ## Three traps, all of which cost a capture here
 
@@ -90,6 +109,10 @@ export default defineConfig({
 ```
 
 ## `app/kbd-harness/main.tsx`
+
+The harness below still mounts `TabBar` inside an `.app-shell`, which is all
+the fill needs. Drop the `useKeyboardOpen` import and its call if you paste
+it from this file's history.
 
 ```tsx
 import { StrictMode } from "react";

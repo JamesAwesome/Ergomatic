@@ -11115,6 +11115,82 @@ test.describe("concept2 screen (/you/concept2, Wave E PR A)", () => {
   });
 });
 
+// The band under the tab bar (James's device report, 2026-09-06; Gate 0
+// approved the same day). With the iOS keyboard up, a strip of page paints
+// below the fixed bar — WebKit excludes the floating input-accessory bar
+// from `visualViewport.height` but still paints behind it. `.tabbar::after`
+// fills that strip.
+//
+// WHAT THIS CAN AND CANNOT PROVE, stated so nobody reads it as more (RF26).
+// Chromium has no software keyboard, so the strip never appears here and NO
+// gate in this repo can render the defect. This asserts the FILL EXISTS,
+// is anchored below the bar, carries the bar's own surface, and costs the
+// document no height. That the fill actually covers the strip on iOS was
+// verified by hand on device, both orientations, and is recorded in
+// `docs/testing/2026-09-06-keyboard-harness.md` — not here.
+test.describe("the tab bar's fill below the fold", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-tabbar-fill@e2e.test",
+      name: "Design Fill Tester",
+    });
+    await page.goto("/library");
+    await expect(page.locator(".tabbar")).toHaveCount(1);
+  });
+
+  test("paints the bar's own surface below itself, anchored to its bottom edge", async ({
+    page,
+  }) => {
+    const fill = await page.locator(".tabbar").evaluate((el) => {
+      const after = getComputedStyle(el, "::after");
+      return {
+        content: after.content,
+        position: after.position,
+        top: after.top,
+        height: after.height,
+        background: after.backgroundColor,
+        barBackground: getComputedStyle(el).backgroundColor,
+        barHeight: el.getBoundingClientRect().height,
+      };
+    });
+    // A fill that is not there at all reports `content: "none"`.
+    expect(fill.content).not.toBe("none");
+    expect(fill.position).toBe("absolute");
+    // `top: 100%` resolves against the bar's own height, so the fill starts
+    // exactly at its bottom edge with no seam.
+    expect(parseFloat(fill.top)).toBeCloseTo(fill.barHeight, 0);
+    // Deeper than the ~66px accessory bar measured on device, by an
+    // INDEPENDENT literal — not the CSS's own 140 (RF21's first smell).
+    expect(parseFloat(fill.height)).toBeGreaterThan(100);
+    // The same surface the bar itself paints, or the seam would show.
+    expect(fill.background).toBe(fill.barBackground);
+  });
+
+  test("costs the document no height, in both orientations", async ({
+    page,
+  }) => {
+    // `position: absolute` inside a `position: fixed` parent is out of
+    // flow. If it ever stopped being, every screen would grow a 140px
+    // scroll tail — the exact regression this asserts against.
+    for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
+      await page.setViewportSize(vp);
+      const overflow = await page.evaluate(() => {
+        const doc = document.documentElement;
+        return doc.scrollHeight - doc.clientHeight;
+      });
+      const withoutFill = await page.evaluate(() => {
+        const el = document.querySelector(".tabbar") as HTMLElement;
+        el.style.display = "none";
+        const doc = document.documentElement;
+        const value = doc.scrollHeight - doc.clientHeight;
+        el.style.display = "";
+        return value;
+      });
+      expect(overflow).toBe(withoutFill);
+    }
+  });
+});
+
 test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
   const C2_UNLINKED = {
     available: true,
