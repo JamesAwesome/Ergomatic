@@ -5829,3 +5829,54 @@ is James's own ruling and Gate 0 showed two of the four stacked. If a
 household report asks "how do I make this go away", the answer today is "set
 a baseline", which is the sentence the phase existed to stop being the
 answer.
+
+## 2026-09-07 — The partial baseline pair: ASK, prefilled, persistent — never FORCE (PM opinion, James's question)
+
+James asked whether setting one baseline should FORCE the other, having ruled
+the day before that it should ASK with the 7 s suggestion. **Recommendation:
+ask, prefilled, one tap, on Today — and fix the false copy in the same
+change.** (Prod check, James, same day: no account is currently half paired,
+so the work is preventive and rides the next Today PR.)
+
+**Force degrades the provenance record it means to complete.** A rower forced
+to fill a 6k they have never rowed types a guess, and `KnowBaseline.tsx`
+stamps it `k6Source: "manual"` — indistinguishable forever from a rowed
+number. The offer they would otherwise decline stores as `derived`
+(`PostTestPrompt.tsx`). **When weighing a mandate against an offer, ask what
+SOURCE each one writes**; this repo's `sourceFor` (`BaselineEditor.tsx`)
+exists so the stored source matches what the rower saw, and a forced field
+breaks it in the one direction the enum cannot express.
+
+**The honesty line here is not "never store an estimate".** `Recommend.tsx`
+already stores BOTH sides as `estimated` from a hand-authored table on the
+default onboarding door. The line this repo actually draws is: an estimate may
+be stored when the rower SAW it and its provenance is recorded. That admits
+prefill-plus-one-tap and excludes silent auto-fill and read-time derivation
+(which resolves live targets off a number nobody saw and leaves no record).
+
+**A "force vs ask" question posed at the WRITE moment is usually posed at the
+wrong lever.** Nothing hurts when a half pair is saved; it hurts on every
+later read — Today collapses the pair to null, so a rower with a tested 2k is
+told `NO BASELINE SET` and gets words on every target. A write-side force
+fixes nothing for accounts already in that state. Ask which surface carries
+the lie before designing the gate that prevents it.
+
+**The counter-case, recorded because it is real and was James's instinct:**
+half a pair is not a usable state for anything, and a narrow force at the two
+typed-entry surfaces only (`KnowBaseline`, `BaselineEditor`; `Recommend`
+already writes both) is cheap and defensible. Rejected on three grounds: a
+per-screen rule invites "why did it let me last time"; the You editor's Apply
+is also how a rower EDITS one number, so force is a wall in front of an edit;
+and it strands whoever is already half-paired. The post-test path can never be
+forced honestly — it would hold a real measurement hostage to a heuristic, at
+the erg.
+
+**Grounding of the 7 s, for the next person who reaches for it:**
+`estimateBaseline.ts` — Paul's Law ≈ +7.9 s for 2k→6k, SECONDARY, a c2forum
+post, trained rowers, and "no source grounds a better per-population gap".
+`deriveBaseline.test.ts` pins the constant and the two directions and nothing
+else. Fine as an offer; not groundable as a mandate.
+
+**Sizing: S, not TRIAD** (no new stored shape — `derived` and both columns
+exist; no auth; no number changes MEANING, only when an existing derived
+number is written). Carries a Gate 0, because it changes what a rower reads.

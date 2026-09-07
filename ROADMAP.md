@@ -2037,24 +2037,42 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **A rower who sets ONE baseline is asked to set both, suggested at the 7 s
-  offset (James, 2026-09-07: "If a user sets a 2k or a 6k they should be
-  asked to set both with a suggestion of the 7s offset").** This is the
-  ruling on the partial-pair state, raised at Phase RW PR C's PM final gate:
-  every screen collapses a half pair to `null` (`Today.tsx`'s own
-  derivation), so a rower who set only their 2k reads `NO BASELINE SET` at
-  the top of Today, which is false about their account. The half-measures
-  considered and NOT taken were naming the missing side in the copy, or
-  gating the row on both sides being null; James's answer is to close the
-  state instead of describing it. **The mechanism already exists and is
-  currently declinable:** `domain/deriveBaseline.ts`'s
-  `K2_K6_OFFSET_SECONDS = 7` and the counterpart offer the post-test prompt
-  already makes (`PostTestPrompt.tsx`). The work is to make the ask
-  persistent rather than a one-time offer — wherever a single side is
-  stored, the rower is asked for the other with the derived number
-  suggested. Sizing note: the derivation, the copy and the surface that
-  carries the ask (a Today row, the You editor, or both) are the design
-  question; the arithmetic is done. **S/M.**
+- **A rower who sets ONE baseline is offered the other at the 7 s offset, on
+  Today, with one tap (James, 2026-09-07: "If a user sets a 2k or a 6k they
+  should be asked to set both with a suggestion of the 7s offset"; PM opinion
+  the same day on his follow-up question, "forcing it… maybe it'd bother some
+  people": **ask, prefilled, persistent — never force**).**
+  **Nobody is in this state today** (James checked prod, 2026-09-07: "No
+  account is half paired"), so this is preventive and rides the next PR that
+  touches Today rather than opening anything.
+  **The state:** every screen collapses a half pair to "no baseline"
+  (`Today.tsx`'s own derivation), so a rower with a *tested* 2k reads
+  `NO BASELINE SET` and gets words on every target. The lie is on the READ
+  surfaces, which is why a write-moment gate would not fix it.
+  **The shape:** when exactly one side is stored, Today's row says what is
+  true and carries one action — e.g. `2K BASELINE SET · 6K ESTIMATED FROM IT
+  (+7s)` with `Use it`, issuing the patch `PostTestPrompt`'s
+  `handleAcceptDerived` already sends (`k6Source: "derived"`). The predicate
+  is `BaselineEditor.tsx`'s `deriveOffer`, a STATE not an event, so declining
+  never loses the offer. Targets stay words until the tap.
+  **Why not force** (PM, and it is not the consistency argument): a rower made
+  to fill a 6k they never rowed types a guess, and `KnowBaseline.tsx` stamps
+  it `manual` — permanently indistinguishable from a rowed number, while the
+  declined offer would have stored `derived`. Force degrades the provenance
+  record it means to complete, and it cannot be done honestly at the erg
+  (removing the post-test Skip holds a real measurement hostage to a
+  heuristic). **Why not silent auto-fill:** this repo's line is not "never
+  store an estimate" — `Recommend.tsx` stores both sides as `estimated` from a
+  hand-authored table — it is that the rower SAW it and the provenance is
+  recorded.
+  **The 7 s is an offer, not a fact:** `estimateBaseline.ts` grounds it on
+  Paul's Law (≈ +7.9 s, SECONDARY, a forum post, trained rowers) and says in
+  terms that no source grounds a better per-population gap;
+  `deriveBaseline.test.ts` pins the constant and nothing about any real pair.
+  **S, not TRIAD** (no new stored shape, no auth, no number changes meaning —
+  only when an existing derived number is written). Carries a Gate 0: it
+  changes what a rower reads.
+
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard
