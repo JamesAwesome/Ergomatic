@@ -5439,3 +5439,49 @@ the gate cheap enough to be worth running at all. James closed the loop here
   mechanism bullets ("why the other option failed") above the fold, with
   fuller versions already in the Record. The fold owes the outcome and the
   cost; the road not taken is a Record item.
+
+## 2026-09-06 — Phase NF close: the gate that cannot see the thing the exit is about
+
+Eleven countable exits, walked on hardware, and the two findings that mattered
+both came from asking what the EVIDENCE could see rather than what it said.
+
+- **When an exit says "supported devices show X", find the predicate and ask
+  what it actually measures.** Exit 3 read "supported iPhones show Scan NFC;
+  every unsupported surface shows no trace." The probe behind it is
+  `NFCTagReaderSession.readingAvailable || NFCNDEFReaderSession.readingAvailable`
+  — a HARDWARE check that cannot see code signing. So a distribution build
+  missing the NFC entitlement shows the button and fails on every tap, and no
+  gate in the repo can distinguish it from a correct one. The spec had written
+  the residual itself and nobody carried it to the exit table. **Technique:
+  for every exit phrased as "the app shows/hides X under condition C", read
+  the predicate that decides C and ask whether it measures C or a PROXY for
+  C. A proxy is where RF11 lives at the exit gate.**
+- **Split a walk-credited exit into the halves the walk actually reached.**
+  Exit 7 asked for no NFC sessions AND no BLE scans after every terminal path,
+  and the walk result credited it whole. The NFC half is proven by an oracle
+  we do not own — seven Core NFC `didInvalidateWithError` endings. The BLE
+  half has zero hardware evidence. **Read every conjunction in an exit
+  criterion as two criteria and demand a separate oracle for each.**
+- **A walk that FALSIFIES a premise is a better result than one that passes
+  it, and the exit table must say which happened.** Leg 2 was INCONCLUSIVE
+  because James's own erg observation killed its premise. The copy under test
+  was then replaced entirely — and the REPLACEMENT is also unwalked, with its
+  reachable state changed from "off Connect Device" (unstageable) to "held by
+  another central" (a tester meets it). **A falsified premise re-opens the
+  question of which state now produces the copy — name the new one in the
+  owed-observation row, or the next walk stages the dead premise again.**
+- **A phase-close gate verifies the RELEASE ritual, not only the phase.**
+  Main's post-merge run for the notes PR was still `in_progress` at gate time;
+  the close said so and the tag waited for `success`. Quote the run id.
+- **Ruling to keep (James, 2026-09-06): a walk's findings become their own
+  PR, not a re-opened one.** "Merge this then do a new pr" — the atomic
+  product PR merged as walked, and the four things the erg handed back became
+  #324 with its own spec, Gate 0 and delta pass. The spec's "one atomic
+  product PR" exit then reads as three merges by ruling; say so at close.
+- **Antagonist exit pass, when the walk-protocol half was already done well:**
+  the timed-protocol lens covered the protocol half better than a routine
+  dispatch would. The evidence half went uncovered and produced the two
+  findings above. **A dispatch was NOT owed at close** — after the walk and
+  the release call it buys a second copy of the verdict. What carries
+  forward: for every exit the walk is credited with closing, name the oracle
+  and say whether it is ours.
