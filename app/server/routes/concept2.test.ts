@@ -729,7 +729,11 @@ describe("per-user gate (C2_ALLOWED_EMAILS)", () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userB.id, freshLink());
     const client = makeStubClient();
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 1,
+      verified: false,
+    });
     const { app, logs } = buildApp({
       c2AllowedEmails: ONLY_A,
       store,
@@ -2174,6 +2178,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     vi.mocked(client.postResult).mockResolvedValue({
       ok: true,
       resultId: 85557,
+      verified: false,
     });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
@@ -2215,7 +2220,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
     const client = makeStubClient();
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 9 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 9,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client });
     const step = {
       label: "250m @ 2:07.0",
@@ -2279,7 +2288,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     const client = makeStubClient();
     vi.mocked(client.postResult)
       .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
-      .mockResolvedValueOnce({ ok: true, resultId: 11 });
+      .mockResolvedValueOnce({ ok: true, resultId: 11, verified: false });
     const { app, logs } = buildApp({ store, client });
     const step = {
       label: "250m @ 2:07.0",
@@ -2429,12 +2438,26 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     vi.mocked(client.postResult).mockResolvedValue({
       ok: true,
       resultId: 91001,
+      verified: false,
     });
     const { app, logs } = buildApp({ store, client });
     // A divergent row: our sum 5708, the machine's own total 5706.
+    // Phase LP PR 2.5: the store also holds the PM5's 0x003F bytes; the
+    // route posts them as Concept2's `verification_code` (wire form, dashed
+    // — the form the API accepted live). Exit-7 walk bytes; words derived
+    // in domain/monitor/verificationCode.test.ts.
     const id = await seedEligibleLog(logs, userA.id, {
       workMeters: 5708,
       machineWorkMeters: 5706,
+      machineWorkSeconds: 1319.3,
+      machineSummary: {
+        avgStrokeRate: 24,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
     });
 
     const res = await asA(
@@ -2449,6 +2472,123 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     // dropping the field in toMappingRow, posts 5708 and reddens this.
     expect(posted.distance).toBe(5706);
     expect(posted.distance).not.toBe(5708);
+    // Dropping the bytes in toMappingRow, or the code in buildC2Payload,
+    // posts no code and reddens this.
+    expect(posted.verification_code).toBe("AF99-4706-C021-B054");
+  });
+
+  it("Phase LP PR 2.5: a row WITHOUT machine totals posts no verification_code even when the bytes are stored", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 91002,
+      verified: false,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineSummary: {
+        avgStrokeRate: 24,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    const posted = vi.mocked(client.postResult).mock.calls[0]![1];
+    expect(posted).not.toHaveProperty("verification_code");
+  });
+
+  it("Phase LP PR 2.5: a 4xx on a no-array row carrying verification_code is retried once WITHOUT the code (the upload cannot regress on the code either)", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: true, resultId: 91003, verified: false });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      workMeters: 5708,
+      machineWorkMeters: 5706,
+      machineWorkSeconds: 1319.3,
+      machineSummary: {
+        avgStrokeRate: 24,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]![1]).not.toHaveProperty("workout");
+    expect(calls[0]![1].verification_code).toBe("AF99-4706-C021-B054");
+    expect(calls[1]![1]).not.toHaveProperty("verification_code");
+    expect(calls[1]![1].distance).toBe(5706);
+  });
+
+  it("Phase LP PR 2.5: every accepted send logs one c2_send event carrying the 201 body's verified flag, whether the code went, and which fallback fired", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 91004,
+      verified: true,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 5706,
+      machineWorkSeconds: 1319.3,
+      machineSummary: {
+        avgStrokeRate: 24,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(200);
+      const events = logSpy.mock.calls
+        .map((c) => String(c[0]))
+        .filter((line) => line.includes('"event":"c2_send"'))
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(events).toStrictEqual([
+        {
+          event: "c2_send",
+          logId: id,
+          verified: true,
+          codeSent: true,
+          intervalsSent: false,
+          fallback: "none",
+        },
+      ]);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   it("legacy row: persists tz on the first attempt; a failed-then-retried upload from a DIFFERENT zone posts the SAME date (dedup stability)", async () => {
@@ -2460,7 +2600,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       async (_token: string, payload: Record<string, unknown>) => {
         posted.push(payload);
         if (posted.length === 1) return { ok: false, kind: "c2_error" };
-        return { ok: true, resultId: 4242 };
+        return { ok: true, resultId: 4242, verified: false };
       },
     );
     const { app, logs } = buildApp({ store, client });
@@ -2508,7 +2648,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       async (_token: string, payload: Record<string, unknown>) => {
         posted.push(payload);
         if (posted.length === 1) return { ok: false, kind: "c2_error" };
-        return { ok: true, resultId: 9001 };
+        return { ok: true, resultId: 9001, verified: false };
       },
     );
     const { app, logs } = buildApp({ store, client });
@@ -2557,7 +2697,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         expiresAt: newExpiry,
       },
     });
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 1,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
 
@@ -2612,7 +2756,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         expiresAt: new Date(fixedNow.getTime() + 3600_000),
       },
     });
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 1,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client, now: () => fixedNow });
     const id = await seedEligibleLog(logs, userA.id);
 
@@ -2652,7 +2800,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         },
       ],
     });
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 1,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client, now: () => fixedNow });
     const id = await seedEligibleLog(logs, userA.id);
 
@@ -2768,6 +2920,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     vi.mocked(client.postResult).mockResolvedValueOnce({
       ok: true,
       resultId: 85557,
+      verified: false,
     });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
@@ -2867,7 +3020,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     const client = makeStubClient();
     vi.mocked(client.postResult)
       .mockResolvedValueOnce({ ok: false, kind: "auth" })
-      .mockResolvedValueOnce({ ok: true, resultId: 55 });
+      .mockResolvedValueOnce({ ok: true, resultId: 55, verified: false });
     vi.mocked(client.refreshTokens).mockResolvedValue({
       ok: true,
       tokens: {
@@ -2915,7 +3068,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         );
         return { ok: false, kind: "auth" };
       }
-      return { ok: true, resultId: 9 };
+      return { ok: true, resultId: 9, verified: false };
     });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
@@ -3026,7 +3179,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
     const client = makeStubClient();
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 1,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
     vi.spyOn(logs, "recordC2Result").mockResolvedValue(false);
@@ -3107,7 +3264,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     it("a 200 post CLEARS a set flag", async () => {
       const store = await flaggedStore();
       const client = makeStubClient();
-      vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 1 });
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: true,
+        resultId: 1,
+        verified: false,
+      });
       const { app, logs } = buildApp({ store, client });
       const id = await seedEligibleLog(logs, userA.id);
       const res = await asA(
@@ -3261,7 +3422,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       await new Promise((r) => setTimeout(r, 20));
       expect(d.impl).toHaveBeenCalledTimes(1);
 
-      d.resolve({ ok: true, resultId: 4242 });
+      d.resolve({ ok: true, resultId: 4242, verified: false });
       const [r1, r2] = await Promise.all([first, second]);
       expect(r1.status).toBe(200);
       expect(r2.status).toBe(200);
@@ -3294,7 +3455,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
           .send({ tz: "America/New_York" }),
       ).then((r) => r);
       await new Promise((r) => setTimeout(r, 20));
-      d.resolve({ ok: true, resultId: 4343 });
+      d.resolve({ ok: true, resultId: 4343, verified: false });
       const [r1, r2] = await Promise.all([first, second]);
       expect(r1.status).toBe(200);
       expect(r2.status).toBe(200);
@@ -3339,7 +3500,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       // The claim is still held by the running handler.
       expect(d.impl).toHaveBeenCalledTimes(1);
 
-      d.resolve({ ok: true, resultId: 4242 });
+      d.resolve({ ok: true, resultId: 4242, verified: false });
       const r2 = await second;
       expect(r2.status).toBe(200);
       expect(r2.body.resultId).toBe(4242);
@@ -3368,7 +3529,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       const r1 = await first;
       expect(r1.status).toBeGreaterThanOrEqual(500);
 
-      vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 7 });
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: true,
+        resultId: 7,
+        verified: false,
+      });
       const r2 = await asA(
         request(app)
           .post(`/api/concept2/results/${id}`)
@@ -3392,6 +3557,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     vi.mocked(client.postResult).mockResolvedValue({
       ok: true,
       resultId: 5000,
+      verified: false,
     });
 
     const res = await asA(
@@ -3440,6 +3606,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     vi.mocked(client.postResult).mockResolvedValue({
       ok: true,
       resultId: 777,
+      verified: false,
     });
 
     const res = await asA(
@@ -3602,7 +3769,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         },
       ],
     });
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 41 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 41,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
 
@@ -3634,7 +3805,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       weight: 7000,
       gender: "M",
     });
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 42 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 42,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
 
@@ -3719,7 +3894,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       weight: 8200,
       gender: "M",
     });
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 51 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 51,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client });
     vi.spyOn(logs, "sentC2ResultIds").mockResolvedValue(
       new Set([9001, 9002, 9003, 9004, 9005, 9006]),
@@ -3759,7 +3938,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       weight: 7000,
       gender: "M",
     });
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 52 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 52,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client });
     vi.spyOn(logs, "sentC2ResultIds").mockResolvedValue(new Set(ids));
     const id = await seedEligibleLog(logs, userA.id);
@@ -3804,7 +3987,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       weight: 7000,
       gender: "M",
     });
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 340 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 340,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client });
     const first = await seedEligibleLog(logs, userA.id);
     const second = await seedEligibleLog(logs, userA.id);
@@ -4049,7 +4236,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         expiresAt: new Date(Date.now() + 3600_000),
       },
     });
-    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 43 });
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 43,
+      verified: false,
+    });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
 
@@ -4157,7 +4348,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     });
     vi.mocked(client.postResult)
       .mockResolvedValueOnce({ ok: false, kind: "auth" })
-      .mockResolvedValueOnce({ ok: true, resultId: 44 });
+      .mockResolvedValueOnce({ ok: true, resultId: 44, verified: false });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
 

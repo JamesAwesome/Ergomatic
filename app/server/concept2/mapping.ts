@@ -12,6 +12,7 @@ import type { LogSource } from "../../domain/types.js";
 import type { LogStep } from "../stores/logs.js";
 import { buildC2Intervals } from "./intervals.js";
 import { c2Tenths, sendableInt } from "./tenths.js";
+import { wireVerificationCode } from "../../domain/monitor/verificationCode.js";
 
 // Re-exported so `mapping.test.ts` keeps one name (`scripts/c2-crossconnect.ts`
 // carries its own copy and imports nothing from here); the definition moved
@@ -505,6 +506,19 @@ export function buildC2Payload(
       : row.loggedAt;
   const tz = row.completedAt !== null && row.tz !== null ? row.tz : effectiveTz;
 
+  // PR 2.5 (review L3): ONE derivation feeds the posted numbers AND the
+  // verification-code guard below. Restating the predicate in two places
+  // let a later `??` edit decouple them and pair a code with a summed
+  // number it was never minted over.
+  const usedMachineMeters =
+    row.machineWorkMeters !== null && row.machineWorkMeters > 0;
+  const usedMachineSeconds =
+    row.machineWorkSeconds !== null && row.machineWorkSeconds > 0;
+  const postedMeters = usedMachineMeters ? row.machineWorkMeters! : workMeters;
+  const postedSeconds = usedMachineSeconds
+    ? row.machineWorkSeconds!
+    : workSeconds;
+
   const post: Record<string, unknown> = {
     type: "rower",
     date: formatC2Date(instant, tz),
@@ -522,15 +536,8 @@ export function buildC2Payload(
     // real captures (oracleCorpusReplay KEYSTONE, machine 138.7 vs ours
     // 138.8), gated by a seeded unit test at this store→payload seam while
     // oracleCorpusReplay gates the wire→machine_work_seconds step.
-    distance:
-      row.machineWorkMeters !== null && row.machineWorkMeters > 0
-        ? row.machineWorkMeters
-        : workMeters,
-    time: c2Tenths(
-      row.machineWorkSeconds !== null && row.machineWorkSeconds > 0
-        ? row.machineWorkSeconds
-        : workSeconds,
-    ),
+    distance: postedMeters,
+    time: c2Tenths(postedSeconds),
     weight_class: weightClass,
   };
 
@@ -592,6 +599,31 @@ export function buildC2Payload(
     if (bpm !== undefined) heartRate[key] = bpm;
   }
   if (Object.keys(heartRate).length > 0) post.heart_rate = heartRate;
+
+  // Phase LP PR 2.5 (spec §5 rev 2.6): the PM5's own verification code,
+  // sent ONLY when the posted `time`/`distance` are BOTH the machine's own
+  // totals — the code is minted over those, and the API checks "date, time,
+  // distance, workout_type and machine type".
+  // MEASURED (log-dev): the machine's 5706 returns `verified: true` and the
+  // control 5707 returns false, both WITHOUT the interval array (2026-09-05)
+  // and WITH it (2026-09-07, rows 86044/86045, deleted) — so the array does
+  // not interfere. UNTESTED: production; the parity walk settles it.
+  // INFERENCE (n=4 rows vs 1 control, and the control was also a different
+  // build): Concept2 hides its own Verify button on a result that arrives
+  // with interval data, which is why sending the code matters now. The
+  // change is right either way: verifying at receipt makes the button moot.
+  // A row without machine totals sends no code — it could not verify and
+  // would only read as a mismatch.
+  const bytes = row.machineSummary?.verificationBytes;
+  if (
+    usedMachineMeters &&
+    usedMachineSeconds &&
+    Array.isArray(bytes) &&
+    bytes.every((b) => typeof b === "number" && Number.isInteger(b))
+  ) {
+    const code = wireVerificationCode(bytes as number[]);
+    if (code !== null) post.verification_code = code;
+  }
 
   // The per-interval array rides ONLY with a workout_type we map
   // (VariableInterval — every programmed Ergomatic piece) and only when
