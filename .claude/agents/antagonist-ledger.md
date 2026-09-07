@@ -8791,3 +8791,83 @@ had passed over the same document without a single duration in it.
   exactly ONE production caller of `clear`. **Technique: a "never cleared is
   safe" claim is settled by counting the producers of the state that would
   make it unsafe**, not by reasoning about the flag.
+
+### 2026-09-07 — Short status frames (0x0032/0x0038): anchor pass
+
+- **CLAIM (HELD, but for a different reason than given):** "The affected family
+  is exactly 0x0032 and 0x0038, established by reading the vendor revision
+  history end to end." Believed because Table 1 genuinely has only two matching
+  rows. **TECHNIQUE THAT SETTLED IT — the mechanical slack audit.** A vendor
+  revision history is a log of edits to the DOCUMENT, not a changelog of the
+  wire; a row exists only where an engineer wrote one, and the pass found three
+  GATT-versus-multiplexed layout divergences with no row at all (one, 0x003A
+  19→18, not explained by the multiplexed 20-byte ceiling). The conclusion was
+  rescued by a second, non-mirror route computed from OUR source: for each of
+  the nine parsers, `floor − (highest byte offset of a field with a consumer)`.
+  Exactly two have slack. **When a scope claim rests on a vendor's changelog,
+  re-derive it from a property of our own code and require both routes to
+  agree.**
+
+- **CLAIM (FALSE as a proof, though the sentence is true):** the quoted
+  V1.26/V1.27 rows "establish that the field was added, and is last." They
+  establish ADDED only; LAST comes from Table 3's field ordering. RF16
+  corollary 2, one hop smaller than usual: the citation was real, current and
+  correctly transcribed, and still carried only half the attributes the
+  argument needed.
+
+- **CLAIM (FALSE):** the spec's test 1 ("a short frame decodes and
+  `ergMachineType` is undefined") gates the fix. **TECHNIQUE — trace the WRONG
+  fix through the actual byte readers.** `readU8` is `bytes[offset]!`;
+  `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are both off. An
+  implementer who lowers the floor and leaves the read unguarded produces
+  `ergMachineType: undefined` typed `number` — no throw, no typecheck error,
+  and the SAME assertion result as the correct fix. RF21 with a twist: the gate
+  goes red on the original defect but not on the half-fix.
+  `Object.hasOwn(decoded, "ergMachineType")` discriminates, because key-absence
+  is observable where `undefined` is not.
+
+- **CLAIM (TRUE, understated):** "the 0x0038 half is justified by the vendor
+  row." `noteBoundaryHalf` (`driver.ts:3138-3156`) returns without emitting
+  when its partner half is missing, so a dead 0x0038 means zero `IntervalActual`
+  rows are ever recorded. **A spec that justifies scope only from a document has
+  not asked what the code does when the field is missing; the product
+  consequence is usually the stronger argument and does not depend on the
+  document being complete.**
+
+- **TECHNIQUE THAT ALMOST WORKED, AND THE CORRECTION THAT MATTERS MORE.** The
+  pass's headline finding was: the cited ring log was never committed, and
+  `driver.ts:2301` records `notify-first <char> (<n>B)` on first arrival of
+  every characteristic BEFORE the decode, so that one file already held the
+  measured wire length of all five — including 0x0033, which the whole fix
+  silently depends on. The technique is right and worth keeping: **read what
+  the LOGGER writes, not what the report quotes.** But the conclusion was
+  wrong, and only checking the ring's capacity showed it: the ring holds 500
+  entries (`eventLog.ts:51`) and the export ran seq 5432-5931, exactly 500. It
+  had rolled over; the lines were gone. **Generalisation, now a ROADMAP row:
+  a high-frequency error path evicts its own diagnosis, so "the log must
+  contain X" needs the buffer's capacity checked against the log's own seq
+  range before it is relied on.**
+
+- **PRIOR ART (found, mechanism not invented here):** ErgometerJS's
+  `handleRowingAdditionalStatus1` reads bytes 0-15 unconditionally and gates the
+  trailing field on `data.byteLength`, never reading `ergMachineType` at all —
+  the identical 16-byte floor, reached independently. Its motivation is
+  GATT/mux unification, not old firmware, so it corroborates the FLOOR and the
+  MECHANISM and is NOT an observation of a real short frame. **A matching
+  implementation is not a matching observation**, and recording the distinction
+  is the point.
+
+- **DETERMINISTIC vs HEURISTIC:** the length check is deterministic (the
+  transport REPORTS `bytes.length`; a truncated notification has no supported
+  producer, since ATT does not deliver partial PDUs). The REJECTED alternative,
+  firmware gating, is heuristic and now has evidence: PM5 versions are disjoint
+  per-machine-family bands — the vendor's own BLE doc prints "(Valid for PM5
+  V150 – V199.99 only) (Valid for PM5 V204 – V299.99 only)" for one
+  characteristic — so a version comparison is not an order relation. **Where a
+  spec refuses an alternative, give the refusal the receipt (RF30); the doc's
+  own version-band line is a stronger reason than "a version we have not met".**
+
+- **MEASURED (reproduced by the controller, not taken on trust):** 0x0032 is 17
+  bytes in 8248/8248 and 0x0038 is 19 bytes in 42/42 notifications across all 20
+  committed recordings — no existing replay can go red on this. RF24 confirmed
+  by measuring bytes, not by grepping for an error string.
