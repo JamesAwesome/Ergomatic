@@ -2151,8 +2151,11 @@ Each needs erg time or a deliberate recording session.
 ## Small, queued, rides the next PR in its area
 
 - [ ] **No committed capture shows the free-row summary's machine tiles.**
-      They ship in #351 with a component test on the real 2026-08-31 row, but
-      `docs/screenshots/justrow-log.png` cannot show them:
+      They ship in #351 gated from upstream of the producer — the
+      2026-08-31 walk's own bytes replayed through the real driver, hook and
+      store, then the door mounted over what it wrote
+      (`justRowReplay.test.ts`) — but `docs/screenshots/justrow-log.png`
+      cannot show them:
       `injectJustRowShotFake` sends no burst, and `fake.test.ts` pins that a
       burst-less script emits no 0x0039/0x003A. **Attempted and reverted in
       #351**, so the next attempt starts here rather than from scratch. A
@@ -2164,9 +2167,9 @@ Each needs erg time or a deliberate recording session.
       Calories live on 0x003A, which `FakeBurst` takes only as raw bytes, so
       `summaryOverrides` cannot reach them. Appending such a boundary to the
       free-row script left Connect permanently disabled and broke four
-      justrow captures — that is the thing to solve. **Also owed:** a
-      `design.spec.ts` assertion that `summary-machine-tier` renders on the
-      free-row door; today it is asserted only on the programmed ones.
+      justrow captures — that is the thing to solve. What is left here is
+      the PICTURE: a `design.spec.ts` or screenshot assertion needs the same
+      burst, so it unblocks only when the fake sends one.
 
 - **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
   one and offered the other at the 7 s offset.** James's ruling ("If a user
