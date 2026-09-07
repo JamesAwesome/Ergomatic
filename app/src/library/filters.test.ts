@@ -481,3 +481,23 @@ describe("the TYPE chip state machine", () => {
     }
   });
 });
+
+describe("duration range with no baseline (Phase RW PR A)", () => {
+  it("applies a bounded range on the assumed-pace estimate instead of skipping the filter", () => {
+    // 6000 m at the assumed 2:25 is 29 minutes: inside [25, 35], outside [0, 20].
+    const sixK = w({
+      id: "sixk",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 6000 },
+          ref: { base: "2k", off: 0 },
+        },
+      ],
+    });
+    const inRangeF = { ...EMPTY_FILTERS, durationRange: { min: 25, max: 35 } };
+    const outRangeF = { ...EMPTY_FILTERS, durationRange: { min: 0, max: 20 } };
+    expect(applyFilters([sixK], inRangeF, null)).toHaveLength(1);
+    expect(applyFilters([sixK], outRangeF, null)).toHaveLength(0);
+  });
+});

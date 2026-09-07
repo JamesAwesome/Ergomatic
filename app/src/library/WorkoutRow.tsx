@@ -7,9 +7,13 @@ import { structureLine } from "../../domain/display/stepDetail.js";
 export default function WorkoutRow({
   workout,
   durationMinutes,
+  durationAssumed,
 }: {
   workout: LibraryWorkout;
-  durationMinutes: number | null;
+  durationMinutes: number;
+  /** Phase RW PR A: true when the estimate was priced off the assumed
+   *  pair (no baseline set); renders as a leading `~`. */
+  durationAssumed: boolean;
 }) {
   const daysLabel =
     workout.lastDoneDaysAgo === null
@@ -33,7 +37,7 @@ export default function WorkoutRow({
               and Phase 6's distance-based estimation may well produce one,
               so this component must not print "2.25′" if a future caller
               passes a fractional value. See WorkoutRow.test.tsx. */}
-          {durationMinutes !== null ? `${Math.round(durationMinutes)}′` : "—"}
+          {`${durationAssumed ? "~" : ""}${Math.round(durationMinutes)}′`}
         </span>
       </div>
       {/* Line 2 of 3 (spec §3): structureLine takes authored steps only,

@@ -53,6 +53,25 @@ const WORKOUTS: LibraryWorkout[] = [
   },
 ];
 
+// Phase RW PR A: one DISTANCE workout for the no-baseline test alone (the
+// shared fixture's counts are pinned all over this file). 6000 m at 6k+0:
+// at the assumed 2:32 (152 s/500 m) = 30.4 -> ~30'.
+const DISTANCE_WORKOUT: LibraryWorkout = {
+  id: "w-dist",
+  title: "Long Distance Row",
+  type: "O2",
+  effort: 2,
+  steps: [
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 6000 },
+      ref: { base: "6k", off: 0 },
+    },
+  ],
+  isGlobal: true,
+  lastDoneDaysAgo: 12,
+};
+
 const CUSTOM_WORKOUT: LibraryWorkout = {
   id: "w-custom",
   title: "My Interval Build",
@@ -999,9 +1018,12 @@ describe("Library", () => {
     ]);
   });
 
-  it("renders a — duration fallback instead of a bogus number when baselines are unset", async () => {
+  it("renders exact minutes on time rows, ~ on distance rows, and one caption when baselines are unset (Phase RW PR A)", async () => {
     vi.doMock("../api/useWorkouts", () => ({
-      useWorkouts: () => ({ state: "ready", workouts: WORKOUTS }),
+      useWorkouts: () => ({
+        state: "ready",
+        workouts: [...WORKOUTS, DISTANCE_WORKOUT],
+      }),
     }));
     vi.doMock("../api/useBaselines", () => ({
       useBaselines: () => ({
@@ -1012,9 +1034,16 @@ describe("Library", () => {
 
     await renderLibrary();
 
-    expect(screen.getAllByText("—")).toHaveLength(WORKOUTS.length);
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
-    expect(screen.queryByText("30′")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("~ times are estimates until you set a baseline"),
+    ).toBeInTheDocument();
+    // The distance row (assumed) and the 30-minute time row (exact) sit
+    // one tilde apart, which is the whole point of the mark.
+    expect(screen.getByText("~30′")).toBeInTheDocument();
+    expect(screen.getByText("30′")).toBeInTheDocument();
+    expect(screen.getByText("20′")).toBeInTheDocument();
   });
 
   it("renders the loading state before data arrives", async () => {
