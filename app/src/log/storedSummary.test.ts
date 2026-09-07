@@ -278,6 +278,84 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(buildStoredSummary(baseRow()).heroes.machine).toBeUndefined();
   });
 
+  // The monitor leaves its summary heart-rate fields empty on every capture
+  // we hold (11 of 11 that carry a summary at all), so this is not an edge
+  // case — it is what EVERY real row looks like, and why the tile read a dash
+  // for a month while the trace beside it was full of readings.
+  it("derives AVG HR from the trace when the monitor sends none, excluding rest", () => {
+    // `Sample` carries distance, pace and rate too; they play no part in this
+    // derivation, so they are filled with a constant rather than varied,
+    // which keeps the heart-rate literals the only thing under test.
+    // SECONDS in, deciseconds out — `Sample.t` is `round(seconds * 10)`, and
+    // writing these in seconds is how a 60-decisecond dropout cap read as 60
+    // seconds for a whole review round. `r` is the recorder's own key.
+    const at = (seconds: number, hr?: number, resting?: true) => ({
+      t: seconds * 10,
+      d: 0,
+      p: 1250,
+      spm: 24,
+      ...(hr === undefined ? {} : { hr }),
+      ...(resting === undefined ? {} : { r: resting }),
+    });
+    const withTrace = (samples: ReturnType<typeof at>[]) =>
+      buildStoredSummary(
+        baseRow({
+          source: "pm5",
+          endedBy: "finished",
+          machineWorkSeconds: 600,
+          machineWorkMeters: 2400,
+          // Exactly what the hardware sends: a summary with no heart rate.
+          machineSummary: { avgStrokeRate: 24, dragFactorAverage: 101 },
+          series: { samples },
+          steps: [measuredStep(600, 2400, 125)],
+        }),
+      ).heroes.machine;
+
+    // Ten seconds at 100 then ten at 140 weights evenly: 120.
+    expect(withTrace([at(0, 100), at(1, 140), at(2, 140)])?.avgHr).toBe(120);
+
+    // UNEVEN gaps, the only shape that tells a time-weighted mean from a
+    // plain one: one second at 100 then five at 140 is 133 weighted and 120
+    // if each sample counted once. Every other case is evenly spaced, so a
+    // plain mean passed them all until this was added. Both gaps sit inside
+    // the six-second dropout cap — the twenty-second gaps an earlier version
+    // used are dropouts at the recorder's 1 Hz and count for nothing.
+    expect(withTrace([at(0, 100), at(1, 140), at(6, 140)])?.avgHr).toBe(133);
+
+    // The same trace with the SECOND stretch marked rest drops to 100 — the
+    // assertion that tells option A from option B, and the reason the two
+    // literals here differ by 20 rather than by rounding.
+    expect(withTrace([at(0, 100), at(1, 140, true), at(2, 140)])?.avgHr).toBe(
+      100,
+    );
+
+    // No trace, or a trace with no readings: the dash stays, rather than a
+    // number invented from nothing.
+    expect(withTrace([])?.avgHr).toBeUndefined();
+    expect(withTrace([at(0), at(1)])?.avgHr).toBeUndefined();
+  });
+
+  it("prefers the monitor's OWN average when it ever sends one", () => {
+    const machine = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        endedBy: "finished",
+        machineWorkSeconds: 600,
+        machineWorkMeters: 2400,
+        machineSummary: { avgStrokeRate: 24, avgHeartRateBpm: 151 },
+        // A trace that would derive 100, so the two cannot be confused.
+        series: {
+          samples: [
+            { t: 0, d: 0, p: 1250, spm: 24, hr: 100 },
+            { t: 10, d: 40, p: 1250, spm: 24, hr: 100 },
+          ],
+        },
+        steps: [measuredStep(600, 2400, 125)],
+      }),
+    ).heroes.machine;
+    expect(machine?.avgHr).toBe(151);
+  });
+
   it("TIER A: a row carrying the machine's own work totals renders them verbatim, including the machine's own avg split, plus the TOTAL line from the RC-1 rest pair — DISCRIMINATING from tier B (design spec §1's own antagonist-established fact: the machine can disagree with the sum of its own rows, walk-2026-08-20's 901-vs-899), so the machine's totals here are deliberately NOT equal to Σ EXIT7_STEPS (500m/124.0s) — a test that used equal values couldn't tell tier A from tier B", () => {
     const view = buildStoredSummary(
       baseRow({

@@ -5,8 +5,11 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    // v0.42.0: git log v0.41.0..main --oneline at 4daeff32 — NINE merges,
-    // each accounted for (RF15; no --merges):
+    // v0.42.0: git log v0.41.0..main --oneline at b96c780d — SIXTEEN
+    // merges, each accounted for (RF15; no --merges). Re-counted 2026-09-07
+    // after the first v0.42.0 tag was DELETED unreleased (it sat at
+    // 8326fb2c, before the half-set work); the range therefore runs to the
+    // current main, not to that commit:
     //   #329 Phase RW opened (spec) + Phase SB archived — docs only.
     //   #331 NFC copy: "monitor" where PM5 is not the device's own name —
     //     wording inside a flow v0.40.0 already announced; no note.
@@ -22,13 +25,26 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     //     No note; the pair is recorded here so a reader does not go
     //     looking for one.
     //   #333 / #335 / #338 Phase RW — items 1, 2 and 3.
+    //   #341 prints the Concept2 verification code only on rows Concept2
+    //     will accept one for — item 5.
+    //   #344 a rower who has set ONE baseline is told which one and
+    //     offered the other — item 4. (#346 fixed a test-only mock race
+    //     and #343 / #334 are ROADMAP and ledger writing; #339 is a
+    //     dependency bump. None is rower-visible.)
+    //   #345 fills AVG HR from the heart-rate trace — item 6, which also
+    //     CORRECTS v0.41.0's own item 1 below (that note called the
+    //     session figures "what the monitor measured" and listed average
+    //     heart rate among them; the monitor sends nothing there).
     // This notes-and-captures PR adds packaging, not another behavior.
     version: "v0.42.0",
     date: "2026-09-07",
     items: [
       "You can row without setting a baseline. Where a workout used to show a pace target, it now says STEADY, MODERATE, HARD or ALL OUT, and Start, Connect and Log it after all work. If your baselines are already set, nothing changes for you here: to see it, tap Reset baseline setup on You.",
-      "The baseline doors on Today have a way past them: Row without one for now. The app remembers that, so it survives a reinstall. A quiet NO BASELINE SET line keeps the doors one tap away, and setting a baseline any time puts the numbers back.",
+      "The baseline doors on Today have a way past them: Row without one for now. The app remembers that, so it survives a reinstall. A quiet line keeps the doors one tap away, and setting both baselines any time puts the numbers back.",
       "Workouts still tell you roughly how long they are without a baseline. A time-based workout is exact; a distance one is an estimate off an assumed pace and reads with a ~, like ~24'.",
+      "If you have set one baseline and not the other, Today says which one you have set and offers to fill the other in at the usual 7 second gap, in one tap. Library and each workout say the same. Your targets stay words until both are set.",
+      "The PM5's verification code now prints only on rows Concept2 will let you type it into: a distance or a time that hits one of their ranking figures exactly, counting rest. Everywhere else it was decoration.",
+      "AVG HR now has a number in it. The monitor leaves that field empty, so Ergomatic works it out from the heart-rate trace it already records, over your working strokes. That means it can read a little below the per-interval HR column on the same screen.",
     ],
   },
   {
@@ -42,11 +58,18 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     //     figures the logbook shows"): PM final gate #327 — false until
     //     PR 2 sends the splits.
     //   #328 Phase NF close — docs/ROADMAP/ledger only; needs no note.
+    // CORRECTED 2026-09-07 (v0.42.0's notes round): item 1 said "what the
+    // monitor measured" and listed "average heart rate for the session"
+    // among the figures. The monitor sends nothing in its summary
+    // heart-rate fields, so that tile read a dash on every row in this
+    // build — the claim was false when shipped, not merely outdated.
+    // v0.42.0 item 6 says where the number comes from now. Notes are
+    // shipped copy, not history (PM gate #345).
     // This notes-and-captures PR adds packaging, not another behavior.
     version: "v0.41.0",
     date: "2026-09-07",
     items: [
-      "Rows rowed with the PM5 connected now show what the monitor measured: watts, calories, cal/hour, rate, drag and average heart rate for the session, and a MACHINE SUMMARY table under INTERVALS with HR, watts, calories, cal/hour and drag for each interval. It scrolls sideways. Rows saved before this build show what they have and a dash for the rest.",
+      "Rows rowed with the PM5 connected now show what the monitor reports: watts, calories, cal/hour, rate and drag for the session, and a MACHINE SUMMARY table under INTERVALS with HR, watts, calories, cal/hour and drag for each interval. It scrolls sideways. Rows saved before this build show what they have and a dash for the rest.",
       "Watts and cal/hour are worked out the way Concept2's logbook does it, from time, distance and calories, so they can read a little different from the PM5's own screen.",
     ],
   },

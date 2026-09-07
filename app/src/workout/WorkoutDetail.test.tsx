@@ -196,9 +196,33 @@ function mockApi(handler: () => Response) {
   return fn;
 }
 
+/** The `usePreferences` arm every test gets unless it asks for another.
+ *  Passed IN rather than overridden afterwards — see `mockHooks`. */
+const READY_PREFERENCES = () => ({
+  state: "ready",
+  preferences: {
+    timeCapMinutes: 60,
+    countdownSeconds: 10,
+    baselinesSkipped: false,
+  },
+  // Phase RW PR C: the ready arm's writer. A vi factory is not
+  // typechecked against the module, so omitting it would TypeError at
+  // the first click rather than fail the typecheck.
+  setBaselinesSkipped: skipWrites.fn,
+});
+
 function mockHooks(
   baselines: { k2Seconds: number | null; k6Seconds: number | null },
   workouts: LibraryWorkout[] = [WORKOUT],
+  // The preferences arm is a PARAMETER, never a second `vi.doMock` of the
+  // same path layered on afterwards. `queueMock` (@vitest/mocker) registers
+  // each mock inside an async RPC `.then`, so two registrations for one path
+  // race and the LAST TO RESOLVE wins — not the last called. Under load that
+  // is sometimes the earlier call, which is how the errored-preferences test
+  // got the READY arm, wrote a skip it asserts never happens, and reddened
+  // main after PR #344 (`expected [ false ] to strictly equal []`,
+  // reproduced locally at roughly one full `pnpm test:coverage` run in two).
+  usePreferencesArm: () => unknown = READY_PREFERENCES,
 ) {
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({ state: "ready", workouts }),
@@ -213,18 +237,7 @@ function mockHooks(
   // reads the hook itself; this keeps its real fetch off the `api` spy
   // several tests assert was never called.
   vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () => ({
-      state: "ready",
-      preferences: {
-        timeCapMinutes: 60,
-        countdownSeconds: 10,
-        baselinesSkipped: false,
-      },
-      // Phase RW PR C: the ready arm's writer. A vi factory is not
-      // typechecked against the module, so omitting it would TypeError at
-      // the first click rather than fail the typecheck.
-      setBaselinesSkipped: skipWrites.fn,
-    }),
+    usePreferences: usePreferencesArm,
   }));
 }
 
@@ -371,9 +384,9 @@ function mockHooksWithPreferencesError(
   baselines: { k2Seconds: number | null; k6Seconds: number | null },
   workouts: LibraryWorkout[] = [WORKOUT],
 ) {
-  mockHooks(baselines, workouts);
-  vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () => ({ state: "error", retry: () => {} }),
+  mockHooks(baselines, workouts, () => ({
+    state: "error",
+    retry: () => {},
   }));
 }
 
@@ -2095,5 +2108,72 @@ describe("the caption's Set one up (Phase RW PR C)", () => {
 
     expect(skipWrites.calls).toStrictEqual([]);
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+});
+
+describe("the caption names the side that IS set (2026-09-07)", () => {
+  it("reads 'Your 2k is set' rather than 'until you set a baseline' when one side is stored", async () => {
+    mockHooks({ k2Seconds: 112, k6Seconds: null }, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+
+    expect(
+      screen.getByText(
+        /Your 2k is set\. Targets stay words until the 6k is too\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Targets are words until you set a baseline/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("the caption's button names the MISSING side, not 'Set one up'", async () => {
+    // "Set one up" to a rower who has one up is the same falsehood this
+    // caption exists to remove. Both labels lead to the same place.
+    mockHooks({ k2Seconds: 112, k6Seconds: null }, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+
+    const caption = screen.getByText(/Your 2k is set\./);
+    expect(
+      within(caption.closest("p")!).getByRole("button", {
+        name: "Set your 6k",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(caption.closest("p")!).queryByRole("button", {
+        name: "Set one up",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("names the 6k when that is the stored side", async () => {
+    mockHooks({ k2Seconds: null, k6Seconds: 122 }, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+
+    expect(
+      screen.getByText(
+        /Your 6k is set\. Targets stay words until the 2k is too\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("names the 2k when the 6k is the stored side", async () => {
+    mockHooks({ k2Seconds: null, k6Seconds: 122 }, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+
+    const caption = screen.getByText(/Your 6k is set\./);
+    expect(
+      within(caption.closest("p")!).getByRole("button", {
+        name: "Set your 2k",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the neither-side copy when neither is set", async () => {
+    mockHooks(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+
+    expect(
+      screen.getByText(/Targets are words until you set a baseline/),
+    ).toBeInTheDocument();
   });
 });

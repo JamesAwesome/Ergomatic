@@ -5829,3 +5829,102 @@ is James's own ruling and Gate 0 showed two of the four stacked. If a
 household report asks "how do I make this go away", the answer today is "set
 a baseline", which is the sentence the phase existed to stop being the
 answer.
+
+## 2026-09-07 — The partial baseline pair: ASK, prefilled, persistent — never FORCE (PM opinion, James's question)
+
+James asked whether setting one baseline should FORCE the other, having ruled
+the day before that it should ASK with the 7 s suggestion. **Recommendation:
+ask, prefilled, one tap, on Today — and fix the false copy in the same
+change.** (Prod check, James, same day: no account is currently half paired,
+so the work is preventive and rides the next Today PR.)
+
+**Force degrades the provenance record it means to complete.** A rower forced
+to fill a 6k they have never rowed types a guess, and `KnowBaseline.tsx`
+stamps it `k6Source: "manual"` — indistinguishable forever from a rowed
+number. The offer they would otherwise decline stores as `derived`
+(`PostTestPrompt.tsx`). **When weighing a mandate against an offer, ask what
+SOURCE each one writes**; this repo's `sourceFor` (`BaselineEditor.tsx`)
+exists so the stored source matches what the rower saw, and a forced field
+breaks it in the one direction the enum cannot express.
+
+**The honesty line here is not "never store an estimate".** `Recommend.tsx`
+already stores BOTH sides as `estimated` from a hand-authored table on the
+default onboarding door. The line this repo actually draws is: an estimate may
+be stored when the rower SAW it and its provenance is recorded. That admits
+prefill-plus-one-tap and excludes silent auto-fill and read-time derivation
+(which resolves live targets off a number nobody saw and leaves no record).
+
+**A "force vs ask" question posed at the WRITE moment is usually posed at the
+wrong lever.** Nothing hurts when a half pair is saved; it hurts on every
+later read — Today collapses the pair to null, so a rower with a tested 2k is
+told `NO BASELINE SET` and gets words on every target. A write-side force
+fixes nothing for accounts already in that state. Ask which surface carries
+the lie before designing the gate that prevents it.
+
+**The counter-case, recorded because it is real and was James's instinct:**
+half a pair is not a usable state for anything, and a narrow force at the two
+typed-entry surfaces only (`KnowBaseline`, `BaselineEditor`; `Recommend`
+already writes both) is cheap and defensible. Rejected on three grounds: a
+per-screen rule invites "why did it let me last time"; the You editor's Apply
+is also how a rower EDITS one number, so force is a wall in front of an edit;
+and it strands whoever is already half-paired. The post-test path can never be
+forced honestly — it would hold a real measurement hostage to a heuristic, at
+the erg.
+
+**Grounding of the 7 s, for the next person who reaches for it:**
+`estimateBaseline.ts` — Paul's Law ≈ +7.9 s for 2k→6k, SECONDARY, a c2forum
+post, trained rowers, and "no source grounds a better per-population gap".
+`deriveBaseline.test.ts` pins the constant and the two directions and nothing
+else. Fine as an offer; not groundable as a mandate.
+
+**Sizing: S, not TRIAD** (no new stored shape — `derived` and both columns
+exist; no auth; no number changes MEANING, only when an existing derived
+number is written). Carries a Gate 0, because it changes what a rower reads.
+
+---
+
+## Half-set baselines shipped, PR #344 (2026-09-07) — the gate that caught a feature nobody could reach
+
+**Verdict: PASS WITH CONDITIONS, and two of the four conditions were product
+defects.** The PR fixed Today and the workout detail for a rower holding half
+a baseline pair. It reached almost none of them.
+
+- **When a predicate collapses two fields to one null, grep every SCREEN that
+  renders on it before calling the state closed.** `baselines === null` had
+  three renderers. Two were fixed; `Library.tsx` carried the identical
+  sentence ("~ times are estimates until you set a baseline") on the
+  identical gate, on the screen with the most rows in the app — and the PR's
+  own e2e leg walked the half-set rower THROUGH it to reach the caption it
+  had fixed. The check is `grep -rn` for the COPY, not for the component.
+
+- **A feature gated on a flag only one screen writes reaches only rowers who
+  visited that screen.** The half-set row lived in the `else` arm of
+  `needsDoors = baselines === null && !baselinesSkipped`, and
+  `grep setBaselinesSkipped` returns exactly two writers, both on the doors
+  card. So the row required tapping "Row without one for now" FIRST. The
+  ordinary route to a half pair — `KnowBaseline.tsx` saves whichever field
+  was touched — never writes the flag, so those rowers got the doors card
+  telling them to set up a baseline they had just typed. **Ask "which writers
+  put a user into the state this feature renders in, and does every one of
+  them satisfy the render condition?"** The PR's own "Try it" steps did not
+  reproduce its own feature (RF13).
+
+- **A repeated derivation is a house rule; the fourth call site must obey
+  it.** Three sites derive the ±7 s counterpart and all three bounds-check
+  (`BaselineEditor.deriveOffer`, `postTestOffer`, `Recommend.fillFor`), one of
+  them naming the exact reachability in its own comment. The new tap was the
+  fourth and skipped it, so a stored 2k of 234-240 s produced a button that
+  PUT an out-of-band value, took a 400, and — with no `.catch` — did nothing
+  at all, forever, with no message. **Before adding a caller to a shared
+  domain helper, read its existing callers:** `deriveBaseline.ts` says in
+  prose that bounds are "the caller's job", and three callers had agreed.
+
+- **A tag cut at a PR's own base is a release trap.** `v0.42.0` sat at
+  #344's merge-base while the TestFlight release was being HELD for #344.
+  Shipping from the tag would have shipped without the fix. When a release is
+  held for a specific PR, check `git rev-list -n1 <tag>` against that PR's
+  base before anything else.
+
+- **The ASK-not-force ruling stands and should not be re-litigated.** Forcing
+  both baselines makes a 2k test's own result unsavable until a 6k the rower
+  has not rowed. James took the PM's call ("Go with the pms decision").

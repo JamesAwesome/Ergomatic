@@ -613,18 +613,26 @@ describe("phase tripwires", () => {
     },
   );
 
-  it("AT/AN's committed targets are still the grid this solver produces", () => {
-    const solved = solveLibrary(
-      libraryItems().map((r) => r.item),
-      DRAFT_GRID,
-    );
-    for (const type of ["AT", "AN"] as const) {
-      expect({ type, grid: solved[type].grid }).toStrictEqual({
-        type,
-        grid: patterns.targets[type],
-      });
-    }
-  });
+  // The solver is deterministic but heavy: it ran 5,953 ms against the
+  // default 5,000 ms cap during a `pnpm test:coverage` run on a loaded
+  // machine (2026-09-07), which is a red main waiting for a slow CI runner.
+  // The timeout is a guard against a hang, not a performance assertion.
+  it(
+    "AT/AN's committed targets are still the grid this solver produces",
+    { timeout: 60_000 },
+    () => {
+      const solved = solveLibrary(
+        libraryItems().map((r) => r.item),
+        DRAFT_GRID,
+      );
+      for (const type of ["AT", "AN"] as const) {
+        expect({ type, grid: solved[type].grid }).toStrictEqual({
+          type,
+          grid: patterns.targets[type],
+        });
+      }
+    },
+  );
 
   // "the adversarial review's published numbers still replay" (crossers
   // 144 / unreachable 40 / deficits {O2:3, AT:4, TR:6, AN:8}) is RETIRED

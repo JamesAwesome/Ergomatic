@@ -156,6 +156,7 @@ const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 // doors are the superset re-entry; the old BaselineCard's only-missing-
 // distance branch died with it).
 const ONLY_K6_BASELINE = { k2Seconds: null, k6Seconds: 122 };
+const ONLY_K2_BASELINE = { k2Seconds: 112, k6Seconds: null };
 const DEFAULT_PREFS = {
   timeCapMinutes: 60,
   // Phase RW PR C. A fixture that omitted this would read `undefined` →
@@ -306,6 +307,27 @@ const LOGS: RecentLog[] = [
 // write through `usePreferences().setBaselinesSkipped`. This records the
 // calls and lets a test choose the resolved value (false = the server did
 // not confirm it).
+// The half-set row's "Estimate it" writes the counterpart through
+// `useBaselines().save`. Recorded so a test can assert the PATCH, not just
+// that something was clicked.
+const baselineSaves: {
+  calls: unknown[];
+  /** Set true to make the next save REJECT the way `useBaselines.save`
+   *  does on any non-ok response (`api/useBaselines.ts` throws). Without
+   *  this, no test can reach the row's failure branch. */
+  fails: boolean;
+  fn: (p: unknown) => Promise<void>;
+} = {
+  calls: [],
+  fails: false,
+  fn: (p: unknown) => {
+    baselineSaves.calls.push(p);
+    return baselineSaves.fails
+      ? Promise.reject(new Error("failed to save baselines"))
+      : Promise.resolve();
+  },
+};
+
 const skipWrites: {
   calls: boolean[];
   resolve: boolean;
@@ -321,7 +343,11 @@ const skipWrites: {
 
 function mockReady(overrides?: {
   workouts?: LibraryWorkout[];
-  baselines?: typeof BASELINES | typeof NO_BASELINES | typeof ONLY_K6_BASELINE;
+  baselines?:
+    | typeof BASELINES
+    | typeof NO_BASELINES
+    | typeof ONLY_K6_BASELINE
+    | typeof ONLY_K2_BASELINE;
   plan?: PlanData;
   preferences?: typeof DEFAULT_PREFS;
   logs?: RecentLog[];
@@ -341,7 +367,7 @@ function mockReady(overrides?: {
     useWorkouts: () => ({ state: "ready", workouts }),
   }));
   vi.doMock("../api/useBaselines", () => ({
-    useBaselines: () => ({ state: "ready", baselines }),
+    useBaselines: () => ({ state: "ready", baselines, save: baselineSaves.fn }),
   }));
   vi.doMock("../api/usePlan", () => ({
     usePlan: () => ({ state: "ready", plan }),
@@ -433,6 +459,8 @@ async function openFilterSheet() {
 beforeEach(() => {
   skipWrites.calls = [];
   skipWrites.resolve = true;
+  baselineSaves.calls = [];
+  baselineSaves.fails = false;
 
   vi.resetModules();
   localStorage.clear();
@@ -3324,27 +3352,27 @@ describe("Today (the no-baseline card)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("a partial pair (only the 2k missing) renders the SAME three-door card — the doors are the superset re-entry", async () => {
-    // Phase BL PR C: the doors card shows whenever the PAIR is incomplete
-    // (spec ruling — a superset of the old card's states), and all three
-    // doors render; door 1's own recommendation screen is what protects
-    // the existing number (M8, Recommend.test.tsx), not a hidden door.
+  it("a partial pair renders the half-set row, not the three doors (2026-09-07 supersedes BL PR C)", async () => {
+    // Phase BL PR C ruled the doors card a superset re-entry: it showed
+    // whenever the PAIR was incomplete. That sent a rower who had typed a
+    // 2k and pressed Apply back to "SET UP YOUR BASELINE / How do you want
+    // to start?", which is false about their account. The half-set row
+    // replaces it and names the side that IS stored. A rower with NEITHER
+    // side still gets all three doors (sibling test above).
     mockReady({
       baselines: ONLY_K6_BASELINE,
       workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
 
-    expect(await screen.findByText("SET UP YOUR BASELINE")).toBeVisible();
+    expect(await screen.findByText("6K SET · NO 2K")).toBeVisible();
+    expect(screen.queryByText("SET UP YOUR BASELINE")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Recommend my baseline/ }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: /I know my baseline/ }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: /Row to find my baseline/ }),
-    ).toBeVisible();
+      screen.queryByRole("link", { name: /Recommend my baseline/ }),
+    ).not.toBeInTheDocument();
+    // The rest of Today comes back with it: a half-set rower rows on
+    // intensity words, so the suggestion apparatus is theirs to use.
+    expect(screen.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
   });
 
   it("both baselines set: normal Today returns — plan apparatus back, no doors card", async () => {
@@ -4510,10 +4538,11 @@ describe("the stored skip (Phase RW PR C)", () => {
   });
 
   it("keeps the return row for a PARTIAL pair — the state spec 3.2 calls out", async () => {
-    // One side stored still reads as "no baseline" everywhere (Today's own
-    // derivation collapses a half pair to null), so the flag still decides.
-    // James's 2026-09-07 ruling — ask for both, suggested at the 7s offset —
-    // is the queued fix for the copy; this pins today's behaviour.
+    // One side stored still reads as "no baseline" for every TARGET (Today's
+    // own derivation collapses a half pair to null), so the flag still
+    // decides which of the two states shows. What the row SAYS in that state
+    // is the half-set copy, pinned in its own describe below: James's
+    // 2026-09-07 ruling closed the false "NO BASELINE SET".
     mockReady({
       baselines: ONLY_K6_BASELINE,
       preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
@@ -4521,7 +4550,7 @@ describe("the stored skip (Phase RW PR C)", () => {
     await renderToday();
 
     expect(document.querySelector(".doorscard")).toBeNull();
-    expect(screen.getByText("NO BASELINE SET")).toBeInTheDocument();
+    expect(document.querySelector(".today-nobaseline-row")).not.toBeNull();
   });
 
   it("shows neither the card nor the row once a baseline is set, whatever the flag says", async () => {
@@ -4533,5 +4562,170 @@ describe("the stored skip (Phase RW PR C)", () => {
 
     expect(document.querySelector(".doorscard")).toBeNull();
     expect(screen.queryByText("NO BASELINE SET")).not.toBeInTheDocument();
+  });
+});
+
+describe("a half-set baseline pair says what is true (2026-09-07)", () => {
+  it("names the side that IS set, never NO BASELINE SET, and offers the other at +7s", async () => {
+    mockReady({
+      baselines: ONLY_K2_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(screen.getByText("2K SET · NO 6K")).toBeInTheDocument();
+    expect(screen.queryByText("NO BASELINE SET")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Estimate it (+7s)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Targets stay words until both are set. You can type the other in on You.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("names the 6k side and subtracts, when that is the one stored", async () => {
+    mockReady({
+      baselines: ONLY_K6_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(screen.getByText("6K SET · NO 2K")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Estimate it (−7s)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("Estimate it writes the DERIVED counterpart, 7s slower than the stored 2k", async () => {
+    mockReady({
+      baselines: ONLY_K2_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Estimate it (+7s)" }),
+    );
+
+    // 112 + 7 = 119, and the source says the rower did not row it.
+    expect(baselineSaves.calls).toStrictEqual([
+      { k6Seconds: 119, k6Source: "derived" },
+    ]);
+  });
+
+  it("Estimate it writes the derived 2k when the 6K is the side stored", async () => {
+    // The mirror of the +7s case. Without this the k6 -> k2 write branch is
+    // executed by no test at all: the sibling above asserts the k6 branch's
+    // patch, and the −7s test asserts only the button's LABEL, so writing
+    // k6Source there, or adding instead of subtracting, went unnoticed.
+    mockReady({
+      baselines: ONLY_K6_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Estimate it (−7s)" }),
+    );
+
+    // 122 − 7 = 115.
+    expect(baselineSaves.calls).toStrictEqual([
+      { k2Seconds: 115, k2Source: "derived" },
+    ]);
+  });
+
+  it("says so when the write fails, instead of a button that does nothing", async () => {
+    // RF25: `save` throws on any non-ok response. A rower at an erg taps
+    // Estimate it, the server refuses, and before this the row was
+    // unchanged with no message and no way to tell.
+    mockReady({
+      baselines: ONLY_K2_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    baselineSaves.fails = true;
+    await renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Estimate it (+7s)" }),
+    );
+
+    expect(
+      await screen.findByText("Couldn't save that. Try again."),
+    ).toBeInTheDocument();
+    // The row is still the half-set row: nothing was written, and the copy
+    // must not imply it was.
+    expect(screen.getByText("2K SET · NO 6K")).toBeInTheDocument();
+  });
+
+  it("offers no estimate when the derived split falls outside the storable band", async () => {
+    // A 2k of 236 s is inside the band the You editor accepts (60..240),
+    // and 236 + 7 = 243 is not. The server would answer 400. The other two
+    // derivation offers in the app refuse the same case rather than
+    // promising a number they cannot store, so this one does too — the row
+    // and its "type the other in on You" copy stay.
+    mockReady({
+      baselines: { k2Seconds: 236, k6Seconds: null },
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(screen.getByText("2K SET · NO 6K")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Estimate it (+7s)" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Targets stay words until both are set. You can type the other in on You.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the half-set row, NOT the doors, to a rower who never skipped", async () => {
+    // The ordinary way to reach a half pair: `onboarding/KnowBaseline.tsx`
+    // saves whichever field was touched, so typing a 2k and pressing Apply
+    // stores one side and never writes `baselinesSkipped`. Before
+    // 2026-09-07 those rowers read "SET UP YOUR BASELINE / How do you want
+    // to start?" — false about their account, and the one-tap offer that
+    // closes the pair was on a screen they could not reach.
+    mockReady({
+      baselines: ONLY_K2_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: false },
+    });
+    await renderToday();
+
+    expect(document.querySelector(".doorscard")).toBeNull();
+    expect(screen.getByText("2K SET · NO 6K")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Estimate it (+7s)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("still shows the doors to a rower with NEITHER side set who never skipped", async () => {
+    mockReady({
+      baselines: NO_BASELINES,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: false },
+    });
+    await renderToday();
+
+    expect(document.querySelector(".doorscard")).not.toBeNull();
+    expect(screen.queryByText("NO BASELINE SET")).not.toBeInTheDocument();
+  });
+
+  it("keeps NO BASELINE SET and the skip-clearing link when NEITHER side is set", async () => {
+    mockReady({
+      baselines: NO_BASELINES,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(screen.getByText("NO BASELINE SET")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Set one up" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("~ times are estimates until you set a baseline"),
+    ).toBeInTheDocument();
   });
 });

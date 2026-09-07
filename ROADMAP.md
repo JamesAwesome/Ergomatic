@@ -1251,57 +1251,78 @@ closed with zero Concept2 contact.
       not victims of the interval array. The app now prints the code only on
       rows Concept2 will take it for.
 
-**Standing warning this wave inherits.** `recordTwdVerdict` was retired for
-being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
-sum, while Concept2's logbook — the actual authority — stores work only. **An
-oracle that shares your definition is a mirror.** Before trusting any number
-this wave pulls back, state what it measures and confirm it is the same thing we
-are trying to be right about.
+- [x] **DONE (PR #345). The fake monitor sent a summary heart rate no capture we hold contains,
+      and that is why AVG HR reading `—` went unnoticed for a month.**
+      `transports/fake.ts` emitted `avgHeartRateBpm: 152`, `min 96`, `max 175`,
+      `ending 168` in its 0x0039 end-of-workout summary. **Measured
+      2026-09-07: of 20 capture files, 11 carry a 0x0039 summary and every
+      heart-rate slot in all eleven is a 0/255 sentinel — but two pairs are
+      duplicate encodings (9 recordings) and 7 of the 9 had no belt paired at
+      all, so the real evidence is TWO belted recordings from ONE walk.**
+      Narrow, and still enough: the fake asserted a number no capture we hold
+      contains, and dozens of tests seeded the same fiction.
+      So every gate we own says the tile fills, because every gate feeds it a
+      number the hardware does not produce — RF3, and it hid a real defect.
+      **Fix:** make the fake's 0x0039 heart-rate bytes sentinels like the
+      hardware's, and let the suite show the dash. Rides the AVG HR change.
+- [x] **DONE (PR #345). AVG HR is derived from the heart-rate trace.** The tile reads
+      `—` on every row because the monitor leaves its summary heart-rate
+      fields empty (row above). The trace we already record and store has the
+      data — it decimates to roughly 1 Hz, not one sample per stroke.
+      **Measured on four committed captures with the repo's own parser:** a
+      work-only time-weighted mean and a whole-session one differ by at most
+      0.5 bpm, while the monitor's own per-interval figure runs 3.5 to 15.2
+      bpm higher weighted by interval duration, or 0 to 15 as a plain mean
+      with one capture agreeing — the range depends on the aggregation, and
+      an earlier version of this row stated it without one. What that field
+      measures is not documented (`docs/monitor/pm5-interface-notes.md` §10's
+      0x0038 table says only "Split/Interval Work Heartrate"), so the gap is
+      recorded, not explained. Gate 0 APPROVED (option A); the same figure also rides the
+      Concept2 upload as `heart_rate.average`, a field Concept2 documents as
+      optional and defines no further. **Owed:** James's own belted row is
+      the only evidence outside those two recordings, and it is not in the
+      repo — capture one on the next walk so the corpus carries a belted
+      0x0039 from a second day and build.
 
-**Exit — RC exit criterion (d) transcribed VERBATIM at open, per the close
-gate's binding:** _"a row posted to the Concept2 sandbox comes back through
-`export/` matching what we stored, or the reason it cannot is documented."_
-The hatch is bounded (PM open gate): "cannot" is acceptable for a field C2
-rejects or does not return, never for a field we chose not to send. Plus,
-from the widened scope: a linked user sends an eligible row from the app ON
-THE PHONE and C2's result id is stored on it, with the duplicate (409) and
-failure states each observed for real at least once; the link flow's
-request bodies carry NO new user attribute (the countable form of
-minimal-PII, STRENGTHENED by the 2026-09-03 ruling — it used to read
-"exactly ONE new user attribute, `weight_class`"); **the UNIT of Concept2's
-`weight` field is measured on James's log-dev profile before the flag
-flips — a DESK step, not a walk step, and it takes TWO readings** (the
-profile's unit preference on kg, then on lb, because the profile carries no
-unit field and one reading cannot detect a per-user display unit). The same
-desk session answers two more questions no status code can: which Concept2
-page carries the weight and weight-class fields (2i's link-out target is
-provisional until then), and whether a non-rower result carries a class.
-**It gates less than it used to:** with the declaration as the primary
-producer the unit only matters for a rower who has declared nothing, and
-the derivation's plausibility band already refuses four of the SIX wrong
-unit readings — the two it admits are hundredths-of-a-kilogram, which is
-the assumed-correct reading, and hundredths-of-a-pound, a 2.2x error no
-band can exclude, which is exactly what the second reading settles. Plus
-the
-dedup-granularity, `state`-echo and
-zero-rest-post questions each carry a measured answer in PR0's report —
-"unknown" leaves the wave open. (RC-9(b)'s live ring verdict moved OUT to
-the open-item register at the PM open gate: no shared mechanism, PR, or
-risk model with this wave.)
-
----
-
----
-
-# The open-item register
-
-Work with no wave, lifted out of archived phase bodies so it does not die with
-them. **Every entry names where its evidence now lives.** An item here is real
-and unscheduled; it is not a wish.
-
-**How an entry leaves:** it rides the next PR that touches its area, it is
-promoted into a wave, or it is killed with a reason. "Rides the next PR touching
-X" is a real disposition — most of these are single files.
+- [x] **DONE (2026-09-07, PR #348). v0.41.0's release note was FALSE and the
+      next note owed a correction.** Fixed in the same round that corrected
+      v0.42.0's own item 2: v0.41.0 item 1 now reads "what the monitor
+      reports" and no longer lists average heart rate among the session
+      figures — that tile read a dash on every row in that build, so the
+      claim was false when shipped rather than merely outdated — and
+      v0.42.0 item 6 says where the number comes from now.
+      **Original row:** It reads "Rows rowed with the PM5 connected now show what
+      the monitor measured: … average heart rate for the session". After
+      #345 that figure is NOT what the monitor measured — the monitor sends
+      nothing there, and the app works it out from the trace, working strokes
+      only, which can read below the per-interval HR column on the same
+      screen. Notes are shipped copy, not history, and nothing else re-reads
+      them (PM gate #345). **Check:** at any change to where a number comes
+      from, grep `releaseNotes.ts` for that tile's own label.
+- [x] **DONE (#346). `WorkoutDetail.test.tsx` flaked on a MOCK REGISTRATION
+      RACE, and my first diagnosis of it was wrong.** Kept because the wrong
+      diagnosis is the lesson. The symptom: "still navigates when preferences
+      errored" failed ~2 runs in 3 with `expected [ false ] to strictly equal
+      []`, blocked three pushes here, and — found at #345's PM gate — failed
+      main's `app` job at `3c319cc8`, which SKIPPED `deploy` and froze
+      production a merge back. **I filed the mechanism as a shared
+      module-scoped `skipWrites` spy reset while a previous test's write was
+      still in flight. That is false**: the write is pushed synchronously
+      inside the mock during the click, so it cannot outlive its own test.
+      **The real one** (the no-baselines session, verified here by reading
+      `a1967244^`): `mockHooksWithPreferencesError` called `mockHooks`, which
+      registers a READY `usePreferences`, and then `vi.doMock`'d an ERRORED
+      one for the same path. `@vitest/mocker`'s `queueMock` registers each
+      inside an async RPC's `.then`, so two registrations for one path race
+      and the last to resolve wins; when the ready arm won, the errored test
+      got a live writer and recorded the write it asserts never happens. Fix:
+      the preferences arm is a parameter, so the path is registered once, plus
+      a census script that fails lint on the shape (one instance repo-wide).
+      **The lesson: a mechanism I could not reproduce got written down as
+      though I had.** I observed the failure rate and the provenance, both
+      true, and then inferred a cause from reading two tests — RF16's shape,
+      inside a row whose whole purpose was to carry evidence. Tag an
+      unreproduced mechanism INFERENCE, or leave the row at the symptom.
 
 - [ ] **DONE, PR OPEN — a monitor older than 2018 is silently unusable.**
       Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26
@@ -1808,6 +1829,14 @@ close, not before.**
       and the tile renders 929. The arithmetic was ruled; the LABEL was
       not. A named row for this pass's Gate 0, which LP's own §3.4 admits
       it enlarged by six numbers.
+      **THIRD MEMBER (PM final gate #345, 2026-09-07): AVG HR is derived
+      too**, from the trace rather than the monitor, and it is the first of
+      the three that visibly disagrees with the rows in the same frame — the
+      HR column beneath it is the monitor's own per-interval reading, which
+      measures 3.5-15.2 bpm higher. Not a merge blocker (a rower cannot act
+      differently on 117 versus 125) but three of six tiles under a `PM5`
+      eyebrow are now not the monitor's figure, and each arrived in its own
+      PR. This pass should rule on the label with all three on the table.
 
 **Opened by James's 2026-08-31 ruling** on the axis-quantity question: take the
 three surviving work-versus-rest mismatches together, in ONE design pass with
@@ -2121,24 +2150,56 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **A rower who sets ONE baseline is asked to set both, suggested at the 7 s
-  offset (James, 2026-09-07: "If a user sets a 2k or a 6k they should be
-  asked to set both with a suggestion of the 7s offset").** This is the
-  ruling on the partial-pair state, raised at Phase RW PR C's PM final gate:
-  every screen collapses a half pair to `null` (`Today.tsx`'s own
-  derivation), so a rower who set only their 2k reads `NO BASELINE SET` at
-  the top of Today, which is false about their account. The half-measures
-  considered and NOT taken were naming the missing side in the copy, or
-  gating the row on both sides being null; James's answer is to close the
-  state instead of describing it. **The mechanism already exists and is
-  currently declinable:** `domain/deriveBaseline.ts`'s
-  `K2_K6_OFFSET_SECONDS = 7` and the counterpart offer the post-test prompt
-  already makes (`PostTestPrompt.tsx`). The work is to make the ask
-  persistent rather than a one-time offer — wherever a single side is
-  stored, the rower is asked for the other with the derived number
-  suggested. Sizing note: the derivation, the copy and the surface that
-  carries the ask (a Today row, the You editor, or both) are the design
-  question; the arithmetic is done. **S/M.**
+- **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
+  one and offered the other at the 7 s offset.** James's ruling ("If a user
+  sets a 2k or a 6k they should be asked to set both with a suggestion of the
+  7s offset"), raised at Phase RW PR C's PM final gate: every screen collapsed
+  a half pair to `null`, so a rower with a tested 2k read `NO BASELINE SET` on
+  Today, which was false about their account. The PM ruled ASK, not force
+  (forcing would make a 2k test's own result unsavable until a 6k it does not
+  have), and James took the PM's decision. What shipped: Today's row names the
+  stored side (`2K SET · NO 6K`) and fills the other on one tap, stamped
+  `derived`; Library and the workout detail's captions name it too; the doors
+  card states the consequence of leaving them unset. **The doors card now
+  yields to that row whenever one side is stored** — Phase BL PR C had ruled
+  the doors a superset re-entry for any incomplete pair, which sent a rower
+  who typed a 2k in the I-know-my-baseline door back to `SET UP YOUR
+  BASELINE`; that is the ordinary way to hold half a pair, and it never
+  writes `baselinesSkipped`, so the first cut of this work reached only
+  rowers who had skipped first. The estimate is suppressed when the derived
+  split falls outside the storable 60..240 band, matching the refusal
+  `BaselineEditor`'s and `postTestOffer`'s offers already make, and a failed
+  write says so rather than leaving a button that does nothing. The You
+  editor keeps its own existing counterpart offer (`deriveOffer` /
+  `DeriveSlot`) unchanged; no second ask was added there.
+  **Why not force** (PM, 2026-09-07, on James's follow-up "I feel like it's
+  natural but maybe it'd bother some people" — and it is NOT the consistency
+  argument): a rower made to fill a 6k they never rowed types a guess, and
+  `KnowBaseline.tsx` stamps a typed field `manual`, permanently
+  indistinguishable from a rowed number, while the declined offer would have
+  stored `derived`. Force degrades the provenance record it means to
+  complete, and it cannot be done honestly at the erg — removing the
+  post-test Skip holds a real measurement hostage to a heuristic. **Why not
+  silent auto-fill:** this repo's line is not "never store an estimate"
+  (`Recommend.tsx` stores both sides as `estimated` from a hand-authored
+  table), it is that the rower SAW it and the provenance is recorded.
+  **And the 7 s is an offer, not a fact:** `estimateBaseline.ts` grounds it
+  on Paul's Law (≈ +7.9 s, SECONDARY, a forum post, trained rowers) and says
+  in terms that no source grounds a better per-population gap;
+  `deriveBaseline.test.ts` pins the constant and nothing about any real pair.
+- **DONE (2026-09-07, PR #348): v0.42.0's notes corrected, and the tag it
+  was written for DELETED unreleased.** Item 2 promised "a quiet **NO
+  BASELINE SET** line" and that "setting a baseline any time puts the numbers
+  back"; after #344 a half-set rower reads `2K SET · NO 6K`, and setting ONE
+  side does not put the numbers back. James, 2026-09-07: "We won't release
+  that tag" — so `v0.42.0` (which sat at `8326fb2c`, #344's base, and never
+  reached TestFlight) was deleted locally and on the remote, and the VERSION
+  is free to be re-cut at whatever main is when he releases. The notes entry
+  keeps its `v0.42.0` label and `e2e/releasePin.ts` is unchanged for the same
+  reason. Its provenance comment was re-counted over the full
+  `v0.41.0..main` range (sixteen merges, RF15) and three items added: the
+  half-set offer (#344), the verification-code narrowing (#341) and AVG HR
+  (#345).
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard
@@ -2650,7 +2711,9 @@ trigger is the whole entry.
   wanted.
 - ~~**Row without a baseline set** (James, 2026-08-23)~~ — **DONE.** The Just
   Row half shipped with Phase JR; the every-workout half was Phase RW,
-  closed 2026-09-07 and released in v0.42.0 (ledger row below).
+  closed 2026-09-07; NOT yet released (the first v0.42.0 tag was deleted
+  unreleased, 2026-09-07 — James is bundling more work first). Ledger row
+  below.
 - **"Which days did I override, and what was the other suggestion?"** (James,
   2026-08-12). Two questions in one sentence: the CHECKPOINT half needs no new
   capture (`plan_index ∈ {6,34,62}`, **not** `workout_title`), and the FREE-FORM
@@ -2690,7 +2753,7 @@ RECORD — do not cite it for a live question.
   (STEADY · MODERATE · HARD · ALL OUT) where the split would be, `~`
   durations off an assumed pace, and a stored "row without one for now"
   that survives a reinstall · closed 2026-09-07 · #333, #335, #338 ·
-  released in v0.42.0 · [detail](docs/history/phase-rw.md)
+  awaiting release; the first v0.42.0 tag was deleted unreleased · [detail](docs/history/phase-rw.md)
 - **Phase NF** — Scan NFC: hold the iPhone to the PM5's own tag and the app
   connects to exactly that erg and programs the workout, no Bluetooth picker
   (workout detail and Just Row); the scan screen names the target and can be

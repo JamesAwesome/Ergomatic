@@ -223,6 +223,7 @@ function toMappingRow(row: {
   source: LogSource;
   endedBy: string | null;
   steps: unknown;
+  series: unknown;
 }): SessionLogRow {
   return {
     loggedAt: row.loggedAt,
@@ -243,6 +244,15 @@ function toMappingRow(row: {
     // above already makes; a non-array (impossible on a row the write
     // path admitted) reads as no steps, never a partial array.
     steps: Array.isArray(row.steps) ? (row.steps as LogStep[]) : [],
+    // The trace feeds the derived heart-rate average. Untyped off
+    // `store.get` like its neighbours; a shape the write path never admits
+    // reads as no samples rather than a partial trace.
+    series:
+      typeof row.series === "object" && row.series !== null
+        ? (row.series as {
+            samples?: readonly { t: number; hr?: number; r?: true }[];
+          })
+        : null,
     source: row.source,
     endedBy: row.endedBy,
   };

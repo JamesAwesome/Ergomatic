@@ -365,7 +365,7 @@ test.describe("Phase 6I: designated-workout exclusion", () => {
 // `setBaselines` above (deliberately: that helper proves nothing about
 // whether the CLIENT's own Apply logic can produce this state).
 test.describe("the derivation offer is reachable through the real editor flow (task review round, Finding 1)", () => {
-  test("touching only the 6k field and applying sends ONLY k6Seconds — 2k stays null, and the offer plus Today's own doors card both still show it", async ({
+  test("touching only the 6k field and applying sends ONLY k6Seconds — 2k stays null, and the offer plus Today's own half-set row both still show it", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -406,15 +406,13 @@ test.describe("the derivation offer is reachable through the real editor flow (t
       page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
     ).toBeVisible();
 
-    // And the SAME fact holds system-wide: Today's own doors card (a
-    // completely separate screen/component reading the identical baselines
-    // row) still renders for the incomplete pair — the doors are the
-    // superset re-entry since PR C, so a partial pair shows all three.
+    // And the SAME fact holds system-wide: Today (a completely separate
+    // screen/component reading the identical baselines row) names the side
+    // that IS stored. Until 2026-09-07 this rower got the three-door card
+    // instead, telling them to set up a baseline they had just typed.
     await page.goto("/today");
-    await expect(page.locator(".doorscard")).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: /Row to find my baseline/ }),
-    ).toBeVisible();
+    await expect(page.getByText("6K SET · NO 2K")).toBeVisible();
+    await expect(page.locator(".doorscard")).toHaveCount(0);
 
     // PR A's PM gate (C3): the one case the provenance ruling exists for,
     // proven END TO END — the client PRODUCES `derived` and the server
@@ -424,7 +422,7 @@ test.describe("the derivation offer is reachable through the real editor flow (t
     // re-declares the enum as string literals (`src/api/useBaselines.ts`,
     // no compile-time link to the pgEnum), so a rename on either side is
     // caught HERE, not by a type. Runs LAST in this test because accepting
-    // the offer sets BOTH baselines, which removes the doors card the
+    // the offer sets BOTH baselines, which removes the half-set row the
     // assertions above depend on.
     await page.goto("/you/baselines");
     await page.locator(".baseline-input").first().waitFor();
@@ -534,7 +532,7 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
     });
   });
 
-  test("door 2: enter one split -> Save writes ONLY it as `manual`, and the doors (superset) still stand for the partial pair", async ({
+  test("door 2: enter one split -> Save writes ONLY it as `manual`, and Today names the side that is now set", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -575,11 +573,16 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
     await expect.poll(() => putBody).not.toBeNull();
     expect(putBody).toStrictEqual({ k2Seconds: 118, k2Source: "manual" });
 
-    // A partial pair is still an incomplete pair: the doors render again
-    // (the superset ruling), all three of them.
-    await expect(page.locator(".doorscard")).toBeVisible();
+    // A partial pair is still an incomplete pair for every TARGET, but it
+    // is not "no baseline": Today names the stored side and offers the
+    // other at the offset. This is the ordinary route to a half pair —
+    // door 2 writes only what was touched and never writes the skip — and
+    // it is the exact rower the doors used to swallow (BL PR C's superset
+    // ruling, superseded 2026-09-07).
+    await expect(page.getByText("2K SET · NO 6K")).toBeVisible();
+    await expect(page.locator(".doorscard")).toHaveCount(0);
     await expect(
-      page.getByRole("link", { name: /Recommend my baseline/ }),
+      page.getByRole("button", { name: "Estimate it (+7s)" }),
     ).toBeVisible();
   });
 

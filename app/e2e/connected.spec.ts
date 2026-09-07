@@ -1045,14 +1045,23 @@ async function walkSurfaceToLog(
   // `toStrictEqual` (not `toMatchObject`) is what actually pins that.
   expect(newest.machineWorkSeconds).toBe(100);
   expect(newest.machineWorkMeters).toBe(500);
+  // The four heart-rate fields are NULL, and this walk pinning 168/152/96/175
+  // is why the AVG HR defect survived a month: the fake invented a summary
+  // heart rate no monitor sends, and this end-to-end assertion then froze the
+  // fiction as the expected stored shape. Measured 2026-09-07 over the whole
+  // committed corpus — 11 of 20 captures carry a 0x0039 summary and all
+  // eleven leave every one of these slots at a sentinel, on walks whose
+  // per-interval frames carry real readings at the same moment. The tile now
+  // derives its number from the trace instead
+  // (`domain/monitor/derivedHeartRate.ts`).
   expect(newest.machineSummary).toStrictEqual({
     avgStrokeRate: 24,
-    endingHeartRateBpm: 168,
-    avgHeartRateBpm: 152,
-    minHeartRateBpm: 96,
-    maxHeartRateBpm: 175,
+    endingHeartRateBpm: null,
+    avgHeartRateBpm: null,
+    minHeartRateBpm: null,
+    maxHeartRateBpm: null,
     dragFactorAverage: 128,
-    recoveryHeartRateBpm: 120,
+    recoveryHeartRateBpm: null,
     workoutType: 8,
     avgPaceSecondsPer500m: 125,
   });

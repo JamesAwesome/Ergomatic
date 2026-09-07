@@ -7,12 +7,18 @@ import { useBaselines } from "../api/useBaselines";
 import { usePlan } from "../api/usePlan";
 import type { PlanData } from "../api/usePlan";
 import { usePreferences } from "../api/usePreferences";
+import { MAX_SPLIT, MIN_SPLIT } from "../you/baselineDraft";
 import type { PreferencesData } from "../api/usePreferences";
 import { useRecentLogs } from "../api/useRecentLogs";
 import type { RecentLog } from "../api/useRecentLogs";
 import { LogRow } from "../log/LogRow";
 import { fmtDuration } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
+import {
+  deriveK2FromK6,
+  deriveK6FromK2,
+  K2_K6_OFFSET_SECONDS,
+} from "../../domain/deriveBaseline.js";
 import {
   drawOne,
   nextShuffle,
@@ -576,6 +582,44 @@ function TodayContent({
           k6Seconds: baselinesState.baselines.k6Seconds,
         }
       : null;
+  // Which side IS stored when the pair collapses to null, and what the
+  // counterpart would be. The pair stays "unknown" for every target, but
+  // the row must not tell a rower with a tested 2k that they have no
+  // baseline.
+  //
+  // `offer` is null when the derived number falls outside the storable
+  // band, which is the same refusal the other two derivation offers make
+  // (`you/BaselineEditor.tsx`'s deriveOffer, `session/postTestOffer.ts`)
+  // and for the same reason: the server rejects out-of-band splits with a
+  // 400, so a button promising "+7s" would be a button that cannot work.
+  // Reachable from the You editor, which accepts the full 60..240 band: a
+  // stored 2k of 236 s derives a 6k of 243. Those rowers keep the row and
+  // its copy, which sends them to You to type the other side.
+  const halfPairSide: { which: "k2" | "k6"; stored: number } | null =
+    baselines !== null
+      ? null
+      : baselinesState.baselines.k2Seconds !== null
+        ? { which: "k2", stored: baselinesState.baselines.k2Seconds }
+        : baselinesState.baselines.k6Seconds !== null
+          ? { which: "k6", stored: baselinesState.baselines.k6Seconds }
+          : null;
+  const halfPair: {
+    which: "k2" | "k6";
+    stored: number;
+    offer: number | null;
+  } | null =
+    halfPairSide === null
+      ? null
+      : {
+          ...halfPairSide,
+          offer: ((): number | null => {
+            const value =
+              halfPairSide.which === "k2"
+                ? deriveK6FromK2(halfPairSide.stored)
+                : deriveK2FromK6(halfPairSide.stored);
+            return value >= MIN_SPLIT && value <= MAX_SPLIT ? value : null;
+          })(),
+        };
 
   // key={} forces a fresh TodayView (and thus fresh pick/overrides/
   // shuffle state) whenever the plan's identity or position changes
@@ -601,6 +645,19 @@ function TodayContent({
       baselines={baselines}
       preferences={preferencesState.preferences}
       setBaselinesSkipped={preferencesState.setBaselinesSkipped}
+      halfPair={halfPair}
+      onFillCounterpart={
+        halfPair === null || halfPair.offer === null
+          ? null
+          : (
+              (offer) => () =>
+                baselinesState.save(
+                  halfPair.which === "k2"
+                    ? { k6Seconds: offer, k6Source: "derived" }
+                    : { k2Seconds: offer, k2Source: "derived" },
+                )
+            )(halfPair.offer)
+      }
       plan={planState.plan}
       logs={recentLogsState.logs}
       session={session}
@@ -800,6 +857,8 @@ function TodayView({
   baselines,
   preferences,
   setBaselinesSkipped,
+  halfPair,
+  onFillCounterpart,
   plan,
   logs,
   session,
@@ -816,6 +875,10 @@ function TodayView({
   // through this; it refetches, so the card appears and disappears without
   // a reload. Resolves false when the server did not confirm the value.
   setBaselinesSkipped: (value: boolean) => Promise<boolean>;
+  // The side that IS stored when only one is, else null. Drives the row's
+  // copy: a rower with a tested 2k must not read "no baseline set".
+  halfPair: { which: "k2" | "k6"; stored: number; offer: number | null } | null;
+  onFillCounterpart: (() => Promise<void>) | null;
   plan: PlanData;
   logs: RecentLog[];
   /** `sessionsLoggedToday` — part of every day record's key. */
@@ -1210,8 +1273,18 @@ function TodayView({
   // where it is actually needed.
   // Phase RW PR C (spec §3.2's invariant): the doors card renders IFF the
   // pair is unset AND the rower has not skipped. Nothing else reads the flag.
-  const needsDoors = baselines === null && !preferences.baselinesSkipped;
+  //
+  // Amended 2026-09-07 (the half-set round): a rower who set ONE side is
+  // NOT sent back through the doors. `KnowBaseline` saves whichever field
+  // was touched, so typing a 2k and pressing Apply is the ordinary way to
+  // reach a half pair, and it never writes `baselinesSkipped` — before
+  // this line, every one of those rowers read "SET UP YOUR BASELINE / How
+  // do you want to start?", which is false about their account and hides
+  // the one-tap offer that closes the pair.
+  const needsDoors =
+    baselines === null && !preferences.baselinesSkipped && halfPair === null;
   const [skipError, setSkipError] = useState(false);
+  const [fillError, setFillError] = useState(false);
   const writeSkip = (value: boolean) => {
     setSkipError(false);
     void setBaselinesSkipped(value).then((ok) => {
@@ -1365,19 +1438,45 @@ function TodayView({
           {baselines === null && (
             <div className="today-nobaseline-row">
               <span className="today-nobaseline-line">
-                <span className="mono-status">NO BASELINE SET</span>
-                <button
-                  type="button"
-                  className="today-nobaseline-link"
-                  onClick={() => writeSkip(false)}
-                >
-                  Set one up
-                </button>
+                <span className="mono-status">
+                  {halfPair === null
+                    ? "NO BASELINE SET"
+                    : halfPair.which === "k2"
+                      ? "2K SET · NO 6K"
+                      : "6K SET · NO 2K"}
+                </span>
+                {halfPair === null ? (
+                  <button
+                    type="button"
+                    className="today-nobaseline-link"
+                    onClick={() => writeSkip(false)}
+                  >
+                    Set one up
+                  </button>
+                ) : onFillCounterpart === null ? null : (
+                  <button
+                    type="button"
+                    className="today-nobaseline-link"
+                    onClick={() => {
+                      setFillError(false);
+                      // RF25: `save` throws on any non-ok response, and a
+                      // `void` on it would leave the rower tapping a button
+                      // that silently does nothing.
+                      onFillCounterpart().catch(() => setFillError(true));
+                    }}
+                  >
+                    {halfPair.which === "k2"
+                      ? `Estimate it (+${K2_K6_OFFSET_SECONDS}s)`
+                      : `Estimate it (−${K2_K6_OFFSET_SECONDS}s)`}
+                  </button>
+                )}
               </span>
               <p className="library-caption">
-                ~ times are estimates until you set a baseline
+                {halfPair === null
+                  ? "~ times are estimates until you set a baseline"
+                  : "Targets stay words until both are set. You can type the other in on You."}
               </p>
-              {skipError && (
+              {(skipError || fillError) && (
                 <p className="baseline-error">Couldn't save that. Try again.</p>
               )}
             </div>
