@@ -605,15 +605,38 @@ Gate 0 approved on artboard 03; §3.1 ruled "logbook formula"; the four
 session fields ride `machine_summary` jsonb, not columns, on a measured
 DBA benchmark
 (`docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`).
+**PR 2 BUILT 2026-09-07** on `phase-lp-pr2-upload` (plan
+`docs/superpowers/plans/2026-09-07-logbook-parity-pr2.md`, inline shape;
+spec rev 2.5 on the re-fetched API rows): antagonist DELTA pass RUN
+(REVISE → folded: the retry-without-`workout` fallback, interval
+`rest_distance` 0, drag 1..255, the 158-of-300 trailing-rest finding and
+the two walk read-backs it adds); `/harden` SKIPPED, spoken — the same
+inline shape as PR 1, the review half covers its blocks; whole-branch
+review RAN (REQUEST CHANGES → closed at `8e19cac8`); PM final gate RAN
+(PASS WITH CONDITIONS, five, none code — closed). §6's "verification
+spec's record reconciled" needs NO edit, said here so it is not read as
+skipped: `2026-09-05-concept2-verification.md`'s two "rest is untouched"
+sentences are scoped to THAT PR's own diff and stay true of it; PR 2's
+`rest_distance` source switch and the interval-level rest fields are
+outside the code's checked set (date, time, distance, workout_type,
+machine type), so the code's record stands. PR 2 needs NO Gate 0 of its
+own: the only saved-row figure it moves is the strip's REST m, from a dash
+to the number artboard 03 ALREADY drew — the approved design is satisfied,
+not changed (PM #332). Merge on James's word; the walk on the flag-flip
+trip.
 Gates on PR #327: `/harden` SKIPPED, spoken — the plan was executed
 inline in full, so its paste-test precondition and every block both
 lenses read are committed code, and the review half covers them; the
 whole-branch review RAN (REQUEST CHANGES → all code findings closed at
 `76a6b18b`, execution record in the plan); PM final gate RAN (PASS WITH
-CONDITIONS, all four record-side, closed). Owed before the TAG that
-carries PR 1, not before merge (PM C4): the phone captures (fresh + a
-real old machine row, both orientations — ASK before installing) and the
-production count of rows clearing the tier-A gate.
+CONDITIONS, all four record-side, closed). Owed before the next TAG
+(PM #327 C4, amended by PM #332 C3): the phone captures — fresh + a real
+old machine row, both orientations, ASK before installing — taken on a
+build that carries PR 2, because PR 2 fills the strip's REST m column a
+v0.41.0 capture would document as a dash; and the production count of
+rows clearing the tier-A gate. (v0.41.0 was tagged 2026-09-07 with the
+captures still owed; the tag went out on the e2e/web gates, and the phone
+half now rides the PR 2 tag.)
 
 **Goal:** a rower who opens the same piece in our app and in the Concept2
 logbook after an upload reads the same numbers — per split: watts, cal,
@@ -626,9 +649,13 @@ calories / watts / avg calories to the record; renders six hero tiles and a
 sideways-scrolling **MACHINE SUMMARY** table under today's INTERVALS table
 (layout B + B, chosen in the visual companion); old machine rows render
 `—`. PR 2 extends `buildC2Payload` to everything the logbook API accepts
-(splits/intervals with calories, HR, stroke rate, rests; result-level
-calories, drag, HR set; per-interval targets). Then one walk: the same piece
-photographed in both apps, every cell compared.
+(`workout.intervals[]` — never `splits[]`, every programmed piece is
+VariableInterval — with calories, HR, stroke rate, rests and per-interval
+targets; result-level calories, drag, HR set, the PM5's rest distance),
+all or nothing on the array and with a retry-once-without-it fallback,
+because Concept2 validates the array and says not what for. Then one
+walk: the same piece photographed in both apps, every cell compared, a
+LAST-interval rest included.
 
 **Closes:** the "Session calories" open item — settled at the desk on the
 committed corpus: per-split 0x0038 calories sum to 0x003A's Total Calories
@@ -639,7 +666,8 @@ rest-inclusive chart, which that pass will have to reconcile.
 **Opens one row:** the PM5 sends 0x0038 per 5-minute auto-split for a Just
 Row (`walk-2026-08-31-justrow`, two frames) and the record stores
 `steps: []` for it — nowhere to keep them; LP renders a Just Row's tiles
-and no strip. A later phase gives those splits a home.
+and no strip. A later phase gives those splits a home — the register row
+"A Just Row's 5-minute auto-splits have no home" is that owner.
 
 **Gates:** antagonist anchor pass RUN 2026-09-06 (REVISE → rev 2: the
 0x003A rest-time field reads 0 on 9/9 captures and is struck; the wire's
@@ -1226,7 +1254,7 @@ closed with zero Concept2 contact.
       session-level split only, `LogStep` carries no per-interval rest, so the
       `intervals` array is out of scope and rides the auto-upload follow-on
       — **HANDED OVER 2026-09-06 to Phase LP PR 2** (`docs/superpowers/specs/2026-09-06-logbook-parity-design.md`
-      §5), which sends `intervals[]`/`splits[]` with calories, HR, stroke
+      §5), which sends `workout.intervals[]` (never `splits[]`) with calories, HR, stroke
       rate and per-interval rest, result-level calories/drag/HR, and
       targets; `buildC2Payload` stays Wave E's file, LP owns that edit.
 - [x] **PR B — the link-outs leave the app.** MERGED #298. The read-only Concept2
@@ -1313,9 +1341,17 @@ closed with zero Concept2 contact.
       AUTOMATIC save this PR owes on the phone, PR C's owed confirming send,
       and **Phase LP's parity photograph** (the logbook page beside our
       screen after our upload, plus the PM5's own View Detail screens — spec
-      §4.2) all need the same `C2_LINK_ENABLED` flip on James's own account;
-      walk them together, never as separate PR-body lines. LP's exit is
-      blocked on this flip and says so.
+      §4.2, now SEVEN items: PR 2 added a last-interval-rest piece and the
+      `pace` target's unit as read-backs) all need the same
+      `C2_LINK_ENABLED` flip on James's own account; walk them together,
+      never as separate PR-body lines. LP's exit is blocked on this flip
+      and says so. **For the runsheet's author (PM #332):** choose the
+      parity piece to CARRY a final-interval rest, so one rowed piece
+      settles both the photograph and the 158-of-300 trailing-rest
+      read-back; and capture which fallback path fired from the server
+      log on every send — that line is the only evidence a thinned row
+      leaves. No runsheet is owed until the flip is schedulable; it then
+      gets its own PM readiness PASS.
 - [ ] **Verification code: hide it, say "verified".** James, 2026-09-05: like
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that
@@ -1387,6 +1423,39 @@ X" is a real disposition — most of these are single files.
       and try again." Copy only; rides the next PR that touches the
       connect flow or the Bluetooth adapter. **S**
 
+- [ ] **A row thinned BY the fallback reads as a successful send, and no
+      query can find it.** PM #332 C1 (2026-09-07): when Concept2 refuses
+      the interval array with a 4xx, `routes/concept2.ts` re-posts without
+      it, gets a 201, stores `c2_result_id` and returns 200 — the rower
+      sees success, the row is un-resendable forever (no PATCH), and the
+      only evidence is a `console.warn` on the server. RF25 pointed at the
+      RECORD: the different action the caller could take is ONE stored
+      boolean (`sent_without_intervals`) that makes the population
+      countable and gives the row a place to say so. The fallback outlives
+      the walk, so a future validation change at Concept2 would thin rows
+      silently from then on. Decide after the walk reads which path fired;
+      a stored shape, so its own PM gate. **S**
+
+- [ ] **A Just Row's 5-minute auto-splits have no home.** Spec §8's owed
+      row (PM #332 found it living only in the LP section's prose): the
+      PM5 sends 0x0038 per auto-split on a free row
+      (`walk-2026-08-31-justrow`, two frames) and the record stores
+      `steps: []`, so LP renders a Just Row's tiles and no strip, and PR 2
+      sends no `workout` array for it. Giving those splits a stored home
+      (`splits[]` on the upload, a strip on the screen) is a later phase's
+      spec: a stored shape plus wire meaning, TRIAD twice. **M**
+
+- [ ] **Rows auto-sent before Phase LP PR 2 keep their thin logbook entry
+      forever, and nothing tells the rower.** Antagonist delta pass
+      2026-09-07: Concept2 has no PATCH; a resend of an already-uploaded row
+      short-circuits (`routes/concept2.ts`). Every row sent under v0.39.0–
+      v0.41.0 (auto-send has been live and dark since #312) has date, time,
+      distance, rest and stroke rate in the logbook and none of PR 2's
+      calories, heart rate, drag or intervals. A product call for the PM /
+      James: say so on the row (a "sent before …" note), offer a
+      delete-and-resend, or accept silently. Filed here so it is decided,
+      not discovered (RF14). **S**
+
 - [ ] **The history LIST has no `(user_id, logged_at desc, id desc)`
       index.** Found by the Phase LP DBA benchmark, 2026-09-07
       (`docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`,
@@ -1410,14 +1479,12 @@ X" is a real disposition — most of these are single files.
       You will show. Opens WITH that phase, not before — at household
       scale the un-indexed SUM measures ~1 ms. **S**
 
-- [ ] **A stored row's MACHINE SUMMARY REST column reads a dash.** Phase
-      LP PR 1: `IntervalActual.restDistanceMeters` reaches the LIVE strip
-      but `LogStep` carries no per-step rest metres, so the same piece
-      re-opened from history shows `—` under REST where the live door
-      showed 147 / 95. Either PR 2 adds `machineRestMeters` to `LogStep`
-      (it already sends per-interval `rest_distance` to Concept2 from the
-      same source) or the column is dropped from the stored strip;
-      decide at PR 2's spec pass. **S**
+- [x] **A stored row's MACHINE SUMMARY REST column reads a dash.** CLOSED
+      by Phase LP PR 2 (2026-09-07): `LogStep` gained `machineRestMeters`
+      (and `machineRestSeconds`, which the logbook API's interval object
+      REQUIRES as `rest_time`), so the stored strip's REST column fills
+      from the step itself on rows saved after PR 2; older rows keep the
+      dash. **S**
 
 - [ ] **354 code comments cite `interface-notes.md §N` — a file that does
       not exist** (`docs/monitor/` holds `pm5-interface-notes.md`;

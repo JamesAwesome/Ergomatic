@@ -243,6 +243,16 @@ export interface LogStep {
   machineWatts?: number;
   machineDragFactor?: number;
   machineRestHr?: number | null;
+  /** Phase LP PR 2 (spec §2.1 rev 2.5): the interval's own rest — the
+   *  0x0037 rest-time READBACK (`IntervalActual.restSeconds`, whole
+   *  seconds; every committed capture reads the programmed value, never a
+   *  measurement) and the measured rest distance (`restDistanceMeters`).
+   *  The logbook API's interval object REQUIRES `rest_time`, so a row
+   *  without these sends no `workout` array at all (all-or-nothing,
+   *  `server/concept2/intervals.ts`). `machineRestMeters` also fills the
+   *  stored strip's REST m column. `0` is a value (an r0 piece). */
+  machineRestSeconds?: number;
+  machineRestMeters?: number;
 }
 
 /** THE ROW-LOCAL DISCRIMINANT for a pre-split monitor row (Phase LT spec 1,
@@ -884,7 +894,6 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
     if (actual.index !== null) actualByIndex.set(actual.index, actual);
   }
   const out: LogStep[] = [];
-  const programIndices: number[] = [];
   run.program.intervals.forEach((interval, i) => {
     const seedStep = seed.steps[i]!;
     // KEEP — RESTORED at door PR A's whole-branch review (Important 1).
@@ -903,7 +912,6 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
     // DIFFERENT number from the live summary `warmupIndex` keeps frozen.
     // Nothing produces the value any more (`buildLogSeed` above cannot).
     if ((seedStep.kind as string) === "warmup") return;
-    programIndices.push(i);
     const step: LogStep = { label: seedStep.label };
     if (interval.targetSplit !== null) step.targetSplit = interval.targetSplit;
     if (interval.kind === "time") {
@@ -964,6 +972,13 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
       ) {
         step.machineRestHr = actual.restHeartRateBpm;
       }
+      // Phase LP PR 2: the interval's rest readback and rest metres ride
+      // along verbatim (absent when the actual has none — the
+      // summary-fallback final, or a pre-RC-1 record).
+      if (actual.restSeconds !== undefined)
+        step.machineRestSeconds = actual.restSeconds;
+      if (actual.restDistanceMeters !== undefined)
+        step.machineRestMeters = actual.restDistanceMeters;
       if (
         actual.avgHeartRateBpm !== null &&
         actual.avgHeartRateBpm >= MONITOR_HR_MIN &&
@@ -1012,22 +1027,7 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
     }
     out.push(step);
   });
-  monitorStepProgramIndex.set(out, programIndices);
   return out;
-}
-
-/** Phase LP (whole-branch review L5): the PROGRAM index of each step
- *  `buildMonitorLogSteps` emitted, keyed by the emitted array. Output
- *  position and program index differ by one on a legacy `kind: "warmup"`
- *  seed (the guard above emits no step for it), so a reader that needs the
- *  step's own actual — `machineSplitRowsFromRun`'s rest metres — must not
- *  re-derive the index from position. Absent for any array this builder
- *  did not produce. */
-const monitorStepProgramIndex = new WeakMap<readonly LogStep[], number[]>();
-export function monitorStepProgramIndices(
-  steps: readonly LogStep[],
-): readonly number[] | undefined {
-  return monitorStepProgramIndex.get(steps);
 }
 
 // Mirrors Today.tsx's own (private, unexported) `formatLogDate` byte for

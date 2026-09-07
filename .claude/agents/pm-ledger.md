@@ -5688,3 +5688,89 @@ discriminant plus reading each hit.
   is not blocking the phase — it is forcing the jumping phase to amend the
   passed-over wave's EXIT to cite it, so the clause is not verified twice or
   not at all.
+
+## 2026-09-07 — Phase LP PR 2 final gate (#332, TRIAD twice: stored shape + wire meaning): a fallback that succeeds is a population nobody can count
+
+**Verdict:** PASS WITH CONDITIONS. Five — one product (a new permanently-thin
+row population with no ROADMAP home), three record (an undischarged §6 bullet,
+Gate 0 captures owed on the wrong build, presentation), one deferred to the
+walk's own readiness gate. None about the code. All closed the same day.
+
+**A FALLBACK THAT DROPS DATA AND RETURNS 200 CREATES A POPULATION, AND THE
+POPULATION NEEDS A ROW.** Concept2 documents that it validates interval data
+without saying for what, so a 4xx refusal re-posts without the array. That is
+the right call — the upload can never regress because of the array. But the
+route then takes the normal success path: 200 to the client, `c2ResultId`
+stored, row un-resendable forever, no rower-visible signal, and a
+`console.warn` as the sole evidence. RF25 pointed at the RECORD rather than
+the write. The code comment names its owner, which satisfies the rule's
+letter; the "different action the caller could take" it did not imagine is one
+stored boolean, which would make the population COUNTABLE. Today nothing in
+the database distinguishes a full send from a thinned one, and the fallback
+outlives the walk — any future validation change at Concept2 thins rows
+silently from then on. **When a degradation path returns success, ask what
+query would find its victims. If the answer is "none", that is the finding.**
+
+**A DARK FLAG IS WHAT BUYS THE RIGHT TO SEND AN INFERENCE.** The instinct on
+`targets.pace` — unit tagged INFERENCE, permanent record, no PATCH — is to
+withhold it until the walk. That instinct is WRONG when the feature is behind
+a flag whose flip IS the walk: nothing can be permanently wrong before the
+first send, and withholding makes the question unanswerable, because you
+cannot read back a unit you did not send. **Before ruling that an unverified
+field must be held, ask when its first real exposure happens; if that
+exposure IS the experiment, sending it is the cheaper proof.**
+
+**A MOCKUP THAT OUTRUNS THE RECORD IS A SEQUENCING STATEMENT, NOT ALWAYS A
+DEFECT.** The PR 1 gate's headline was that artboard 03 drew `REST m` as
+18/21/0 while the shipping record set `restMeters: undefined`. PR 2 filled it,
+from the same phase, one PR later. So the approved design is now SATISFIED, not
+CHANGED, and PR 2 needed no Gate 0 of its own even though a saved row renders
+a different figure after it. **Amendment to that entry: when a Gate 0 cell is
+found unfillable, ask which PR in this phase makes it true and whether that PR
+is in the slate; if it is, the artboard is early, not wrong — and say so.**
+The consequence to catch is downstream: any capture owed for that gate must
+be taken on the build that FILLS the cell.
+
+**§6's PR bullet is a CHECKLIST — discharge it item by item and speak the
+skips.** LP §6's PR 2 bullet named four things; three were done and verifiable
+by grep; the fourth ("the verification spec's record reconciled") was neither
+done nor spoken. It needs no edit — both sentences are scoped to that PR's own
+diff — but "needs nothing" is a sentence someone has to write. **At a final
+gate, read the spec's own PR bullet as a list and mark each element done /
+not-done / needs-nothing-because. An unspoken item reads as done.**
+
+**The seam question, answered the way RF24 asks it.** Two producers feed
+`machineRestSeconds` and both are gated upstream: `partialReplay.test.ts`
+drives REAL capture bytes through the driver to the built step, and the new
+`concept2Send.integration.test.ts` case starts at `postLog` over real Postgres
+and ends at the C2 payload. **For each new stored key, name the two seams it
+crosses and find the test that STARTS before each.**
+
+**Thin rows — PM recommendation to James, pending a count.** Rows sent before
+PR 2 keep a thin logbook entry forever. **PM recommends ACCEPT SILENTLY,
+closed on a COUNT of rows carrying a non-null `c2_result_id`, not on
+assertion** — `C2_LINK_ENABLED` has never flipped on a real cohort, so the
+population may be zero. Delete-and-resend is the worst option and not close:
+an app affordance that destroys rows from a third party's permanent training
+log, untestable without destroying real ones. The gap is one of COMPLETENESS,
+not contradiction. **The case against, recorded because it is real: the phase
+opened on "be absolutely certain our numbers match Concept2's"; if "match" is
+read as coverage rather than agreement, the note on the row is right and costs
+one design gate.**
+
+**Release ruling, refining the PR 1 one.** PR 2 makes parity POSSIBLE; the
+WALK makes it TRUE. §8's second sentence ("the same figures Concept2's logbook
+shows for that row") is still not shippable — it is a claim about a third
+party's rendering nobody has photographed. **Ship it in the tag AFTER the
+walk.**
+
+**Walk readiness NOT covered by this gate, and no runsheet is owed yet** — the
+trip is blocked on `C2_LINK_ENABLED`, itself blocked on Concept2's write
+approval. When the flip becomes possible, ONE runsheet covers all three
+verifications and gets its own PM readiness PASS. Two facts for its author,
+now in the ROADMAP's flag-flip row: carry a final-interval rest on the parity
+piece; capture which fallback path fired on every send.
+
+**Presentation:** 172 words above the fold against ~120, six bullets at the
+limit, two over ~25 at 33 and 40. Improving (#327 was 218/7) and still failing
+the count.

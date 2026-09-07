@@ -266,6 +266,7 @@ describe("POST/GET /api/logs: completedAt/tz round-trip through the real route a
         machineSummary: null,
         source: "pm5",
         endedBy: "finished",
+        steps: [],
       },
       "H",
       "Pacific/Kiritimati",

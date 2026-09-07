@@ -128,6 +128,7 @@ const SEND_EMAILS = new Set([
   "send-noweight@c2send.test",
   "send-dup@c2send.test",
   "send-relink@c2send.test",
+  "send-lp-intervals@c2send.test",
 ]);
 
 const WEB_REDIRECT_URI = "https://ergomatic.example/api/concept2/callback";
@@ -172,6 +173,7 @@ const C2_USER_SECOND = 700342;
 const C2_USER_DECLARED = 700343;
 const C2_USER_PROFILE = 700344;
 const C2_USER_NOWEIGHT = 700345;
+const C2_USER_LP = 700346;
 
 describe("the Concept2 send seam: the route writes, the log detail reads (RF24)", () => {
   let container: StartedPostgreSqlContainer;
@@ -525,6 +527,97 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
     expect(posted).toStrictEqual([
       expect.objectContaining({ weight_class: "L" }),
     ]);
+  });
+
+  // Phase LP PR 2 (review L8): the stored-shape half of the TRIAD over real
+  // Postgres — the steps and the 0x003A keys go in through the real
+  // `createLogsStore`, out through the real route, and the body Concept2
+  // would receive carries `workout.intervals[]` and the session fields.
+  it("Phase LP PR 2: a row stored in real Postgres with complete steps posts workout.intervals[] and the session fields to Concept2", async () => {
+    const { bearer, userId } = await signIn("send-lp-intervals");
+    await linkAccount({
+      userId,
+      c2UserId: C2_USER_LP,
+      username: "jamesawesome",
+    });
+    const step = {
+      label: "250m @ 2:07.0",
+      targetSplit: 127.0,
+      actualSplit: 135.8,
+      actualSeconds: 67.9,
+      actualSource: "pm5",
+      meters: 250,
+      actualMeters: 250,
+      actualSpm: 25,
+      spm: 26,
+      machineCalories: 16,
+      machineRestSeconds: 60,
+      machineRestMeters: 147,
+    };
+    const logId = await postLog(bearer, {
+      steps: [step, { ...step, actualSeconds: 56.1, actualSpm: 28 }],
+      machineSummary: {
+        avgStrokeRate: 24,
+        workoutType: 8,
+        totalCalories: 32,
+        dragFactorAverage: 100,
+        avgHeartRateBpm: 142,
+        totalRestMeters: 242,
+      },
+    });
+    const posted: unknown[] = [];
+    fetchMock.mockImplementation(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/users/me/results?")) {
+        return jsonResponse(200, declarationListBody("L"));
+      }
+      if (url.endsWith("/api/users/me")) {
+        return jsonResponse(200, {
+          data: {
+            id: C2_USER_LP,
+            username: "jamesawesome",
+            weight: 8200,
+            gender: "M",
+          },
+        });
+      }
+      posted.push(JSON.parse(String(init?.body)));
+      return jsonResponse(201, created201(341, C2_USER_LP));
+    });
+
+    const sent = await request(app)
+      .post(`/api/concept2/results/${logId}`)
+      .set("Authorization", bearer)
+      .send({ tz: "Europe/London" });
+
+    expect(sent.status).toBe(200);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({
+      calories_total: 32,
+      drag_factor: 100,
+      heart_rate: { average: 142 },
+      rest_distance: 242,
+      workout: {
+        intervals: [
+          {
+            type: "distance",
+            time: 679,
+            distance: 250,
+            rest_time: 600,
+            rest_distance: 147,
+            targets: { pace: 1270, stroke_rate: 26 },
+          },
+          {
+            type: "distance",
+            time: 561,
+            distance: 250,
+            rest_time: 600,
+            rest_distance: 147,
+            stroke_rate: 28,
+          },
+        ],
+      },
+    });
   });
 
   it("falls back to our derivation over the real wire when the rower has declared nothing (ruling i, RF24)", async () => {

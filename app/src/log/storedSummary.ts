@@ -141,6 +141,9 @@ export interface StoredLogStep {
   machineWatts?: number;
   machineDragFactor?: number;
   machineRestHr?: number | null;
+  // Phase LP PR 2: the interval's rest readback (s) and rest metres.
+  machineRestSeconds?: number;
+  machineRestMeters?: number;
   // Phase LT spec 1 (2026-08-18), §2, MEDIUM-1 (Task 1 review): the
   // lockstep line this interface's own header comment demands —
   // `session/logDraft.ts`'s `LogStep` gained this field the same task
@@ -273,8 +276,11 @@ export interface StoredLog {
   // `LogInput.restSeconds`/`restMeters` comment). Task 3's ONLY rest
   // source for the TOTAL line's own §2 derivation — see `buildStoredRest`
   // below for why there is no third, per-actual fallback rung here the
-  // way the live door has (`StoredLogStep` carries no per-step rest
-  // field at all).
+  // way the live door has: `StoredLogStep` carries per-step rest since
+  // Phase LP PR 2 (`machineRestSeconds`/`machineRestMeters`), but only on
+  // rows saved after it, and a Σ over a mixed row would be the partial
+  // sum RC-1's own all-or-nothing gate refuses — the row-level pair stays
+  // the one source.
   restSeconds: number | null;
   restMeters: number | null;
   // RC-1 (storage-spine design spec §3, TRIAD): the session's WORK pair —
@@ -326,8 +332,8 @@ export interface StoredSummaryView {
   rows: SummaryRow[];
   /** Phase LP §3: the MACHINE SUMMARY strip's rows off the stored steps
    *  (`machineSplitRows`, `session/summaryModel.ts`); empty on manual and
-   *  timer rows and on a Just Row. REST reads a dash on a stored row —
-   *  `StoredLogStep` carries no per-step rest metres. */
+   *  timer rows and on a Just Row. REST reads the step's own
+   *  `machineRestMeters` (Phase LP PR 2); a dash on rows saved before it. */
   machineRows: MachineSplitRow[];
   caption?: string;
   readBack: StoredReadBack;

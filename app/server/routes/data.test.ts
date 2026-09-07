@@ -3003,6 +3003,21 @@ describe("GET/POST /api/logs", () => {
         { machineRestHr: false },
         "machineRestHr must be null or an integer, 20..254",
       ],
+      // Phase LP PR 2: the interval's rest readback (whole seconds) and
+      // rest metres — integers off 0x0037, banded to a day and to the
+      // row-level rest cap.
+      [
+        { machineRestSeconds: 1.5 },
+        "machineRestSeconds must be an integer, 0..86400",
+      ],
+      [
+        { machineRestSeconds: 86401 },
+        "machineRestSeconds must be an integer, 0..86400",
+      ],
+      [
+        { machineRestMeters: -1 },
+        "machineRestMeters must be an integer, 0..1000000",
+      ],
     ] as const)(
       "Phase LP: rejects a malformed per-split machine field %j, naming it",
       async (field, message) => {
@@ -3030,6 +3045,8 @@ describe("GET/POST /api/logs", () => {
         machineWatts: 157,
         machineDragFactor: 101,
         machineRestHr: null,
+        machineRestSeconds: 60,
+        machineRestMeters: 147,
       };
       const created = await asA(request(app).post("/api/logs")).send({
         ...validLogBody(),

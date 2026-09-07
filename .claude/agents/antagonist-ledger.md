@@ -8668,3 +8668,68 @@ had passed over the same document without a single duration in it.
   a `targetSplit!` that a `targetKind !== "split"` `continue` makes
   unreachable); and the partial-baseline pair, which every screen collapses to
   `null` before it can reach `resolveSplit`.
+
+## 2026-09-07 — Phase LP PR 2 delta (the upload): the shape the library ships and the corpus has never seen
+
+- **"Every committed capture's value equals the programmed rest, so the readback
+  is safe to upload as `rest_time`."** True, irrelevant, and it hides the case
+  that will actually ship. `expand.ts` pushes a rest after EVERY work rep
+  including the last, and `compileProgram` folds it onto the interval BEFORE it,
+  with no trailing-rest strip at its one caller — so **158 of the 300 seeded
+  library workouts compile with a non-zero rest on their FINAL interval**
+  (`phases()` + `compileProgram` over `LIBRARY_WORKOUTS`, k2 120 / k6 132: 300
+  compiled, 158 with `intervals.at(-1).restSeconds > 0`). Decoding 0x0037 offset
+  12 across all ten committed recordings: the final interval reads **0 in every
+  one**, and the phase-exit keystone (2×250 **r0**) cannot produce anything else.
+  **Technique: when a spec justifies a wire value from "every capture agrees",
+  compile the real corpus of PROGRAMS and ask what fraction of them produces a
+  shape no capture contains.** The captures are a sample of what we walked; the
+  seed is the population of what will ship, and they had 0% overlap here.
+- **A quoted API row is not evidence for the unit it does not state.** The
+  targets row reads verbatim `pace | No | integer | Time in tenths of a second`
+  — no denominator. The spec wrote "(tenths per 500 m)" inside a paragraph whose
+  premise is "every load-bearing row is quoted". RF16's second corollary, one
+  clause wide. **Technique: for every parenthetical you add to a quote, check
+  whether the quote contains it.**
+- **The sentence that governs a feature is often the PROSE above the table
+  nobody transcribed.** The doc's workout-object intro reads *"Note: split and
+  interval data are validated for type and expected values."* Neither the spec's
+  two prior fetches nor its rev-2.5 rewrite carried it — and it converts "the
+  array is optional so this is additive" into "the array can fail the whole
+  upload". Folded as a retry-once-without-`workout` fallback with both paths
+  logged. **Technique: fetch the doc asking for HEADINGS AND PROSE, not rows.
+  A field table cannot tell you what the server does with the table.**
+- **Two authorities for one quantity, measured, on the row we already send.**
+  `buildC2Payload` sends 0x0039's totals as result `time`/`distance` while PR 2
+  sends the per-interval 0x0037 figures — and Σ intervals ≠ the total on **2 of
+  the 4** committed captures that are programmed pieces reaching a natural finish
+  (keystone 138.8 vs 138.7; frame-fingerprint 173.1 vs 173.0). **Technique: when
+  a change adds a breakdown beside a total that already ships, sum the breakdown
+  over the real corpus before assuming they agree — the totals came from a
+  different characteristic.**
+- **A field named in a spec's "untouched" list may never have been touched at
+  all.** `verification_code` appeared in §5 and in the plan's Global Constraints;
+  `grep -rn verification_code app/` finds it only in the dev-only desk harness
+  and one display component. `buildC2Payload` has never emitted it and PR0's own
+  201 body reads `"verified": false`. **Technique: grep the "untouched" list.
+  A field that cannot change because it does not exist reads, in a record, as a
+  field that was checked.**
+- **Attacked and HELD (PR 2's vetted ground):** the `rest_distance` source switch
+  is a provable no-op (0x003A total == Σ 0x0037 rest distance, delta 0 on 9/9,
+  including 274 = 130+144) and cannot post a non-zero where the machine said
+  zero; result `rest_time` and Σ interval `rest_time` share one source
+  (`computeWorkRestSums`) and cannot disagree except on a rest-distance-only gap
+  or a legacy warm-up seed; all-or-nothing is right because a partial ORDERED
+  array misrepresents structure, and the rest-step worry is void (steps are one
+  per WORK interval, rests fold); every emitted number is integer-safe by
+  construction (`actualSeconds` is u24/10, `Math.round` is total); the
+  prescription-derived interval `type` agrees with the wire's own 0x0037 offset-16
+  byte on **22 of 22** decoded frames; deleting `monitorStepProgramIndices` is
+  strictly safer than keeping it (the skipped warm-up seed step never pushes, so
+  each step carries its own rest and no index lookup can shift one); and the
+  verification code's five checked fields are untouched. **Not established:**
+  what "validated for type and expected values" checks; whether `pace` is per
+  500 m (the 201 body does not echo `workout`, so only the logbook page settles
+  it); whether the trailing-rest readback equals ELAPSED rest (both hypotheses
+  predict the same number for a fixed countdown — the PM5's rest is not
+  shortened by rowing: 130 m rowed inside a 60 s rest still read 60).

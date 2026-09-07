@@ -26,7 +26,7 @@ import {
   type Concept2Store,
   type LinkSurface,
 } from "../stores/concept2.js";
-import type { LogsStore } from "../stores/logs.js";
+import type { LogStep, LogsStore } from "../stores/logs.js";
 import { tzError } from "./data.js";
 
 // Wave E PR1 Task 6, rebuilt at PR1.75a
@@ -222,6 +222,7 @@ function toMappingRow(row: {
   machineSummary: unknown;
   source: LogSource;
   endedBy: string | null;
+  steps: unknown;
 }): SessionLogRow {
   return {
     loggedAt: row.loggedAt,
@@ -237,6 +238,11 @@ function toMappingRow(row: {
     machineWorkMeters: row.machineWorkMeters,
     machineWorkSeconds: row.machineWorkSeconds,
     machineSummary: row.machineSummary as Record<string, unknown> | null,
+    // Phase LP PR 2: the stored steps feed `workout.intervals[]`. The jsonb
+    // column arrives untyped off `store.get`, the same cast `machineSummary`
+    // above already makes; a non-array (impossible on a row the write
+    // path admitted) reads as no steps, never a partial array.
+    steps: Array.isArray(row.steps) ? (row.steps as LogStep[]) : [],
     source: row.source,
     endedBy: row.endedBy,
   };
@@ -1336,6 +1342,56 @@ export function createConcept2Router({
         }
       }
 
+      // Phase LP PR 2, the fallback the briefing's own rule requires for an
+      // unobserved wire premise ("ship it with a fallback path plus a log
+      // entry that records which path fired"): Concept2 documents that
+      // "split and interval data are validated for type and expected
+      // values", and what it validates is not stated — the result's own
+      // `time` is 0x0039's figure while the intervals sum 0x0037's, a tenth
+      // apart on two committed captures (antagonist delta pass, 2026-09-07).
+      // A rejection that is neither auth nor duplicate, on a payload that
+      // carried `workout`, is retried ONCE without it, so the upload PR 0
+      // proved can never regress into a failure because of the array. The
+      // log line names the path so the walk can settle what C2 checks.
+      // Only a 4xx REFUSAL retries (review M1): `c2_error` also covers a
+      // network failure, a timeout, a 5xx and an unparsable 201/409 body —
+      // transient, and nothing to do with the array — and a thinned
+      // logbook row is permanent (no PATCH). 401 and 409 never reach here
+      // as `c2_error` with those statuses (they are `auth`/`duplicate`),
+      // so the band is 400..499 with a status present.
+      if (
+        !postResult.ok &&
+        postResult.kind === "c2_error" &&
+        postResult.status !== undefined &&
+        postResult.status >= 400 &&
+        postResult.status < 500 &&
+        payload.workout !== undefined
+      ) {
+        const { workout: _dropped, ...withoutWorkout } = payload;
+        console.warn(
+          `concept2 send: C2 refused the payload with workout.intervals (status ${postResult.status ?? "none"}); retrying once without the array (user ${userId}, log ${logId})`,
+        );
+        payload = withoutWorkout;
+        postResult = await client.postResult(accessToken, payload);
+        if (postResult.ok) {
+          console.warn(
+            `concept2 send: accepted WITHOUT workout.intervals — the array was the rejected part (user ${userId}, log ${logId})`,
+          );
+        }
+        // The fallback post can meet a rotated or revoked grant too (review
+        // M2): the same repeat-401 handling as the first post, never a bare
+        // 502 for an outcome that has its own answer.
+        if (!postResult.ok && postResult.kind === "auth") {
+          const stillSameGrant = await flagIfSameGrant(accessToken);
+          if (stillSameGrant) {
+            res.status(409).json({ error: "needs_reauth" });
+          } else {
+            res.status(502).json({ error: "c2_error" });
+          }
+          return;
+        }
+      }
+
       if (postResult.ok) {
         // RF25: this route owns the end-to-end invariant. A false return
         // means the row vanished between the eligibility read and this
@@ -1408,8 +1464,8 @@ export function createConcept2Router({
         return;
       }
       // Only "c2_error" can still reach here — every "auth" outcome is
-      // handled above, either by a successful retry or by the repeat-401
-      // flagReauth branch.
+      // handled above: a successful retry, the repeat-401 flagReauth
+      // branch, or the same branch after the without-`workout` fallback.
       res.status(502).json({ error: "c2_error" });
     }),
   );

@@ -174,7 +174,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     });
   });
 
-  it("Phase LP §3: a stored row's machineRows come off its pm5 steps (REST a dash — no per-step rest on a stored row); a manual row has none", () => {
+  it("Phase LP §3 (PR 2): a stored row's machineRows come off its pm5 steps, REST from the step's own machineRestMeters; a manual row has none", () => {
     const view = buildStoredSummary(
       baseRow({
         source: "pm5",
@@ -188,6 +188,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
             avgHr: 142,
             machineCalories: 73,
             machineDragFactor: 101,
+            machineRestMeters: 147,
           },
           { ...measuredStep(309.0, 1200, 128.8), machineCalories: 75 },
         ],
@@ -201,7 +202,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
         calories: 73,
         calPerHour: 838,
         drag: 101,
-        restMeters: undefined,
+        restMeters: 147,
       },
       {
         index: 2,
@@ -2108,16 +2109,17 @@ describe("I-B5 census: no summing reader ever sees partialMeters/partialSeconds 
     expect(afterRow.timeLabel).toBe("1:08");
   });
 
-  it("the C2 mapping: eligibilityFailure's own row shape has no `steps` field at all, so no value the pair could carry can ever reach it — and the fence excludes every partial row anyway (I-B1: a partial row's endedBy is never \"finished\", the one value eligibilityFailure accepts)", () => {
+  it("the C2 mapping: eligibilityFailure never reads `steps` (the field is on SessionLogRow since Phase LP PR 2, for the upload's intervals), so no value the pair could carry can ever reach it — and the fence excludes every partial row anyway (I-B1: a partial row's endedBy is never \"finished\", the one value eligibilityFailure accepts)", () => {
     const c2Row = {
       source: "pm5" as const,
       endedBy: "rower",
       workSeconds: 124,
       workMeters: 500,
     };
-    // `steps` isn't part of `SessionLogRow` at all (mapping.ts's own type) —
-    // added here only to prove, at runtime, that a caller handing this
-    // function an object that ALSO happens to carry a `steps` array with
+    // `steps` IS on `SessionLogRow` since Phase LP PR 2 (`buildC2Payload`
+    // reads it for `workout.intervals[]`); `eligibilityFailure` does not
+    // read it, and this proves at runtime that an object carrying a `steps`
+    // array with
     // the new keys gets the identical verdict, because the function never
     // reads the property.
     const withSteps = { ...c2Row, steps: withPartial.steps };

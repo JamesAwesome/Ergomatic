@@ -2207,6 +2207,213 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(stored?.c2UserId).toBe(LINK_INPUT.c2UserId);
   });
 
+  // Phase LP PR 2, the RF24 seam for the new fields: the STORE writes the
+  // steps and the 0x003A keys, `toMappingRow` carries them, `buildC2Payload`
+  // reads them — this test starts at `logs.create`, never at a hand-built
+  // SessionLogRow, so dropping `steps` in `toMappingRow` is caught here.
+  it("Phase LP PR 2: a stored row with complete steps and the 0x003A keys posts workout.intervals, calories_total, drag_factor and heart_rate to Concept2", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 9 });
+    const { app, logs } = buildApp({ store, client });
+    const step = {
+      label: "250m @ 2:07.0",
+      targetSplit: 127.0,
+      actualSplit: 135.8,
+      actualSeconds: 67.9,
+      actualSource: "pm5" as const,
+      meters: 250,
+      actualMeters: 250,
+      actualSpm: 25,
+      spm: 26,
+      machineCalories: 16,
+      machineRestSeconds: 60,
+      machineRestMeters: 147,
+    };
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [step, { ...step, actualSeconds: 56.1, actualSpm: 28 }],
+      machineSummary: {
+        avgStrokeRate: 24,
+        workoutType: 8,
+        totalCalories: 32,
+        dragFactorAverage: 100,
+        avgHeartRateBpm: 142,
+        totalRestMeters: 242,
+      },
+    });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    const payload = vi.mocked(client.postResult).mock.calls[0]![1] as Record<
+      string,
+      unknown
+    >;
+    expect(payload).toMatchObject({
+      calories_total: 32,
+      drag_factor: 100,
+      heart_rate: { average: 142 },
+      rest_distance: 242,
+    });
+    const workout = payload.workout as { intervals: unknown[] };
+    expect(workout.intervals).toHaveLength(2);
+    expect(workout.intervals[0]).toMatchObject({
+      type: "distance",
+      time: 679,
+      rest_time: 600,
+      rest_distance: 147,
+      targets: { pace: 1270, stroke_rate: 26 },
+    });
+  });
+
+  // Phase LP PR 2, the fallback: Concept2 validates split/interval data for
+  // "type and expected values" and does not say what it checks. A refusal
+  // that is neither auth nor duplicate, on a payload carrying `workout`, is
+  // retried ONCE without the array; the upload PR 0 proved cannot regress.
+  it("Phase LP PR 2: when Concept2 refuses a payload carrying workout.intervals (c2_error), the route retries once without the array and succeeds on that", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: true, resultId: 11 });
+    const { app, logs } = buildApp({ store, client });
+    const step = {
+      label: "250m @ 2:07.0",
+      actualSeconds: 67.9,
+      actualSource: "pm5" as const,
+      meters: 250,
+      actualMeters: 250,
+      machineRestSeconds: 60,
+    };
+    const id = await seedEligibleLog(logs, userA.id, { steps: [step] });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.resultId).toBe(11);
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]![1]).toHaveProperty("workout");
+    expect(calls[1]![1]).not.toHaveProperty("workout");
+    // Everything else on the second payload is the first payload.
+    const { workout: _w, ...first } = calls[0]![1] as Record<string, unknown>;
+    expect(calls[1]![1]).toStrictEqual(first);
+  });
+
+  const LP_STEP = {
+    label: "250m @ 2:07.0",
+    actualSeconds: 67.9,
+    actualSource: "pm5" as const,
+    meters: 250,
+    actualMeters: 250,
+    machineRestSeconds: 60,
+  };
+
+  it("Phase LP PR 2: a refusal on a payload WITHOUT workout is not retried (no second post)", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: false,
+      kind: "c2_error",
+      status: 422,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(502);
+    expect(vi.mocked(client.postResult).mock.calls).toHaveLength(1);
+  });
+
+  // Review M1: only a 4xx refusal can be the array's fault. A timeout (no
+  // status), a 5xx, or an unparsable 201 body is transient — retrying
+  // without the array would thin the logbook row permanently for nothing.
+  it.each([
+    [
+      "a timeout / network failure (no status)",
+      { ok: false as const, kind: "c2_error" as const },
+    ],
+    ["a 500", { ok: false as const, kind: "c2_error" as const, status: 500 }],
+    [
+      "an unparsable 201 body",
+      { ok: false as const, kind: "c2_error" as const, status: 201 },
+    ],
+  ])(
+    "Phase LP PR 2 (review M1): %s on a payload carrying workout is NOT retried without the array — the rower's own retry keeps it",
+    async (_label, outcome) => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      vi.mocked(client.postResult).mockResolvedValue(outcome);
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id, { steps: [LP_STEP] });
+      const res = await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      expect(res.status).toBe(502);
+      expect(vi.mocked(client.postResult).mock.calls).toHaveLength(1);
+      expect(vi.mocked(client.postResult).mock.calls[0]![1]).toHaveProperty(
+        "workout",
+      );
+    },
+  );
+
+  it("Phase LP PR 2 (review M3): a duplicate on a payload carrying workout is answered as a duplicate — never retried without the array", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: false,
+      kind: "duplicate",
+      resultId: 77,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, { steps: [LP_STEP] });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: "duplicate", c2ResultId: 77 });
+    expect(vi.mocked(client.postResult).mock.calls).toHaveLength(1);
+  });
+
+  // Review M2: the fallback post can meet a rotated/revoked grant; it takes
+  // the same repeat-401 handling as the first post, never a bare 502.
+  it("Phase LP PR 2 (review M2): an auth failure on the without-workout fallback post flags needs_reauth like a repeat 401, with no third post", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: false, kind: "auth" });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, { steps: [LP_STEP] });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
+    expect(vi.mocked(client.postResult).mock.calls).toHaveLength(2);
+    const link = await store.getLink(userA.id);
+    expect(link?.needsReauthAt).not.toBeNull();
+  });
+
   // Wave E PR C, the RF24 seam: A (the store) writes machineWorkMeters, B
   // (buildC2Payload, via toMappingRow) reads it. This test starts at the
   // stored row — NOT at a hand-built SessionLogRow — so the mutation that

@@ -511,6 +511,10 @@ describe("door spec §8.2 — the in-flight pair, from the wire bytes to the bui
       machineWatts: 99,
       machineDragFactor: 101,
       machineRestHr: null,
+      // Phase LP PR 2: the actual's own 0x0037 rest readback (60 s, the
+      // programmed r1) and measured rest distance (6 m), on the step.
+      machineRestSeconds: 60,
+      machineRestMeters: 6,
     });
     expect(steps[1]).toStrictEqual(PARTIAL_STEP_LEG_B);
     expect(steps[2]).toStrictEqual(BARE_STEP);

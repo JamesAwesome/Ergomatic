@@ -9,6 +9,14 @@
 // here rather than a shared import.
 
 import type { LogSource } from "../../domain/types.js";
+import type { LogStep } from "../stores/logs.js";
+import { buildC2Intervals } from "./intervals.js";
+import { c2Tenths, sendableInt } from "./tenths.js";
+
+// Re-exported so `mapping.test.ts` keeps one name (`scripts/c2-crossconnect.ts`
+// carries its own copy and imports nothing from here); the definition moved
+// to the leaf `tenths.ts` (Phase LP PR 2, no import cycle).
+export { c2Tenths };
 
 // Independent, own-bounds structural mirror of `stores/logs.ts`'s `get()`
 // return row (the SAME "independent mirror" idiom that file's own
@@ -48,6 +56,9 @@ export interface SessionLogRow {
   machineSummary: Record<string, unknown> | null;
   source: LogSource;
   endedBy: string | null;
+  /** Phase LP PR 2 (spec §5): the stored steps, for `workout.intervals[]`.
+   *  `store.get` selects the column; `toMappingRow` carries it. */
+  steps: LogStep[];
 }
 
 // The three reasons a row is not eligible for a Concept2 upload, in the
@@ -384,10 +395,6 @@ export function deriveWeightClass(profile: {
 }
 
 // Transplanted from scripts/c2-crossconnect.ts:132-134.
-export function c2Tenths(seconds: number): number {
-  return Math.round(seconds * 10);
-}
-
 // Transplanted from scripts/c2-crossconnect.ts:136-152 (en-CA date + en-GB
 // h23 time via Intl — en-CA gives yyyy-mm-dd; hourCycle h23 avoids
 // "24:00"). Measured live against this exact instant/tz at PR0
@@ -431,6 +438,10 @@ export function formatC2Date(instant: Date, tz: string): string {
 // answered a different, now-closed question.
 const STROKE_RATE_MIN = 1;
 const STROKE_RATE_MAX = 99;
+// Phase LP PR 2: the same HR band `routes/data.ts` admits on write.
+const HR_MIN = 20;
+const HR_MAX = 254;
+const U16_MAX = 65535;
 
 // `machineSummary.workoutType` is the raw 0x0039 byte 17
 // (domain/monitor/pm5/parse.ts:370). Ordinal 8 is the programmed-row
@@ -529,7 +540,17 @@ export function buildC2Payload(
   if (row.restSeconds !== null && row.restSeconds > 0) {
     post.rest_time = c2Tenths(row.restSeconds);
   }
-  if (row.restMeters !== null && row.restMeters > 0) {
+  // Phase LP PR 2 (spec §5): the PM5's own session rest total when stored
+  // and > 0 (0x003A offsets 12-14 — agrees with our sum to the metre on
+  // every committed capture), else today's summed rest metres, same > 0 rule.
+  const machineRest = sendableInt(
+    row.machineSummary?.totalRestMeters,
+    1,
+    1_000_000,
+  );
+  if (machineRest !== undefined) {
+    post.rest_distance = machineRest;
+  } else if (row.restMeters !== null && row.restMeters > 0) {
     post.rest_distance = row.restMeters;
   }
 
@@ -549,6 +570,35 @@ export function buildC2Payload(
     workoutType in C2_WORKOUT_TYPE_BY_ORDINAL
   ) {
     post.workout_type = C2_WORKOUT_TYPE_BY_ORDINAL[workoutType];
+  }
+
+  // Phase LP PR 2 (spec §5, each API row quoted there): result-level fields
+  // the logbook stores as its own — never derived, never zero-filled.
+  const calories = sendableInt(row.machineSummary?.totalCalories, 0, U16_MAX);
+  if (calories !== undefined) post.calories_total = calories;
+  // 1..255: 0x0039 byte 15 has no documented sentinel and a drag factor of
+  // 0 is not a reading (antagonist delta 6, minor).
+  const drag = sendableInt(row.machineSummary?.dragFactorAverage, 1, 255);
+  if (drag !== undefined) post.drag_factor = drag;
+  const heartRate: Record<string, number> = {};
+  for (const [key, field] of [
+    ["average", "avgHeartRateBpm"],
+    ["min", "minHeartRateBpm"],
+    ["max", "maxHeartRateBpm"],
+    ["ending", "endingHeartRateBpm"],
+    ["recovery", "recoveryHeartRateBpm"],
+  ] as const) {
+    const bpm = sendableInt(row.machineSummary?.[field], HR_MIN, HR_MAX);
+    if (bpm !== undefined) heartRate[key] = bpm;
+  }
+  if (Object.keys(heartRate).length > 0) post.heart_rate = heartRate;
+
+  // The per-interval array rides ONLY with a workout_type we map
+  // (VariableInterval — every programmed Ergomatic piece) and only when
+  // every step can fill the API's REQUIRED keys (`buildC2Intervals`).
+  if (post.workout_type !== undefined) {
+    const intervals = buildC2Intervals(row.steps);
+    if (intervals !== null) post.workout = { intervals };
   }
 
   return post;

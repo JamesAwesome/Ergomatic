@@ -44,6 +44,9 @@ const FINISHED_ROW: SessionLogRow = {
   machineSummary: { avgStrokeRate: 24, workoutType: 8 },
   source: "pm5",
   endedBy: "finished",
+  // Phase LP PR 2: no steps → no `workout` array, so PR0's accepted payload
+  // below stays byte-identical.
+  steps: [],
 };
 // Wave E PR2, ruling (i): `buildC2Payload`'s second parameter used to be
 // the stored LINK row; it is now the RESOLVED class. Twelve call sites all
@@ -593,5 +596,265 @@ describe("deriveWeightClass", () => {
       ok: false,
       reason: "implausible_weight",
     });
+  });
+});
+
+// Phase LP PR 2 (spec 2026-09-06-logbook-parity §5): the result-level
+// fields and the per-interval array, from the stored record and nothing
+// else. Literals are hand computed, never via the mapper.
+describe("buildC2Payload — Phase LP PR 2, result-level fields", () => {
+  const LP_SUMMARY = {
+    avgStrokeRate: 24,
+    workoutType: 8,
+    totalCalories: 372,
+    dragFactorAverage: 101,
+    avgHeartRateBpm: 142,
+    minHeartRateBpm: 96,
+    maxHeartRateBpm: 175,
+    endingHeartRateBpm: 168,
+    recoveryHeartRateBpm: null,
+  };
+
+  it("posts calories_total, drag_factor and a heart_rate object from the stored 0x0039/0x003A keys, each key only when present (a null recovery HR is left out)", () => {
+    const post = buildC2Payload(
+      { ...FINISHED_ROW, machineSummary: LP_SUMMARY },
+      LINK,
+      "UTC",
+    );
+    expect(post).toMatchObject({
+      calories_total: 372,
+      drag_factor: 101,
+      heart_rate: { average: 142, min: 96, max: 175, ending: 168 },
+    });
+    expect(post.heart_rate as Record<string, unknown>).not.toHaveProperty(
+      "recovery",
+    );
+  });
+
+  it("0 calories posts 0 (a value); a missing key posts nothing; an all-null heart rate posts no heart_rate object at all", () => {
+    const zero = buildC2Payload(
+      {
+        ...FINISHED_ROW,
+        machineSummary: { avgStrokeRate: 24, workoutType: 8, totalCalories: 0 },
+      },
+      LINK,
+      "UTC",
+    );
+    expect(zero.calories_total).toBe(0);
+    expect(zero).not.toHaveProperty("drag_factor");
+    // A drag factor of 0 is not a reading (no sentinel on the wire): omitted.
+    expect(
+      buildC2Payload(
+        {
+          ...FINISHED_ROW,
+          machineSummary: {
+            avgStrokeRate: 24,
+            workoutType: 8,
+            dragFactorAverage: 0,
+          },
+        },
+        LINK,
+        "UTC",
+      ),
+    ).not.toHaveProperty("drag_factor");
+    expect(zero).not.toHaveProperty("heart_rate");
+    const nulls = buildC2Payload(
+      {
+        ...FINISHED_ROW,
+        machineSummary: {
+          avgStrokeRate: 24,
+          workoutType: 8,
+          avgHeartRateBpm: null,
+          minHeartRateBpm: null,
+          maxHeartRateBpm: null,
+          endingHeartRateBpm: null,
+          recoveryHeartRateBpm: null,
+        },
+      },
+      LINK,
+      "UTC",
+    );
+    expect(nulls).not.toHaveProperty("heart_rate");
+  });
+
+  it("rest_distance is the PM5's own session total when stored and > 0, else today's summed rest metres; a stored 0 falls back (the > 0 rule the field already had)", () => {
+    const withMachine = buildC2Payload(
+      {
+        ...FINISHED_ROW,
+        machineSummary: {
+          avgStrokeRate: 24,
+          workoutType: 8,
+          totalRestMeters: 275,
+        },
+      },
+      LINK,
+      "UTC",
+    );
+    expect(withMachine.rest_distance).toBe(275);
+    const zeroMachine = buildC2Payload(
+      {
+        ...FINISHED_ROW,
+        machineSummary: {
+          avgStrokeRate: 24,
+          workoutType: 8,
+          totalRestMeters: 0,
+        },
+      },
+      LINK,
+      "UTC",
+    );
+    expect(zeroMachine.rest_distance).toBe(274);
+    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC").rest_distance).toBe(274);
+  });
+
+  it("a non-integer or string stored value is omitted, never sent (the API fails the whole workout on one decimal)", () => {
+    const post = buildC2Payload(
+      {
+        ...FINISHED_ROW,
+        machineSummary: {
+          avgStrokeRate: 24,
+          workoutType: 8,
+          totalCalories: 372.5,
+          dragFactorAverage: "101",
+          avgHeartRateBpm: 142.2,
+        },
+      },
+      LINK,
+      "UTC",
+    );
+    expect(post).not.toHaveProperty("calories_total");
+    expect(post).not.toHaveProperty("drag_factor");
+    expect(post).not.toHaveProperty("heart_rate");
+  });
+});
+
+describe("buildC2Payload — Phase LP PR 2, workout.intervals[]", () => {
+  const STEP_1 = {
+    label: "250m @ 2:07.0",
+    targetSplit: 127.0,
+    actualSplit: 135.8,
+    actualSeconds: 67.9,
+    actualSource: "pm5" as const,
+    meters: 250,
+    actualMeters: 250,
+    actualSpm: 25,
+    spm: 26,
+    machineCalories: 16,
+    machineRestHr: null,
+    machineRestSeconds: 60,
+    machineRestMeters: 147,
+  };
+  const STEP_2 = {
+    ...STEP_1,
+    actualSplit: 112.2,
+    actualSeconds: 56.1,
+    actualSpm: 28,
+    machineRestMeters: 95,
+  };
+
+  it("rides the payload as workout.intervals when every step fills the API's REQUIRED keys, and stays off PR0's fixture (steps: [])", () => {
+    const post = buildC2Payload(
+      { ...FINISHED_ROW, steps: [STEP_1, STEP_2] },
+      LINK,
+      "UTC",
+    );
+    expect(post.workout).toStrictEqual({
+      intervals: [
+        {
+          type: "distance",
+          time: 679,
+          distance: 250,
+          rest_time: 600,
+          rest_distance: 147,
+          stroke_rate: 25,
+          calories_total: 16,
+          targets: { pace: 1270, stroke_rate: 26 },
+        },
+        {
+          type: "distance",
+          time: 561,
+          distance: 250,
+          rest_time: 600,
+          rest_distance: 95,
+          stroke_rate: 28,
+          calories_total: 16,
+          targets: { pace: 1270, stroke_rate: 26 },
+        },
+      ],
+    });
+    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC")).not.toHaveProperty(
+      "workout",
+    );
+  });
+
+  it("sends no workout array when the workout_type is one we do not map (ordinal 1), however complete the steps", () => {
+    const post = buildC2Payload(
+      {
+        ...FINISHED_ROW,
+        machineSummary: { avgStrokeRate: 24, workoutType: 1 },
+        steps: [STEP_1, STEP_2],
+      },
+      LINK,
+      "UTC",
+    );
+    expect(post).not.toHaveProperty("workout_type");
+    expect(post).not.toHaveProperty("workout");
+  });
+
+  it("sends no workout array — not a partial one — when one step lacks its rest readback (a row saved before PR 2)", () => {
+    const { machineRestSeconds: _r, ...prePr2 } = STEP_2;
+    const post = buildC2Payload(
+      { ...FINISHED_ROW, steps: [STEP_1, prePr2] },
+      LINK,
+      "UTC",
+    );
+    expect(post).not.toHaveProperty("workout");
+    expect(post.workout_type).toBe("VariableInterval");
+  });
+
+  it("every numeric leaf of a full payload is an integer after JSON round-trip, and every string leaf is one the API enumerates", () => {
+    const post = JSON.parse(
+      JSON.stringify(
+        buildC2Payload(
+          {
+            ...FINISHED_ROW,
+            machineSummary: {
+              avgStrokeRate: 24,
+              workoutType: 8,
+              totalCalories: 32,
+              dragFactorAverage: 100,
+              avgHeartRateBpm: 142,
+              totalRestMeters: 242,
+            },
+            steps: [STEP_1, STEP_2],
+          },
+          LINK,
+          "UTC",
+        ),
+      ),
+    ) as unknown;
+    const STRING_KEYS = new Set([
+      "type",
+      "date",
+      "timezone",
+      "weight_class",
+      "workout_type",
+    ]);
+    // Collect every offending leaf, then assert once (no conditional
+    // expect): an empty list is the pass.
+    const offenders: string[] = [];
+    const walk = (node: unknown, key: string): void => {
+      if (typeof node === "number") {
+        if (!Number.isInteger(node)) offenders.push(`${key}=${node}`);
+      } else if (typeof node === "string") {
+        if (!STRING_KEYS.has(key)) offenders.push(`${key}=${node}`);
+      } else if (Array.isArray(node)) {
+        node.forEach((n) => walk(n, key));
+      } else if (node !== null && typeof node === "object") {
+        for (const [k, v] of Object.entries(node)) walk(v, k);
+      }
+    };
+    walk(post, "");
+    expect(offenders).toStrictEqual([]);
   });
 });
