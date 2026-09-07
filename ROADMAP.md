@@ -1284,6 +1284,27 @@ closed with zero Concept2 contact.
       repo — capture one on the next walk so the corpus carries a belted
       0x0039 from a second day and build.
 
+- [ ] **`WorkoutDetail.test.tsx` is FLAKY on main and blocks pushes.**
+      "still navigates when preferences errored, rather than trapping the
+      rower" fails ~2 runs in 3 in isolation with
+      `AssertionError: expected [ false ] to strictly equal []`. **Measured
+      2026-09-07** on `lp-avg-hr` (three isolated runs: fail, fail, pass) and
+      it blocked `git push` twice through the pre-push hook, which is how it
+      was found. **Not introduced by that branch** — the test arrived with
+      Phase RW PR C (#338) and was last touched by #344; the branch never
+      opened that file.
+      **Mechanism (INFERENCE, from reading the two tests):** `skipWrites` is
+      a module-scoped spy shared across the file. The preceding test asserts
+      `skipWrites.calls` equals `[false]`, and this one resets the array to
+      `[]` at its own start — so a write from the PREVIOUS test that resolves
+      after the reset lands in the new array and the assertion sees the
+      stale `false`. The reset cannot fix an arrival that has not happened
+      yet. **Fix:** await the preceding write's own observable before that
+      test ends, or give each test its own spy rather than resetting a shared
+      one. **Why it matters beyond the annoyance:** a suite that fails at
+      random trains everyone to re-run rather than read, which is exactly how
+      a real failure gets waved through.
+
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
 sum, while Concept2's logbook — the actual authority — stores work only. **An
