@@ -433,9 +433,11 @@ function WorkoutDetailView({
     );
   }
 
-  const minutesLabel = baselines
-    ? `${estimateMinutes(workout.steps, baselines).minutes} MIN`
-    : "— MIN";
+  // Phase RW PR A: with no baseline the estimate is priced off the assumed
+  // pair and reads with a tilde; a time-only workout prices exactly either
+  // way and is never marked (`estimateMinutes`, domain/expand.ts).
+  const minutesEstimate = estimateMinutes(workout.steps, baselines);
+  const minutesLabel = `${minutesEstimate.assumed ? "~" : ""}${minutesEstimate.minutes} MIN`;
   const daysLabel =
     workout.lastDoneDaysAgo === null
       ? "NEVER DONE"

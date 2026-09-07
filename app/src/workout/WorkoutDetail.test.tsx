@@ -129,6 +129,22 @@ const EFFORT_ONLY_WORKOUT: LibraryWorkout = {
 
 const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 
+// Phase RW PR A: a distance split-ref workout, so the header has an
+// assumed-pace estimate to mark. 6000 m at the assumed 2:25 2k (145 s/500 m)
+// = 1740 s = 29 MIN.
+const SIX_K_DISTANCE_WORKOUT: LibraryWorkout = {
+  ...WORKOUT,
+  id: "w-sixk-split",
+  title: "Six K Split",
+  steps: [
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 6000 },
+      ref: { base: "2k", off: 0 },
+    },
+  ],
+};
+
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 // A completed-but-unlogged run record for `draft` — the exact shape
@@ -1981,5 +1997,40 @@ describe("RC-37 ([R5]): the nudge survives Menu-at-READY, the same way it surviv
     expect(screen.queryByText("Ready when you pull")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
     expect(screen.getByText(/nudged −1s/)).toBeInTheDocument();
+  });
+});
+
+describe("header minutes without a baseline (Phase RW PR A)", () => {
+  it("reads ~N MIN off the assumed pair, never — MIN", async () => {
+    mockHooks(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+    expect(screen.getByText("~29 MIN", { exact: false })).toBeInTheDocument();
+    expect(
+      screen.queryByText("— MIN", { exact: false }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reads exact minutes, unmarked, for a time-only workout without a baseline", async () => {
+    // A time workout prices exactly with or without a baseline, so a 20:00
+    // step reads 20 MIN with no tilde.
+    mockHooks(NO_BASELINES, [
+      {
+        ...WORKOUT,
+        id: "w-time",
+        title: "Twenty Minutes",
+        steps: [
+          {
+            k: "w",
+            duration: { kind: "time", minutes: 20 },
+            ref: { base: "6k", off: 10 },
+          },
+        ],
+      },
+    ]);
+    await renderDetail("/library/w-time");
+    expect(screen.getByText("20 MIN", { exact: false })).toBeInTheDocument();
+    expect(
+      screen.queryByText("~20 MIN", { exact: false }),
+    ).not.toBeInTheDocument();
   });
 });
