@@ -22,7 +22,10 @@ rows are untouched. Machine rows saved before this ships render `—` where
 the field never existed.
 
 **Rev 2.3 (2026-09-07):** the sixth tile is AVG HR, not REST (James, M3,
-on `04-rest-tile-options.html`).
+on `04-rest-tile-options.html`). **Rev 2.4 (same day):** `CAL / HR` → `CAL / HOUR` (tile) and `CAL/HR` →
+`CAL/HOUR` (strip) — James: with AVG HR beside it, "both using hr" read as
+heart rate; HR now means heart rate only. Concept2 writes "Cal/hr"; the
+quantity is unchanged.
 
 **Rev 2.2 (2026-09-07, PM final gate #327):** §3's old-row strip claim
 corrected (REST m is a dash on every stored row; the artboard's old-row
@@ -302,7 +305,7 @@ the log detail, Just Row's log — one component.
 
 - **Hero, second tier** — six smaller tiles under AVG SPLIT · TIME ·
   DISTANCE: **AVG WATTS** (derived, §3.1), **CALORIES** (`machineSummary.totalCalories`),
-  **CAL / HR** (derived, §3.1), **RATE · TARGET** (§3.2), **DRAG**
+  **CAL / HOUR** (derived, §3.1), **RATE · TARGET** (§3.2), **DRAG**
   (`machineSummary.dragFactorAverage`), **AVG HR**
   (`machineSummary.avgHeartRateBpm`; a dash without a belt). Absent → `—`.
   _Rev 2.3 (2026-09-07, James on artboard 04: "Drop and replace with avg
@@ -313,7 +316,7 @@ the log detail, Just Row's log — one component.
 - **Today's INTERVALS table is unchanged** — target, actual, Δ, SPM with
   its target, the bars.
 - **MACHINE SUMMARY** (`PM5 · PER INTERVAL`) beneath it: sideways-scrolling,
-  `#` pinned, columns **HR · WATTS · CAL · CAL/HR · DRAG · REST m**. No ALL
+  `#` pinned, columns **HR · WATTS · CAL · CAL/HOUR · DRAG · REST m**. No ALL
   row (the tiles are the session), no SPM (the INTERVALS table has it with
   its target). Renders only when the row has steps: **a Just Row stores
   `steps: []`**, so it gets the tiles and no strip — the PM5's own 5-minute
@@ -330,9 +333,9 @@ the log detail, Just Row's log — one component.
 - **What an OLD machine row actually renders** (PM, from the stored
   shape): tiles **3 of 6** populate — AVG WATTS (derivable from stored
   time/distance), RATE · TARGET, DRAG, and AVG HR if a belt was worn;
-  CALORIES and CAL/HR are `—`.
+  CALORIES and CAL/HOUR are `—`.
   Strip **2 of 6** columns populate — HR (with a belt) and WATTS; CAL,
-  CAL/HR, DRAG are `—`, and REST m is `—` on EVERY stored row, old or new,
+  CAL/HOUR, DRAG are `—`, and REST m is `—` on EVERY stored row, old or new,
   because `LogStep` carries no per-step rest metres (only the live door
   fills that column, from `IntervalActual.restDistanceMeters`; ROADMAP
   register row, PR 2 decides). _Rev 2.2 (2026-09-07, PM final gate C2):

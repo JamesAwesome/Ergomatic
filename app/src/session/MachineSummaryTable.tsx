@@ -1,7 +1,7 @@
 import { DASH } from "../workout/connected/surfaceModel";
 import type { MachineSplitRow } from "./summaryModel";
 
-const COLUMNS = ["HR", "WATTS", "CAL", "CAL/HR", "DRAG", "REST m"] as const;
+const COLUMNS = ["HR", "WATTS", "CAL", "CAL/HOUR", "DRAG", "REST m"] as const;
 
 /** `undefined` (no frame) and `null` (a belt that said nothing) both read
  *  as the house dash; `0` reads as 0 — "the machine did not say" and "the
@@ -19,7 +19,7 @@ function cell(v: number | null | undefined): string {
  * overflow). No ALL row — the hero tiles are the session — and no SPM,
  * which the INTERVALS table already shows beside its target. Renders
  * nothing without rows, so a manual row or a Just Row (`steps: []`) adds no
- * surface. WATTS and CAL/HR are the logbook's arithmetic (§3.1).
+ * surface. WATTS and CAL/HOUR are the logbook's arithmetic (§3.1).
  */
 export default function MachineSummaryTable({
   rows,

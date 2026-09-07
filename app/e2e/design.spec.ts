@@ -11596,7 +11596,7 @@ test.describe("from-the-log detail, machine tier + MACHINE SUMMARY (Phase LP §3
     await expect(tiles).toHaveCount(6);
     await expect(tiles.nth(0)).toHaveText("AVG WATTS184");
     await expect(tiles.nth(1)).toHaveText("CALORIES32");
-    await expect(tiles.nth(2)).toHaveText("CAL / HR929");
+    await expect(tiles.nth(2)).toHaveText("CAL / HOUR929");
     await expect(tiles.nth(3)).toHaveText("RATE · TARGET26 / 26");
     await expect(tiles.nth(4)).toHaveText("DRAG100");
     await expect(tiles.nth(5)).toHaveText("AVG HR142");

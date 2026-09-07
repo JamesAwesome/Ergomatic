@@ -3659,7 +3659,7 @@ test("log-detail", async ({ page }) => {
 
   // Phase LP §3 (RF7 — recompute the headline from the rows by eye): the
   // machine tier reads the LOGBOOK's arithmetic over the seed — AVG WATTS
-  // round(2.80/(124.0/500)³) = 184, CAL / HR floor(32×3600/124.0) = 929
+  // round(2.80/(124.0/500)³) = 184, CAL / HOUR floor(32×3600/124.0) = 929
   // (NOT the seeded PM5 figure 931), CALORIES 32 = 16 + 16 below, AVG HR a
   // dash (this walk wore no belt — `avgHeartRateBpm` is not seeded), RATE 26
   // with NO target half (this walk's program authored no display SPM, so
@@ -3670,7 +3670,7 @@ test("log-detail", async ({ page }) => {
   const lpTiles = page.getByTestId("summary-machine-tier").getByRole("group");
   await expect(lpTiles).toHaveCount(6);
   await expect(lpTiles.nth(0)).toHaveText("AVG WATTS184");
-  await expect(lpTiles.nth(2)).toHaveText("CAL / HR929");
+  await expect(lpTiles.nth(2)).toHaveText("CAL / HOUR929");
   await expect(lpTiles.nth(3)).toHaveText("RATE26");
   await expect(lpTiles.nth(5)).toHaveText("AVG HR—");
   const lpStrip = page

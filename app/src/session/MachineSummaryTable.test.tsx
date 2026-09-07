@@ -40,7 +40,7 @@ describe("MachineSummaryTable (Phase LP §3)", () => {
       within(header!)
         .getAllByRole("columnheader")
         .map((c) => c.textContent),
-    ).toStrictEqual(["#", "HR", "WATTS", "CAL", "CAL/HR", "DRAG", "REST m"]);
+    ).toStrictEqual(["#", "HR", "WATTS", "CAL", "CAL/HOUR", "DRAG", "REST m"]);
     expect(body).toHaveLength(2);
     expect(
       within(body[0]!)

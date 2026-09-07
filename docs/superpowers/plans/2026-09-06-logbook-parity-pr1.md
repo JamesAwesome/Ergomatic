@@ -18,7 +18,7 @@
 - Watts = `Math.round(2.80 / (seconds / metres) ** 3)`; cal/hr = `Math.floor(calories * 3600 / seconds)` (spec §1.2, verified 6/6 against James's logbook row — those six values are the unit-test literals).
 - The dash glyph is `DASH` from `src/workout/connected/surfaceModel.ts` (`—`), never `-`.
 - No em-dashes in user-facing strings (house style); `DASH` as a data placeholder is exempt.
-- Copy: `MACHINE SUMMARY`, `PM5 · PER INTERVAL`, tile labels `AVG WATTS · CALORIES · CAL / HR · RATE · TARGET · DRAG · AVG HR` (REST → AVG HR, James 2026-09-07, M3).
+- Copy: `MACHINE SUMMARY`, `PM5 · PER INTERVAL`, tile labels `AVG WATTS · CALORIES · CAL / HOUR · RATE · TARGET · DRAG · AVG HR` (REST → AVG HR, James 2026-09-07, M3).
 - Machine rows only: the tier and the table render only when the row is PM5-sourced; manual rows are unchanged.
 - Test invocation: from `app/`, `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>` (client) or `--project unit <file>` (domain/server). `pnpm e2e` rebuilds a Docker stack — run it once at the end, not per task.
 - Every new assertion gets a mutation that makes it fail, recorded in the commit message (RF21).
@@ -943,7 +943,7 @@ and in `monitorHeroes`'s `summaryTotals !== undefined` branch add `machine: mach
         <div className="summary-machine-tier" data-testid="summary-machine-tier">
           <MachineTile label="AVG WATTS" value={heroes.machine.avgWatts} />
           <MachineTile label="CALORIES" value={heroes.machine.calories} />
-          <MachineTile label="CAL / HR" value={heroes.machine.calPerHour} />
+          <MachineTile label="CAL / HOUR" value={heroes.machine.calPerHour} />
           <MachineTile
             label="RATE · TARGET"
             value={heroes.machine.rate}
@@ -1048,7 +1048,7 @@ export function machineSplitRows(steps: readonly LogStep[]): MachineSplitRow[]  
 export function machineSplitRowsFromRun(run: MonitorRun): MachineSplitRow[]      // from run.actuals via buildMonitorLogSteps-equivalent mapping
 ```
 
-- `<MachineSummaryTable rows={rows} />` renders nothing when `rows.length === 0`; otherwise heading `MACHINE SUMMARY` with eyebrow `PM5 · PER INTERVAL`, a `.machine-summary-scroller` (`overflow-x: auto`) containing a `<table class="machine-summary">` with `border-collapse: separate`, a sticky first column `#`, columns `HR · WATTS · CAL · CAL/HR · DRAG · REST m`, `DASH` for undefined, `0` rendered as `0`.
+- `<MachineSummaryTable rows={rows} />` renders nothing when `rows.length === 0`; otherwise heading `MACHINE SUMMARY` with eyebrow `PM5 · PER INTERVAL`, a `.machine-summary-scroller` (`overflow-x: auto`) containing a `<table class="machine-summary">` with `border-collapse: separate`, a sticky first column `#`, columns `HR · WATTS · CAL · CAL/HOUR · DRAG · REST m`, `DASH` for undefined, `0` rendered as `0`.
 
 - [ ] **Step 1: Failing tests**
 
@@ -1160,7 +1160,7 @@ export function machineSplitRowsFromRun(run: MonitorRun): MachineSplitRow[] {
 import { DASH } from "../workout/connected/surfaceModel";
 import type { MachineSplitRow } from "./summaryModel";
 
-const COLUMNS = ["HR", "WATTS", "CAL", "CAL/HR", "DRAG", "REST m"] as const;
+const COLUMNS = ["HR", "WATTS", "CAL", "CAL/HOUR", "DRAG", "REST m"] as const;
 
 function cell(v: number | null | undefined): string {
   return v === undefined || v === null ? DASH : String(v);
@@ -1501,7 +1501,7 @@ git commit -m "LP PR1 T10: e2e — tier and strip shape on a machine row, absent
 
 - [ ] **Step 1: DEVIATIONS row**
 
-`| N/A — the handoff has no per-interval machine metrics or session tiles | **Machine rows carry a second hero tier (AVG WATTS · CALORIES · CAL / HR · RATE · TARGET · DRAG · REST) and a sideways-scrolling MACHINE SUMMARY table (HR · WATTS · CAL · CAL/HR · DRAG · REST m) under the INTERVALS table** (\`PostWorkoutSummary.tsx\`, \`MachineSummaryTable.tsx\`). Watts and cal/hr are the LOGBOOK's arithmetic (\`logbookDerived.ts\`), not the PM5's own; absence renders \`DASH\`, \`0\` renders 0; manual rows show neither | Phase LP (\`docs/superpowers/specs/2026-09-06-logbook-parity-design.md\`), 2026-09-06 — James: "show everything that Concept2's logbook shows … be absolutely certain our numbers match Concept2's". Layout B + B from the visual companion (\`docs/design/logbook-parity/03-chosen-composed.html\`); no ALL row and no SPM in the strip (both would duplicate what the tiles / INTERVALS table already show). The PM5's own watts/cal-hr are stored as provenance and differ from the logbook's by ≤1 W and 24–78 cal/hr — the Gate 0 option James chose |`
+`| N/A — the handoff has no per-interval machine metrics or session tiles | **Machine rows carry a second hero tier (AVG WATTS · CALORIES · CAL / HOUR · RATE · TARGET · DRAG · REST) and a sideways-scrolling MACHINE SUMMARY table (HR · WATTS · CAL · CAL/HOUR · DRAG · REST m) under the INTERVALS table** (\`PostWorkoutSummary.tsx\`, \`MachineSummaryTable.tsx\`). Watts and cal/hr are the LOGBOOK's arithmetic (\`logbookDerived.ts\`), not the PM5's own; absence renders \`DASH\`, \`0\` renders 0; manual rows show neither | Phase LP (\`docs/superpowers/specs/2026-09-06-logbook-parity-design.md\`), 2026-09-06 — James: "show everything that Concept2's logbook shows … be absolutely certain our numbers match Concept2's". Layout B + B from the visual companion (\`docs/design/logbook-parity/03-chosen-composed.html\`); no ALL row and no SPM in the strip (both would duplicate what the tiles / INTERVALS table already show). The PM5's own watts/cal-hr are stored as provenance and differ from the logbook's by ≤1 W and 24–78 cal/hr — the Gate 0 option James chose |`
 
 - [ ] **Step 2: Comment sweep** — `grep -rn "interface-notes.md" app/src app/domain` → each hit becomes `pm5-interface-notes.md`; `grep -n "undecoded surface with no reader" app/domain/monitor/pm5/parse.ts` → reword to "Phase LP gave these fields readers (spec §2)".
 

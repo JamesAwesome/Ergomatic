@@ -327,7 +327,7 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
     expect(tiles.map((t) => t.getAttribute("aria-label"))).toStrictEqual([
       "AVG WATTS",
       "CALORIES",
-      "CAL / HR",
+      "CAL / HOUR",
       "RATE · TARGET",
       "DRAG",
       "AVG HR",

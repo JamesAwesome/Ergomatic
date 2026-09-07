@@ -1737,7 +1737,7 @@ close, not before.**
 
 - [ ] **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
       columns that are Concept2's arithmetic** (PM final gate #327,
-      2026-09-07, non-blocking): WATTS and CAL/HR are the logbook's
+      2026-09-07, non-blocking): WATTS and CAL/HOUR are the logbook's
       derivation (James's §3.1 ruling), differing from the PM5's own by
       ≤1 W and 24–78 cal/hr — the same record stores `avgCalPerHour: 931`
       and the tile renders 929. The arithmetic was ruled; the LABEL was
