@@ -15,7 +15,7 @@
 - Worktree `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/lp-pr2`, branch `phase-lp-pr2-upload`, base `origin/main` `a6fc1e96`.
 - **Omit, never zero; `0` is a value.** Every emitted numeric field passes `Number.isInteger` or is omitted (API: "Sending across a decimal value or a string where an integer is expected … will result in the workout failing").
 - **All-or-nothing `workout.intervals[]`:** sent only when `workout_type` maps AND every step has `actualSource === "pm5"`, `actualSeconds`, `actualMeters`, `machineRestSeconds`. Otherwise no `workout` key at all.
-- **Untouched:** `type`, `date`, `timezone`, `distance`, `time`, `weight_class`, `rest_time`, `stroke_rate`, `workout_type`, `verification_code`. The route test "happy path posts EXACTLY the fixture payload" must keep passing byte-for-byte on its `steps: []` fixture.
+- **Untouched:** `type`, `date`, `timezone`, `distance`, `time`, `weight_class`, `rest_time`, `stroke_rate`, `workout_type` (`verification_code` has never been emitted by `buildC2Payload` — antagonist delta 5). The route test "happy path posts EXACTLY the fixture payload" must keep passing byte-for-byte on its `steps: []` fixture.
 - Never `git checkout --` a file with uncommitted work (RF22); commit before each mutation.
 - No device install without James's permission; the walk rides Wave E's flag-flip trip (spec §4.2), not this PR.
 - Tests: `cd app && NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit <file>` (server) / `--project client <file>` (src). `pnpm e2e` once at the end.
@@ -364,7 +364,8 @@ export function buildC2Intervals(steps: readonly LogStep[]): C2Interval[] | null
 ### Task 5: Integer sweep, records, and the PR
 
 - [ ] One test in `mapping.test.ts`: `JSON.parse(JSON.stringify(buildC2Payload(FULL_ROW, LINK, "UTC")))` walked recursively — every number leaf `Number.isInteger`; every string leaf in the set `{type, date, timezone, weight_class, workout_type, interval.type}`.
-- [ ] `docs/design/DEVIATIONS.md`: strip REST clause removed; `ROADMAP.md`: register row struck ("closed by PR 2, `machineRestMeters`"), Phase LP status "PR 2 BUILT"; the Wave E `intervals` sentence corrected (spec §6). `docs/superpowers/specs/2026-09-05-c2-verification-*.md`: one line noting the payload grew and the code's checked set did not.
+- [ ] `docs/design/DEVIATIONS.md`: strip REST clause removed; `ROADMAP.md`: register row struck ("closed by PR 2, `machineRestMeters`"), Phase LP status "PR 2 BUILT"; the Wave E `intervals` sentence corrected (spec §6). (The verification-research note the plan first owed is struck: no Ergomatic upload has ever carried `verification_code` — antagonist delta 5.)
+- [ ] **Folded from the antagonist delta pass (2026-09-07):** the route retries once without `workout` on a non-auth, non-duplicate refusal and logs both paths; interval `rest_distance` sends 0; `drag_factor` 1..255; spec §5 corrected (trailing-rest evidence, `pace` unit INFERENCE, the "validated" prose, `verification_code`, heart-rate type contradiction, the accepted SPM-target cost); §4.2 gains the last-interval-rest and pace read-backs; ROADMAP register row for the rows already sent thin.
 - [ ] Gates: lint, typecheck, format, unit+client, `pnpm build` + `dist:grep`, `pnpm e2e`, `pnpm screenshots` (LP captures only).
 - [ ] PR (human-first body, TRIAD twice stated), review half: whole-branch review + PM final gate. Walk stays on the flag-flip trip.
 

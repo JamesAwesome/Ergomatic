@@ -1342,6 +1342,35 @@ export function createConcept2Router({
         }
       }
 
+      // Phase LP PR 2, the fallback the briefing's own rule requires for an
+      // unobserved wire premise ("ship it with a fallback path plus a log
+      // entry that records which path fired"): Concept2 documents that
+      // "split and interval data are validated for type and expected
+      // values", and what it validates is not stated — the result's own
+      // `time` is 0x0039's figure while the intervals sum 0x0037's, a tenth
+      // apart on two committed captures (antagonist delta pass, 2026-09-07).
+      // A rejection that is neither auth nor duplicate, on a payload that
+      // carried `workout`, is retried ONCE without it, so the upload PR 0
+      // proved can never regress into a failure because of the array. The
+      // log line names the path so the walk can settle what C2 checks.
+      if (
+        !postResult.ok &&
+        postResult.kind === "c2_error" &&
+        payload.workout !== undefined
+      ) {
+        const { workout: _dropped, ...withoutWorkout } = payload;
+        console.warn(
+          `concept2 send: C2 refused the payload with workout.intervals (status ${postResult.status ?? "none"}); retrying once without the array (user ${userId}, log ${logId})`,
+        );
+        payload = withoutWorkout;
+        postResult = await client.postResult(accessToken, payload);
+        if (postResult.ok) {
+          console.warn(
+            `concept2 send: accepted WITHOUT workout.intervals — the array was the rejected part (user ${userId}, log ${logId})`,
+          );
+        }
+      }
+
       if (postResult.ok) {
         // RF25: this route owns the end-to-end invariant. A false return
         // means the row vanished between the eligibility read and this

@@ -80,7 +80,9 @@ export function buildC2Intervals(
       distance: Math.round(s.actualMeters),
       rest_time: c2Tenths(s.machineRestSeconds),
     };
-    const restMeters = sendableInt(s.machineRestMeters, 1, 1_000_000);
+    // 0 m of rest is a reading (an r0 piece), sent as 0 beside its
+    // `rest_time: 0` — §2's invariant, "0 is a value" (antagonist delta 6).
+    const restMeters = sendableInt(s.machineRestMeters, 0, 1_000_000);
     if (restMeters !== undefined) interval.rest_distance = restMeters;
     const spm = sendableInt(s.actualSpm, 1, 99);
     if (spm !== undefined) interval.stroke_rate = spm;

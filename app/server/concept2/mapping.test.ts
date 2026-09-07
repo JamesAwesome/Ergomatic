@@ -642,6 +642,21 @@ describe("buildC2Payload — Phase LP PR 2, result-level fields", () => {
     );
     expect(zero.calories_total).toBe(0);
     expect(zero).not.toHaveProperty("drag_factor");
+    // A drag factor of 0 is not a reading (no sentinel on the wire): omitted.
+    expect(
+      buildC2Payload(
+        {
+          ...FINISHED_ROW,
+          machineSummary: {
+            avgStrokeRate: 24,
+            workoutType: 8,
+            dragFactorAverage: 0,
+          },
+        },
+        LINK,
+        "UTC",
+      ),
+    ).not.toHaveProperty("drag_factor");
     expect(zero).not.toHaveProperty("heart_rate");
     const nulls = buildC2Payload(
       {

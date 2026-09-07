@@ -591,7 +591,9 @@ export function buildC2Payload(
   // the logbook stores as its own — never derived, never zero-filled.
   const calories = sendableInt(row.machineSummary?.totalCalories, 0, U16_MAX);
   if (calories !== undefined) post.calories_total = calories;
-  const drag = sendableInt(row.machineSummary?.dragFactorAverage, 0, 255);
+  // 1..255: 0x0039 byte 15 has no documented sentinel and a drag factor of
+  // 0 is not a reading (antagonist delta 6, minor).
+  const drag = sendableInt(row.machineSummary?.dragFactorAverage, 1, 255);
   if (drag !== undefined) post.drag_factor = drag;
   const heartRate: Record<string, number> = {};
   for (const [key, field] of [

@@ -64,7 +64,7 @@ describe("buildC2Intervals (Phase LP PR 2, spec §5)", () => {
     ]);
   });
 
-  it("a time-prescribed step is type time; a zero rest posts rest_time 0 and no rest_distance; no targets object when the step stored none", () => {
+  it("a time-prescribed step is type time; a zero rest posts rest_time 0 AND rest_distance 0 (0 is a value); no targets object when the step stored none", () => {
     const step: LogStep = {
       label: "1:00",
       seconds: 60,
@@ -75,7 +75,13 @@ describe("buildC2Intervals (Phase LP PR 2, spec §5)", () => {
       machineRestMeters: 0,
     };
     expect(buildC2Intervals([step])).toStrictEqual([
-      { type: "time", time: 600, distance: 197, rest_time: 0 },
+      {
+        type: "time",
+        time: 600,
+        distance: 197,
+        rest_time: 0,
+        rest_distance: 0,
+      },
     ]);
   });
 

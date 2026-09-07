@@ -481,7 +481,13 @@ The pass keeps its own Gate 0.
    distance (409), so it needs our row deleted and the piece re-uploaded
    from ErgData — a sequenced experiment, filed as optional under the same
    walk, not required for exit.
-5. **Dependency named:** a live send needs `C2_LINK_ENABLED` for James's
+5. **Two read-backs PR 2 adds (antagonist delta 2026-09-07):** (a) a piece
+   whose LAST interval carries a programmed rest — the shape 158 of 300
+   library workouts ship and no capture contains — sent with its
+   `workout.intervals[]`, and the logbook page checked for the final rest
+   and for whether the array was accepted at all (the route logs which path
+   fired); (b) the `pace` target read back on the page to settle its unit.
+6. **Dependency named:** a live send needs `C2_LINK_ENABLED` for James's
    account, which Wave E still lists as owed pending Concept2's write
    approval. This walk joins Wave E's owed flag-flip trip (auto-send's
    AUTOMATIC save, PR C's confirming send, LP's parity photograph — three
@@ -511,10 +517,16 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   intervals"_); `rest_distance` ← `machineSummary.totalRestMeters` when present
   and > 0, else today's `row.restMeters` (_"Depends | integer | For interval
   workouts only. This is the total distance in meters of distance covered in
-  rest intervals"_ — the PM5's own session total is the authority, and the
-  two agree to the metre on every committed capture); `stroke_rate`,
-  `workout_type`, `time`, `distance`, `verification_code`, `weight_class`
-  **untouched**. _Rev 2 said `stroke_rate` "per §3.2 (fixes the doubled
+  rest intervals"_ — measured a no-op on every observed row: 0x003A's total
+  equals Σ 0x0037 rest distance on 9 of 9 captures carrying both, 274 =
+  130 + 144 included; its real value is covering the row whose RC-1 rest
+  pair is null because one actual lacked a rest field, antagonist delta
+  2026-09-07); `stroke_rate`, `workout_type`, `time`, `distance`,
+  `weight_class` **untouched**. _`verification_code` is NOT in this list
+  because `buildC2Payload` has never emitted it — `grep -rn verification_code
+  app/` finds only the dev-only desk harness and one display component, and
+  PR 0's 201 body reads `"verified": false`. Rev 2.5 listed it as untouched;
+  a field that does not exist cannot be untouched (antagonist delta 5)._ _Rev 2 said `stroke_rate` "per §3.2 (fixes the doubled
   value on terminated pieces)": MOOT on this path — `eligibilityFailure`
   admits only `endedBy === "finished"`, so no terminated row ever reaches
   `buildC2Payload`; the 0x0039 average is the right one for every row it
@@ -532,8 +544,18 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   `rest_time` _"Yes | integer | This is the value in tenths of a second of
   the time spent in rest intervals"_ ← `c2Tenths(machineRestSeconds)` (the
   programmed-rest readback, §2.1 — INFERENCE that the PM5's readback equals
-  time spent, stated; every committed capture's value equals the programmed
-  rest); `rest_distance` _"No | integer | … This should be included for
+  time spent; the two facts that support it, antagonist delta 2026-09-07:
+  the PM5 does execute a rest after the FINAL work interval —
+  `pm5/intervalIndex.ts`'s observed table has "rest-after-work1, resting,
+  machineIndex 2" for a two-interval program — and rowing does not shorten a
+  PM5 rest: on `walk-2026-08-25/rests-finished` the rower covered 130 m
+  inside a 60 s rest and offset 12 still read 60. **What no capture
+  contains:** a finished piece whose LAST interval carries a programmed
+  rest — offset 12 reads 0 on the final interval of all ten recordings, and
+  the phase-exit keystone (2×250 r0) cannot produce one — while
+  `compileProgram` folds a trailing rest onto the last interval on **158 of
+  the 300** seeded library workouts (`expand.ts` pushes a rest after every
+  work rep, including the last). The walk (§4.2) adds that case); `rest_distance` _"No | integer | … This should be included for
   Variable interval workouts only"_ ← `machineRestMeters` when > 0 (every
   programmed Ergomatic piece IS VariableInterval — the compiler sends
   `WORKOUTTYPE_VARIABLE_INTERVAL` 0x08 and every programmed capture's 0x0039
@@ -547,16 +569,26 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   `machineRestSeconds` on EVERY step (a manual step, a dropped boundary, or
   any row saved before PR 2 fails the rule and sends no array).
   **`workout.splits[]` is never sent**: a Just Row stores `steps: []` (§3,
-  §8) and the doc is silent on how splits vs intervals is decided (ABSENT on
-  re-fetch) — we send the shape whose `workout_type` we send, and the only
-  `workout_type` we map is `VariableInterval`. A row whose `workout_type`
+  §8); the doc's `Split/Interval Workouts` heading says _"The following
+  fields are also for interval workouts only"_ over `type`/`rest_time`/
+  `rest_distance`, and the result-level rest rows read _"For interval
+  workouts only"_ — so an interval workout sends `intervals`, and the only
+  `workout_type` we map is `VariableInterval` (_rev 2.5 called this ABSENT;
+  the sentence exists, the conclusion stands — antagonist delta 4_). A row whose `workout_type`
   would be omitted (any ordinal but 8) sends no array either.
 - **`workout.targets`:** _"For split and fixed distance/time/calorie/
   wattminute intervals, these targets should at workout level…For variable
   interval workouts, the target should be at the level of each individual
   interval"_ — every row we send is VariableInterval, so targets ride each
-  interval object: `pace` ← `c2Tenths(targetSplit)` (tenths per 500 m) and
-  `stroke_rate` ← the step's `spm`, each only when stored; _"only one of
+  interval object: `pace` ← `c2Tenths(targetSplit)` — the row reads only
+  _"pace | No | integer | Time in tenths of a second"_, so "per 500 m" is
+  INFERENCE from Concept2's own UI, not the doc; the 201 body does not echo
+  `workout`, so only the logbook page at the walk settles it (§4.2) — and
+  `stroke_rate` ← the step's `spm` (_"Can be between 0 and 255"_), each only
+  when stored. **Accepted cost, stated:** `spm` is written only beside an
+  in-band `actualSpm` (Phase LT's pairing rule), so an interval whose
+  measured rate was dropped loses its authored TARGET from the upload too
+  (antagonist delta 7); _"only one of
   watts, calories or pace can be present"_ — we send pace only. No
   workout-level targets. _Rev 2 said "workout-level for single pieces and
   fixed intervals" — unreachable, we send neither._
@@ -570,9 +602,23 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   the workout failing."_ Every emitted numeric field passes
   `Number.isInteger` or is omitted; a test posts the fixture through
   `JSON.parse(JSON.stringify(payload))` and checks every leaf.
-- **The verification code is untouched**: it checks _"date, time, distance,
-  workout_type and machine type"_ only (research 2026-09-05); nothing added
-  here is in that set. Duplicate rule unchanged (_"same date, time and
+- **Concept2 VALIDATES the array, and we ship a fallback.** The prose above
+  the doc's workout-object table, missed by every earlier fetch: _"Note:
+  split and interval data are validated for type and expected values."_
+  What it checks is not stated, and one thing it could check is already
+  measured to disagree: the result's `time` is 0x0039's figure while the
+  intervals sum 0x0037's, and Σ intervals − total = +0.1 s on two of the
+  four programmed finished captures (keystone 138.8 vs 138.7,
+  frame-fingerprint 173.1 vs 173.0). So a refusal that is neither auth nor
+  duplicate, on a payload carrying `workout`, is retried ONCE without the
+  array and both paths are logged (`routes/concept2.ts`) — the upload PR 0
+  proved can never regress into a failure because of the array, and the
+  walk reads which path fired. **The verification code** (whatever it will
+  check once we send one) covers _"date, time, distance, workout_type and
+  machine type"_ (research 2026-09-05); nothing added here is in that set.
+  The doc contradicts itself on `heart_rate`'s value type (result row:
+  "object of strings"; its own example and the interval row: integers) —
+  integers are sent, as the example shows. Duplicate rule unchanged (_"same date, time and
   distance"_, 409). Idempotency unchanged: a resend of an already-uploaded
   row short-circuits and gains nothing — a row uploaded BEFORE PR 2 keeps
   its thinner logbook entry (no PATCH exists).
