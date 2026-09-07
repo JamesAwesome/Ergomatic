@@ -3823,7 +3823,7 @@ test("log-detail", async ({ page }) => {
   // visual record, and a code re-appearing here would otherwise only be caught
   // by a human noticing it. Consequence worth stating plainly: a programmed
   // piece WITH rest almost never lands on a standard, so this line is rare.
-  await expect(page.getByText("CODE AF99-4706 C021-B054")).toBeHidden();
+  await expect(page.locator(".log-machine-confirmed-code")).toHaveCount(0);
   // THE CAPTION IS GONE (James, 2026-08-27: "just no prose"). Asserted as
   // an ABSENCE so the committed capture keeps showing a three-line block:
   // this is the PR's visual record, and a re-added sentence would

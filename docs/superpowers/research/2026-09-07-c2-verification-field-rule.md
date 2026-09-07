@@ -18,12 +18,15 @@ the DOM** and its **visibility** carries the rule:
 "Overall" means work plus rest, which is what the form displays. Established by
 a crossed experiment on EACH axis, so neither is inferred from the other:
 
-| Axis | Work | Rest | Overall | Field |
-| --- | --- | --- | --- | --- |
-| Distance | 1820 m | 180 m | 2000 m | visible |
-| Distance | 2000 m | 180 m | 2180 m | hidden |
-| Time | 25:00 | 5:00 | 30:00 | visible |
-| Time | 25:00 | 6:00 | 31:00 | hidden |
+| Axis under test | Work | Rest | Overall | Other axis | Field |
+| --- | --- | --- | --- | --- | --- |
+| Distance | 1820 m | 180 m | **2000 m** | 8:00, not standard | visible |
+| Distance | 2000 m | 180 m | 2180 m | 10:00, not standard | hidden |
+| Time | 25:00 | 5:00 | **30:00** | 7301 m, not standard | visible |
+| Time | 25:00 | 6:00 | 31:00 | 7302 m, not standard | hidden |
+
+The rule is an OR, so each visible arm is only unconfounded if the OTHER axis
+misses — hence the fourth column. It does in all four rows.
 
 In each pair the work figure alone explains neither arm: the row whose WORK is
 standard is the one refused, and the row whose work is not standard is the one

@@ -1474,7 +1474,13 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
               machineWorkSeconds: 420,
               machineWorkMeters: 1820,
               restSeconds: 60,
-              restMeters: 180,
+              // OUR summed rest and the MONITOR's disagree on purpose: the
+              // mapper posts the monitor's 180, so the overall is 2000 and a
+              // code is offered. Reading our 155 instead gives 1975 and no
+              // code. Without that disagreement this test passes whether or
+              // not the screen forwards the monitor's figure at all — which
+              // is exactly how the first version of this fix shipped ungated.
+              restMeters: 155,
               machineSummary: {
                 verificationBytes: WALK_VERIFICATION_BYTES,
                 totalRestMeters: 180,

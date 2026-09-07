@@ -62,8 +62,15 @@ export interface PostedTotalsInput {
   restSeconds: number | null;
   /** `machineSummary.totalRestMeters` — the monitor's own rest distance,
    *  which the mapper prefers over our summed one when it is a whole number
-   *  in 1..1_000_000. */
-  machineRestMeters?: number | null;
+   *  in 1..1_000_000.
+   *
+   *  REQUIRED, deliberately, and `null` is how a caller says "absent". It was
+   *  optional for one review round and the only production caller silently
+   *  omitted it, so the screen judged our summed rest where the upload sends
+   *  the monitor's — a divergence no test caught, because optionality made
+   *  the compiler quiet. Requiring it closes the invariant rather than that
+   *  one counterexample. */
+  machineRestMeters: number | null;
 }
 
 /** Tenths of a second, the wire's unit. Mirrors `server/concept2/tenths.ts`'s

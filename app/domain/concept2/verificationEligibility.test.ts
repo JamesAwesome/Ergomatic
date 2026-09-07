@@ -12,6 +12,7 @@ const plain = (meters: number, seconds: number) => ({
   workSeconds: seconds,
   restMeters: null,
   restSeconds: null,
+  machineRestMeters: null,
 });
 
 describe("concept2OffersVerification — the measured rule", () => {
@@ -158,6 +159,7 @@ describe("concept2OverallTotals — rest counts toward the figure", () => {
       workSeconds: null,
       restMeters: null,
       restSeconds: null,
+      machineRestMeters: null,
     };
     expect(concept2OverallTotals(monitorOnly)).toStrictEqual({
       meters: 500,
