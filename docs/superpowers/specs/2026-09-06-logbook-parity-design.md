@@ -521,23 +521,20 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   130 + 144 included; its real value is covering the row whose RC-1 rest
   pair is null because one actual lacked a rest field, antagonist delta
   2026-09-07); `stroke_rate`, `workout_type`, `time`, `distance`,
-  `weight_class` **untouched**. **`verification_code` — SENT from rev 2.6
-  (PR 2.5, 2026-09-07).** The PM5's code from 0x003F's first 8 bytes, two
-  LE u32 words rendered `XXXX-XXXX-XXXX-XXXX` (`domain/monitor/verificationCode.ts`,
-  shared with the Log screen's display), sent ONLY when the posted `time`
-  and `distance` are the machine's own totals — the code is minted over those
-  **MEASURED** 2026-09-05 on **log-dev**, with a payload carrying **no**
-  `workout.intervals[]`: the machine's 5706 returns `verified: true`, our
-  summed 5708 returns `false`
-  (`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`,
-  whose own limits section reads _"NOT tested: production (only log-dev)"_).
-  **ALSO MEASURED 2026-09-07 on log-dev** (same research file, follow-up
-  section): the identical verified payload **with** `workout.intervals[]`
-  added returns `verified: true` (row 86044), and the same array at the
-  negative-control distance 5707 returns `false` (row 86045) — so the array
-  does not interfere and the probe is proven able to fail. Both rows deleted.
-  **UNTESTED and owed to the parity walk:** production, and the inference
-  about Concept2's own Verify button.
+  `weight_class` **untouched**. **`verification_code` — NOT SENT (rev 2.7,
+  James, 2026-09-07).** Rev 2.6 sent it and it worked: the row came back
+  `Verified: Yes` on the first real rowed piece, with no Verify button on the
+  page and nothing for the rower to do. **That is a parity REGRESSION, and
+  this phase is about parity.** Concept2's own app uploads the row and leaves
+  verification to the rower; auto-verifying takes away an act the rower
+  performs deliberately. Reverted in full — the mapper withholds the code
+  even on a row that would verify, and a test pins that.
+  _The wire facts rev 2.6 measured still stand and are worth keeping_
+  (`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`:
+  the code verifies at 5706 and fails at 5707, with and without
+  `workout.intervals[]`). What changed is the product decision, not the
+  measurement. **The question that opened this thread is still open:** why
+  Concept2 shows no Verify button on a row carrying interval data.
   Why now: James's four rows sent on the PR 2 build (2026-09-07) show that
   Concept2's own **Verify** affordance is absent on a result that arrives
   with `workout.intervals[]` — only the v0.41.0 (no-array) row still offered

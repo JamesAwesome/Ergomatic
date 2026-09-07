@@ -2442,10 +2442,9 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     });
     const { app, logs } = buildApp({ store, client });
     // A divergent row: our sum 5708, the machine's own total 5706.
-    // Phase LP PR 2.5: the store also holds the PM5's 0x003F bytes; the
-    // route posts them as Concept2's `verification_code` (wire form, dashed
-    // — the form the API accepted live). Exit-7 walk bytes; words derived
-    // in domain/monitor/verificationCode.test.ts.
+    // Phase LP: the store also holds the PM5's 0x003F bytes. They are
+    // deliberately NOT forwarded as Concept2's `verification_code` (James,
+    // 2026-09-07) — the rower verifies by hand, as with ErgData.
     const id = await seedEligibleLog(logs, userA.id, {
       workMeters: 5708,
       machineWorkMeters: 5706,
@@ -2472,77 +2471,12 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     // dropping the field in toMappingRow, posts 5708 and reddens this.
     expect(posted.distance).toBe(5706);
     expect(posted.distance).not.toBe(5708);
-    // Dropping the bytes in toMappingRow, or the code in buildC2Payload,
-    // posts no code and reddens this.
-    expect(posted.verification_code).toBe("AF99-4706-C021-B054");
-  });
-
-  it("Phase LP PR 2.5: a row WITHOUT machine totals posts no verification_code even when the bytes are stored", async () => {
-    const store = makeFakeConcept2Store();
-    await store.upsertLink(userA.id, freshLink());
-    const client = makeStubClient();
-    vi.mocked(client.postResult).mockResolvedValue({
-      ok: true,
-      resultId: 91002,
-      verified: false,
-    });
-    const { app, logs } = buildApp({ store, client });
-    const id = await seedEligibleLog(logs, userA.id, {
-      machineSummary: {
-        avgStrokeRate: 24,
-        workoutType: 8,
-        verificationBytes: [
-          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
-          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ],
-      },
-    });
-    const res = await asA(
-      request(app)
-        .post(`/api/concept2/results/${id}`)
-        .send({ tz: "America/New_York" }),
-    );
-    expect(res.status).toBe(200);
-    const posted = vi.mocked(client.postResult).mock.calls[0]![1];
+    // The code is deliberately never sent (James, 2026-09-07): Concept2's
+    // own app leaves verification to the rower.
     expect(posted).not.toHaveProperty("verification_code");
   });
 
-  it("Phase LP PR 2.5: a 4xx on a no-array row carrying verification_code is retried once WITHOUT the code (the upload cannot regress on the code either)", async () => {
-    const store = makeFakeConcept2Store();
-    await store.upsertLink(userA.id, freshLink());
-    const client = makeStubClient();
-    vi.mocked(client.postResult)
-      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
-      .mockResolvedValueOnce({ ok: true, resultId: 91003, verified: false });
-    const { app, logs } = buildApp({ store, client });
-    const id = await seedEligibleLog(logs, userA.id, {
-      workMeters: 5708,
-      machineWorkMeters: 5706,
-      machineWorkSeconds: 1319.3,
-      machineSummary: {
-        avgStrokeRate: 24,
-        workoutType: 8,
-        verificationBytes: [
-          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
-          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ],
-      },
-    });
-    const res = await asA(
-      request(app)
-        .post(`/api/concept2/results/${id}`)
-        .send({ tz: "America/New_York" }),
-    );
-    expect(res.status).toBe(200);
-    const calls = vi.mocked(client.postResult).mock.calls;
-    expect(calls).toHaveLength(2);
-    expect(calls[0]![1]).not.toHaveProperty("workout");
-    expect(calls[0]![1].verification_code).toBe("AF99-4706-C021-B054");
-    expect(calls[1]![1]).not.toHaveProperty("verification_code");
-    expect(calls[1]![1].distance).toBe(5706);
-  });
-
-  it("Phase LP PR 2.5: every accepted send logs one c2_send event carrying the 201 body's verified flag, whether the code went, and which fallback fired", async () => {
+  it("Phase LP: every accepted send logs one c2_send event carrying the 201 body's verified flag and which fallback fired", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
     const client = makeStubClient();
@@ -2581,7 +2515,6 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
           event: "c2_send",
           logId: id,
           verified: true,
-          codeSent: true,
           intervalsSent: false,
           fallback: "none",
         },
