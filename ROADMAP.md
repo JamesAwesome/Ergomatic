@@ -1229,20 +1229,21 @@ closed with zero Concept2 contact.
       `workout.intervals[]` and one WITH, same account, and look at both
       pages — that separates payload shape from build.
 
-- [ ] **The fake monitor sends a summary heart rate no real monitor ever has,
+- [x] **DONE (PR #345). The fake monitor sent a summary heart rate no capture we hold contains,
       and that is why AVG HR reading `—` went unnoticed for a month.**
-      `transports/fake.ts` emits `avgHeartRateBpm: 152`, `min 96`, `max 175`,
+      `transports/fake.ts` emitted `avgHeartRateBpm: 152`, `min 96`, `max 175`,
       `ending 168` in its 0x0039 end-of-workout summary. **Measured
-      2026-09-07 across the whole committed corpus: of 20 capture files, 11
-      carry a 0x0039 summary, and in ALL ELEVEN every one of the four
-      heart-rate slots is a 0/255 sentinel.** Three of those same walks carry
-      real PER-INTERVAL heart rate in 0x0038 at the same time, so it is not
-      that the belt was off. Dozens of tests seed a non-null summary HR too.
+      2026-09-07: of 20 capture files, 11 carry a 0x0039 summary and every
+      heart-rate slot in all eleven is a 0/255 sentinel — but two pairs are
+      duplicate encodings (9 recordings) and 7 of the 9 had no belt paired at
+      all, so the real evidence is TWO belted recordings from ONE walk.**
+      Narrow, and still enough: the fake asserted a number no capture we hold
+      contains, and dozens of tests seeded the same fiction.
       So every gate we own says the tile fills, because every gate feeds it a
       number the hardware does not produce — RF3, and it hid a real defect.
       **Fix:** make the fake's 0x0039 heart-rate bytes sentinels like the
       hardware's, and let the suite show the dash. Rides the AVG HR change.
-- [ ] **AVG HR should be derived from the heart-rate trace.** The tile reads
+- [x] **DONE (PR #345). AVG HR is derived from the heart-rate trace.** The tile reads
       `—` on every row because the monitor leaves its summary heart-rate
       fields empty (row above). The per-stroke trace we already record and
       store has the data. **Measured on four committed captures with the
@@ -1251,8 +1252,12 @@ closed with zero Concept2 contact.
       figure reads 4 to 15 bpm HIGHER than either — what that field measures
       is not documented (`pm5-interface-notes.md` §539 states no semantics
       beyond "Split/Interval Work Heartrate"), so the gap is recorded, not
-      explained. Gate 0 owed before implementation; TRIAD, since it changes
-      what a stored row renders.
+      explained. Gate 0 APPROVED (option A); the same figure also rides the
+      Concept2 upload as `heart_rate.average`, a field Concept2 documents as
+      optional and defines no further. **Owed:** James's own belted row is
+      the only evidence outside those two recordings, and it is not in the
+      repo — capture one on the next walk so the corpus carries a belted
+      0x0039 from a second day and build.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our

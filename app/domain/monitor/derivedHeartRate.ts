@@ -2,28 +2,40 @@
  * The rower's average heart rate for a piece, derived from the trace.
  *
  * WHY THIS EXISTS: the monitor leaves the four heart-rate fields of its
- * end-of-workout summary empty. Not sometimes — measured 2026-09-07 across
- * the whole committed corpus, 11 of 20 captures carry a 0x0039 summary and in
- * ALL ELEVEN every heart-rate slot is a sentinel, while three of those same
- * walks carry real per-interval heart rate at the same moment. So AVG HR has
- * read `—` on every row anyone has ever saved, on a screen whose own table
- * shows real numbers two lines below.
+ * end-of-workout summary empty, and AVG HR has read `—` on every row anyone
+ * has saved.
+ *
+ * HOW STRONG THAT EVIDENCE ACTUALLY IS, stated precisely because the first
+ * version of this comment overstated it. Of 20 committed capture FILES, 11
+ * carry a 0x0039 summary and every heart-rate slot in all eleven is a
+ * sentinel — but two pairs are `.jsonl`/`.gz` encodings of one recording, so
+ * that is 9 distinct recordings, and 7 of the 9 had no belt paired at all
+ * (0x0032 live heart rate reads 255 throughout). An empty summary proves
+ * nothing on those. **The real base is TWO belted recordings, from one walk,
+ * one day, one erg, one belt, all over the web transport.** James's own
+ * belted row on 2026-09-07 was empty too, but that log is not in the repo.
+ * A single belted 0x0039 carrying a real average, on any other day or build,
+ * falsifies this.
  *
  * WHICH AVERAGE (James, 2026-09-07, Gate 0 option A): the time-weighted mean
  * over WORKING strokes, excluding rest. Measured on four captures with the
  * repo's own parser, that lands within 0.5 bpm of a whole-session mean on
  * every one, and it measures the same quantity as the per-interval HR column
  * beneath the tile, so the two agree by construction. The monitor's own
- * per-interval figure was the third option and was rejected on evidence: it
- * reads 4-15 bpm HIGHER than the trace on all four captures, and Concept2
+ * per-interval figure was the third option and was rejected on evidence:
+ * weighted by interval duration it runs 3.5 to 15.2 bpm HIGHER than the trace
+ * on all four captures (as a plain mean of the intervals, 0 to 15, with one
+ * capture agreeing — the range depends on the aggregation, which the first
+ * version of this comment failed to state). Concept2
  * documents that field only as "Split/Interval Work Heartrate", never saying
  * whether it is a mean, a final reading or a peak
  * (`docs/monitor/pm5-interface-notes.md` §10). An unexplained gap is not a
  * foundation for a number a rower reads.
  *
- * TIME-WEIGHTED, not a plain mean: samples arrive per stroke, so a slow
- * stroke would otherwise count the same as a fast one. Each sample is
- * weighted by the gap to the next.
+ * TIME-WEIGHTED, not a plain mean. The recorder decimates to roughly 1 Hz,
+ * so in a clean trace the two agree; they diverge around a gap, and weighting
+ * by the interval to the next sample is what stops one reading either side of
+ * a stall counting as much as a second of rowing.
  */
 
 /** The recorder's own `Sample`, narrowed to the three fields this needs.

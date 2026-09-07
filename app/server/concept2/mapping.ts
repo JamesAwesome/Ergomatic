@@ -605,8 +605,9 @@ export function buildC2Payload(
     const bpm = sendableInt(row.machineSummary?.[field], HR_MIN, HR_MAX);
     if (bpm !== undefined) heartRate[key] = bpm;
   }
-  // The monitor never fills `average` — 11 of 11 committed captures carrying
-  // a 0x0039 summary leave all four heart-rate slots at a sentinel — so
+  // The monitor does not fill `average` on any capture we hold (see
+  // `domain/monitor/derivedHeartRate.ts` for how narrow that evidence
+  // really is: two belted recordings from one walk), so
   // without this the logbook row shows no heart rate at all, exactly as our
   // own tile did. Derived from the per-stroke trace instead, the same
   // function and the same working-strokes-only rule the tile uses, so the
@@ -620,7 +621,8 @@ export function buildC2Payload(
   // automated fetching, so this is a search summary, not a quote): ErgData is
   // reported to upload only each split's ENDING heart rate and let the
   // logbook average those. If true it would explain why the monitor's own
-  // per-interval field measured 4-15 bpm above the trace on every capture —
+  // per-interval field measured 3.5-15.2 bpm above the trace, weighted by
+  // interval duration, on every capture —
   // and it means our figure is better data than the logbook usually holds,
   // at the cost of not matching an ErgData-uploaded row.
   if (heartRate.average === undefined) {
