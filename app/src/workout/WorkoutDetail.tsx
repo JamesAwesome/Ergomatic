@@ -662,7 +662,17 @@ function WorkoutDetailView({
                 void onSetOneUp().then(go, go);
               }}
             >
-              Set one up
+              {/* Naming the missing side: "Set one up" is the same class of
+                  falsehood this caption exists to fix when the rower has
+                  one up already. Both labels lead to the same place —
+                  Today, with the skip cleared — which now carries the
+                  half-set row and its one-tap offer rather than the doors
+                  card. */}
+              {halfPairSide === null
+                ? "Set one up"
+                : halfPairSide === "k2"
+                  ? "Set your 6k"
+                  : "Set your 2k"}
             </button>
           </p>
         )}

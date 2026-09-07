@@ -2113,6 +2113,25 @@ describe("the caption names the side that IS set (2026-09-07)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("the caption's button names the MISSING side, not 'Set one up'", async () => {
+    // "Set one up" to a rower who has one up is the same falsehood this
+    // caption exists to remove. Both labels lead to the same place.
+    mockHooks({ k2Seconds: 112, k6Seconds: null }, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+
+    const caption = screen.getByText(/Your 2k is set\./);
+    expect(
+      within(caption.closest("p")!).getByRole("button", {
+        name: "Set your 6k",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(caption.closest("p")!).queryByRole("button", {
+        name: "Set one up",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("names the 6k when that is the stored side", async () => {
     mockHooks({ k2Seconds: null, k6Seconds: 122 }, [SIX_K_DISTANCE_WORKOUT]);
     await renderDetail("/library/w-sixk-split");
@@ -2121,6 +2140,18 @@ describe("the caption names the side that IS set (2026-09-07)", () => {
       screen.getByText(
         /Your 6k is set\. Targets stay words until the 2k is too\./,
       ),
+    ).toBeInTheDocument();
+  });
+
+  it("names the 2k when the 6k is the stored side", async () => {
+    mockHooks({ k2Seconds: null, k6Seconds: 122 }, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+
+    const caption = screen.getByText(/Your 6k is set\./);
+    expect(
+      within(caption.closest("p")!).getByRole("button", {
+        name: "Set your 2k",
+      }),
     ).toBeInTheDocument();
   });
 
