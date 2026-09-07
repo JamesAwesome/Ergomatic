@@ -63,8 +63,9 @@ constant, `domain/deriveBaseline.ts`, value 7). Then it is bucketed:
 | ≥ +13 | STEADY | `6k+6` and slower (O2's bulk), and `{effort:"min"}` |
 
 Evidence for the thresholds is the seeded library's own offset census
-(counted 2026-09-06 over `app/server/seed/library/*.ts`, `grep -oE 'base:
-"(2k|6k)", off: -?[0-9]+' | sort | uniq -c`):
+(counted 2026-09-06 against main `8986f81d` over `app/server/seed/library/*.ts`
+with `grep -oE 'base: "(2k|6k)", off: -?[0-9]+' | sort | uniq -c`; the live gate is
+the census test in §7, not this table):
 
 | Type | Split-ref range | Bulk |
 |---|---|---|
