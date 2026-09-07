@@ -1359,35 +1359,25 @@ export function createConcept2Router({
       // logbook row is permanent (no PATCH). 401 and 409 never reach here
       // as `c2_error` with those statuses (they are `auth`/`duplicate`),
       // so the band is 400..499 with a status present.
-      // PR 2.5 (PM condition 1): `verification_code` is inside the same
-      // fallback — a code-caused 4xx on a no-array row would otherwise fail
-      // an upload main accepted. A WRONG well-formed code was measured to
-      // return 201 `verified: false` (5707 control, 2026-09-05), not a 4xx;
-      // a malformed one was never measured, so the retry strips both.
-      let fallback: "none" | "without_workout_and_code" = "none";
+      let fallback: "none" | "without_workout" = "none";
       if (
         !postResult.ok &&
         postResult.kind === "c2_error" &&
         postResult.status !== undefined &&
         postResult.status >= 400 &&
         postResult.status < 500 &&
-        (payload.workout !== undefined ||
-          payload.verification_code !== undefined)
+        payload.workout !== undefined
       ) {
-        const {
-          workout: _dropped,
-          verification_code: _droppedCode,
-          ...thinned
-        } = payload;
+        const { workout: _dropped, ...thinned } = payload;
         console.warn(
-          `concept2 send: C2 refused the payload with ${payload.workout !== undefined ? "workout.intervals" : "no array"}${payload.verification_code !== undefined ? " + verification_code" : ""} (status ${postResult.status ?? "none"}); retrying once without them (user ${userId}, log ${logId})`,
+          `concept2 send: C2 refused the payload with workout.intervals (status ${postResult.status ?? "none"}); retrying once without the array (user ${userId}, log ${logId})`,
         );
         payload = thinned;
-        fallback = "without_workout_and_code";
+        fallback = "without_workout";
         postResult = await client.postResult(accessToken, payload);
         if (postResult.ok) {
           console.warn(
-            `concept2 send: accepted WITHOUT workout.intervals / verification_code — one of them was the rejected part (user ${userId}, log ${logId})`,
+            `concept2 send: accepted WITHOUT workout.intervals — the array was the rejected part (user ${userId}, log ${logId})`,
           );
         }
         // The fallback post can meet a rotated or revoked grant too (review
@@ -1414,7 +1404,6 @@ export function createConcept2Router({
             event: "c2_send",
             logId,
             verified: postResult.verified,
-            codeSent: payload.verification_code !== undefined,
             intervalsSent: payload.workout !== undefined,
             fallback,
           }),

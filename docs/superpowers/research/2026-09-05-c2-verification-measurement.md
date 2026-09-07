@@ -88,3 +88,29 @@ dedup key never fired and neither arm is confounded by the other.
   that Concept2 hides its own Verify button on rows carrying interval data
   (n=4 against one control, build and payload shape confounded). The parity
   walk settles both.
+
+## Product decision, 2026-09-07: measured, shipped, and REVERSED
+
+The two sections above are wire facts and still stand. What follows is what
+happened when the behaviour they enabled met a real rower.
+
+PR #336 sent `verification_code` on every eligible upload. On the first real
+rowed row (James, "Test with rest") Concept2 returned `Verified: Yes`, the page
+offered no Verify button, and there was nothing for the rower to do.
+
+**James ruled that a regression, and the reasoning is worth keeping:** ErgData
+— Concept2's own app — uploads the row and leaves verification to the rower.
+Phase LP's north star is parity with Concept2, so a change that removes an act
+the rower performs deliberately is the opposite of parity, however well it
+works. Verification is a human confirmation that the row is real, not a field
+to be filled in for them.
+
+**The send was removed the same day** and a test pins the withholding on the
+exact row that would otherwise verify.
+
+**The lesson, for whoever reads this next:** these measurements answered "does
+the API accept our code", and the answer was an unambiguous yes. Nobody asked
+"should the rower stop verifying their own rows", which was the actual product
+question, and no amount of further measurement would have surfaced it. The
+request that started the thread was *investigate why the Verify button
+disappeared* — that question is still open.

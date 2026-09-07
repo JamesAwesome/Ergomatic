@@ -859,16 +859,18 @@ describe("buildC2Payload — Phase LP PR 2, workout.intervals[]", () => {
   });
 });
 
-// Phase LP PR 2.5: the verification code rides the upload.
-describe("buildC2Payload — Phase LP PR 2.5, verification_code", () => {
-  // The exit-7 walk's real 0x003F payload; words derived by hand in
-  // domain/monitor/verificationCode.test.ts (AF99-4706 / C021-B054).
+// Phase LP PR 2.5 REVERSED (James, 2026-09-07): the code is never sent —
+// Concept2's own app leaves verification to the rower, and this phase is
+// about parity with Concept2.
+describe("buildC2Payload — verification_code is never sent", () => {
   const EXIT7_BYTES = [
     0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01, 0x00,
     0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   ];
 
-  it("sends the PM5's code, dashed, when the posted time and distance are the machine's own totals", () => {
+  it("withholds the code even on the row that would verify: machine totals posted AND the bytes stored", () => {
+    // This is exactly the row PR 2.5 sent a code for (it verified live,
+    // rows 86044/5706). Re-adding the send reddens this.
     const post = buildC2Payload(
       {
         ...FINISHED_ROW,
@@ -883,61 +885,10 @@ describe("buildC2Payload — Phase LP PR 2.5, verification_code", () => {
       LINK,
       "UTC",
     );
-    expect(post.verification_code).toBe("AF99-4706-C021-B054");
+    expect(post).not.toHaveProperty("verification_code");
+    // The numbers the code WOULD have been checked against still post — the
+    // rower can read the code off the monitor and verify by hand.
     expect(post.distance).toBe(500);
     expect(post.time).toBe(1240);
-  });
-
-  it("sends NO code when the row fell back to our summed totals (the code could not verify), when the bytes are absent, or when they are short or malformed", () => {
-    expect(
-      buildC2Payload(
-        {
-          ...FINISHED_ROW,
-          machineSummary: {
-            avgStrokeRate: 24,
-            workoutType: 8,
-            verificationBytes: EXIT7_BYTES,
-          },
-        },
-        LINK,
-        "UTC",
-      ),
-    ).not.toHaveProperty("verification_code");
-    const withTotals = {
-      ...FINISHED_ROW,
-      machineWorkMeters: 500,
-      machineWorkSeconds: 124.0,
-    };
-    expect(buildC2Payload(withTotals, LINK, "UTC")).not.toHaveProperty(
-      "verification_code",
-    );
-    expect(
-      buildC2Payload(
-        {
-          ...withTotals,
-          machineSummary: {
-            avgStrokeRate: 24,
-            workoutType: 8,
-            verificationBytes: EXIT7_BYTES.slice(0, 7),
-          },
-        },
-        LINK,
-        "UTC",
-      ),
-    ).not.toHaveProperty("verification_code");
-    expect(
-      buildC2Payload(
-        {
-          ...withTotals,
-          machineSummary: {
-            avgStrokeRate: 24,
-            workoutType: 8,
-            verificationBytes: ["06", 0x47],
-          },
-        },
-        LINK,
-        "UTC",
-      ),
-    ).not.toHaveProperty("verification_code");
   });
 });
