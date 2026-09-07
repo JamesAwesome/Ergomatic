@@ -11,10 +11,11 @@
 import type { LogSource } from "../../domain/types.js";
 import type { LogStep } from "../stores/logs.js";
 import { buildC2Intervals } from "./intervals.js";
-import { c2Tenths } from "./tenths.js";
+import { c2Tenths, sendableInt } from "./tenths.js";
 
-// Re-exported so existing importers (`scripts/`, tests) keep one name; the
-// definition moved to the leaf `tenths.ts` (Phase LP PR 2, no import cycle).
+// Re-exported so `mapping.test.ts` keeps one name (`scripts/c2-crossconnect.ts`
+// carries its own copy and imports nothing from here); the definition moved
+// to the leaf `tenths.ts` (Phase LP PR 2, no import cycle).
 export { c2Tenths };
 
 // Independent, own-bounds structural mirror of `stores/logs.ts`'s `get()`
@@ -441,22 +442,6 @@ const STROKE_RATE_MAX = 99;
 const HR_MIN = 20;
 const HR_MAX = 254;
 const U16_MAX = 65535;
-
-/** A stored number that may be sent: an integer within [min, max]; anything
- *  else — null, undefined, a decimal, a string — is omitted, because the
- *  API fails the WHOLE workout on one non-integer (spec §5). */
-function sendableInt(
-  value: unknown,
-  min: number,
-  max: number,
-): number | undefined {
-  return typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= min &&
-    value <= max
-    ? value
-    : undefined;
-}
 
 // `machineSummary.workoutType` is the raw 0x0039 byte 17
 // (domain/monitor/pm5/parse.ts:370). Ordinal 8 is the programmed-row

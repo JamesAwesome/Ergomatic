@@ -34,7 +34,7 @@
 | `app/server/concept2/mapping.ts` | `SessionLogRow.steps`; result-level fields; calls the intervals builder |
 | `app/server/concept2/intervals.ts` (new) | `buildC2Intervals(steps)`: the all-or-nothing array |
 | `app/server/routes/concept2.ts` | `toMappingRow` passes `steps` |
-| `app/e2e/concept2.spec.ts` | one send asserting `sendBodies[0].workout.intervals` |
+| `app/e2e/concept2.spec.ts` | STRUCK at execution (RF10): the e2e fake intercepts OUR route (`page.route(/\/api\/concept2\//)`), so `sendBodies` holds `{tz}`, never the C2 payload; the C2 payload is gated at the route test's `client.postResult` mock and the real-Postgres integration case |
 | `docs/design/DEVIATIONS.md`, `ROADMAP.md` | REST column row closed; LP status |
 
 ---

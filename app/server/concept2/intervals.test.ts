@@ -105,6 +105,24 @@ describe("buildC2Intervals (Phase LP PR 2, spec §5)", () => {
     expect(out?.[0]).not.toHaveProperty("stroke_rate");
   });
 
+  it("review L3/L7: an absurd reading (a day of work, a thousand km) or a step prescribing neither seconds nor metres withholds the whole array", () => {
+    expect(buildC2Intervals([{ ...STEP_1, actualSeconds: 86_401 }])).toBeNull();
+    expect(
+      buildC2Intervals([{ ...STEP_1, actualMeters: 1_000_001 }]),
+    ).toBeNull();
+    const { meters: _m, ...neither } = STEP_1;
+    expect(buildC2Intervals([neither])).toBeNull();
+  });
+
+  it("review L5: a stored target rate of 0 is sent as 0 (a value), and one above the store's own ceiling is dropped", () => {
+    expect(
+      buildC2Intervals([{ ...STEP_1, spm: 0 }])?.[0]?.targets,
+    ).toStrictEqual({ pace: 1270, stroke_rate: 0 });
+    expect(
+      buildC2Intervals([{ ...STEP_1, spm: 100 }])?.[0]?.targets,
+    ).toStrictEqual({ pace: 1270 });
+  });
+
   it("a 0 calorie interval posts calories_total 0 — a value, not an absence", () => {
     expect(
       buildC2Intervals([{ ...STEP_1, machineCalories: 0 }])?.[0]

@@ -11608,8 +11608,8 @@ test.describe("from-the-log detail, machine tier + MACHINE SUMMARY (Phase LP §3
     // The strip: per-split logbook arithmetic — 250 m in 67.9 s → 140 W,
     // 16 cal → floor(16×3600/67.9) = 848; 250 m in 56.1 s → round(2.80/
     // (56.1/250)³) = round(247.7) = 248, 16 cal → floor(1026.7) = 1026.
-    // HR is a dash (no belt), REST is a dash on a stored row (LogStep
-    // carries no per-step rest — DEVIATIONS.md).
+    // HR is a dash (no belt); REST m is the step's own machineRestMeters
+    // (147 / 95, Phase LP PR 2).
     const table = page.getByRole("table", {
       name: "Machine summary per interval",
     });

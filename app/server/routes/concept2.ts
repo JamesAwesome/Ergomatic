@@ -1353,9 +1353,18 @@ export function createConcept2Router({
       // carried `workout`, is retried ONCE without it, so the upload PR 0
       // proved can never regress into a failure because of the array. The
       // log line names the path so the walk can settle what C2 checks.
+      // Only a 4xx REFUSAL retries (review M1): `c2_error` also covers a
+      // network failure, a timeout, a 5xx and an unparsable 201/409 body —
+      // transient, and nothing to do with the array — and a thinned
+      // logbook row is permanent (no PATCH). 401 and 409 never reach here
+      // as `c2_error` with those statuses (they are `auth`/`duplicate`),
+      // so the band is 400..499 with a status present.
       if (
         !postResult.ok &&
         postResult.kind === "c2_error" &&
+        postResult.status !== undefined &&
+        postResult.status >= 400 &&
+        postResult.status < 500 &&
         payload.workout !== undefined
       ) {
         const { workout: _dropped, ...withoutWorkout } = payload;
@@ -1368,6 +1377,18 @@ export function createConcept2Router({
           console.warn(
             `concept2 send: accepted WITHOUT workout.intervals — the array was the rejected part (user ${userId}, log ${logId})`,
           );
+        }
+        // The fallback post can meet a rotated or revoked grant too (review
+        // M2): the same repeat-401 handling as the first post, never a bare
+        // 502 for an outcome that has its own answer.
+        if (!postResult.ok && postResult.kind === "auth") {
+          const stillSameGrant = await flagIfSameGrant(accessToken);
+          if (stillSameGrant) {
+            res.status(409).json({ error: "needs_reauth" });
+          } else {
+            res.status(502).json({ error: "c2_error" });
+          }
+          return;
         }
       }
 
@@ -1443,8 +1464,8 @@ export function createConcept2Router({
         return;
       }
       // Only "c2_error" can still reach here — every "auth" outcome is
-      // handled above, either by a successful retry or by the repeat-401
-      // flagReauth branch.
+      // handled above: a successful retry, the repeat-401 flagReauth
+      // branch, or the same branch after the without-`workout` fallback.
       res.status(502).json({ error: "c2_error" });
     }),
   );

@@ -2109,16 +2109,17 @@ describe("I-B5 census: no summing reader ever sees partialMeters/partialSeconds 
     expect(afterRow.timeLabel).toBe("1:08");
   });
 
-  it("the C2 mapping: eligibilityFailure's own row shape has no `steps` field at all, so no value the pair could carry can ever reach it — and the fence excludes every partial row anyway (I-B1: a partial row's endedBy is never \"finished\", the one value eligibilityFailure accepts)", () => {
+  it("the C2 mapping: eligibilityFailure never reads `steps` (the field is on SessionLogRow since Phase LP PR 2, for the upload's intervals), so no value the pair could carry can ever reach it — and the fence excludes every partial row anyway (I-B1: a partial row's endedBy is never \"finished\", the one value eligibilityFailure accepts)", () => {
     const c2Row = {
       source: "pm5" as const,
       endedBy: "rower",
       workSeconds: 124,
       workMeters: 500,
     };
-    // `steps` isn't part of `SessionLogRow` at all (mapping.ts's own type) —
-    // added here only to prove, at runtime, that a caller handing this
-    // function an object that ALSO happens to carry a `steps` array with
+    // `steps` IS on `SessionLogRow` since Phase LP PR 2 (`buildC2Payload`
+    // reads it for `workout.intervals[]`); `eligibilityFailure` does not
+    // read it, and this proves at runtime that an object carrying a `steps`
+    // array with
     // the new keys gets the identical verdict, because the function never
     // reads the property.
     const withSteps = { ...c2Row, steps: withPartial.steps };

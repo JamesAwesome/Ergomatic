@@ -1432,14 +1432,12 @@ X" is a real disposition — most of these are single files.
       You will show. Opens WITH that phase, not before — at household
       scale the un-indexed SUM measures ~1 ms. **S**
 
-- [ ] **A stored row's MACHINE SUMMARY REST column reads a dash.** Phase
-      LP PR 1: `IntervalActual.restDistanceMeters` reaches the LIVE strip
-      but `LogStep` carries no per-step rest metres, so the same piece
-      re-opened from history shows `—` under REST where the live door
-      showed 147 / 95. Either PR 2 adds `machineRestMeters` to `LogStep`
-      (it already sends per-interval `rest_distance` to Concept2 from the
-      same source) or the column is dropped from the stored strip;
-      decide at PR 2's spec pass. **S**
+- [x] **A stored row's MACHINE SUMMARY REST column reads a dash.** CLOSED
+      by Phase LP PR 2 (2026-09-07): `LogStep` gained `machineRestMeters`
+      (and `machineRestSeconds`, which the logbook API's interval object
+      REQUIRES as `rest_time`), so the stored strip's REST column fills
+      from the step itself on rows saved after PR 2; older rows keep the
+      dash. **S**
 
 - [ ] **354 code comments cite `interface-notes.md §N` — a file that does
       not exist** (`docs/monitor/` holds `pm5-interface-notes.md`;

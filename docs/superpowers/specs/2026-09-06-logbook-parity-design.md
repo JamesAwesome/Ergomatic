@@ -355,10 +355,9 @@ the log detail, Just Row's log — one component.
   time/distance), RATE · TARGET, DRAG, and AVG HR if a belt was worn;
   CALORIES and CAL/HOUR are `—`.
   Strip **2 of 6** columns populate — HR (with a belt) and WATTS; CAL,
-  CAL/HOUR, DRAG are `—`, and REST m is `—` on EVERY stored row, old or new,
-  because `LogStep` carries no per-step rest metres (only the live door
-  fills that column, from `IntervalActual.restDistanceMeters`; ROADMAP
-  register row, PR 2 decides). _Rev 2.2 (2026-09-07, PM final gate C2):
+  CAL/HOUR, DRAG are `—`, and REST m is `—` on a row saved before PR 2
+  (since PR 2 the step carries `machineRestMeters` and the column fills on
+  both doors — the register row PR 1 opened is closed). _Rev 2.2 (2026-09-07, PM final gate C2):
   this line and the artboard's old-row phone said "3 of 6 — HR, WATTS,
   REST m"; both corrected._ Not a wall of dashes; Gate 0 shows a real old
   row.
@@ -556,7 +555,9 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   `compileProgram` folds a trailing rest onto the last interval on **158 of
   the 300** seeded library workouts (`expand.ts` pushes a rest after every
   work rep, including the last). The walk (§4.2) adds that case); `rest_distance` _"No | integer | … This should be included for
-  Variable interval workouts only"_ ← `machineRestMeters` when > 0 (every
+  Variable interval workouts only"_ ← `machineRestMeters` including 0 — an
+  r0 piece's 0 m is a reading, sent beside its `rest_time: 0` (§2's "0 is
+  a value"; antagonist delta 6) — (every
   programmed Ergomatic piece IS VariableInterval — the compiler sends
   `WORKOUTTYPE_VARIABLE_INTERVAL` 0x08 and every programmed capture's 0x0039
   byte 17 reads `08`); `stroke_rate` _"No | integer | Average stroke rate"_
@@ -609,9 +610,13 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   measured to disagree: the result's `time` is 0x0039's figure while the
   intervals sum 0x0037's, and Σ intervals − total = +0.1 s on two of the
   four programmed finished captures (keystone 138.8 vs 138.7,
-  frame-fingerprint 173.1 vs 173.0). So a refusal that is neither auth nor
-  duplicate, on a payload carrying `workout`, is retried ONCE without the
-  array and both paths are logged (`routes/concept2.ts`) — the upload PR 0
+  frame-fingerprint 173.1 vs 173.0). So a 4xx refusal that is neither auth
+  (401) nor duplicate (409), on a payload carrying `workout`, is retried
+  ONCE without the array and both paths are logged (`routes/concept2.ts`);
+  a network failure, a timeout or a 5xx is NOT — those are transient and
+  the array had nothing to do with them, and a thinned row is permanent
+  (whole-branch review M1). An `auth` outcome on the fallback post takes
+  the same repeat-401 handling as the first (M2) — the upload PR 0
   proved can never regress into a failure because of the array, and the
   walk reads which path fired. **The verification code** (whatever it will
   check once we send one) covers _"date, time, distance, workout_type and

@@ -1,5 +1,5 @@
 import type { LogStep } from "../stores/logs.js";
-import { c2Tenths } from "./tenths.js";
+import { c2Tenths, sendableInt } from "./tenths.js";
 
 /** One object of the logbook API's `workout.intervals[]` (spec
  *  2026-09-06-logbook-parity §5, every row quoted there). REQUIRED:
@@ -19,24 +19,6 @@ export interface C2Interval {
 const U16 = 65535;
 const HR_MIN = 20;
 const HR_MAX = 254;
-
-/** A stored number that may be sent: an integer within [min, max]. Anything
- *  else — absent, null, a decimal, a string — is omitted, because the API
- *  fails the WHOLE workout on one non-integer ("Sending across a decimal
- *  value or a string where an integer is expected … will result in the
- *  workout failing"). */
-function sendableInt(
-  value: unknown,
-  min: number,
-  max: number,
-): number | undefined {
-  return typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= min &&
-    value <= max
-    ? value
-    : undefined;
-}
 
 /**
  * Phase LP PR 2 (spec §5): every stored step → one interval object, or
@@ -64,16 +46,29 @@ export function buildC2Intervals(
     ) {
       return null;
     }
+    // Defensive, not a gate: `routes/data.ts` admits only finite, >= 0
+    // readings, so these arms are unreachable through the write path
+    // (review L4) — kept so a row that bypassed it can never put a
+    // non-integer or an absurd figure on the wire (review L3: a day of
+    // work time and 1,000 km are the ceilings, the same caps the row-level
+    // rest fields carry).
     if (
       !Number.isFinite(s.actualSeconds) ||
       s.actualSeconds < 0 ||
+      s.actualSeconds > 86_400 ||
       !Number.isFinite(s.actualMeters) ||
       s.actualMeters < 0 ||
+      s.actualMeters > 1_000_000 ||
       !Number.isInteger(s.machineRestSeconds) ||
       s.machineRestSeconds < 0
     ) {
       return null;
     }
+    // `type` is REQUIRED and derived from the prescription; a step that
+    // prescribes neither seconds nor metres (unreachable from the app —
+    // `buildMonitorLogSteps` always sets one) has no honest type, so the
+    // whole array is withheld rather than guessed (review L7).
+    if (s.seconds === undefined && s.meters === undefined) return null;
     const interval: C2Interval = {
       type: s.seconds !== undefined ? "time" : "distance",
       time: c2Tenths(s.actualSeconds),
@@ -98,7 +93,9 @@ export function buildC2Intervals(
     if (typeof s.targetSplit === "number" && s.targetSplit > 0) {
       targets.pace = c2Tenths(s.targetSplit);
     }
-    const targetSpm = sendableInt(s.spm, 1, 255);
+    // 0..99: the store admits 0..99 (`PM5_SPM_MIN/MAX`), the API "can be
+    // between 0 and 255", and 0 is a value (review L5).
+    const targetSpm = sendableInt(s.spm, 0, 99);
     if (targetSpm !== undefined) targets.stroke_rate = targetSpm;
     if (Object.keys(targets).length > 0) interval.targets = targets;
     out.push(interval);
