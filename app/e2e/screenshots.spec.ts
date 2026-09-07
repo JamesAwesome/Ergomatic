@@ -1962,6 +1962,30 @@ test("library-no-baseline", async ({ page }) => {
   });
 });
 
+// Phase RW PR A (review, finding 4): the Builder's TOTAL and per-set clause
+// read ~ when the rows price off the assumed pair. No baseline, one
+// distance row: 2000 m at the assumed 6k (2:32) = ~10 MIN. Scrolled so the
+// totals footer is in frame; the Gate 0 set ended above it.
+test("builder-no-baseline", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-builder-no-baseline@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/library/new");
+  await page.getByLabel("Title").fill("Assumed Pace");
+  await page.getByRole("button", { name: "Effort 3" }).click();
+  await page.getByRole("radio", { name: "Row 1 duration unit meters" }).click();
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  await page.getByRole("button", { name: "DONE" }).click();
+  await expect(page.getByText(/^~\d+ MIN$/)).toBeVisible();
+  await page
+    .locator(".builder-totals")
+    .evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "builder-no-baseline.png"),
+  });
+});
+
 // Phase 6E fix round: "library.png" above deliberately captures the
 // Phase 5H CUSTOM-filter single-row state, so it never shows what the
 // screen actually looks like for the vast majority of visits — the

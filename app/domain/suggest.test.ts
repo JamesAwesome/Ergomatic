@@ -973,7 +973,7 @@ describe("suggestFreestyle", () => {
 
     it("time not checked (unbounded range or none) and no other filter: nothing can be excluded, so there is no fallback to explain", () => {
       for (const prefs of [{ durationRange: { min: 0, max: 120 } }, {}]) {
-        const r = suggest({ todayCode: "AT", prefs, library: fellbackLib });
+        const r = suggestFreestyle(fellbackLib, prefs);
         expect(r.fellBack).toBe(false);
         expect(r.reason).toBe("Least recently done (33 days ago).");
       }

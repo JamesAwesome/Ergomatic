@@ -219,6 +219,13 @@ export function elapsedSinceStart(run: SessionRun, now: Date): number {
 // baseline (distance work off the assumed pair, marked `assumed`), so each
 // entry carries a real `estMinutes` and the old 0 placeholder plus its
 // `durationsUnknown` escape hatch in domain/suggest.ts are gone.
+/** The suggestion card's duration chip: `~24′` for an assumed-pace
+ *  estimate, `24′` otherwise (spec §4). */
+function cardMinutes(steps: Step[], baselines: Baselines | null): string {
+  const est = estimateMinutes(steps, baselines);
+  return `${est.assumed ? "~" : ""}${est.minutes}′`;
+}
+
 function toLibraryEntry(
   w: LibraryWorkout,
   baselines: Baselines | null,
@@ -1416,11 +1423,12 @@ function TodayView({
               <div className="today-card-top">
                 <TypeBadge type={recommended.type} />
                 <span className="today-card-duration">
-                  {/* `baselines` is never null in this branch
-                      (`needsDoors` above already gated on it), so the
-                      bare-dash fallback this ternary used to need is gone —
-                      the branch itself is the guarantee now. */}
-                  {estimateMinutes(recommended.steps, baselines!).minutes}′
+                  {/* Phase RW PR A: `estimateMinutes` prices with or
+                      without a baseline; an assumed estimate carries the
+                      same ~ the Library row does. Unreachable without a
+                      baseline until PR C (`needsDoors` above), but the
+                      mark is here so PR C cannot show one unmarked. */}
+                  {cardMinutes(recommended.steps, baselines)}
                 </span>
               </div>
               <h2 className="today-card-title">{recommended.title}</h2>

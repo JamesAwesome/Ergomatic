@@ -292,7 +292,7 @@ describe("structure line (line 2 of 3)", () => {
     // HOARFROST above: 2×12:00 at 6k+12, 3' rest — same reps-marker shape
     // as "Sea Fret". Library.tsx passes an assumed estimate for every
     // row exactly when the signed-in user has no baselines yet
-    // (Library.tsx:337-343) — structureLine must not gate on that.
+    // (Library.tsx's row map) — structureLine must not gate on that.
     render(
       <MemoryRouter>
         <WorkoutRow workout={HOARFROST} durationMinutes={30} durationAssumed />

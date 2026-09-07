@@ -471,19 +471,18 @@ export default function Library() {
         </div>
       ) : (
         <ul className="workout-list">
-          {visible.map((workout) => (
-            <li key={workout.id}>
-              <WorkoutRow
-                workout={workout}
-                durationMinutes={
-                  estimateMinutes(workout.steps, baselines).minutes
-                }
-                durationAssumed={
-                  estimateMinutes(workout.steps, baselines).assumed
-                }
-              />
-            </li>
-          ))}
+          {visible.map((workout) => {
+            const est = estimateMinutes(workout.steps, baselines);
+            return (
+              <li key={workout.id}>
+                <WorkoutRow
+                  workout={workout}
+                  durationMinutes={est.minutes}
+                  durationAssumed={est.assumed}
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
     </main>

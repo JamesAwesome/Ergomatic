@@ -491,9 +491,10 @@ navigating.
   retire, and so do the two other spellings of the same rule the anchor
   pass found (S3): `library/filters.ts`'s bare `baselines !== null` guard
   on the duration range, and `session/draft.ts`'s `draftMinutes`, which
-  returns `null` for any workout with a work step and otherwise prices
-  off a THIRD placeholder pair (`{k2Seconds: 0, k6Seconds: 0}`). All
-  three go through `estimateMinutes(steps, null)`.
+  returned `null` for any workout with a work step and otherwise priced
+  off a THIRD placeholder pair (`{k2Seconds: 0, k6Seconds: 0}`) and had
+  no production caller: deleted in PR A (RF29), its nudge-pricing proof
+  kept in `draft.test.ts` through `estimateMinutes(draftSteps(d), …)`.
 - Caption, once per screen, not per row, on the Today row and the Library
   header while `baselines === null`. **The number is out of the caption**:
   "assume 2:30/500m" was true only for `2k+0` and `max` (PM open gate C3).
@@ -588,11 +589,12 @@ missing column.
   and a saved log whose step label is the word. Starts before the producer,
   asserts after the reader.
 - **Durations:** `estimateMinutes` with null baselines on a time-only
-  workout returns `assumed: false` and the exact minutes; on a 2000 m
-  `2k+0` step returns `assumed: true` and 9.67 minutes (2000/500 × 145 s),
-  on a 2000 m `min` step 11.47 (2000/500 × 172 s), both pinned as literals,
-  never derived from the constant; mutation: price at the slowest cell
-  (150) instead of the mode and both literals must change.
+  workout returns `assumed: false` and the exact minutes; it rounds to
+  whole minutes, so the pins use 6000 m steps where the mode and the
+  slowest cell round apart: `max` 29 (6000/500 × 145 s = 1740 s) vs 30 at
+  the slowest cell; `min` 34 (172 s/500 m) vs 35. The Builder's `totals`
+  keeps the unrounded 9.67 for a 2000 m `2k+0` row. Literals, never the
+  constant; mutation: the slowest cell for the mode and all three change.
 - **Log seed (C1, B4):** a `2k+2` step under null baselines seeds a
   `LogStep` labelled `5:00 @ MODERATE` at BOTH doors (matched draft and
   fallback), never `MIN` and never `2k +2`. Mutations: restore the
@@ -618,10 +620,13 @@ missing column.
 - **Census, all four plus the workout level:** the test pins 23 / 3 / 11
   / 4 AND the 76 collapsed and 9 badge-contradicting workouts by title,
   so a seed edit that moves a word is seen.
-- **The leak (§1.3):** `estimateMinutes(distanceWorkout, null)` returns a
-  number while `phases(distanceWorkout, null)` carries no `targetSplit`
-  on any phase; mutation: price via `phases(steps, ASSUMED_BASELINES)`
-  and the second assertion must fail.
+- **The leak (§1.3, as shipped in PR A):** `src/assumedBaselinesCensus.test.ts`
+  pins the constant's importers to `domain/expand.ts` and
+  `src/builder/builderState.ts` across `domain/`, `src/` and `server/`
+  (import statements, non-test files) and its definition to
+  `domain/pace.ts`; mutation: add the import to `domain/display/stepDetail.ts`
+  and the census names it. PR B adds the second half: `phases(steps, null)`
+  carries no `targetSplit` on any phase.
 - **`pieceList(steps, null)`** carries the word for a split-ref piece;
   Today's card renders it with no assertion.
 - **Builder:** a split-ref row with null baselines shows the word in the
@@ -673,6 +678,8 @@ them; a plan that contradicts one is a plan finding.
    "split"` `continue`.
 7. **A partial pair cannot produce a NaN target.** Every derivation site
    requires both sides before building a `Baselines`.
-8. **`ASSUMED_BASELINES` reaches no target, wire or log** PROVIDED
-   `estimateMinutes` never calls `phases(steps, ASSUMED_BASELINES)`; §1.3
-   makes that the mechanism and §7 gates it.
+8. **`ASSUMED_BASELINES` reaches no target, wire or log** PROVIDED no
+   `Phase` built against it ever leaves `estimateMinutes` (which builds
+   them internally and returns numbers only, PR A) and nothing else
+   imports it; §1.3 states the invariant and the census test in §7 gates
+   the importers.
