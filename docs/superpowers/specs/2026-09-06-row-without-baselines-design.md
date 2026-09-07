@@ -98,7 +98,10 @@ measured over the 300 seeded workouts with these thresholds; the script
 rides PR B as the census test in §7):** 76 workouts have two or more
 distinct refs that all collapse to one word (AN 7 of 7, TR 25 of 37, AT
 21 of 33, O2 23 of 25), so a `2k+0 → 2k+4` build reads HARD on every
-rung; and 9 workouts read a word that contradicts their type badge on
+rung (the committed census, `domain/intensityCensus.test.ts`, pins 79
+under its own definition, which also counts a workout whose `max`/`min`
+steps share the word; the anchor's 76 came from a script that is not
+committed, and the pinned figure is the one that guards drift); and 9 workouts read a word that contradicts their type badge on
 EVERY step ("Roaring Forties", "Polar Blast", "Grec", "Beam Sea", "Canary
 Current": TR at `2K+6`, all MODERATE; "Bora": AT at `6K−3`, all HARD;
 "Warm Sector": AT, all STEADY; "Moderate Breeze", "Crepuscular Rays": O2,
