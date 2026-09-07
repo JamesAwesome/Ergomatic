@@ -236,7 +236,7 @@ export function totalSessionSecondsOf(phases: EnginePhase[]): number {
  *  which case this renders the word once, not "REST · Rest" (whole-branch
  *  review, F4: exactly this duplication was visible in the committed
  *  timer.png). No other phase kind's label ever matches its own kind word
- *  (a work phase's exact resolved split or "ALL OUT"/"EASY", a test
+ *  (a work phase's exact resolved split or a word such as "ALL OUT", a test
  *  phase's "All out" — neither equals "WORK"/"TEST"), so this only ever
  *  actually collapses the rest case, but
  *  the check is general rather than hardcoded to "rest" specifically.

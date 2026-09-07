@@ -219,7 +219,7 @@ export function startDraft(d: SessionDraft): SessionDraft {
 
 /** Nudges a split step's target by `delta` seconds (cumulative). No-ops
  *  (returns `d` unchanged) when the step at `i` isn't a split-ref work step
- *  — effort steps ("ALL OUT"/"EASY") have nothing to nudge, the same rule
+ *  — effort steps ("ALL OUT"/"STEADY") have nothing to nudge, the same rule
  *  the detail screen already follows. */
 export function withNudge(
   d: SessionDraft,

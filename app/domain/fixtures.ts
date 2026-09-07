@@ -5,7 +5,7 @@ import type { Step } from "./types.js";
  *  until 2026-08-09 (the warmup-setting spec): "wu" left the Step union, so
  *  this fixture leads with an equal-length "r" step instead — same phase
  *  count, same total seconds, only the label/type of phase 0 differs
- *  (Rest, not Easy/warmup). */
+ *  (Rest, never a warm-up phase). */
 export const intervalLadder: { title: string; steps: Step[] } = {
   title: "Ladder Sets",
   steps: [

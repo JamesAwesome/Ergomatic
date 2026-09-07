@@ -664,7 +664,7 @@ function TodayPieceRow({
   // decides the row's class and geometry below; only the ref text stopped
   // varying.
   const refText = row.refTextFull;
-  // PaceWord pieces carry their word ("ALL OUT"/"EASY") in the SAME slot a
+  // PaceWord pieces carry their word ("ALL OUT"/"STEADY", or any ladder word with no baseline) in the SAME slot a
   // split target would occupy (Task 1's own PieceRow doc comment: "in the
   // pace slot") — test pieces have neither and the slot renders empty.
   const rightSlot = row.paceWordText ?? row.split;

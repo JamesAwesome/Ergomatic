@@ -373,7 +373,7 @@ export default function Countdown() {
   }
 
   // Handoff §5: the next-phase line is the upcoming phase's OWN resolved
-  // label (a fmtSplit range, an effort word, or "Easy"/"Rest"/"All out") —
+  // label (a fmtSplit range, an effort or ladder word, or "Rest"/"All out") —
   // the same text the live timer's TARGET SPLIT card will show for phase 0,
   // not a re-derived phrase. `run.phases` is never empty (every draft has
   // at least one step), but the fallback keeps this defensive rather than

@@ -130,7 +130,7 @@ function fmtMeters(meters: number): string {
 export default function PaneLive({ model }: { model: SurfaceModel }) {
   // Both heroes signal "no target" the same way: the model's own `absent`
   // flag (I-1, carried forward — the target VALUE names the phase kind,
-  // `Easy`/`Rest`/`All out`/`Free`, greyed by `connected-value-absent`).
+  // `Rest`/`All out`/`Free`, greyed by `connected-value-absent`).
   const rateAbsent = model.targetRate.absent;
   const paceTargetAbsent = model.targetSplit.absent;
   // BOTH heroes wear the SAME label (carried forward, I-1): one field, read

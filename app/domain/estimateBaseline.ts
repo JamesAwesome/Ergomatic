@@ -93,7 +93,7 @@ export const RECREATIONAL_FAST_END_SECONDS = 135;
  *  - "never" (never rowed, or once or twice): the UCanRow2/Torokhtiy
  *    beginner band's faster half, because these are TARGET-SETTING
  *    baselines, not first-session paces — a 2:30 2k baseline prices even
- *    EASY near the beginner's actual steady pace. SECONDARY anchor at
+ *    STEADY near the beginner's actual steady pace. SECONDARY anchor at
  *    2:30, INFERENCE for the cardio spread (no source crosses beginner
  *    technique with cardio level).
  *  - "a-little" / "regularly": INFERENCE — interpolated between the

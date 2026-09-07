@@ -174,8 +174,8 @@ function nextLineExtent(
  *
  * BUILT FROM `label`, NEVER RE-DERIVED (PM C5): `EnginePhase.label` is the
  * domain's already-resolved display value — the exact split
- * (`fmtSplit(targetSplit)`), `"Easy"`, `"Rest"`, `"All out"`, or an effort
- * word (`"ALL OUT"`/`"EASY"`) — for every phase kind that carries one
+ * (`fmtSplit(targetSplit)`), `"Rest"`, `"All out"`, or an effort word
+ * (`"ALL OUT"`/`"STEADY"`, or with no baseline any ladder word) — for every phase kind that carries one
  * (`domain/expand.ts`'s `phases()`).
  * This function composes that label with the phase's own extent and rate;
  * it never calls `fmtSplit`/`resolveSplit` itself, so a future change to
@@ -639,8 +639,9 @@ export interface SurfaceModel {
   freeRow: boolean;
   /** That card's third line — the ref when there is one, and EMPTY when
    *  there isn't. It used to read `NO SPLIT TARGET` beside a dash; both
-   *  surfaces now name the phase instead — `Easy`, `Rest`, `All out` for
-   *  the phase kinds, and `ALL OUT`/`EASY` for a work phase at an effort
+   *  surfaces now name the phase instead — `Rest`, `All out` for
+   *  the phase kinds, and `ALL OUT`/`STEADY` (or any ladder word with no
+   *  baseline) for a work phase at an effort
    *  ref (`domain/pace.ts`'s `paceWordLabel`, caps on purpose — see the `FREE`
    *  comment in `session/TimerTargets.tsx`) — so the caption would only
    *  repeat the value above it. Empty is therefore the COMMON case, not the
@@ -1111,8 +1112,8 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // §6 originally made that a `DASH` on this surface, because the phase's
   // own WORD in the target's type weight "read as a target that doesn't
   // exist". The phone timer never adopted that rule — it kept showing
-  // `Easy`/`Rest`/`All out` — and once the revamp taught the two surfaces
-  // one visual language, the same effort phase read `Easy` on the phone and
+  // `Rest`/`All out` — and once the revamp taught the two surfaces
+  // one visual language, the same effort phase read one word on the phone and
   // `— NO SPLIT TARGET` on the erg. James ruled the WORD, both places.
   //
   // §6's concern is answered by treatment rather than by omission: `absent`
@@ -1121,8 +1122,9 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // word says which kind of piece this is.
   //
   // THE WORD IS WHATEVER THE PHASE CALLS ITSELF, not a vocabulary this file
-  // curates: `Easy`/`Rest`/`All out` for the phase kinds, and `ALL OUT`/
-  // `EASY` (caps, `domain/pace.ts`'s `paceWordLabel`) for a work phase at an
+  // curates: `Rest`/`All out` for the phase kinds, and `ALL OUT`/
+  // `STEADY` (caps, `domain/pace.ts`'s `paceWordLabel`; with no baseline
+  // any ladder word, `intensityWord`) for a work phase at an
   // effort ref, which is the branch the ruling newly routed here and the
   // one no test or capture had reached (tail review I-1). The caps are
   // deliberate and shared with the timer's UP NEXT strip; the reasoning is
@@ -1386,7 +1388,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // `Free`, not a dash, for the same reason `targetSplit` names its phase
     // (James, 2026-08-12): the phone timer has always said `free` here, and
     // the two surfaces now share a language. Capitalized to sit beside the
-    // phase-kind words `Easy`/`Rest`/`All out`, which are already Title case.
+    // phase-kind words `Rest`/`All out`, which are already Title case.
     //
     // ...but only when there IS a phase (tail review M-1). `Free` says "this
     // piece asks for no particular rate"; with no phase there is no piece to

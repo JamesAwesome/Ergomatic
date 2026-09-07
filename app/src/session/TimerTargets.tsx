@@ -7,14 +7,15 @@ import type { EnginePhase } from "./engine";
  *  not in `surfaceModel.ts`, because that file already imports this one:
  *  the connected surface reads the phone timer's vocabulary, never the
  *  reverse. Title case to match the PHASE-KIND words it sits beside
- *  (`Easy`, `Rest`, `All out`, the literals `domain/expand.ts` and
+ *  (`Rest`, `All out`, the literals `domain/expand.ts` and
  *  `engine.ts` stamp on warm-up/rest/test phases) — lowercase `free` was
  *  the only exception, and on the timer the two render side by side as a
  *  pair.
  *
  *  THE EFFORT WORD IS NOT ONE OF THOSE and is deliberately NOT title-cased:
  *  a work phase at `MAX`/`MIN` labels itself from `domain/pace.ts`'s
- *  `paceWordLabel`, which is `ALL OUT`/`EASY` in caps, and that literal is what
+ *  `paceWordLabel`, which is `ALL OUT`/`STEADY` in caps (or, with no baseline,
+ *  any ladder word from `intensityWord`), and that literal is what
  *  the split slot beside this one shows for it (tail review I-1, measured
  *  2026-08-13 against `Fog Bow` and `Rear Flank`). Caps because the same
  *  field feeds the strip directly above the card (`Timer.tsx`'s
@@ -38,7 +39,8 @@ export const FREE = "Free";
  *  comment on `Phase.targetKind`: "work phases only; set on every work
  *  phase"), so branching on it alone — never on `phase.type` — already
  *  covers every case correctly:
- *  - `"effort"`: the word (`phase.label` — "ALL OUT"/"EASY"), no sub-line.
+ *  - `"effort"`: the word (`phase.label` — "ALL OUT"/"STEADY", or a ladder
+ *    word for a split ref rowed with no baseline), no sub-line.
  *    The spec is explicit that the numeric estimate behind an effort target
  *    (`targetSplit`) is NEVER displayed, so there is nothing to put
  *    underneath it, unlike a split-ref target below.
@@ -56,7 +58,7 @@ export const FREE = "Free";
  *    still have `targetKind: "split"` with no `ref`) — the sub-line is
  *    omitted rather than crashing on it, degrading to a two-line card.
  *  - `undefined` (warmup/rest/test — the only phase kinds with no
- *    `targetKind` at all): `phase.label` alone (already "Easy"/"Rest"/
+ *    `targetKind` at all): `phase.label` alone (already "Rest"/
  *    "All out"), no sub-line — there is no split to trace a ref for.
  *
  *  The older design prototype's own mock data (`Erg Log.dc.html`) reuses

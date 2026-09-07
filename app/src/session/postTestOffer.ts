@@ -74,8 +74,8 @@ export function postTestOffer(input: {
  *  (domain/deriveBaseline.ts) when the other side is missing, OR when the
  *  freshly-accepted number lands inconsistent with its stored counterpart
  *  (a 2k must be STRICTLY faster than a 6k — equality is inconsistent;
- *  pace.ts prices ALL OUT off k2 and EASY off k6, so an inverted pair
- *  makes ALL OUT slower than EASY). Never automatic, never blocking:
+ *  pace.ts prices ALL OUT off k2 and STEADY off k6, so an inverted pair
+ *  makes ALL OUT slower than STEADY). Never automatic, never blocking:
  *  declining leaves the pair partial or inconsistent, which is the
  *  rower's call. Refuses a derived value outside the storable band, same
  *  rule as the editor's own offer (BaselineEditor.tsx's deriveOffer). */

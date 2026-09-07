@@ -93,7 +93,7 @@ import type { MonitorRun } from "../monitor/monitorRun.js";
  *  and must not crash logging. Falls back to composing from the phase's own
  *  frozen fields: for an EFFORT phase, `domain/pace.ts`'s `paceWordFromLabel`
  *  (F1's original fix, still load-bearing here) inverts `paceWordLabel`'s
- *  frozen "ALL OUT"/"EASY" back to the chip ("MAX"/"MIN") — bijective over
+ *  frozen "ALL OUT"/"STEADY" back to the chip ("MAX"/"MIN") — bijective over
  *  the two-element `PaceWord` type, so this is a lookup, not a guess. For a
  *  SPLIT-ref phase (ui-fix round Task 2 fix round, F1b amendment):
  *  `EnginePhase` now carries the same EFFECTIVE `ref` `targetSplit` was
