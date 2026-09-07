@@ -255,6 +255,19 @@ export default function Library() {
           k6Seconds: baselinesState.baselines.k6Seconds,
         }
       : null;
+  // ...but the CAPTION must still name the side that is stored. The pair
+  // being unknown is why the ~ times are estimates; it is not a licence to
+  // tell a rower with a tested 2k to go and set a baseline (2026-09-07:
+  // Today and the workout detail were fixed first and this screen, which
+  // shows the most rows in the app, was missed).
+  const halfPairSide: "k2" | "k6" | null =
+    baselines !== null
+      ? null
+      : baselinesState.baselines.k2Seconds !== null
+        ? "k2"
+        : baselinesState.baselines.k6Seconds !== null
+          ? "k6"
+          : null;
 
   // Phase 8A PR B (James's ruling, 2026-08-22): the 6K Test and 2K Test
   // are VISIBLE here — a rower can voluntarily re-test, so Phase 6I's
@@ -419,7 +432,9 @@ export default function Library() {
             read with a leading ~. Gate 0 approved this wording. */}
         {baselines === null && (
           <p className="library-caption">
-            ~ times are estimates until you set a baseline
+            {halfPairSide === null
+              ? "~ times are estimates until you set a baseline"
+              : `Your ${halfPairSide === "k2" ? "2k" : "6k"} is set. ~ times are estimates until the ${halfPairSide === "k2" ? "6k" : "2k"} is too.`}
           </p>
         )}
         {hasFilters && (

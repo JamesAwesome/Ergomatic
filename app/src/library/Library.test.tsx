@@ -1046,6 +1046,61 @@ describe("Library", () => {
     expect(screen.getByText("20′")).toBeInTheDocument();
   });
 
+  it("names the side that IS set in the caption, rather than telling them to set a baseline", async () => {
+    // Library shows the most rows in the app, and it collapsed a half pair
+    // to null like every other screen: a rower with a tested 2k was told to
+    // go and set a baseline (2026-09-07 — Today and the workout detail were
+    // fixed a round earlier and this screen was missed).
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({
+        state: "ready",
+        workouts: [...WORKOUTS, DISTANCE_WORKOUT],
+      }),
+    }));
+    vi.doMock("../api/useBaselines", () => ({
+      useBaselines: () => ({
+        state: "ready",
+        baselines: { k2Seconds: 112, k6Seconds: null },
+      }),
+    }));
+
+    await renderLibrary();
+
+    expect(
+      screen.getByText(
+        "Your 2k is set. ~ times are estimates until the 6k is too.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("~ times are estimates until you set a baseline"),
+    ).not.toBeInTheDocument();
+    // The half pair still prices off the assumed pair, so the tilde stays.
+    expect(screen.getByText("~30′")).toBeInTheDocument();
+  });
+
+  it("names the 6k when that is the side stored", async () => {
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({
+        state: "ready",
+        workouts: [...WORKOUTS, DISTANCE_WORKOUT],
+      }),
+    }));
+    vi.doMock("../api/useBaselines", () => ({
+      useBaselines: () => ({
+        state: "ready",
+        baselines: { k2Seconds: null, k6Seconds: 122 },
+      }),
+    }));
+
+    await renderLibrary();
+
+    expect(
+      screen.getByText(
+        "Your 6k is set. ~ times are estimates until the 2k is too.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("renders the loading state before data arrives", async () => {
     vi.doMock("../api/useWorkouts", () => ({
       useWorkouts: () => ({ state: "loading" }),

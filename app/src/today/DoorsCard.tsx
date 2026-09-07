@@ -40,7 +40,8 @@ export default function DoorsCard({ onSkip }: { onSkip: () => void }) {
       <span className="doorscard-label mono-status">SET UP YOUR BASELINE</span>
       <h2 className="doorscard-title">How do you want to start?</h2>
       <p className="doorscard-body">
-        Every workout's targets come from your 2k and 6k baseline splits. Pick
+        Every workout's targets come from your 2k and 6k baseline splits. Both
+        set means a recommendation here and a pace target on every workout. Pick
         whichever door suits you. You can change the numbers any time.
       </p>
       <div className="doorscard-doors">

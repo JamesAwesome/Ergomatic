@@ -5880,3 +5880,51 @@ else. Fine as an offer; not groundable as a mandate.
 **Sizing: S, not TRIAD** (no new stored shape — `derived` and both columns
 exist; no auth; no number changes MEANING, only when an existing derived
 number is written). Carries a Gate 0, because it changes what a rower reads.
+
+---
+
+## Half-set baselines shipped, PR #344 (2026-09-07) — the gate that caught a feature nobody could reach
+
+**Verdict: PASS WITH CONDITIONS, and two of the four conditions were product
+defects.** The PR fixed Today and the workout detail for a rower holding half
+a baseline pair. It reached almost none of them.
+
+- **When a predicate collapses two fields to one null, grep every SCREEN that
+  renders on it before calling the state closed.** `baselines === null` had
+  three renderers. Two were fixed; `Library.tsx` carried the identical
+  sentence ("~ times are estimates until you set a baseline") on the
+  identical gate, on the screen with the most rows in the app — and the PR's
+  own e2e leg walked the half-set rower THROUGH it to reach the caption it
+  had fixed. The check is `grep -rn` for the COPY, not for the component.
+
+- **A feature gated on a flag only one screen writes reaches only rowers who
+  visited that screen.** The half-set row lived in the `else` arm of
+  `needsDoors = baselines === null && !baselinesSkipped`, and
+  `grep setBaselinesSkipped` returns exactly two writers, both on the doors
+  card. So the row required tapping "Row without one for now" FIRST. The
+  ordinary route to a half pair — `KnowBaseline.tsx` saves whichever field
+  was touched — never writes the flag, so those rowers got the doors card
+  telling them to set up a baseline they had just typed. **Ask "which writers
+  put a user into the state this feature renders in, and does every one of
+  them satisfy the render condition?"** The PR's own "Try it" steps did not
+  reproduce its own feature (RF13).
+
+- **A repeated derivation is a house rule; the fourth call site must obey
+  it.** Three sites derive the ±7 s counterpart and all three bounds-check
+  (`BaselineEditor.deriveOffer`, `postTestOffer`, `Recommend.fillFor`), one of
+  them naming the exact reachability in its own comment. The new tap was the
+  fourth and skipped it, so a stored 2k of 234-240 s produced a button that
+  PUT an out-of-band value, took a 400, and — with no `.catch` — did nothing
+  at all, forever, with no message. **Before adding a caller to a shared
+  domain helper, read its existing callers:** `deriveBaseline.ts` says in
+  prose that bounds are "the caller's job", and three callers had agreed.
+
+- **A tag cut at a PR's own base is a release trap.** `v0.42.0` sat at
+  #344's merge-base while the TestFlight release was being HELD for #344.
+  Shipping from the tag would have shipped without the fix. When a release is
+  held for a specific PR, check `git rev-list -n1 <tag>` against that PR's
+  base before anything else.
+
+- **The ASK-not-force ruling stands and should not be re-litigated.** Forcing
+  both baselines makes a 2k test's own result unsavable until a 6k the rower
+  has not rowed. James took the PM's call ("Go with the pms decision").

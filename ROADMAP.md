@@ -1218,16 +1218,38 @@ closed with zero Concept2 contact.
       what changed is the product decision.
       **This row is now UNBLOCKED but unstarted**, and means reflecting a
       verification the ROWER performed, never one we caused.
+- [ ] **`pnpm screenshots` rewrites ~61 PNGs per run with no content change.**
+      Measured twice on 2026-09-07 (PR #341): two consecutive runs on an
+      unchanged tree each rewrote the same 61 captures, differing only in the
+      clock rendered into the frame (`SEP 7 · 00:15` → `12:49`, diff bounding
+      box 37×11 px). `log-detail-legacy.png` moves 181 bytes despite carrying
+      no machine block at all. **Why it matters:** committed captures are the
+      PR's visual record (RF7), and 61 noisy PNGs bury the two that actually
+      changed — this PR had to revert them by hand twice to keep the record
+      readable. **Fix:** freeze the clock the captures render, the way the
+      fixtures already freeze their data.
+- [ ] **Auto-verification, as an option, DEFAULTED OFF (James, 2026-09-07).**
+      Sending the monitor's code with the upload verifies the row at receipt;
+      that shipped as #336, was reversed as #337 because it took the act away
+      from the rower, and James then asked for it back as a SETTING the rower
+      turns on. **Default off, always.** The mechanism is already measured
+      (`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`:
+      the code verifies at the monitor's own distance, fails at a control,
+      with and without `workout.intervals[]`), so what this owes is the
+      setting, its storage, and a design gate on where it lives and how it
+      reads. Worth more than it looks: a code is only typeable on a ranking
+      distance, so for most pieces this is the ONLY route to a verified row.
+      **PRIORITY: after Just Row parity** (James, 2026-09-07).
 - [ ] **Why does Concept2 show no Verify button on a row carrying interval
-      data?** The question that opened the 2026-09-07 thread and STILL
-      UNANSWERED — it was overtaken by the auto-verify change, which has
-      since been reversed. INFERENCE, n=4 rows on the PR 2 build against one
-      v0.41.0 control, so build and payload shape are confounded; the API
-      doc is silent. This is a live defect now, not a curiosity: with the
-      code no longer sent, a rower who cannot press Verify cannot verify
-      their row at all. **First cheap step:** post one row WITHOUT
-      `workout.intervals[]` and one WITH, same account, and look at both
-      pages — that separates payload shape from build.
+      data?** **ANSWERED 2026-09-07 and CLOSED — it was never about interval
+      data.** Concept2 offers the Verification Code field only when the row's
+      OVERALL distance or time hits a ranking standard, matched exactly;
+      measured over every listed figure, both boundaries and three negatives
+      by driving a logged-in browser
+      (`docs/superpowers/research/2026-09-07-c2-verification-field-rule.md`).
+      The four rows that lacked it were 200 m and other non-standard figures,
+      not victims of the interval array. The app now prints the code only on
+      rows Concept2 will take it for.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
@@ -2037,42 +2059,53 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **A rower who sets ONE baseline is offered the other at the 7 s offset, on
-  Today, with one tap (James, 2026-09-07: "If a user sets a 2k or a 6k they
-  should be asked to set both with a suggestion of the 7s offset"; PM opinion
-  the same day on his follow-up question, "forcing it… maybe it'd bother some
-  people": **ask, prefilled, persistent — never force**).**
-  **Nobody is in this state today** (James checked prod, 2026-09-07: "No
-  account is half paired"), so this is preventive and rides the next PR that
-  touches Today rather than opening anything.
-  **The state:** every screen collapses a half pair to "no baseline"
-  (`Today.tsx`'s own derivation), so a rower with a *tested* 2k reads
-  `NO BASELINE SET` and gets words on every target. The lie is on the READ
-  surfaces, which is why a write-moment gate would not fix it.
-  **The shape:** when exactly one side is stored, Today's row says what is
-  true and carries one action — e.g. `2K BASELINE SET · 6K ESTIMATED FROM IT
-  (+7s)` with `Use it`, issuing the patch `PostTestPrompt`'s
-  `handleAcceptDerived` already sends (`k6Source: "derived"`). The predicate
-  is `BaselineEditor.tsx`'s `deriveOffer`, a STATE not an event, so declining
-  never loses the offer. Targets stay words until the tap.
-  **Why not force** (PM, and it is not the consistency argument): a rower made
-  to fill a 6k they never rowed types a guess, and `KnowBaseline.tsx` stamps
-  it `manual` — permanently indistinguishable from a rowed number, while the
-  declined offer would have stored `derived`. Force degrades the provenance
-  record it means to complete, and it cannot be done honestly at the erg
-  (removing the post-test Skip holds a real measurement hostage to a
-  heuristic). **Why not silent auto-fill:** this repo's line is not "never
-  store an estimate" — `Recommend.tsx` stores both sides as `estimated` from a
-  hand-authored table — it is that the rower SAW it and the provenance is
-  recorded.
-  **The 7 s is an offer, not a fact:** `estimateBaseline.ts` grounds it on
-  Paul's Law (≈ +7.9 s, SECONDARY, a forum post, trained rowers) and says in
-  terms that no source grounds a better per-population gap;
+- **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
+  one and offered the other at the 7 s offset.** James's ruling ("If a user
+  sets a 2k or a 6k they should be asked to set both with a suggestion of the
+  7s offset"), raised at Phase RW PR C's PM final gate: every screen collapsed
+  a half pair to `null`, so a rower with a tested 2k read `NO BASELINE SET` on
+  Today, which was false about their account. The PM ruled ASK, not force
+  (forcing would make a 2k test's own result unsavable until a 6k it does not
+  have), and James took the PM's decision. What shipped: Today's row names the
+  stored side (`2K SET · NO 6K`) and fills the other on one tap, stamped
+  `derived`; Library and the workout detail's captions name it too; the doors
+  card states the consequence of leaving them unset. **The doors card now
+  yields to that row whenever one side is stored** — Phase BL PR C had ruled
+  the doors a superset re-entry for any incomplete pair, which sent a rower
+  who typed a 2k in the I-know-my-baseline door back to `SET UP YOUR
+  BASELINE`; that is the ordinary way to hold half a pair, and it never
+  writes `baselinesSkipped`, so the first cut of this work reached only
+  rowers who had skipped first. The estimate is suppressed when the derived
+  split falls outside the storable 60..240 band, matching the refusal
+  `BaselineEditor`'s and `postTestOffer`'s offers already make, and a failed
+  write says so rather than leaving a button that does nothing. The You
+  editor keeps its own existing counterpart offer (`deriveOffer` /
+  `DeriveSlot`) unchanged; no second ask was added there.
+  **Why not force** (PM, 2026-09-07, on James's follow-up "I feel like it's
+  natural but maybe it'd bother some people" — and it is NOT the consistency
+  argument): a rower made to fill a 6k they never rowed types a guess, and
+  `KnowBaseline.tsx` stamps a typed field `manual`, permanently
+  indistinguishable from a rowed number, while the declined offer would have
+  stored `derived`. Force degrades the provenance record it means to
+  complete, and it cannot be done honestly at the erg — removing the
+  post-test Skip holds a real measurement hostage to a heuristic. **Why not
+  silent auto-fill:** this repo's line is not "never store an estimate"
+  (`Recommend.tsx` stores both sides as `estimated` from a hand-authored
+  table), it is that the rower SAW it and the provenance is recorded.
+  **And the 7 s is an offer, not a fact:** `estimateBaseline.ts` grounds it
+  on Paul's Law (≈ +7.9 s, SECONDARY, a forum post, trained rowers) and says
+  in terms that no source grounds a better per-population gap;
   `deriveBaseline.test.ts` pins the constant and nothing about any real pair.
-  **S, not TRIAD** (no new stored shape, no auth, no number changes meaning —
-  only when an existing derived number is written). Carries a Gate 0: it
-  changes what a rower reads.
-
+- **v0.42.0's release note describes behaviour the app no longer has**
+  (found at PR #344's PM gate, 2026-09-07; the tag has NOT been released —
+  James is bundling more work first). `releaseNotes.ts` item 2 promises "a
+  quiet **NO BASELINE SET** line keeps the doors one tap away, and setting a
+  baseline any time puts the numbers back". After #344 a half-set rower reads
+  `2K SET · NO 6K`, not `NO BASELINE SET`, and setting ONE baseline does not
+  put the numbers back — the app now says so out loud. Amend item 2 and name
+  the `Estimate it (+7s)` tap. Rides whatever notes PR precedes the tag; the
+  tag itself needs re-cutting at the new main, since `v0.42.0` currently
+  points at #344's base and nothing has been uploaded from it.
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard

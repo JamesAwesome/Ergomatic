@@ -573,6 +573,15 @@ often they recur.
     claim of the form "X is not in the production bundle" is settled by
     `pnpm build` plus a string-literal grep over `dist/`, in both
     directions — prove the probe can go red before trusting its green.**
+    **Corollary, from PR #344 (2026-09-07): a mutation that breaks the BUILD
+    reads as a passing probe.** Three e2e probes in one session came back
+    green because the mutation left an import unused, `pnpm build` exited 2
+    inside `docker compose up --build`, compose kept the PREVIOUS image, and
+    Playwright ran against unmutated code. Same shape as this entry, one
+    machine over: the artifact you reason about is not the artifact that ran.
+    **An e2e mutation must COMPILE** — swap one call for another that keeps
+    every import used, rather than deleting a call — **and the build must be
+    seen to succeed before the test result is read.**
 13. **Handing James an operator instruction nobody checked against the
     code.** Item 10 covers plans that contain factual errors; this is its
     operator-facing sibling, and it burns HIS time rather than an agent's.

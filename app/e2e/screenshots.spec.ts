@@ -795,6 +795,36 @@ test("today-skipped", async ({ page }) => {
   });
 });
 
+// 2026-09-07: the same row for a rower who has set ONE side — it names which,
+// and offers the other at the offset instead of claiming they have none.
+test("today-half-baseline", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-half@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/today");
+  const seeded = await page.evaluate(async () => {
+    const a = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ k2Seconds: 112 }),
+    });
+    const b = await fetch("/api/prefs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baselinesSkipped: true }),
+    });
+    return a.ok && b.ok;
+  });
+  expect(seeded).toBe(true);
+  await page.reload();
+  await page.locator(".today-nobaseline-row").waitFor();
+  await page.locator(".today-card").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-half-baseline.png"),
+  });
+});
+
 // Phase BL PR C: the door flow screens (canvas Question1/Recommendation/
 // Experienced/RowPath), each in its fullest real state — the
 // questionnaire with an option genuinely selected, the recommendation
@@ -1980,6 +2010,31 @@ test("library-no-baseline", async ({ page }) => {
   });
 });
 
+// 2026-09-07: the same screen for a rower who has set ONE side. The caption
+// names it rather than telling them to set a baseline they already set.
+test("library-half-baseline", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-library-half@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/library");
+  const seeded = await page.evaluate(async () => {
+    const res = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ k2Seconds: 112 }),
+    });
+    return res.ok;
+  });
+  expect(seeded).toBe(true);
+  await page.reload();
+  await page.locator(".library-caption").waitFor();
+  await page.locator(".workout-row").first().waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-half-baseline.png"),
+  });
+});
+
 // Phase RW PR A (review, finding 4): the Builder's TOTAL and per-set clause
 // read ~ when the rows price off the assumed pair. No baseline, one
 // distance row: 2000 m at the assumed 6k (2:32) = ~10 MIN. Scrolled so the
@@ -2138,6 +2193,43 @@ test("workout-detail-no-baseline", async ({ page }) => {
   await expect(page.locator(".workout-detail-caption")).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "workout-detail-no-baseline.png"),
+  });
+
+  await cleanupByTitle(page, title);
+});
+
+// 2026-09-07: the same detail screen with ONE side stored. The caption names
+// the stored side and its button names the missing one.
+test("workout-detail-half-baseline", async ({ page }) => {
+  await stubBluetoothScanFailure(page);
+  await signInViaBackdoor(page, {
+    email: "screenshots-detail-half@e2e.test",
+    name: "Screenshot Half Baseline Tester",
+  });
+  await page.goto("/library");
+  const seeded = await page.evaluate(async () => {
+    const res = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ k2Seconds: 112 }),
+    });
+    return res.ok;
+  });
+  expect(seeded).toBe(true);
+
+  const title = "Screenshot Half Baseline Workout";
+  await page.goto("/library/new");
+  await page.getByLabel("Title").fill(title);
+  await page.getByRole("button", { name: "Effort 3" }).click();
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  await page.getByRole("button", { name: "Save to library" }).click();
+  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await page.locator(".workout-detail-title").waitFor();
+  await expect(page.locator(".workout-detail-caption")).toContainText(
+    "Your 2k is set.",
+  );
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "workout-detail-half-baseline.png"),
   });
 
   await cleanupByTitle(page, title);
@@ -3831,7 +3923,18 @@ test("log-detail", async ({ page }) => {
     page.getByRole("group", { name: "MACHINE CONFIRMED · WORK ONLY" }),
   ).toBeVisible();
   await expect(page.getByText("2:04.0 work · 500m")).toBeVisible();
-  await expect(page.getByText("CODE AF99-4706 C021-B054")).toBeVisible();
+  // NO CODE on this row, and that is the feature (2026-09-07). The fixture is
+  // a real walk piece — 500 m of work plus 242 m of rest — so Concept2 sees
+  // 742 m overall and 4:04 overall. The rule is an OR, and this row misses on
+  // BOTH axes: 742 m is on no ranking distance list and 4:04 is not one of the
+  // four rankable durations, so its edit form offers no field to type into. The app stops printing one rather than showing
+  // a string with nowhere to go
+  // (docs/superpowers/research/2026-09-07-c2-verification-field-rule.md).
+  // Asserted as an ABSENCE so the committed PNG keeps proving it: this is the
+  // visual record, and a code re-appearing here would otherwise only be caught
+  // by a human noticing it. Consequence worth stating plainly: a programmed
+  // piece WITH rest almost never lands on a standard, so this line is rare.
+  await expect(page.locator(".log-machine-confirmed-code")).toHaveCount(0);
   // THE CAPTION IS GONE (James, 2026-08-27: "just no prose"). Asserted as
   // an ABSENCE so the committed capture keeps showing a three-line block:
   // this is the PR's visual record, and a re-added sentence would
