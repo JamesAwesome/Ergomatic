@@ -610,17 +610,33 @@ DBA benchmark
 spec rev 2.5 on the re-fetched API rows): antagonist DELTA pass RUN
 (REVISE → folded: the retry-without-`workout` fallback, interval
 `rest_distance` 0, drag 1..255, the 158-of-300 trailing-rest finding and
-the two walk read-backs it adds); whole-branch review + PM final gate
-owed on the PR; merge on James's word; the walk on the flag-flip trip.
+the two walk read-backs it adds); `/harden` SKIPPED, spoken — the same
+inline shape as PR 1, the review half covers its blocks; whole-branch
+review RAN (REQUEST CHANGES → closed at `8e19cac8`); PM final gate RAN
+(PASS WITH CONDITIONS, five, none code — closed). §6's "verification
+spec's record reconciled" needs NO edit, said here so it is not read as
+skipped: `2026-09-05-concept2-verification.md`'s two "rest is untouched"
+sentences are scoped to THAT PR's own diff and stay true of it; PR 2's
+`rest_distance` source switch and the interval-level rest fields are
+outside the code's checked set (date, time, distance, workout_type,
+machine type), so the code's record stands. PR 2 needs NO Gate 0 of its
+own: the only saved-row figure it moves is the strip's REST m, from a dash
+to the number artboard 03 ALREADY drew — the approved design is satisfied,
+not changed (PM #332). Merge on James's word; the walk on the flag-flip
+trip.
 Gates on PR #327: `/harden` SKIPPED, spoken — the plan was executed
 inline in full, so its paste-test precondition and every block both
 lenses read are committed code, and the review half covers them; the
 whole-branch review RAN (REQUEST CHANGES → all code findings closed at
 `76a6b18b`, execution record in the plan); PM final gate RAN (PASS WITH
-CONDITIONS, all four record-side, closed). Owed before the TAG that
-carries PR 1, not before merge (PM C4): the phone captures (fresh + a
-real old machine row, both orientations — ASK before installing) and the
-production count of rows clearing the tier-A gate.
+CONDITIONS, all four record-side, closed). Owed before the next TAG
+(PM #327 C4, amended by PM #332 C3): the phone captures — fresh + a real
+old machine row, both orientations, ASK before installing — taken on a
+build that carries PR 2, because PR 2 fills the strip's REST m column a
+v0.41.0 capture would document as a dash; and the production count of
+rows clearing the tier-A gate. (v0.41.0 was tagged 2026-09-07 with the
+captures still owed; the tag went out on the e2e/web gates, and the phone
+half now rides the PR 2 tag.)
 
 **Goal:** a rower who opens the same piece in our app and in the Concept2
 logbook after an upload reads the same numbers — per split: watts, cal,
@@ -650,7 +666,8 @@ rest-inclusive chart, which that pass will have to reconcile.
 **Opens one row:** the PM5 sends 0x0038 per 5-minute auto-split for a Just
 Row (`walk-2026-08-31-justrow`, two frames) and the record stores
 `steps: []` for it — nowhere to keep them; LP renders a Just Row's tiles
-and no strip. A later phase gives those splits a home.
+and no strip. A later phase gives those splits a home — the register row
+"A Just Row's 5-minute auto-splits have no home" is that owner.
 
 **Gates:** antagonist anchor pass RUN 2026-09-06 (REVISE → rev 2: the
 0x003A rest-time field reads 0 on 9/9 captures and is struck; the wire's
@@ -1324,9 +1341,17 @@ closed with zero Concept2 contact.
       AUTOMATIC save this PR owes on the phone, PR C's owed confirming send,
       and **Phase LP's parity photograph** (the logbook page beside our
       screen after our upload, plus the PM5's own View Detail screens — spec
-      §4.2) all need the same `C2_LINK_ENABLED` flip on James's own account;
-      walk them together, never as separate PR-body lines. LP's exit is
-      blocked on this flip and says so.
+      §4.2, now SEVEN items: PR 2 added a last-interval-rest piece and the
+      `pace` target's unit as read-backs) all need the same
+      `C2_LINK_ENABLED` flip on James's own account; walk them together,
+      never as separate PR-body lines. LP's exit is blocked on this flip
+      and says so. **For the runsheet's author (PM #332):** choose the
+      parity piece to CARRY a final-interval rest, so one rowed piece
+      settles both the photograph and the 158-of-300 trailing-rest
+      read-back; and capture which fallback path fired from the server
+      log on every send — that line is the only evidence a thinned row
+      leaves. No runsheet is owed until the flip is schedulable; it then
+      gets its own PM readiness PASS.
 - [ ] **Verification code: hide it, say "verified".** James, 2026-09-05: like
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that
@@ -1397,6 +1422,28 @@ X" is a real disposition — most of these are single files.
       your monitor" / "No monitor found. Wake the monitor, then tap Cancel
       and try again." Copy only; rides the next PR that touches the
       connect flow or the Bluetooth adapter. **S**
+
+- [ ] **A row thinned BY the fallback reads as a successful send, and no
+      query can find it.** PM #332 C1 (2026-09-07): when Concept2 refuses
+      the interval array with a 4xx, `routes/concept2.ts` re-posts without
+      it, gets a 201, stores `c2_result_id` and returns 200 — the rower
+      sees success, the row is un-resendable forever (no PATCH), and the
+      only evidence is a `console.warn` on the server. RF25 pointed at the
+      RECORD: the different action the caller could take is ONE stored
+      boolean (`sent_without_intervals`) that makes the population
+      countable and gives the row a place to say so. The fallback outlives
+      the walk, so a future validation change at Concept2 would thin rows
+      silently from then on. Decide after the walk reads which path fired;
+      a stored shape, so its own PM gate. **S**
+
+- [ ] **A Just Row's 5-minute auto-splits have no home.** Spec §8's owed
+      row (PM #332 found it living only in the LP section's prose): the
+      PM5 sends 0x0038 per auto-split on a free row
+      (`walk-2026-08-31-justrow`, two frames) and the record stores
+      `steps: []`, so LP renders a Just Row's tiles and no strip, and PR 2
+      sends no `workout` array for it. Giving those splits a stored home
+      (`splits[]` on the upload, a strip on the screen) is a later phase's
+      spec: a stored shape plus wire meaning, TRIAD twice. **M**
 
 - [ ] **Rows auto-sent before Phase LP PR 2 keep their thin logbook entry
       forever, and nothing tells the rower.** Antagonist delta pass
