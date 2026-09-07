@@ -521,41 +521,50 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 `effort: 3`, and a workout it creates carries a derived difficulty)
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
-## Phase SB — A blurred strip behind the status bar
+## Phase RW — Row without a baseline
 
-**Status:** Gate 0 APPROVED 2026-09-06 on build `a41f0f88`; PR #323 in
-review. Opened the same day by James's capture of `← BACK` printed over
-the clock on a scrolled Detail screen (v0.39.2). Spec
-`docs/superpowers/specs/2026-09-06-status-bar-backdrop-design.md`. Not
-TRIAD; **not fast path by James's call** ("since there are a lot of
-surfaces"). **S.**
+**Status:** OPENED 2026-09-06. Spec
+`docs/superpowers/specs/2026-09-06-row-without-baselines-design.md`, brainstormed
+with James the same day. Antagonist anchor pass and PM open gate owed on the
+spec before Gate 0; Gate 0 before any implementation task. PR 2 is **TRIAD**
+(stored shape). **M.**
 
-**Goal:** scrolled content passes under a blurred, page-coloured band the
-height of the status bar on every screen; nothing moves at rest.
+**Goal:** every workout is rowable with no baseline set. Where a split would
+appear the rower reads STEADY · MODERATE · HARD · ALL OUT, derived from the
+step's own pace ref; `EASY` is retired as a work word (James: easy is what
+rest is). Durations still show, distance ones priced off a stated assumed
+2:30/500m and marked `~24′`. The doors card gains a stored, reversible
+"Row without one for now"; a one-line "No baseline set · Set one up" row
+stays on Today until a baseline exists.
 
-**Why it happens:** `viewport-fit=cover` + per-screen `padding-top:
-env(safe-area-inset-top)` — the padding scrolls away with the page. Apple
-HIG (PRIMARY): "Obscure content under the status bar … Prefer using a
-scroll edge effect to place a blurred view behind the status bar."
+**Why now:** it is the register's "Row without a baseline set" item (James,
+2026-08-23), half-delivered by Phase JR's Just Row door, and it is the
+shape Wave A's exit ("a stranger rows a row") has to pass through.
 
-**One PR:** `.status-backdrop` (fixed, `height: env(safe-area-inset-top)`,
-`rgba` for `--page` at 82% through a 14px blur — not `color-mix`, which is
-below the iOS 15.0 floor — `pointer-events: none`, z 30) rendered once in
-`AppRoutes`; `UIStatusBarStyleDarkContent` in Info.plist so the glyphs stay
-dark in Dark Mode; an AppRoutes test (red first) and two e2e tests, one
-driving a CDP-emulated inset (height = inset; a scrolled row under it);
-a DEVIATIONS row. Anchor pass RUN 2026-09-06: two BLOCKING (the
-`color-mix` floor; the falsely-ruled-out CDP gate), folded.
+- [ ] **PR 1 — words and unblocking.** `intensityWord(ref)` in
+      `domain/pace.ts` (2k-equivalent thresholds, exported); `phases(steps,
+      null)` emits an effort-shaped phase for a split ref instead of
+      throwing; the compiler, Timer, log seed and judge need no branch; every
+      Start/Connect/Log gate and the Countdown redirect go; `~24′` and the
+      caption; every `EASY` becomes `STEADY`. Gate 0 captures, PM final gate
+      (a split becomes a word). **M**
+- [ ] **PR 2 — skip.** `preferences.baselines_skipped` (migration 0026,
+      additive route), the card line, the Today return row (a button that
+      clears the flag: the doors have no standalone route), `DELETE
+      /api/baselines` clears it server-side. Lifetime table in spec §3.2.
+      TRIAD. **S**
+- [ ] Notes PR and tag.
 
-**Gates:** antagonist anchor pass on the spec (the surface census in §4 is
-the target); PM open/close SKIPPED aloud (pure UI); **Gate 0 on Kaito** —
-the seven captures in spec §5 (Detail scrolled beside v0.39.2, Library
-scrolled, landscape at 0px, one non-scrolling screen at rest, Releases
-scrolled inside its overlay panel, Dark Mode, the half-blurred straddle)
-— contrast stated as numbers.
+**Gates, spoken:** one antagonist anchor pass on the spec (thresholds, the
+assumed pair's reach, the flag's lifetime); PM open, per-PR final, close;
+Gate 0 on detail, Timer, a connected pane, Today both states, Library;
+**no hardware walk** (a word phase's wire shape is the effort phase's, walked
+since Phase 7C; PM may disagree at open).
 
-**Exit:** Gate 0 approved; e2e green, no web capture moved; DEVIATIONS row;
-rides the next tag (no release of its own).
+**Exit:** a fresh account with no baseline can open any workout, Start,
+Connect and Log it after, sees words where splits would be and `~` on
+assumed durations, can skip the doors and get them back, and `EASY` appears
+on no surface.
 
 ## Wave A — The front door
 
@@ -2443,9 +2452,9 @@ trigger is the whole entry.
   exact fixture it would consume), so this is eligible to schedule whenever it is
   wanted.
 - **Row without a baseline set** (James, 2026-08-23): every workout rowable with
-  no baseline, targets simply absent. **Partially delivered by Phase JR's
-  design** — the "nobody is ever blocked from just rowing" half is the connected
-  Just Row door; the every-workout-targetless half remains.
+  no baseline. The Just Row half shipped with Phase JR; the every-workout half
+  **is Phase RW, opened 2026-09-06** (live section above). Retire this line
+  when RW closes.
 - **"Which days did I override, and what was the other suggestion?"** (James,
   2026-08-12). Two questions in one sentence: the CHECKPOINT half needs no new
   capture (`plan_index ∈ {6,34,62}`, **not** `workout_title`), and the FREE-FORM
@@ -2478,6 +2487,9 @@ trigger is the whole entry.
 One row each. The body is in `docs/history/`, archived verbatim, and it is a
 RECORD — do not cite it for a live question.
 
+- **Phase SB** — a blurred, page-coloured strip the height of the status bar
+  on every screen, so scrolled content no longer prints over the clock · closed
+  2026-09-06 · #323 · released in v0.40.0 · [detail](docs/history/phase-sb.md)
 - **Phase NF** — Scan NFC: hold the iPhone to the PM5's own tag and the app
   connects to exactly that erg and programs the workout, no Bluetooth picker
   (workout detail and Just Row); the scan screen names the target and can be
