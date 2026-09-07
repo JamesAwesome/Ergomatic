@@ -1044,6 +1044,25 @@ often they recur.
     by a command or the vendor's sentence, never by re-reading. Cost of
     skipping, measured: five gate rounds at roughly a PM dispatch each.
 
+32. **Naming the PM5 in copy where the rower is not being told WHICH
+    monitor (James, 2026-09-07: "anonymize the pm5 in copy unless we are
+    specifically referring to it").** The NFC sheet shipped as "Hold your
+    iPhone near the PM5.", the post-scan button as `✓ PM5 found`, and the
+    already-taken card as "End this PM5's current connection" — three
+    lines on one surface, none of which needed the brand: the rower is
+    holding a phone up to the thing they call the monitor. Fixed in
+    #331. **The rule: in user-facing copy the erg's display is "the
+    monitor". "PM5" appears ONLY where it is the device's own advertised
+    name doing a job — disambiguating which monitor ("Looking for PM5
+    432331249", "More than one PM5 has this name") or naming the source
+    of a stored number where the reader must know it came from the
+    machine (`MACHINE SUMMARY · PM5 · PER INTERVAL`).** The check is
+    mechanical: `grep -rn "PM5" app/src --include='*.ts' --include='*.tsx'`
+    over string literals, and for each hit ask "would this sentence be
+    less true with 'monitor'?" — if not, it is the wrong word. Code
+    identifiers, comments, wire notes and walk records are not copy and
+    keep the name.
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;

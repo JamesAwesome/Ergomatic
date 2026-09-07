@@ -136,7 +136,7 @@ export interface ConnectionEntryProps {
    *  attempt may exist). REQUIRED, no default (lens 2): a caller that
    *  forgets it must not get two live buttons during an attempt. */
   busy: boolean;
-  /** Render `✓ PM5 found` in the Scan NFC slot for one committed paint. */
+  /** Render `✓ Monitor found` in the Scan NFC slot for one committed paint. */
   accepted: boolean;
 }
 
@@ -281,7 +281,7 @@ export default function ConnectAction({
   // is still alone.
   // Phase NF (Gate 0): Scan NFC sits DIRECTLY ABOVE Connect, equal weight,
   // present only when native reports support. `accepted` swaps the NFC
-  // button for its `✓ PM5 found` state (a status, not a control) for one
+  // button for its `✓ Monitor found` state (a status, not a control) for one
   // committed paint before the interstitial takes over.
   return (
     <>
@@ -292,7 +292,7 @@ export default function ConnectAction({
             role="status"
             aria-live="polite"
           >
-            ✓ PM5 found
+            ✓ Monitor found
           </div>
         ) : (
           <button

@@ -15125,7 +15125,7 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
       [
         "TargetAlreadyConnectedError",
         "target-already-connected",
-        "End this PM5's current connection, then try again.",
+        "End the monitor's current connection, then try again.",
       ],
       [
         "TargetMonitorAmbiguousError",

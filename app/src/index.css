@@ -307,7 +307,7 @@ button:disabled {
    one-off like `.button-connect`, not a numbered level. `:disabled` keeps
    the full fill (a 60% fill would fall to ~2.6:1 against cream text —
    below AA) and signals the live attempt with the cursor instead.
-   `.button-nfc-accepted` is the SAME fill carrying `✓ PM5 found` for one
+   `.button-nfc-accepted` is the SAME fill carrying `✓ Monitor found` for one
    committed paint before the interstitial replaces it. */
 .button-nfc {
   min-height: 56px;
@@ -327,7 +327,7 @@ button:disabled {
    `button:disabled`'s global `--ink-5` label would be 2.38:1 on fern and
    2.42:1 on Connect's blue (measured, hardening lens 2), below AA. On iOS
    the cursor is inert, so the visual "busy" signal is the sheet itself
-   (NFC) or the `✓ PM5 found` status; Connect is disabled only for the
+   (NFC) or the `✓ Monitor found` status; Connect is disabled only for the
    duration of an NFC read the rower is already looking at. */
 .button-nfc:disabled,
 .button-nfc:disabled:hover {

@@ -11,7 +11,7 @@ function read(script: NfcScript, signal = new AbortController().signal) {
   const trace = createConnectionAttemptTrace(() => 0);
   const result = reader.readOne({
     attemptId: ATTEMPT,
-    alertMessage: "Hold your iPhone near the PM5.",
+    alertMessage: "Hold your iPhone near the monitor.",
     signal,
     trace,
   });

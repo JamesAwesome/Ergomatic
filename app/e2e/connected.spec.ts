@@ -2223,7 +2223,9 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
   test.use({ viewport: { width: 390, height: 844 } });
   const NAME = "PM5 432331249 Row";
 
-  test("a valid PM5 tag: ✓ PM5 found, no picker, READY", async ({ page }) => {
+  test("a valid PM5 tag: ✓ Monitor found, no picker, READY", async ({
+    page,
+  }) => {
     const title = "NFC Valid Tag Walk";
     await injectFakeMonitor(page, NAME);
     await injectNfcScript(page, {
@@ -2242,7 +2244,7 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
     const scanNfc = page.getByRole("button", { name: "Scan NFC" });
     await expect(scanNfc).toBeVisible();
     await scanNfc.click();
-    await expect(page.getByRole("status")).toHaveText("✓ PM5 found");
+    await expect(page.getByRole("status")).toHaveText("✓ Monitor found");
     await expect(page.getByText("Choose your monitor")).toHaveCount(0);
     await expect(
       page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),

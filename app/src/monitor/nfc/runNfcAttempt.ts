@@ -26,7 +26,7 @@ import type { ConnectionAttemptId } from "../../../domain/monitor/types.js";
 import type { NfcReader } from "../../adapters/nfcReader";
 import type { ConnectionAttemptTrace } from "./connectionAttemptTrace";
 
-export const NFC_ALERT_MESSAGE = "Hold your iPhone near the PM5.";
+export const NFC_ALERT_MESSAGE = "Hold your iPhone near the monitor.";
 
 export type NfcInlineCopy =
   | "Unsupported NFC tag"
@@ -49,7 +49,7 @@ export interface RunNfcAttemptDeps {
   /** The paint barrier; the caller passes `paintBarrier` bound to the same
    *  signal. */
   paint: (signal: AbortSignal) => Promise<void>;
-  /** Commits `✓ PM5 found`. Called BEFORE `paint`. */
+  /** Commits `✓ Monitor found`. Called BEFORE `paint`. */
   onAccepted: () => void;
 }
 

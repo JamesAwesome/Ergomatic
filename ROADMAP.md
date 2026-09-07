@@ -1377,6 +1377,16 @@ and unscheduled; it is not a wish.
 promoted into a wave, or it is killed with a reason. "Rides the next PR touching
 X" is a real disposition — most of these are single files.
 
+- [ ] **The Bluetooth scan sheet mixes "PM5" and "monitor" in one flow.**
+      `capacitorBle.ts`'s scan copy reads "Looking for your PM5" and then
+      "No monitor found. Wake the PM5, then tap Cancel and try again." —
+      two words for one thing, three lines apart. James, 2026-09-07,
+      after PR #331 made the NFC surface say "monitor" wherever PM5 was
+      not the device's own advertised name: same rule here — "Looking for
+      your monitor" / "No monitor found. Wake the monitor, then tap Cancel
+      and try again." Copy only; rides the next PR that touches the
+      connect flow or the Bluetooth adapter. **S**
+
 - [ ] **The history LIST has no `(user_id, logged_at desc, id desc)`
       index.** Found by the Phase LP DBA benchmark, 2026-09-07
       (`docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`,

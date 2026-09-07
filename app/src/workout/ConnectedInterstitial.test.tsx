@@ -1904,7 +1904,7 @@ describe("targeted failures (Phase NF)", () => {
   it.each([
     [
       "target-already-connected",
-      "End this PM5's current connection, then try again.",
+      "End the monitor's current connection, then try again.",
       true,
     ],
     [
