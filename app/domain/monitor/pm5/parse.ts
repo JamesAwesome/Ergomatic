@@ -139,6 +139,17 @@ export function parseGeneralStatus(
   };
 }
 
+/** The pre-V1.26 length of 0x0032. `Erg Machine Type` was APPENDED to this
+ *  characteristic in interface-definition revision V1.26 (2018-11-02, rev 1.30
+ *  Table 1, verbatim: "Added Erg Machine Type parameter to characteristic
+ *  0x0032/0x0080/ V1.26."), so a monitor on older firmware sends a clean
+ *  16-byte prefix. Every field we CONSUME ends at byte 15 (`restSeconds`, a
+ *  u24 at offset 13), so rejecting those frames discarded a whole session's
+ *  readings over a byte with no consumer — and because `driver.ts`'s
+ *  `seen.as1` is a one-way latch set only on a successful parse, it cost every
+ *  frame, not just this field. */
+const ADDITIONAL_STATUS_1_MIN_BYTES = 16;
+
 /** 0x0032 — C2 rowing additional status 1, 17 bytes (interface-notes.md
  *  §10). */
 export interface AdditionalStatus1 {
@@ -150,15 +161,25 @@ export interface AdditionalStatus1 {
   averageSplit: number;
   restDistanceMeters: number;
   restSeconds: number;
-  ergMachineType: number;
+  /** ABSENT on pre-V1.26 firmware — see `ADDITIONAL_STATUS_1_MIN_BYTES`. The
+   *  property is OMITTED rather than set to `undefined`, which is what
+   *  `parse.test.ts`'s `Object.hasOwn` assertion pins: an unguarded
+   *  `readU8(bytes, 16)` on a short frame also yields `undefined`, so absence
+   *  is the only observable that tells a correct decode from that half-fix.
+   *  No consumer anywhere in `app/src` or `app/domain`. */
+  ergMachineType?: number;
 }
 
 export function parseAdditionalStatus1(
   bytes: Uint8Array,
 ): AdditionalStatus1 | { error: Pm5ParseError } {
-  const lengthError = checkLength(bytes, 17, "0x0032");
+  const lengthError = checkLength(
+    bytes,
+    ADDITIONAL_STATUS_1_MIN_BYTES,
+    "0x0032",
+  );
   if (lengthError) return lengthError;
-  return {
+  const decoded: AdditionalStatus1 = {
     elapsedSeconds: readU24LE(bytes, 0) / 100,
     speedMetersPerSecond: readU16LE(bytes, 3) / 1000,
     spm: readU8(bytes, 5),
@@ -167,8 +188,11 @@ export function parseAdditionalStatus1(
     averageSplit: readU16LE(bytes, 9) / 100,
     restDistanceMeters: readU16LE(bytes, 11),
     restSeconds: readU24LE(bytes, 13) / 100,
-    ergMachineType: readU8(bytes, 16),
   };
+  if (bytes.length > ADDITIONAL_STATUS_1_MIN_BYTES) {
+    decoded.ergMachineType = readU8(bytes, 16);
+  }
+  return decoded;
 }
 
 /** 0x0033 — C2 rowing additional status 2, 20 bytes (interface-notes.md
@@ -240,6 +264,16 @@ export function parseSplitIntervalData(
   };
 }
 
+/** The pre-V1.27 length of 0x0038 — same mechanism as
+ *  `ADDITIONAL_STATUS_1_MIN_BYTES`, one revision later (rev 1.30 Table 1:
+ *  "Added Erg Machine Type parameter to characteristic 0x0038."). Every
+ *  consumed field ends at byte 17 (`splitIntervalNumber`). Losing this
+ *  characteristic costs more than one field: `driver.ts`'s `noteBoundaryHalf`
+ *  emits `intervalComplete` only when BOTH 0x0037 and 0x0038 arrive for the
+ *  same split number, so a dead 0x0038 means no `IntervalActual` is ever
+ *  recorded. */
+const ADDITIONAL_SPLIT_INTERVAL_MIN_BYTES = 18;
+
 /** 0x0038 — C2 rowing additional split/interval data, 19 bytes
  *  (interface-notes.md §10). */
 export interface AdditionalSplitIntervalData {
@@ -258,15 +292,23 @@ export interface AdditionalSplitIntervalData {
   splitIntervalPowerWatts: number;
   splitAvgDragFactor: number;
   splitIntervalNumber: number;
-  ergMachineType: number;
+  /** ABSENT on pre-V1.27 firmware — see `ADDITIONAL_SPLIT_INTERVAL_MIN_BYTES`.
+   *  Omitted rather than `undefined`, same reasoning as
+   *  `AdditionalStatus1.ergMachineType`. No consumer anywhere in `app/src` or
+   *  `app/domain`. */
+  ergMachineType?: number;
 }
 
 export function parseAdditionalSplitIntervalData(
   bytes: Uint8Array,
 ): AdditionalSplitIntervalData | { error: Pm5ParseError } {
-  const lengthError = checkLength(bytes, 19, "0x0038");
+  const lengthError = checkLength(
+    bytes,
+    ADDITIONAL_SPLIT_INTERVAL_MIN_BYTES,
+    "0x0038",
+  );
   if (lengthError) return lengthError;
-  return {
+  const decoded: AdditionalSplitIntervalData = {
     elapsedSeconds: readU24LE(bytes, 0) / 100,
     splitIntervalAvgStrokeRate: readU8(bytes, 3),
     splitIntervalWorkHeartRateBpm: heartRate(readU8(bytes, 4)),
@@ -278,8 +320,11 @@ export function parseAdditionalSplitIntervalData(
     splitIntervalPowerWatts: readU16LE(bytes, 14),
     splitAvgDragFactor: readU8(bytes, 16),
     splitIntervalNumber: readU8(bytes, 17),
-    ergMachineType: readU8(bytes, 18),
   };
+  if (bytes.length > ADDITIONAL_SPLIT_INTERVAL_MIN_BYTES) {
+    decoded.ergMachineType = readU8(bytes, 18);
+  }
+  return decoded;
 }
 
 /**

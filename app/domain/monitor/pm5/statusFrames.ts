@@ -205,7 +205,7 @@ export function buildAdditionalStatus1Bytes(s: AdditionalStatus1): Uint8Array {
   writeU16LE(bytes, 9, Math.round(s.averageSplit * 100));
   writeU16LE(bytes, 11, s.restDistanceMeters);
   writeU24LE(bytes, 13, Math.round(s.restSeconds * 100));
-  writeU8(bytes, 16, s.ergMachineType);
+  writeU8(bytes, 16, s.ergMachineType ?? 0);
   return bytes;
 }
 
@@ -255,7 +255,7 @@ export function buildAdditionalSplitIntervalDataBytes(
   writeU16LE(bytes, 14, s.splitIntervalPowerWatts);
   writeU8(bytes, 16, s.splitAvgDragFactor);
   writeU8(bytes, 17, s.splitIntervalNumber);
-  writeU8(bytes, 18, s.ergMachineType);
+  writeU8(bytes, 18, s.ergMachineType ?? 0);
   return bytes;
 }
 

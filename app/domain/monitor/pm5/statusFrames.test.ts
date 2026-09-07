@@ -96,6 +96,29 @@ describe("buildAdditionalStatus1Bytes: round-trips through parseAdditionalStatus
       parseAdditionalStatus1(buildAdditionalStatus1Bytes(status)),
     ).toStrictEqual(status);
   });
+
+  it("ergMachineType omitted (as on a pre-V1.26 fixture) encodes the trailing byte as 0", () => {
+    const status = {
+      elapsedSeconds: 0,
+      speedMetersPerSecond: 0,
+      spm: 0,
+      heartRateBpm: null,
+      currentSplit: 0,
+      averageSplit: 0,
+      restDistanceMeters: 0,
+      restSeconds: 0,
+    };
+    const bytes = buildAdditionalStatus1Bytes(status);
+    expect(bytes[16]).toBe(0);
+    // The builder always emits all 17 bytes, so parsing them back necessarily
+    // yields a PRESENT ergMachineType of 0 — this is a builder-defaulting
+    // test, not a round trip of absence (parse.test.ts's short-frame tests
+    // cover absence itself).
+    expect(parseAdditionalStatus1(bytes)).toStrictEqual({
+      ...status,
+      ergMachineType: 0,
+    });
+  });
 });
 
 describe("buildAdditionalStatus2Bytes: round-trips through parseAdditionalStatus2", () => {
@@ -178,6 +201,32 @@ describe("buildAdditionalSplitIntervalDataBytes: round-trips through parseAdditi
         buildAdditionalSplitIntervalDataBytes(status),
       ),
     ).toStrictEqual(status);
+  });
+
+  it("ergMachineType omitted (as on a pre-V1.27 fixture) encodes the trailing byte as 0", () => {
+    const status = {
+      elapsedSeconds: 0,
+      splitIntervalAvgStrokeRate: 0,
+      splitIntervalWorkHeartRateBpm: null,
+      splitIntervalRestHeartRateBpm: null,
+      splitIntervalAvgPace: 0,
+      splitIntervalTotalCalories: 0,
+      splitIntervalAvgCalories: 0,
+      splitIntervalSpeedMetersPerSecond: 0,
+      splitIntervalPowerWatts: 0,
+      splitAvgDragFactor: 0,
+      splitIntervalNumber: 0,
+    };
+    const bytes = buildAdditionalSplitIntervalDataBytes(status);
+    expect(bytes[18]).toBe(0);
+    // The builder always emits all 19 bytes, so parsing them back necessarily
+    // yields a PRESENT ergMachineType of 0 — this is a builder-defaulting
+    // test, not a round trip of absence (parse.test.ts's short-frame tests
+    // cover absence itself).
+    expect(parseAdditionalSplitIntervalData(bytes)).toStrictEqual({
+      ...status,
+      ergMachineType: 0,
+    });
   });
 });
 

@@ -14,9 +14,15 @@ import {
   toIntervalActual,
   toMonitorFrame,
   toMonitorState,
+  type AdditionalSplitIntervalData,
+  type AdditionalStatus1,
   type Pm5ParseError,
   type RawPm5Status,
 } from "./parse.js";
+import {
+  buildAdditionalSplitIntervalDataBytes,
+  buildAdditionalStatus1Bytes,
+} from "./statusFrames.js";
 
 /** Unwraps a parse function's success branch, throwing (never a
  *  conditional `expect`) if it was a `Pm5ParseError` instead — so a
@@ -529,13 +535,13 @@ describe("parseEndOfWorkoutSummary (0x0039, 20 bytes, interface-notes.md §23)",
 describe("length guards (M3): a too-short input is a typed error, never a silently garbage-filled decode", () => {
   it.each([
     ["parseGeneralStatus", parseGeneralStatus, 19, "0x0031"],
-    ["parseAdditionalStatus1", parseAdditionalStatus1, 17, "0x0032"],
+    ["parseAdditionalStatus1", parseAdditionalStatus1, 16, "0x0032"],
     ["parseAdditionalStatus2", parseAdditionalStatus2, 20, "0x0033"],
     ["parseSplitIntervalData", parseSplitIntervalData, 18, "0x0037"],
     [
       "parseAdditionalSplitIntervalData",
       parseAdditionalSplitIntervalData,
-      19,
+      18,
       "0x0038",
     ],
   ] as const)(
@@ -550,17 +556,10 @@ describe("length guards (M3): a too-short input is a typed error, never a silent
 
   it.each([
     ["parseGeneralStatus", parseGeneralStatus, 19, "0x0031"],
-    ["parseAdditionalStatus1", parseAdditionalStatus1, 17, "0x0032"],
     ["parseAdditionalStatus2", parseAdditionalStatus2, 20, "0x0033"],
     ["parseSplitIntervalData", parseSplitIntervalData, 18, "0x0037"],
-    [
-      "parseAdditionalSplitIntervalData",
-      parseAdditionalSplitIntervalData,
-      19,
-      "0x0038",
-    ],
   ] as const)(
-    "%s: one byte short of the documented length still errors (off-by-one, not just wildly short)",
+    "%s: one byte short still errors — these three have no optional trailing field (0x0032/0x0038 do; see the pre-V1.26 cases above)",
     (_name, parseFn, expected, characteristic) => {
       const oneShort = new Uint8Array(expected - 1);
       const result = parseFn(oneShort);
@@ -594,6 +593,98 @@ describe("length guards (M3): a too-short input is a typed error, never a silent
     const result = parseGeneralStatus(Uint8Array.from([1, 2, 3]));
     expect(result).toStrictEqual({
       error: { characteristic: "0x0031", expected: 19, actual: 3 },
+    });
+  });
+
+  it("0x0032: a 16-byte pre-V1.26 frame decodes, with ergMachineType ABSENT (not undefined)", () => {
+    const long = buildAdditionalStatus1Bytes({
+      elapsedSeconds: 12.34,
+      speedMetersPerSecond: 3.456,
+      spm: 22,
+      heartRateBpm: 142,
+      currentSplit: 111.5,
+      averageSplit: 113.25,
+      restDistanceMeters: 64,
+      restSeconds: 59.5,
+      ergMachineType: 0,
+    });
+    expect(long.length).toBe(17);
+    const short = long.slice(0, 16);
+
+    const decoded = parseAdditionalStatus1(short);
+    expect("error" in decoded).toBe(false);
+    const ok = decoded as AdditionalStatus1;
+
+    // Every CONSUMED field is identical to the long form's decode.
+    const fromLong = parseAdditionalStatus1(long) as AdditionalStatus1;
+    for (const k of [
+      "elapsedSeconds",
+      "speedMetersPerSecond",
+      "spm",
+      "heartRateBpm",
+      "currentSplit",
+      "averageSplit",
+      "restDistanceMeters",
+      "restSeconds",
+    ] as const) {
+      expect(ok[k]).toStrictEqual(fromLong[k]);
+    }
+
+    // KEY ABSENCE, not `undefined`. `readU8` is `bytes[offset]!` and neither
+    // noUncheckedIndexedAccess nor exactOptionalPropertyTypes is set, so a
+    // half-fix that lowers the floor and leaves the read UNGUARDED also
+    // yields `undefined` here. Only absence tells the two apart.
+    expect(Object.hasOwn(ok, "ergMachineType")).toBe(false);
+  });
+
+  it("0x0038: an 18-byte pre-V1.27 frame decodes, with ergMachineType ABSENT (not undefined)", () => {
+    const long = buildAdditionalSplitIntervalDataBytes({
+      elapsedSeconds: 20.5,
+      splitIntervalAvgStrokeRate: 24,
+      splitIntervalWorkHeartRateBpm: 150,
+      splitIntervalRestHeartRateBpm: 120,
+      splitIntervalAvgPace: 113.4,
+      splitIntervalTotalCalories: 73,
+      splitIntervalAvgCalories: 840,
+      splitIntervalSpeedMetersPerSecond: 4.321,
+      splitIntervalPowerWatts: 157,
+      splitAvgDragFactor: 121,
+      splitIntervalNumber: 1,
+      ergMachineType: 0,
+    });
+    expect(long.length).toBe(19);
+    const short = long.slice(0, 18);
+
+    const decoded = parseAdditionalSplitIntervalData(short);
+    expect("error" in decoded).toBe(false);
+    const ok = decoded as AdditionalSplitIntervalData;
+    const fromLong = parseAdditionalSplitIntervalData(
+      long,
+    ) as AdditionalSplitIntervalData;
+    for (const k of [
+      "elapsedSeconds",
+      "splitIntervalAvgStrokeRate",
+      "splitIntervalWorkHeartRateBpm",
+      "splitIntervalRestHeartRateBpm",
+      "splitIntervalAvgPace",
+      "splitIntervalTotalCalories",
+      "splitIntervalAvgCalories",
+      "splitIntervalSpeedMetersPerSecond",
+      "splitIntervalPowerWatts",
+      "splitAvgDragFactor",
+      "splitIntervalNumber",
+    ] as const) {
+      expect(ok[k]).toStrictEqual(fromLong[k]);
+    }
+    expect(Object.hasOwn(ok, "ergMachineType")).toBe(false);
+  });
+
+  it("below the pre-addition floor is STILL a typed error, naming the new floor", () => {
+    expect(parseAdditionalStatus1(new Uint8Array(15))).toStrictEqual({
+      error: { characteristic: "0x0032", expected: 16, actual: 15 },
+    });
+    expect(parseAdditionalSplitIntervalData(new Uint8Array(17))).toStrictEqual({
+      error: { characteristic: "0x0038", expected: 18, actual: 17 },
     });
   });
 });
