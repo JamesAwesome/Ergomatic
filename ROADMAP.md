@@ -2490,9 +2490,8 @@ trigger is the whole entry.
   (eight findings). Rows (1) Just Row Scan NFC, (2) the targeted-scan
   screen with Cancel, (3) the tag-failure copy, (5) the not-advertising
   copy are IMPLEMENTED; row (4) is RETIRED (the existing held-device path,
-  RC-18). **Owed after it:** naming the target on Just Row's own connecting
-  card (`Connecting to monitor` / `Wake the monitor…` today; copy on a
-  screen Gate 0 did not draw — its own Gate 0). **The five rows as filed
+  RC-18). **Owed after it, DONE (fast path, Gate 0 approved 2026-09-06):** Just
+  Row's own connecting card names the target on the NFC route. **The five rows as filed
   (James's ruling 2026-09-06 "merge this then a new PR"):** (1) **Scan NFC on Just Row** — absent today
   by implementation choice (`JustRow.tsx` passes `nfcCapability="unsupported"`);
   James noticed at the erg; Gate 0 for the Just Row screen with the second
