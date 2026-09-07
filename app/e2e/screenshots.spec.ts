@@ -777,6 +777,24 @@ test("today-onboarding", async ({ page }) => {
   });
 });
 
+// Phase RW PR C: the same screen after "Row without one for now" — the
+// suggestion apparatus returns under one row that keeps the doors a tap
+// away. Gate 0's approved render is docs/design/rw-gate0/today-skipped.png.
+test("today-skipped", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-skipped@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/today");
+  await page.locator(".doorscard").waitFor();
+  await page.getByRole("button", { name: "Row without one for now" }).click();
+  await page.locator(".today-nobaseline-row").waitFor();
+  await page.locator(".today-card").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-skipped.png"),
+  });
+});
+
 // Phase BL PR C: the door flow screens (canvas Question1/Recommendation/
 // Experienced/RowPath), each in its fullest real state — the
 // questionnaire with an option genuinely selected, the recommendation
