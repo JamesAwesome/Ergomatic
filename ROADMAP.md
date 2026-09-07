@@ -1517,10 +1517,26 @@ X" is a real disposition — most of these are single files.
   `.superpowers/` (recurring failure 16's corollary) — the same reason the
   screenshot-flakiness item above is inlined. Rides the next PR touching
   this file, or the next time it fires.
+- **The checked-in NFC patch is part of the safety mechanism, not a
+  convenience.** `app/patches/@capgo__capacitor-nfc@8.2.5.patch` supplies
+  session identity on retained events, single-tag selection, native drain on
+  stop, and the controller-published `cause` the reader-ending seam depends
+  on; the released plugin has none of them. **Any NFC or Capacitor upgrade
+  reapplies and re-reviews the patch and re-runs the 31 native tests before
+  the dependency is accepted** (`docs/RELEASING.md` step 3 has the command).
 
 ## Needs a decision from James
 
-- _(none open)_ — the `/api/today` row that sat here from Phase SF PR1
+- **The 1 000 ms collision window is paid on every NFC connect.**
+  `TARGET_COLLISION_WINDOW_MS` (`src/monitor/transports/capacitorBle.ts`)
+  holds every targeted scan open for a full second after the first exact-name
+  match, so that two devices carrying one name fail closed instead of
+  programming the wrong erg. The walk measured 2-3 s to CONNECTED; a third of
+  that is ours. It is an Ergomatic policy, not a platform fact (Phase NF spec,
+  "Residuals accepted for review"). **Whether a household of one erg should
+  pay a gym's safety margin on every row** is a one-constant change with a
+  named test; James's call.
+- _(previously none open)_ — the `/api/today` row that sat here from Phase SF PR1
   closed 2026-09-05: James ruled DELETE, and the route, its unit block and
   the isolation test's dependence on it left in the same PR (the "done is
   per-user" proof now reads `/api/workouts`' `lastDoneDaysAgo`, the oracle
@@ -1825,6 +1841,17 @@ new.
   a pooled connection across the outbound refresh call (`client.ts`,
   `stores/concept2.ts`). Follow-up hardening; household-scale acceptable today.
   (`2026-08-31-concept2-logbook-design.md`)
+- **Our NFC capability probe reports device support, never code signing**
+  (Phase NF spec residual, confirmed at the phase-close gate 2026-09-06).
+  `isSupported` resolves `NFCTagReaderSession.readingAvailable ||
+  NFCNDEFReaderSession.readingAvailable` (the checked-in patch) — a hardware
+  check. A build shipped without an effective
+  `com.apple.developer.nfc.readersession.formats` entitlement therefore SHOWS
+  Scan NFC and fails at every session begin, and no gate this repo owns can
+  tell the two apart. Pinned rather than fixed because the honest probe is an
+  archive-and-device gate, not a runtime one. The compensating control is one
+  tap on Scan NFC after every TestFlight install that changed signing,
+  entitlements, or the Xcode project.
 
 ## Owed captures and walk items
 
@@ -1880,6 +1907,29 @@ Each needs erg time or a deliberate recording session.
   spans, the unrowed question from §17 item 5, §18's readings-still-owed, a
   genuine mid-piece disconnect, and **one `.5` pace target on the wire**
   (`representableCentiseconds` has never been sent to a real PM5).
+- **Backgrounding during the targeted BLE scan may arm the never-cleared
+  cleanup poison** (Phase NF spec residual; whole-branch review SF3,
+  2026-09-06). A `pause` aborts the scan; the abort's `stopLEScan()` and its
+  10 s cleanup deadline both ride the process, which iOS may suspend; on
+  resume the deadline and the plugin's reply race, and a deadline win sets the
+  poison (`Restart Ergomatic`). Harm ceiling is that copy on the next attempt;
+  manual **Connect** on a fresh launch is unaffected. **Not walked** — no leg
+  backgrounds during the BLE half. Candidate fix if it is ever seen: do not
+  arm the cleanup deadline on a background-caused abort. (`phase-nf.md`)
+- **The copy mapping for a Core NFC 202 that WINS the race is unexercised.**
+  Walk leg 4 staged a side-button lock during a live reader and read 202 on
+  the console, but the app's own `pause` abort settled the attempt first, so
+  the late ending was ignored and `NFC scan stopped. Try again.` never
+  rendered. The branch where the 202 arrives first has no hardware evidence;
+  the next connected walk that locks the phone mid-read reads the console for
+  which path fired. (`phase-nf.md`, `phase-nf-product-walk/RESULT.md`)
+- **The not-advertising copy has never rendered on hardware.** Walk leg 2's
+  premise was false (a PM5 keeps advertising after a phone-side END), so the
+  leg could not be staged; #324 then replaced the copy with `Couldn't reach
+  <name>.` / `Check nothing else is connected to it, then try again.` Desk
+  proof only. **The one state a tester can reach is a PM5 held by another
+  central** (the Concept2 app, a second household phone) — stage that, not
+  "off Connect Device". (`phase-nf.md`)
 
 ## Small, queued, rides the next PR in its area
 
@@ -2301,6 +2351,13 @@ Each needs erg time or a deliberate recording session.
   it.**
 
 ---
+- **Phase NF dead-code rows (RF29, filed at close 2026-09-06).**
+  `PaintBarrierAbortedError`, `stagedRetireAttemptId()` and the transport's
+  `targetDeadlineMs` / `collisionWindowMs` options have test consumers only —
+  deliberate seams, kept on purpose, listed so nobody deletes them as dead.
+  **Genuinely removable:** the NFC patch carries two unused symbols,
+  `NfcSessionCoordinator.async(_:)` and `tagAttemptId`. Remove them at the
+  next patch edit, which re-runs the Swift suite anyway. (`phase-nf.md`)
 
 # Icebox
 
@@ -2381,179 +2438,6 @@ trigger is the whole entry.
 - **PWA installability.** **Trigger:** the web build stops being only a harness.
 - **Apple Health (HealthKit)** — write rowing workouts from the iOS shell.
   **Trigger:** James asks.
-- **Phase NF — Scan NFC to connect and program a PM5. TRIGGER FIRED; HARDENED
-  DESIGN APPROVED 2026-09-03; GATE -1 COMPLETE 2026-09-06; PRODUCT
-  IMPLEMENTATION IN FLIGHT (scheduled by James 2026-09-06, ahead of Wave
-  A); PR awaiting James's word to push.** Gate -1 history: two targeted
-  NFC/BLE connections succeeded (v8 normal trace, 2026-09-04); recovery
-  cases 2-4 dropped as ship gates. Further walks require PM
-  approval of the exact prepared runsheet before asking James to participate.
-  Evidence and desk-only close-out:
-  [`SESSION-PAUSED.md`](docs/monitor/sessions/phase-nf-gate-minus-one/SESSION-PAUSED.md).
-  Approved desk-only trace/capture follow-up and verification limits:
-  [`DIAGNOSTIC-CAPTURE.md`](docs/monitor/sessions/phase-nf-gate-minus-one/DIAGNOSTIC-CAPTURE.md).
-  The retired v3 approval does not authorize its hardened replacement.
-  `NF-NORMAL-TRACE-v5`
-  received PM PASS but aborted before installation when its controller timer
-  expired across the operator turn boundary; it authorizes no retry. See
-  [`NORMAL-TRACE-V5-ABORT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V5-ABORT.md).
-  The resumed preparation installed and verified the diagnostic build;
-  [`NF-NORMAL-TRACE-v7`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V7-RUNSHEET.md)
-  separates setup from scan consent and removes timed chat acknowledgements.
-  James confirmed the enabled probe; one separately authorized v7 sample
-  activated the reader and reached BLE scanning, but captured no matching PM5
-  name or final receipt. Cleanup verified; no retry authorized. See
-  [`NORMAL-TRACE-V7-RESULT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V7-RESULT.md) and
-  [`OPERATOR-WORKFLOW-V6.md`](docs/monitor/sessions/phase-nf-gate-minus-one/OPERATOR-WORKFLOW-V6.md).
-  [`NF-NORMAL-TRACE-v8`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V8-RUNSHEET.md)
-  passed its one separately authorized normal sample: NFC RF-active trace,
-  exact-name targeted BLE connect/disconnect, both automatic exports and verified
-  cleanup, in 1 minute 46 seconds. See
-  [`NORMAL-TRACE-V8-RESULT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/NORMAL-TRACE-V8-RESULT.md).
-  Its final-export finish rule corrects v7's premature host cleanup. **Since
-  v8 (2026-09-05):** recovery v1 aborted on a Wi-Fi CoreDevice tunnel drop;
-  recovery v2 ran wired and stopped on a host-helper display guard that was a
-  FALSE NEGATIVE (fixed:
-  [`RECOVERY-GUARD-FIX.md`](docs/monitor/sessions/phase-nf-gate-minus-one/RECOVERY-GUARD-FIX.md));
-  recovery v3 **closed case 1 (stop-during-connect)** and stopped at case 2
-  when two 60 s NDEF windows found no PM5 tag
-  ([`RECOVERY-WALK-V3-RESULT.md`](docs/monitor/sessions/phase-nf-gate-minus-one/RECOVERY-WALK-V3-RESULT.md)).
-  A Flipper-emulated replica of the tag now reads on the phone byte-for-byte
-  (desk, no erg), so the NFC read path is desk-testable up to the BLE
-  boundary. **Open finding, PM5 NFC availability:** cause of the no-tag windows
-  not identified, five alternatives live
-  ([research note](docs/superpowers/research/2026-09-05-pm5-nfc-availability.md));
-  `NF-RECOVERY-v4`'s control-tag bracket ran CLEAN on 2026-09-06 (phone stack
-  live, PM5 read + full connect, Flipper raw read 42/42 pages after the
-  connect); the v3 no-tag condition did not reproduce. **Cases 2-4 and the
-  query-scenario diagnosis are DROPPED as ship gates (antagonist verdict,
-  James's call, 2026-09-06):** probe-only constructs the spec's NO-GO list and
-  countable exit never required. No further erg time for Gate -1. The
-  design spec's "PM5 NFC availability" section LANDED 2026-09-06
-  (no-tag is an expected outcome; do not attribute a cause; no rule may be
-  conditioned on the PM5's power cycle) — Gate 0 only if copy changes.
-  **Injected multi-tag / invalidation tests LANDED 2026-09-06** in the
-  checked-in NFC patch (`NdefSessionEndingTests.swift`: zero/two tags and
-  several NDEF messages rejected before any connect, every Core NFC ending
-  code mapped with attempt identity, drained A cannot touch B; six
-  deciding-source mutations, record in `REMAINING-PROOF.md`). **Reader-ending
-  seam RULED and LANDED 2026-09-06 (James: option A):** the plugin's ending
-  reason came from the Core NFC code alone, so the controller's own multi-tag
-  rejection reached JS as `userCancelled`; the patched controller now publishes
-  `cause: multipleTags | tagFailure` on endings it forced (spec section
-  "Reader-ending seam" has the evidence, rule and lifetime; four more
-  mutations bite). No copy changed. **Gate -1 is complete; James scheduled
-  product implementation 2026-09-06, AHEAD of Wave A ("Do it now").**
-  **PRODUCT IMPLEMENTATION IN FLIGHT** on `codex/phase-nf-nfc-design`: plan
-  `docs/superpowers/plans/2026-09-06-phase-nf-scan-nfc-product.md`; `/harden`
-  lens 1 ran (seven code findings applied, ledger entry landed); Tasks 1-8
-  committed (probe retired, parser, `scanTarget` + operation tail,
-  decorators, NFC reader port + native arm + scripted reader + trace,
-  keyed staged retire + mount lease, `connect(request)`, Scan NFC on detail
-  with the routed click-to-`armed` proof); `/harden` lens 2 (18 findings)
-  applied; the self-mutation sweep record is
-  `docs/monitor/sessions/phase-nf-product-walk/MUTATIONS.md`;
-  main merged (2a6ba780). **Whole-branch review (2026-09-06) returned NOT
-  READY with six blocking items, all fixed in the same round:** the pinned
-  `domain/**` 100% coverage gate was RED (an untested overlong-name branch);
-  the attempt trace was published only on a successful connect (now every
-  terminal publishes and the failure screen's export window carries it); a
-  `cause` beside a non-`invalidated` reason failed OPEN to silence (now
-  cause-first); Gate 0's fold claim was filed under a one-row capture (now
-  the Gate 0 workout itself, and the claim says what the capture shows); a comment cited a dist-grep needle that
-  never existed; and seven mutation rows read "not run" behind an "all
-  bite" header (re-run, see MUTATIONS.md). PM readiness on runsheet v1:
-  NOT READY (ten legs → five, three blocks, ≤ 15 min, ≤ 6 reader starts;
-  ledger entry "Phase NF product walk readiness"); v2 NOT READY too
-  (inert build-identity rule and a build with no `VITE_API_BASE`, both
-  found by building; two steps unperformable from the screen the previous
-  step leaves; second ledger entry); v3 NOT READY (a Save on a screen that
-  does not exist, a console field the emitter never writes, a recount off
-  by one, a photo at a mid-leg state; third entry); v4 NOT READY (a
-  plan-dependent save label, a timing discriminator with no shared clock,
-  leg 2's unstated "stops advertising" premise; fourth entry); v5 READY
-  (fifth entry). **James then asked for the walk hardened as a TIMED
-  PROTOCOL; `/harden` ran both lenses (v6 timer table + holds + block
-  re-cut + leg 4 decided by ending code; v7 operator blocks in screen
-  text); v7's gate found one record clause (200 attributes nothing, only
-  202 ⇒ iOS); v8 READY at the delta gate (seventh entry). James closed the
-  review loop: "No more after this round."** **WALKED 2026-09-06
-  (`docs/monitor/sessions/phase-nf-product-walk/RESULT.md`): legs 1, 3, 4, 5
-  PASS; leg 2 INCONCLUSIVE — a PM5 keeps advertising after a phone-side END,
-  so the not-advertising copy is desk-proven only; leg 4 decided: iOS ends a
-  backgrounded reader with code 202 and the app's own pause abort still wins
-  the race to a quiet return.** Next: James's merge approval of #316.
-  **Follow-on PR BUILT 2026-09-06** on `codex/phase-nf2-followon`: spec
-  `docs/superpowers/specs/2026-09-06-phase-nf-followon-design.md`, Gate 0
-  `docs/design/handoffs/2026-09-06-phase-nf-followon/gate0.html` (APPROVED
-  by James 2026-09-06 with two copy rulings), antagonist delta pass folded
-  (eight findings). Rows (1) Just Row Scan NFC, (2) the targeted-scan
-  screen with Cancel, (3) the tag-failure copy, (5) the not-advertising
-  copy are IMPLEMENTED; row (4) is RETIRED (the existing held-device path,
-  RC-18). **Owed after it, DONE (fast path, Gate 0 approved 2026-09-06):** Just
-  Row's own connecting card names the target on the NFC route. **The five rows as filed
-  (James's ruling 2026-09-06 "merge this then a new PR"):** (1) **Scan NFC on Just Row** — absent today
-  by implementation choice (`JustRow.tsx` passes `nfcCapability="unsupported"`);
-  James noticed at the erg; Gate 0 for the Just Row screen with the second
-  primary; (2) the buttonless `Choosing your monitor` screen on the NFC path
-  (filed below) gets a targeted-scan variant with Cancel, Gate 0; (3) the
-  NDEF read-error path (Core NFC code 102, tag lost mid-read) showed the
-  system's error text, not our `NFC scan stopped. Try again.` — trace and
-  fix; (4) Connect once began connecting with no list sheet (walk leg 3; not
-  reproduced in leg 5) — reproduce or retire; (5) **the not-advertising copy is wrong about the
-  PM5** (James, 2026-09-06: it advertises whenever awake and not already
-  connected, on any screen, and an NFC tap wakes it) — `Open Connect Device
-  on this PM5, then try again.` becomes copy about a sleeping or
-  already-connected PM5, Gate 0. Spec fact landed in the walk section. **Walk-verified countable exits** (spec): 2, 4,
-  5, 6, 7 and 9 close only at the walk; the walk precedes merge. The
-  branch is NOT pushed; James's word gates push, PR, walk and merge. Open
-  number for James: the 1_000 ms collision window is paid on every NFC
-  connect. **Owed observation (spec residual, review SF3):** backgrounding
-  during the targeted BLE scan may arm the never-cleared cleanup poison on
-  resume; no leg backgrounds during the BLE half; candidate fix "do not arm
-  the cleanup deadline on a background-caused abort" if ever seen.
-  **Product defect found by the walk hardening (RF14), FIXED in the
-  follow-on PR:** on the NFC route the interstitial passed through
-  `picking` rendering `CONNECT / Choosing your monitor` with NO buttons for
-  the whole targeted scan; it now reads `Looking for <name>` with Cancel
-  (follow-on Gate 0 §2).
-  **Dead-code rows (RF29):** `PaintBarrierAbortedError`,
-  `stagedRetireAttemptId()` and the transport's `targetDeadlineMs` /
-  `collisionWindowMs` options have test consumers only (seams, kept on
-  purpose); the NFC patch carries two unused symbols
-  (`NfcSessionCoordinator.async(_:)`, `tagAttemptId`) — remove them at the
-  next patch edit, which re-runs the Swift suite anyway.
-  James chose a
-  56 px filled muted-fern **Scan NFC** action directly above the equal-weight
-  existing blue **Connect**, present only when native iOS reports NFC support.
-  A valid PM5
-  record confirms `PM5 found`, then silently discovers that exact advertised
-  name and reuses the existing connect → program → `armed` path; no second app
-  tap and no Bluetooth picker. Unsupported records say `Unsupported NFC tag`.
-  A target the scan cannot find says `Couldn't reach <name>.` /
-  `Check nothing else is connected to it, then try again.` (follow-on, after
-  James's erg fact: the PM5 advertises whenever awake and unconnected, on any
-  screen) and never falls back to a general picker. NFC is a lookup
-  shortcut, not pairing. CoreBluetooth's opaque id makes the tag's MAC unusable;
-  exact live `ScanResult.localName` matching is the bridge. **Gate -1 comes
-  before product implementation:** a complete read on James's real PM5 must
-  prove the pinned, checked-in-patched `@capgo/capacitor-nfc@8.2.5` receives the
-  external NDEF record, establish its payload padding/termination, and show the
-  ASCII-decoded name exactly equals that unit's live `ScanResult.localName`
-  across repeated fresh scans. The patch is required because the released
-  plugin's retained events lack session identity, its NDEF delegate chooses the
-  first physical tag, and its stop promise does not drain old native closures.
-  Native attempt identity/single-tag/drain tests, fail-closed end-to-end
-  targeted-operation propagation, and raw BLE-operation serialization are
-  merge gates. The
-  existing Flipper file is header-only and proves none of those literal bytes.
-  Full architecture, atomic product-PR shape, Gate 0, cleanup/concurrency
-  contract, replay seam, and exits:
-  [`docs/superpowers/specs/2026-09-03-phase-nf-scan-nfc-design.md`](docs/superpowers/specs/2026-09-03-phase-nf-scan-nfc-design.md).
-  The executable, disposable hardware-proof plan is
-  [`docs/superpowers/plans/2026-09-03-phase-nf-gate-minus-one.md`](docs/superpowers/plans/2026-09-03-phase-nf-gate-minus-one.md).
-  Implementation requires a separate explicit scheduling ruling; the default
-  remains behind Wave A. **M**
 - **The parametric workout generator** — "generate me a 45' AT workout".
   **Its trigger has FIRED** (Phase 6 closed the loop, and `patterns.json` is the
   exact fixture it would consume), so this is eligible to schedule whenever it is
@@ -2594,6 +2478,12 @@ trigger is the whole entry.
 One row each. The body is in `docs/history/`, archived verbatim, and it is a
 RECORD — do not cite it for a live question.
 
+- **Phase NF** — Scan NFC: hold the iPhone to the PM5's own tag and the app
+  connects to exactly that erg and programs the workout, no Bluetooth picker
+  (workout detail and Just Row); the scan screen names the target and can be
+  cancelled. Walked on the erg, where James's own fact overturned the phase's
+  advertising premise · closed 2026-09-06 · #316 + #324 + #325 · v0.40.0 ·
+  [detail](docs/history/phase-nf.md)
 - **Phase KB** — the tab bar hides while the keyboard is up (the v0.39.1 fill
   under it never painted: iOS never shrinks the fixed viewport; Ionic hides
   its bar too); the Keyboard plugin for its events only, tray restored ·
