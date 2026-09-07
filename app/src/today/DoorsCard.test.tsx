@@ -60,6 +60,9 @@ describe("the skip line (Phase RW PR C)", () => {
     });
     // Three doors, and the skip is NOT one of them: it writes, they navigate.
     expect(screen.getAllByRole("link")).toHaveLength(3);
+    // BENEATH them, not among them — the doors are the offer, this is the
+    // way past it.
+    expect(skip.previousElementSibling).toHaveClass("doorscard-doors");
 
     await userEvent.click(skip);
     expect(onSkip).toHaveBeenCalledTimes(1);

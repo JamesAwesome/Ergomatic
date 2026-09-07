@@ -2206,18 +2206,24 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **`NO BASELINE SET` is false for a rower who has set ONE side** (Phase RW
-  PR C, found at its PM final gate 2026-09-07). Every screen collapses a
-  half baseline pair to `null` (`Today.tsx`'s own derivation), so a rower
-  who skipped the doors, rowed the 2K Test, accepted the measured number
-  and DECLINED the derived 6k has their 2k stored and still reads
-  `NO BASELINE SET` at the top of Today. The row is new in PR C; before it
-  the same state showed the doors card, a softer falsehood. Reachable only
-  by skip + a designated test + a decline, so it is queued rather than
-  fixed in place. **Candidates:** say which side is missing ("NO 6K
-  BASELINE"), or gate the row on both sides being null and let the existing
-  counterpart offer carry the other case. Spec §3.2's own lifetime table
-  names the partial pair as a durable state and did not notice the copy.
+- **A rower who sets ONE baseline is asked to set both, suggested at the 7 s
+  offset (James, 2026-09-07: "If a user sets a 2k or a 6k they should be
+  asked to set both with a suggestion of the 7s offset").** This is the
+  ruling on the partial-pair state, raised at Phase RW PR C's PM final gate:
+  every screen collapses a half pair to `null` (`Today.tsx`'s own
+  derivation), so a rower who set only their 2k reads `NO BASELINE SET` at
+  the top of Today, which is false about their account. The half-measures
+  considered and NOT taken were naming the missing side in the copy, or
+  gating the row on both sides being null; James's answer is to close the
+  state instead of describing it. **The mechanism already exists and is
+  currently declinable:** `domain/deriveBaseline.ts`'s
+  `K2_K6_OFFSET_SECONDS = 7` and the counterpart offer the post-test prompt
+  already makes (`PostTestPrompt.tsx`). The work is to make the ask
+  persistent rather than a one-time offer — wherever a single side is
+  stored, the rower is asked for the other with the derived number
+  suggested. Sizing note: the derivation, the copy and the surface that
+  carries the ask (a Today row, the You editor, or both) are the design
+  question; the arithmetic is done. **S/M.**
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard

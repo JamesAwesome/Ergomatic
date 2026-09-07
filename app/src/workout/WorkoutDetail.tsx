@@ -79,7 +79,18 @@ export default function WorkoutDetail() {
   const baselinesState = useBaselines();
   const preferencesState = usePreferences();
 
-  if (workoutsState.state === "loading" || baselinesState.state === "loading") {
+  // Phase RW PR C: `preferencesState` is in this guard because the caption's
+  // "Set one up" needs the writer to clear the skip. Without it the caption
+  // renders while `/api/prefs` is still in flight, `onSetOneUp` is null, and
+  // the tap falls through to a bare navigate — landing a skipped rower on
+  // Today's own "Set one up" row, the double-offer the phase's antagonist
+  // pass raised as blocking (branch review, finding 2). The three fetches
+  // start together, so this costs nothing unless prefs is the slowest.
+  if (
+    workoutsState.state === "loading" ||
+    baselinesState.state === "loading" ||
+    preferencesState.state === "loading"
+  ) {
     return (
       <main className="screen">
         <p className="mono-status">LOADING…</p>
@@ -152,6 +163,9 @@ export default function WorkoutDetail() {
       // card rather than on Today's own "Set one up" row. Null while
       // preferences are loading or errored — the caption falls back to
       // navigating, which is what it did before this PR.
+      // Null only when preferences ERRORED (loading is guarded above): the
+      // caption still navigates, so a rower is never trapped on this screen
+      // by a failed fetch.
       onSetOneUp={
         preferencesState.state === "ready"
           ? () => preferencesState.setBaselinesSkipped(false)

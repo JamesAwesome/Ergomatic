@@ -795,7 +795,8 @@ button:disabled {
    explaining the ~ on distance rows. --ink-3 on --page: 6.69:1 (Gate 0,
    docs/design/rw-gate0/contrast.json). */
 /* Phase RW PR C: the doors card's fourth line, and Today's return row while
-   a rower has skipped. --ink-3 on --page is 6.69:1 (Gate 0). */
+   a rower has skipped. --ink-3 on --page is 6.69:1 (Gate 0). (The comment
+   directly above belongs to `.library-caption`, further down.) */
 .doorscard-skip {
   display: block;
   width: 100%;

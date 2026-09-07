@@ -11778,6 +11778,11 @@ test.describe("the stored skip (Phase RW PR C)", () => {
       page.getByText("~ times are estimates until you set a baseline"),
     ).toBeVisible();
 
+    // The skipped screen carries two new controls; sweep them (the plan's
+    // Task 3 named this and the first draft dropped it).
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+
     // Server-side, not component state.
     await page.reload();
     await expect(page.getByText("NO BASELINE SET")).toBeVisible();

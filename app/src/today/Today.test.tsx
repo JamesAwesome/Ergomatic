@@ -4509,6 +4509,21 @@ describe("the stored skip (Phase RW PR C)", () => {
     expect(document.querySelector(".doorscard")).not.toBeNull();
   });
 
+  it("keeps the return row for a PARTIAL pair — the state spec 3.2 calls out", async () => {
+    // One side stored still reads as "no baseline" everywhere (Today's own
+    // derivation collapses a half pair to null), so the flag still decides.
+    // James's 2026-09-07 ruling — ask for both, suggested at the 7s offset —
+    // is the queued fix for the copy; this pins today's behaviour.
+    mockReady({
+      baselines: ONLY_K6_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(document.querySelector(".doorscard")).toBeNull();
+    expect(screen.getByText("NO BASELINE SET")).toBeInTheDocument();
+  });
+
   it("shows neither the card nor the row once a baseline is set, whatever the flag says", async () => {
     mockReady({
       baselines: BASELINES,
