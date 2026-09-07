@@ -204,24 +204,17 @@ export function draftSteps(d: SessionDraft): Step[] {
   return effectiveSteps(d).map((e) => e.step);
 }
 
-/** Estimated minutes for the effective steps, via `estimateMinutes`. Every
- *  work step's pace ref — split or effort, time or distance duration alike —
- *  is resolved against `baselines` unconditionally by domain/expand.ts's
- *  `phases()`, so any work step present with no baselines would crash
- *  `estimateMinutes`; this returns null instead in that case. Uses
+/** Estimated minutes for the effective steps, via `estimateMinutes`. With
+ *  no baseline the estimate is the assumed-pace one (Phase RW PR A,
+ *  domain/expand.ts), never null and never a placeholder pair. Uses
  *  `draftSteps` (nudges already folded into `off`), not raw `d.steps` — see
  *  `effectiveSteps`'s comment for why that's the same math as a "real"
  *  nudge. */
 export function draftMinutes(
   d: SessionDraft,
   baselines: Baselines | null,
-): number | null {
-  const steps = draftSteps(d);
-  if (baselines === null) {
-    if (steps.some((s) => s.k === "w")) return null;
-    return estimateMinutes(steps, { k2Seconds: 0, k6Seconds: 0 }).minutes;
-  }
-  return estimateMinutes(steps, baselines).minutes;
+): number {
+  return estimateMinutes(draftSteps(d), baselines).minutes;
 }
 
 /** Stamps `startedAt` — the one field 6B requires non-null before it will

@@ -4,7 +4,12 @@ import {
   parseDurationToken,
 } from "../../domain/duration.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
-import { estimationSplit, isPaceWordRef, refLabel } from "../../domain/pace.js";
+import {
+  ASSUMED_BASELINES,
+  estimationSplit,
+  isPaceWordRef,
+  refLabel,
+} from "../../domain/pace.js";
 import type {
   Baselines,
   PaceWord,
@@ -522,19 +527,24 @@ export function toSteps(
 function rowMinutes(
   row: BuilderRow,
   baselines: Baselines | null,
-): number | null {
+): { minutes: number; assumed: boolean } {
   const n = rowDurationNumber(row);
-  if (n === null) return 0;
+  if (n === null) return { minutes: 0, assumed: false };
 
   let minutes: number;
+  let assumed = false;
   if (row.durUnit === "min") {
     minutes = n;
   } else {
-    if (!baselines) return null;
     const ref: PaceRef = row.refEffort
       ? { effort: row.refEffort }
       : { base: row.refBase, off: row.refOff };
-    minutes = (estimationSplit(baselines, ref) * n) / 500 / 60;
+    // Phase RW PR A: no baseline prices the row off the assumed pair, the
+    // same pair `estimateMinutes` uses, so the Builder's TOTAL and the
+    // saved workout's Library row agree (and both carry the ~).
+    minutes =
+      (estimationSplit(baselines ?? ASSUMED_BASELINES, ref) * n) / 500 / 60;
+    assumed = baselines === null;
   }
 
   // The domain's phases()/estimateMinutes() emit restMinutes as its own
@@ -547,7 +557,7 @@ function rowMinutes(
     }
   }
 
-  return minutes;
+  return { minutes, assumed };
 }
 
 /** Sums rows before `spanStartIndex(f)` into `loose` (paid once) and every
@@ -567,19 +577,22 @@ function rowMinutes(
 export function totals(
   f: BuilderForm,
   baselines: Baselines | null,
-): { loose: number; perSet: number; total: number } | null {
+): { loose: number; perSet: number; total: number; assumed: boolean } {
   const start = spanStartIndex(f);
   let loose = 0;
   let perSet = 0;
+  // Phase RW PR A: true when any row priced off the assumed pair; the
+  // Builder's TOTAL renders it as a leading ~. Never null any more.
+  let assumed = false;
 
   for (let i = 0; i < f.rows.length; i++) {
-    const minutes = rowMinutes(f.rows[i]!, baselines);
-    if (minutes === null) return null;
-    if (i >= start) perSet += minutes;
-    else loose += minutes;
+    const r = rowMinutes(f.rows[i]!, baselines);
+    assumed = assumed || r.assumed;
+    if (i >= start) perSet += r.minutes;
+    else loose += r.minutes;
   }
 
-  return { loose, perSet, total: loose + perSet * f.reps };
+  return { loose, perSet, total: loose + perSet * f.reps, assumed };
 }
 
 function formatDurationValue(d: WorkDuration): {

@@ -161,23 +161,21 @@ describe("draftMinutes", () => {
     expect(draftMinutes(d, baselines)).toBe(44);
   });
 
-  it("returns null for a distance workout when baselines are absent", () => {
+  it("prices a distance workout with no baseline off the assumed pair (Phase RW PR A)", () => {
     const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-4"));
-    expect(draftMinutes(d, null)).toBeNull();
+    // 10,000 m @ 6k+12 against the assumed 6k of 2:32 (152 s): 164 s/500 m
+    // -> 20 * 164 = 3280 s -> 54.67 -> 55. (44 with this file's own 2:00
+    // 6k baseline, the test above.)
+    expect(draftMinutes(d, null)).toBe(55);
   });
 
-  it("also returns null for a TIME-based work step without baselines (any pace ref needs resolving)", () => {
-    // Hoarfrost is time-based (not distance), but its work step still carries
-    // a SplitRef that expand.ts's phases() resolves unconditionally via
-    // resolveSplit(baselines, ref) regardless of duration kind - so it
-    // crashes without baselines exactly like the distance case. The brief
-    // frames the null case as "a distance step needs baselines"; the actual
-    // domain code (domain/pace.ts resolveSplit/estimationSplit, domain/
-    // expand.ts phases()) requires baselines for ANY "w" step, split or
-    // effort ref, time or distance duration. This test pins that broader,
-    // actually-correct rule.
+  it("prices a time-based split-ref workout exactly with no baseline", () => {
+    // Hoarfrost is 2 x (12:00 @ 6k+12, 5:00 rest): a clock total whatever
+    // the pace, so no baseline changes nothing. Both calls pin the SAME
+    // literal, never each other.
     const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-3"));
-    expect(draftMinutes(d, null)).toBeNull();
+    expect(draftMinutes(d, null)).toBe(34);
+    expect(draftMinutes(d, baselines)).toBe(34);
   });
 
   // Phase 6I: `draftMinutes` was ALREADY null-tolerant for an effort-only
@@ -192,9 +190,11 @@ describe("draftMinutes", () => {
   // used to block START before a rower's draft could ever render here with
   // null baselines) — no production code changed in this file for Task 2,
   // only this covering test.
-  it("returns null for a REAL effort-only library workout too (Fork Lightning) — no different from any other work step without baselines", () => {
+  it("prices a REAL time-based effort-only workout (Fork Lightning) exactly, with or without a baseline (Phase RW PR A)", () => {
+    // 5 x (0:30 max + rest): clock time, so the assumed pair never enters.
     const d = buildDraft(draftInputFor("Fork Lightning", "id-fork-null"));
-    expect(draftMinutes(d, null)).toBeNull();
+    expect(draftMinutes(d, null)).toBe(20);
+    expect(draftMinutes(d, baselines)).toBe(20);
   });
 
   it("still computes minutes without baselines when no work step is present", () => {
@@ -436,7 +436,9 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     const loaded = loadDraft();
     expect(loaded).toStrictEqual(nudged);
     expect(draftMinutes(loaded!, baselines)).toBe(42);
-    expect(draftMinutes(loaded!, null)).toBeNull();
+    // Phase RW PR A: the same nudged draft priced off the assumed 6k
+    // (2:32 + 12 - the nudge) instead of this file's 2:00 one.
+    expect(draftMinutes(loaded!, null)).toBe(53);
   });
 
   it("round-trips a Hoarfrost (reps marker) draft, keeping the marker live", () => {
