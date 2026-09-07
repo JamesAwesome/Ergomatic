@@ -414,9 +414,13 @@ requirements).
   second; it is fail-fast. Pre-push runs unit + client tests only (fast,
   Docker-free — CI runs the full gate incl. integration/e2e). Both hooks fail
   loudly and block if the active Node major is below `.nvmrc`. Don't bypass with
-  `--no-verify`; fix the failure. **Root markdown is NOT formatted by anything**
-  — lint-staged's globs are `app/**` only, so `ROADMAP.md`, `CLAUDE.md` and the
-  root docs have never been Prettier-formatted. Never run `prettier --write` on
+  `--no-verify`; fix the failure. **Root markdown AND everything under `docs/`
+  are formatted by NOTHING** — lint-staged's globs are `app/**/*.{ts,tsx}` and
+  `app/**/*.{json,css,md,html}`, so `ROADMAP.md`, `CLAUDE.md` and the whole
+  `docs/` tree have never been Prettier-formatted. This bullet used to say
+  "the root docs", which reads as ambiguous: a controller told an implementer
+  `docs/**` WAS Prettier-managed on 2026-09-07 and the implementer had to
+  check `package.json` to find otherwise. Never run `prettier --write` on
   them to "fix" a failing check: it reflows the whole file and buries a real
   edit in ~100 lines of rewrapped prose (measured on `ROADMAP.md`, 2026-08-31 —
   226/166 became 118/57 once the reflow was reverted). Wrap by hand to match the
@@ -686,6 +690,19 @@ often they recur.
     code comment recording a hardware DEPARTURE from it; a document this
     project has already caught being wrong does not get a fresh PRIMARY
     tag on the neighbouring claim.
+    **Fourth corollary, 2026-09-07: A VENDOR'S REVISION HISTORY LOGS EDITS
+    TO A DOCUMENT, NOT CHANGES TO THE WIRE.** The short-status-frame fix
+    scoped itself by reading Concept2's revision history end to end and
+    concluding the affected family was exactly two characteristics. The
+    conclusion was right and the method was not: a revision row exists only
+    where an engineer wrote one, and the same pass found three
+    GATT-versus-multiplexed layout divergences carrying no row at all. What
+    rescued it was a second, non-mirror route computed from OUR OWN source —
+    for each parser, `length floor − (highest byte offset of a field that has
+    a consumer)`; exactly two had slack. **When a scope claim rests on a
+    vendor's changelog, re-derive it from a property of our own code and
+    require both routes to agree.** A changelog is corroboration, never the
+    proof.
 
 17. **Opening a phase without writing it into the ROADMAP.** Four phases
     running (PW, CS close, CM, LT), the phase's own gate ran
@@ -1076,6 +1093,33 @@ often they recur.
     less true with 'monitor'?" — if not, it is the wrong word. Code
     identifiers, comments, wire notes and walk records are not copy and
     keep the name.
+
+33. **A narrowed input interface that renames the producer's field, and a
+    constant whose unit no assertion can reveal (Phase LP, PR #345,
+    2026-09-07).** Two defects in one function, both invisible to the
+    compiler and to five green tests, and both in the number a rower reads.
+    (1) `seriesRecorder.ts` marks a resting sample `r`; the domain function
+    declared its own input interface "structurally what `Sample` carries" and
+    spelled it `rest`. The field is OPTIONAL, so structural typing accepts
+    the real `Sample` with the key simply absent — no error, no warning — and
+    the rest exclusion was dead on every production path while every test,
+    which built `rest` by hand, proved it worked. The app shipped an average
+    James had explicitly not chosen. **When a domain function declares a
+    narrow input interface described as "structurally what X carries", diff
+    it against X's real declaration FIELD BY FIELD.** A renamed optional is
+    invisible in exactly the direction that matters, and the fix is to make
+    the field REQUIRED with `null` meaning absent, so the compiler becomes
+    the gate. **And one test must build its input from the PRODUCER** — here,
+    driving `createSeriesRecorder` and never naming the field at all.
+    (2) `Sample.t` is DECISECONDS; the dropout cap was named, documented and
+    written in seconds, so it shipped at 6.0 s while claiming 60. Four
+    capture-derived literals held under either unit because **a weighted mean
+    is scale-invariant** — no assertion on the RESULT could ever catch it.
+    **For any test whose expected value would be UNCHANGED by a unit error,
+    list the constants that would not be; those are the untested ones**, and
+    pin them at a boundary with independent literals.
+    _Both were found by review, neither by the author, and the author had
+    already run four mutation probes that all bit._
 
 ## Commands
 

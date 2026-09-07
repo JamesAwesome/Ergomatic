@@ -1,8 +1,10 @@
 # Phase RW — Row without a baseline (archived at close, 2026-09-07)
 
 A RECORD, not a backlog. Opened and closed on 2026-09-07 across three PRs
-(#333 durations, #335 the ladder, #338 the stored skip); released in
-v0.42.0. The live items this phase left behind were lifted into ROADMAP's
+(#333 durations, #335 the ladder, #338 the stored skip). Its v0.42.0 tag was
+DELETED unreleased on 2026-09-07 (James: "We won't release that tag" — he is
+bundling more work first); the version is free to be re-cut at a later main,
+and this phase's work has not reached TestFlight. The live items this phase left behind were lifted into ROADMAP's
 open-item register before archiving, and the ROADMAP ledger row is the live
 record.
 
@@ -80,7 +82,9 @@ Today row clears, and `DELETE /api/baselines` clears server-side (real
 Postgres, `baselineReset.integration.test.ts`); the e2e RELOAD is the
 oracle that the write is server-side, and its mutation was run.
 (5) MET — the grep returns 62 hits, all in spec §2.9's three classes.
-(6) MET — one tag, v0.42.0.
+(6) MET as written — one tag, v0.42.0 — though that tag was later deleted
+unreleased (see the header). One tag per phase is what the criterion asked;
+whether it ships is James's call.
 
 **Exit as originally written (each clause names its oracle):** (1) on web e2e, a fresh account
 with no baseline opens a split-ref workout and Start, Log it after and the

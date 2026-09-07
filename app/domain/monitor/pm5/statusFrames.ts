@@ -194,9 +194,22 @@ export function buildGeneralStatusBytes(s: GeneralStatus): Uint8Array {
   return bytes;
 }
 
-/** 0x0032 — inverse of `parse.ts`'s `parseAdditionalStatus1`, 17 bytes. */
-export function buildAdditionalStatus1Bytes(s: AdditionalStatus1): Uint8Array {
-  const bytes = new Uint8Array(17);
+/** The wire form to emit. `"v126"` is the current 17/19-byte layout;
+ *  `"pre-v126"` is the 16/18-byte one a monitor older than interface
+ *  revision V1.26 (2018-11-02) sends, which omits the trailing `Erg
+ *  Machine Type` byte. A FLAG rather than an optional input field on
+ *  purpose: a caller that simply forgets to set `ergMachineType` still
+ *  gets the long frame and cannot produce a short one by accident. */
+export type StatusFrameForm = "v126" | "pre-v126";
+
+/** 0x0032 — inverse of `parse.ts`'s `parseAdditionalStatus1`, 17 bytes
+ *  (`form: "pre-v126"` yields the 16-byte prefix a pre-2018 monitor sends,
+ *  omitting the trailing Erg Machine Type byte). */
+export function buildAdditionalStatus1Bytes(
+  s: AdditionalStatus1,
+  form: StatusFrameForm = "v126",
+): Uint8Array {
+  const bytes = new Uint8Array(form === "pre-v126" ? 16 : 17);
   writeU24LE(bytes, 0, Math.round(s.elapsedSeconds * 100));
   writeU16LE(bytes, 3, Math.round(s.speedMetersPerSecond * 1000));
   writeU8(bytes, 5, s.spm);
@@ -205,7 +218,7 @@ export function buildAdditionalStatus1Bytes(s: AdditionalStatus1): Uint8Array {
   writeU16LE(bytes, 9, Math.round(s.averageSplit * 100));
   writeU16LE(bytes, 11, s.restDistanceMeters);
   writeU24LE(bytes, 13, Math.round(s.restSeconds * 100));
-  writeU8(bytes, 16, s.ergMachineType);
+  if (form === "v126") writeU8(bytes, 16, s.ergMachineType ?? 0);
   return bytes;
 }
 
@@ -239,11 +252,13 @@ export function buildSplitIntervalDataBytes(s: SplitIntervalData): Uint8Array {
 }
 
 /** 0x0038 — inverse of `parse.ts`'s `parseAdditionalSplitIntervalData`, 19
- *  bytes. */
+ *  bytes (`form: "pre-v126"` yields the 18-byte prefix a pre-2018 monitor
+ *  sends, omitting the trailing Erg Machine Type byte). */
 export function buildAdditionalSplitIntervalDataBytes(
   s: AdditionalSplitIntervalData,
+  form: StatusFrameForm = "v126",
 ): Uint8Array {
-  const bytes = new Uint8Array(19);
+  const bytes = new Uint8Array(form === "pre-v126" ? 18 : 19);
   writeU24LE(bytes, 0, Math.round(s.elapsedSeconds * 100));
   writeU8(bytes, 3, s.splitIntervalAvgStrokeRate);
   writeHeartRate(bytes, 4, s.splitIntervalWorkHeartRateBpm);
@@ -255,7 +270,7 @@ export function buildAdditionalSplitIntervalDataBytes(
   writeU16LE(bytes, 14, s.splitIntervalPowerWatts);
   writeU8(bytes, 16, s.splitAvgDragFactor);
   writeU8(bytes, 17, s.splitIntervalNumber);
-  writeU8(bytes, 18, s.ergMachineType);
+  if (form === "v126") writeU8(bytes, 18, s.ergMachineType ?? 0);
   return bytes;
 }
 

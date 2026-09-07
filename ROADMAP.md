@@ -1284,8 +1284,14 @@ closed with zero Concept2 contact.
       repo — capture one on the next walk so the corpus carries a belted
       0x0039 from a second day and build.
 
-- [ ] **v0.41.0's release note is now FALSE and the next note owes a
-      correction.** It reads "Rows rowed with the PM5 connected now show what
+- [x] **DONE (2026-09-07, PR #348). v0.41.0's release note was FALSE and the
+      next note owed a correction.** Fixed in the same round that corrected
+      v0.42.0's own item 2: v0.41.0 item 1 now reads "what the monitor
+      reports" and no longer lists average heart rate among the session
+      figures — that tile read a dash on every row in that build, so the
+      claim was false when shipped rather than merely outdated — and
+      v0.42.0 item 6 says where the number comes from now.
+      **Original row:** It reads "Rows rowed with the PM5 connected now show what
       the monitor measured: … average heart rate for the session". After
       #345 that figure is NOT what the monitor measured — the monitor sends
       nothing there, and the app works it out from the trace, working strokes
@@ -1317,6 +1323,68 @@ closed with zero Concept2 contact.
       true, and then inferred a cause from reading two tests — RF16's shape,
       inside a row whose whole purpose was to carry evidence. Tag an
       unreproduced mechanism INFERENCE, or leave the row at the symptom.
+
+- [ ] **DONE, PR OPEN — a monitor older than 2018 is silently unusable.**
+      Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26
+      (2018-11-02) and to `0x0038` in V1.27; our parsers demanded the longer
+      form, so a pre-2018 monitor had every one of those frames rejected.
+      `seen.as1` then never latched and `maybeEmitFrame` published NOTHING
+      for the whole session — the rower sat on `READY`, unwarned, and the
+      row was lost. Reported by a friend of James's, 2026-09-07, with a ring
+      full of `0x0032: expected 17 bytes, got 16` and
+      `rowingActive=unseen`. Spec:
+      `docs/superpowers/specs/2026-09-07-short-status-frames-design.md`. All
+      four plan tasks are complete and the full gate is green on PR #350
+      (`as1-short-frame`); the checkbox above ticks on merge, not before. **M**
+
+- [ ] **A monitor we cannot decode says nothing at all.** The follow-on the
+      spec above names: hundreds of `frame-error` entries reached the ring
+      and NOTHING reached the rower, who kept rowing against an app that
+      had already stopped listening. Recurring failure 25's shape — a lower
+      layer reports a durability failure and the caller proceeds. Needs a
+      rower-facing state, so it carries a Gate 0. **M**
+
+- [ ] **The frame-error flood evicts its own diagnosis.** The ring holds 500
+      entries (`eventLog.ts:51`). A monitor we cannot decode produces a
+      `frame-error` per arrival, roughly eight a second, so the buffer fills
+      in about a minute and the connect-time entries are gone — including
+      `notify-first <char> (<n>B)` (`driver.ts:2301`), which records the
+      MEASURED wire length of every characteristic before the decode and is
+      the single most useful line in the file for this bug class. Found
+      2026-09-07: the reporting rower's export ran seq 5432-5931, exactly 500,
+      already rolled over, so we cannot tell whether that monitor's `0x0033`
+      parses — and a fresh export from them would be equally useless. Rate-limit
+      or count a repeated identical `frame-error`, or reserve connect-time
+      entries from eviction. **S**
+
+- [ ] **We cannot read the monitor's firmware version, and it is the one
+      fact every report of this class needs.** Documented at characteristic
+      `0x0014` (20 bytes, READ) in the C2 Device Information service
+      `0x0010` (BLE doc rev 1.30 attribute table). `Transport` has no read
+      method at all, so this touches both real transports, the fake, replay
+      and three decorators; a connect-time ring entry is the payoff. **Check
+      while implementing:** `DEVICE_INFO_SERVICE_UUID` is built from handle
+      `0x0000` while the document gives `0x0010`, and the constant's own
+      comment concedes we never established whether it or the `PM5` name
+      prefix matched at discovery. **M**
+
+- [ ] **Our arm verification cannot see a dropped rest, or ANY interval past
+      the first.** `expectedArmedStructure` predicts exactly three values —
+      workout type, workout duration, duration type — and the duration pair
+      mirrors INTERVAL 0 only. So a monitor can ack every frame, read back a
+      structure we declare correct, and still run something else: rest is
+      never checked on any interval, and intervals 1..N are never checked at
+      all. Found 2026-09-07 chasing a report that Sea Fret ran as work, work,
+      rest ON THE MONITOR'S OWN SCREEN rather than work, rest, work, rest.
+      **The report is UNREPRODUCED and there is no defect to fix yet:** the
+      compiled program carries `restSeconds: 60` on both intervals and the
+      wire bytes carry `04 02 00 3c` twice, matching the CSAFE worked
+      example byte for byte. What is certain is that no instrument we own
+      would have caught it (recurring failure 19). **OPEN QUESTION:** whether
+      the PM exposes any readback for PROGRAMMED rest — `0x0032`'s rest
+      fields are live values, not configuration — which decides whether this
+      is an extension of the existing check or a different mechanism. Needs
+      the reporter's firmware version and a recorded session. **M**
 
 - [ ] **The Bluetooth scan sheet mixes "PM5" and "monitor" in one flow.**
       `capacitorBle.ts`'s scan copy reads "Looking for your PM5" and then
@@ -2137,16 +2205,32 @@ Each needs erg time or a deliberate recording session.
   on Paul's Law (≈ +7.9 s, SECONDARY, a forum post, trained rowers) and says
   in terms that no source grounds a better per-population gap;
   `deriveBaseline.test.ts` pins the constant and nothing about any real pair.
-- **v0.42.0's release note describes behaviour the app no longer has**
-  (found at PR #344's PM gate, 2026-09-07; the tag has NOT been released —
-  James is bundling more work first). `releaseNotes.ts` item 2 promises "a
-  quiet **NO BASELINE SET** line keeps the doors one tap away, and setting a
-  baseline any time puts the numbers back". After #344 a half-set rower reads
-  `2K SET · NO 6K`, not `NO BASELINE SET`, and setting ONE baseline does not
-  put the numbers back — the app now says so out loud. Amend item 2 and name
-  the `Estimate it (+7s)` tap. Rides whatever notes PR precedes the tag; the
-  tag itself needs re-cutting at the new main, since `v0.42.0` currently
-  points at #344's base and nothing has been uploaded from it.
+- **DONE (2026-09-07, PR #348): v0.42.0's notes corrected, and the tag it
+  was written for DELETED unreleased.** Item 2 promised "a quiet **NO
+  BASELINE SET** line" and that "setting a baseline any time puts the numbers
+  back"; after #344 a half-set rower reads `2K SET · NO 6K`, and setting ONE
+  side does not put the numbers back. James, 2026-09-07: "We won't release
+  that tag" — so `v0.42.0` (which sat at `8326fb2c`, #344's base, and never
+  reached TestFlight) was deleted locally and on the remote, and the VERSION
+  is free to be re-cut at whatever main is when he releases. The notes entry
+  keeps its `v0.42.0` label and `e2e/releasePin.ts` is unchanged for the same
+  reason. Its provenance comment was re-counted over the full
+  `v0.41.0..main` range (sixteen merges, RF15) and three items added: the
+  half-set offer (#344), the verification-code narrowing (#341) and AVG HR
+  (#345).
+- **The vitest 5 migration is owed, and it is why the app's dependency group
+  went red** (2026-09-07, PR #349 split it out; Dependabot's #340 bundled the
+  major with 17 routine patches). Vitest 5 changes the `Assertion` type
+  `@testing-library/jest-dom` augments, so every `toHaveValue` and
+  `toHaveAttribute` in the suite fails typecheck with TS2339 — 23 errors in
+  `SplitInput.test.tsx` alone, and that file is one of many. `jest-dom@7.0.1`
+  is the latest and declares `vitest: >= 0.32`, so the peer range does not
+  warn; the break is in the augmentation, not the range. **What unblocks it:**
+  a jest-dom release that targets vitest 5's Assertion shape, or our own
+  `vitest.d.ts` re-declaring the matchers. Until then `.github/dependabot.yml`
+  ignores the major for `vitest` and `@vitest/coverage-v8` so one upstream
+  major cannot hold 17 patches hostage. Re-check jest-dom's releases at any
+  test-infra touch. **S/M**
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard
@@ -2658,7 +2742,9 @@ trigger is the whole entry.
   wanted.
 - ~~**Row without a baseline set** (James, 2026-08-23)~~ — **DONE.** The Just
   Row half shipped with Phase JR; the every-workout half was Phase RW,
-  closed 2026-09-07 and released in v0.42.0 (ledger row below).
+  closed 2026-09-07; NOT yet released (the first v0.42.0 tag was deleted
+  unreleased, 2026-09-07 — James is bundling more work first). Ledger row
+  below.
 - **"Which days did I override, and what was the other suggestion?"** (James,
   2026-08-12). Two questions in one sentence: the CHECKPOINT half needs no new
   capture (`plan_index ∈ {6,34,62}`, **not** `workout_title`), and the FREE-FORM
@@ -2698,7 +2784,7 @@ RECORD — do not cite it for a live question.
   (STEADY · MODERATE · HARD · ALL OUT) where the split would be, `~`
   durations off an assumed pace, and a stored "row without one for now"
   that survives a reinstall · closed 2026-09-07 · #333, #335, #338 ·
-  released in v0.42.0 · [detail](docs/history/phase-rw.md)
+  awaiting release; the first v0.42.0 tag was deleted unreleased · [detail](docs/history/phase-rw.md)
 - **Phase NF** — Scan NFC: hold the iPhone to the PM5's own tag and the app
   connects to exactly that erg and programs the workout, no Bluetooth picker
   (workout detail and Just Row); the scan screen names the target and can be

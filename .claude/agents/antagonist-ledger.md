@@ -8813,3 +8813,126 @@ had passed over the same document without a single duration in it.
   each new anchor before running the probe that depends on it.** RF21's
   DoorsCard case in this same PR was exactly this: the assertion the probe
   existed to bite had never been written, and the probe reported green.
+
+### 2026-09-07 — Short status frames (0x0032/0x0038): anchor pass
+
+- **CLAIM (HELD, but for a different reason than given):** "The affected family
+  is exactly 0x0032 and 0x0038, established by reading the vendor revision
+  history end to end." Believed because Table 1 genuinely has only two matching
+  rows. **TECHNIQUE THAT SETTLED IT — the mechanical slack audit.** A vendor
+  revision history is a log of edits to the DOCUMENT, not a changelog of the
+  wire; a row exists only where an engineer wrote one, and the pass found three
+  GATT-versus-multiplexed layout divergences with no row at all (one, 0x003A
+  19→18, not explained by the multiplexed 20-byte ceiling). The conclusion was
+  rescued by a second, non-mirror route computed from OUR source: for each of
+  the nine parsers, `floor − (highest byte offset of a field with a consumer)`.
+  Exactly two have slack. **When a scope claim rests on a vendor's changelog,
+  re-derive it from a property of our own code and require both routes to
+  agree.**
+
+- **CLAIM (FALSE as a proof, though the sentence is true):** the quoted
+  V1.26/V1.27 rows "establish that the field was added, and is last." They
+  establish ADDED only; LAST comes from Table 3's field ordering. RF16
+  corollary 2, one hop smaller than usual: the citation was real, current and
+  correctly transcribed, and still carried only half the attributes the
+  argument needed.
+
+- **CLAIM (FALSE):** the spec's test 1 ("a short frame decodes and
+  `ergMachineType` is undefined") gates the fix. **TECHNIQUE — trace the WRONG
+  fix through the actual byte readers.** `readU8` is `bytes[offset]!`;
+  `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are both off. An
+  implementer who lowers the floor and leaves the read unguarded produces
+  `ergMachineType: undefined` typed `number` — no throw, no typecheck error,
+  and the SAME assertion result as the correct fix. RF21 with a twist: the gate
+  goes red on the original defect but not on the half-fix.
+  `Object.hasOwn(decoded, "ergMachineType")` discriminates, because key-absence
+  is observable where `undefined` is not.
+
+- **CLAIM (TRUE, understated):** "the 0x0038 half is justified by the vendor
+  row." `noteBoundaryHalf` (`driver.ts:3138-3156`) returns without emitting
+  when its partner half is missing, so a dead 0x0038 means zero `IntervalActual`
+  rows are ever recorded. **A spec that justifies scope only from a document has
+  not asked what the code does when the field is missing; the product
+  consequence is usually the stronger argument and does not depend on the
+  document being complete.**
+
+- **TECHNIQUE THAT ALMOST WORKED, AND THE CORRECTION THAT MATTERS MORE.** The
+  pass's headline finding was: the cited ring log was never committed, and
+  `driver.ts:2301` records `notify-first <char> (<n>B)` on first arrival of
+  every characteristic BEFORE the decode, so that one file already held the
+  measured wire length of all five — including 0x0033, which the whole fix
+  silently depends on. The technique is right and worth keeping: **read what
+  the LOGGER writes, not what the report quotes.** But the conclusion was
+  wrong, and only checking the ring's capacity showed it: the ring holds 500
+  entries (`eventLog.ts:51`) and the export ran seq 5432-5931, exactly 500. It
+  had rolled over; the lines were gone. **Generalisation, now a ROADMAP row:
+  a high-frequency error path evicts its own diagnosis, so "the log must
+  contain X" needs the buffer's capacity checked against the log's own seq
+  range before it is relied on.**
+
+- **PRIOR ART (found, mechanism not invented here):** ErgometerJS's
+  `handleRowingAdditionalStatus1` reads bytes 0-15 unconditionally and gates the
+  trailing field on `data.byteLength`, never reading `ergMachineType` at all —
+  the identical 16-byte floor, reached independently. Its motivation is
+  GATT/mux unification, not old firmware, so it corroborates the FLOOR and the
+  MECHANISM and is NOT an observation of a real short frame. **A matching
+  implementation is not a matching observation**, and recording the distinction
+  is the point.
+
+- **DETERMINISTIC vs HEURISTIC:** the length check is deterministic (the
+  transport REPORTS `bytes.length`; a truncated notification has no supported
+  producer we can point to — INFERENCE, labelled: no partial frame has ever
+  appeared in any committed capture, and the general expectation of a link
+  layer is that it delivers a complete PDU or none; this does not carry the
+  refusal below, which stands on the version-band evidence alone). The
+  REJECTED alternative,
+  firmware gating, is heuristic and now has evidence: PM5 versions are disjoint
+  per-machine-family bands — the vendor's own BLE doc prints "(Valid for PM5
+  V150 – V199.99 only) (Valid for PM5 V204 – V299.99 only)" for one
+  characteristic — so a version comparison is not an order relation. **Where a
+  spec refuses an alternative, give the refusal the receipt (RF30); the doc's
+  own version-band line is a stronger reason than "a version we have not met".**
+
+- **MEASURED (reproduced by the controller, not taken on trust):** 0x0032 is 17
+  bytes in 8248/8248 and 0x0038 is 19 bytes in 42/42 notifications across all 20
+  committed recordings — no existing replay can go red on this. RF24 confirmed
+  by measuring bytes, not by grepping for an error string.
+
+## TRIAD pass, 2026-09-07 (Phase LP, derived AVG HR — PR #345)
+
+- **"Working strokes only, excluding rest by the monitor's own state."** False
+  in production, true in every test. `seriesRecorder.ts` marks a resting sample
+  `r`; `deriveAverageHeartRate` branched on `rest`. Structural typing makes the
+  real `Sample` assignable to the narrowed `HeartRateSample` with the field
+  simply absent, so nothing typechecked red, and the replay test's own
+  extractor synthesised `rest`, so the rest-exclusion mutation bit a key no
+  producer writes. Measured on a production-shaped trace: 96 bpm shipped where
+  150 was approved — James had chosen option A and the app was doing option B.
+  **Technique: run the pure function over an array built the way the PRODUCER
+  builds it, not the way the test builds it.** Corollary: when a domain
+  function declares its own narrow input interface "structurally what X
+  carries", diff that interface against X's real declaration FIELD BY FIELD; a
+  renamed optional is invisible to the compiler in exactly the direction that
+  matters.
+- **A scale-invariant formula hides a scale-dependent constant.**
+  `MAX_GAP_SECONDS = 60` was applied to `t`, which the recorder stores in
+  DECISECONDS. All four capture literals held under either unit because a
+  weighted mean is scale-invariant; the dropout cap is not, and shipped at
+  6.0 s while its name and comment said 60. **Technique: for any test whose
+  expected value would be UNCHANGED by a unit error, list the constants that
+  would not be — those are the untested ones.**
+- **"11 of 20 captures carry a 0x0039 summary and every heart-rate slot is a
+  sentinel."** Literally true, evidentially near-empty. Two of the 11 files are
+  `.gz` duplicates (9 recordings), and 7 of the 9 had no belt paired at all,
+  where an empty summary HR is the expected reading and proves nothing. The
+  real base was TWO recordings from ONE walk. **Technique: for any "N of M
+  captures show X", first count how many of the N were in a STATE where the
+  absence of X is informative — and de-duplicate the file list before quoting
+  M.** Corollary to RF16's date rule: also check for duplicate encodings of one
+  recording.
+- **Attacked and HELD:** Concept2 documents `heart_rate.average` as an optional
+  value with no unit or derivation, so a derived mean contradicts no stated
+  contract; the unread c2forum ErgData claim is correctly labelled SECONDARY
+  and carries no design weight; all three surfaces derive from one function
+  over one trace, so reopening a row cannot change the figure; the four replay
+  literals reproduce under an independent raw-hex decode.

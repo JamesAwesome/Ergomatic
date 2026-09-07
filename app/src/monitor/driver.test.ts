@@ -4205,6 +4205,116 @@ describe("createPm5Driver: garbled frame — logged, stream lives", () => {
   });
 });
 
+describe("createPm5Driver: RF24 — the only test that starts upstream of the parse", () => {
+  it("a monitor that only ever sends the 16-byte 0x0032 still produces frames — whole session, arming included (RF24: the only test that starts upstream of the parse)", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 120,
+        spm: 24,
+        currentSplit: 120,
+        heartRateBpm: 140,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 60,
+        distanceMeters: 240,
+        spm: 26,
+        currentSplit: 118,
+        heartRateBpm: 145,
+        programIntervalIndex: 0,
+      },
+      // A genuine boundary, so `deliverBoundary` — the third of the three
+      // `preV126Firmware` build sites in `fake.ts` — is exercised too, not
+      // only `deliverStatus`/`deliverArmedBundle`. Without this, 0x0038
+      // never notifies in this timeline and the length assertion below
+      // would be vacuously true regardless of how that site is wired.
+      {
+        atMs: 250,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 240,
+          avgSpm: 25,
+          avgHeartRateBpm: 142,
+          restDistanceMeters: 0,
+        },
+        cumulativeElapsedSeconds: 60,
+        cumulativeDistanceMeters: 240,
+      },
+    ];
+
+    // `preV126Firmware` makes the fake emit the 16-byte 0x0032 (and
+    // 18-byte 0x0038) for the WHOLE session — `programAndArm` below
+    // included. That matters: `seen.as1` is a one-way latch, so one
+    // well-formed 0x0032 during arming would open it and this test would
+    // pass with the bug still present.
+    const { fake, driver, events } = harness({
+      program: MINIMAL_PROGRAM,
+      events: timeline,
+      preV126Firmware: true,
+    });
+
+    // Subscribe directly through the transport, the SAME way
+    // `driver.ts`'s `mergeStatus()` does for these two characteristics —
+    // independent of whether the driver's own parse succeeds. This is the
+    // only assertion in this branch that can catch a `preV126Firmware`
+    // ternary wired backwards at ANY of `fake.ts`'s three build sites
+    // (`deliverStatus` / `deliverBoundary` / `deliverArmedBundle`): the
+    // frames-are-emitted assertion below would still pass even if the
+    // ARMED bundle carried a long 17-byte 0x0032, because `seen.as1` only
+    // needs to latch open once and every later short frame keeps emitting
+    // fine.
+    const as1Lengths: number[] = [];
+    const as38Lengths: number[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (bytes) => {
+      as1Lengths.push(bytes.length);
+    });
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (bytes) => {
+      as38Lengths.push(bytes.length);
+    });
+
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    fake.tick(300);
+
+    const frames = events.filter((e) => e.kind === "frame");
+
+    // The defect is not "wrong numbers", it is NO frames at all: the parse
+    // fails, seen.as1 never latches, maybeEmitFrame returns early forever.
+    expect(frames.length).toBeGreaterThan(0);
+
+    // And the readings this characteristic carries are real, not zeroed —
+    // a bare count would pass if frames were emitted with an empty as1
+    // merge. `spm` is `number | null` (`MonitorFrame`'s own type — the
+    // brief's snippet wrote `e.frame.spm > 0` directly, which does not
+    // typecheck against that union), so the null case is excluded first.
+    expect(
+      frames.some(
+        (e) => e.kind === "frame" && e.frame.spm !== null && e.frame.spm > 0,
+      ),
+    ).toBe(true);
+
+    // Every 0x0032 notification across the whole session — arming
+    // included — is the pre-V1.26 16-byte form. A bare count proves
+    // nothing about WHICH form was sent; this is the assertion that
+    // actually distinguishes it from the 17-byte form.
+    expect(as1Lengths.length).toBeGreaterThan(0);
+    expect(as1Lengths.every((n) => n === 16)).toBe(true);
+
+    // Same for 0x0038 (the pre-V1.27 18-byte form), sent from the
+    // boundary above.
+    expect(as38Lengths.length).toBeGreaterThan(0);
+    expect(as38Lengths.every((n) => n === 18)).toBe(true);
+  });
+});
+
 describe("createPm5Driver: MED-2 — divergence logging", () => {
   it("logs a 'divergence' entry when frame.intervalIndex (0x0033) disagrees with actual.index (0x0037/38)", async () => {
     const timeline: FakeTimelineEvent[] = [
