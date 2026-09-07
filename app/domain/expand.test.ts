@@ -234,7 +234,7 @@ describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => 
       type: "work",
       targetKind: "effort",
       meters: 6000,
-      label: "EASY", // paceWordLabel("min") — the word, never a number
+      label: "STEADY", // paceWordLabel("min") — the word, never a number
     });
     expect(p[0]!.targetSplit).toBeUndefined();
     // No targetSplit means phaseSeconds (the estimate builder) can't price
@@ -259,18 +259,6 @@ describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => 
       label: "Rest",
       seconds: 120,
     });
-  });
-
-  it("throws when a split-ref work step reaches phases(null) — programmer error, callers gate on needsBaselines() first", () => {
-    const steps: Step[] = [
-      { k: "r", minutes: 5 },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 5 },
-        ref: { base: "6k", off: 0 },
-      },
-    ];
-    expect(() => phases(steps, null)).toThrow(/baselines/i);
   });
 
   it("existing concrete-baseline callers are untouched (same fixture as the top-level describe, byte-identical result)", () => {
@@ -390,5 +378,58 @@ describe("phaseSeconds", () => {
     const p = phases(distanceRepeats.steps, B);
     expect(phaseSeconds(p[0]!)).toBe(600); // the 10' lead-in rest step
     expect(phaseSeconds(p[1]!)).toBe(540); // 2500m @ 108 s/500m -> 5*108
+  });
+});
+
+describe("phases with null baselines (Phase RW PR B, spec §1.2)", () => {
+  const splitStep: Step = {
+    k: "w",
+    duration: { kind: "time", minutes: 5 },
+    ref: { base: "2k", off: 6 },
+    spm: 24,
+    restMinutes: 1.5,
+  };
+
+  it("emits an effort-kind phase carrying the ref and the word, no targetSplit", () => {
+    const [work, rest] = phases([splitStep], null);
+    expect(work).toMatchObject({
+      type: "work",
+      targetKind: "effort",
+      label: "MODERATE",
+      ref: { base: "2k", off: 6 },
+      spm: 24,
+      seconds: 300,
+      originalStepIndex: 0,
+    });
+    expect(work).not.toHaveProperty("targetSplit");
+    expect(rest).toMatchObject({ type: "rest", seconds: 90, label: "Rest" });
+  });
+
+  it("carries meters for a distance step and still no targetSplit", () => {
+    const [work] = phases(
+      [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 2000 },
+          ref: { base: "6k", off: 10 },
+        },
+      ],
+      null,
+    );
+    expect(work).toMatchObject({
+      targetKind: "effort",
+      label: "STEADY",
+      meters: 2000,
+    });
+    expect(work).not.toHaveProperty("targetSplit");
+  });
+
+  it("is unchanged with real baselines: split kind, number, ref", () => {
+    const [work] = phases([splitStep], { k2Seconds: 112, k6Seconds: 122 });
+    expect(work).toMatchObject({
+      targetKind: "split",
+      targetSplit: 118,
+      label: "1:58.0",
+    });
   });
 });
