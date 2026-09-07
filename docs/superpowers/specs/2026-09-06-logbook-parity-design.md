@@ -531,8 +531,13 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   summed 5708 returns `false`
   (`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`,
   whose own limits section reads _"NOT tested: production (only log-dev)"_).
-  **UNTESTED and owed to the parity walk:** the code alongside
-  `workout.intervals[]`, and either of them on production.
+  **ALSO MEASURED 2026-09-07 on log-dev** (same research file, follow-up
+  section): the identical verified payload **with** `workout.intervals[]`
+  added returns `verified: true` (row 86044), and the same array at the
+  negative-control distance 5707 returns `false` (row 86045) — so the array
+  does not interfere and the probe is proven able to fail. Both rows deleted.
+  **UNTESTED and owed to the parity walk:** production, and the inference
+  about Concept2's own Verify button.
   Why now: James's four rows sent on the PR 2 build (2026-09-07) show that
   Concept2's own **Verify** affordance is absent on a result that arrives
   with `workout.intervals[]` — only the v0.41.0 (no-array) row still offered

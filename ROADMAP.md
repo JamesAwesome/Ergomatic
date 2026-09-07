@@ -1367,9 +1367,10 @@ closed with zero Concept2 contact.
       Verify button on a result carrying `workout.intervals[]` (INFERENCE,
       James's four rows on the PR 2 build against one v0.41.0 control —
       build and payload shape are confounded). Verifying at receipt makes
-      the button moot either way. **The code alongside the interval array,
-      and either on production, are UNTESTED — the parity walk settles
-      them.** **Still owed:** store `verified` from the 201 body
+      the button moot either way. **The code alongside the interval array is
+      MEASURED** (2026-09-07, log-dev: verified with the array at the
+      monitor's distance, not verified at the control distance, both rows
+      deleted). **Production is UNTESTED — the parity walk settles it.** **Still owed:** store `verified` from the 201 body
       (a new stored key — TRIAD) and render "verified" in place of the raw
       code with a debug reveal.
 

@@ -53,3 +53,38 @@ A single hardware send on James's real logbook, of a future interval row whose
 after PR C ships — closes the log-dev-vs-production gap. Not required for the
 number to be settled; the API result above settles which of our two stored
 numbers is authoritative.
+
+## Follow-up, 2026-09-07: the code verifies WITH `workout.intervals[]`
+
+**PRIMARY, run live against `log-dev.concept2.com`**, same dev account 2211 and
+session file, by the controller, to close the gap this file's own limits
+section named before merging PR #336 (which sends `verification_code` on rows
+that always carry the interval array).
+
+Every field held exactly at this file's verified arm — `date 2026-09-04
+17:19:22`, `time 15000`, `distance 5706`, `rest_time 3000`, `rest_distance 525`,
+`stroke_rate 21`, `workout_type VariableInterval`, code
+`D9BD-F964-32E2-7F18` — with `workout.intervals[]` added: three intervals summing
+exactly to the top-level totals (3 × 5000 tenths, 3 × 1902 m, 3 × 1000 tenths
+rest, 3 × 175 m rest distance), so the array could not be refused on its own
+numbers.
+
+| arm | distance | array | HTTP | `verified` | row |
+| --- | --- | --- | --- | --- | --- |
+| **B** | 5706 (the monitor's own total) | 3 intervals | 201 | **`true`** | 86044 |
+| **C** | 5707 (negative control) | 3 intervals | 201 | **`false`** | 86045 |
+
+Both rows were **deleted immediately** (`DELETE …/results/{id}` → 200 each). The
+arms ran sequentially with the row deleted between them, so the date+time+distance
+dedup key never fired and neither arm is confounded by the other.
+
+- **PROVEN:** `workout.intervals[]` does **not** interfere with verification —
+  the array and the code coexist, and the check stays pinned to the monitor's
+  own distance. This is the exact payload shape PR #336 produces.
+- **PROVEN (RF21):** the probe can come back `false` — arm C is the same payload
+  with the same array at a distance the code was not minted over. Arm B's `true`
+  is the code being checked, not the API rubber-stamping a well-formed post.
+- **STILL NOT TESTED:** production (both arms are log-dev), and the INFERENCE
+  that Concept2 hides its own Verify button on rows carrying interval data
+  (n=4 against one control, build and payload shape confounded). The parity
+  walk settles both.

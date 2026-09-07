@@ -604,10 +604,10 @@ export function buildC2Payload(
   // sent ONLY when the posted `time`/`distance` are BOTH the machine's own
   // totals — the code is minted over those, and the API checks "date, time,
   // distance, workout_type and machine type".
-  // MEASURED (2026-09-05, log-dev, a payload with NO `workout.intervals[]`):
-  // the machine's 5706 returns `verified: true`, our summed 5708 returns
-  // false. UNTESTED: the code alongside `workout.intervals[]`, and any of
-  // it on production — the flag-flip parity walk settles both.
+  // MEASURED (log-dev): the machine's 5706 returns `verified: true` and the
+  // control 5707 returns false, both WITHOUT the interval array (2026-09-05)
+  // and WITH it (2026-09-07, rows 86044/86045, deleted) — so the array does
+  // not interfere. UNTESTED: production; the parity walk settles it.
   // INFERENCE (n=4 rows vs 1 control, and the control was also a different
   // build): Concept2 hides its own Verify button on a result that arrives
   // with interval data, which is why sending the code matters now. The
