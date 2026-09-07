@@ -215,6 +215,23 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(buildStoredSummary(baseRow()).machineRows).toStrictEqual([]);
   });
 
+  it("Phase LP §3: the strip is gated on the row's own source — a by-hand row carrying a pm5-sourced step (the e2e from-the-log fixture's shape) gets NO machine rows", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        source: "manual",
+        steps: [
+          {
+            label: "Work",
+            targetSplit: 125,
+            actualSplit: 124,
+            actualSource: "pm5",
+          },
+        ],
+      }),
+    );
+    expect(view.machineRows).toStrictEqual([]);
+  });
+
   it("Phase LP: a stored machine row saved BEFORE this phase (machine_summary without the 0x003A keys) derives watts and dashes the rest; a manual row has no tier at all", () => {
     const old = buildStoredSummary(
       baseRow({

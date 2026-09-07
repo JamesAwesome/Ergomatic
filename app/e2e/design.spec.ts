@@ -11473,3 +11473,184 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
     ).toBe("rgb(244, 241, 232)"); // --page
   });
 });
+
+// ---------------------------------------------------------------------
+// Phase LP (spec 2026-09-06-logbook-parity §3; Gate 0 approved 2026-09-07
+// on docs/design/logbook-parity/03-chosen-composed.html): a machine row
+// carries six tiles under the heroes and a sideways-scrolling MACHINE
+// SUMMARY table under INTERVALS; a manual row carries neither. The seed is
+// the exit-7 walk's real pair (`e2e/screenshots.spec.ts`'s own capture
+// fixture, hand-checked there), plus the LP fields: 0x003A's real frame
+// (seq 63: 32 cal, 184 W, 242 m rest, 931 cal/hr — `parse.test.ts`) and
+// per-split calories that sum to it (16 + 16 = 32).
+// ---------------------------------------------------------------------
+async function postMachineRowWithLpFields(page: Page): Promise<string> {
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        workoutTitle: "Sea Fret",
+        workoutType: "O2",
+        deviceName: "PM5 432331249",
+        source: "pm5",
+        held: null,
+        effort: null,
+        thumbs: null,
+        notes: null,
+        avgSplitSeconds: 124.0,
+        timeSeconds: 244,
+        distanceMeters: 742,
+        restSeconds: 120,
+        restMeters: 242,
+        advancesPlan: false,
+        endedBy: "finished",
+        steps: [
+          {
+            label: "250m @ 2:07.0",
+            targetSplit: 127.0,
+            actualSplit: 135.8,
+            actualSeconds: 67.9,
+            actualSource: "pm5",
+            meters: 250,
+            actualMeters: 250,
+            actualSpm: 25,
+            spm: 26,
+            machineCalories: 16,
+            machineCalPerHour: 848,
+            machineWatts: 140,
+            machineDragFactor: 100,
+            machineRestHr: null,
+          },
+          {
+            label: "250m @ 2:07.0",
+            targetSplit: 127.0,
+            actualSplit: 112.2,
+            actualSeconds: 56.1,
+            actualSource: "pm5",
+            meters: 250,
+            actualMeters: 250,
+            actualSpm: 28,
+            spm: 26,
+            machineCalories: 16,
+            machineCalPerHour: 1146,
+            machineWatts: 248,
+            machineDragFactor: 100,
+            machineRestHr: null,
+          },
+        ],
+        machineWorkSeconds: 124.0,
+        machineWorkMeters: 500,
+        machineSummary: {
+          avgPaceSecondsPer500m: 124.0,
+          avgStrokeRate: 26,
+          dragFactorAverage: 100,
+          totalCalories: 32,
+          avgWatts: 184,
+          avgCalPerHour: 931,
+          totalRestMeters: 242,
+        },
+      }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(
+      `machine-row LP fixture seed failed: ${result.status} ${result.body}`,
+    );
+  }
+  return (JSON.parse(result.body) as { id: string }).id;
+}
+
+test.describe("from-the-log detail, machine tier + MACHINE SUMMARY (Phase LP §3)", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-lp-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design LP Tester",
+    });
+  });
+
+  test("a machine row shows the six tiles with the logbook's arithmetic, and a MACHINE SUMMARY table that scrolls sideways inside its own container with a pinned # column — the page never scrolls sideways", async ({
+    page,
+  }) => {
+    const id = await postMachineRowWithLpFields(page);
+    await page.goto(`/today/log/${id}`);
+    await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+
+    // The tier: six tiles, in the artboard's order, values recomputed
+    // in-frame from the seed (RF7): watts round(2.80/(124.0/500)³) = 184;
+    // cal/hr floor(32×3600/124.0) = 929 — the LOGBOOK's figure, not the
+    // seeded 0x003A `avgCalPerHour: 931`, which is provenance only.
+    const tier = page.getByTestId("summary-machine-tier");
+    await expect(tier).toBeVisible();
+    const tiles = tier.getByRole("group");
+    await expect(tiles).toHaveCount(6);
+    await expect(tiles.nth(0)).toHaveText("AVG WATTS184");
+    await expect(tiles.nth(1)).toHaveText("CALORIES32");
+    await expect(tiles.nth(2)).toHaveText("CAL / HR929");
+    await expect(tiles.nth(3)).toHaveText("RATE / TARGET26 / 26");
+    await expect(tiles.nth(4)).toHaveText("DRAG100");
+    await expect(tiles.nth(5)).toHaveText("REST242m");
+
+    // The strip: per-split logbook arithmetic — 250 m in 67.9 s → 140 W,
+    // 16 cal → floor(16×3600/67.9) = 848; 250 m in 56.1 s → round(2.80/
+    // (56.1/250)³) = round(247.7) = 248, 16 cal → floor(1026.7) = 1026.
+    // HR is a dash (no belt), REST is a dash on a stored row (LogStep
+    // carries no per-step rest — DEVIATIONS.md).
+    const table = page.getByRole("table", {
+      name: "Machine summary per interval",
+    });
+    await expect(table).toBeVisible();
+    const rows = table.locator("tbody tr");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toHaveText("1—14016848100—");
+    await expect(rows.nth(1)).toHaveText("2—248161026100—");
+
+    // Structure (RF21: measure the CELL's own box, never an inline child).
+    const shape = await table.evaluate((el) => {
+      const scroller = el.parentElement!;
+      const pin = el.querySelector<HTMLElement>("tbody .machine-summary-pin")!;
+      const cs = getComputedStyle(pin);
+      return {
+        collapse: getComputedStyle(el).borderCollapse,
+        overflowX: getComputedStyle(scroller).overflowX,
+        pinPosition: cs.position,
+        pinLeft: cs.left,
+        pinBackground: cs.backgroundColor,
+        pinWidth: pin.getBoundingClientRect().width,
+        pageScrollWidth: document.documentElement.scrollWidth,
+        viewport: window.innerWidth,
+      };
+    });
+    expect(shape.collapse).toBe("separate");
+    expect(shape.overflowX).toBe("auto");
+    expect(shape.pinPosition).toBe("sticky");
+    expect(shape.pinLeft).toBe("0px");
+    expect(shape.pinBackground).toBe("rgb(244, 241, 232)"); // --page, opaque
+    expect(shape.pinWidth).toBeGreaterThan(12);
+    expect(shape.pageScrollWidth).toBeLessThanOrEqual(shape.viewport);
+  });
+
+  test("a manual row shows neither the machine tier nor the MACHINE SUMMARY table", async ({
+    page,
+  }) => {
+    const id = await postFromLogFixture(page);
+    await page.goto(`/today/log/${id}`);
+    await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+    await expect(page.getByTestId("summary-machine-tier")).toHaveCount(0);
+    await expect(
+      page.getByRole("table", { name: "Machine summary per interval" }),
+    ).toHaveCount(0);
+  });
+
+  test("every visible interactive element keeps a >=44x44 tap target and the page has zero WCAG 2A/2AA violations with the tier and strip present", async ({
+    page,
+  }) => {
+    const id = await postMachineRowWithLpFields(page);
+    await page.goto(`/today/log/${id}`);
+    await expect(page.getByTestId("summary-machine-tier")).toBeVisible();
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+  });
+});

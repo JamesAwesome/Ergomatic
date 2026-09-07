@@ -1286,7 +1286,13 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const readBack = buildReadBack(row);
   const closeLine = buildCloseLine(row);
   const planFooter = buildPlanFooter(row);
-  const machineRows = machineSplitRows(row.steps);
+  // Phase LP §3: MACHINE rows only — gated on the row's own `source`
+  // column, not on its steps. A by-hand row can carry a `pm5`-sourced step
+  // (the e2e from-the-log fixture does, and so could any pre-sunset row
+  // edited by hand); the strip is the machine's account of a machine row,
+  // so a `manual`/`timer` row gets none however its steps are marked.
+  // Caught by the e2e manual-row assertion on the first run, 2026-09-07.
+  const machineRows = row.source === "pm5" ? machineSplitRows(row.steps) : [];
   return {
     meta,
     heroes,
