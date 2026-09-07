@@ -560,7 +560,12 @@ describe("FromTheLog — door spec §1 PARTIAL marker", () => {
       await screen.findByText("STOPPED EARLY · 2 of 5 intervals measured"),
     ).toBeVisible();
     expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
-    expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
+    // 1298 m is on no Concept2 ranking list, so its edit form offers no
+    // Verification Code field and a code here would have nowhere to go
+    // (measured 2026-09-07,
+    // docs/superpowers/research/2026-09-07-c2-verification-field-rule.md).
+    // The BLOCK still renders; only the code line is withheld.
+    expect(screen.queryByText(WALK_VERIFICATION_CODE)).toBeNull();
   });
 });
 
@@ -1437,6 +1442,36 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
     ).toBeTruthy();
   });
 
+  // James, 2026-09-07: "show the code but only for pieces that we know will
+  // get the verification option". Concept2's edit form offers the field only
+  // when the OVERALL figure hits a ranking standard, measured on real pages
+  // over every listed figure and both boundaries.
+  const codeRow = (meters: number) =>
+    storedRow({
+      machineWorkSeconds: 124,
+      machineWorkMeters: meters,
+      machineSummary: { verificationBytes: WALK_VERIFICATION_BYTES },
+    });
+
+  it("prints the code at 500 m, a distance Concept2 will take it for", async () => {
+    mockApi(() => new Response(JSON.stringify(codeRow(500)), { status: 200 }));
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
+  });
+
+  it("withholds the code ONE METRE off, where Concept2 offers no field", async () => {
+    // An INDEPENDENT literal, not derived from the module's own list
+    // (RF21): 501 m against the identical row above. Deleting the
+    // eligibility guard prints the code here and reddens this.
+    mockApi(() => new Response(JSON.stringify(codeRow(501)), { status: 200 }));
+    const { container } = await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    // The block still renders; only its code line is withheld.
+    expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
+    expect(container.querySelector(".log-machine-confirmed-code")).toBeNull();
+  });
+
   it("renders NO block when all three machine fields are null (the common case, old rows)", async () => {
     mockApi(() => new Response(JSON.stringify(storedRow()), { status: 200 }));
     const { container } = await renderFromTheLog();
@@ -1520,7 +1555,7 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
  * Save press and `JustRowLog.test.tsx`'s body assertions.
  */
 describe("FromTheLog — a free row's MACHINE CONFIRMED block", () => {
-  it("renders label, value line and verification code with no type badge and no steps widget", async () => {
+  it("renders label and value line, withholds the code on a non-standard distance, and shows no type badge or steps widget", async () => {
     mockApi(
       () =>
         new Response(
@@ -1544,7 +1579,9 @@ describe("FromTheLog — a free row's MACHINE CONFIRMED block", () => {
     await screen.findByRole("heading", { name: "Just Row" });
 
     expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
-    expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
+    // A free row of 1396 m hits no ranking standard, so no code is printed
+    // — Concept2 would give the rower nowhere to type it.
+    expect(screen.queryByText(WALK_VERIFICATION_CODE)).toBeNull();
     // Exit criterion 3's absence holds alongside the block: no steps
     // widget, never an empty one. (A `.type-badge` null check used to sit
     // here too — vacuous, since this screen never renders `TypeBadge` for

@@ -15,6 +15,7 @@ import Concept2SendBlock from "./Concept2SendBlock";
 import { buildStoredSummary, type StoredLog } from "./storedSummary";
 import TraceChart from "./TraceChart";
 import { displayVerificationCode } from "../../domain/monitor/verificationCode.js";
+import { concept2OffersVerification } from "../../domain/concept2/verificationEligibility.js";
 
 // The verification code's byte→code transform moved to
 // `domain/monitor/verificationCode.ts` at Phase LP PR 2.5, so the Concept2
@@ -54,8 +55,15 @@ function machineConfirmedValueLine(row: StoredLog): string {
 function MachineConfirmedBlock({ row }: { row: StoredLog }) {
   if (row.machineWorkSeconds === null) return null;
   const bytes = row.machineSummary?.verificationBytes;
+  // The code is printed ONLY when Concept2 will actually let the rower type
+  // it in (James, 2026-09-07: "show the code but only for pieces that we
+  // know will get the verification option"). A code with nowhere to go is
+  // noise, and a code cannot be attached after upload — Concept2 accepts it
+  // at create and silently ignores it on update, measured the same day.
+  // The rule itself is measured, not inferred: see
+  // `domain/concept2/verificationEligibility.ts`.
   const code =
-    bytes !== undefined
+    bytes !== undefined && concept2OffersVerification(row)
       ? (displayVerificationCode(bytes) ?? undefined)
       : undefined;
   return (

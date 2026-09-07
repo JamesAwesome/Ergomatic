@@ -1373,16 +1373,28 @@ closed with zero Concept2 contact.
       what changed is the product decision.
       **This row is now UNBLOCKED but unstarted**, and means reflecting a
       verification the ROWER performed, never one we caused.
+- [ ] **Auto-verification, as an option, DEFAULTED OFF (James, 2026-09-07).**
+      Sending the monitor's code with the upload verifies the row at receipt;
+      that shipped as #336, was reversed as #337 because it took the act away
+      from the rower, and James then asked for it back as a SETTING the rower
+      turns on. **Default off, always.** The mechanism is already measured
+      (`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`:
+      the code verifies at the monitor's own distance, fails at a control,
+      with and without `workout.intervals[]`), so what this owes is the
+      setting, its storage, and a design gate on where it lives and how it
+      reads. Worth more than it looks: a code is only typeable on a ranking
+      distance, so for most pieces this is the ONLY route to a verified row.
+      **PRIORITY: after Just Row parity** (James, 2026-09-07).
 - [ ] **Why does Concept2 show no Verify button on a row carrying interval
-      data?** The question that opened the 2026-09-07 thread and STILL
-      UNANSWERED — it was overtaken by the auto-verify change, which has
-      since been reversed. INFERENCE, n=4 rows on the PR 2 build against one
-      v0.41.0 control, so build and payload shape are confounded; the API
-      doc is silent. This is a live defect now, not a curiosity: with the
-      code no longer sent, a rower who cannot press Verify cannot verify
-      their row at all. **First cheap step:** post one row WITHOUT
-      `workout.intervals[]` and one WITH, same account, and look at both
-      pages — that separates payload shape from build.
+      data?** **ANSWERED 2026-09-07 and CLOSED — it was never about interval
+      data.** Concept2 offers the Verification Code field only when the row's
+      OVERALL distance or time hits a ranking standard, matched exactly;
+      measured over every listed figure, both boundaries and three negatives
+      by driving a logged-in browser
+      (`docs/superpowers/research/2026-09-07-c2-verification-field-rule.md`).
+      The four rows that lacked it were 200 m and other non-standard figures,
+      not victims of the interval array. The app now prints the code only on
+      rows Concept2 will take it for.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
