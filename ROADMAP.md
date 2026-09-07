@@ -1229,6 +1229,31 @@ closed with zero Concept2 contact.
       `workout.intervals[]` and one WITH, same account, and look at both
       pages — that separates payload shape from build.
 
+- [ ] **The fake monitor sends a summary heart rate no real monitor ever has,
+      and that is why AVG HR reading `—` went unnoticed for a month.**
+      `transports/fake.ts` emits `avgHeartRateBpm: 152`, `min 96`, `max 175`,
+      `ending 168` in its 0x0039 end-of-workout summary. **Measured
+      2026-09-07 across the whole committed corpus: of 20 capture files, 11
+      carry a 0x0039 summary, and in ALL ELEVEN every one of the four
+      heart-rate slots is a 0/255 sentinel.** Three of those same walks carry
+      real PER-INTERVAL heart rate in 0x0038 at the same time, so it is not
+      that the belt was off. Dozens of tests seed a non-null summary HR too.
+      So every gate we own says the tile fills, because every gate feeds it a
+      number the hardware does not produce — RF3, and it hid a real defect.
+      **Fix:** make the fake's 0x0039 heart-rate bytes sentinels like the
+      hardware's, and let the suite show the dash. Rides the AVG HR change.
+- [ ] **AVG HR should be derived from the heart-rate trace.** The tile reads
+      `—` on every row because the monitor leaves its summary heart-rate
+      fields empty (row above). The per-stroke trace we already record and
+      store has the data. **Measured on four committed captures with the
+      repo's own parser:** a work-only time-weighted mean and a whole-session
+      one differ by at most 0.5 bpm, while the monitor's own per-interval
+      figure reads 4 to 15 bpm HIGHER than either — what that field measures
+      is not documented (`pm5-interface-notes.md` §539 states no semantics
+      beyond "Split/Interval Work Heartrate"), so the gap is recorded, not
+      explained. Gate 0 owed before implementation; TRIAD, since it changes
+      what a stored row renders.
+
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
 sum, while Concept2's logbook — the actual authority — stores work only. **An
