@@ -5637,3 +5637,54 @@ with the PR that makes it visible.**
 **Presentation:** 218 words above the fold against ~120, 7 bullets against ~6,
 one 52-word bullet — a mechanism bullet ("jsonb keys, no migration") and a
 Try-it that narrates cases instead of naming one. Cut to 5 bullets.
+
+
+## 2026-09-06 — Phase RW open: "byte-for-byte the same shape" is a claim about CONSUMERS, not about the object
+
+The spec's load-bearing sentence was that a split-ref phase under null baselines
+is "byte-for-byte the shape an effort phase already has, so every consumer
+handles the new case with no branch of its own." The shape claim was true. The
+consumer claim was false at three sites, and finding them took one grep for the
+discriminant plus reading each hit.
+
+- **When a spec widens the set of values a discriminant can carry, grep the
+  DISCRIMINANT and read every branch — the shape being identical is exactly
+  what makes the bug invisible.** `grep -rn targetKind src domain` returned the
+  three that mattered: `logDraft.ts`'s `buildLogSeed` casts `phase.label as
+  "ALL OUT" | "EASY"` and stores `"5:00 @ MIN"` for a HARD interval;
+  `stepDetail.ts`'s `pieceList` takes concrete `Baselines` (so "Today's card is
+  unchanged" was false); `Builder.tsx`'s split slot returns null and was not in
+  the spec at all. Two of the three carried a comment stating the precondition
+  the spec was about to break — RF18's tripwire phrasing, found by reading the
+  hit rather than by suspecting it.
+- **A "no change needed" bullet is a claim with the same evidence bar as a
+  change.** Every one of the spec's four "consumer needs no branch" bullets was
+  plausible; one of them wrote a stored log label. The cheap check is to open
+  each named consumer and find the line that would FALSIFY the bullet, not the
+  line that names its subject (agent briefing's own rule, applied to a spec's
+  negative claims for the first time here).
+- **A caption that states an assumption is a factual claim about the
+  arithmetic.** "Times marked ~ assume 2:30/500m" is true for `2k+0` and `max`
+  and false for everything else the same constant prices (`min` → k6+20 =
+  2:57). Where a spec proposes copy that names a NUMBER, recompute the number
+  for the other input classes before the design gate sees it.
+- **§"out of scope" and §"what changes" get read against each other, with the
+  constant's call sites in hand.** RW's §4 retired `ONBOARDING_DURATION_COPY`
+  whose only two consumers sit on a door §8 declared out of scope — and the
+  retirement moved two shipped figures ("ABOUT 25 MIN" → ~30′). One grep for
+  each retired symbol settles it.
+- **Check the migration index against the SCHEDULED work, not only against
+  main.** RW PR C and Phase DE PR 3 (scheduled 2026-09-12) both mint `0026` on
+  `preferences`. `ls app/drizzle | tail -1` plus a read of every dated ROADMAP
+  row that touches a table is now part of the open gate for any stored-shape
+  phase.
+- **Ruling recorded (PM, RW open): one tag at phase close, not per PR.** PR B
+  alone unblocks Start via Library while the doors card still owns Today for
+  exactly the rower the phase serves, and its only tester-visible change would
+  be EASY→STEADY. The half-product tag buys a note that must be rewritten.
+- **Queue fact worth carrying: Wave A has read "Next in the slate" since
+  2026-09-04 and six phases have gone ahead of it in three days** (SF, DE, KB,
+  SB, NF, RW). Each was individually defensible. The gate that keeps it honest
+  is not blocking the phase — it is forcing the jumping phase to amend the
+  passed-over wave's EXIT to cite it, so the clause is not verified twice or
+  not at all.

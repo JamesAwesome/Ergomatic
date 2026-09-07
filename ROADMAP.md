@@ -521,41 +521,75 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 `effort: 3`, and a workout it creates carries a derived difficulty)
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
-## Phase SB — A blurred strip behind the status bar
+## Phase RW — Row without a baseline
 
-**Status:** Gate 0 APPROVED 2026-09-06 on build `a41f0f88`; PR #323 in
-review. Opened the same day by James's capture of `← BACK` printed over
-the clock on a scrolled Detail screen (v0.39.2). Spec
-`docs/superpowers/specs/2026-09-06-status-bar-backdrop-design.md`. Not
-TRIAD; **not fast path by James's call** ("since there are a lot of
-surfaces"). **S.**
+**Status:** OPENED 2026-09-06. Spec
+`docs/superpowers/specs/2026-09-06-row-without-baselines-design.md`, brainstormed
+with James the same day. PM open gate PASS WITH CONDITIONS 2026-09-06, all
+folded into the spec (three consumers that DO branch, the three-PR cut, one
+tag at close). Antagonist anchor pass owed on the spec before Gate 0; Gate 0
+before any implementation task. PR C is **TRIAD** (stored shape). **M.**
 
-**Goal:** scrolled content passes under a blurred, page-coloured band the
-height of the status bar on every screen; nothing moves at rest.
+**Goal:** every workout is rowable with no baseline set. Where a split would
+appear the rower reads STEADY · MODERATE · HARD · ALL OUT, derived from the
+step's own pace ref; `EASY` is retired as a work word (James: easy is what
+rest is). Durations still show, distance ones priced off a stated assumed
+2:30/500m and marked `~24′`. The doors card gains a stored, reversible
+"Row without one for now"; a one-line "No baseline set · Set one up" row
+stays on Today until a baseline exists.
 
-**Why it happens:** `viewport-fit=cover` + per-screen `padding-top:
-env(safe-area-inset-top)` — the padding scrolls away with the page. Apple
-HIG (PRIMARY): "Obscure content under the status bar … Prefer using a
-scroll edge effect to place a blurred view behind the status bar."
+**Why now:** it is the register's "Row without a baseline set" item (James,
+2026-08-23), half-delivered by Phase JR's Just Row door. It does NOT itself
+unblock a stranger (the proven blocker is deny-by-default sign-up,
+`server/auth/signin.ts:33`); it is M-sized and keeps a domain change out of
+an L auth wave, so Wave A's "rows a row" clause becomes reachable with no
+domain work inside Wave A. Wave A's exit cites this phase for that clause.
 
-**One PR:** `.status-backdrop` (fixed, `height: env(safe-area-inset-top)`,
-`rgba` for `--page` at 82% through a 14px blur — not `color-mix`, which is
-below the iOS 15.0 floor — `pointer-events: none`, z 30) rendered once in
-`AppRoutes`; `UIStatusBarStyleDarkContent` in Info.plist so the glyphs stay
-dark in Dark Mode; an AppRoutes test (red first) and two e2e tests, one
-driving a CDP-emulated inset (height = inset; a scrolled row under it);
-a DEVIATIONS row. Anchor pass RUN 2026-09-06: two BLOCKING (the
-`color-mix` floor; the falsely-ruled-out CDP gate), folded.
+- [ ] **PR A — durations.** `estimateMinutes` prices null baselines off an
+      assumed 2:25 2k / 2:32 6k pair (the recommend table's most common
+      cell) through the existing `estimationSplit` (so `min` prices at
+      2:52, stated in spec §4); `~24′` on Library, Today,
+      detail and the Builder; the `estMinutes: 0` placeholder and
+      `durationsUnknown` retire; the time filter runs on real numbers.
+      Removes no gate. **S**
+- [ ] **PR B — the ladder and unblocking.** `intensityWord(ref)` in
+      `domain/pace.ts` (2k-equivalent thresholds, exported); `phases(steps,
+      null)` emits an effort-kind phase carrying its `ref` instead of
+      throwing; the compiler, Timer and judge verified to need no branch;
+      **the log seed, `pieceList` and the Builder DO** (spec §1.2); every
+      Start/Connect/Log gate and the Countdown redirect go; every `EASY`
+      becomes `STEADY`. Gate 0 captures, PM final gate (a split becomes a
+      word). **M**
+- [ ] **PR C — skip.** `preferences.baselines_skipped` (additive route), the
+      card line, the Today return row (a button that clears the flag: the
+      doors have no standalone route), `DELETE /api/baselines` clears it
+      server-side. Lifetime table in spec §3.2. TRIAD. **Migration index
+      collides with Phase DE PR 3 (scheduled 2026-09-12, same table, also
+      `0026`): whichever merges second regenerates off new main first.** **S**
+- [ ] Notes PR and **one tag at phase close** (PM ruling, 2026-09-06): PR B
+      alone would put `EASY` → `STEADY` in front of testers while the doors
+      card still owns Today.
 
-**Gates:** antagonist anchor pass on the spec (the surface census in §4 is
-the target); PM open/close SKIPPED aloud (pure UI); **Gate 0 on Kaito** —
-the seven captures in spec §5 (Detail scrolled beside v0.39.2, Library
-scrolled, landscape at 0px, one non-scrolling screen at rest, Releases
-scrolled inside its overlay panel, Dark Mode, the half-blurred straddle)
-— contrast stated as numbers.
+**Gates, spoken:** one antagonist anchor pass on the spec (thresholds, the
+assumed pair's reach, the flag's lifetime); PM open, per-PR final, close;
+Gate 0 on detail, Timer, a connected pane, Today both states, Library;
+**no hardware walk** (a word phase's wire shape is the effort phase's, walked
+since Phase 7C; PM may disagree at open).
 
-**Exit:** Gate 0 approved; e2e green, no web capture moved; DEVIATIONS row;
-rides the next tag (no release of its own).
+**Exit (each clause names its oracle):** (1) on web e2e, a fresh account
+with no baseline opens a split-ref workout and Start, Log it after and the
+web Connect path (the fake monitor is web-only; the native path is covered
+by the compiler test plus the next walk's added observation) all proceed;
+(2) the word renders on every surface in spec §2: detail step rows, Timer,
+the connected pane, Today's card, the Builder's split slot, each pinned by
+a client or e2e test; (3) `~` appears on a distance workout's duration on
+Library, Today, detail and Builder, and not on a time workout's; (4) the
+skip line writes the flag, the Today row clears it, and the baselines reset
+clears it server-side (integration test); (5) `grep -rn "EASY\|Easy\b"
+app/src app/domain app/e2e` returns only the bulk-grammar token `easy` in
+`domain/bulk.ts` and its tests and the whole-workout effort word
+`EASY BREATH` in `builderState.ts` (a different axis, expected), with any
+other survivor named and ruled at close.
 
 ## Phase LP — Logbook parity: every number Concept2 shows, and the same number
 
@@ -678,8 +712,10 @@ it lands the stranger on this same denial.
       sign-in-adjacent onboarding screen. **S**
 
 **Exit:** a stranger installs from TestFlight, signs in with Apple or Google,
-gets an empty working account, rows a row, and deletes the account and all of
-its data from inside the app.
+gets an empty working account, rows a row (the "rows a row" clause is closed
+by Phase RW, opened 2026-09-06: a no-baseline account can Start any workout;
+this wave verifies it once, on the stranger's account, not twice), and
+deletes the account and all of its data from inside the app.
 
 ---
 
@@ -2566,9 +2602,9 @@ trigger is the whole entry.
   exact fixture it would consume), so this is eligible to schedule whenever it is
   wanted.
 - **Row without a baseline set** (James, 2026-08-23): every workout rowable with
-  no baseline, targets simply absent. **Partially delivered by Phase JR's
-  design** — the "nobody is ever blocked from just rowing" half is the connected
-  Just Row door; the every-workout-targetless half remains.
+  no baseline. The Just Row half shipped with Phase JR; the every-workout half
+  **is Phase RW, opened 2026-09-06** (live section above). Retire this line
+  when RW closes.
 - **"Which days did I override, and what was the other suggestion?"** (James,
   2026-08-12). Two questions in one sentence: the CHECKPOINT half needs no new
   capture (`plan_index ∈ {6,34,62}`, **not** `workout_title`), and the FREE-FORM
@@ -2601,6 +2637,9 @@ trigger is the whole entry.
 One row each. The body is in `docs/history/`, archived verbatim, and it is a
 RECORD — do not cite it for a live question.
 
+- **Phase SB** — a blurred, page-coloured strip the height of the status bar
+  on every screen, so scrolled content no longer prints over the clock · closed
+  2026-09-06 · #323 · released in v0.40.0 · [detail](docs/history/phase-sb.md)
 - **Phase NF** — Scan NFC: hold the iPhone to the PM5's own tag and the app
   connects to exactly that erg and programs the workout, no Bluetooth picker
   (workout detail and Just Row); the scan screen names the target and can be
