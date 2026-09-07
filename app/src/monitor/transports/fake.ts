@@ -595,6 +595,13 @@ export interface FakeScript {
    * stub-driven sibling this generalizes end-to-end).
    */
   lagStructureOneTick?: boolean;
+  /** Emit the PRE-V1.26 wire forms of 0x0032 (16 bytes) and 0x0038 (18
+   *  bytes) for the WHOLE session, arming included — what a monitor older
+   *  than 2018 sends. One switch rather than two, because `driver.ts`'s
+   *  `seen.as1` is a one-way latch: a single well-formed 0x0032 anywhere,
+   *  including during the arm sequence, opens it permanently and any test
+   *  relying on this would go green while proving nothing. */
+  preV126Firmware?: boolean;
   /** The post-"armed" session timeline, ascending by `atMs`. `tick(ms)`
    *  advances a purely virtual clock (no timers, no wall clock anywhere in
    *  this file) and delivers every event whose `atMs` has now been
@@ -1828,7 +1835,13 @@ export function createFakeTransport(script: FakeScript): Transport &
       },
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
-    notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
+    notify(
+      ADDITIONAL_STATUS_1_UUID,
+      buildAdditionalStatus1Bytes(
+        as1,
+        script.preV126Firmware ? "pre-v126" : "v126",
+      ),
+    );
     notify(GENERAL_STATUS_UUID, buildGeneralStatusBytes(general));
   }
 
@@ -1847,7 +1860,10 @@ export function createFakeTransport(script: FakeScript): Transport &
     notify(SPLIT_INTERVAL_DATA_UUID, buildSplitIntervalDataBytes(split));
     notify(
       ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
-      buildAdditionalSplitIntervalDataBytes(asSplit),
+      buildAdditionalSplitIntervalDataBytes(
+        asSplit,
+        script.preV126Firmware ? "pre-v126" : "v126",
+      ),
     );
   }
 
@@ -1882,7 +1898,13 @@ export function createFakeTransport(script: FakeScript): Transport &
       bankedDistanceMeters,
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
-    notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
+    notify(
+      ADDITIONAL_STATUS_1_UUID,
+      buildAdditionalStatus1Bytes(
+        as1,
+        script.preV126Firmware ? "pre-v126" : "v126",
+      ),
+    );
     notify(GENERAL_STATUS_UUID, buildGeneralStatusBytes(general));
     setLatestStatus(zeroedStatus(WORKOUTSTATE_WAITTOBEGIN));
   }

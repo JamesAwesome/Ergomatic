@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type {
+  AdditionalSplitIntervalData,
+  AdditionalStatus1,
+} from "./parse.js";
 import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
@@ -119,6 +123,32 @@ describe("buildAdditionalStatus1Bytes: round-trips through parseAdditionalStatus
       ergMachineType: 0,
     });
   });
+
+  it("the pre-v126 form omits the trailing Erg Machine Type byte and round-trips through the parser", () => {
+    const status: AdditionalStatus1 = {
+      elapsedSeconds: 12.34,
+      speedMetersPerSecond: 3.456,
+      spm: 22,
+      heartRateBpm: 142,
+      currentSplit: 111.5,
+      averageSplit: 113.25,
+      restDistanceMeters: 64,
+      restSeconds: 59.5,
+      ergMachineType: 0,
+    };
+    const long = buildAdditionalStatus1Bytes(status);
+    const short = buildAdditionalStatus1Bytes(status, "pre-v126");
+
+    expect(long.length).toBe(17);
+    expect(short.length).toBe(16);
+    // The short form is a strict PREFIX of the long one — the whole premise.
+    expect([...short]).toStrictEqual([...long.slice(0, 16)]);
+
+    const decoded = parseAdditionalStatus1(short) as AdditionalStatus1;
+    expect(decoded.spm).toBe(22);
+    expect(decoded.restSeconds).toBeCloseTo(59.5, 2);
+    expect(Object.hasOwn(decoded, "ergMachineType")).toBe(false);
+  });
 });
 
 describe("buildAdditionalStatus2Bytes: round-trips through parseAdditionalStatus2", () => {
@@ -227,6 +257,34 @@ describe("buildAdditionalSplitIntervalDataBytes: round-trips through parseAdditi
       ...status,
       ergMachineType: 0,
     });
+  });
+
+  it("0x0038's pre-v126 form is likewise an 18-byte prefix", () => {
+    const status: AdditionalSplitIntervalData = {
+      elapsedSeconds: 20.5,
+      splitIntervalAvgStrokeRate: 24,
+      splitIntervalWorkHeartRateBpm: 150,
+      splitIntervalRestHeartRateBpm: 120,
+      splitIntervalAvgPace: 113.4,
+      splitIntervalTotalCalories: 73,
+      splitIntervalAvgCalories: 840,
+      splitIntervalSpeedMetersPerSecond: 4.321,
+      splitIntervalPowerWatts: 157,
+      splitAvgDragFactor: 121,
+      splitIntervalNumber: 1,
+      ergMachineType: 0,
+    };
+    const long = buildAdditionalSplitIntervalDataBytes(status);
+    const short = buildAdditionalSplitIntervalDataBytes(status, "pre-v126");
+    expect(long.length).toBe(19);
+    expect(short.length).toBe(18);
+    expect([...short]).toStrictEqual([...long.slice(0, 18)]);
+    expect(
+      Object.hasOwn(
+        parseAdditionalSplitIntervalData(short) as AdditionalSplitIntervalData,
+        "ergMachineType",
+      ),
+    ).toBe(false);
   });
 });
 
