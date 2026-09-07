@@ -2046,10 +2046,19 @@ Each needs erg time or a deliberate recording session.
   (forcing would make a 2k test's own result unsavable until a 6k it does not
   have), and James took the PM's decision. What shipped: Today's row names the
   stored side (`2K SET · NO 6K`) and fills the other on one tap, stamped
-  `derived`; the workout detail's caption names it too; the doors card states
-  the consequence of leaving them unset. The You editor carries no separate
-  ask on purpose — it is where both fields are typed, and Today's copy sends
-  the rower there.
+  `derived`; Library and the workout detail's captions name it too; the doors
+  card states the consequence of leaving them unset. **The doors card now
+  yields to that row whenever one side is stored** — Phase BL PR C had ruled
+  the doors a superset re-entry for any incomplete pair, which sent a rower
+  who typed a 2k in the I-know-my-baseline door back to `SET UP YOUR
+  BASELINE`; that is the ordinary way to hold half a pair, and it never
+  writes `baselinesSkipped`, so the first cut of this work reached only
+  rowers who had skipped first. The estimate is suppressed when the derived
+  split falls outside the storable 60..240 band, matching the refusal
+  `BaselineEditor`'s and `postTestOffer`'s offers already make, and a failed
+  write says so rather than leaving a button that does nothing. The You
+  editor keeps its own existing counterpart offer (`deriveOffer` /
+  `DeriveSlot`) unchanged; no second ask was added there.
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard
