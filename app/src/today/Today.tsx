@@ -215,24 +215,10 @@ export function elapsedSinceStart(run: SessionRun, now: Date): number {
   return Math.max(0, Math.round(ms / 1000));
 }
 
-// Baselines unset (a brand-new account) means estimateMinutes cannot
-// resolve a single work step's split — it would throw, not return an
-// estimate. The suggestion card still has to render in that state (reason
-// without a target preview), and suggest()/suggestFreestyle()'s duration-
-// bucket filter needs *some* estMinutes number per entry. Building
-// estMinutes as 0 here does NOT by itself make the filter harmless the way
-// it did under the old single-value cap (0 <= any positive cap,
-// unconditionally): 0 is inside any range whose `min` is 0, and a range
-// with `min > 0` (e.g. `[45, 60]`) would legitimately exclude it, wrongly
-// treating an UNKNOWABLE duration as a known short one. What
-// actually keeps the filter harmless is passing `durationsUnknown: true`
-// in prefs below — domain/suggest.ts's own `passesDurationFilter` skips
-// the bucket check ENTIRELY when that flag is set, regardless of which
-// bucket the 0 placeholder resolves to (SuggestPrefs' own doc comment
-// spells out why the placeholder value alone can no longer carry this).
-// The same flag also keeps the reason text honest, unchanged from before:
-// without it, the standard/fellback reasons would claim a duration was
-// actually checked when every one fed in was a placeholder.
+// Phase RW PR A: `estimateMinutes` prices every workout with or without a
+// baseline (distance work off the assumed pair, marked `assumed`), so each
+// entry carries a real `estMinutes` and the old 0 placeholder plus its
+// `durationsUnknown` escape hatch in domain/suggest.ts are gone.
 function toLibraryEntry(
   w: LibraryWorkout,
   baselines: Baselines | null,
@@ -241,7 +227,7 @@ function toLibraryEntry(
     id: w.id,
     type: w.type,
     effort: w.effort,
-    estMinutes: baselines ? estimateMinutes(w.steps, baselines).minutes : 0,
+    estMinutes: estimateMinutes(w.steps, baselines).minutes,
     lastDoneDaysAgo: w.lastDoneDaysAgo,
     // Round 2 (2026-08-04): passed straight through so domain/suggest.ts's
     // own SOURCE predicate can tell a global (starter-library) entry apart
@@ -260,7 +246,6 @@ function toLibraryEntry(
 function computeSuggestion(
   filters: FilterSet,
   entries: LibraryEntry[],
-  baselines: Baselines | null,
   todayCode: WorkoutType | null,
   // Phase SF PR1: the day's stored pick — the drawn first card
   // (`shuffled: false`, honoured but reported "Least recently done" and
@@ -283,13 +268,6 @@ function computeSuggestion(
     // real value (possibly null) here.
     lastDone: filters.lastDone,
     source: filters.source,
-    // See toLibraryEntry's comment: with no baselines, every entry's
-    // estMinutes is a 0 placeholder. This flag does double duty in
-    // domain/suggest.ts — it skips the TIME FILTER entirely (not just the
-    // reason text) so the 0 placeholder never wrongly includes or
-    // excludes an unknown-duration entry, and it keeps the reason text from claiming a
-    // duration was actually checked against a real number.
-    durationsUnknown: baselines === null,
   };
   // Narrowing on todayCode (rather than a separate boolean) lets TS see
   // `suggest`'s todayCode argument is non-null in the true branch with no
@@ -316,7 +294,6 @@ function computeSuggestion(
 function poolCountFor(
   draft: FilterSet,
   entries: LibraryEntry[],
-  baselines: Baselines | null,
   todayCode: WorkoutType | null,
   pick: StoredPick | null,
   prescribed: { entry: LibraryEntry; reason: string } | null,
@@ -325,14 +302,8 @@ function poolCountFor(
   // (suggest.ts's own contract), so the sheet's live count stays an
   // honest count of the ESCAPE pool either way — the prescribed entry is
   // never a pool member.
-  return computeSuggestion(
-    draft,
-    entries,
-    baselines,
-    todayCode,
-    pick,
-    prescribed,
-  ).poolIds.length;
+  return computeSuggestion(draft, entries, todayCode, pick, prescribed).poolIds
+    .length;
 }
 
 export default function Today() {
@@ -606,9 +577,9 @@ function TodayContent({
   // below (Task 2, 2026-08-04 round: FILTER ⌄ + TodayFilterSheet, replacing
   // the old inline chips); it still needs the raw server preferences to
   // seed those overrides' defaults on first mount
-  // (rangeForCap(preferences.timeCapMinutes)) and
-  // `baselines` to compute durationsUnknown itself, so both are passed
-  // through rather than a pre-built SuggestPrefs.
+  // (rangeForCap(preferences.timeCapMinutes)) and `baselines` to price
+  // each entry, so both are passed through rather than a pre-built
+  // SuggestPrefs.
   const session = sessionsLoggedToday(
     recentLogsState.logs,
     planState.plan.planKey !== null
@@ -967,7 +938,6 @@ function TodayView({
         const s = computeSuggestion(
           filterSetFor(filterStore, type, seedSet),
           entries,
-          baselines,
           type,
           null,
           null,
@@ -1167,14 +1137,7 @@ function TodayView({
     const stored = loadTodayPick(today, plan.planKey, plan.doneN, session);
     if (stored !== null) return stored;
     if (prescribed !== null || baselines === null) return null;
-    const first = computeSuggestion(
-      filters,
-      entries,
-      baselines,
-      todayCode,
-      null,
-      null,
-    );
+    const first = computeSuggestion(filters, entries, todayCode, null, null);
     const id = drawOne(first.tieIds, clientRng);
     if (id === null) return null;
     const drawn: StoredPick = {
@@ -1189,7 +1152,6 @@ function TodayView({
   const suggestion = computeSuggestion(
     filters,
     entries,
-    baselines,
     todayCode,
     pick,
     prescribed,
@@ -1200,7 +1162,6 @@ function TodayView({
   const draftPoolCount = poolCountFor(
     draft,
     entries,
-    baselines,
     todayCode,
     pick,
     prescribed,
