@@ -2200,6 +2200,19 @@ Each needs erg time or a deliberate recording session.
   `v0.41.0..main` range (sixteen merges, RF15) and three items added: the
   half-set offer (#344), the verification-code narrowing (#341) and AVG HR
   (#345).
+- **The vitest 5 migration is owed, and it is why the app's dependency group
+  went red** (2026-09-07, PR #349 split it out; Dependabot's #340 bundled the
+  major with 17 routine patches). Vitest 5 changes the `Assertion` type
+  `@testing-library/jest-dom` augments, so every `toHaveValue` and
+  `toHaveAttribute` in the suite fails typecheck with TS2339 — 23 errors in
+  `SplitInput.test.tsx` alone, and that file is one of many. `jest-dom@7.0.1`
+  is the latest and declares `vitest: >= 0.32`, so the peer range does not
+  warn; the break is in the augmentation, not the range. **What unblocks it:**
+  a jest-dom release that targets vitest 5's Assertion shape, or our own
+  `vitest.d.ts` re-declaring the matchers. Until then `.github/dependabot.yml`
+  ignores the major for `vitest` and `@vitest/coverage-v8` so one upstream
+  major cannot hold 17 patches hostage. Re-check jest-dom's releases at any
+  test-infra touch. **S/M**
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard
