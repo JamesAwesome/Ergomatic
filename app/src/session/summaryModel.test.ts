@@ -724,8 +724,26 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
       rate: 26,
       targetRate: 26,
       drag: 100,
-      restMeters: 242,
+      avgHr: undefined,
     });
+  });
+
+  it("Phase LP (James 2026-09-07, M3): the sixth tile is AVG HR off 0x0039 — a belt reading shows, no belt (wire null) is undefined, and REST is no longer a tile", () => {
+    const withBelt = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: {
+        ...exit7SummaryDetail,
+        avgHeartRateBpm: 152,
+        totalRestMeters: 242,
+      },
+    });
+    const tier = buildSummaryModel({ door: "monitor", run: withBelt }).heroes
+      .machine;
+    expect(tier?.avgHr).toBe(152);
+    expect(tier).not.toHaveProperty("restMeters");
   });
 
   it("Phase LP: an OLD tier-A row (summaryDetail without 0x003A) still derives watts, and leaves calories / cal-hr / rest undefined — a dash, never 0; TARGET is undefined when the intervals disagree", () => {
@@ -745,7 +763,7 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
     expect(machine?.avgWatts).toBe(184);
     expect(machine?.calories).toBeUndefined();
     expect(machine?.calPerHour).toBeUndefined();
-    expect(machine?.restMeters).toBeUndefined();
+    expect(machine?.avgHr).toBeUndefined();
     expect(machine?.targetRate).toBeUndefined();
     expect(machine?.drag).toBe(100);
   });

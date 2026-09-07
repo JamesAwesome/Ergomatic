@@ -150,6 +150,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
         machineSummary: {
           avgPaceSecondsPer500m: 129.2,
           avgStrokeRate: 27,
+          avgHeartRateBpm: 142,
           dragFactorAverage: 101,
           totalCalories: 372,
           avgWatts: 162,
@@ -169,7 +170,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
       rate: 27,
       targetRate: 26,
       drag: 101,
-      restMeters: 0,
+      avgHr: 142,
     });
   });
 
@@ -272,7 +273,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(old?.rate).toBe(24);
     expect(old?.calories).toBeUndefined();
     expect(old?.calPerHour).toBeUndefined();
-    expect(old?.restMeters).toBeUndefined();
+    expect(old?.avgHr).toBeUndefined();
     expect(buildStoredSummary(baseRow()).heroes.machine).toBeUndefined();
   });
 

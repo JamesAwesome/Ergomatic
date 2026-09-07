@@ -257,6 +257,7 @@ export interface StoredLog {
     // since RC-3) and 0x003A's four (absent on any row saved before this
     // phase, or when the frame missed the burst; rendered as a dash).
     avgStrokeRate?: number;
+    avgHeartRateBpm?: number | null;
     dragFactorAverage?: number;
     totalCalories?: number;
     avgWatts?: number;
@@ -786,7 +787,7 @@ function storedMachineTier(
     }),
     targetRate: agreedTargetSpm(row.steps.map((s) => s.spm)),
     drag: ms?.dragFactorAverage,
-    restMeters: ms?.totalRestMeters,
+    avgHr: ms?.avgHeartRateBpm ?? undefined,
   };
 }
 

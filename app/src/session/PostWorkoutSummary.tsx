@@ -408,7 +408,11 @@ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
             }
           />
           <MachineTile label="DRAG" value={machine.drag} />
-          <MachineTile label="REST" value={machine.restMeters} unit="m" />
+          {/* James, 2026-09-07 (review M3, on artboard 04): AVG HR in the
+              sixth cell, not REST — rest metres already live on the total
+              line and a second source four lines apart said nothing a
+              rower could act on. */}
+          <MachineTile label="AVG HR" value={machine.avgHr} />
         </div>
       )}
     </div>

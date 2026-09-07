@@ -317,7 +317,7 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
             rate: 26,
             targetRate: 26,
             drag: 101,
-            restMeters: undefined,
+            avgHr: undefined,
           },
         },
       }),
@@ -330,7 +330,7 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
       "CAL / HR",
       "RATE · TARGET",
       "DRAG",
-      "REST",
+      "AVG HR",
     ]);
     expect(within(tiles[0]!).getByText("162")).toBeInTheDocument();
     // 0 is a value: both zero tiles read 0, never a dash.
@@ -339,15 +339,14 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
     expect(tiles[3]!).toHaveTextContent("26 / 26");
     expect(within(tiles[4]!).getByText("101")).toBeInTheDocument();
     expect(tiles[5]!).toHaveTextContent("—");
-    expect(tiles[5]!).not.toHaveTextContent("m");
   });
 
-  it("Phase LP: RATE without an agreed TARGET renders the rate alone, and REST carries its unit", () => {
+  it("Phase LP: RATE without an agreed TARGET renders the rate alone, and AVG HR shows the belt's number", () => {
     renderSummary({
       model: monitorModel({
         heroes: {
           time: "25:50",
-          machine: { rate: 26, restMeters: 242 },
+          machine: { rate: 26, avgHr: 142 },
         },
       }),
     });
@@ -355,8 +354,7 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
     const tiles = within(tier).getAllByRole("group");
     expect(tiles[3]!.getAttribute("aria-label")).toBe("RATE");
     expect(tiles[3]!).toHaveTextContent(/^RATE26$/);
-    expect(tiles[5]!).toHaveTextContent("242");
-    expect(tiles[5]!).toHaveTextContent("m");
+    expect(tiles[5]!).toHaveTextContent("142");
   });
 
   it("Phase LP: no machine tier on a model without one (the timer and manual doors)", () => {

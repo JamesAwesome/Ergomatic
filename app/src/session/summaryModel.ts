@@ -193,7 +193,12 @@ export interface MachineTier {
   rate?: number;
   targetRate?: number;
   drag?: number;
-  restMeters?: number;
+  /** 0x0039's average heart rate (`summaryDetail.avgHeartRateBpm`);
+   *  `undefined` when no belt was worn (the wire's null) or on a row
+   *  without a summary. James, 2026-09-07 (M3): the REST tile is DROPPED —
+   *  it repeated the total line's rest metres from a second source — and
+   *  AVG HR takes its cell; the PM5's rest total stays stored for PR 2. */
+  avgHr?: number;
 }
 
 /** Phase LP §3: one MACHINE SUMMARY row. `index` is the INTERVALS table's
@@ -1237,7 +1242,7 @@ function machineTierFromRun(run: MonitorRun): MachineTier {
     }),
     targetRate: agreedTargetSpm(run.program.intervals.map((i) => i.displaySpm)),
     drag: detail?.dragFactorAverage,
-    restMeters: detail?.totalRestMeters,
+    avgHr: detail?.avgHeartRateBpm ?? undefined,
   };
 }
 

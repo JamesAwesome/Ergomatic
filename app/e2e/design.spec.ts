@@ -11552,6 +11552,7 @@ async function postMachineRowWithLpFields(
         machineSummary: {
           avgPaceSecondsPer500m: 124.0,
           avgStrokeRate: 26,
+          avgHeartRateBpm: 142,
           dragFactorAverage: 100,
           totalCalories: 32,
           avgWatts: 184,
@@ -11598,7 +11599,7 @@ test.describe("from-the-log detail, machine tier + MACHINE SUMMARY (Phase LP §3
     await expect(tiles.nth(2)).toHaveText("CAL / HR929");
     await expect(tiles.nth(3)).toHaveText("RATE · TARGET26 / 26");
     await expect(tiles.nth(4)).toHaveText("DRAG100");
-    await expect(tiles.nth(5)).toHaveText("REST242m");
+    await expect(tiles.nth(5)).toHaveText("AVG HR142");
 
     // The strip: per-split logbook arithmetic — 250 m in 67.9 s → 140 W,
     // 16 cal → floor(16×3600/67.9) = 848; 250 m in 56.1 s → round(2.80/

@@ -21,6 +21,9 @@ logbook row, six cells of six, before any code exists. Manual and by-feel
 rows are untouched. Machine rows saved before this ships render `—` where
 the field never existed.
 
+**Rev 2.3 (2026-09-07):** the sixth tile is AVG HR, not REST (James, M3,
+on `04-rest-tile-options.html`).
+
 **Rev 2.2 (2026-09-07, PM final gate #327):** §3's old-row strip claim
 corrected (REST m is a dash on every stored row; the artboard's old-row
 phone corrected to match); §6's "migration" struck; §3.3 step 2 is the
@@ -300,8 +303,13 @@ the log detail, Just Row's log — one component.
 - **Hero, second tier** — six smaller tiles under AVG SPLIT · TIME ·
   DISTANCE: **AVG WATTS** (derived, §3.1), **CALORIES** (`machineSummary.totalCalories`),
   **CAL / HR** (derived, §3.1), **RATE · TARGET** (§3.2), **DRAG**
-  (`machineSummary.dragFactorAverage`), **REST** (`machineSummary.totalRestMeters`,
-  metres). Absent → `—`.
+  (`machineSummary.dragFactorAverage`), **AVG HR**
+  (`machineSummary.avgHeartRateBpm`; a dash without a belt). Absent → `—`.
+  _Rev 2.3 (2026-09-07, James on artboard 04: "Drop and replace with avg
+  heart rate"): the sixth tile was REST (`machineSummary.totalRestMeters`),
+  which repeated the total line's "plus N m coasting in rest" from a
+  second source; the PM5's rest total stays stored and is uploaded in
+  PR 2 (§5), it is just not a tile._
 - **Today's INTERVALS table is unchanged** — target, actual, Δ, SPM with
   its target, the bars.
 - **MACHINE SUMMARY** (`PM5 · PER INTERVAL`) beneath it: sideways-scrolling,
@@ -321,7 +329,8 @@ the log detail, Just Row's log — one component.
   never an inline child.
 - **What an OLD machine row actually renders** (PM, from the stored
   shape): tiles **3 of 6** populate — AVG WATTS (derivable from stored
-  time/distance), RATE · TARGET, DRAG; CALORIES, CAL/HR, REST are `—`.
+  time/distance), RATE · TARGET, DRAG, and AVG HR if a belt was worn;
+  CALORIES and CAL/HR are `—`.
   Strip **2 of 6** columns populate — HR (with a belt) and WATTS; CAL,
   CAL/HR, DRAG are `—`, and REST m is `—` on EVERY stored row, old or new,
   because `LogStep` carries no per-step rest metres (only the live door

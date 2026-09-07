@@ -18,7 +18,7 @@
 - Watts = `Math.round(2.80 / (seconds / metres) ** 3)`; cal/hr = `Math.floor(calories * 3600 / seconds)` (spec §1.2, verified 6/6 against James's logbook row — those six values are the unit-test literals).
 - The dash glyph is `DASH` from `src/workout/connected/surfaceModel.ts` (`—`), never `-`.
 - No em-dashes in user-facing strings (house style); `DASH` as a data placeholder is exempt.
-- Copy: `MACHINE SUMMARY`, `PM5 · PER INTERVAL`, tile labels `AVG WATTS · CALORIES · CAL / HR · RATE · TARGET · DRAG · REST`.
+- Copy: `MACHINE SUMMARY`, `PM5 · PER INTERVAL`, tile labels `AVG WATTS · CALORIES · CAL / HR · RATE · TARGET · DRAG · AVG HR` (REST → AVG HR, James 2026-09-07, M3).
 - Machine rows only: the tier and the table render only when the row is PM5-sourced; manual rows are unchanged.
 - Test invocation: from `app/`, `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>` (client) or `--project unit <file>` (domain/server). `pnpm e2e` rebuilds a Docker stack — run it once at the end, not per task.
 - Every new assertion gets a mutation that makes it fail, recorded in the commit message (RF21).
