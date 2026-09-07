@@ -1446,16 +1446,16 @@ X" is a real disposition — most of these are single files.
       (`splits[]` on the upload, a strip on the screen) is a later phase's
       spec: a stored shape plus wire meaning, TRIAD twice. **M**
 
-- [ ] **Rows auto-sent before Phase LP PR 2 keep their thin logbook entry
-      forever, and nothing tells the rower.** Antagonist delta pass
-      2026-09-07: Concept2 has no PATCH; a resend of an already-uploaded row
-      short-circuits (`routes/concept2.ts`). Every row sent under v0.39.0–
-      v0.41.0 (auto-send has been live and dark since #312) has date, time,
-      distance, rest and stroke rate in the logbook and none of PR 2's
-      calories, heart rate, drag or intervals. A product call for the PM /
-      James: say so on the row (a "sent before …" note), offer a
-      delete-and-resend, or accept silently. Filed here so it is decided,
-      not discovered (RF14). **S**
+- [x] **Rows auto-sent before Phase LP PR 2 keep their thin logbook entry
+      forever, and nothing tells the rower.** RULED by James, 2026-09-07:
+      "just leave em" — accept silently, no note on the row, no
+      delete-and-resend, no count taken. PM #332's read (accept silently,
+      close on a count) agreed on the outcome; James closed it without the
+      count. The gap is completeness, not contradiction: no number on those
+      rows disagrees with the app, and the app already shows everything the
+      machine measured for them. Concept2 has no PATCH and a resend
+      short-circuits (`routes/concept2.ts`), so those entries stay as
+      sent. **S**
 
 - [ ] **The history LIST has no `(user_id, logged_at desc, id desc)`
       index.** Found by the Phase LP DBA benchmark, 2026-09-07
