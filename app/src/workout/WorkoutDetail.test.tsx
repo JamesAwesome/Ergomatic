@@ -196,9 +196,33 @@ function mockApi(handler: () => Response) {
   return fn;
 }
 
+/** The `usePreferences` arm every test gets unless it asks for another.
+ *  Passed IN rather than overridden afterwards — see `mockHooks`. */
+const READY_PREFERENCES = () => ({
+  state: "ready",
+  preferences: {
+    timeCapMinutes: 60,
+    countdownSeconds: 10,
+    baselinesSkipped: false,
+  },
+  // Phase RW PR C: the ready arm's writer. A vi factory is not
+  // typechecked against the module, so omitting it would TypeError at
+  // the first click rather than fail the typecheck.
+  setBaselinesSkipped: skipWrites.fn,
+});
+
 function mockHooks(
   baselines: { k2Seconds: number | null; k6Seconds: number | null },
   workouts: LibraryWorkout[] = [WORKOUT],
+  // The preferences arm is a PARAMETER, never a second `vi.doMock` of the
+  // same path layered on afterwards. `queueMock` (@vitest/mocker) registers
+  // each mock inside an async RPC `.then`, so two registrations for one path
+  // race and the LAST TO RESOLVE wins — not the last called. Under load that
+  // is sometimes the earlier call, which is how the errored-preferences test
+  // got the READY arm, wrote a skip it asserts never happens, and reddened
+  // main after PR #344 (`expected [ false ] to strictly equal []`,
+  // reproduced locally at roughly one full `pnpm test:coverage` run in two).
+  usePreferencesArm: () => unknown = READY_PREFERENCES,
 ) {
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({ state: "ready", workouts }),
@@ -213,18 +237,7 @@ function mockHooks(
   // reads the hook itself; this keeps its real fetch off the `api` spy
   // several tests assert was never called.
   vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () => ({
-      state: "ready",
-      preferences: {
-        timeCapMinutes: 60,
-        countdownSeconds: 10,
-        baselinesSkipped: false,
-      },
-      // Phase RW PR C: the ready arm's writer. A vi factory is not
-      // typechecked against the module, so omitting it would TypeError at
-      // the first click rather than fail the typecheck.
-      setBaselinesSkipped: skipWrites.fn,
-    }),
+    usePreferences: usePreferencesArm,
   }));
 }
 
@@ -371,9 +384,9 @@ function mockHooksWithPreferencesError(
   baselines: { k2Seconds: number | null; k6Seconds: number | null },
   workouts: LibraryWorkout[] = [WORKOUT],
 ) {
-  mockHooks(baselines, workouts);
-  vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () => ({ state: "error", retry: () => {} }),
+  mockHooks(baselines, workouts, () => ({
+    state: "error",
+    retry: () => {},
   }));
 }
 

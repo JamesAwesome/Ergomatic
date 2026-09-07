@@ -2156,6 +2156,31 @@ Each needs erg time or a deliberate recording session.
   write says so rather than leaving a button that does nothing. The You
   editor keeps its own existing counterpart offer (`deriveOffer` /
   `DeriveSlot`) unchanged; no second ask was added there.
+  **Why not force** (PM, 2026-09-07, on James's follow-up "I feel like it's
+  natural but maybe it'd bother some people" — and it is NOT the consistency
+  argument): a rower made to fill a 6k they never rowed types a guess, and
+  `KnowBaseline.tsx` stamps a typed field `manual`, permanently
+  indistinguishable from a rowed number, while the declined offer would have
+  stored `derived`. Force degrades the provenance record it means to
+  complete, and it cannot be done honestly at the erg — removing the
+  post-test Skip holds a real measurement hostage to a heuristic. **Why not
+  silent auto-fill:** this repo's line is not "never store an estimate"
+  (`Recommend.tsx` stores both sides as `estimated` from a hand-authored
+  table), it is that the rower SAW it and the provenance is recorded.
+  **And the 7 s is an offer, not a fact:** `estimateBaseline.ts` grounds it
+  on Paul's Law (≈ +7.9 s, SECONDARY, a forum post, trained rowers) and says
+  in terms that no source grounds a better per-population gap;
+  `deriveBaseline.test.ts` pins the constant and nothing about any real pair.
+- **v0.42.0's release note describes behaviour the app no longer has**
+  (found at PR #344's PM gate, 2026-09-07; the tag has NOT been released —
+  James is bundling more work first). `releaseNotes.ts` item 2 promises "a
+  quiet **NO BASELINE SET** line keeps the doors one tap away, and setting a
+  baseline any time puts the numbers back". After #344 a half-set rower reads
+  `2K SET · NO 6K`, not `NO BASELINE SET`, and setting ONE baseline does not
+  put the numbers back — the app now says so out loud. Amend item 2 and name
+  the `Estimate it (+7s)` tap. Rides whatever notes PR precedes the tag; the
+  tag itself needs re-cutting at the new main, since `v0.42.0` currently
+  points at #344's base and nothing has been uploaded from it.
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard
