@@ -5,6 +5,33 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.42.0: git log v0.41.0..main --oneline at 4daeff32 — NINE merges,
+    // each accounted for (RF15; no --merges):
+    //   #329 Phase RW opened (spec) + Phase SB archived — docs only.
+    //   #331 NFC copy: "monitor" where PM5 is not the device's own name —
+    //     wording inside a flow v0.40.0 already announced; no note.
+    //   #332 Phase LP PR 2 — the Concept2 upload carries everything the
+    //     logbook accepts. NOT noted as parity: the PM's PR 1 gate ruled
+    //     that "the same figures the logbook shows" waits for the walk,
+    //     and the walk has not happened.
+    //   #334 ROADMAP only.
+    //   #336 sends the PM5's verification code with every upload, and
+    //     #337 stops auto-verifying rows because verification is the
+    //     rower's act. Net effect on a rower between v0.41.0 and here:
+    //     none — the second reverses what the first would have shown.
+    //     No note; the pair is recorded here so a reader does not go
+    //     looking for one.
+    //   #333 / #335 / #338 Phase RW — items 1, 2 and 3.
+    // This notes-and-captures PR adds packaging, not another behavior.
+    version: "v0.42.0",
+    date: "2026-09-07",
+    items: [
+      "You can row without setting a baseline. Where a workout used to show a pace target, it now says STEADY, MODERATE, HARD or ALL OUT, and Start, Connect and Log it after all work. If your baselines are already set, nothing changes for you here: to see it, tap Reset baseline setup on You.",
+      "The baseline doors on Today have a way past them: Row without one for now. The app remembers that, so it survives a reinstall. A quiet NO BASELINE SET line keeps the doors one tap away, and setting a baseline any time puts the numbers back.",
+      "Workouts still tell you roughly how long they are without a baseline. A time-based workout is exact; a distance one is an estimate off an assumed pace and reads with a ~, like ~24'.",
+    ],
+  },
+  {
     // v0.41.0: git log v0.40.0..origin/main --oneline at e6cb2995 — two
     // merges, each accounted for (RF15; no --merges):
     //   #327 Phase LP PR 1 — every figure Concept2's logbook shows, on

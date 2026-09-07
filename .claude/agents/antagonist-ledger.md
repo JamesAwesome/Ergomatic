@@ -8733,3 +8733,61 @@ had passed over the same document without a single duration in it.
   it); whether the trailing-rest readback equals ELAPSED rest (both hypotheses
   predict the same number for a fixed countdown — the PM5's rest is not
   shortened by rowing: 130 m rowed inside a 60 s rest still read 60).
+
+## Delta pass, 2026-09-07 (Phase RW PR C, the stored skip — TRIAD stored shape)
+
+- **"Nothing else reads or writes the flag."** True of the code the plan
+  touched and false against the plan's own spec: §2.1 said the shipped
+  detail caption's link goes to Today "where the card reopens (**the link
+  clears the flag on tap, §3.3**)" — and §3.3's surfaces list had no such
+  entry. **Technique: when a spec cites its own §N for a behaviour, OPEN §N
+  and check the behaviour is in it.** A spec's internal cross-references
+  decay exactly like external citations, and a plan restating one section
+  inherits the gap silently. The tell was a parenthetical obligation
+  attached to a surface the plan's file list never mentioned.
+
+- **"A duplicate migration index is applied silently once and the API
+  500s."** Wrong mechanism, accidentally right remedy. `drizzle-orm` selects
+  `order by created_at desc limit 1` and applies every journal entry whose
+  `folderMillis` is strictly greater — **the index plays no part.** The
+  hazard is generation time vs merge order. **Technique: read the migrator,
+  not the journal.** And the finding that matters more: **no gate in this
+  repo starts from a NON-EMPTY database**, so nothing can see a skipped
+  migration; deploy's health check is a DB ping that reads no schema. Ask of
+  any migration risk: which gate starts from a non-empty database?
+
+- **"Additive API" is directional and was asserted symmetrically.** Old
+  client → new server holds (`onConflictDoUpdate({ set: patch })` never puts
+  an absent key in the SET clause). New client → OLD server does not: the
+  route ignores an unrecognised key and its empty-patch guard returns **200
+  with the current row**, so `res.ok` is true for a write that stored
+  nothing — and a rollback to `$PREV` makes that a supported state.
+  **Technique: for any "additive" claim, name BOTH skew directions and find
+  the line that returns success on the unsupported one.** An RF25 "branch on
+  the boolean" instruction is decoration when the boolean is `res.ok`;
+  branch on the returned VALUE.
+
+- **A prescribed test that cannot be written.** The plan said "mock the hook
+  the way the file already mocks it" AND "capture the request body" AND "the
+  doors come back". The file mocks it as a CONSTANT with no writer, so no
+  PUT is issued and the return cannot change between renders. **Technique:
+  for every prescribed test, open the file's own helper and check the mock
+  can PRODUCE the state the assertion reads.** Corollary: with the hook
+  mocked in every client test, the ONE test crossing the write→reload seam
+  was an e2e reload — and it was the only prescribed assertion with no
+  stated mutation.
+
+- **Attacked and NOT broken: "the reset shows the doors again with no
+  flash."** It depends on a mount, and the mount happens — `AppRoutes` is a
+  plain `<Routes>` with no keep-alive, so leaving the reset screen unmounts
+  it and remounts Today, whose hook refetches; Today blocks render until
+  every loader is ready; `api.ts` is a bare `fetch` with no cache.
+  **Technique: settle a "does it refetch?" question at the ROUTER, not the
+  hook** — whether the component unmounts decides it.
+
+- **Attacked and NOT broken: "becomes irrelevant, never cleared" is safe.**
+  The attack was to find a second route back to `baselines === null` that
+  leaves a stale `true`. `grep -rn "stores.baselines" app/server/` returns
+  exactly ONE production caller of `clear`. **Technique: a "never cleared is
+  safe" claim is settled by counting the producers of the state that would
+  make it unsafe**, not by reasoning about the flag.
