@@ -8859,7 +8859,11 @@ had passed over the same document without a single duration in it.
 
 - **DETERMINISTIC vs HEURISTIC:** the length check is deterministic (the
   transport REPORTS `bytes.length`; a truncated notification has no supported
-  producer, since ATT does not deliver partial PDUs). The REJECTED alternative,
+  producer we can point to — INFERENCE, labelled: no partial frame has ever
+  appeared in any committed capture, and the general expectation of a link
+  layer is that it delivers a complete PDU or none; this does not carry the
+  refusal below, which stands on the version-band evidence alone). The
+  REJECTED alternative,
   firmware gating, is heuristic and now has evidence: PM5 versions are disjoint
   per-machine-family bands — the vendor's own BLE doc prints "(Valid for PM5
   V150 – V199.99 only) (Valid for PM5 V204 – V299.99 only)" for one

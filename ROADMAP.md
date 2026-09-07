@@ -1303,16 +1303,18 @@ and unscheduled; it is not a wish.
 promoted into a wave, or it is killed with a reason. "Rides the next PR touching
 X" is a real disposition — most of these are single files.
 
-- [ ] **IN FLIGHT — a monitor older than 2018 is silently unusable.**
+- [ ] **DONE, PR OPEN — a monitor older than 2018 is silently unusable.**
       Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26
-      (2018-11-02) and to `0x0038` in V1.27; our parsers demand the longer
-      form, so a pre-2018 monitor has every one of those frames rejected.
-      `seen.as1` then never latches and `maybeEmitFrame` publishes NOTHING
-      for the whole session — the rower sits on `READY`, unwarned, and the
-      row is lost. Reported by a friend of James's, 2026-09-07, with a ring
+      (2018-11-02) and to `0x0038` in V1.27; our parsers demanded the longer
+      form, so a pre-2018 monitor had every one of those frames rejected.
+      `seen.as1` then never latched and `maybeEmitFrame` published NOTHING
+      for the whole session — the rower sat on `READY`, unwarned, and the
+      row was lost. Reported by a friend of James's, 2026-09-07, with a ring
       full of `0x0032: expected 17 bytes, got 16` and
       `rowingActive=unseen`. Spec:
-      `docs/superpowers/specs/2026-09-07-short-status-frames-design.md`. **M**
+      `docs/superpowers/specs/2026-09-07-short-status-frames-design.md`. All
+      four plan tasks are complete and the full gate is green on PR #350
+      (`as1-short-frame`); the checkbox above ticks on merge, not before. **M**
 
 - [ ] **A monitor we cannot decode says nothing at all.** The follow-on the
       spec above names: hundreds of `frame-error` entries reached the ring

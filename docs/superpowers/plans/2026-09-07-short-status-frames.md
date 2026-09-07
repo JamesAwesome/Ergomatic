@@ -696,6 +696,12 @@ recording is post-V1.26 — 0x0032 is 17 bytes in 8248 of 8248 notifications and
 0x0038 is 19 in 42 of 42 — so no capture we hold exercises the short form.
 ```
 
+[Superseded during execution: the vendor row above establishes ADDED only,
+not LAST — that comes from rev 1.30 Table 3's field ordering, and the
+16-byte pre-2018 prefix is an INFERENCE, since no such capture exists. The
+prose as prescribed conflated the three; the corrected wording actually
+committed is `docs/monitor/pm5-interface-notes.md:490-500`.]
+
 Add the matching two-sentence note under the `0x0038` table pointing back to
 this one.
 

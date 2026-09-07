@@ -163,8 +163,12 @@ does not claim they are observed.
   RowErg, SkiErg and BikeErg separate number ranges. A version comparison is
   therefore not an order relation, and a gate built on one is a heuristic
   wearing a number. The length check, by contrast, is deterministic: the
-  transport REPORTS `bytes.length`, and a truncated notification has no
-  supported producer because ATT does not deliver partial PDUs.
+  transport REPORTS `bytes.length`. **INFERENCE, labelled:** a truncated
+  notification has no supported producer we can point to — no partial frame
+  has ever appeared in any committed capture, and the general expectation of
+  a link layer is that it delivers a complete PDU or none. Nothing above
+  depends on it: the refusal to gate on firmware version rests entirely on
+  the version-band evidence, not on this inference.
 - **The frame gate stays as it is.** Relaxing `seen.general && seen.as1 &&
   seen.as2` to general alone would hand consumers zeros for rate and pace,
   which is a fabricated reading (recurring failure 11). The gate is correct;
