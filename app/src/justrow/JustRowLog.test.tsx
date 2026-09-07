@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { api } from "../api";
@@ -171,6 +171,54 @@ describe("JustRowLog (the workout-less log door)", () => {
     // where a badge can exist instead (`TypeBadge.test.tsx`, the history
     // list in `e2e/justrow.spec.ts`).
     expect(screen.queryByText(/INTERVALS/)).not.toBeInTheDocument();
+  });
+
+  // Just Row parity (Gate 0, James 2026-09-07). This screen held the whole
+  // burst and showed three numbers; the saved row has shown the tiles all
+  // along. The values below are the REAL 2026-08-31 free row
+  // (`docs/monitor/sessions/walk-2026-08-31-justrow/`), 393.6 s and 1396 m,
+  // whose burst carries rate 25, drag 101, 80 calories and 730 cal/hr —
+  // not a fixture chosen to be convenient (RF3).
+  it("shows the six machine tiles a programmed piece shows, on a real free row's own numbers", async () => {
+    mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    const capture = closedFreeRow({
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 393.6, workDistanceMeters: 1396 },
+      summaryDetail: {
+        avgStrokeRate: 25,
+        endingHeartRateBpm: null,
+        avgHeartRateBpm: null,
+        minHeartRateBpm: null,
+        maxHeartRateBpm: null,
+        dragFactorAverage: 101,
+        recoveryHeartRateBpm: null,
+        // 1, not 8: the monitor tags a free row differently, and nothing
+        // here may gate on that byte.
+        workoutType: 1,
+        totalCalories: 80,
+        avgPaceSecondsPer500m: 140.9,
+      },
+    });
+    commitHandoff(capture.startedAt, null, capture);
+    await renderDoor();
+
+    const tier = await screen.findByTestId("summary-machine-tier");
+    // INDEPENDENT literals, computed from the capture's own totals by the
+    // logbook's arithmetic, not read back from the module under test:
+    // round(2.80 / (393.6/1396)³) = 125 W, and floor(80 × 3600 / 393.6) = 731.
+    expect(within(tier).getByText("125")).toBeInTheDocument();
+    expect(within(tier).getByText("80")).toBeInTheDocument();
+    expect(within(tier).getByText("731")).toBeInTheDocument();
+    expect(within(tier).getByText("25")).toBeInTheDocument();
+    expect(within(tier).getByText("101")).toBeInTheDocument();
+    // The rate tile carries NO target on a free row — the program is the
+    // empty interval list — so the label is plain RATE.
+    expect(within(tier).getByText("RATE")).toBeInTheDocument();
+    expect(within(tier).queryByText("RATE · TARGET")).not.toBeInTheDocument();
+    // No belt on that row and no trace to derive from, so a dash.
+    expect(within(tier).getByText("AVG HR")).toBeInTheDocument();
+    // Still no strip: a free row saves no intervals.
+    expect(screen.queryByText(/MACHINE SUMMARY/)).not.toBeInTheDocument();
   });
 
   it("saves a free row without a plan: advancesPlan false, both ids null, steps empty, AVG derived", async () => {
