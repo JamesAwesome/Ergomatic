@@ -5,6 +5,25 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.41.0: git log v0.40.0..origin/main --oneline at e6cb2995 — two
+    // merges, each accounted for (RF15; no --merges):
+    //   #327 Phase LP PR 1 — every figure Concept2's logbook shows, on
+    //     machine rows: six tiles under the heroes and a per-interval
+    //     MACHINE SUMMARY table — items 1 and 2. Watts and cal/hour use
+    //     Concept2's arithmetic (James's §3.1 ruling), so item 2 says they
+    //     can differ from the monitor. NO parity sentence ("the same
+    //     figures the logbook shows"): PM final gate #327 — false until
+    //     PR 2 sends the splits.
+    //   #328 Phase NF close — docs/ROADMAP/ledger only; needs no note.
+    // This notes-and-captures PR adds packaging, not another behavior.
+    version: "v0.41.0",
+    date: "2026-09-07",
+    items: [
+      "Rows rowed with the PM5 connected now show what the monitor measured: watts, calories, cal/hour, rate, drag and average heart rate for the session, and a MACHINE SUMMARY table under INTERVALS with HR, watts, calories, cal/hour and drag for each interval. It scrolls sideways. Rows saved before this build show what they have and a dash for the rest.",
+      "Watts and cal/hour are worked out the way Concept2's logbook does it, from time, distance and calories, so they can read a little different from the PM5's own screen.",
+    ],
+  },
+  {
     // v0.40.0: git log v0.39.2..main --oneline at d8fe78bd — three merges,
     // each accounted for (RF15; no --merges):
     //   #316 Phase NF — Scan NFC on workout detail: read the PM5's tag,
