@@ -458,7 +458,7 @@ export function buildLogSteps(
       );
     } else if (isPaceWord) {
       label = refPaceLabel(durationText(phase), {
-        effort: paceWordFromLabel(phase.label as "ALL OUT" | "EASY"),
+        effort: paceWordFromLabel(phase.label as "ALL OUT" | "STEADY"),
       });
     } else if (phase.ref !== undefined) {
       // Ui-fix round Task 2 fix round, F1b: reconstructs the SAME chip the
@@ -716,7 +716,7 @@ export function buildLogSeed(
     let label: string;
     if (isPaceWord) {
       label = refPaceLabel(durationText(phase), {
-        effort: paceWordFromLabel(phase.label as "ALL OUT" | "EASY"),
+        effort: paceWordFromLabel(phase.label as "ALL OUT" | "STEADY"),
       });
     } else if (phase.ref !== undefined) {
       label = refPaceLabel(durationText(phase), phase.ref);
