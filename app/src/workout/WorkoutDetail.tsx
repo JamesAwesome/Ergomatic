@@ -171,6 +171,17 @@ export default function WorkoutDetail() {
           ? () => preferencesState.setBaselinesSkipped(false)
           : null
       }
+      // Which side IS stored when the pair collapses to null: the caption
+      // must not tell a rower with a tested 2k that they have no baseline.
+      halfPairSide={
+        baselines !== null
+          ? null
+          : baselinesState.baselines.k2Seconds !== null
+            ? "k2"
+            : baselinesState.baselines.k6Seconds !== null
+              ? "k6"
+              : null
+      }
     />
   );
 }
@@ -179,10 +190,12 @@ function WorkoutDetailView({
   workout,
   baselines,
   onSetOneUp,
+  halfPairSide,
 }: {
   workout: LibraryWorkout;
   baselines: Baselines | null;
   onSetOneUp: (() => Promise<boolean>) | null;
+  halfPairSide: "k2" | "k6" | null;
 }) {
   // Session-only preview nudges, keyed by the RAW step index (the handoff's
   // model: one nudge covers a whole repeat block, since we render
@@ -626,7 +639,9 @@ function WorkoutDetailView({
             workouts show nothing. */}
         {baselines === null && needsBaselines(workout.steps) && (
           <p className="workout-detail-caption">
-            Targets are words until you set a baseline.{" "}
+            {halfPairSide === null
+              ? "Targets are words until you set a baseline. "
+              : `Your ${halfPairSide === "k2" ? "2k" : "6k"} is set. Targets stay words until the ${halfPairSide === "k2" ? "6k" : "2k"} is too. `}
             {/* Phase RW PR C (spec §2.1): this CLEARS the skip on the way,
                 so the rower lands on the doors card. A plain Link would
                 land a skipped rower on Today's return row, showing the

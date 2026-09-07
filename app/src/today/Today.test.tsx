@@ -156,6 +156,7 @@ const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 // doors are the superset re-entry; the old BaselineCard's only-missing-
 // distance branch died with it).
 const ONLY_K6_BASELINE = { k2Seconds: null, k6Seconds: 122 };
+const ONLY_K2_BASELINE = { k2Seconds: 112, k6Seconds: null };
 const DEFAULT_PREFS = {
   timeCapMinutes: 60,
   // Phase RW PR C. A fixture that omitted this would read `undefined` →
@@ -306,6 +307,17 @@ const LOGS: RecentLog[] = [
 // write through `usePreferences().setBaselinesSkipped`. This records the
 // calls and lets a test choose the resolved value (false = the server did
 // not confirm it).
+// The half-set row's "Estimate it" writes the counterpart through
+// `useBaselines().save`. Recorded so a test can assert the PATCH, not just
+// that something was clicked.
+const baselineSaves: { calls: unknown[]; fn: (p: unknown) => Promise<void> } = {
+  calls: [],
+  fn: (p: unknown) => {
+    baselineSaves.calls.push(p);
+    return Promise.resolve();
+  },
+};
+
 const skipWrites: {
   calls: boolean[];
   resolve: boolean;
@@ -321,7 +333,11 @@ const skipWrites: {
 
 function mockReady(overrides?: {
   workouts?: LibraryWorkout[];
-  baselines?: typeof BASELINES | typeof NO_BASELINES | typeof ONLY_K6_BASELINE;
+  baselines?:
+    | typeof BASELINES
+    | typeof NO_BASELINES
+    | typeof ONLY_K6_BASELINE
+    | typeof ONLY_K2_BASELINE;
   plan?: PlanData;
   preferences?: typeof DEFAULT_PREFS;
   logs?: RecentLog[];
@@ -341,7 +357,7 @@ function mockReady(overrides?: {
     useWorkouts: () => ({ state: "ready", workouts }),
   }));
   vi.doMock("../api/useBaselines", () => ({
-    useBaselines: () => ({ state: "ready", baselines }),
+    useBaselines: () => ({ state: "ready", baselines, save: baselineSaves.fn }),
   }));
   vi.doMock("../api/usePlan", () => ({
     usePlan: () => ({ state: "ready", plan }),
@@ -433,6 +449,7 @@ async function openFilterSheet() {
 beforeEach(() => {
   skipWrites.calls = [];
   skipWrites.resolve = true;
+  baselineSaves.calls = [];
 
   vi.resetModules();
   localStorage.clear();
@@ -4510,10 +4527,11 @@ describe("the stored skip (Phase RW PR C)", () => {
   });
 
   it("keeps the return row for a PARTIAL pair — the state spec 3.2 calls out", async () => {
-    // One side stored still reads as "no baseline" everywhere (Today's own
-    // derivation collapses a half pair to null), so the flag still decides.
-    // James's 2026-09-07 ruling — ask for both, suggested at the 7s offset —
-    // is the queued fix for the copy; this pins today's behaviour.
+    // One side stored still reads as "no baseline" for every TARGET (Today's
+    // own derivation collapses a half pair to null), so the flag still
+    // decides which of the two states shows. What the row SAYS in that state
+    // is the half-set copy, pinned in its own describe below: James's
+    // 2026-09-07 ruling closed the false "NO BASELINE SET".
     mockReady({
       baselines: ONLY_K6_BASELINE,
       preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
@@ -4521,7 +4539,7 @@ describe("the stored skip (Phase RW PR C)", () => {
     await renderToday();
 
     expect(document.querySelector(".doorscard")).toBeNull();
-    expect(screen.getByText("NO BASELINE SET")).toBeInTheDocument();
+    expect(document.querySelector(".today-nobaseline-row")).not.toBeNull();
   });
 
   it("shows neither the card nor the row once a baseline is set, whatever the flag says", async () => {
@@ -4533,5 +4551,72 @@ describe("the stored skip (Phase RW PR C)", () => {
 
     expect(document.querySelector(".doorscard")).toBeNull();
     expect(screen.queryByText("NO BASELINE SET")).not.toBeInTheDocument();
+  });
+});
+
+describe("a half-set baseline pair says what is true (2026-09-07)", () => {
+  it("names the side that IS set, never NO BASELINE SET, and offers the other at +7s", async () => {
+    mockReady({
+      baselines: ONLY_K2_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(screen.getByText("2K SET · NO 6K")).toBeInTheDocument();
+    expect(screen.queryByText("NO BASELINE SET")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Estimate it (+7s)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Targets stay words until both are set. You can type the other in on You.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("names the 6k side and subtracts, when that is the one stored", async () => {
+    mockReady({
+      baselines: ONLY_K6_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(screen.getByText("6K SET · NO 2K")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Estimate it (−7s)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("Estimate it writes the DERIVED counterpart, 7s slower than the stored 2k", async () => {
+    mockReady({
+      baselines: ONLY_K2_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Estimate it (+7s)" }),
+    );
+
+    // 112 + 7 = 119, and the source says the rower did not row it.
+    expect(baselineSaves.calls).toStrictEqual([
+      { k6Seconds: 119, k6Source: "derived" },
+    ]);
+  });
+
+  it("keeps NO BASELINE SET and the skip-clearing link when NEITHER side is set", async () => {
+    mockReady({
+      baselines: NO_BASELINES,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(screen.getByText("NO BASELINE SET")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Set one up" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("~ times are estimates until you set a baseline"),
+    ).toBeInTheDocument();
   });
 });

@@ -14,6 +14,11 @@ import { LogRow } from "../log/LogRow";
 import { fmtDuration } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import {
+  deriveK2FromK6,
+  deriveK6FromK2,
+  K2_K6_OFFSET_SECONDS,
+} from "../../domain/deriveBaseline.js";
+import {
   drawOne,
   nextShuffle,
   suggest,
@@ -576,6 +581,17 @@ function TodayContent({
           k6Seconds: baselinesState.baselines.k6Seconds,
         }
       : null;
+  // Which side IS stored when the pair collapses to null. The pair stays
+  // "unknown" for every target, but the row must not tell a rower with a
+  // tested 2k that they have no baseline.
+  const halfPair: { which: "k2" | "k6"; stored: number } | null =
+    baselines !== null
+      ? null
+      : baselinesState.baselines.k2Seconds !== null
+        ? { which: "k2", stored: baselinesState.baselines.k2Seconds }
+        : baselinesState.baselines.k6Seconds !== null
+          ? { which: "k6", stored: baselinesState.baselines.k6Seconds }
+          : null;
 
   // key={} forces a fresh TodayView (and thus fresh pick/overrides/
   // shuffle state) whenever the plan's identity or position changes
@@ -601,6 +617,23 @@ function TodayContent({
       baselines={baselines}
       preferences={preferencesState.preferences}
       setBaselinesSkipped={preferencesState.setBaselinesSkipped}
+      halfPair={halfPair}
+      onFillCounterpart={
+        halfPair === null
+          ? null
+          : () =>
+              baselinesState.save(
+                halfPair.which === "k2"
+                  ? {
+                      k6Seconds: deriveK6FromK2(halfPair.stored),
+                      k6Source: "derived",
+                    }
+                  : {
+                      k2Seconds: deriveK2FromK6(halfPair.stored),
+                      k2Source: "derived",
+                    },
+              )
+      }
       plan={planState.plan}
       logs={recentLogsState.logs}
       session={session}
@@ -800,6 +833,8 @@ function TodayView({
   baselines,
   preferences,
   setBaselinesSkipped,
+  halfPair,
+  onFillCounterpart,
   plan,
   logs,
   session,
@@ -816,6 +851,10 @@ function TodayView({
   // through this; it refetches, so the card appears and disappears without
   // a reload. Resolves false when the server did not confirm the value.
   setBaselinesSkipped: (value: boolean) => Promise<boolean>;
+  // The side that IS stored when only one is, else null. Drives the row's
+  // copy: a rower with a tested 2k must not read "no baseline set".
+  halfPair: { which: "k2" | "k6"; stored: number } | null;
+  onFillCounterpart: (() => Promise<void>) | null;
   plan: PlanData;
   logs: RecentLog[];
   /** `sessionsLoggedToday` — part of every day record's key. */
@@ -1365,17 +1404,40 @@ function TodayView({
           {baselines === null && (
             <div className="today-nobaseline-row">
               <span className="today-nobaseline-line">
-                <span className="mono-status">NO BASELINE SET</span>
-                <button
-                  type="button"
-                  className="today-nobaseline-link"
-                  onClick={() => writeSkip(false)}
-                >
-                  Set one up
-                </button>
+                <span className="mono-status">
+                  {halfPair === null
+                    ? "NO BASELINE SET"
+                    : halfPair.which === "k2"
+                      ? "2K SET · NO 6K"
+                      : "6K SET · NO 2K"}
+                </span>
+                {halfPair === null ? (
+                  <button
+                    type="button"
+                    className="today-nobaseline-link"
+                    onClick={() => writeSkip(false)}
+                  >
+                    Set one up
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="today-nobaseline-link"
+                    onClick={() => {
+                      if (onFillCounterpart === null) return;
+                      void onFillCounterpart();
+                    }}
+                  >
+                    {halfPair.which === "k2"
+                      ? `Estimate it (+${K2_K6_OFFSET_SECONDS}s)`
+                      : `Estimate it (−${K2_K6_OFFSET_SECONDS}s)`}
+                  </button>
+                )}
               </span>
               <p className="library-caption">
-                ~ times are estimates until you set a baseline
+                {halfPair === null
+                  ? "~ times are estimates until you set a baseline"
+                  : "Targets stay words until both are set. You can type the other in on You."}
               </p>
               {skipError && (
                 <p className="baseline-error">Couldn't save that. Try again.</p>
