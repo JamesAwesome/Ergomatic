@@ -205,7 +205,7 @@ describe("pieceList", () => {
       split: null,
       off: null,
     });
-    expect(rows[1].paceWordText).toBe("EASY");
+    expect(rows[1].paceWordText).toBe("STEADY");
   });
 
   it("distance pieces put meters in the duration slot and price the split", () => {
@@ -674,5 +674,43 @@ describe("structureLine", () => {
       expect(out, `${wk.title}`).not.toMatch(/undefined|NaN/);
       expect(out, `${wk.title}: "${out}"`).toMatch(STRUCTURE_LINE_SHAPE);
     }
+  });
+});
+
+describe("pieceList without a baseline (Phase RW PR B, spec §1.2)", () => {
+  const B: Baselines = { k2Seconds: 112, k6Seconds: 122 };
+  const seeded = (title: string) => {
+    const w = LIBRARY_WORKOUTS.find((x) => x.title === title);
+    if (!w) throw new Error(`fixture: ${title} missing from LIBRARY_WORKOUTS`);
+    return w;
+  };
+
+  it("keeps every row and the peak of a six-rung ladder (Tehuantepecer), swapping the split for the word", () => {
+    const w = seeded("Tehuantepecer");
+    const withB = pieceList(w.steps, B);
+    const without = pieceList(w.steps, null);
+    expect(without).toHaveLength(withB.length);
+    expect(peakIndex(without, 8)).toBe(peakIndex(withB, 8));
+    expect(without.every((r) => r.split === null)).toBe(true);
+    // 2k+3 down to 2k-2: every rung inside HARD's band, the accepted cost.
+    expect(without.map((r) => r.paceWordText)).toStrictEqual(
+      withB.map(() => "HARD"),
+    );
+    // Raw off, identical to the baseline view, so rows and peak agree.
+    expect(without.map((r) => r.off)).toStrictEqual(withB.map((r) => r.off));
+    expect(without[0]!.refTextFull).toBe(withB[0]!.refTextFull);
+  });
+
+  it("keeps a 6k pyramid's peak where the baseline view has it (Squall Line, raw off)", () => {
+    const w = seeded("Squall Line");
+    expect(peakIndex(pieceList(w.steps, null), 8)).toBe(
+      peakIndex(pieceList(w.steps, B), 8),
+    );
+    expect(peakIndex(pieceList(w.steps, null), 8)).toBe(1);
+  });
+
+  it("workAndTotal prices through estimateMinutes with null (Laminar, ~16)", () => {
+    const w = seeded("Laminar");
+    expect(workAndTotal(w.steps, null).totalMinutes).toBe(16);
   });
 });

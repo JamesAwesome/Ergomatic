@@ -45,7 +45,10 @@ function fmtRest(minutes: number, suffix: string): string {
     : `${fmtDuration(minutes)} ${suffix}`;
 }
 
-export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
+export function pieceList(
+  steps: Step[],
+  baselines: Baselines | null,
+): PieceRow[] {
   const all = phases(steps, baselines);
   const rows: PieceRow[] = [];
   for (const p of all) {
@@ -97,14 +100,25 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
         ? `${p.meters}m`
         : fmtDuration((p.seconds as number) / 60);
     if (p.targetKind === "effort") {
+      // Phase RW PR B: an effort-kind phase that stands in for a split ref
+      // (null baselines) keeps the notation (James: the left slot keeps
+      // it) and its RAW off, so joinsRun/peakIndex roll and rank rows
+      // exactly as the baseline view does; only the split text is the
+      // word. A true max/min phase has no ref and behaves as before.
+      const sref = p.ref !== undefined && !isPaceWordRef(p.ref) ? p.ref : null;
       rows.push({
         duration,
-        refTextFull: null,
+        refTextFull:
+          sref === null
+            ? null
+            : sref.off === 0
+              ? `at ${sref.base} pace`
+              : `at ${sref.base} ${fmtOff(sref.off)}`,
         paceWordText: p.label.toUpperCase(),
         restText: null,
         split: null,
         spm: p.spm ?? null,
-        off: null,
+        off: sref === null ? null : sref.off,
         count: 1,
       });
     } else {
@@ -204,7 +218,7 @@ export function peakIndex(
  *  piece in its run (`count` × rest), not once per row. */
 export function workAndTotal(
   steps: Step[],
-  baselines: Baselines,
+  baselines: Baselines | null,
 ): { workMinutes: number; totalMinutes: number } {
   const totalMinutes = estimateMinutes(steps, baselines).minutes;
   let workSeconds = 0;
