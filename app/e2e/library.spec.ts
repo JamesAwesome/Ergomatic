@@ -671,3 +671,82 @@ test.describe("no baseline: durations still show (Phase RW PR A)", () => {
     ).toHaveCount(0);
   });
 });
+
+// Phase RW PR B: the same fresh account rows a split-ref workout to a WORD.
+// Start is live, the Timer's TARGET SPLIT card reads the word with no
+// sub-line, and Log it after opens the real form. This is the seam test
+// spec §7 owes (RF24): it starts at a fresh account, upstream of
+// `phases()`, and asserts at the reader.
+test.describe("no baseline: rowing to a word (Phase RW PR B)", () => {
+  test("Start opens the countdown and the Timer reads STEADY for Laminar; Log it after opens the form", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "library-row-to-word@e2e.test",
+      name: "Row To Word Tester",
+    });
+    await page.goto("/library");
+    await waitForLibraryLoaded(page);
+    await page.getByPlaceholder("SEARCH BY NAME").fill("Laminar");
+    await page.locator(".workout-row").filter({ hasText: "Laminar" }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText("Laminar");
+    // 1000-1000-1000 m at 6K+12: 2k-equivalent +19, STEADY, on every row.
+    await expect(page.locator(".step-row-range").first()).toHaveText("STEADY");
+    await expect(page.locator(".workout-detail-caption")).toBeVisible();
+
+    await page.getByRole("button", { name: "Start Timer" }).click();
+    await expect(page).toHaveURL(/\/session\/countdown$/);
+    await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
+    await expect(page.getByText("STEADY").first()).toBeVisible();
+    await page.getByRole("button", { name: "SKIP ›" }).click();
+    await expect(page).toHaveURL(/\/session\/run$/);
+    const target = page.locator(".timer-card-value").first();
+    await expect(target).toHaveText("STEADY");
+    await expect(target).toHaveClass(/timer-card-value-word/);
+    // No sub-line under the word (the RATE card keeps its own "spm" caption).
+    await expect(
+      page.locator(".timer-card").first().locator(".timer-card-caption"),
+    ).toHaveCount(0);
+
+    // Log it after on the same workout opens the manual form, not a stub.
+    // (The Library remembers the search, so the count reads "1 OF N SHOWN"
+    // here; wait for the row, not the plain count.)
+    await page.goto("/library");
+    await page.getByPlaceholder("SEARCH BY NAME").fill("Laminar");
+    await page.locator(".workout-row").first().waitFor();
+    await page.locator(".workout-row").filter({ hasText: "Laminar" }).click();
+    await page.getByRole("link", { name: "Log it after" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+    await expect(page.getByRole("heading", { name: "Laminar" })).toBeVisible();
+    await expect(page.getByText("no target")).toHaveCount(0);
+
+    // The seam spec §7 asks for (RF24): SAVE, then read the row back
+    // through the API. The persisted step label must be the WORD the rower
+    // read, never the ref they never saw and never MIN. This starts at a
+    // fresh account, upstream of `phases()`, and asserts after the write.
+    await page.getByRole("button", { name: "HELD" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+
+    const labels = await page.evaluate(async () => {
+      const list = await fetch("/api/logs");
+      const rows = (await list.json()) as Array<{
+        id: string;
+        workoutTitle: string;
+      }>;
+      const row = rows.find((r) => r.workoutTitle === "Laminar");
+      if (!row) return null;
+      const detail = await fetch(`/api/logs/${row.id}`);
+      const full = (await detail.json()) as {
+        steps: Array<{ label: string; targetSplit?: number }>;
+      };
+      return full.steps.map((s) => s.label);
+    });
+    expect(labels).not.toBeNull();
+    expect(labels!.length).toBeGreaterThan(0);
+    for (const label of labels!) {
+      expect(label).toMatch(/@ STEADY$/);
+    }
+  });
+});

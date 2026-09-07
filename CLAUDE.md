@@ -829,6 +829,11 @@ often they recur.
     probe's revert is a no-op against a clean file, and the probe can never
     take anything with it. `git stash` is not the alternative here — the
     stash stack is shared with other sessions (agent briefing).
+    **And confirm the commit LANDED before the probe (`git log -1`):** on
+    2026-09-07 (Phase RW PR A, Task 5) the pre-commit typecheck blocked
+    the commit, the file stayed dirty, and the probe's `git checkout --`
+    erased forty lines of the real change — this entry's exact class, one
+    step later in the sequence.
     **And anchor the mutation on a UNIQUE string (PR #269, 2026-09-02).**
     Task 6's round-0 probe edited the first match of a `sessions:` line —
     the unmounted test-signin router, not the concept2 mount it meant to

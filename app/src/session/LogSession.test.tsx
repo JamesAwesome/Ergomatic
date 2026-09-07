@@ -2353,27 +2353,21 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(screen.getByRole("link", { name: "← BACK" })).toBeInTheDocument();
   });
 
-  it("degrades to the no-target/Set baselines idiom instead of crashing when baselines are unset (a stale bookmark)", async () => {
+  it("renders the manual form with the word as each step's label when baselines are unset (Phase RW PR B: the no-target stub is gone)", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     await renderManualLog(workout.id);
 
-    // This early-return degraded state is its own small screen, never the
-    // summary (PostWorkoutSummary never mounts here — there is nothing to
-    // log yet) — Task 5 left it untouched, so it keeps the pre-existing
-    // "Log {title}" heading and the bare BackLink's own default fallback.
+    // The real manual form, headed by the workout's own title (the old
+    // "Log {title}" stub is gone).
     expect(
-      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+      await screen.findByRole("heading", { name: "Hoarfrost" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("no target")).toBeInTheDocument();
+    expect(screen.queryByText("no target")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /set baselines/i }),
-    ).toHaveAttribute("href", "/you/baselines");
-    // Nothing to save against — no form at all in this degraded state.
-    expect(
-      screen.queryByRole("button", { name: SAVE_BUTTON }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: SAVE_BUTTON }),
+    ).toBeInTheDocument();
   });
 
   it("Phase 6I: an effort-only workout (needsBaselines() false) opens the form with null baselines instead of the no-target block", async () => {

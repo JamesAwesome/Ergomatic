@@ -6,6 +6,7 @@ import type {
   SplitRef,
 } from "./types.js";
 import { MOST_COMMON_ESTIMATE } from "./estimateBaseline.js";
+import { K2_K6_OFFSET_SECONDS } from "./deriveBaseline.js";
 
 /** Phase RW (spec §1.3): the pair a DURATION is priced against when the
  *  rower has no baseline. The recommend table's most common cell (2:25 /
@@ -15,6 +16,36 @@ import { MOST_COMMON_ESTIMATE } from "./estimateBaseline.js";
  *  never reaches the wire, never reaches a log; `src/
  *  assumedBaselinesCensus.test.ts` pins who may import it. */
 export const ASSUMED_BASELINES: Baselines = MOST_COMMON_ESTIMATE;
+
+/** Phase RW (spec §1.1): the four-word ladder a split ref reads as when
+ *  the rower has no baseline. One scalar, one word: a ref is expressed in
+ *  2k-equivalent seconds (a 6k ref sits K2_K6_OFFSET_SECONDS slower) and
+ *  bucketed on these inclusive upper bounds. Never base- or type-aware
+ *  (James, 2026-09-06): 2k+6 and 6k-1 are the same pace and read the same
+ *  word. The thresholds are exported so a test can name them, and pinned
+ *  by independent literals in pace.test.ts. */
+export type IntensityWord = "STEADY" | "MODERATE" | "HARD" | "ALL OUT";
+export const INTENSITY_ALL_OUT_MAX = -3;
+export const INTENSITY_HARD_MAX = 4;
+export const INTENSITY_MODERATE_MAX = 12;
+
+export function intensityWord(ref: PaceRef): IntensityWord {
+  if (isPaceWordRef(ref)) return ref.effort === "max" ? "ALL OUT" : "STEADY";
+  const eq = ref.base === "2k" ? ref.off : ref.off + K2_K6_OFFSET_SECONDS;
+  if (eq <= INTENSITY_ALL_OUT_MAX) return "ALL OUT";
+  if (eq <= INTENSITY_HARD_MAX) return "HARD";
+  if (eq <= INTENSITY_MODERATE_MAX) return "MODERATE";
+  return "STEADY";
+}
+
+/** The spoken form for an accessible name ("5 minutes moderate"). */
+export function intensityWordSpoken(
+  word: IntensityWord,
+): "steady" | "moderate" | "hard" | "all out" {
+  return word === "ALL OUT"
+    ? "all out"
+    : (word.toLowerCase() as "steady" | "moderate" | "hard");
+}
 
 const EFFORT_RE = /^(max|min)$/i;
 const REF_RE = /^(2k|6k)\s*([+-]\s*\d+(\.\d+)?)?$/i;
@@ -46,12 +77,12 @@ export function resolveSplit(
   throw new Error("resolveSplit requires a split ref");
 }
 
-export function paceWordLabel(effort: PaceWord): "ALL OUT" | "EASY" {
-  return effort === "max" ? "ALL OUT" : "EASY";
+export function paceWordLabel(effort: PaceWord): "ALL OUT" | "STEADY" {
+  return effort === "max" ? "ALL OUT" : "STEADY";
 }
 
 // Inverse of paceWordLabel. Exists so a caller holding only a frozen "ALL
-// OUT"/"EASY" display word (not the original PaceRef/PaceWord it came from)
+// OUT"/"STEADY" display word (not the original PaceRef/PaceWord it came from)
 // can still reach `refLabel`'s chip idiom ("MAX"/"MIN") — the session log
 // builder (`src/session/logDraft.ts`'s `buildLogSteps`) only ever sees an
 // `EnginePhase`'s frozen `label`, which for an effort phase already IS
@@ -61,9 +92,9 @@ export function paceWordLabel(effort: PaceWord): "ALL OUT" | "EASY" {
 // Microburst's identical effort step). Bijective by construction (paceWordLabel
 // is a total function over the two-element PaceWord type), so this never
 // needs a null/error case. Kept beside `paceWordLabel` rather than duplicated
-// as a private map at that call site, so the ALL OUT/EASY <-> MAX/MIN
+// as a private map at that call site, so the ALL OUT/STEADY <-> MAX/MIN
 // vocabulary — the 5G rule's own domain — lives in exactly one file.
-export function paceWordFromLabel(word: "ALL OUT" | "EASY"): PaceWord {
+export function paceWordFromLabel(word: "ALL OUT" | "STEADY"): PaceWord {
   return word === "ALL OUT" ? "max" : "min";
 }
 
@@ -73,11 +104,11 @@ export function paceWordFromLabel(word: "ALL OUT" | "EASY"): PaceWord {
 // confusion the display-word pair exists to prevent — so callers building a
 // spoken name substitute this instead. Includes its own leading "at" for
 // "max" (a noun phrase, "at max effort") but not for "min" (a plain adverb,
-// "30 seconds easy" — rowing's own idiom, not "at easy" or "at easy
+// "30 seconds steady" — rowing's own idiom, not "at steady" or "at steady
 // effort"), so a caller can compose `${duration} ${paceWordSpoken(effort)}`
 // uniformly without an effort-specific grammar branch of its own.
-export function paceWordSpoken(effort: PaceWord): "at max effort" | "easy" {
-  return effort === "max" ? "at max effort" : "easy";
+export function paceWordSpoken(effort: PaceWord): "at max effort" | "steady" {
+  return effort === "max" ? "at max effort" : "steady";
 }
 
 // Phase 6I: `baselines` is nullable so an effort-ref work step can be

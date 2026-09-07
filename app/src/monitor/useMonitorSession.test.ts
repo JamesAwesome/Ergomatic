@@ -188,7 +188,7 @@ function fillingLow(): { program: WorkoutProgram; title: string; id: string } {
     type: w.type as WorkoutType,
     // Filling Low's 8:00 opener was a `wu` step in the seed until
     // 2026-08-09, then the rower's warm-up PREFERENCE, and Phase WU removed
-    // that too. It is an authored 8' EASY step here, which compiles to the
+    // that too. It is an authored 8' STEADY step here, which compiles to the
     // identical interval (`compileProgram` nulls an effort phase's target
     // exactly as it nulled a warm-up's), so the program is still
     // interval 0 = time 480 then 3 x distance 2000 and every index and

@@ -3,32 +3,10 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { keepAwakeOff, keepAwakeOn } from "../adapters/keepAwake";
 import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
-import { needsBaselines } from "../../domain/needsBaselines.js";
 import type { Baselines } from "../../domain/types.js";
 import { buildRun } from "./engine";
-import { clearDraft, draftSteps, loadDraft, type SessionDraft } from "./draft";
+import { clearDraft, loadDraft, type SessionDraft } from "./draft";
 import { clearRun, loadRun, saveRun, type SessionRun } from "./run";
-
-// Phase 6I: the SAME predicate WorkoutDetail.tsx's own Start guard uses
-// (fast-follow spec §3 moved it there from ConfirmTargets' old footer),
-// applied to the two places Countdown itself must agree with it — the
-// build effect's own gate (below) and the render's redirect (further
-// down). Missing either one reintroduces the exact bug a mismatched pair
-// would produce: gate the effect but not the redirect, and an effort-only
-// workout would render "Couldn't load…"-style limbo behind a redirect
-// that fires anyway; gate the redirect but not the effect, and the run
-// record this screen's whole job is to write never gets built at all — a
-// rower stuck on a screen that looks like it's counting down toward a
-// session that doesn't exist. `draftSteps` (not raw `d.steps`) is the
-// EFFECTIVE view — removed rows dropped, nudges folded — the same one
-// `buildRun` itself resolves against, so this can never disagree with what
-// actually gets built.
-function blocksWithoutBaselines(
-  d: SessionDraft,
-  baselines: Baselines | null,
-): boolean {
-  return baselines === null && needsBaselines(draftSteps(d));
-}
 
 // The countdown's own timing state: `total` is the configured length
 // (preferences.countdownSeconds), `startedAtMs` is the wall-clock instant
@@ -138,14 +116,11 @@ export default function Countdown() {
   // Resolved once baselines are READY — `null` covers both "not ready yet"
   // (loading/error; the render below returns before this matters) and the
   // genuine case this exists to catch: ready, but the rower has never set
-  // baselines. WorkoutDetail.tsx's own Start guard blocks in that case
-  // ONLY when `needsBaselines()` reads true for the draft's effective steps
-  // (Phase 6I — before that task it blocked unconditionally); an
-  // effort-only workout's `resolvedBaselines === null` is therefore a
-  // GENUINE, expected case reaching this screen now, not just a
-  // direct/deep-link that skipped that guard. `blocksWithoutBaselines`
-  // (module scope, above) is what actually decides whether this null value
-  // blocks the build effect/render below — see its own comment.
+  // baselines. Phase RW PR B: that is now an ORDINARY case for every
+  // workout, not just the effort-only ones. Nothing blocks on it — the
+  // guard this comment used to name (`blocksWithoutBaselines`, and
+  // WorkoutDetail's matching Start guard) is deleted; `buildRun` takes the
+  // union and a split ref resolves to a ladder word.
   // useMemo, not a plain `const`: `baselinesState` itself is a STABLE
   // reference across renders that don't touch it (the countdown's own 1s
   // repaint interval re-renders this component every second once running),
@@ -214,18 +189,14 @@ export default function Countdown() {
     if (existingRun !== null && hasRunProgress(existingRun)) return;
     if (baselinesState.state !== "ready") return;
     if (preferencesState.state !== "ready") return;
-    // Ready but unset AND the draft actually needs baselines to resolve
-    // (Phase 6I: `blocksWithoutBaselines`, module scope) — never build
-    // here; the render below redirects to /today instead. `builtRef` is
-    // deliberately NOT flipped in this branch: this isn't "built once,
-    // never rebuild," it's "nothing to build yet," so a hypothetical future
-    // render with real baselines (there isn't one today; nothing here
-    // re-fetches) wouldn't be wrongly blocked by a stale guard. An
-    // effort-only draft falls THROUGH this check even with
-    // `resolvedBaselines === null` — `buildRun` accepts `Baselines | null`
-    // and resolves an effort phase to no target/no estimate rather than
-    // crashing (domain/expand.ts's `phases()`).
-    if (blocksWithoutBaselines(draft, resolvedBaselines)) return;
+    // Phase RW PR B: there is no "ready but unset" early return here any
+    // more — a null pair builds a run whose split refs read ladder words.
+    // `builtRef` is
+    // deliberately NOT flipped in the loading branches above: that isn't
+    // "built once, never rebuild," it's "nothing to build yet," so a
+    // later render with real baselines is not wrongly blocked by a stale
+    // guard. `buildRun` accepts `Baselines | null` throughout
+    // (domain/expand.ts's `phases()`).
     builtRef.current = true;
 
     const baselines = resolvedBaselines;
@@ -340,24 +311,6 @@ export default function Countdown() {
     );
   }
 
-  if (blocksWithoutBaselines(draft, resolvedBaselines)) {
-    // Both hooks are READY by this point (every loading/error branch above
-    // already returned), so this means baselines resolved to genuinely
-    // unset AND this draft's effective steps need one — WorkoutDetail's own
-    // Start button blocks in that exact case (fast-follow spec §3: disabled
-    // + caption, the needsBaselines guard relocated from ConfirmTargets'
-    // old footer), so the only way to land here with this true is a
-    // direct/deep navigation to /session/countdown that skipped that guard
-    // entirely. Bouncing to /today (where the three-door onboarding card
-    // — the no-baselines entry — lives) rather than building a run against
-    // a dummy pair, same
-    // as the shim's own "no draft" arm. An effort-only draft never reaches
-    // this branch, even with `resolvedBaselines === null` — see the build
-    // effect's own identical gate above, and `blocksWithoutBaselines`'s own
-    // comment for why BOTH must share this exact predicate.
-    return <Navigate to="/today" replace />;
-  }
-
   // Gate 0 (storage-denial spec §2, APPROVED by James 2026-09-03): the
   // run write failed I-4's check (`attemptBuild` returned `null`). Both
   // hooks are READY by this point (every loading/error branch above
@@ -414,7 +367,7 @@ export default function Countdown() {
   }
 
   // Handoff §5: the next-phase line is the upcoming phase's OWN resolved
-  // label (a fmtSplit range, an effort word, or "Easy"/"Rest"/"All out") —
+  // label (a fmtSplit range, an effort or ladder word, or "Rest"/"All out") —
   // the same text the live timer's TARGET SPLIT card will show for phase 0,
   // not a re-derived phrase. `run.phases` is never empty (every draft has
   // at least one step), but the fallback keeps this defensive rather than

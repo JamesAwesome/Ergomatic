@@ -58,7 +58,7 @@ export interface CompiledPhase {
    *  the two work-phase kinds apart; see its own comment. */
   targetSplit?: number;
   /** Discriminates a work phase's target: "split" is a real, user-chosen
-   *  pace; "effort" is a display estimate for "ALL OUT"/"EASY" — the
+   *  pace; "effort" is a display estimate for "ALL OUT"/"STEADY" (or, with no baseline, any ladder word) — the
    *  compiler must not program the estimate as a hard target (see
    *  `compileProgram`). Undefined for rest/test. */
   targetKind?: "split" | "effort";
@@ -290,7 +290,7 @@ function representableCentiseconds(raw: number): number | null {
  * phase's `targetSplit`, when baselines were available, is ALSO a real
  * number on the input (an ESTIMATE, `domain/pace.ts`'s `estimationSplit`,
  * used for the phone's own display only) — programming that estimate as a
- * hard target would turn every "ALL OUT"/"EASY" step into a fabricated
+ * hard target would turn every "ALL OUT"/"STEADY" (or, with no baseline, any ladder word) step into a fabricated
  * pace target. The discriminant is `targetKind === "effort"`, NEVER
  * `targetSplit === undefined` — this function always checks `targetKind`
  * first. (Phase 6I: with null baselines, `domain/expand.ts`'s `phases()`
@@ -466,7 +466,7 @@ export function compileProgram(
     // H8: the discriminant is targetKind, never targetSplit === undefined
     // — an "effort" phase's targetSplit, when baselines were available, IS
     // a real number (a display estimate), and programming it as a hard
-    // target would turn every "ALL OUT"/"EASY" step into a fabricated
+    // target would turn every "ALL OUT"/"STEADY" (or, with no baseline, any ladder word) step into a fabricated
     // pace. Phase 6I: with null baselines an effort phase's targetSplit is
     // genuinely undefined (`domain/expand.ts`'s `phases()` omits it), so
     // this check's `||` below is load-bearing, not just defensive.

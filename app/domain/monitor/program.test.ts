@@ -896,3 +896,29 @@ describe("compileProgram: targetSplit representability (M-9, final-review)", () 
     });
   });
 });
+
+describe("compileProgram: a split ref rowed with no baseline (Phase RW PR B)", () => {
+  it("programs no pace target for either interval", () => {
+    const ps = expandPhases(
+      [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { base: "2k", off: 2 },
+        },
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 1000 },
+          ref: { base: "6k", off: 8 },
+        },
+      ],
+      null,
+    );
+    const compiled = compileProgram(toCompiledPhases(ps));
+    if ("code" in compiled) throw new Error(compiled.message);
+    expect(compiled.intervals).toHaveLength(2);
+    for (const interval of compiled.intervals) {
+      expect(interval.targetSplit).toBeNull();
+    }
+  });
+});

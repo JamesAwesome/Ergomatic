@@ -62,7 +62,10 @@ export function BaselinesBody() {
         every workout in the library starts speaking in your numbers. The editor
         behind BASELINES on the You tab is still there whenever you'd rather
         type a number in by hand. Re-test whenever workouts have felt noticeably
-        easier or harder than their forecasts for a couple of weeks.
+        easier or harder than their forecasts for a couple of weeks. Until a
+        baseline is set, every workout still runs: where a split would show you
+        read a word instead, steady, moderate, hard or all out, and distance
+        workouts show a rough length marked with a tilde.
       </p>
     </>
   );

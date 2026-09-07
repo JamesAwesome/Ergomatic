@@ -210,7 +210,7 @@ describe("TimerTargets (component)", () => {
     expect(easy.targetSplit).toBe(142); // the estimate exists...
 
     const first = render(<TimerTargets phase={easy} />);
-    expect(screen.getByText("EASY")).toBeInTheDocument();
+    expect(screen.getByText("STEADY")).toBeInTheDocument();
     // ...and is nowhere on the card. 6k 122 + 20 = 142 -> "2:22.0".
     expect(screen.queryByText("2:22.0")).not.toBeInTheDocument();
     expect(screen.getByText("20")).toBeInTheDocument(); // its rate IS real
@@ -329,5 +329,37 @@ describe("index.css: .timer-card-actual-stale resolves to the AA-passing token (
     const body = match![1];
     expect(body).toContain("var(--ink-3)");
     expect(body).not.toContain("--ink-5");
+  });
+});
+
+describe("the word modifier (Phase RW PR B)", () => {
+  const NOW = new Date("2026-09-07T10:00:00.000Z");
+  const draft = buildDraft({
+    id: "w-word",
+    title: "Word",
+    type: "TR" as WorkoutType,
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "2k", off: 6 },
+      },
+    ],
+  });
+
+  it("marks an effort-kind phase's TARGET SPLIT value with timer-card-value-word", () => {
+    const run = buildRun(draft, null, NOW);
+    const { container } = render(<TimerTargets phase={run.phases[0]!} />);
+    const value = container.querySelector(".timer-card-value")!;
+    expect(value).toHaveTextContent("MODERATE");
+    expect(value).toHaveClass("timer-card-value-word");
+  });
+
+  it("leaves a split-kind phase's value unmarked", () => {
+    const run = buildRun(draft, { k2Seconds: 112, k6Seconds: 122 }, NOW);
+    const { container } = render(<TimerTargets phase={run.phases[0]!} />);
+    const value = container.querySelector(".timer-card-value")!;
+    expect(value).toHaveTextContent("1:58.0");
+    expect(value).not.toHaveClass("timer-card-value-word");
   });
 });

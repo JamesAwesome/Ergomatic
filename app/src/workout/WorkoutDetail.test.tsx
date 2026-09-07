@@ -440,16 +440,27 @@ describe("WorkoutDetail", () => {
     expect(screen.getByText(/2500 m/)).toBeInTheDocument();
   });
 
-  it("renders the italic no-target state with a link to set baselines when both are unset", async () => {
-    mockHooks({ k2Seconds: null, k6Seconds: null });
-    await renderDetail();
+  it("reads a ladder word on every split-ref row and one caption when both baselines are unset (Phase RW PR B)", async () => {
+    mockHooks(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
 
-    const noTargets = screen.getAllByText("no target");
-    expect(noTargets.length).toBeGreaterThan(0);
-    expect(noTargets.every((el) => el.tagName === "EM")).toBe(true);
+    expect(screen.queryByText("no target")).not.toBeInTheDocument();
+    // 6000 m @ 2k+0: HARD.
+    expect(screen.getByText("HARD")).toHaveClass("step-row-range");
+    const caption = screen.getByText(
+      /Targets are words until you set a baseline\./,
+    );
     expect(
-      screen.getAllByRole("link", { name: /set baselines/i })[0],
-    ).toHaveAttribute("href", "/you/baselines");
+      within(caption.closest("p")!).getByRole("link", { name: "Set one up" }),
+    ).toHaveAttribute("href", "/today");
+  });
+
+  it("shows no caption once a baseline is set", async () => {
+    mockHooks(BASELINES, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+    expect(
+      screen.queryByText(/Targets are words until you set a baseline/),
+    ).not.toBeInTheDocument();
   });
 
   it("renders Log it after as a real, enabled link to /library/:id/log when baselines are set", async () => {
@@ -472,28 +483,18 @@ describe("WorkoutDetail", () => {
     expect(await screen.findByText("LOG SCREEN")).toBeInTheDocument();
   });
 
-  // Phase 6I amendment: this test's fixture (the default WORKOUT) has a
-  // split-ref work step — `needsBaselines()` reads true, so the gate below
-  // still fires exactly as before this task. The sibling test right after
-  // this one pins the OTHER branch the predicate now opens.
-  it("Task 3 (the manual door): replaces Log it after with the no-target/Set baselines idiom when baselines are unset (split-ref workout)", async () => {
-    mockHooks({ k2Seconds: null, k6Seconds: null });
-    await renderDetail();
+  // Phase RW PR B: the split-ref fixture is the one that used to be
+  // blocked here. The sibling test right after pins the effort-only case,
+  // which was always allowed.
+  it("keeps Log it after as a real link for a split-ref workout with baselines unset (Phase RW PR B)", async () => {
+    mockHooks(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
 
-    // There is no "Log it after" control at all in this state — it's
-    // replaced by the same no-target idiom the step rows use, not merely
-    // disabled (buildManualLogSteps requires a concrete Baselines, so there
-    // is nothing honest for this link to lead to yet).
-    expect(
-      screen.queryByRole("link", { name: "Log it after" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Log it after" }),
-    ).not.toBeInTheDocument();
-    // At least one extra "no target" appears beyond the step rows' own —
-    // the actions row's copy of the idiom.
-    const noTargets = screen.getAllByText("no target");
-    expect(noTargets.length).toBeGreaterThan(1);
+    expect(screen.getByRole("link", { name: "Log it after" })).toHaveAttribute(
+      "href",
+      "/library/w-sixk-split/log",
+    );
+    expect(screen.queryByText("no target")).not.toBeInTheDocument();
   });
 
   // Phase 6I: `needsBaselines` (domain/needsBaselines.ts) is the single
@@ -555,27 +556,20 @@ describe("WorkoutDetail", () => {
     expect(draft!.workoutId).toBe("w-effort");
   });
 
-  // The split-ref regression companion — the branch the guard NOW blocks,
-  // the exact gap fast-follow Task 4 closes (adversarial I1): before this
-  // task, a split-ref workout's Start reached ConfirmTargets unconditionally
-  // and relied on THAT screen's own footer to block it; that screen is
+  // The split-ref companion. HISTORY, for the reader who wonders why this
+  // pair exists: a split-ref workout's Start was blocked here from the
+  // fast-follow round until Phase RW PR B removed the guard entirely. The
+  // screen that first owned that footer block is
   // gone, so the block has to happen here or not at all.
-  it("Start is disabled with a no-target caption for a split-ref workout when baselines are unset — the guard moved here", async () => {
-    mockHooks(NO_BASELINES);
-    await renderDetailWithCountdownRoute("/library/w1");
+  it("Start is enabled for a split-ref workout with baselines unset and saves a started draft (Phase RW PR B: the guard is gone)", async () => {
+    mockHooks(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetailWithCountdownRoute("/library/w-sixk-split");
 
     const startButton = screen.getByRole("button", { name: "Start Timer" });
-    expect(startButton).toBeDisabled();
-    expect(loadDraft()).toBeNull();
-    // The caption sits immediately beside Start itself, not just anywhere
-    // on the screen — the step rows and "Log it after" grow their own
-    // "no target" idiom too, so this disambiguates THIS guard's own render
-    // from theirs by DOM adjacency rather than counting matches.
-    const caption = startButton.nextElementSibling as HTMLElement;
-    expect(caption).toHaveTextContent(/no target/i);
-    expect(
-      within(caption).getByRole("link", { name: /set baselines/i }),
-    ).toHaveAttribute("href", "/you/baselines");
+    expect(startButton).not.toBeDisabled();
+    await userEvent.click(startButton);
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
+    expect(loadDraft()?.workoutId).toBe("w-sixk-split");
   });
 
   it("deep-copies the workout's steps into the draft — mutating one never touches the other", async () => {
@@ -1515,20 +1509,6 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     restore();
   });
 
-  it("no baselines set: pressing Connect shows an inline error, no interstitial", async () => {
-    mockHooks({ k2Seconds: null, k6Seconds: null });
-    await renderDetail();
-
-    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
-
-    expect(
-      await screen.findByText(
-        "Set your baselines first. Connect needs a target to program.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
-  });
-
   // Phase 6I: an effort-only workout needs no target to program at all
   // (`compileProgram` already resolves an effort phase with no
   // `targetSplit`, Task 1's own comment fix to domain/monitor/program.ts)
@@ -1539,6 +1519,20 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
   // showing up (not the baselines error)
   // is what proves the interstitial actually mounted, i.e. that Connect's
   // own guard let this workout through.
+  it("split-ref workout, baselines unset: Connect proceeds to the interstitial with NO baselines error (Phase RW PR B)", async () => {
+    mockHooks(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetail("/library/w-sixk-split");
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(await screen.findByText("Test scan failed")).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Set your baselines first. Connect needs a target to program.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("effort-only workout, baselines unset: Connect proceeds to the interstitial with NO baselines error", async () => {
     mockHooks(NO_BASELINES, [EFFORT_ONLY_WORKOUT]);
     await renderDetail("/library/w-effort");

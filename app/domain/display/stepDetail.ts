@@ -1,7 +1,7 @@
 import { phases, estimateMinutes, phaseSeconds } from "../expand.js";
 import { fmtDuration } from "../duration.js";
 import { fmtSplit } from "../format.js";
-import { isPaceWordRef } from "../pace.js";
+import { ASSUMED_BASELINES, isPaceWordRef } from "../pace.js";
 import type { Baselines, PaceRef, Step } from "../types.js";
 
 /** Per-piece display rows for Today's suggestion card (spec §1/§2).
@@ -45,7 +45,10 @@ function fmtRest(minutes: number, suffix: string): string {
     : `${fmtDuration(minutes)} ${suffix}`;
 }
 
-export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
+export function pieceList(
+  steps: Step[],
+  baselines: Baselines | null,
+): PieceRow[] {
   const all = phases(steps, baselines);
   const rows: PieceRow[] = [];
   for (const p of all) {
@@ -97,14 +100,25 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
         ? `${p.meters}m`
         : fmtDuration((p.seconds as number) / 60);
     if (p.targetKind === "effort") {
+      // Phase RW PR B: an effort-kind phase that stands in for a split ref
+      // (null baselines) keeps the notation (James: the left slot keeps
+      // it) and its RAW off, so joinsRun/peakIndex roll and rank rows
+      // exactly as the baseline view does; only the split text is the
+      // word. A true max/min phase has no ref and behaves as before.
+      const sref = p.ref !== undefined && !isPaceWordRef(p.ref) ? p.ref : null;
       rows.push({
         duration,
-        refTextFull: null,
+        refTextFull:
+          sref === null
+            ? null
+            : sref.off === 0
+              ? `at ${sref.base} pace`
+              : `at ${sref.base} ${fmtOff(sref.off)}`,
         paceWordText: p.label.toUpperCase(),
         restText: null,
         split: null,
         spm: p.spm ?? null,
-        off: null,
+        off: sref === null ? null : sref.off,
         count: 1,
       });
     } else {
@@ -201,14 +215,21 @@ export function peakIndex(
  *  (the duration chip's); WORK is the work phases alone. With the
  *  trailing-rest deviation, WORK plus every displayed rest equals
  *  TOTAL by construction — where a rolled row's rest counts once per
- *  piece in its run (`count` × rest), not once per row. */
+ *  piece in its run (`count` × rest), not once per row.
+ *
+ *  Phase RW PR B: WORK prices against the SAME pair TOTAL does — the
+ *  rower's own baselines, or `ASSUMED_BASELINES` when they have none.
+ *  Without that, a distance step under null baselines is an effort-kind
+ *  phase with no `targetSplit`, `phaseSeconds` returns null, and WORK
+ *  reads 0 beside a TOTAL that priced the very same step (branch review,
+ *  finding 1: it breaks the invariant this comment states). */
 export function workAndTotal(
   steps: Step[],
-  baselines: Baselines,
+  baselines: Baselines | null,
 ): { workMinutes: number; totalMinutes: number } {
   const totalMinutes = estimateMinutes(steps, baselines).minutes;
   let workSeconds = 0;
-  for (const p of phases(steps, baselines)) {
+  for (const p of phases(steps, baselines ?? ASSUMED_BASELINES)) {
     if (p.type !== "work" && p.type !== "test") continue;
     workSeconds += phaseSeconds(p) ?? 0;
   }

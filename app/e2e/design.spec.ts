@@ -1095,8 +1095,9 @@ test.describe("workout detail screen (Scan NFC supported)", () => {
 // step (no explicit effort pace — the same construction "workout detail
 // screen (personal workout, owner actions)" above uses for its own owned
 // workout) — `needsBaselines()` reads true for a plain distance/duration
-// row, so Start Timer renders disabled with the dashed idiom every time.
-test.describe("workout detail screen (no baselines, guarded Start Timer)", () => {
+// row, so before Phase RW PR B Start Timer rendered disabled here; now the
+// row reads a ladder word and Start is live.
+test.describe("workout detail screen (no baselines: words, not a guard)", () => {
   const title = "Design No Baselines Sweep";
 
   test.beforeEach(async ({ page }, testInfo) => {
@@ -1117,49 +1118,35 @@ test.describe("workout detail screen (no baselines, guarded Start Timer)", () =>
     await cleanupByTitle(page, title);
   });
 
-  test("Start Timer renders disabled/dashed and the screen still clears the tap-target/a11y/ink4 sweeps", async ({
+  test("Start Timer is enabled, the step row reads a ladder word in accent, the caption sits in --ink-3, and the screen still clears the tap-target/a11y/ink4 sweeps (Phase RW PR B)", async ({
     page,
   }) => {
     const startTimer = page.getByRole("button", { name: "Start Timer" });
-    await expect(startTimer).toBeDisabled();
+    await expect(startTimer).toBeEnabled();
     await expect(startTimer).toHaveClass(/button-l2/);
+    expect(
+      await startTimer.evaluate((el) => getComputedStyle(el).borderStyle),
+    ).not.toBe("dashed");
 
-    const startStyles = await startTimer.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { borderStyle: s.borderStyle, color: s.color };
-    });
-    expect(startStyles.borderStyle).toBe("dashed");
-    // The global `button:disabled` rule's --ink-5 text on --surface
-    // computes 2.754:1 (verified independently, WCAG relative-luminance
-    // formula, and already documented at this exact figure elsewhere in
-    // index.css's own connect-block-dashed comment) — well under 4.5:1,
-    // but WCAG 1.4.3 exempts disabled controls (axe-core's own
-    // color-contrast rule skips them too, which `assertNoA11yViolations`
-    // below proves empirically rather than just by exemption).
-    expect(startStyles.color).toBe("rgb(160, 154, 140)"); // --ink-5
+    // 2000 m at the fresh builder's 6k ±0: 2k-equivalent +7, MODERATE, in
+    // the slot the split would fill and in the split's own accent.
+    const word = page.locator(".step-row-range").first();
+    await expect(word).toHaveText("MODERATE");
+    expect(await word.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(181, 52, 31)",
+    ); // --accent on --page: 5.35:1 (tokens.css lists 5.94/5.35/5.03 for page/surface/sunken)
 
-    // `needsBaselines()` reading true with no baselines set makes BOTH
-    // Start Timer's own caption AND the "Log it after" fallback below it
-    // render this exact class (WorkoutDetail.test.tsx's own comment: "the
-    // step rows and 'Log it after' grow their own 'no target' idiom too")
-    // — `.first()`, scoped to the action stack, picks Start Timer's own,
-    // the one adjacent to it in document order (StepRow's own copy, if
-    // any, lives inside `.step-list`, a sibling of the action stack, so
-    // the `>` direct-child scope never reaches it).
-    const caption = page
-      .locator(".workout-detail-actions > .step-row-no-target")
-      .first();
-    await expect(caption).toBeVisible();
-    const captionColor = await caption.evaluate(
-      (el) => getComputedStyle(el).color,
+    const caption = page.locator(".workout-detail-caption");
+    await expect(caption).toHaveText(
+      "Targets are words until you set a baseline. Set one up",
     );
-    // --ink-4 on --page (the screen's own body background, not --surface —
-    // this caption sits directly on `.screen`, which sets no background of
-    // its own) computes 4.76:1, independently verified against the same
-    // WCAG formula — clears the 4.5:1 AA floor for real (non-exempt) text,
-    // matching the figure design.spec.ts's own assertNoFailingInk4Labels
-    // doc comment already cites for this exact pairing.
-    expect(captionColor).toBe("rgb(111, 106, 95)"); // --ink-4
+    expect(await caption.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(87, 84, 76)",
+    ); // --ink-3, 6.69:1 on --page
+    await expect(
+      caption.getByRole("link", { name: "Set one up" }),
+    ).toHaveAttribute("href", "/today");
+    await expect(page.locator(".step-row-no-target")).toHaveCount(0);
 
     await assertTapTargets(page);
     await assertNoA11yViolations(page);
@@ -4728,7 +4715,8 @@ test.describe("timer screen (portrait, DISTANCE phase)", () => {
 // Phase 6B (Task 5): the live timer with an effort-ref TARGET (`ref:
 // {effort:"max"}`) — TimerTargets.tsx's own binding rule: the numeric
 // estimate behind an effort ref is NEVER shown, only the resolved word
-// ("ALL OUT"/"EASY"), with no sub-line underneath it (unlike a split-ref
+// ("ALL OUT"/"STEADY", or any ladder word for a split ref rowed with no
+// baseline), with no sub-line underneath it (unlike a split-ref
 // target's own ref sub-line, ui-fix round Item 1). Time-based (not distance) so the ▶ control
 // shows, distinct from the DISTANCE sweep above.
 test.describe("timer screen (portrait, effort target visible)", () => {

@@ -3,7 +3,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
 import { useWorkouts } from "../api/useWorkouts";
-import { paceWordLabel, resolveSplit } from "../../domain/pace.js";
+import {
+  intensityWord,
+  paceWordLabel,
+  resolveSplit,
+} from "../../domain/pace.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { Baselines, PaceRef, WorkoutType } from "../../domain/types.js";
 import BackLink from "../shell/BackLink";
@@ -44,15 +48,13 @@ import Stepper from "./Stepper";
 // look up, so there's nothing for missing baselines to block. This is why
 // the check comes first, ahead of `baselines === null`, rather than
 // falling through to the same null a split row gets when baselines are
-// unset (StepEditor/StepCard's "no target / Set baselines" state stays
-// exactly for the split case).
-function splitLabelFor(
-  row: BuilderRow,
-  baselines: Baselines | null,
-): string | null {
+// unset. Phase RW PR B: a split row with no baseline reads the ladder
+// word too, so `splitLabelFor` is never null any more.
+function splitLabelFor(row: BuilderRow, baselines: Baselines | null): string {
   if (row.refEffort) return paceWordLabel(row.refEffort);
-  if (baselines === null) return null;
   const ref: PaceRef = { base: row.refBase, off: row.refOff };
+  // Phase RW PR B: no baseline reads the ladder word, never "no target".
+  if (baselines === null) return intensityWord(ref);
   const resolved = resolveSplit(baselines, ref);
   // Ui-fix round, Item 1: the exact resolved split, not a tolerance band.
   return fmtSplit(resolved);

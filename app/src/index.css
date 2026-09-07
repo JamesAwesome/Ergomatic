@@ -34,8 +34,9 @@
    round, Task 1) are each shared between real <button>s (already covered)
    and anchor-styled links (auth.tsx's sign-in, WorkoutDetail.tsx's Edit/Log
    it after), which aren't. Left deliberately selectable: plain inline text
-   hyperlinks (e.g.
-   StepEditor.tsx/StepRow.tsx's "Set baselines") — those read as ordinary
+   hyperlinks (e.g. WorkoutDetail.tsx's caption link "Set one up"; the
+   StepEditor/StepRow "Set baselines" links this note used to name went
+   with Phase RW PR B) — those read as ordinary
    body-copy links, not chrome controls, and a copy/look-up callout on
    link text is normal iOS behaviour there. `.filter-token` (Task 4, ui-fix
    round) joins the list for the same reason `.chip` is here: it's a chrome
@@ -1495,23 +1496,23 @@ button.back-link:disabled,
   white-space: nowrap;
 }
 
-.step-row-no-target {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-4);
+/* Phase RW PR B: the "no target · Set baselines" idiom is gone from every
+   surface (the slot reads a ladder word); the caption below is what a
+   no-baseline detail screen shows instead. --ink-3 on --page 6.69:1. */
+.workout-detail-caption {
+  margin: 12px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
-.step-row-no-target em {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: 18px;
-}
-
-.step-row-no-target a {
+/* The link keeps the 44px target the old "Set baselines" link had, as an
+   inline-flex box inside the 13px line. */
+.workout-detail-caption a {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
+  color: var(--ink);
 }
 
 /* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — this is an
@@ -3571,31 +3572,6 @@ button.back-link:disabled,
   color: var(--ink);
 }
 
-.step-editor-no-target {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  /* --ink-4 (#6f6a5f) measures 4.48:1 against --surface-sunken at this
-     size/weight — just under WCAG AA's 4.5:1 floor for normal text below
-     the large-text threshold (this italic serif "em" doesn't qualify as
-     large text). --ink-3 (#57544c) clears it comfortably, same fix-the-
-     violation-not-the-assertion approach as the ink-4 substitution
-     recorded in docs/design/DEVIATIONS.md. */
-  color: var(--ink-3);
-  font-size: 13px;
-}
-
-.step-editor-no-target em {
-  font-family: var(--font-serif);
-  font-style: italic;
-}
-
-.step-editor-no-target a {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--tap);
-}
-
 /* Task 1 (ui-fix round): DONE's own bespoke `.step-editor-done` class is
    gone — it's now `.button-l3` (index.css's five-level system block),
    48px/mono-12/600/0.16em rather than this class's old 44px/mono-11/0.12em. */
@@ -4729,6 +4705,21 @@ button.back-link:disabled,
   line-height: 1;
   letter-spacing: -0.03em;
   color: var(--ink);
+}
+
+/* Phase RW PR B (Gate 0, docs/design/rw-gate0/timer-measure.json): a word
+   in the TARGET SPLIT card is up to eight characters against the digits'
+   seven, and at the subhero size the portrait card grid overflowed (370px
+   of content in a 350px track, FREE clipped). The word renders one size
+   down in portrait; landscape measured 310 of 310 at the subhero size and
+   keeps it. */
+.timer-card-value-word {
+  font-size: 40px;
+}
+@media (orientation: landscape) {
+  .timer-card-value-word {
+    font-size: var(--size-subhero);
+  }
 }
 
 .timer-card-caption {

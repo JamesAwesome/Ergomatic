@@ -60,9 +60,9 @@ export default function ResetBaselineSetup({
     <div className="reset-baselines">
       <div className="baseline-confirm">
         <p className="baseline-confirm-line">
-          This clears both baseline splits. Workouts with pace targets lose them
-          and can't be started until you set a baseline again. Today offers the
-          setup doors.
+          This clears both baseline splits. Workouts show effort words in place
+          of pace targets until you set a baseline again. Today offers the setup
+          doors.
         </p>
         {error && <p className="baseline-error">{error}</p>}
         <div className="baseline-actions">

@@ -2096,14 +2096,18 @@ test("workout-detail", async ({ page }) => {
 // baselines" caption. A plain distance/duration row (no explicit effort
 // pace) is enough — `needsBaselines()` reads true for it, and this
 // account never calls the baselines API.
-test("workout-detail-no-target", async ({ page }) => {
+test("workout-detail-no-baseline", async ({ page }) => {
   await stubBluetoothScanFailure(page);
   await signInViaBackdoor(page, {
-    email: "screenshots-detail-no-target@e2e.test",
-    name: "Screenshot No Target Tester",
+    email: "screenshots-detail-no-baseline@e2e.test",
+    name: "Screenshot No Baseline Tester",
   });
 
-  const title = "Screenshot No Target Workout";
+  // Phase RW PR B (replaces the retired `workout-detail-no-target`): a
+  // personal 2000 m workout with no baseline set — the row reads MODERATE,
+  // Start is live, one caption under the actions.
+  // Gate 0's approved render is docs/design/rw-gate0/detail-imported.png.
+  const title = "Screenshot No Baseline Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(title);
   await page.getByRole("button", { name: "Effort 3" }).click();
@@ -2111,13 +2115,85 @@ test("workout-detail-no-target", async ({ page }) => {
   await page.getByRole("button", { name: "Save to library" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+$/);
   await page.locator(".workout-detail-title").waitFor();
-  await expect(
-    page.getByRole("button", { name: "Start Timer" }),
-  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Start Timer" })).toBeEnabled();
+  await expect(page.locator(".step-row-range").first()).toHaveText("MODERATE");
+  await expect(page.locator(".workout-detail-caption")).toBeVisible();
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "workout-detail-no-target.png"),
+    path: path.join(SCREENSHOTS_DIR, "workout-detail-no-baseline.png"),
   });
 
+  await cleanupByTitle(page, title);
+});
+
+// Phase RW PR B (PM final gate, condition 6): the phase's own ACCEPTED
+// COST, on a real seeded workout. "Roaring Forties" is 6 x 2000m @ 2K+6,
+// a TR-badged workout whose every rung reads MODERATE — one of the nine
+// James ruled on at Gate 0 (docs/design/rw-gate0/detail-roaring-forties.png).
+// The synthetic one-row capture above cannot show it.
+test("workout-detail-no-baseline-collapsed", async ({ page }) => {
+  await stubBluetoothScanFailure(page);
+  await signInViaBackdoor(page, {
+    email: "screenshots-detail-collapsed@e2e.test",
+    name: "Screenshot Collapsed Tester",
+  });
+  await page.goto("/library");
+  await page.getByPlaceholder("SEARCH BY NAME").fill("Roaring Forties");
+  await page.locator(".workout-row").first().click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(
+    "Roaring Forties",
+  );
+  await expect(page.locator(".step-row-range").first()).toHaveText("MODERATE");
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "workout-detail-no-baseline-collapsed.png",
+    ),
+  });
+});
+
+// Phase RW PR B: the Timer with a WORD in the TARGET SPLIT card, both
+// orientations. Portrait renders the word one size down (Gate 0 measured
+// MODERATE beside FREE overflowing the card grid at the subhero size);
+// landscape keeps the subhero size. No spm on the first step so the RATE
+// card reads FREE, the widest case.
+async function startNoBaselineTimer(page: Page, title: string): Promise<void> {
+  await importBulk(
+    page,
+    [`${title} | TR | 3`, "w 5:00 2k+6 r1.5", "w 5:00 2k-3 @28"].join("\n"),
+  );
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.locator(".timer-card-value").first()).toHaveText(
+    "MODERATE",
+  );
+}
+
+test("timer-no-baseline", async ({ page }) => {
+  const title = "Screenshot Timer No Baseline";
+  await signInViaBackdoor(page, {
+    email: "screenshots-timer-no-baseline@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await startNoBaselineTimer(page, title);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "timer-no-baseline.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("timer-no-baseline-landscape", async ({ page }) => {
+  const title = "Screenshot Timer No Baseline Landscape";
+  await signInViaBackdoor(page, {
+    email: "screenshots-timer-no-baseline-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await startNoBaselineTimer(page, title);
+  await page.setViewportSize({ width: 844, height: 420 });
+  await expect(page.locator(".timer-upnext-then")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "timer-no-baseline-landscape.png"),
+  });
   await cleanupByTitle(page, title);
 });
 

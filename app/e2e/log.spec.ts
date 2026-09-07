@@ -847,10 +847,9 @@ test("a connected arrival with no reading saves as no-reading and reads NO MONIT
     name: "Log No Reading",
   });
 
-  // BASELINES FIRST. Without them `LogSession.tsx:2107` short-circuits the
-  // whole manual door to the "Set baselines" stub for any workout whose
-  // steps resolve against a pace reference (`needsBaselines`), and the form
-  // this leg needs never renders. Measured: the first run of this leg met
+  // BASELINES FIRST. Without them the manual door logs ladder words with no
+  // numbers (Phase RW PR B; before it, a "Set baselines" stub), and this
+  // leg asserts resolved splits. Measured: the first run of this leg met
   // `Log <title>` from that stub instead of the summary.
   await setBaselines(page, { k2Seconds: 105, k6Seconds: 115 });
 

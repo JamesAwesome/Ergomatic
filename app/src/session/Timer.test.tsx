@@ -44,7 +44,7 @@ function library(title: string) {
 // work-effort-time/work-split/rest/work-effort-distance all in one run).
 // Hoarfrost's own real split-ref work step (time, spm 22, its own embedded
 // 5' rest) supplies work-split/rest; a distance split-ref step and an
-// effort-ref step are appended directly onto the draft. Phase 0's 4:00 EASY
+// effort-ref step are appended directly onto the draft. Phase 0's 4:00 STEADY
 // piece was a `wu` row until 2026-08-09, then the rower's warm-up SETTING
 // (`buildRun`'s fourth argument) until Phase WU deleted that too; it is an
 // authored effort step now, with the same 240 s, so every phase index,
@@ -58,7 +58,7 @@ function library(title: string) {
 // 1: the label/UP NEXT value is the EXACT split, never a "lo–hi" band; the
 // TimerTargets sub-line is the ref it was resolved from instead, uppercased
 // (refLabel(ref).toUpperCase()).
-//   0 work     240s   effort "EASY"
+//   0 work     240s   effort "STEADY"
 //   1 work     720s   split  "2:12.0", ref "6K +12"  spm 22
 //   2 rest     300s   "Rest"
 //   3 work     —      distance 500m, split "1:40.0", ref "2K"
@@ -96,7 +96,7 @@ function kindMatrixDraft(): SessionDraft {
 
 // No library workout authors a "test" (open-ended) step (Task 1's own
 // report: none exists in the seeded library) — a hand-built minimal draft.
-// Its 2:00 EASY opener came from the warm-up SETTING until Phase WU
+// Its 2:00 STEADY opener came from the warm-up SETTING until Phase WU
 // deleted it; an authored effort step gives the same two-phase run.
 function testKindDraft(): SessionDraft {
   return buildDraft({
@@ -140,7 +140,7 @@ function onboardingShapedRun(): SessionRun {
 // Phase 6I: the shape Task 3 seeds as the two designated onboarding
 // workouts (domain/onboarding.ts) — ONE distance work step at an effort
 // ref, nothing after it (no reps, no embedded rest), preceded here by a
-// 10:00 EASY time piece so the run has a priceable phase ahead of the
+// 10:00 STEADY time piece so the run has a priceable phase ahead of the
 // unpriceable one (that lead used to come from the warm-up SETTING; Phase
 // WU made it an authored step).
 // Hand-built because the seed doesn't exist yet — this is the one shape in
@@ -327,7 +327,7 @@ describe("the phase-word helpers survive a legacy persisted warm-up phase", () =
 describe("totalSessionSeconds", () => {
   it("sums every phase's full duration from the start: fixed seconds + a distance estimate + zero for an open-ended phase", () => {
     const phases: EnginePhase[] = [
-      phase({ seconds: 300, label: "EASY" }), // Phase WU: was type "warmup"
+      phase({ seconds: 300, label: "STEADY" }), // Phase WU: was type "warmup"
 
       // (2000/500)*120 = 480
       phase({ meters: 2000, targetSplit: 120, label: "2:00.0" }),
@@ -345,7 +345,7 @@ describe("totalSessionSeconds", () => {
 });
 
 describe("hasRemainingEstimate — Phase 6I's shared gate for TOTAL LEFT + the phase bar", () => {
-  const priceable = phase({ seconds: 300, label: "EASY" }); // Phase WU: was "warmup"
+  const priceable = phase({ seconds: 300, label: "STEADY" }); // Phase WU: was "warmup"
   // An effort work phase with null-baselines: no targetSplit, no seconds,
   // no meters priced — exactly what `phases()` (domain/expand.ts) produces
   // for a distance-duration effort step under null baselines.
@@ -353,7 +353,7 @@ describe("hasRemainingEstimate — Phase 6I's shared gate for TOTAL LEFT + the p
     type: "work",
     targetKind: "effort",
     meters: 6000,
-    label: "EASY",
+    label: "STEADY",
   });
 
   it("is true when the CURRENT phase itself has an estimate", () => {
@@ -407,7 +407,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     vi.setSystemTime(FIXED_NOW);
   });
 
-  it("effort time piece: 'EASY' target, 'Free', count-DOWN remaining", async () => {
+  it("effort time piece: 'STEADY' target, 'Free', count-DOWN remaining", async () => {
     mockKeepAwake();
     const run = matrixRun();
     runAtIndex(run, 0);
@@ -415,12 +415,12 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
 
     // PHASE WU CHANGED BOTH STRINGS. Phase 0 was a warm-up, so the step
     // line read `· WARM-UP` (`phaseKindWord`'s deleted arm) and its target
-    // was the warm-up's own `Easy` label. It is an authored EASY effort
-    // step now: `· WORK`, and `paceWordLabel`'s uppercase `EASY`.
+    // was the warm-up's own `Easy` label. It is an authored STEADY effort
+    // step now: `· WORK`, and `paceWordLabel`'s uppercase `STEADY`.
     expect(screen.getByText("STEP 1 OF 5 · WORK")).toBeInTheDocument();
     expect(screen.getByText("RUNNING")).toBeInTheDocument();
     expect(screen.getByText("4:00")).toBeInTheDocument(); // 240s remaining
-    expect(screen.getByText("EASY")).toBeInTheDocument();
+    expect(screen.getByText("STEADY")).toBeInTheDocument();
     expect(screen.getByText("Free")).toBeInTheDocument();
     // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
     // Connected-revamp Task 6: the "then" phase (the rest that follows the
@@ -628,7 +628,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
-  // Phase 6I: at the EASY opener (phase 0) of the same fixture, the test phase
+  // Phase 6I: at the STEADY opener (phase 0) of the same fixture, the test phase
   // ahead has no estimate but that doesn't matter yet — nothing here reads
   // "remaining" per-phase, only whether ANYTHING from the current index
   // onward prices. The opener itself has a real duration, so both rows
@@ -673,9 +673,9 @@ describe("Timer — Phase 6I: the null-baselines onboarding session (TOTAL LEFT 
     // The distance step's own meters fold into the STEP line (Timer.tsx's
     // own `stepLineText`), unaffected by this task.
     expect(screen.getByText("STEP 2 OF 2 · WORK · 6000M")).toBeInTheDocument();
-    // The effort word only — {effort:"min"} -> "EASY" (domain/pace.ts) —
+    // The effort word only — {effort:"min"} -> "STEADY" (domain/pace.ts) —
     // never a numeric target, the 5G rule, unaffected by this task.
-    expect(screen.getByText("EASY")).toBeInTheDocument();
+    expect(screen.getByText("STEADY")).toBeInTheDocument();
     expect(document.querySelector(".timer-total")).not.toBeInTheDocument();
     expect(document.querySelector(".timer-phase-bar")).not.toBeInTheDocument();
     // CONNECTED-REVAMP TASK 7 (revision §5, "distance pieces swap the
@@ -1837,6 +1837,15 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
     expect(body).toContain("var(--ink)");
     expect(body).not.toMatch(/font-size:\s*\d/);
     expect(body).not.toContain("var(--accent)");
+  });
+
+  it(".timer-card-value-word (Phase RW PR B) is 40px in portrait and back to --size-subhero under the landscape media block", () => {
+    const bodies = cssRules(indexCssStripped)
+      .filter((rule) => rule.selectors.includes(".timer-card-value-word"))
+      .map((rule) => rule.body);
+    expect(bodies).toHaveLength(2);
+    expect(bodies.some((b) => b.includes("font-size: 40px"))).toBe(true);
+    expect(bodies.some((b) => b.includes("var(--size-subhero)"))).toBe(true);
   });
 
   it("timer-card-value-accent has no rule left in index.css — TimerTargets.tsx's own JSX no longer applies it", () => {

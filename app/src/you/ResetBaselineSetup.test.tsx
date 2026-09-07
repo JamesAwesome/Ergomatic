@@ -34,7 +34,7 @@ describe("ResetBaselineSetup", () => {
     // baseline is set again).
     expect(
       screen.getByText(
-        /This clears both baseline splits\. Workouts with pace targets lose\s+them and can't be started until you set a baseline again\. Today\s+offers the setup doors\./,
+        /This clears both baseline splits\. Workouts show effort words in place\s+of pace targets until you set a baseline again\. Today offers the\s+setup doors\./,
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();

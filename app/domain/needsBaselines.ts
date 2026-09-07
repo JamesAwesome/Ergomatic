@@ -1,18 +1,17 @@
 import { isPaceWordRef } from "./pace.js";
 import type { Step } from "./types.js";
 
-/** True unless EVERY work ("w") step in `steps` is an effort ref
- *  (`{effort:"max"|"min"}`) — i.e. true the moment any work step is a
- *  split ref that needs a resolved baseline. Rest/test/reps-marker
- *  steps never carry a ref and are ignored (vacuously "false" contributes
- *  nothing, so a workout with no work steps at all needs no baselines).
+/** True the moment any work ("w") step is a split ref, i.e. the workout
+ *  has NUMBERS waiting behind a baseline; false when every work step is a
+ *  pace-word ref (`{effort:"max"|"min"}`). Rest/test/reps-marker steps
+ *  never carry a ref and are ignored.
  *
- *  The single gate every coupled call site shares (Phase 6I design spec,
- *  "Mechanics"): Confirm's footer guard, Countdown's null-baselines
- *  redirect and its `buildRun` call, WorkoutDetail's Connect guard and
- *  manual-log door, and `phases()`/`estimateMinutes` below all key off
- *  this SAME predicate rather than each re-deriving it, so they can never
- *  disagree about which workouts are safe to run without baselines. */
+ *  Phase RW PR B: no longer a GATE. Nothing blocks on it any more: a
+ *  split ref rowed with no baseline reads a ladder word (`intensityWord`,
+ *  domain/pace.ts) and `phases()`, the compiler, the log and every screen
+ *  handle that shape. It survives as the predicate for "would this
+ *  workout show numbers if a baseline were set", which the workout
+ *  detail's caption ("Targets are words until you set a baseline") reads. */
 export function needsBaselines(steps: Step[]): boolean {
   return steps.some((s) => s.k === "w" && !isPaceWordRef(s.ref));
 }

@@ -1,6 +1,7 @@
 import { fmtSplit } from "./format.js";
 import {
   paceWordLabel,
+  intensityWord,
   ASSUMED_BASELINES,
   estimationSplit,
   isPaceWordRef,
@@ -21,9 +22,11 @@ export interface Phase {
   // "effort" here is the PACE WORD kind (MAX/MIN), a runtime discriminant
   // frozen by Phase DE PR 2 — not the 1..5 effort figure.
   targetKind?: "split" | "effort"; // work phases only; set on every work phase
-  // The raw ref a "split" targetKind phase was resolved from — set ONLY
-  // for that case (an effort phase's target is words, never a number to
-  // trace back to a ref; the same 5G rule). When this Phase came from
+  // The raw ref a "split" targetKind phase was resolved from, AND (Phase
+  // RW) the ref an "effort" targetKind phase stands in for when a split
+  // ref is rowed with no baseline (its label is then a ladder word,
+  // `intensityWord`). A true max/min phase has no ref: its target is a
+  // word with no number behind it (the 5G rule). When this Phase came from
   // `buildRun` (engine.ts), `effectiveSteps` has already folded any
   // confirm-time nudge into `off` before `phases()` ever sees it, so this
   // is always the EFFECTIVE ref — the same one `targetSplit` was resolved
@@ -35,7 +38,7 @@ export interface Phase {
   // before this field existed.
   ref?: PaceRef;
   spm?: number;
-  // 'Easy' | 'Rest' | 'All out' | 'ALL OUT' | 'EASY' | the EXACT resolved
+  // 'Rest' | 'All out' | a ladder word ('ALL OUT'/'STEADY'/'MODERATE'/'HARD') | the EXACT resolved
   // split (`fmtSplit`) for a "split" targetKind phase. Ui-fix round, Item
   // 1: this used to be `toleranceRange(split, tol).label` (a "lo–hi"
   // band) — retired because this label reaches display (Timer.tsx's own
@@ -167,15 +170,23 @@ export function phases(steps: Step[], baselines: Baselines | null): Phase[] {
             set,
             originalStepIndex,
           };
+        } else if (baselines === null) {
+          // Phase RW PR B (spec §1.2): a split ref with no baseline is
+          // rowed to a WORD. The phase takes the effort-kind shape the
+          // Timer, the PM5 compiler and the judge already handle (no
+          // targetSplit, so nothing is programmed or judged) and keeps
+          // its ref so the log and the piece list can say which ref the
+          // word stood for.
+          base = {
+            type: "work",
+            targetKind: "effort",
+            label: intensityWord(s.ref),
+            ref: s.ref,
+            spm: s.spm,
+            set,
+            originalStepIndex,
+          };
         } else {
-          // A split-ref work step has nothing to resolve without
-          // baselines — reaching here with null is a programmer error;
-          // callers must gate on `needsBaselines()` first (Phase 6I).
-          if (baselines === null) {
-            throw new Error(
-              "phases: a split-ref work step needs baselines — callers must gate on needsBaselines() first",
-            );
-          }
           const split = resolveSplit(baselines, s.ref);
           base = {
             type: "work",

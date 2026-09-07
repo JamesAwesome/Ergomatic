@@ -964,9 +964,9 @@ test.describe("Concept2 row on You (Wave E PR A)", () => {
  */
 test.describe("Concept2 auto-send, in a real browser", () => {
   /** Same in-page-`fetch` idiom as `log.spec.ts`'s own `setBaselines` (e2e
-   *  helpers are copied across files here, not shared). The manual door
-   *  short-circuits to a "Set baselines" stub for a workout whose steps
-   *  resolve against a pace reference; the form under test needs them. */
+   *  helpers are copied across files here, not shared). The form under
+   *  test asserts resolved NUMBERS, which need a baseline (with none set
+   *  the door logs ladder words instead, Phase RW PR B). */
   async function setBaselines(page: Page): Promise<void> {
     const result = await page.evaluate(async () => {
       const res = await fetch("/api/baselines", {

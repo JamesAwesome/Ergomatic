@@ -258,7 +258,7 @@ describe("Countdown", () => {
   // it) lives. Regression pin: this
   // must stay true even though the identical predicate now lets an
   // effort-only draft (the test above) through.
-  it("still redirects to /today without building a run for a SPLIT-REF workout when baselines are ready but unset", async () => {
+  it("builds and saves a run for a SPLIT-REF workout with baselines ready but unset, and proceeds to GET ON THE HANDLE (Phase RW PR B: no redirect)", async () => {
     saveDraft(hoarfrostDraft());
     mockAdapters({
       baselinesState: {
@@ -268,9 +268,14 @@ describe("Countdown", () => {
     });
     await renderCountdown();
 
-    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
-    expect(screen.queryByText("GET ON THE HANDLE")).not.toBeInTheDocument();
-    expect(loadRun()).toBeNull();
+    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
+    expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
+    const run = loadRun();
+    expect(run).not.toBeNull();
+    // Hoarfrost is 12:00 @ 6k+12: 2k-equivalent +19, STEADY, no target.
+    const work = run!.phases.find((p) => p.type === "work");
+    expect(work).toMatchObject({ targetKind: "effort", label: "STEADY" });
+    expect(work).not.toHaveProperty("targetSplit");
   });
 
   it("does not build or save a run while baselines are in an error state", async () => {

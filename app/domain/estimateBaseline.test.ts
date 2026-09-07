@@ -55,7 +55,7 @@ describe("the estimate table (domain/estimateBaseline.ts)", () => {
     }
   });
 
-  it("estimates k2 strictly faster than k6 in EVERY cell (the inversion that would make ALL OUT slower than EASY)", () => {
+  it("estimates k2 strictly faster than k6 in EVERY cell (the inversion that would make ALL OUT slower than STEADY)", () => {
     for (const { cell } of ALL_CELLS) {
       expect(cell.k2Seconds).toBeLessThan(cell.k6Seconds);
     }

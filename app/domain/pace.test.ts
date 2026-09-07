@@ -9,6 +9,8 @@ import {
   refLabel,
   estimationSplit,
   ASSUMED_BASELINES,
+  intensityWord,
+  intensityWordSpoken,
 } from "./pace.js";
 
 const B = { k2Seconds: 112, k6Seconds: 122 };
@@ -75,7 +77,7 @@ describe("effort refs", () => {
 
   it("maps efforts to the display pair", () => {
     expect(paceWordLabel("max")).toBe("ALL OUT");
-    expect(paceWordLabel("min")).toBe("EASY");
+    expect(paceWordLabel("min")).toBe("STEADY");
   });
 
   // paceWordFromLabel is paceWordLabel's inverse — round-tripping every real
@@ -85,7 +87,7 @@ describe("effort refs", () => {
   // `label`, needs to recover the chip word via refLabel({effort: ...})).
   it("paceWordFromLabel inverts paceWordLabel", () => {
     expect(paceWordFromLabel("ALL OUT")).toBe("max");
-    expect(paceWordFromLabel("EASY")).toBe("min");
+    expect(paceWordFromLabel("STEADY")).toBe("min");
     for (const effort of ["max", "min"] as const) {
       expect(paceWordFromLabel(paceWordLabel(effort))).toBe(effort);
     }
@@ -97,7 +99,7 @@ describe("effort refs", () => {
   // spoken form needs its own vocabulary rather than reusing the chip text.
   it("maps efforts to the spoken pair, not the chip word", () => {
     expect(paceWordSpoken("max")).toBe("at max effort");
-    expect(paceWordSpoken("min")).toBe("easy");
+    expect(paceWordSpoken("min")).toBe("steady");
   });
 
   it("labels refs with the chip word", () => {
@@ -153,5 +155,44 @@ describe("ASSUMED_BASELINES (Phase RW PR A)", () => {
       k2Seconds: 145,
       k6Seconds: 152,
     });
+  });
+});
+
+describe("intensityWord (Phase RW PR B, spec §1.1)", () => {
+  // Every boundary as a literal on BOTH sides, never the exported constant.
+  it.each([
+    [{ base: "2k", off: -4 }, "ALL OUT"],
+    [{ base: "2k", off: -3 }, "ALL OUT"],
+    [{ base: "2k", off: -2 }, "HARD"],
+    [{ base: "2k", off: 4 }, "HARD"],
+    [{ base: "2k", off: 5 }, "MODERATE"],
+    [{ base: "2k", off: 12 }, "MODERATE"],
+    [{ base: "2k", off: 13 }, "STEADY"],
+    [{ base: "2k", off: 30 }, "STEADY"],
+    // 6k refs sit 7 s slower than the 2k (deriveBaseline's constant):
+    // 6k-4 is 2k+3 (HARD), 6k-3 is 2k+4 (HARD), 6k-2 is 2k+5 (MODERATE),
+    // 6k+5 is 2k+12 (MODERATE), 6k+6 is 2k+13 (STEADY).
+    [{ base: "6k", off: -10 }, "ALL OUT"],
+    [{ base: "6k", off: -4 }, "HARD"],
+    [{ base: "6k", off: -3 }, "HARD"],
+    [{ base: "6k", off: -2 }, "MODERATE"],
+    [{ base: "6k", off: 5 }, "MODERATE"],
+    [{ base: "6k", off: 6 }, "STEADY"],
+    [{ base: "6k", off: 15 }, "STEADY"],
+    [{ effort: "max" }, "ALL OUT"],
+    [{ effort: "min" }, "STEADY"],
+  ] as const)("%j reads %s", (ref, word) => {
+    expect(intensityWord(ref)).toBe(word);
+  });
+
+  it("the same pace reads the same word whichever base wrote it (2k+6 is 6k-1)", () => {
+    expect(intensityWord({ base: "2k", off: 6 })).toBe(
+      intensityWord({ base: "6k", off: -1 }),
+    );
+  });
+
+  it("speaks each word in lower case, 'all out' with the space", () => {
+    expect(intensityWordSpoken("ALL OUT")).toBe("all out");
+    expect(intensityWordSpoken("MODERATE")).toBe("moderate");
   });
 });

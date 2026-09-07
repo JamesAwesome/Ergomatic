@@ -6,6 +6,7 @@ import {
   isPaceWordRef,
   refLabel,
   resolveSplit,
+  intensityWord,
 } from "../../domain/pace.js";
 import type { Baselines, PaceRef, SplitRef, Step } from "../../domain/types.js";
 import type { EnginePhase } from "./engine";
@@ -92,7 +93,7 @@ import type { MonitorRun } from "../monitor/monitorRun.js";
  *  and must not crash logging. Falls back to composing from the phase's own
  *  frozen fields: for an EFFORT phase, `domain/pace.ts`'s `paceWordFromLabel`
  *  (F1's original fix, still load-bearing here) inverts `paceWordLabel`'s
- *  frozen "ALL OUT"/"EASY" back to the chip ("MAX"/"MIN") — bijective over
+ *  frozen "ALL OUT"/"STEADY" back to the chip ("MAX"/"MIN") — bijective over
  *  the two-element `PaceWord` type, so this is a lookup, not a guess. For a
  *  SPLIT-ref phase (ui-fix round Task 2 fix round, F1b amendment):
  *  `EnginePhase` now carries the same EFFECTIVE `ref` `targetSplit` was
@@ -435,9 +436,11 @@ export function buildLogSteps(
     // is undefined): an effort phase still has a ref to reconstruct — the
     // chip word ("MAX"/"MIN") recovers from the frozen display word via
     // paceWordFromLabel's inverse (the cast is safe: this branch only runs
-    // when `targetKind === "effort"`, and domain/expand.ts's "case w" sets
-    // `label` to exactly `paceWordLabel(ref.effort)` in that case, never any
-    // other string) — so it still goes through `refPaceLabel`. A split-ref
+    // when `targetKind === "effort"` AND the phase carries no `ref`, and
+    // domain/expand.ts's "case w" sets `label` to exactly
+    // `paceWordLabel(ref.effort)` in that case, never any other string; a
+    // ref-carrying effort phase is the Phase RW word branch above, which
+    // never reaches this cast) — so it still goes through `refPaceLabel`. A split-ref
     // phase now ALSO reconstructs through `refPaceLabel` (ui-fix round
     // Task 2 fix round, F1b): `phase.ref` carries the same effective ref
     // `targetSplit` was resolved from, so this composes the identical chip
@@ -447,7 +450,15 @@ export function buildLogSteps(
     // reconstruct from; that one case keeps the phase's own frozen `label`
     // verbatim.
     let label: string;
-    if (draftStep !== undefined) {
+    if (phase.targetKind === "effort" && phase.ref !== undefined) {
+      // Phase RW PR B (James, 2026-09-06): a split ref rowed with no
+      // baseline logs the WORD the rower read, at every door: never the
+      // ref (they never saw a number) and never MIN (the effort arm below
+      // maps any word but ALL OUT to it). Checked FIRST, before the
+      // matched-draft path, which would otherwise compose the authored
+      // ref from `draftStep.ref`.
+      label = `${durationText(phase)} @ ${phase.label}`;
+    } else if (draftStep !== undefined) {
       // `draft` is guaranteed non-null here: `draftWorkStep` (above) can
       // only return non-undefined when its own `draft` argument was
       // non-null (it short-circuits via `draft?.steps[...]` otherwise).
@@ -458,7 +469,7 @@ export function buildLogSteps(
       );
     } else if (isPaceWord) {
       label = refPaceLabel(durationText(phase), {
-        effort: paceWordFromLabel(phase.label as "ALL OUT" | "EASY"),
+        effort: paceWordFromLabel(phase.label as "ALL OUT" | "STEADY"),
       });
     } else if (phase.ref !== undefined) {
       // Ui-fix round Task 2 fix round, F1b: reconstructs the SAME chip the
@@ -559,15 +570,11 @@ export function buildLogSteps(
  *  builder always has the step's own ORIGINAL authored `label` straight
  *  from `Step` with no phase/draft indirection to reach through at all.
  *
- *  Phase 6I close-out fold (Task 2's deferred ledger item): `baselines` is
- *  now `Baselines | null` — `ManualDoorLog` gates its OWN call site on
- *  `needsBaselines(workout.steps)` rather than bare `baselines === null`,
- *  so an effort-only workout (every step `isPaceWordRef`) can reach here
- *  with null baselines. `resolveSplit` is only ever called from the
- *  `!isPaceWord` branch below, which `needsBaselines` guarantees never runs
- *  when `baselines` is null (the two predicates are the same condition,
- *  "some work step is a split ref") — the `!` on `baselines` there
- *  documents that invariant, not a runtime check. */
+ *  `baselines` is `Baselines | null`, and since Phase RW PR B that is an
+ *  ordinary state for ANY workout: the door has no gate. `resolveSplit` is
+ *  reached only past the early `continue` below, which takes every split
+ *  ref with null baselines and logs it as a ladder word — so the `!` on
+ *  `baselines` there documents that local branch, not a caller's gate. */
 export function buildManualLogSteps(
   workout: { steps: Step[] },
   baselines: Baselines | null,
@@ -584,14 +591,18 @@ export function buildManualLogSteps(
       step.duration.kind === "time"
         ? fmtDuration(step.duration.minutes)
         : `${step.duration.meters} m`;
+    if (!isPaceWord && baselines === null) {
+      // Phase RW PR B: a split ref logged by hand with no baseline is the
+      // word form, no target and no actual (there is no number to hold).
+      out.push({ label: `${durationLabel} @ ${intensityWord(step.ref)}` });
+      continue;
+    }
     const logStep: LogStep = {
       label: refPaceLabel(durationLabel, step.ref),
     };
     if (!isPaceWord) {
-      // `needsBaselines(workout.steps)` (ManualDoorLog's own call-site
-      // gate) is true whenever any work step reaches this branch — the
-      // caller has already confirmed `baselines` is non-null before
-      // calling at all in that case (module header's Phase 6I paragraph).
+      // Non-null by the early `continue` above: a split ref with null
+      // baselines never reaches here (Phase RW PR B logs it as a word).
       const split = resolveSplit(baselines!, step.ref);
       logStep.targetSplit = split;
       logStep.actualSplit = split;
@@ -684,19 +695,17 @@ export interface LogSeed {
  *  neither `seconds` nor `meters`) rather than left to throw if that
  *  compiler rule is ever loosened.
  *
- *  `paces`: walks every split-ref work phase's `phase.ref.base` (an effort
- *  phase has no `ref` at all — the 5G rule, `domain/expand.ts`'s "case w")
- *  and records CURRENT `baselines` under whichever base(s) were actually
- *  referenced — the same F1 rule `manualLockedBaseline` (`LogSession.tsx`)
+ *  `paces`: walks every split-KIND work phase's `phase.ref.base` and
+ *  records CURRENT `baselines` under whichever base(s) were actually
+ *  referenced. (Since Phase RW PR B an EFFORT-kind phase may carry a `ref`
+ *  too — a split ref rowed with no baseline — but it is logged as a word
+ *  above and has no baseline to record.) — the same F1 rule `manualLockedBaseline` (`LogSession.tsx`)
  *  already established for the manual door. */
-/** Rebase seam (6I over 7C, 2026-08-09): 6I loosened the Connect guard so
- *  an effort-only workout can program a monitor with NULL baselines — and
- *  this function (7C) is directly downstream of that guard. Baselines are
- *  read ONLY in the split-ref branch below, which `needsBaselines` gating
- *  at the Connect door guarantees is unreachable when they're null; a
- *  split-ref phase arriving here with null anyway is a programmer error
- *  and throws loudly, the exact convention `phases()`/`estimationSplit`
- *  established (domain/expand.ts). */
+/** Baselines are read ONLY in the split-KIND branch below. Phase RW PR B:
+ *  with null baselines `phases()` emits a split ref as an effort-kind
+ *  phase carrying its `ref`, which the first branch logs as the word, so
+ *  the split-kind branch and its baseline read are only ever reached with
+ *  a real pair (the Connect door no longer gates on one). */
 export function buildLogSeed(
   phases: EnginePhase[],
   baselines: Baselines | null,
@@ -714,24 +723,32 @@ export function buildLogSeed(
     }
     const isPaceWord = phase.targetKind === "effort";
     let label: string;
-    if (isPaceWord) {
+    if (isPaceWord && phase.ref !== undefined) {
+      // Phase RW PR B: a split ref rowed with no baseline, the word form
+      // (see buildLogSteps). No pace is recorded for it either: `paces`
+      // below walks the split-KIND branch only.
+      label = `${durationText(phase)} @ ${phase.label}`;
+    } else if (isPaceWord) {
       label = refPaceLabel(durationText(phase), {
-        effort: paceWordFromLabel(phase.label as "ALL OUT" | "EASY"),
+        effort: paceWordFromLabel(phase.label as "ALL OUT" | "STEADY"),
       });
     } else if (phase.ref !== undefined) {
       label = refPaceLabel(durationText(phase), phase.ref);
-      // `phase.ref` is always a SplitRef here, never an PaceWordRef: an
-      // "effort" targetKind phase never sets `ref` at all
-      // (`domain/expand.ts`'s "case w" only sets it in the split branch),
-      // and the `isPaceWord` branch above already handled the effort case.
+      // `phase.ref` is always a SplitRef here, never a PaceWordRef: the
+      // two effort branches above have already taken every effort-kind
+      // phase, whether or not it carries a `ref` (Phase RW PR B gave the
+      // no-baseline split ref one).
       // The cast documents that construction guarantee rather than
       // re-checking it at runtime — this file's own `!` convention
       // (`durationText`'s header comment) for a fact the domain layer
       // enforces upstream, not a possibility this function needs to guard.
       const splitRef = phase.ref as SplitRef;
       if (baselines === null) {
+        // Unreachable by construction since Phase RW PR B: `phases()`
+        // mints a split-KIND phase only from a real pair (a split ref with
+        // no baseline arrives as effort-kind with a ref, logged above).
         throw new Error(
-          "buildLogSeed: a split-ref phase needs baselines — callers must gate on needsBaselines() first",
+          "buildLogSeed: a split-kind phase with no baselines cannot exist",
         );
       }
       if (splitRef.base === "2k") {
