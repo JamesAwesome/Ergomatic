@@ -605,6 +605,13 @@ Gate 0 approved on artboard 03; §3.1 ruled "logbook formula"; the four
 session fields ride `machine_summary` jsonb, not columns, on a measured
 DBA benchmark
 (`docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`).
+**PR 2 BUILT 2026-09-07** on `phase-lp-pr2-upload` (plan
+`docs/superpowers/plans/2026-09-07-logbook-parity-pr2.md`, inline shape;
+spec rev 2.5 on the re-fetched API rows): antagonist DELTA pass RUN
+(REVISE → folded: the retry-without-`workout` fallback, interval
+`rest_distance` 0, drag 1..255, the 158-of-300 trailing-rest finding and
+the two walk read-backs it adds); whole-branch review + PM final gate
+owed on the PR; merge on James's word; the walk on the flag-flip trip.
 Gates on PR #327: `/harden` SKIPPED, spoken — the plan was executed
 inline in full, so its paste-test precondition and every block both
 lenses read are committed code, and the review half covers them; the
@@ -626,9 +633,13 @@ calories / watts / avg calories to the record; renders six hero tiles and a
 sideways-scrolling **MACHINE SUMMARY** table under today's INTERVALS table
 (layout B + B, chosen in the visual companion); old machine rows render
 `—`. PR 2 extends `buildC2Payload` to everything the logbook API accepts
-(splits/intervals with calories, HR, stroke rate, rests; result-level
-calories, drag, HR set; per-interval targets). Then one walk: the same piece
-photographed in both apps, every cell compared.
+(`workout.intervals[]` — never `splits[]`, every programmed piece is
+VariableInterval — with calories, HR, stroke rate, rests and per-interval
+targets; result-level calories, drag, HR set, the PM5's rest distance),
+all or nothing on the array and with a retry-once-without-it fallback,
+because Concept2 validates the array and says not what for. Then one
+walk: the same piece photographed in both apps, every cell compared, a
+LAST-interval rest included.
 
 **Closes:** the "Session calories" open item — settled at the desk on the
 committed corpus: per-split 0x0038 calories sum to 0x003A's Total Calories
@@ -1226,7 +1237,7 @@ closed with zero Concept2 contact.
       session-level split only, `LogStep` carries no per-interval rest, so the
       `intervals` array is out of scope and rides the auto-upload follow-on
       — **HANDED OVER 2026-09-06 to Phase LP PR 2** (`docs/superpowers/specs/2026-09-06-logbook-parity-design.md`
-      §5), which sends `intervals[]`/`splits[]` with calories, HR, stroke
+      §5), which sends `workout.intervals[]` (never `splits[]`) with calories, HR, stroke
       rate and per-interval rest, result-level calories/drag/HR, and
       targets; `buildC2Payload` stays Wave E's file, LP owns that edit.
 - [x] **PR B — the link-outs leave the app.** MERGED #298. The read-only Concept2
