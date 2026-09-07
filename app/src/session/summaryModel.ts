@@ -1218,9 +1218,12 @@ function monitorAvgSplit(run: MonitorRun): WorkingAverage {
 /** EXPORTED for the free-row summary (Just Row parity, Gate 0 approved
  *  2026-09-07). A free row reaches this unchanged: its program is the empty
  *  interval list, so `agreedTargetSpm([])` is undefined and the tile reads
- *  plain `RATE`; its `actuals` are empty, so a finished row takes the
- *  monitor's own `avgStrokeRate` and a terminated one reads a dash rather
- *  than a rate derived from no splits. Deliberately ONE function for both
+ *  plain `RATE`; its `actuals` are empty, so the rate comes from the
+ *  monitor's own `avgStrokeRate` — see the `finished` argument below for why
+ *  a free row takes that branch even though it ALWAYS terminates. An earlier
+ *  version of this comment said a terminated row reads a dash, which the
+ *  code eight lines down had already stopped doing.
+ *  Deliberately ONE function for both
  *  doors — the alternative is two that drift, which is how the tile and the
  *  wire came to disagree once already this phase. */
 export function machineTierFromRun(run: MonitorRun): MachineTier {

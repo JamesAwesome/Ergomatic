@@ -3895,7 +3895,8 @@ test("log-detail", async ({ page }) => {
   // machine tier reads the LOGBOOK's arithmetic over the seed — AVG WATTS
   // round(2.80/(124.0/500)³) = 184, CAL / HOUR floor(32×3600/124.0) = 929
   // (NOT the seeded PM5 figure 931), CALORIES 32 = 16 + 16 below, AVG HR a
-  // dash (this walk wore no belt — `avgHeartRateBpm` is not seeded), RATE 26
+  // 140 since PR #345 — the monitor seeds no `avgHeartRateBpm`, so the tile
+  // derives from the seeded trace instead of showing a dash — RATE 26
   // with NO target half (this walk's program authored no display SPM, so
   // no step carries `spm` and the tile reads the rate alone), DRAG 100,
   // REST 242 m = 147 + 95 — and the MACHINE
@@ -3908,7 +3909,7 @@ test("log-detail", async ({ page }) => {
   await expect(lpTiles.nth(3)).toHaveText("RATE26");
   // 140, not a dash: PR #345 fills AVG HR from the trace, and this fixture's
   // own ramp (130 + round(t/244 × 28), with rest marked) gives a work-only
-  // time-weighted mean of 140.30. Recomputed from the ramp's formula, not
+  // time-weighted mean of 140.129. Recomputed from the ramp's formula, not
   // read back from the app. **#345 did not run `pnpm screenshots`** — it
   // judged "no layout moved", true and beside the point: captures assert
   // VALUES, and the value moved. A number change re-runs them.

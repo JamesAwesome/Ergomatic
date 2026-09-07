@@ -179,6 +179,37 @@ describe("JustRowLog (the workout-less log door)", () => {
   // (`docs/monitor/sessions/walk-2026-08-31-justrow/`), 393.6 s and 1396 m,
   // whose burst carries rate 25, drag 101, 80 calories and 730 cal/hr —
   // not a fixture chosen to be convenient (RF3).
+  // The gate mirrors the programmed door's `hasTotals`, and NOTHING could
+  // redden it: reverting it to a bare `summaryTotals !== undefined` left all
+  // 62 free-row tests green (branch review, round 2). A 0/0 burst is what it
+  // exists to refuse — the tier would otherwise render with DRAG and
+  // CALORIES real beside dashed watts, over totals that are not there.
+  it("renders NO tier over a 0/0 burst, as the programmed door refuses to", async () => {
+    mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    const empty = closedFreeRow({
+      endedBy: "rower",
+      summaryTotals: { workElapsedSeconds: 0, workDistanceMeters: 0 },
+      summaryDetail: {
+        avgStrokeRate: 25,
+        endingHeartRateBpm: null,
+        avgHeartRateBpm: null,
+        minHeartRateBpm: null,
+        maxHeartRateBpm: null,
+        dragFactorAverage: 101,
+        recoveryHeartRateBpm: null,
+        workoutType: 1,
+        totalCalories: 80,
+        avgPaceSecondsPer500m: 140.9,
+      },
+    });
+    commitHandoff(empty.startedAt, null, empty);
+    await renderDoor();
+    await screen.findByRole("heading", { name: "Just Row" });
+    expect(
+      screen.queryByTestId("summary-machine-tier"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the six machine tiles a programmed piece shows, on a real free row's own numbers", async () => {
     mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
     const capture = closedFreeRow({

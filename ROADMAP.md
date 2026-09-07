@@ -2090,7 +2090,8 @@ Each needs erg time or a deliberate recording session.
       #351**, so the next attempt starts here rather than from scratch. A
       `FakeBurst` rides a `FakeBoundaryEvent`, whose `actual` needs
       `index`, `elapsedSeconds`, `distanceMeters`, `avgSpm`,
-      `avgHeartRateBpm`, `restDistanceMeters` and `restSeconds`, plus
+      `avgHeartRateBpm` and `restDistanceMeters` (`restSeconds` is
+      optional), plus
       sibling `cumulativeElapsedSeconds`/`cumulativeDistanceMeters`.
       Calories live on 0x003A, which `FakeBurst` takes only as raw bytes, so
       `summaryOverrides` cannot reach them. Appending such a boundary to the
