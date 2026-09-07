@@ -27,6 +27,26 @@ describe("verificationCode", () => {
       "0000-0001-0000-0002",
     );
   });
+  it("is null when any of the first eight is not a whole byte — a plausible WRONG code is worse than none", () => {
+    // The write door bands the stored array 0..255; this is the guard for a
+    // value that got past it. Each case keeps eight entries, so only the
+    // range check can reject it.
+    const bad = (i: number, v: number): (number | undefined)[] => {
+      const copy = EXIT7.slice(0, 8);
+      copy[i] = v;
+      return copy;
+    };
+    expect(verificationWords(bad(0, 256) as number[])).toBeNull();
+    expect(verificationWords(bad(3, -1) as number[])).toBeNull();
+    expect(verificationWords(bad(7, 1.5) as number[])).toBeNull();
+    expect(wireVerificationCode(bad(4, Number.NaN) as number[])).toBeNull();
+    // The ninth byte and beyond are never read, so a rogue one there is not
+    // a rejection: the code is the first two words, exactly as on the screen.
+    const ninthBad = EXIT7.slice();
+    ninthBad[8] = 999;
+    expect(wireVerificationCode(ninthBad)).toBe("AF99-4706-C021-B054");
+  });
+
   it("is null under eight bytes — never a padded guess", () => {
     expect(verificationWords(EXIT7.slice(0, 7))).toBeNull();
     expect(wireVerificationCode([])).toBeNull();
