@@ -9313,6 +9313,46 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 20px;
 }
 
+/* Phase LP §3 — the six machine tiles under the heroes (Gate 0 approved
+   2026-09-07 on docs/design/logbook-parity/03-chosen-composed.html).
+   Three columns × two rows at every width the heroes already handle;
+   labels reuse `.summary-hero-label` (--ink-3 on --page, 6.69:1 — the
+   pairing this file's own contrast notes above compute); values are
+   --ink on --page like every hero value, at a size between the total
+   line and the secondary heroes so the tier reads as detail, not as a
+   fourth hero. The unit/suffix `small` is --ink-3, same 6.69:1. */
+.summary-machine-tier {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 10px;
+  margin-top: 14px;
+}
+
+.summary-machine-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.summary-machine-value {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.summary-machine-value small {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  margin-left: 2px;
+  color: var(--ink-3);
+}
+
 .summary-reflection-card {
   display: flex;
   flex-direction: column;
@@ -9478,6 +9518,102 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 .summary-intervals {
   margin: 0 0 24px;
+}
+
+/* Phase LP §3 — MACHINE SUMMARY (Gate 0 approved 2026-09-07 on
+   docs/design/logbook-parity/03-chosen-composed.html). The strip scrolls
+   sideways inside its own container; the PAGE never scrolls sideways
+   (e2e pins document.scrollWidth <= innerWidth). `border-collapse:
+   separate` on purpose: collapsed borders belong to the table and do not
+   travel with a stuck cell (WebKit bug 128486, csswg-drafts #3136), so the
+   pinned `#` column paints its own opaque --page background and a soft
+   right shadow instead of a border. The scroller bleeds into `.screen`'s
+   20px side padding (negative margin + matching padding) so the table's
+   first pixel aligns with the INTERVALS list above it and the scroll edge
+   reaches the screen edge — safe-area insets stay on `.screen` itself.
+   Text pairings (WCAG relative luminance from theme/tokens.css, never
+   eyeballed): --ink #1b1a17 on --page #f4f1e8 = 15.41:1 (cells), --ink-3
+   #57544c on --page = 6.69:1 (headers/eyebrow). The pinned column's
+   rgba(0,0,0,0.25) box-shadow is a raw colour and a shadow against this
+   sheet's tokens-only/no-shadow habit — sanctioned by spec §3 and the
+   Gate 0 artboard for the one job of showing the pin over scrolled cells,
+   and recorded in docs/design/DEVIATIONS.md's Phase LP row. */
+.machine-summary-block {
+  margin: 0 0 24px;
+}
+
+.machine-summary-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.machine-summary-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+.machine-summary-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.machine-summary-scroller {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -20px;
+  padding: 0 20px;
+}
+
+/* Keyboard focus on the scroll region (it is a tab stop — see the
+   component): the same 2px --ink outline the rest of this sheet uses for
+   focus-visible, inset so the -20px bleed does not push it off-screen. */
+.machine-summary-scroller:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.machine-summary {
+  border-collapse: separate;
+  border-spacing: 0;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.machine-summary th,
+.machine-summary td {
+  padding: 9px 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+}
+
+.machine-summary th {
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.machine-summary .machine-summary-pin {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  padding-left: 0;
+  background: var(--page);
+  box-shadow: 6px 0 6px -6px rgba(0, 0, 0, 0.25);
 }
 
 .summary-intervals-header {

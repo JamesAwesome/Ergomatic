@@ -9,6 +9,7 @@ import {
   SummaryMetaBlock,
   SummaryReflectionCard,
 } from "../session/PostWorkoutSummary";
+import MachineSummaryTable from "../session/MachineSummaryTable";
 import { resolveBackTarget } from "../shell/BackLink";
 import Concept2SendBlock from "./Concept2SendBlock";
 import { buildStoredSummary, type StoredLog } from "./storedSummary";
@@ -539,6 +540,9 @@ export default function FromTheLog() {
           )}
 
           <SummaryIntervalsBlock rows={view.rows} caption={view.caption} />
+
+          {/* Phase LP §3: same strip as the live door, off the stored steps. */}
+          <MachineSummaryTable rows={view.machineRows} />
 
           {/* RC-2/RC-3 wave, §3: "place it below the interval table...
               matching the section rhythm already on the screen." §3's own

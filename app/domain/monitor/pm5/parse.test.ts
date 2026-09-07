@@ -5,6 +5,7 @@ import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
+  parseAdditionalSummary,
   parseAdditionalSummaryRest,
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
@@ -828,6 +829,29 @@ describe("toIntervalActual: field mapping (interface-notes.md's own reasoning co
     expect(actual.avgHeartRateBpm).toBeNull();
   });
 
+  it("Phase LP: keeps 0x0038's calories, cal/hr, watts, drag factor and rest heartrate verbatim (James's 6k split 1: 73 cal, 840 cal/hr, 157 W)", () => {
+    const actual = toIntervalActual(
+      baseRaw({
+        splitIntervalTotalCalories: 73,
+        splitIntervalAvgCalories: 840,
+        splitIntervalPowerWatts: 157,
+        splitAvgDragFactor: 101,
+        splitIntervalRestHeartRateBpm: null,
+      }),
+    );
+    expect(actual.calories).toBe(73);
+    expect(actual.calPerHour).toBe(840);
+    expect(actual.watts).toBe(157);
+    expect(actual.dragFactor).toBe(101);
+    expect(actual.restHeartRateBpm).toBeNull();
+  });
+
+  it("Phase LP: a zero-calorie split reads 0, not undefined — 0 is a value", () => {
+    expect(
+      toIntervalActual(baseRaw({ splitIntervalTotalCalories: 0 })).calories,
+    ).toBe(0);
+  });
+
   it("uses intervalRestDistanceMeters (0x0037) for restDistanceMeters (R-B)", () => {
     const actual = toIntervalActual(
       baseRaw({ intervalRestDistanceMeters: 22 }),
@@ -970,5 +994,47 @@ describe("parseAdditionalSummaryRest (0x003A, offsets 12-14 Total Rest Distance 
 
   it("a 17-byte buffer of all zeros is NOT null — the length guard is length-only, never content-sniffing (mirrors parseEndOfWorkoutSummary's own rule)", () => {
     expect(parseAdditionalSummaryRest(new Uint8Array(17))).not.toBeNull();
+  });
+});
+describe("parseAdditionalSummary (0x003A — Phase LP: Total Calories 8-9, Watts 10-11, Total Rest Distance 12-14, Avg Calories 17-18; BLE rev 1.30 p.22)", () => {
+  // exit-7 walk seq 63 (docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.json):
+  // 88 35 03 0f 02 fa 00 02 20 00 b8 00 f2 00 00 00 00 a3 03
+  // index:  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18
+  // 8-9   u16 LE: 20 00 -> 32 cal      10-11 u16 LE: b8 00 -> 184 W
+  // 12-14 u24 LE: f2 00 00 -> 242 m    17-18 u16 LE: a3 03 -> 931 cal/hr
+  const EXIT7 = new Uint8Array([
+    0x88, 0x35, 0x03, 0x0f, 0x02, 0xfa, 0x00, 0x02, 0x20, 0x00, 0xb8, 0x00,
+    0xf2, 0x00, 0x00, 0x00, 0x00, 0xa3, 0x03,
+  ]);
+
+  it("decodes the exit-7 walk's frame: 32 cal, 184 W, 242 m rest, 931 cal/hr", () => {
+    expect(parseAdditionalSummary(EXIT7)).toStrictEqual({
+      totalCalories: 32,
+      avgWatts: 184,
+      totalRestDistanceMeters: 242,
+      avgCalPerHour: 931,
+    });
+  });
+
+  it("decodes the r0 keystone piece (walk-2026-08-23 seq 517): 28 cal, 131 W, 0 m rest, 751 cal/hr — a genuine 0, never null", () => {
+    // 78 35 1c 09 01 fa 00 02 1c 00 83 00 00 00 00 00 00 ef 02
+    const bytes = new Uint8Array([
+      0x78, 0x35, 0x1c, 0x09, 0x01, 0xfa, 0x00, 0x02, 0x1c, 0x00, 0x83, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0xef, 0x02,
+    ]);
+    expect(parseAdditionalSummary(bytes)).toStrictEqual({
+      totalCalories: 28,
+      avgWatts: 131,
+      totalRestDistanceMeters: 0,
+      avgCalPerHour: 751,
+    });
+  });
+
+  it("returns null for a frame shorter than 19 bytes, never a partial object (Avg Calories lives at 17-18)", () => {
+    expect(parseAdditionalSummary(EXIT7.subarray(0, 18))).toBeNull();
+  });
+
+  it("keeps 0 as a value: an all-zero frame reads 0 calories, not null", () => {
+    expect(parseAdditionalSummary(new Uint8Array(19))?.totalCalories).toBe(0);
   });
 });

@@ -240,7 +240,12 @@ Web/OS API names its availability floor against
 1. `git merge origin/main` on the branch; resolve; gates green on the
    merged tree.
 2. A CI run EXISTS for the exact head AND is green (an empty check rollup
-   is not green — the #258 premature-comment lesson).
+   is not green — the #258 premature-comment lesson). The mechanical
+   form, because #327 reported "gates run at <head>" from a LOCAL run
+   while the branch's only CI run was the commit before the fix round:
+   `gh run list --branch <branch> --limit 1 --json headSha,conclusion`
+   against `git rev-parse HEAD` — the two SHAs match, and the conclusion
+   reads `success`, or there is no CI claim to make.
 3. The PR body names the current head with exact commit/test counts; a
    grep for every superseded figure and retired phrasing comes back empty.
 4. When a reviewer states a rule, adopt its wording VERBATIM and sweep all

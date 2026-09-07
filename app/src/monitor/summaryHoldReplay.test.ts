@@ -164,6 +164,13 @@ import {
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { releasingSchedule } from "../test/statusSubscriptions";
+import express from "express";
+import request from "supertest";
+import { noStore, requireUser } from "../../server/auth/middleware.js";
+import type { SessionStore, SessionUser } from "../../server/auth/sessions.js";
+import { makeFakeStores } from "../../server/testing/fakes.js";
+import { createDataRouter } from "../../server/routes/data.js";
+import { buildMonitorLogSteps } from "../session/logDraft";
 
 /** Same path-surgery idiom as `burstReplay.test.ts` (jsdom resolves
  *  `new URL(...)` against `http://localhost:3000/`, so string surgery on
@@ -820,11 +827,84 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
       workoutType: 1,
       recoveryHeartRateBpm: null,
       avgPaceSecondsPer500m: 143.1,
+      // Phase LP: seq 295's own raw 0x003A (`98 35 2c 11 00 6e 00 01 06 00
+      // 77 00 00 00 00 00 00 c7 02`), hand-decoded: 8-9 `06 00` = 6 cal;
+      // 10-11 `77 00` = 119 W; 12-14 = 0 m; 17-18 `c7 02` = 711 cal/hr.
+      totalCalories: 6,
+      avgWatts: 119,
+      avgCalPerHour: 711,
+      totalRestMeters: 0,
     });
     expect(fullRecord.verificationBytes).toBeDefined();
     expect(Array.from(fullRecord.verificationBytes!.slice(0, 8))).toStrictEqual(
       [140, 215, 219, 144, 135, 230, 130, 229],
     );
+
+    // Phase LP, THE SEAM (RF24; whole-branch review M2): this test began
+    // at the wire bytes, upstream of the driver's 0x003A stash, and the
+    // record above is what the hook persisted. Now the OTHER half, in the
+    // same test: the body `LogSession.tsx` builds from that record
+    // (`buildMonitorLogSteps` + the `machineSummary` spread, transcribed
+    // from its `save` — the file's own shape, not re-derived) POSTed to
+    // the REAL data router over the fake stores, then read back. Nothing
+    // here seeds the API row by hand.
+    const seamApp = express();
+    seamApp.use(express.json());
+    seamApp.use(noStore);
+    const seamUser: SessionUser = {
+      id: "user-lp",
+      email: "lp@x.com",
+      name: "LP",
+    };
+    seamApp.use(
+      createDataRouter({
+        stores: makeFakeStores(),
+        requireUser: requireUser({
+          resolveSession: async () => ({
+            user: seamUser,
+            expiresAt: new Date(Date.now() + 100_000),
+            refreshed: false,
+          }),
+        } as unknown as SessionStore),
+      }),
+    );
+    const seamBody = {
+      workoutId: null,
+      workoutTitle: fullRecord.title,
+      workoutType: "AN",
+      held: null,
+      effort: null,
+      notes: null,
+      steps: buildMonitorLogSteps(fullRecord),
+      deviceName: fullRecord.deviceName,
+      source: "pm5",
+      endedBy: fullRecord.endedBy,
+      machineWorkSeconds: fullRecord.summaryTotals!.workElapsedSeconds,
+      machineWorkMeters: Math.round(
+        fullRecord.summaryTotals!.workDistanceMeters,
+      ),
+      machineSummary: {
+        verificationBytes: [...fullRecord.verificationBytes!],
+        ...(fullRecord.summaryDetail ?? {}),
+      },
+    };
+    const created = await request(seamApp)
+      .post("/api/logs")
+      .set("Authorization", "Bearer any")
+      .send(seamBody);
+    expect(created.status).toBe(201);
+    const stored = await request(seamApp)
+      .get(`/api/logs/${created.body.id}`)
+      .set("Authorization", "Bearer any");
+    expect(stored.status).toBe(200);
+    // The four 0x003A keys, from seq 295's own bytes to the stored row.
+    expect(stored.body.machineSummary).toMatchObject({
+      totalCalories: 6,
+      avgWatts: 119,
+      avgCalPerHour: 711,
+      totalRestMeters: 0,
+    });
+    expect(stored.body.machineWorkSeconds).toBe(31.5);
 
     // Ordering, not just co-occurrence (spec §6: "write ATTEMPT before
     // release ... this asserts ordering"). Task-3-review finding: the
@@ -959,6 +1039,14 @@ describe("the summary hold's permanent gate, leg 2: user End (storage-spine desi
       workoutType: 1,
       recoveryHeartRateBpm: null,
       avgPaceSecondsPer500m: 283.3,
+      // Phase LP: seq 87's own raw 0x003A (`c8 35 10 09 00 0f 00 01 00 00
+      // 0f 00 00 00 00 00 00 60 01`), hand-decoded: 8-9 `00 00` = 0 cal —
+      // a GENUINE zero on a 15 m piece, stored as 0 and never as absent;
+      // 10-11 `0f 00` = 15 W; 12-14 = 0 m; 17-18 `60 01` = 352 cal/hr.
+      totalCalories: 0,
+      avgWatts: 15,
+      avgCalPerHour: 352,
+      totalRestMeters: 0,
     });
     expect(fullRecord.verificationBytes).toBeDefined();
     expect(Array.from(fullRecord.verificationBytes!.slice(0, 8))).toStrictEqual(

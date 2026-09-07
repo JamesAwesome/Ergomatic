@@ -1,0 +1,131 @@
+<title>REST Tile Options</title>
+<style>
+  :root { --page:#f4f1e8; --ink:#1b1a17; --ink3:#57544c; --dim:#9a968c; --rule:#dcd8cc; --warn:#b0301c; }
+  body { margin:0; padding:24px; background:#e9e5da; color:var(--ink); font-family:-apple-system, "Archivo", system-ui, sans-serif; }
+  h1 { font: 600 18px/1.2 -apple-system, system-ui, sans-serif; margin:0 0 4px; }
+  .lede { max-width:70ch; font-size:13px; color:#333; margin:0 0 18px; }
+  .row { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+  .opt { width:390px; }
+  .opt h2 { font: 600 13px/1.3 -apple-system, system-ui, sans-serif; margin:0 0 6px; }
+  .opt p { font-size:12px; color:#333; margin:6px 0 0; max-width:390px; }
+  .opt .cost { font-size:11px; color:#444; margin-top:6px; padding:8px 10px; border:1px solid #cfcabd; background:#f7f4ec; }
+  .ph { width:390px; box-sizing:border-box; background:var(--page); border:1px solid #cfcabd; border-radius:22px; padding:14px 20px 16px; font-family:"IBM Plex Mono", ui-monospace, Menlo, monospace; font-size:12px; }
+  .hero { display:flex; align-items:flex-end; gap:20px; }
+  .hero > div { flex:1; min-width:0; } .hero > div:first-child { flex:1.6; }
+  .k { font-size:10px; letter-spacing:.14em; color:var(--ink3); display:block; }
+  .hero .v { font-weight:500; line-height:1; font-variant-numeric:tabular-nums; }
+  .hero > div:first-child .v { font-size:36px; } .hero > div:not(:first-child) .v { font-size:20px; }
+  .total { margin:6px 0 0; font-size:12px; letter-spacing:.04em; color:var(--ink3); }
+  .tier { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px 10px; margin-top:14px; }
+  .tier .v { font-size:17px; font-weight:500; line-height:1; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .tier .v small { font-size:10px; font-weight:400; margin-left:2px; color:var(--ink3); }
+  .tier .hole { border:1px dashed #cfcabd; border-radius:6px; min-height:34px; }
+  .hl { background:#fff1c2; outline:2px solid #e0b400; outline-offset:2px; border-radius:2px; }
+  .conflict { color:var(--warn); }
+  .note { font-size:10px; letter-spacing:.06em; color:var(--ink3); margin-top:10px; }
+</style>
+
+<h1>REST tile: two sources of one number</h1>
+<p class="lede"><b>Ruled 2026-09-07 (James): "Drop and replace with avg heart rate."</b> Option C, with the empty cell taken by AVG HR (0x0039's average, already stored; a dash without a belt). Kept as the record of the choice.</p>
+<p class="lede">The exit-7 walk, as the log screen shows it today. The total line's rest metres come from OUR sum of each interval's rest (147 + 95); the REST tile's come from the PM5's own session total (0x003A). On every committed capture they agree to the metre, but the driver already tolerates a 1 m gap between them (its rest-distance verdict), so option A shows the one case a rower could actually meet.</p>
+
+<div class="row">
+
+  <div class="opt">
+    <h2>A · As built: both, from different sources</h2>
+    <div class="ph">
+      <div class="hero">
+        <div><span class="k">AVG SPLIT</span><div class="v">2:04.0</div></div>
+        <div><span class="k">TIME</span><div class="v">2:04</div></div>
+        <div><span class="k">DISTANCE</span><div class="v">500</div></div>
+      </div>
+      <p class="total">4:04 total · plus <span class="hl">242 m</span> coasting in rest</p>
+      <div class="tier">
+        <div><span class="k">AVG WATTS</span><div class="v">184</div></div>
+        <div><span class="k">CALORIES</span><div class="v">32</div></div>
+        <div><span class="k">CAL / HOUR</span><div class="v">929</div></div>
+        <div><span class="k">RATE</span><div class="v">26</div></div>
+        <div><span class="k">DRAG</span><div class="v">100</div></div>
+        <div><span class="k">REST</span><div class="v hl">242<small>m</small></div></div>
+      </div>
+      <p class="note">…and when the two sources differ by the metre the driver already allows:</p>
+      <p class="total">4:04 total · plus <span class="hl">242 m</span> coasting in rest</p>
+      <div class="tier" style="margin-top:8px">
+        <div><span class="k">AVG WATTS</span><div class="v">184</div></div>
+        <div><span class="k">CALORIES</span><div class="v">32</div></div>
+        <div><span class="k">CAL / HOUR</span><div class="v">929</div></div>
+        <div><span class="k">RATE</span><div class="v">26</div></div>
+        <div><span class="k">DRAG</span><div class="v">100</div></div>
+        <div><span class="k">REST</span><div class="v hl conflict">241<small>m</small></div></div>
+      </div>
+    </div>
+    <div class="cost">Cost: the same quantity twice, four lines apart, and nothing on the screen says which one to believe when they differ. No code change.</div>
+  </div>
+
+  <div class="opt">
+    <h2>B · PM's read: keep the tile, one value feeds both</h2>
+    <div class="ph">
+      <div class="hero">
+        <div><span class="k">AVG SPLIT</span><div class="v">2:04.0</div></div>
+        <div><span class="k">TIME</span><div class="v">2:04</div></div>
+        <div><span class="k">DISTANCE</span><div class="v">500</div></div>
+      </div>
+      <p class="total">4:04 total · plus <span class="hl">242 m</span> coasting in rest</p>
+      <div class="tier">
+        <div><span class="k">AVG WATTS</span><div class="v">184</div></div>
+        <div><span class="k">CALORIES</span><div class="v">32</div></div>
+        <div><span class="k">CAL / HOUR</span><div class="v">929</div></div>
+        <div><span class="k">RATE</span><div class="v">26</div></div>
+        <div><span class="k">DRAG</span><div class="v">100</div></div>
+        <div><span class="k">REST</span><div class="v hl">242<small>m</small></div></div>
+      </div>
+      <p class="note">Looks identical to A on every row we have. The line's metres would read the PM5's total when the row has it and fall back to our sum on older rows.</p>
+    </div>
+    <div class="cost">Cost: still says rest twice. The total line would mix sources (its SECONDS stay our sum, its METRES become the PM5's) — a saved row's total line can move by up to 1 m, which makes it a number change and puts it in front of you again as a gate. Small code change on both doors.</div>
+  </div>
+
+  <div class="opt">
+    <h2>C · Drop the tile: the total line carries rest</h2>
+    <div class="ph">
+      <div class="hero">
+        <div><span class="k">AVG SPLIT</span><div class="v">2:04.0</div></div>
+        <div><span class="k">TIME</span><div class="v">2:04</div></div>
+        <div><span class="k">DISTANCE</span><div class="v">500</div></div>
+      </div>
+      <p class="total">4:04 total · plus <span class="hl">242 m</span> coasting in rest</p>
+      <div class="tier">
+        <div><span class="k">AVG WATTS</span><div class="v">184</div></div>
+        <div><span class="k">CALORIES</span><div class="v">32</div></div>
+        <div><span class="k">CAL / HOUR</span><div class="v">929</div></div>
+        <div><span class="k">RATE</span><div class="v">26</div></div>
+        <div><span class="k">DRAG</span><div class="v">100</div></div>
+        <div class="hole" aria-hidden="true"></div>
+      </div>
+      <p class="note">Five tiles in the three-column grid leave the sixth cell empty (drawn dashed here; blank on the phone).</p>
+    </div>
+    <div class="cost">Cost: rest said once, from our sum. The PM5's own rest total is still stored and still goes to Concept2 in PR 2; it just isn't a tile. One empty grid cell, or a 5-across layout that is too narrow at 390 px (each tile would get ~62 px; "AVG WATTS" is 9 characters of 10 px mono ≈ 62 px, so labels would clip). Small code change.</div>
+  </div>
+
+  <div class="opt">
+    <h2>D · Keep the tile, shorten the line</h2>
+    <div class="ph">
+      <div class="hero">
+        <div><span class="k">AVG SPLIT</span><div class="v">2:04.0</div></div>
+        <div><span class="k">TIME</span><div class="v">2:04</div></div>
+        <div><span class="k">DISTANCE</span><div class="v">500</div></div>
+      </div>
+      <p class="total">4:04 total</p>
+      <div class="tier">
+        <div><span class="k">AVG WATTS</span><div class="v">184</div></div>
+        <div><span class="k">CALORIES</span><div class="v">32</div></div>
+        <div><span class="k">CAL / HOUR</span><div class="v">929</div></div>
+        <div><span class="k">RATE</span><div class="v">26</div></div>
+        <div><span class="k">DRAG</span><div class="v">100</div></div>
+        <div><span class="k">REST</span><div class="v hl">242<small>m</small></div></div>
+      </div>
+      <p class="note">On a row without the PM5's total (anything saved before this build) the line would keep its clause, so old and new rows read differently.</p>
+    </div>
+    <div class="cost">Cost: rest said once, from the PM5. The "plus N m coasting in rest" clause was itself a ruling (hero-truth, 2026-08-25: the wall-clock line names its own rest so nobody files a bug on a shrunken hero), so this reverses a decision for new rows only. Small code change.</div>
+  </div>
+
+</div>

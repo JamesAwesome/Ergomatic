@@ -1279,6 +1279,83 @@ describe("createFakeTransport: tick-driven timeline", () => {
     expect(decodeAsSplit(asSplits[0]!).splitIntervalAvgPace).toBe(0);
   });
 
+  // Phase LP (spec §4.1): the fake's 0x0038 used to write literal zeros for
+  // calories/cal-hr/watts and 130 for drag — values a real PM5 never sends
+  // for a rowed split, so a screen reading them could not be told from an
+  // unwired one. It now models the PM5's OWN relations (measured on the
+  // committed captures, spec §1.1): watts = 2.80/pace³, cal/hr = 300 +
+  // 4×0.8604×W from the unrounded watts, calories = cal/hr × t / 3600, drag
+  // in the 100-104 band every capture reads. Literals below are hand
+  // computed for 1200 m in 313.5 s (James's 6k split 1): pace 0.26125 s/m,
+  // W = 2.8/0.017831 = 157.03 → 157; cal/hr = floor(300 + 3.4416×157.03)
+  // = floor(840.4) = 840; cal = round(840 × 313.5 / 3600) = round(73.15)
+  // = 73.
+  it("Phase LP: a split frame carries the PM5's own watts, cal/hr, calories and a real drag factor — never zeros (1200 m in 313.5 s → 157 W, 840 cal/hr, 73 cal, drag 101)", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 500,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 313.5,
+            distanceMeters: 1200,
+            avgSpm: 27,
+            avgHeartRateBpm: null,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 313.5,
+          cumulativeDistanceMeters: 1200,
+        },
+      ],
+    });
+    await programIt(fake, PROGRAM);
+    const asSplits: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (b) =>
+      asSplits.push(b),
+    );
+    fake.tick(500);
+    expect(asSplits).toHaveLength(1);
+    const split = decodeAsSplit(asSplits[0]!);
+    expect(split.splitIntervalPowerWatts).toBe(157);
+    expect(split.splitIntervalAvgCalories).toBe(840);
+    expect(split.splitIntervalTotalCalories).toBe(73);
+    expect(split.splitAvgDragFactor).toBe(101);
+  });
+
+  it("Phase LP: a zero-distance boundary writes 0 watts / 0 cal/hr / 0 calories — the 'nothing rowed' case, never a division by zero", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 500,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 30,
+            distanceMeters: 0,
+            avgSpm: 0,
+            avgHeartRateBpm: null,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 30,
+          cumulativeDistanceMeters: 0,
+        },
+      ],
+    });
+    await programIt(fake, PROGRAM);
+    const asSplits: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (b) =>
+      asSplits.push(b),
+    );
+    fake.tick(500);
+    const split = decodeAsSplit(asSplits[0]!);
+    expect(split.splitIntervalPowerWatts).toBe(0);
+    expect(split.splitIntervalAvgCalories).toBe(0);
+    expect(split.splitIntervalTotalCalories).toBe(0);
+  });
+
   it("a large single tick delivers every event that has now become due, in order", async () => {
     const fake = createFakeTransport({ program: PROGRAM, events });
     await programIt(fake, PROGRAM);

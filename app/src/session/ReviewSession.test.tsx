@@ -520,6 +520,36 @@ describe("selected recording recovery", () => {
         corruptActual(run, "type", true);
       },
     ],
+    [
+      "a string present split calories (Phase LP)",
+      (run: MonitorRun) => {
+        corruptActual(run, "calories", "73");
+      },
+    ],
+    [
+      "a null present drag factor (Phase LP)",
+      (run: MonitorRun) => {
+        corruptActual(run, "dragFactor", null);
+      },
+    ],
+    [
+      "a boolean present rest heart rate (Phase LP — null is allowed, a boolean is not)",
+      (run: MonitorRun) => {
+        corruptActual(run, "restHeartRateBpm", false);
+      },
+    ],
+    [
+      "a string present split cal/hr (Phase LP)",
+      (run: MonitorRun) => {
+        corruptActual(run, "calPerHour", "840");
+      },
+    ],
+    [
+      "a NaN present split watts (Phase LP)",
+      (run: MonitorRun) => {
+        corruptActual(run, "watts", Number.NaN);
+      },
+    ],
   ])(
     "programmed recording with %s stays read-only",
     async (_label, corrupt) => {
@@ -539,6 +569,11 @@ describe("selected recording recovery", () => {
     ["workout type", "workoutType", "1"],
     ["recovery heart rate", "recoveryHeartRateBpm", true],
     ["average pace", "avgPaceSecondsPer500m", "133.3"],
+    // Phase LP: the four 0x003A keys, each guarded when present.
+    ["total calories (Phase LP)", "totalCalories", "372"],
+    ["average watts (Phase LP)", "avgWatts", null],
+    ["average cal/hr (Phase LP)", "avgCalPerHour", true],
+    ["total rest metres (Phase LP)", "totalRestMeters", Number.NaN],
   ])(
     "programmed recording with a malformed summary %s stays read-only",
     async (_label, field, value) => {

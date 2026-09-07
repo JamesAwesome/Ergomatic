@@ -1,0 +1,187 @@
+<h2>B + B, composed — the one artboard Gate 0 approves first</h2>
+<p class="subtitle">Your 6k as a real machine row: the hero's second tier carries the session, the INTERVALS table is today's, the MACHINE SUMMARY strip is per interval only (no ALL row, no SPM). Left: the app's default (Concept2's arithmetic). Right: the same row with the PM5's own watts and cal/hr — the option pair from spec §3.1, with the measured deltas. Third phone: what a REAL old machine row renders.</p>
+
+<style>
+  .row3 { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start }
+  .ph { width: 360px; background: #f4f1e8; color: #1b1a17; border: 1px solid #cfcabd; border-radius: 22px; padding: 16px 20px 18px; font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 12px; overflow: hidden; }
+  .cap-title { font-family: -apple-system, "Archivo", sans-serif; font-size: 13px; font-weight: 600; margin: 0 0 8px; color:#1b1a17 }
+  .eyebrow { font-size:10px; letter-spacing:.12em; color:#6b6862; }
+  .title { font-family: "Newsreader", Georgia, serif; font-size: 24px; margin: 2px 0 2px; }
+  .meta { font-size: 10px; letter-spacing:.1em; color:#6b6862; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #1b1a17; }
+  .hero { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0 8px; }
+  .hero .k { font-size:10px; letter-spacing:.12em; color:#6b6862 } .hero .v { font-size: 22px; font-weight:700; letter-spacing:-.01em } .hero .v small{ font-size:11px; font-weight:400; margin-left:2px }
+  .badge { display:inline-block; font-size:10px; letter-spacing:.12em; padding:3px 6px; border:1px solid #1b1a17; margin-bottom:8px }
+  .grid6 { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; margin: 6px 0 12px; }
+  .grid6 .k { font-size:9px; letter-spacing:.12em; color:#6b6862 } .grid6 .v { font-size: 17px; font-weight:700 } .grid6 .v small{ font-size:10px; font-weight:400 }
+  .feel { border:1px solid #1b1a17; background:#fffdf7; padding:10px 12px; margin:6px 0 12px; font-size:10px; letter-spacing:.12em; color:#6b6862 }
+  .feel div { height:22px; background:#e9e5d8; margin-top:6px }
+  h5 { font: 700 11px/1 "IBM Plex Mono", monospace; letter-spacing:.12em; margin: 10px 0 6px; display:flex; justify-content:space-between }
+  h5 span { font-weight:400; color:#6b6862; font-size:10px }
+  table.iv { border-collapse: collapse; white-space: nowrap; width:100% }
+  table.iv td, table.iv th { padding: 7px 4px; text-align:right; border-bottom:1px solid #dcd8cc; font-variant-numeric: tabular-nums }
+  table.iv th { font-weight:400; color:#6b6862; font-size:10px; letter-spacing:.12em }
+  .fast { color:#1b54b8; font-weight:700 } .slow { color:#b0301c; font-weight:700 } .dim { color:#9a968c }
+  .scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -20px; padding: 0 20px }
+  table.st { border-collapse: separate; border-spacing: 0; white-space: nowrap; }
+  table.st th, table.st td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #dcd8cc; font-variant-numeric: tabular-nums; }
+  table.st th { font-weight: 400; color:#6b6862; font-size:10px; letter-spacing:.12em; }
+  table.st .pin { position: sticky; left: 0; background: #f4f1e8; text-align:left; z-index:1; box-shadow: 6px 0 6px -6px rgba(0,0,0,.25); }
+  .cap { font-size:10px; letter-spacing:.1em; color:#6b6862; margin-top:8px }
+  .delta { font-size: 11px; color:#444; margin: 6px 0 0 }
+</style>
+
+<div class="row3">
+
+  <div>
+    <p class="cap-title">Default — Concept2's arithmetic (matches the logbook page)</p>
+    <div class="ph">
+      <div class="eyebrow">WORKOUT COMPLETE</div>
+      <div class="title">Katabatic Wind</div>
+      <div class="meta">SEP 6 · 17:24 · PM5</div>
+      <div class="hero">
+        <div><div class="k">AVG SPLIT</div><div class="v">2:09.1</div></div>
+        <div><div class="k">TIME</div><div class="v">25:50</div></div>
+        <div><div class="k">DISTANCE</div><div class="v">6000<small>m</small></div></div>
+      </div>
+      <span class="badge">MACHINE CONFIRMED · WORK ONLY</span>
+      <div class="grid6">
+        <div><div class="k">AVG WATTS</div><div class="v">162</div></div>
+        <div><div class="k">CALORIES</div><div class="v">372</div></div>
+        <div><div class="k">CAL / HOUR</div><div class="v">863</div></div>
+        <div><div class="k">RATE · TARGET</div><div class="v">26<small> / 26</small></div></div>
+        <div><div class="k">DRAG</div><div class="v">101</div></div>
+        <div><div class="k">AVG HR</div><div class="v dim">—</div></div>
+      </div>
+      <div class="feel">HOW DID IT FEEL?<div></div><div></div></div>
+      <h5>INTERVALS <span>PACES OFF 6K 2:05.0</span></h5>
+      <table class="iv">
+        <thead><tr><th style="text-align:left">#</th><th>TIME</th><th>TARGET</th><th>PACE</th><th>Δ</th><th>SPM</th></tr></thead>
+        <tbody>
+          <tr><td style="text-align:left">1</td><td>5:13.5</td><td>2:10.0</td><td class="slow">2:10.6</td><td class="slow">+0.6</td><td>27 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">2</td><td>5:09.0</td><td>2:10.0</td><td class="fast">2:08.7</td><td class="fast">−1.3</td><td>26 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">3</td><td>5:10.1</td><td>2:10.0</td><td class="fast">2:09.2</td><td class="fast">−0.8</td><td>27 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">4</td><td>5:10.1</td><td>2:10.0</td><td class="fast">2:09.2</td><td class="fast">−0.8</td><td>27 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">5</td><td>5:07.4</td><td>2:10.0</td><td class="fast">2:08.0</td><td class="fast">−2.0</td><td>27 <span class="dim">/ 26</span></td></tr>
+        </tbody>
+      </table>
+      <h5>MACHINE SUMMARY <span>PM5 · PER INTERVAL</span></h5>
+      <div class="scroller">
+        <table class="st">
+          <thead><tr><th class="pin">#</th><th>HR</th><th>WATTS</th><th>CAL</th><th>CAL/HOUR</th><th>DRAG</th><th>REST m</th></tr></thead>
+          <tbody>
+            <tr><td class="pin">1</td><td>55</td><td>157</td><td>73</td><td>838</td><td>101</td><td class="dim">—</td></tr>
+            <tr><td class="pin">2</td><td>55</td><td>164</td><td>75</td><td>873</td><td>101</td><td class="dim">—</td></tr>
+            <tr><td class="pin">3</td><td>55</td><td>162</td><td>74</td><td>859</td><td>101</td><td class="dim">—</td></tr>
+            <tr><td class="pin">4</td><td>55</td><td>162</td><td>75</td><td>870</td><td>102</td><td class="dim">—</td></tr>
+            <tr><td class="pin">5</td><td>170</td><td>167</td><td>75</td><td>878</td><td>101</td><td class="dim">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cap">← SCROLL →</div>
+    </div>
+    <p class="delta">HR 55·55·55·55·170 under an average of 78 is what a real belt row looks like — left in on purpose.</p>
+  </div>
+
+  <div>
+    <p class="cap-title">Option — the PM5's own watts and cal/hr (matches the monitor's screen)</p>
+    <div class="ph">
+      <div class="eyebrow">WORKOUT COMPLETE</div>
+      <div class="title">Katabatic Wind</div>
+      <div class="meta">SEP 6 · 17:24 · PM5</div>
+      <div class="hero">
+        <div><div class="k">AVG SPLIT</div><div class="v">2:09.1</div></div>
+        <div><div class="k">TIME</div><div class="v">25:50</div></div>
+        <div><div class="k">DISTANCE</div><div class="v">6000<small>m</small></div></div>
+      </div>
+      <span class="badge">MACHINE CONFIRMED · WORK ONLY</span>
+      <div class="grid6">
+        <div><div class="k">AVG WATTS</div><div class="v">162</div></div>
+        <div><div class="k">CALORIES</div><div class="v">372</div></div>
+        <div><div class="k">CAL / HOUR</div><div class="v">858</div></div>
+        <div><div class="k">RATE · TARGET</div><div class="v">26<small> / 26</small></div></div>
+        <div><div class="k">DRAG</div><div class="v">101</div></div>
+        <div><div class="k">AVG HR</div><div class="v dim">—</div></div>
+      </div>
+      <div class="feel">HOW DID IT FEEL?<div></div><div></div></div>
+      <h5>INTERVALS <span>PACES OFF 6K 2:05.0</span></h5>
+      <table class="iv">
+        <thead><tr><th style="text-align:left">#</th><th>TIME</th><th>TARGET</th><th>PACE</th><th>Δ</th><th>SPM</th></tr></thead>
+        <tbody>
+          <tr><td style="text-align:left">1</td><td>5:13.5</td><td>2:10.0</td><td class="slow">2:10.6</td><td class="slow">+0.6</td><td>27 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">2</td><td>5:09.0</td><td>2:10.0</td><td class="fast">2:08.7</td><td class="fast">−1.3</td><td>26 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">3</td><td>5:10.1</td><td>2:10.0</td><td class="fast">2:09.2</td><td class="fast">−0.8</td><td>27 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">4</td><td>5:10.1</td><td>2:10.0</td><td class="fast">2:09.2</td><td class="fast">−0.8</td><td>27 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">5</td><td>5:07.4</td><td>2:10.0</td><td class="fast">2:08.0</td><td class="fast">−2.0</td><td>27 <span class="dim">/ 26</span></td></tr>
+        </tbody>
+      </table>
+      <h5>MACHINE SUMMARY <span>PM5 · PER INTERVAL</span></h5>
+      <div class="scroller">
+        <table class="st">
+          <thead><tr><th class="pin">#</th><th>HR</th><th>WATTS</th><th>CAL</th><th>CAL/HOUR</th><th>DRAG</th><th>REST m</th></tr></thead>
+          <tbody>
+            <tr><td class="pin">1</td><td>55</td><td>157</td><td>73</td><td>840</td><td>101</td><td class="dim">—</td></tr>
+            <tr><td class="pin">2</td><td>55</td><td>164</td><td>75</td><td>864</td><td>101</td><td class="dim">—</td></tr>
+            <tr><td class="pin">3</td><td>55</td><td>162</td><td>74</td><td>857</td><td>101</td><td class="dim">—</td></tr>
+            <tr><td class="pin">4</td><td>55</td><td>162</td><td>75</td><td>857</td><td>102</td><td class="dim">—</td></tr>
+            <tr><td class="pin">5</td><td>170</td><td>167</td><td>75</td><td>874</td><td>101</td><td class="dim">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cap">← SCROLL →</div>
+    </div>
+    <p class="delta"><b>Measured deltas vs the logbook, this row:</b> watts identical on all six cells; cal/hr 840/864/857/857/874/858 against the logbook's 838/873/859/870/878/863 (PM5 formula from watts vs Concept2's calories ÷ time). Across the committed corpus: watts ≤1 W apart; cal/hr 24–78 apart on six of nine sessions.</p>
+  </div>
+
+  <div>
+    <p class="cap-title">A REAL old machine row (saved before this ships)</p>
+    <div class="ph">
+      <div class="eyebrow">LOG</div>
+      <div class="title">Petrichor</div>
+      <div class="meta">SEP 4 · 18:02 · PM5</div>
+      <div class="hero">
+        <div><div class="k">AVG SPLIT</div><div class="v">2:10.4</div></div>
+        <div><div class="k">TIME</div><div class="v">10:36</div></div>
+        <div><div class="k">DISTANCE</div><div class="v">2440<small>m</small></div></div>
+      </div>
+      <span class="badge">MACHINE CONFIRMED · WORK ONLY</span>
+      <div class="grid6">
+        <div><div class="k">AVG WATTS</div><div class="v">158</div></div>
+        <div><div class="k">CALORIES</div><div class="v dim">—</div></div>
+        <div><div class="k">CAL / HOUR</div><div class="v dim">—</div></div>
+        <div><div class="k">RATE · TARGET</div><div class="v">26<small> / 26</small></div></div>
+        <div><div class="k">DRAG</div><div class="v">104</div></div>
+        <div><div class="k">AVG HR</div><div class="v dim">—</div></div>
+      </div>
+      <h5>INTERVALS <span>PACES OFF 6K 2:05.0</span></h5>
+      <table class="iv">
+        <thead><tr><th style="text-align:left">#</th><th>TIME</th><th>TARGET</th><th>PACE</th><th>Δ</th><th>SPM</th></tr></thead>
+        <tbody>
+          <tr><td style="text-align:left">1</td><td>3:00.0</td><td>2:17.0</td><td class="fast">2:11.1</td><td class="fast">−5.9</td><td>26 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">2</td><td>3:00.0</td><td>2:17.0</td><td class="fast">2:10.0</td><td class="fast">−7.0</td><td>27 <span class="dim">/ 26</span></td></tr>
+          <tr><td style="text-align:left">3</td><td>3:00.0</td><td>2:17.0</td><td class="fast">2:10.2</td><td class="fast">−6.8</td><td>26 <span class="dim">/ 26</span></td></tr>
+        </tbody>
+      </table>
+      <h5>MACHINE SUMMARY <span>PM5 · PER INTERVAL</span></h5>
+      <div class="scroller">
+        <table class="st">
+          <thead><tr><th class="pin">#</th><th>HR</th><th>WATTS</th><th>CAL</th><th>CAL/HOUR</th><th>DRAG</th><th>REST m</th></tr></thead>
+          <tbody>
+            <tr><td class="pin">1</td><td>132</td><td>155</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+            <tr><td class="pin">2</td><td>141</td><td>159</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+            <tr><td class="pin">3</td><td>144</td><td>158</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cap">← SCROLL →</div>
+    </div>
+    <p class="delta">Old rows already hold time, distance, pace, SPM, HR, per-interval rest metres, 0x0039's stroke rate and drag — so 3 of 6 tiles and 3 of 6 columns populate. Not a wall of dashes.</p>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:18px">
+  <p style="font-size:12px;color:#444"><b>Ruled 2026-09-07 (James):</b> <code>CAL / HR</code> is <code>CAL / HOUR</code> (and the strip's <code>CAL/HR</code> is <code>CAL/HOUR</code>) so that HR means heart rate only — "Cal / HR and avg hr are a bit confusing both using hr". Applied to every panel here.</p>
+  <p style="font-size:12px;color:#444"><b>Ruled 2026-09-07 (James, on artboard 04):</b> the sixth tile is <b>AVG HR</b> (0x0039's average heart rate; a dash without a belt), not REST — the REST tile repeated the total line's rest metres from a second source. The PM5's rest total stays stored and goes to Concept2 in PR 2. Any REST value drawn in a tile above was replaced by the belt's number or a dash.</p>
+  <p style="font-size:12px;color:#444"><b>Corrected 2026-09-07 (PM final gate C2):</b> the old-row strip's REST m column read 18 / 21 / 0 when first approved; a STORED row's REST m is a dash on every row until <code>LogStep</code> carries per-step rest metres (ROADMAP register) — only the live door fills it. James was told the approved artefact moved.</p>
+  <p style="font-size:12px;color:#444"><b>Rules drawn in:</b> no ALL row (the tiles are the session); no SPM in the strip (the INTERVALS table shows it with its target); a Just Row gets the tiles and no strip; the pinned column uses <code>border-collapse: separate</code> with an opaque background and a soft shadow; <code>—</code> is the app's own <code>DASH</code>, and <code>0</code> is a value. RATE · TARGET's target shows only when every interval agrees.</p>
+</div>

@@ -7,6 +7,8 @@ import type { PlanData } from "../api/usePlan";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import TraceChart from "../log/TraceChart";
 import BackLink from "../shell/BackLink";
+import { DASH } from "../workout/connected/surfaceModel";
+import MachineSummaryTable from "./MachineSummaryTable";
 import type {
   MeasuredRow,
   SummaryHeroes,
@@ -309,12 +311,42 @@ export function SummaryMetaBlock({
  *  when every hero is absent" check — a caller never needs to repeat that
  *  gate, it can render this unconditionally and get nothing back when
  *  there's nothing to show (old rows, spec §5B). */
+/** Phase LP §3: one machine tile. `value === undefined` renders the house
+ *  dash (`DASH`, `surfaceModel.ts`) and NO unit/suffix — "the machine did
+ *  not say" is a blank, not a zero with a unit hanging off it; `0` renders
+ *  as 0. `role="group"` + `aria-label` names the tile for a screen reader
+ *  and for tests, the way `.summary-hero`'s label/value pair already
+ *  reads. */
+function MachineTile({
+  label,
+  value,
+  suffix,
+  unit,
+}: {
+  label: string;
+  value: number | undefined;
+  suffix?: string;
+  unit?: string;
+}) {
+  return (
+    <div className="summary-machine-tile" role="group" aria-label={label}>
+      <span className="summary-hero-label">{label}</span>
+      <span className="summary-machine-value">
+        {value === undefined ? DASH : value}
+        {value !== undefined && suffix !== undefined && <small>{suffix}</small>}
+        {value !== undefined && unit !== undefined && <small>{unit}</small>}
+      </span>
+    </div>
+  );
+}
+
 export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
   const hasHero =
     heroes.avgSplit !== undefined ||
     heroes.time !== undefined ||
     heroes.distanceMeters !== undefined;
   if (!hasHero) return null;
+  const machine = heroes.machine;
   return (
     <div className="summary-heroes-block">
       <div className="summary-heroes">
@@ -347,6 +379,41 @@ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
           a monitor row with no measured time at all). */}
       {heroes.totalLine !== undefined && (
         <p className="summary-total-line">{heroes.totalLine}</p>
+      )}
+      {/* Phase LP §3 (Gate 0 approved 2026-09-07, artboard
+          docs/design/logbook-parity/03-chosen-composed.html): the six
+          machine tiles, machine rows only. Watts and cal/hr are the
+          LOGBOOK's arithmetic (§3.1, James: "logbook formula"); RATE /
+          TARGET is one tile, the target shown only when every interval
+          agreed on one. */}
+      {machine !== undefined && (
+        <div
+          className="summary-machine-tier"
+          data-testid="summary-machine-tier"
+        >
+          <MachineTile label="AVG WATTS" value={machine.avgWatts} />
+          <MachineTile label="CALORIES" value={machine.calories} />
+          <MachineTile label="CAL / HOUR" value={machine.calPerHour} />
+          {/* The Gate 0 artboard's own label, `RATE · TARGET`; with no
+              agreed target the label promises one number and shows one
+              (whole-branch review M5 — a two-number label over a lone
+              `26` was never drawn). */}
+          <MachineTile
+            label={machine.targetRate !== undefined ? "RATE · TARGET" : "RATE"}
+            value={machine.rate}
+            suffix={
+              machine.targetRate !== undefined
+                ? ` / ${machine.targetRate}`
+                : undefined
+            }
+          />
+          <MachineTile label="DRAG" value={machine.drag} />
+          {/* James, 2026-09-07 (review M3, on artboard 04): AVG HR in the
+              sixth cell, not REST — rest metres already live on the total
+              line and a second source four lines apart said nothing a
+              rower could act on. */}
+          <MachineTile label="AVG HR" value={machine.avgHr} />
+        </div>
       )}
     </div>
   );
@@ -626,7 +693,7 @@ export default function PostWorkoutSummary({
   saveDisabled = false,
   children,
 }: PostWorkoutSummaryProps) {
-  const { meta, heroes, rows, caption } = model;
+  const { meta, heroes, rows, caption, machineRows = [] } = model;
 
   // §2F: `Log against plan` carries the plan's own position information
   // (`Log against plan · SESSION n OF N`) whether it's leading or demoted —
@@ -733,6 +800,11 @@ export default function PostWorkoutSummary({
         pacesOffCaption={pacesOffCaption}
         caption={caption}
       />
+
+      {/* Phase LP §3: the PM5's per-interval figures, directly under the
+          INTERVALS table it numbers the same way. Renders nothing without
+          machine rows. */}
+      <MachineSummaryTable rows={machineRows} />
 
       {/* Trace-rendering spec (Phase LT spec 3), §1: "below the INTERVALS
           list ... above the save stack on the live door" — placed here,

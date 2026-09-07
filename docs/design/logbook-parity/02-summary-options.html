@@ -1,0 +1,132 @@
+<h2>The summary: where do the session numbers live?</h2>
+<p class="subtitle">B is the table. Concept2 also lists avg stroke rate, target stroke rate, avg power, total calories, avg cal/hr, rest distance and drag factor for the whole piece. Three places they could go on our screen.</p>
+
+<style>
+  .ph { width: 360px; background: #f4f1e8; color: #1b1a17; border: 1px solid #cfcabd; border-radius: 22px; padding: 16px 20px 18px; font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 12px; overflow: hidden; }
+  .eyebrow { font-size:10px; letter-spacing:.12em; color:#6b6862; }
+  .title { font-family: "Newsreader", Georgia, serif; font-size: 24px; margin: 2px 0 2px; }
+  .meta { font-size: 10px; letter-spacing:.1em; color:#6b6862; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #1b1a17; }
+  .hero { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0 10px; }
+  .hero .k { font-size:10px; letter-spacing:.12em; color:#6b6862 } .hero .v { font-size: 22px; font-weight:700; letter-spacing:-.01em } .hero .v small{ font-size:11px; font-weight:400; margin-left:2px }
+  .badge { display:inline-block; font-size:10px; letter-spacing:.12em; padding:3px 6px; border:1px solid #1b1a17; margin-bottom:8px }
+  .kv { display:flex; justify-content:space-between; padding: 8px 0; border-bottom:1px solid #dcd8cc; }
+  .kv:last-child { border-bottom:0 }
+  .kv b { font-weight:700 } .kv small { color:#6b6862; font-size:10px; margin-left:4px }
+  .card2 { background:#fffdf7; border:1px solid #1b1a17; padding: 4px 12px; margin: 6px 0 10px; }
+  .grid6 { display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; margin: 8px 0 10px; }
+  .grid6 .k { font-size:9px; letter-spacing:.12em; color:#6b6862 } .grid6 .v { font-size: 17px; font-weight:700 } .grid6 .v small{ font-size:10px; font-weight:400 }
+  .feel { border:1px solid #1b1a17; background:#fffdf7; padding:10px 12px; margin:6px 0 10px; font-size:10px; letter-spacing:.12em; color:#6b6862 }
+  .feel div { height:26px; background:#e9e5d8; margin-top:6px }
+  h5 { font: 700 11px/1 "IBM Plex Mono", monospace; letter-spacing:.12em; margin: 8px 0 6px; display:flex; justify-content:space-between }
+  h5 span { font-weight:400; color:#6b6862; font-size:10px }
+  table.st { border-collapse: collapse; white-space: nowrap; width:100% }
+  table.st th, table.st td { padding: 6px 6px; text-align: right; border-bottom: 1px solid #dcd8cc; font-variant-numeric: tabular-nums; }
+  table.st th { font-weight: 400; color:#6b6862; font-size:10px; letter-spacing:.12em; }
+  table.st tr.total td { font-weight:700; background:#fffdf7 }
+  .cap { font-size:10px; letter-spacing:.1em; color:#6b6862; margin-top:6px }
+  .dim { color:#9a968c }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="ph">
+        <div class="eyebrow">WORKOUT COMPLETE</div>
+        <div class="title">Katabatic Wind</div>
+        <div class="meta">SEP 6 · 17:24 · PM5</div>
+        <div class="hero">
+          <div><div class="k">AVG SPLIT</div><div class="v">2:09.1</div></div>
+          <div><div class="k">TIME</div><div class="v">25:50</div></div>
+          <div><div class="k">DISTANCE</div><div class="v">6000<small>m</small></div></div>
+        </div>
+        <span class="badge">MACHINE CONFIRMED · WORK ONLY</span>
+        <div class="card2">
+          <div class="kv"><span>AVG STROKE RATE</span><b>26<small>s/m</small></b></div>
+          <div class="kv"><span>TARGET STROKE RATE</span><b>26<small>s/m</small></b></div>
+          <div class="kv"><span>AVG POWER</span><b>162<small>W</small></b></div>
+          <div class="kv"><span>TOTAL CALORIES</span><b>372<small>cal</small></b></div>
+          <div class="kv"><span>AVG CAL / HOUR</span><b>863</b></div>
+          <div class="kv"><span>REST DISTANCE</span><b class="dim">—</b></div>
+          <div class="kv"><span>DRAG FACTOR</span><b>101</b></div>
+        </div>
+        <div class="feel">HOW DID IT FEEL?<div></div><div></div></div>
+        <h5>INTERVALS <span>PACES OFF 6K 2:05.0</span></h5>
+        <div class="cap">…today's table, then the MACHINE strip (B)</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — A list under the hero, Concept2's way</h3>
+      <p>Hero keeps AVG SPLIT · TIME · DISTANCE. Under the MACHINE CONFIRMED badge, a bordered list with the seven rows in Concept2's order and units. Everything the logbook will show is above the fold, before the feel card.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="ph">
+        <div class="eyebrow">WORKOUT COMPLETE</div>
+        <div class="title">Katabatic Wind</div>
+        <div class="meta">SEP 6 · 17:24 · PM5</div>
+        <div class="hero">
+          <div><div class="k">AVG SPLIT</div><div class="v">2:09.1</div></div>
+          <div><div class="k">TIME</div><div class="v">25:50</div></div>
+          <div><div class="k">DISTANCE</div><div class="v">6000<small>m</small></div></div>
+        </div>
+        <span class="badge">MACHINE CONFIRMED · WORK ONLY</span>
+        <div class="grid6">
+          <div><div class="k">AVG WATTS</div><div class="v">162</div></div>
+          <div><div class="k">CALORIES</div><div class="v">372</div></div>
+          <div><div class="k">CAL / HOUR</div><div class="v">863</div></div>
+          <div><div class="k">RATE · TARGET</div><div class="v">26<small> / 26</small></div></div>
+          <div><div class="k">DRAG</div><div class="v">101</div></div>
+          <div><div class="k">REST</div><div class="v dim">—</div></div>
+        </div>
+        <div class="feel">HOW DID IT FEEL?<div></div><div></div></div>
+        <h5>INTERVALS <span>PACES OFF 6K 2:05.0</span></h5>
+        <div class="cap">…today's table, then the MACHINE strip (B)</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — A second tier of tiles in the hero</h3>
+      <p>Six smaller tiles under the three big ones. Denser, scans faster, but the labels have to shrink and RATE · TARGET packs two numbers into one tile.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="ph">
+        <div class="eyebrow">WORKOUT COMPLETE</div>
+        <div class="title">Katabatic Wind</div>
+        <div class="meta">SEP 6 · 17:24 · PM5</div>
+        <div class="hero">
+          <div><div class="k">AVG SPLIT</div><div class="v">2:09.1</div></div>
+          <div><div class="k">TIME</div><div class="v">25:50</div></div>
+          <div><div class="k">DISTANCE</div><div class="v">6000<small>m</small></div></div>
+        </div>
+        <span class="badge">MACHINE CONFIRMED · WORK ONLY</span>
+        <div class="feel">HOW DID IT FEEL?<div></div><div></div></div>
+        <h5>INTERVALS <span>PACES OFF 6K 2:05.0</span></h5>
+        <div class="cap">…today's table</div>
+        <h5 style="margin-top:12px">MACHINE <span>PM5 · PER INTERVAL</span></h5>
+        <table class="st">
+          <thead><tr><th style="text-align:left">#</th><th>SPM</th><th>HR</th><th>WATTS</th><th>CAL</th><th>CAL/HOUR</th></tr></thead>
+          <tbody>
+            <tr class="total"><td style="text-align:left">ALL</td><td>26</td><td>78</td><td>162</td><td>372</td><td>863</td></tr>
+            <tr><td style="text-align:left">1</td><td>27</td><td>55</td><td>157</td><td>73</td><td>838</td></tr>
+            <tr><td style="text-align:left">…</td><td></td><td></td><td></td><td></td><td></td></tr>
+          </tbody>
+        </table>
+        <div class="cap">TARGET RATE 26 · DRAG 101 · REST — m</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — No separate summary; the strip's ALL row is it</h3>
+      <p>The hero stays three numbers. The session figures live only in the machine strip's bold ALL row, with the three that aren't per-interval (target rate, drag, rest) as one caption line under it. Least new surface; the totals sit far down the screen.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:16px">
+  <p style="font-size:12px;color:#444"><b>Note on TARGET STROKE RATE:</b> Concept2 shows a single session target. Ours is per interval; the summary row would show it only when every interval shares one target, otherwise <b>—</b> (the per-interval targets live in the table).</p>
+</div>

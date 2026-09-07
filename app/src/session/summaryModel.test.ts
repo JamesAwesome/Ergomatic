@@ -29,6 +29,7 @@ import {
 } from "./logDraft";
 import type { SessionRun } from "./run";
 import {
+  machineSplitRows,
   buildSpmCell,
   buildSummaryModel,
   buildTotalLine,
@@ -679,6 +680,259 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
     recoveryHeartRateBpm: null,
     avgPaceSecondsPer500m: 124.0, // 0x0039 offset 18-19, decoded (PRIMARY)
   };
+
+  // Phase LP (spec 2026-09-06-logbook-parity §3): the hero's MACHINE tier.
+  // Literals below are hand computed, never via `logbookDerived`: watts =
+  // round(2.80/(124.0/500)³) = round(2.80/0.015253) = round(183.6) = 184
+  // (the exit-7 0x003A reads 184 W too — spec §1.1's identity); cal/hr =
+  // floor(32 × 3600 / 124.0) = floor(929.0) = 929 (the PM5's own 0x003A
+  // says 931 — the logbook's is what we show, §3.1).
+  it("Phase LP: tier A carries the six machine tiles — logbook watts and cal/hr from the totals, calories/drag/rest from the record, RATE from 0x0039 on a finished piece, TARGET only when every interval agrees", () => {
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({
+            kind: "distance",
+            value: 250,
+            restSeconds: 60,
+            displaySpm: 26,
+          }),
+          interval({
+            kind: "distance",
+            value: 250,
+            restSeconds: 60,
+            displaySpm: 26,
+          }),
+        ],
+      },
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: {
+        ...exit7SummaryDetail,
+        totalCalories: 32,
+        avgWatts: 184,
+        avgCalPerHour: 931,
+        totalRestMeters: 242,
+      },
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.heroes.machine).toStrictEqual({
+      avgWatts: 184,
+      calories: 32,
+      calPerHour: 929,
+      rate: 26,
+      targetRate: 26,
+      drag: 100,
+      avgHr: undefined,
+    });
+  });
+
+  it("Phase LP (James 2026-09-07, M3): the sixth tile is AVG HR off 0x0039 — a belt reading shows, no belt (wire null) is undefined, and REST is no longer a tile", () => {
+    const withBelt = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: {
+        ...exit7SummaryDetail,
+        avgHeartRateBpm: 152,
+        totalRestMeters: 242,
+      },
+    });
+    const tier = buildSummaryModel({ door: "monitor", run: withBelt }).heroes
+      .machine;
+    expect(tier?.avgHr).toBe(152);
+    expect(tier).not.toHaveProperty("restMeters");
+  });
+
+  it("Phase LP: an OLD tier-A row (summaryDetail without 0x003A) still derives watts, and leaves calories / cal-hr / rest undefined — a dash, never 0; TARGET is undefined when the intervals disagree", () => {
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "distance", value: 250, displaySpm: 26 }),
+          interval({ kind: "distance", value: 250, displaySpm: 28 }),
+        ],
+      },
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: exit7SummaryDetail,
+    });
+    const machine = buildSummaryModel({ door: "monitor", run }).heroes.machine;
+    expect(machine?.avgWatts).toBe(184);
+    expect(machine?.calories).toBeUndefined();
+    expect(machine?.calPerHour).toBeUndefined();
+    expect(machine?.avgHr).toBeUndefined();
+    expect(machine?.targetRate).toBeUndefined();
+    expect(machine?.drag).toBe(100);
+  });
+
+  it("Phase LP: a TERMINATED tier-A piece takes RATE from the splits' time-weighted mean, not 0x0039's doubled figure (46 on the wire → 26.3 from the two splits → 26)", () => {
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "rower",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: { ...exit7SummaryDetail, avgStrokeRate: 46 },
+    });
+    // (67.9 × 25 + 56.1 × 28) / 124.0 = (1697.5 + 1570.8) / 124.0 = 26.36
+    expect(
+      buildSummaryModel({ door: "monitor", run }).heroes.machine?.rate,
+    ).toBe(26);
+  });
+
+  it("Phase LP: tier B (no summaryTotals) and the zero-totals hardware shape carry NO machine tier — the tier is the machine's own session, not a quotient of ours", () => {
+    const tierB = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run: tierB }).heroes.machine,
+    ).toBeUndefined();
+    const zero = monitorRun({
+      program: exit7Program,
+      actuals: [],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 0, workDistanceMeters: 0 },
+      summaryDetail: { ...exit7SummaryDetail, totalCalories: 0 },
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run: zero }).heroes.machine,
+    ).toBeUndefined();
+  });
+
+  it("Phase LP §3: machineSplitRows maps pm5 steps to the strip's rows — the INTERVALS table's own numbering, logbook watts and cal/hr off the step's seconds/metres/calories, a null belt kept as null — and skips manual steps entirely", () => {
+    // 1200 m in 313.5 s → 157 W; 73 cal → floor(73×3600/313.5) = 838.
+    // 1200 m in 307.4 s → round(2.80/(307.4/1200)³) = round(166.5) = 167;
+    // 75 cal → floor(75×3600/307.4) = floor(878.3) = 878.
+    const rows = machineSplitRows([
+      {
+        actualSource: "pm5",
+        actualSeconds: 313.5,
+        actualMeters: 1200,
+        avgHr: 55,
+        machineCalories: 73,
+        machineDragFactor: 101,
+      },
+      { actualSource: "assumed", actualSeconds: 300, actualMeters: 1200 },
+      {
+        actualSource: "pm5",
+        actualSeconds: 307.4,
+        actualMeters: 1200,
+        avgHr: undefined,
+        machineCalories: 75,
+      },
+    ]);
+    expect(rows).toStrictEqual([
+      {
+        index: 1,
+        hr: 55,
+        watts: 157,
+        calories: 73,
+        calPerHour: 838,
+        drag: 101,
+        restMeters: undefined,
+      },
+      {
+        index: 3,
+        hr: undefined,
+        watts: 167,
+        calories: 75,
+        calPerHour: 878,
+        drag: undefined,
+        restMeters: undefined,
+      },
+    ]);
+  });
+
+  it("Phase LP (review L5): on a legacy warm-up seed the strip's REST cell reads the step's OWN interval's rest, not its neighbour's", () => {
+    // Program interval 0 was a warm-up (seed kind "warmup" → no step);
+    // intervals 1 and 2 are the two emitted rows. Rest metres 147 / 95
+    // belong to intervals 1 / 2; an off-by-one would read 0's (undefined)
+    // and 1's (147) instead.
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "time", value: 300 }),
+          interval({ kind: "distance", value: 250, restSeconds: 60 }),
+          interval({ kind: "distance", value: 250, restSeconds: 60 }),
+        ],
+      },
+      logSeed: {
+        steps: [
+          { label: "Warm-up", kind: "warmup" as unknown as "work" },
+          { label: "Interval 1", kind: "work" },
+          { label: "Interval 2", kind: "work" },
+        ],
+        paces: {},
+      },
+      actuals: [
+        { ...exit7Actual1, index: 1, calories: 16 },
+        { ...exit7Actual2, index: 2, calories: 16 },
+      ],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: exit7SummaryDetail,
+    });
+    const rows = buildSummaryModel({ door: "monitor", run }).machineRows;
+    expect(rows?.map((r) => [r.index, r.restMeters])).toStrictEqual([
+      [1, 147],
+      [2, 95],
+    ]);
+  });
+
+  it("Phase LP §3: a Just Row with the machine's own totals carries the six tiles and NO strip (steps: [], nothing to number)", () => {
+    const run = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 600, workDistanceMeters: 2400 },
+      summaryDetail: { ...exit7SummaryDetail, totalCalories: 140 },
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    // round(2.80/(600/2400)³) = round(179.2) = 179; floor(140×3600/600) = 840
+    expect(model.heroes.machine?.avgWatts).toBe(179);
+    expect(model.heroes.machine?.calPerHour).toBe(840);
+    expect(model.machineRows).toStrictEqual([]);
+  });
+
+  it("Phase LP §3: the monitor model's machineRows come off the run's own steps, with each interval's rest metres from its actual; a run with no seed (Just Row) has none", () => {
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [
+        { ...exit7Actual1, calories: 16, dragFactor: 100 },
+        { ...exit7Actual2, calories: 16, dragFactor: 100 },
+      ],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: exit7SummaryDetail,
+    });
+    const rows = buildSummaryModel({ door: "monitor", run }).machineRows;
+    // 250 m in 67.9 s → round(2.80/(67.9/250)³) = round(2.80/0.020033) = 140;
+    // 16 cal → floor(16×3600/67.9) = floor(848.3) = 848.
+    expect(rows?.[0]).toStrictEqual({
+      index: 1,
+      hr: undefined,
+      watts: 140,
+      calories: 16,
+      calPerHour: 848,
+      drag: 100,
+      restMeters: 147,
+    });
+    expect(rows?.[1]?.restMeters).toBe(95);
+    // A Just Row: no intervals, a seed with no steps (the shape
+    // `completeMonitorRun` stores for a free row).
+    const justRow = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "finished",
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run: justRow }).machineRows,
+    ).toStrictEqual([]);
+  });
 
   it("tier A (run.summaryTotals present, PR #190): DISTANCE 500, TIME 2:04, AVG SPLIT 2:04.0 — the machine's OWN numbers verbatim, never a quotient of ours; TOTAL line 4:04 · plus 242 m coasting in rest, using RC-1's stored restMeters", () => {
     const run = monitorRun({

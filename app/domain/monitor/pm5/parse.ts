@@ -410,10 +410,11 @@ export function parseSummaryLogStamp(
  *
  *  This is a RING-ONLY diagnostic oracle's decoder (`driver.ts`'s
  *  `recordRestDistanceVerdict`), not a gate: nothing in this driver's
- *  control flow branches on either field, and no caller needs the rest of
- *  0x003A's layout — a wider parser would be undecoded surface with no
- *  reader, the exact shape I5 already warns against for this
- *  characteristic. */
+ *  control flow branches on either field. The "no wider parser" rule this
+ *  comment used to state was RELAXED by Phase LP (2026-09-06): four more
+ *  0x003A fields gained readers (the record, the screen, the upload) and
+ *  are decoded by `parseAdditionalSummary` below; the rest of the frame
+ *  still has none and stays undecoded — I5's rule, applied per field. */
 export interface AdditionalSummaryRest {
   /** Total Rest Distance, offsets 12-14, 1 m/lsb, unscaled — a RUNNING
    *  TOTAL across the whole workout (PRIMARY, both committed captures:
@@ -439,6 +440,44 @@ export function parseAdditionalSummaryRest(
   return {
     totalRestDistanceMeters: readU24LE(bytes, 12),
     intervalRestSeconds: readU16LE(bytes, 15),
+  };
+}
+
+/**
+ * 0x003A — C2 rowing end-of-workout additional summary 1, 19 bytes
+ * (BLE rev 1.30 p.22; docs/monitor/pm5-interface-notes.md §23). Phase LP
+ * reads the four fields the logbook shows and the upload carries: Total
+ * Calories [8..9], Watts [10..11], Total Rest Distance [12..14], Avg
+ * Calories [17..18]. Each offset is confirmed by an identity we did not
+ * compute (spec 2026-09-06-logbook-parity §1.1): the per-split 0x0038
+ * calories sum to [8..9] on 9/9 committed captures, [10..11] is within
+ * 1 W of round(2.80/(t/d)³) from 0x0039's own time and distance, and
+ * [12..14] is the same field `parseAdditionalSummaryRest` already
+ * verified against the PM5's memory screen (147 + 95 = 242).
+ *
+ * Interval Rest Time [15..16] is deliberately NOT returned: it reads 0 on
+ * every committed capture including genuine r60 rests, so its meaning is
+ * undetermined and an unobserved field never ships as a stored value
+ * (spec §1.1, §2.2). This widens the I5 "no reader" narrowing above on
+ * purpose — these four fields now have readers (the record, the screen,
+ * the upload), the rest of the frame still does not.
+ */
+export interface AdditionalSummary {
+  totalCalories: number;
+  avgWatts: number;
+  totalRestDistanceMeters: number;
+  avgCalPerHour: number;
+}
+
+export function parseAdditionalSummary(
+  bytes: Uint8Array,
+): AdditionalSummary | null {
+  if (bytes.length < 19) return null;
+  return {
+    totalCalories: readU16LE(bytes, 8),
+    avgWatts: readU16LE(bytes, 10),
+    totalRestDistanceMeters: readU24LE(bytes, 12),
+    avgCalPerHour: readU16LE(bytes, 17),
   };
 }
 
@@ -652,7 +691,7 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
  * bundles an interval's trailing rest into itself the same way this
  * characteristic pairs a work value with a sibling rest value, and
  * `IntervalActual` (like `ProgramInterval`) represents the work bout;
- * `splitIntervalRestHeartRateBpm` is decoded but has no slot here.
+ * `splitIntervalRestHeartRateBpm` rides along as `restHeartRateBpm` since Phase LP.
  */
 export function toIntervalActual(raw: RawPm5Status): IntervalActual {
   return {
@@ -676,5 +715,14 @@ export function toIntervalActual(raw: RawPm5Status): IntervalActual {
     // (0x0032's own, different field).
     restSeconds: raw.intervalRestTimeSeconds,
     type: raw.splitIntervalType,
+    // Phase LP: 0x0038's own calories / cal-hr / watts / drag / rest HR,
+    // already decoded by `parseAdditionalSplitIntervalData` and until now
+    // dropped here. See `IntervalActual`'s own doc comment for why the
+    // PM5's cal/hr and watts are kept as provenance, not shown.
+    calories: raw.splitIntervalTotalCalories,
+    calPerHour: raw.splitIntervalAvgCalories,
+    watts: raw.splitIntervalPowerWatts,
+    dragFactor: raw.splitAvgDragFactor,
+    restHeartRateBpm: raw.splitIntervalRestHeartRateBpm,
   };
 }

@@ -135,6 +135,148 @@ const EXIT7_STEPS: StoredLog["steps"] = [
 ];
 
 describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL line", () => {
+  // Phase LP (spec §3): the stored row's machine tier, same arithmetic as
+  // the live door. 6000 m in 1550.1 s → watts round(2.80/(1550.1/6000)³) =
+  // round(2.80/0.017245) = round(162.4) = 162; cal/hr floor(372 × 3600 /
+  // 1550.1) = floor(863.9) = 863 — James's photographed 6k session row.
+  it("Phase LP: a stored machine row carries the six tiles from machine_summary — logbook watts and cal/hr, calories/drag/rest verbatim, RATE from the stored 0x0039 average on a finished row, TARGET when every step's spm agrees", () => {
+    const heroes = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "finished",
+        machineWorkSeconds: 1550.1,
+        machineWorkMeters: 6000,
+        machineSummary: {
+          avgPaceSecondsPer500m: 129.2,
+          avgStrokeRate: 27,
+          avgHeartRateBpm: 142,
+          dragFactorAverage: 101,
+          totalCalories: 372,
+          avgWatts: 162,
+          avgCalPerHour: 864,
+          totalRestMeters: 0,
+        },
+        steps: [
+          { ...measuredStep(313.5, 1200, 130.6), spm: 26, actualSpm: 27 },
+          { ...measuredStep(309.0, 1200, 128.8), spm: 26, actualSpm: 27 },
+        ],
+      }),
+    ).heroes;
+    expect(heroes.machine).toStrictEqual({
+      avgWatts: 162,
+      calories: 372,
+      calPerHour: 863,
+      rate: 27,
+      targetRate: 26,
+      drag: 101,
+      avgHr: 142,
+    });
+  });
+
+  it("Phase LP §3: a stored row's machineRows come off its pm5 steps (REST a dash — no per-step rest on a stored row); a manual row has none", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        endedBy: "finished",
+        machineWorkSeconds: 622.5,
+        machineWorkMeters: 2400,
+        machineSummary: { avgPaceSecondsPer500m: 129.7 },
+        steps: [
+          {
+            ...measuredStep(313.5, 1200, 130.6),
+            avgHr: 142,
+            machineCalories: 73,
+            machineDragFactor: 101,
+          },
+          { ...measuredStep(309.0, 1200, 128.8), machineCalories: 75 },
+        ],
+      }),
+    );
+    expect(view.machineRows).toStrictEqual([
+      {
+        index: 1,
+        hr: 142,
+        watts: 157,
+        calories: 73,
+        calPerHour: 838,
+        drag: 101,
+        restMeters: undefined,
+      },
+      {
+        index: 2,
+        hr: undefined,
+        watts: 164,
+        calories: 75,
+        calPerHour: 873,
+        drag: undefined,
+        restMeters: undefined,
+      },
+    ]);
+    expect(buildStoredSummary(baseRow()).machineRows).toStrictEqual([]);
+  });
+
+  it("Phase LP (review L6): a pre-RC-1 pm5 row (no machine totals) shows neither tiles nor strip — one gate for both", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "finished",
+        workSeconds: 622.5,
+        workMeters: 2400,
+        steps: [
+          { ...measuredStep(313.5, 1200, 130.6), machineCalories: 73 },
+          { ...measuredStep(309.0, 1200, 128.8), machineCalories: 75 },
+        ],
+      }),
+    );
+    expect(view.heroes.machine).toBeUndefined();
+    expect(view.machineRows).toStrictEqual([]);
+  });
+
+  it("Phase LP §3: the strip is gated on the row's own source — a by-hand row carrying a pm5-sourced step (the e2e from-the-log fixture's shape) gets NO machine rows", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        source: "manual",
+        steps: [
+          {
+            label: "Work",
+            targetSplit: 125,
+            actualSplit: 124,
+            actualSource: "pm5",
+          },
+        ],
+      }),
+    );
+    expect(view.machineRows).toStrictEqual([]);
+  });
+
+  it("Phase LP: a stored machine row saved BEFORE this phase (machine_summary without the 0x003A keys) derives watts and dashes the rest; a manual row has no tier at all", () => {
+    const old = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        endedBy: "finished",
+        machineWorkSeconds: 636,
+        machineWorkMeters: 2440,
+        // An RC-3-era row: `summaryDetail` always wrote the nine 0x0039
+        // keys (RF3 — a real old machine row carries avgStrokeRate).
+        machineSummary: {
+          avgPaceSecondsPer500m: 130.3,
+          avgStrokeRate: 24,
+          dragFactorAverage: 104,
+        },
+      }),
+    ).heroes.machine;
+    // round(2.80/(636/2440)³) = round(2.80/0.017708) = round(158.1) = 158
+    expect(old?.avgWatts).toBe(158);
+    expect(old?.drag).toBe(104);
+    expect(old?.rate).toBe(24);
+    expect(old?.calories).toBeUndefined();
+    expect(old?.calPerHour).toBeUndefined();
+    expect(old?.avgHr).toBeUndefined();
+    expect(buildStoredSummary(baseRow()).heroes.machine).toBeUndefined();
+  });
+
   it("TIER A: a row carrying the machine's own work totals renders them verbatim, including the machine's own avg split, plus the TOTAL line from the RC-1 rest pair — DISCRIMINATING from tier B (design spec §1's own antagonist-established fact: the machine can disagree with the sum of its own rows, walk-2026-08-20's 901-vs-899), so the machine's totals here are deliberately NOT equal to Σ EXIT7_STEPS (500m/124.0s) — a test that used equal values couldn't tell tier A from tier B", () => {
     const view = buildStoredSummary(
       baseRow({

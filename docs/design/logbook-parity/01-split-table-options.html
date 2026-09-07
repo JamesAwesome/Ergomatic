@@ -1,0 +1,120 @@
+<h2>The split table: which shape?</h2>
+<p class="subtitle">Same data in all three — James's 6k (5 × 1200m), every column Concept2 shows plus our per-interval target. Scroll each phone sideways where it allows it. Pick one, or say what to mix.</p>
+
+<style>
+  .ph { width: 360px; background: #f4f1e8; color: #1b1a17; border: 1px solid #cfcabd; border-radius: 22px; padding: 14px 0 18px; font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 12px; overflow: hidden; }
+  .ph h4 { font: 700 11px/1 "IBM Plex Mono", monospace; letter-spacing: .12em; margin: 0 20px 10px; display:flex; justify-content:space-between; }
+  .ph h4 span { font-weight: 400; color:#6b6862; font-size:10px; }
+  .scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  table.st { border-collapse: separate; border-spacing: 0; white-space: nowrap; }
+  table.st th, table.st td { padding: 9px 10px; text-align: right; border-bottom: 1px solid #dcd8cc; font-variant-numeric: tabular-nums; }
+  table.st th { font-weight: 400; color:#6b6862; font-size:10px; letter-spacing:.12em; }
+  table.st .pin { position: sticky; left: 0; background: #f4f1e8; text-align:left; z-index:1; box-shadow: 6px 0 6px -6px rgba(0,0,0,.25); }
+  table.st .pin2 { position: sticky; left: 36px; background:#f4f1e8; z-index:1; box-shadow: 6px 0 6px -6px rgba(0,0,0,.25); font-weight:700; }
+  table.st tr.total td { font-weight: 700; background:#fffdf7; }
+  .fast { color:#1b54b8; font-weight:700 } .slow { color:#b0301c; font-weight:700 }
+  .strip { margin: 0 20px; border-top: 1px solid #1b1a17; }
+  .kv { display:flex; justify-content:space-between; padding: 9px 0; border-bottom:1px solid #dcd8cc; }
+  .kv b { font-weight:700 } .kv small { color:#6b6862; font-size:10px; margin-left:4px }
+  .seg { display:flex; gap:6px; margin: 0 20px 10px; }
+  .seg span { flex:1; text-align:center; padding:7px 0; border:1px solid #1b1a17; font-size:10px; letter-spacing:.12em; }
+  .seg span.on { background:#1b1a17; color:#f4f1e8; }
+  .note { font-size: 12px; color:#444; margin-top:8px }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="ph">
+        <h4>SPLITS <span>PACES OFF 6K 2:05.0</span></h4>
+        <div class="scroller">
+          <table class="st">
+            <thead><tr>
+              <th class="pin">#</th><th class="pin2">TIME</th><th>METERS</th><th>PACE</th><th>TARGET</th><th>Δ</th><th>SPM</th><th>HR</th><th>WATTS</th><th>CAL</th><th>CAL/HOUR</th><th>DRAG</th>
+            </tr></thead>
+            <tbody>
+              <tr class="total"><td class="pin"></td><td class="pin2">25:50.1</td><td>6000</td><td>2:09.1</td><td>2:10.0</td><td class="fast">−0.9</td><td>26</td><td>78</td><td>162</td><td>372</td><td>863</td><td>101</td></tr>
+              <tr><td class="pin">1</td><td class="pin2">5:13.5</td><td>1200</td><td>2:10.6</td><td>2:10.0</td><td class="slow">+0.6</td><td>27</td><td>55</td><td>157</td><td>73</td><td>838</td><td>101</td></tr>
+              <tr><td class="pin">2</td><td class="pin2">5:09.0</td><td>1200</td><td>2:08.7</td><td>2:10.0</td><td class="fast">−1.3</td><td>26</td><td>55</td><td>164</td><td>75</td><td>873</td><td>101</td></tr>
+              <tr><td class="pin">3</td><td class="pin2">5:10.1</td><td>1200</td><td>2:09.2</td><td>2:10.0</td><td class="fast">−0.8</td><td>27</td><td>55</td><td>162</td><td>74</td><td>859</td><td>101</td></tr>
+              <tr><td class="pin">4</td><td class="pin2">5:10.1</td><td>1200</td><td>2:09.2</td><td>2:10.0</td><td class="fast">−0.8</td><td>27</td><td>55</td><td>162</td><td>75</td><td>870</td><td>102</td></tr>
+              <tr><td class="pin">5</td><td class="pin2">5:07.4</td><td>1200</td><td>2:08.0</td><td>2:10.0</td><td class="fast">−2.0</td><td>27</td><td>170</td><td>167</td><td>75</td><td>878</td><td>101</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h4 style="margin-top:10px">← MORE →</h4>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — One table, two pinned columns</h3>
+      <p>Concept2's shape. <b>#</b> and <b>TIME</b> stay put; everything else scrolls under them. The totals row leads. Our target and Δ sit right after pace, so the pace-vs-target story is the first thing you scroll into.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="ph">
+        <h4>INTERVALS <span>PACES OFF 6K 2:05.0</span></h4>
+        <table class="st" style="width:100%">
+          <thead><tr><th style="text-align:left">#</th><th>TIME</th><th>TARGET</th><th>PACE</th><th>Δ</th></tr></thead>
+          <tbody>
+            <tr><td style="text-align:left">1</td><td>5:13.5</td><td>2:10.0</td><td class="slow">2:10.6</td><td class="slow">+0.6</td></tr>
+            <tr><td style="text-align:left">2</td><td>5:09.0</td><td>2:10.0</td><td class="fast">2:08.7</td><td class="fast">−1.3</td></tr>
+            <tr><td style="text-align:left">3</td><td>5:10.1</td><td>2:10.0</td><td class="fast">2:09.2</td><td class="fast">−0.8</td></tr>
+            <tr><td style="text-align:left">4</td><td>5:10.1</td><td>2:10.0</td><td class="fast">2:09.2</td><td class="fast">−0.8</td></tr>
+            <tr><td style="text-align:left">5</td><td>5:07.4</td><td>2:10.0</td><td class="fast">2:08.0</td><td class="fast">−2.0</td></tr>
+          </tbody>
+        </table>
+        <h4 style="margin-top:14px">MACHINE <span>PM5 · PER INTERVAL</span></h4>
+        <div class="scroller">
+          <table class="st">
+            <thead><tr><th class="pin">#</th><th>SPM</th><th>HR</th><th>WATTS</th><th>CAL</th><th>CAL/HOUR</th><th>DRAG</th><th>REST m</th></tr></thead>
+            <tbody>
+              <tr class="total"><td class="pin">ALL</td><td>26</td><td>78</td><td>162</td><td>372</td><td>863</td><td>101</td><td>—</td></tr>
+              <tr><td class="pin">1</td><td>27</td><td>55</td><td>157</td><td>73</td><td>838</td><td>101</td><td>—</td></tr>
+              <tr><td class="pin">2</td><td>26</td><td>55</td><td>164</td><td>75</td><td>873</td><td>101</td><td>—</td></tr>
+              <tr><td class="pin">3</td><td>27</td><td>55</td><td>162</td><td>74</td><td>859</td><td>101</td><td>—</td></tr>
+              <tr><td class="pin">4</td><td>27</td><td>55</td><td>162</td><td>75</td><td>870</td><td>102</td><td>—</td></tr>
+              <tr><td class="pin">5</td><td>27</td><td>170</td><td>167</td><td>75</td><td>878</td><td>101</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Keep today's table, add a machine strip under it</h3>
+      <p>The pace-vs-target table you have now stays exactly as it is (and stays on manual rows). Below it, only on machine rows, a second table scrolls sideways with the PM5's per-interval numbers. Two tables, one screen.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="ph">
+        <h4>SPLITS <span>PACES OFF 6K 2:05.0</span></h4>
+        <div class="seg"><span class="on">PACE</span><span>STROKE</span><span>ENERGY</span></div>
+        <table class="st" style="width:100%">
+          <thead><tr><th style="text-align:left">#</th><th>TIME</th><th>METERS</th><th>PACE</th><th>TARGET</th><th>Δ</th></tr></thead>
+          <tbody>
+            <tr class="total"><td style="text-align:left"></td><td>25:50.1</td><td>6000</td><td>2:09.1</td><td>2:10.0</td><td class="fast">−0.9</td></tr>
+            <tr><td style="text-align:left">1</td><td>5:13.5</td><td>1200</td><td>2:10.6</td><td>2:10.0</td><td class="slow">+0.6</td></tr>
+            <tr><td style="text-align:left">2</td><td>5:09.0</td><td>1200</td><td>2:08.7</td><td>2:10.0</td><td class="fast">−1.3</td></tr>
+            <tr><td style="text-align:left">3</td><td>5:10.1</td><td>1200</td><td>2:09.2</td><td>2:10.0</td><td class="fast">−0.8</td></tr>
+            <tr><td style="text-align:left">4</td><td>5:10.1</td><td>1200</td><td>2:09.2</td><td>2:10.0</td><td class="fast">−0.8</td></tr>
+            <tr><td style="text-align:left">5</td><td>5:07.4</td><td>1200</td><td>2:08.0</td><td>2:10.0</td><td class="fast">−2.0</td></tr>
+          </tbody>
+        </table>
+        <p class="note" style="margin:10px 20px 0">STROKE = SPM · HR · DRAG &nbsp;&nbsp; ENERGY = WATTS · CAL · CAL/HOUR</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Column groups, no scroll</h3>
+      <p>Three tabs over one table: PACE (time, meters, pace, target, Δ), STROKE (spm, HR, drag), ENERGY (watts, cal, cal/hr). Nothing scrolls sideways; you can never see pace and watts in one glance.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:20px">
+  <p class="note"><b>Common to all three:</b> a machine row only. Manual rows keep today's table. A field the PM5 didn't send renders as <b>—</b>. The totals row is the machine's own summary, not a sum of ours. The summary rows Concept2 shows (avg stroke rate, avg power, total calories, avg cal/hr, rest distance, drag factor, target rate) are the next screen.</p>
+</div>
