@@ -671,3 +671,47 @@ test.describe("no baseline: durations still show (Phase RW PR A)", () => {
     ).toHaveCount(0);
   });
 });
+
+// Phase RW PR B: the same fresh account rows a split-ref workout to a WORD.
+// Start is live, the Timer's TARGET SPLIT card reads the word with no
+// sub-line, and Log it after opens the real form. This is the seam test
+// spec §7 owes (RF24): it starts at a fresh account, upstream of
+// `phases()`, and asserts at the reader.
+test.describe("no baseline: rowing to a word (Phase RW PR B)", () => {
+  test("Start opens the countdown and the Timer reads STEADY for Laminar; Log it after opens the form", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "library-row-to-word@e2e.test",
+      name: "Row To Word Tester",
+    });
+    await page.goto("/library");
+    await waitForLibraryLoaded(page);
+    await page.getByPlaceholder("SEARCH BY NAME").fill("Laminar");
+    await page.locator(".workout-row").filter({ hasText: "Laminar" }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText("Laminar");
+    // 1000-1000-1000 m at 6K+12: 2k-equivalent +19, STEADY, on every row.
+    await expect(page.locator(".step-row-range").first()).toHaveText("STEADY");
+    await expect(page.locator(".workout-detail-caption")).toBeVisible();
+
+    await page.getByRole("button", { name: "Start Timer" }).click();
+    await expect(page).toHaveURL(/\/session\/countdown$/);
+    await expect(page.getByText("STEADY")).toBeVisible();
+    await page.getByRole("button", { name: "SKIP ›" }).click();
+    await expect(page).toHaveURL(/\/session\/run$/);
+    const target = page.locator(".timer-card-value").first();
+    await expect(target).toHaveText("STEADY");
+    await expect(target).toHaveClass(/timer-card-value-word/);
+    await expect(page.locator(".timer-card-caption")).toHaveCount(0);
+
+    // Log it after on the same workout opens the manual form, not a stub.
+    await page.goto("/library");
+    await waitForLibraryLoaded(page);
+    await page.getByPlaceholder("SEARCH BY NAME").fill("Laminar");
+    await page.locator(".workout-row").filter({ hasText: "Laminar" }).click();
+    await page.getByRole("link", { name: "Log it after" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+    await expect(page.getByRole("heading", { name: "Laminar" })).toBeVisible();
+    await expect(page.getByText("no target")).toHaveCount(0);
+  });
+});

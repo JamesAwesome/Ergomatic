@@ -331,3 +331,35 @@ describe("index.css: .timer-card-actual-stale resolves to the AA-passing token (
     expect(body).not.toContain("--ink-5");
   });
 });
+
+describe("the word modifier (Phase RW PR B)", () => {
+  const NOW = new Date("2026-09-07T10:00:00.000Z");
+  const draft = buildDraft({
+    id: "w-word",
+    title: "Word",
+    type: "TR" as WorkoutType,
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "2k", off: 6 },
+      },
+    ],
+  });
+
+  it("marks an effort-kind phase's TARGET SPLIT value with timer-card-value-word", () => {
+    const run = buildRun(draft, null, NOW);
+    const { container } = render(<TimerTargets phase={run.phases[0]!} />);
+    const value = container.querySelector(".timer-card-value")!;
+    expect(value).toHaveTextContent("MODERATE");
+    expect(value).toHaveClass("timer-card-value-word");
+  });
+
+  it("leaves a split-kind phase's value unmarked", () => {
+    const run = buildRun(draft, { k2Seconds: 112, k6Seconds: 122 }, NOW);
+    const { container } = render(<TimerTargets phase={run.phases[0]!} />);
+    const value = container.querySelector(".timer-card-value")!;
+    expect(value).toHaveTextContent("1:58.0");
+    expect(value).not.toHaveClass("timer-card-value-word");
+  });
+});
