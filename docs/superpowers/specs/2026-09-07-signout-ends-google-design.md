@@ -27,15 +27,24 @@ let them sign in as themselves, and the button implies a cleaner break than
 happens. Behind an invite allowlist that is mild, but a sign-out that does not
 sign out is the kind of thing that should not need a caveat.
 
-## Not caused by the version bump, as far as we can show
+## Not caused by the version bump — PROVEN, not hedged
 
-v0.42.0 moved `@capgo/capacitor-social-login` from 8.4.4 to 8.5.5, and this was
-noticed on that build. Tempting to call it a regression. **The gap predates it
-by the entire life of the file**, so the most that can be said is that the
-plugin or Google's own SDK may have changed how readily it reuses a cached
-session, making a standing hole newly visible. INFERENCE, and untested: proving
-it needs a build against 8.4.4, which is not worth doing to attribute a bug we
-are fixing either way.
+v0.42.0 moved `@capgo/capacitor-social-login` from 8.4.4 to 8.5.5 and this was
+noticed on that build, so a regression is the natural suspicion. It is not one.
+
+**PRIMARY, measured.** `GoogleProvider.swift` is byte-identical between the two
+releases — `md5 ba0b4e057b4c38cfec9803a36206ab7b` in both, checked against the
+vendored 8.5.5 and against 8.4.4 fetched with `npm pack`. The only iOS-facing
+differences anywhere in the plugin are a new Telegram provider and three
+`google#*RestoreCredential` cases that reject as Android-only. `Package.swift`,
+which pins the GoogleSignIn-iOS SPM range, is identical too.
+
+So the bump could not have changed session reuse on iOS. The gap predates it by
+the entire life of the file. **This paragraph originally hedged the claim as
+untested inference on the grounds that proving it needed a build against 8.4.4.
+That was wrong and the receipt cost under a minute:** both versions are
+obtainable without building anything. Recorded because the reflex to price a
+check as expensive is itself worth catching.
 
 ## The fix
 
@@ -66,6 +75,16 @@ the session, login prompts naturally, so `forcePrompt` would be a second
 mechanism producing the same effect for a different reason — the shape
 recurring failure 23 is about.
 
+**What the fix does and does not promise, so nobody is surprised.** It ends the
+session, which restores an interactive sign-in. It does not promise a
+multi-account chooser every time. Google's SDK presents that flow through
+`ASWebAuthenticationSession`, and nothing in the vendored source sets
+`prefersEphemeralWebBrowserSession`, so it shares Safari's cookies. A rower
+already signed into Google in Safari may therefore see a one-tap "Continue as
+X" rather than a full account list. That is ordinary OAuth single-sign-on
+behaviour and materially different from the silent, no-UI reuse reported here.
+SUSPECTED, untested on device.
+
 ## Scope
 
 - `app/src/native/signin.ts` only. The web sign-out path is separate, is not
@@ -75,9 +94,11 @@ recurring failure 23 is about.
 
 ## Test plan
 
-Failing test first. `signin.ts` currently carries `v8 ignore` as a thin plugin
-wrapper, and that stops being honest the moment it holds ordering logic that can
-be wrong — the ignore comes off the function this change gives real behaviour to.
+Failing test first. `signin.ts` carries one file-wide `v8 ignore start/stop` as
+a thin plugin wrapper, and that stops being honest the moment it holds ordering
+logic that can be wrong. **`nativeSignOut` alone comes out from under it**;
+`initNativeAuth` and `nativeSignIn` stay ignored and keep their justification,
+so the ignore becomes two narrower spans rather than one file-wide one.
 
 1. **Sign-out calls the plugin's logout for Google.** Mock `SocialLogin`; assert
    `logout` is called with `{ provider: "google" }`.
@@ -90,10 +111,22 @@ be wrong — the ignore comes off the function this change gives real behaviour 
 4. **Mutation probes**, each recorded with its verbatim failure: remove the
    `logout` call (test 1 goes red); move it ahead of `clearToken` and let it
    throw (test 2 goes red); delete the `catch` (test 2 goes red).
+   **And a fourth, which the antagonist pass found missing and which is the
+   only one that gates test 3:** replace the sequential await with a
+   concurrent kickoff that keeps the catch —
+   `const p = SocialLogin.logout({...}).catch(() => {}); await clearToken(); await p;`
+   Tests 1 and 2 both stay GREEN under that mutant: logout was called with the
+   right arguments, `clearToken` ran, and the function resolves. Only test 3
+   can fail on it. Without this probe, test 3 is an assertion nobody has shown
+   can go red, which is recurring failure 21 exactly.
 
 ## What this does not fix
 
-Signing out does not revoke Google's grant to the app. The plugin exposes no
-revoke or disconnect, only `logout`. A rower wanting to remove the app's access
-entirely does that in their Google account settings. Stated so nobody later
-reads "sign out" as "revoked".
+Signing out does not revoke Google's grant to the app. **The PLUGIN exposes no
+revoke or disconnect, only `logout`** — but the GoogleSignIn-iOS SDK it wraps
+does (`disconnectWithCompletion:`, which hits the OAuth revocation endpoint, as
+distinct from `signOut()`'s local keychain wipe). So revoking is a solvable
+future feature behind a plugin patch or native code, not something the platform
+lacks. Recorded precisely so this doc cannot later be cited as "we can never do
+that". Today a rower wanting to remove the app's access does it in their Google
+account settings.
