@@ -8,7 +8,8 @@ import { Link } from "react-router-dom";
  *  partial pair re-enters through the same three doors). Outcome-framed
  *  (James's ruling): recommend it, enter it, or row it.
  *
- *  Pure navigation — this card starts nothing and writes nothing; each
+ *  Navigation plus one write: the three doors start nothing, and the skip
+ *  line below them stores "go on without a baseline" (Phase RW PR C). Each
  *  door's screen owns its own flow (Recommend / KnowBaseline /
  *  RowToFind under /onboarding). Door 3's sub-copy carries James's
  *  2026-08-23 ruling: the 6k is "strong and steady" (with the
@@ -33,7 +34,7 @@ const DOORS: readonly { to: string; title: string; sub: string }[] = [
   },
 ];
 
-export default function DoorsCard() {
+export default function DoorsCard({ onSkip }: { onSkip: () => void }) {
   return (
     <section className="doorscard">
       <span className="doorscard-label mono-status">SET UP YOUR BASELINE</span>
@@ -55,6 +56,11 @@ export default function DoorsCard() {
           </Link>
         ))}
       </div>
+      {/* Phase RW PR C (spec §3.3): the fourth, quieter line. A button, not
+          a door, because it WRITES; the doors above are plain navigation. */}
+      <button type="button" className="doorscard-skip" onClick={onSkip}>
+        Row without one for now
+      </button>
     </section>
   );
 }

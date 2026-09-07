@@ -1,16 +1,18 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import DoorsCard from "./DoorsCard";
 
-// Phase BL PR C — the three-door card (canvas Main). Pure navigation:
-// three Links, no buttons, no writes; each door's own flow screen is
-// tested separately (Recommend/KnowBaseline/RowToFind).
+// Phase BL PR C — the three-door card (canvas Main). Three Links, and
+// (Phase RW PR C) one button beneath them: the skip line, the card's only
+// write. Each door's own flow screen is tested separately
+// (Recommend/KnowBaseline/RowToFind).
 
-function renderCard() {
+function renderCard(onSkip: () => void = () => {}) {
   return render(
     <MemoryRouter>
-      <DoorsCard />
+      <DoorsCard onSkip={onSkip} />
     </MemoryRouter>,
   );
 }
@@ -45,5 +47,21 @@ describe("DoorsCard", () => {
       screen.getByText("A strong, steady 6k, or race a 2k. Your time sets it."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/relaxed/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("the skip line (Phase RW PR C)", () => {
+  it("offers Row without one for now beneath the three doors, as a button", async () => {
+    const onSkip = vi.fn();
+    renderCard(onSkip);
+
+    const skip = screen.getByRole("button", {
+      name: "Row without one for now",
+    });
+    // Three doors, and the skip is NOT one of them: it writes, they navigate.
+    expect(screen.getAllByRole("link")).toHaveLength(3);
+
+    await userEvent.click(skip);
+    expect(onSkip).toHaveBeenCalledTimes(1);
   });
 });

@@ -21,12 +21,29 @@ import { api } from "../api";
 export interface PreferencesData {
   timeCapMinutes: number;
   countdownSeconds: number;
+  // Phase RW PR C: "this rower chose to go on without a baseline." Today's
+  // doors card renders iff the pair is unset AND this is false.
+  baselinesSkipped: boolean;
 }
 
 export type PreferencesState =
   | { state: "loading" }
   | { state: "error"; retry: () => void }
-  | { state: "ready"; preferences: PreferencesData };
+  | {
+      state: "ready";
+      preferences: PreferencesData;
+      /** Phase RW PR C. Resolves TRUE only when the server confirms the new
+       *  value in its response row — never on `res.ok` alone. An older
+       *  server (a rollback to `$PREV`, which `scripts/deploy.sh` really
+       *  does) silently ignores an unrecognised key and then returns 200
+       *  with the unchanged row, so `res.ok` is true for a write that
+       *  stored nothing; a caller branching on it would show the rower a
+       *  state the server does not have. On false the caller leaves the UI
+       *  as it was and says so (RF25). Refetches on success, the same
+       *  `generation` idiom `useBaselines`'s own `save` uses — without it
+       *  `preferences` would be stale and the doors would not move. */
+      setBaselinesSkipped: (value: boolean) => Promise<boolean>;
+    };
 
 export function usePreferences(): PreferencesState {
   const [state, setState] = useState<PreferencesState>({ state: "loading" });
@@ -35,13 +52,25 @@ export function usePreferences(): PreferencesState {
   useEffect(() => {
     let cancelled = false;
     const retry = () => setGeneration((g) => g + 1);
+    const setBaselinesSkipped = async (value: boolean): Promise<boolean> => {
+      const res = await api("/api/prefs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baselinesSkipped: value }),
+      });
+      if (!res.ok) return false;
+      const row = (await res.json()) as Partial<PreferencesData>;
+      if (row.baselinesSkipped !== value) return false;
+      retry();
+      return true;
+    };
 
     api("/api/prefs")
       .then(async (res) => {
         if (cancelled) return;
         if (res.ok) {
           const preferences = (await res.json()) as PreferencesData;
-          setState({ state: "ready", preferences });
+          setState({ state: "ready", preferences, setBaselinesSkipped });
         } else {
           setState({ state: "error", retry });
         }

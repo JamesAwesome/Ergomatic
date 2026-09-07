@@ -450,9 +450,11 @@ describe("WorkoutDetail", () => {
     const caption = screen.getByText(
       /Targets are words until you set a baseline\./,
     );
+    // Phase RW PR C: a button, not a link — it clears the skip before it
+    // navigates, so a skipped rower lands on the doors card.
     expect(
-      within(caption.closest("p")!).getByRole("link", { name: "Set one up" }),
-    ).toHaveAttribute("href", "/today");
+      within(caption.closest("p")!).getByRole("button", { name: "Set one up" }),
+    ).toBeInTheDocument();
   });
 
   it("shows no caption once a baseline is set", async () => {

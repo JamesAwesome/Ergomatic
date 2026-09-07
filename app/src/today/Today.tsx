@@ -600,6 +600,7 @@ function TodayContent({
       library={workoutsState.workouts}
       baselines={baselines}
       preferences={preferencesState.preferences}
+      setBaselinesSkipped={preferencesState.setBaselinesSkipped}
       plan={planState.plan}
       logs={recentLogsState.logs}
       session={session}
@@ -798,6 +799,7 @@ function TodayView({
   library,
   baselines,
   preferences,
+  setBaselinesSkipped,
   plan,
   logs,
   session,
@@ -810,6 +812,10 @@ function TodayView({
   // either-null branching).
   baselines: Baselines | null;
   preferences: PreferencesData;
+  // Phase RW PR C: the doors card's skip line and the return row both write
+  // through this; it refetches, so the card appears and disappears without
+  // a reload. Resolves false when the server did not confirm the value.
+  setBaselinesSkipped: (value: boolean) => Promise<boolean>;
   plan: PlanData;
   logs: RecentLog[];
   /** `sessionsLoggedToday` — part of every day record's key. */
@@ -1202,7 +1208,18 @@ function TodayView({
   // lookups died with it: the doors card is pure navigation, and door 3's
   // own screen (onboarding/RowToFind.tsx) does the designated-row lookup
   // where it is actually needed.
-  const needsDoors = baselines === null;
+  // Phase RW PR C (spec §3.2's invariant): the doors card renders IFF the
+  // pair is unset AND the rower has not skipped. Nothing else reads the flag.
+  const needsDoors = baselines === null && !preferences.baselinesSkipped;
+  const [skipError, setSkipError] = useState(false);
+  const writeSkip = (value: boolean) => {
+    setSkipError(false);
+    void setBaselinesSkipped(value).then((ok) => {
+      // RF25: a write the server did not confirm leaves the screen as it
+      // was and says so, never a silent no-op.
+      if (!ok) setSkipError(true);
+    });
+  };
 
   // I-3: a uniform draw from the pool minus everything shown today minus
   // the card on screen; `nextShuffle` resets the shown list once the pool
@@ -1337,9 +1354,34 @@ function TodayView({
           and nothing real to suggest, so none of it renders alongside
           the card (Phase 6I's rule, condition unchanged). */}
       {needsDoors ? (
-        <DoorsCard />
+        <>
+          <DoorsCard onSkip={() => writeSkip(true)} />
+          {skipError && (
+            <p className="baseline-error">Couldn't save that. Try again.</p>
+          )}
+        </>
       ) : (
         <>
+          {baselines === null && (
+            <div className="today-nobaseline-row">
+              <span className="today-nobaseline-line">
+                <span className="mono-status">NO BASELINE SET</span>
+                <button
+                  type="button"
+                  className="today-nobaseline-link"
+                  onClick={() => writeSkip(false)}
+                >
+                  Set one up
+                </button>
+              </span>
+              <p className="library-caption">
+                ~ times are estimates until you set a baseline
+              </p>
+              {skipError && (
+                <p className="baseline-error">Couldn't save that. Try again.</p>
+              )}
+            </div>
+          )}
           <div className="today-suggestion-header">
             <span className="mono-status">
               {/* Final fix wave (2026-08-04 round, M2): "SUGGESTED FOR TODAY"

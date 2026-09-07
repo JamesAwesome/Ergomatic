@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import { usePreferences } from "../api/usePreferences";
 import { useBaselines } from "../api/useBaselines";
 import {
   probeBluetoothStatus,
@@ -76,6 +77,7 @@ export default function WorkoutDetail() {
   const { id } = useParams();
   const workoutsState = useWorkouts();
   const baselinesState = useBaselines();
+  const preferencesState = usePreferences();
 
   if (workoutsState.state === "loading" || baselinesState.state === "loading") {
     return (
@@ -145,6 +147,16 @@ export default function WorkoutDetail() {
       key={workout.id}
       workout={workout}
       baselines={baselines}
+      // Phase RW PR C (spec §2.1): the caption's "Set one up" clears the
+      // skip on the way to Today, so a skipped rower lands on the doors
+      // card rather than on Today's own "Set one up" row. Null while
+      // preferences are loading or errored — the caption falls back to
+      // navigating, which is what it did before this PR.
+      onSetOneUp={
+        preferencesState.state === "ready"
+          ? () => preferencesState.setBaselinesSkipped(false)
+          : null
+      }
     />
   );
 }
@@ -152,9 +164,11 @@ export default function WorkoutDetail() {
 function WorkoutDetailView({
   workout,
   baselines,
+  onSetOneUp,
 }: {
   workout: LibraryWorkout;
   baselines: Baselines | null;
+  onSetOneUp: (() => Promise<boolean>) | null;
 }) {
   // Session-only preview nudges, keyed by the RAW step index (the handoff's
   // model: one nudge covers a whole repeat block, since we render
@@ -599,7 +613,28 @@ function WorkoutDetailView({
         {baselines === null && needsBaselines(workout.steps) && (
           <p className="workout-detail-caption">
             Targets are words until you set a baseline.{" "}
-            <Link to="/today">Set one up</Link>
+            {/* Phase RW PR C (spec §2.1): this CLEARS the skip on the way,
+                so the rower lands on the doors card. A plain Link would
+                land a skipped rower on Today's return row, showing the
+                same three words a second time for one job. */}
+            <button
+              type="button"
+              className="workout-detail-caption-link"
+              onClick={() => {
+                // Clear the skip, then go — the navigation happens either
+                // way, so a failed write never traps the rower here.
+                const go = () => {
+                  void navigate("/today");
+                };
+                if (onSetOneUp === null) {
+                  go();
+                  return;
+                }
+                void onSetOneUp().then(go, go);
+              }}
+            >
+              Set one up
+            </button>
           </p>
         )}
         {/* Globals are read-only server-side (a 403 on any mutation) — the
