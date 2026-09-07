@@ -562,9 +562,17 @@ rides the next tag (no release of its own).
 **Status:** OPENED 2026-09-06 (James: "show everything that Concept2's
 logbook shows, with the exception of weight class … be absolutely certain
 our numbers match Concept2's"). Spec
-`docs/superpowers/specs/2026-09-06-logbook-parity-design.md`; mockups
-`docs/design/logbook-parity/`. **TRIAD twice** (stored shape in PR 1, wire
-meaning in PR 2). **M.**
+`docs/superpowers/specs/2026-09-06-logbook-parity-design.md` (rev 2.1);
+mockups `docs/design/logbook-parity/`. **TRIAD twice** (stored shape in
+PR 1, wire meaning in PR 2). **M.** **PR 1 BUILT 2026-09-07** on
+`phase-lp-logbook-parity` (plan
+`docs/superpowers/plans/2026-09-06-logbook-parity-pr1.md`, inline shape):
+Gate 0 approved on artboard 03; §3.1 ruled "logbook formula"; the four
+session fields ride `machine_summary` jsonb, not columns, on a measured
+DBA benchmark
+(`docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`).
+Owed before merge: `/harden`, the whole-branch review + PM final gate,
+phone captures (fresh + a real old machine row, both orientations).
 
 **Goal:** a rower who opens the same piece in our app and in the Concept2
 logbook after an upload reads the same numbers — per split: watts, cal,
@@ -1325,6 +1333,47 @@ and unscheduled; it is not a wish.
 **How an entry leaves:** it rides the next PR that touches its area, it is
 promoted into a wave, or it is killed with a reason. "Rides the next PR touching
 X" is a real disposition — most of these are single files.
+
+- [ ] **The history LIST has no `(user_id, logged_at desc, id desc)`
+      index.** Found by the Phase LP DBA benchmark, 2026-09-07
+      (`docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`,
+      "Two things I found on the way"): `schema.ts` carries only
+      `session_logs_user_id_idx`, and at 25k rows per user the page of 50
+      measured ~40 ms without the composite index and ~0.25 ms with it,
+      identically for both storage shapes. Not a Phase LP change (no LP
+      query touches it); rides the next PR that adds a Drizzle migration
+      to `session_logs`. **S**
+
+- [ ] **Generated columns for `machine_summary.totalCalories` /
+      `avgWatts` when the You-stats phase wants a covering index.** The
+      same benchmark's one real jsonb gap: Postgres `INCLUDE` takes
+      columns, never expressions, so a covering index for a per-user
+      monthly roll-up must carry the whole ~666-byte blob (346 MB vs
+      48 MB at 1M rows; 12-month cohort roll-up 337 ms vs 53 ms). The
+      escape hatch needs no backfill and no write-path change:
+      `GENERATED ALWAYS AS ((machine_summary->>'totalCalories')::int)
+      STORED`, then a btree/covering index on it. James (2026-09-07):
+      lifetime and monthly calories and average watts are the two figures
+      You will show. Opens WITH that phase, not before — at household
+      scale the un-indexed SUM measures ~1 ms. **S**
+
+- [ ] **A stored row's MACHINE SUMMARY REST column reads a dash.** Phase
+      LP PR 1: `IntervalActual.restDistanceMeters` reaches the LIVE strip
+      but `LogStep` carries no per-step rest metres, so the same piece
+      re-opened from history shows `—` under REST where the live door
+      showed 147 / 95. Either PR 2 adds `machineRestMeters` to `LogStep`
+      (it already sends per-interval `rest_distance` to Concept2 from the
+      same source) or the column is dropped from the stored strip;
+      decide at PR 2's spec pass. **S**
+
+- [ ] **354 code comments cite `interface-notes.md §N` — a file that does
+      not exist** (`docs/monitor/` holds `pm5-interface-notes.md`;
+      `grep -rn "interface-notes.md" app/src app/domain | grep -v
+      pm5-interface | wc -l` → 354 across 41 files, 2026-09-07). RF16's
+      dangling-citation corollary, at scale; every one is the short name
+      for the same file, so a mechanical `sed` fixes it, but 41 files is
+      not a rider on an unrelated PR. Its own docs-class PR, or the next
+      sweep that already touches `driver.ts` wholesale. **S**
 
 - [ ] **A connected Just Row closed by End or TERMINATE cannot be sent to
       Concept2.** Filed at the door anchor pass, 2026-09-02 (RF14), narrowed

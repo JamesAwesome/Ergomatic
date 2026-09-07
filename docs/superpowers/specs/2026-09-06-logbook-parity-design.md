@@ -21,6 +21,11 @@ logbook row, six cells of six, before any code exists. Manual and by-feel
 rows are untouched. Machine rows saved before this ships render `—` where
 the field never existed.
 
+**Rev 2.1 (2026-09-07):** §2.2 stores the four session fields as
+`machineSummary` jsonb keys, not columns (DBA benchmark cited there; James:
+jsonb). §3.1 ruled "logbook formula" (James, 2026-09-07). Gate 0 approved
+on artboard 03 (James, 2026-09-07).
+
 **Rev 2 (2026-09-06, same day):** folds the antagonist anchor pass (REVISE:
 five BLOCKING, seven MAJOR) and the PM open gate (PASS WITH CONDITIONS,
 build now). Everything they overturned is marked _rev 1 said_ so the record
@@ -220,19 +225,30 @@ Already there: `avgHr`, `actualSpm`, `actualSplit`, `actualSeconds`,
 `actualMeters`, `targetSplit`, `spm` (the per-interval target rate), and
 `restDistanceMeters` on `IntervalActual`.
 
-### 2.2 Per session — the log row gains (all nullable)
+### 2.2 Per session — `machineSummary` gains four optional keys
 
-| Column | Source | Unit |
+| Key (on `machine_summary` jsonb) | Source | Unit |
 | --- | --- | --- |
-| `machine_calories` | 0x003A Total Calories `[8..9]` | cal |
-| `machine_avg_watts` | 0x003A Watts `[10..11]` | W |
-| `machine_cal_per_hour` | 0x003A Avg Calories `[17..18]` | cal/hr (the PM5's; provenance) |
-| `machine_rest_meters` | 0x003A Total Rest Distance `[12..14]` | m |
+| `totalCalories` | 0x003A Total Calories `[8..9]` | cal |
+| `avgWatts` | 0x003A Watts `[10..11]` | W (the PM5's; provenance) |
+| `avgCalPerHour` | 0x003A Avg Calories `[17..18]` | cal/hr (the PM5's; provenance) |
+| `totalRestMeters` | 0x003A Total Rest Distance `[12..14]` | m |
 
-_Rev 1 also stored 0x003A Interval Rest Time; struck (§1.1)._
-`machineSummary` (0x0039) is already stored. Every new numeric key gets an
-integer validation band on the server, the way `STROKE_RATE_MIN/MAX`
-already guards `stroke_rate` — the API rejects a decimal or a string.
+_Rev 1 also stored 0x003A Interval Rest Time; struck (§1.1). Rev 2 named
+four nullable COLUMNS here; rev 2.1 (2026-09-07, at the PR 1 plan) moves
+them onto the existing `machine_summary` jsonb, which already carries
+0x0039's nine keys through the same `MachineSummaryDetail` type, so PR 1
+needs no migration. Measured, not assumed: a DBA benchmark at 100k and 1M
+rows (`docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`)
+found the detail read, history page, indexed filter and MAX identical
+between shapes (≤ 0.36 ms), a ~0.6 µs/row jsonb tax on SUM/AVG, no TOAST,
+and one real gap — a covering index cannot INCLUDE an expression — with a
+no-backfill escape hatch (generated columns) filed in the ROADMAP register
+for the You-stats phase. James ruled jsonb the same day._
+Every new numeric key gets an integer validation band on the server
+(`validateMachineSummary`: u16 for the three counts, the rest-metres cap
+for the fourth), the way `STROKE_RATE_MIN/MAX` already guards
+`stroke_rate` — the API rejects a decimal or a string.
 
 ### 2.3 Lifetime, ordering, attribution (RF27 — invariants, not mechanisms)
 
@@ -260,9 +276,10 @@ already guards `stroke_rate` — the API rejects a decimal or a string.
   condition alongside 0x003F); if the hold releases without it, the four
   session columns are `null`, a diagnostic line records `summary-1-missing`,
   and the row renders `—` — best-effort, said so, RF25's one owner.
-- **Migration is additive:** four nullable columns; `steps` jsonb gains
-  optional keys. No backfill. No read path revalidates. Server deploys
-  first; an old client against the new server writes nothing new.
+- **No migration:** the four session keys ride `machine_summary` jsonb and
+  the per-split keys ride `steps` jsonb, both already untyped at the
+  column. No backfill. No read path revalidates. Server deploys first; an
+  old client against the new server writes nothing new.
 - **Already-uploaded rows never gain the new fields:** there is no PATCH
   to Concept2 in the repo and a resend short-circuits to the old result
   id. The walk uses a fresh row.

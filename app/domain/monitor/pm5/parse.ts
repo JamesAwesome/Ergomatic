@@ -410,10 +410,11 @@ export function parseSummaryLogStamp(
  *
  *  This is a RING-ONLY diagnostic oracle's decoder (`driver.ts`'s
  *  `recordRestDistanceVerdict`), not a gate: nothing in this driver's
- *  control flow branches on either field, and no caller needs the rest of
- *  0x003A's layout — a wider parser would be undecoded surface with no
- *  reader, the exact shape I5 already warns against for this
- *  characteristic. */
+ *  control flow branches on either field. The "no wider parser" rule this
+ *  comment used to state was RELAXED by Phase LP (2026-09-06): four more
+ *  0x003A fields gained readers (the record, the screen, the upload) and
+ *  are decoded by `parseAdditionalSummary` below; the rest of the frame
+ *  still has none and stays undecoded — I5's rule, applied per field. */
 export interface AdditionalSummaryRest {
   /** Total Rest Distance, offsets 12-14, 1 m/lsb, unscaled — a RUNNING
    *  TOTAL across the whole workout (PRIMARY, both committed captures:
