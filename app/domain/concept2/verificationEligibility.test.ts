@@ -41,6 +41,19 @@ describe("concept2OffersVerification — the measured rule", () => {
     expect(concept2OffersVerification(plain(2001, 452))).toBe(false);
   });
 
+  it("ROUNDS seconds to tenths rather than truncating", () => {
+    // 60.05 s rounds to 601 tenths and is NOT the 1:00 standard; truncating
+    // gives 600 and would wrongly offer the field. Every other seconds value
+    // in this suite is exact at x10, so this is the only case that can tell
+    // `Math.round` from `Math.floor`.
+    expect(concept2OverallTotals(plain(1234, 60.05))?.tenths).toBe(601);
+    expect(concept2OffersVerification(plain(1234, 60.05))).toBe(false);
+    // …and rounding DOWN onto a standard qualifies, which is the same rule
+    // read the other way: 60.04 s is 600 tenths, exactly 1:00.
+    expect(concept2OverallTotals(plain(1234, 60.04))?.tenths).toBe(600);
+    expect(concept2OffersVerification(plain(1234, 60.04))).toBe(true);
+  });
+
   it("matches time EXACTLY — one tenth either side is refused", () => {
     expect(concept2OffersVerification(plain(7101, 1800))).toBe(true);
     expect(concept2OffersVerification(plain(7102, 1799.9))).toBe(false);
@@ -56,8 +69,10 @@ describe("concept2OffersVerification — the measured rule", () => {
   });
 
   it("does not treat BikeErg's 200 m as rankable — we ship RowErg only", () => {
-    // 200 m is on Concept2's BikeErg list and NOT its RowErg one, which is
-    // exactly why James's 200 m rows were never offered the field.
+    // 200 m appears on Concept2's BikeErg list but NOT its RowErg one. Its
+    // ABSENCE from the RowErg list is the reason a 200 m row on a RowErg is
+    // never offered the field; its presence on the other list is a
+    // coincidence worth naming so nobody "fixes" this by adding it.
     expect(concept2OffersVerification(plain(200, 53.4))).toBe(false);
   });
 });
@@ -84,6 +99,22 @@ describe("concept2OverallTotals — rest counts toward the figure", () => {
     };
     expect(concept2OverallTotals(landsOnStandard)?.meters).toBe(2000);
     expect(concept2OffersVerification(landsOnStandard)).toBe(true);
+  });
+
+  it("treats a ZERO machine total as absent, exactly as the mapper does", () => {
+    // `mapping.ts` argues this predicate at length ("NOT `??`"): a stored 0
+    // is a value `??` would post while the screen falls back to our sum.
+    // Without the `> 0` half, overall reads 0 and the row is refused.
+    const zeroMachine = {
+      ...plain(500, 124),
+      machineWorkMeters: 0,
+      machineWorkSeconds: 0,
+    };
+    expect(concept2OverallTotals(zeroMachine)).toStrictEqual({
+      meters: 500,
+      tenths: 1240,
+    });
+    expect(concept2OffersVerification(zeroMachine)).toBe(true);
   });
 
   it("prefers the monitor's own totals, the same numbers we post", () => {

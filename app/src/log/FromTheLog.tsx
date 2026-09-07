@@ -62,8 +62,16 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
   // at create and silently ignores it on update, measured the same day.
   // The rule itself is measured, not inferred: see
   // `domain/concept2/verificationEligibility.ts`.
+  // `machineRestMeters` is the row-level figure `buildC2Payload` prefers
+  // over our summed one, and it lives on `machineSummary`, NOT on the row
+  // (review, blocking 2). Passing `row` alone silently judged a different
+  // number than we post — the field is optional, so nothing complained.
   const code =
-    bytes !== undefined && concept2OffersVerification(row)
+    bytes !== undefined &&
+    concept2OffersVerification({
+      ...row,
+      machineRestMeters: row.machineSummary?.totalRestMeters ?? null,
+    })
       ? (displayVerificationCode(bytes) ?? undefined)
       : undefined;
   return (

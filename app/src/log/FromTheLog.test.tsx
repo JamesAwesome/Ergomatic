@@ -1460,6 +1460,35 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
     expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
   });
 
+  it("prints the code on a REST piece whose overall lands on a standard", async () => {
+    // The realistic shape the pair above lacks (review, on question 6): an
+    // interval piece whose WORK distance is on no list, but whose overall —
+    // work plus the rest metres Concept2 counts — is exactly 2000. This is
+    // the only component case that drives the rest path, and it is the arm
+    // of the crossed experiment that proves the rule reads the overall.
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              machineWorkSeconds: 420,
+              machineWorkMeters: 1820,
+              restSeconds: 60,
+              restMeters: 180,
+              machineSummary: {
+                verificationBytes: WALK_VERIFICATION_BYTES,
+                totalRestMeters: 180,
+              },
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
+  });
+
   it("withholds the code ONE METRE off, where Concept2 offers no field", async () => {
     // An INDEPENDENT literal, not derived from the module's own list
     // (RF21): 501 m against the identical row above. Deleting the

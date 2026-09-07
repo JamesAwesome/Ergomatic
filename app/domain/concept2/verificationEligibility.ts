@@ -13,19 +13,35 @@
  * rankable distances, or its OVERALL time one of the rankable durations, each
  * matched exactly — to the metre and to the tenth of a second. "Overall" is
  * work plus rest, the figure Concept2 displays; a crossed experiment settled
- * that (work 1820 + 180 rest shows the field, work 2000 + 180 rest does not).
+ * that on BOTH axes: work 1820 m + 180 m rest shows the field at 2000 m
+ * overall while work 2000 m + 180 m rest does not at 2180 m, and work 25:00
+ * + 5:00 rest shows it at 30:00 overall while 6:00 of rest does not at
+ * 31:00. In each pair the work figure alone explains neither arm.
  *
  * Showing a code the rower has nowhere to type is noise, so the Log screen
  * asks this before printing one.
+ *
+ * WHAT THIS ANSWERS, exactly (review finding 6): "if this row reached
+ * Concept2 with the figures we would post, would its edit form offer a code
+ * field?" It does NOT ask whether the row is uploadable — `eligibilityFailure`
+ * in `server/concept2/mapping.ts` owns that, and refuses a row with no work
+ * totals, one that did not finish, or one that is not from the monitor. A
+ * caller that renders on rows those rules reject (the Log screen does, for a
+ * terminated partial) is asking a hypothetical, and gets a hypothetical
+ * answer. That is the right shape for a display: the alternative is printing
+ * a code beside a row whose numbers Concept2 will never see.
  */
 
 /** `log.concept2.com/help`, RowErg and SkiErg, quoted: "100 Meters, 500
  *  Meters, 1000 Meters, 2000 Meters, 5000 Meters, 6000 Meters, 10000 Meters,
  *  21,097 Meters (half marathon), 42,195 Meters (marathon), 100,000 Meters
  *  (team event)". Every one of these was measured to show the field.
- *  BikeErg's list DIFFERS (it carries 200 m and 4000 m and drops others) and
- *  is deliberately absent: we ship no BikeErg, and guessing its behaviour
- *  from RowErg's is exactly the inference this module exists to avoid. */
+ *  The same page publishes a SEPARATE list for BikeErg, quoted: "200 Meters,
+ *  500 Meters, 1000 Meters, 4000 Meters, 10,000 Meters, 20,000 Meters,
+ *  40,000 Meters, 100,000 Meters (team event), 1 minute, 30 minutes, 60
+ *  minutes". It is deliberately absent here: we ship no BikeErg, its list was
+ *  never measured, and guessing behaviour from RowErg's is exactly the
+ *  inference this module exists to avoid. */
 const ROWERG_RANKABLE_METERS: readonly number[] = [
   100, 500, 1000, 2000, 5000, 6000, 10000, 21097, 42195, 100000,
 ];

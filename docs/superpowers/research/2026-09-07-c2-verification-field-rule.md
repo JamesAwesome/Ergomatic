@@ -16,9 +16,20 @@ the DOM** and its **visibility** carries the rule:
 > The match is exact — to the metre and to the tenth of a second.
 
 "Overall" means work plus rest, which is what the form displays. Established by
-a crossed experiment earlier the same day, confirmed by James by eye: a row with
-work 1820 m + 180 m rest (overall 2000) shows the field, and a row with work
-2000 m + 180 m rest (overall 2180) does not. Work alone explains neither.
+a crossed experiment on EACH axis, so neither is inferred from the other:
+
+| Axis | Work | Rest | Overall | Field |
+| --- | --- | --- | --- | --- |
+| Distance | 1820 m | 180 m | 2000 m | visible |
+| Distance | 2000 m | 180 m | 2180 m | hidden |
+| Time | 25:00 | 5:00 | 30:00 | visible |
+| Time | 25:00 | 6:00 | 31:00 | hidden |
+
+In each pair the work figure alone explains neither arm: the row whose WORK is
+standard is the one refused, and the row whose work is not standard is the one
+offered. The distance pair was confirmed by James by eye; the time pair was
+read by the same scripted browser as the main matrix, 2026-09-07. All four
+rows deleted.
 
 ## The measurements
 

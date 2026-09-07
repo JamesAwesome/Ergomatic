@@ -1,7 +1,17 @@
 # Verify a row by hand — design
 
-**Status:** Gate 0 APPROVED (James, 2026-09-07, artifact
-`94367040-7c9a-409a-b7c4-abfe57c9788c`). TRIAD: new stored shape.
+**Status: SUPERSEDED.** The design this file describes — a code field on a
+saved row — is impossible: Concept2 honours a verification code only at
+create, measured below. Gate 0 approved that design
+(`94367040-7c9a-409a-b7c4-abfe57c9788c`) before its mechanism was tested, and
+an approval does not survive the mechanism being falsified.
+
+**What shipped instead**, on its own Gate 0
+(`555f1eaa-624c-434e-b7cd-d882eb88b173`, approved 2026-09-07): the Log screen
+prints the code only on rows Concept2 will offer a field for, and nothing else
+changes. **NOT TRIAD** — no stored shape, no auth, and no number changes
+meaning; one display line becomes conditional. This file is kept for the
+reasoning that produced that reshape, not as a description of the code.
 
 ## What and why
 
@@ -38,8 +48,10 @@ overall and got it; the 200 m rows and a 2180 m row got nothing.
 **PRIMARY, `log.concept2.com/help`**, quoted: _"Verification is not required to
 rank a piece, however, to flag a manually entered piece as 'verified', you can
 use the verification code from your PM3, PM4 or PM5."_ Same page lists the
-standard distances (100, 500, 1000, 2000, 5000, 6000, 10 000 m, half and full
-marathon) and timed pieces (1, 4, 30, 60 minutes).
+standard distances — 100, 500, 1000, 2000, 5000, 6000, 10 000 m, half
+marathon, marathon AND 100 000 m (team event), the last of which an earlier
+paraphrase here dropped — and timed pieces (1, 4, 30, 60 minutes). All
+fourteen were later measured one by one.
 
 **PRIMARY, `log.concept2.com/developers/documentation/`**, the update endpoint:
 `PATCH /api/users/{user}/results/{result_id}` accepts `verification_code` among
