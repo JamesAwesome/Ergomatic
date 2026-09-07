@@ -60,6 +60,40 @@ describe("the ladder over the seeded library", () => {
     expect(collapsed).toHaveLength(79);
   });
 
+  // Spec §7: the STEP-level overlap counts James ruled the thresholds on
+  // (spec §1.1's accepted-cost table). Independent of the workout-level
+  // counts above: these are steps whose word sits one rung off the type
+  // badge's own band.
+  it("pins the step-level overlaps: 23 TR steps read MODERATE, 3 AT read HARD, 11 AT read STEADY, 4 O2 read MODERATE", () => {
+    // AUTHORED steps, not expanded phases: the spec's figures count what a
+    // reader sees in the seed source, so a step inside a 5x reps block
+    // counts once.
+    const count = (type: string, word: IntensityWord, lo: number, hi: number) =>
+      LIBRARY_WORKOUTS.filter((w) => w.type === type).reduce(
+        (n, w) =>
+          n +
+          w.steps.filter((step) => {
+            if (step.k !== "w" || isPaceWordRef(step.ref)) return false;
+            const e = eq(step.ref);
+            return (
+              e !== null &&
+              e >= lo &&
+              e <= hi &&
+              intensityWord(step.ref) === word
+            );
+          }).length,
+        0,
+      );
+    // TR at 2k+5..+8 (2k-equivalent +5..+8).
+    expect(count("TR", "MODERATE", 5, 12)).toBe(23);
+    // AT at 6k-4/-3 (2k-equivalent +3/+4).
+    expect(count("AT", "HARD", -2, 4)).toBe(3);
+    // AT at 6k+6..+8 (2k-equivalent +13..+15).
+    expect(count("AT", "STEADY", 13, 100)).toBe(11);
+    // O2 at 6k+4 (2k-equivalent +11).
+    expect(count("O2", "MODERATE", 5, 12)).toBe(4);
+  });
+
   it("contradicts its own type badge on every step in exactly the nine named workouts", () => {
     const BADGE: Record<string, IntensityWord> = {
       AN: "ALL OUT",

@@ -399,11 +399,19 @@ line, "Workouts with pace targets lose them and can't be started until
 you set a baseline again." Its replacement is Gate 0 copy. **Gate 0 also
 notes the collision:** `HARD` was a DIFFICULTY word until Phase DE removed
 that axis (the v0.39.0 note announces it) and now returns as an intensity
-word meaning something else. **The exit grep's expected survivor** (lens
-2, F7): `builderState.ts`'s `EFFORT_WORDS` list carries `EASY BREATH`,
-the 1-to-5 whole-workout effort scale's first word, a different axis
-from the work target; it stays and is named in the exit criterion so it
-does not force a close-time ruling. The News article `baselines` gains
+word meaning something else. **The exit grep's expected survivors**, run
+at PR B's head and classified there rather than left to the close gate
+(the PM final gate found the first version of this claim false):
+`grep -rn "EASY\|Easy\b" app/src app/domain app/e2e` returns 67 hits, and
+every one is in one of three classes, none of them a live pace word:
+(a) the DIFFERENT AXIS — `builderState.ts`'s `EFFORT_WORDS` carries
+`EASY BREATH`, the 1-to-5 whole-workout scale's first word, plus the
+difficulty-era chip labels in `Today`/`CellGrid`/`TokenRow` tests;
+(b) HISTORY — comments and fixture names recording the warm-up phase
+Phase WU deleted (its label was `Easy`) and the v0.39.0 release note;
+(c) the bulk grammar's `easy` token, which still parses to
+`{effort:"min"}` on purpose (§1.1). A hit outside those three is a
+defect; PR B fixed the four that were. The News article `baselines` gains
 one sentence: words stand in for targets until a baseline exists, and
 what the four words mean. No new article.
 

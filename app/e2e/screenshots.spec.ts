@@ -2103,9 +2103,9 @@ test("workout-detail-no-baseline", async ({ page }) => {
     name: "Screenshot No Baseline Tester",
   });
 
-  // Phase RW PR B: the same personal 2000 m workout the old
-  // `workout-detail-no-target` capture built, now with no baseline set:
-  // the row reads MODERATE, Start is live, one caption under the actions.
+  // Phase RW PR B (replaces the retired `workout-detail-no-target`): a
+  // personal 2000 m workout with no baseline set — the row reads MODERATE,
+  // Start is live, one caption under the actions.
   // Gate 0's approved render is docs/design/rw-gate0/detail-imported.png.
   const title = "Screenshot No Baseline Workout";
   await page.goto("/library/new");
@@ -2123,6 +2123,32 @@ test("workout-detail-no-baseline", async ({ page }) => {
   });
 
   await cleanupByTitle(page, title);
+});
+
+// Phase RW PR B (PM final gate, condition 6): the phase's own ACCEPTED
+// COST, on a real seeded workout. "Roaring Forties" is 6 x 2000m @ 2K+6,
+// a TR-badged workout whose every rung reads MODERATE — one of the nine
+// James ruled on at Gate 0 (docs/design/rw-gate0/detail-roaring-forties.png).
+// The synthetic one-row capture above cannot show it.
+test("workout-detail-no-baseline-collapsed", async ({ page }) => {
+  await stubBluetoothScanFailure(page);
+  await signInViaBackdoor(page, {
+    email: "screenshots-detail-collapsed@e2e.test",
+    name: "Screenshot Collapsed Tester",
+  });
+  await page.goto("/library");
+  await page.getByPlaceholder("SEARCH BY NAME").fill("Roaring Forties");
+  await page.locator(".workout-row").first().click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(
+    "Roaring Forties",
+  );
+  await expect(page.locator(".step-row-range").first()).toHaveText("MODERATE");
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "workout-detail-no-baseline-collapsed.png",
+    ),
+  });
 });
 
 // Phase RW PR B: the Timer with a WORD in the TARGET SPLIT card, both

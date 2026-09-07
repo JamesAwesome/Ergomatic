@@ -416,17 +416,15 @@ describe("StepEditor", () => {
     expect(screen.queryByText("TARGET")).not.toBeInTheDocument();
   });
 
-  // Coverage: the "no target / Set baselines" fallback (splitLabel null on
-  // a work row) — the same honesty treatment StepRowEditor's resolvedSplit
-  // used to give, ported here since baselines can still be unset.
   // Task 4: an effort row's TARGET reads the effort word, in the SAME
   // target-value element a resolved (exact) split renders in — Builder's
   // splitLabelFor is what actually resolves refEffort to paceWordLabel(...)
   // (deliberately without needing baselines, unlike the split branch above);
   // this component does no pace math of its own and just renders whatever
-  // string it's handed, so passing "ALL OUT"/"EASY" here is exactly what a
-  // real MAX/MIN row's splitLabel prop looks like once it reaches this
-  // component.
+  // string it's handed, so passing "ALL OUT"/"STEADY" here is exactly what
+  // a real MAX/MIN row's splitLabel prop looks like once it reaches this
+  // component (Phase RW PR B retired EASY; a split row with no baseline
+  // now arrives here as a ladder word too, never null).
   it("shows ALL OUT in the TARGET strip's own value element for a MAX row", () => {
     setup({ row: workRow({ refEffort: "max" }), splitLabel: "ALL OUT" });
     const value = screen.getByText("ALL OUT");
@@ -434,9 +432,9 @@ describe("StepEditor", () => {
     expect(value.className).not.toMatch(/no-target/);
   });
 
-  it("shows EASY in the TARGET strip's own value element for a MIN row", () => {
-    setup({ row: workRow({ refEffort: "min" }), splitLabel: "EASY" });
-    const value = screen.getByText("EASY");
+  it("shows STEADY in the TARGET strip's own value element for a MIN row", () => {
+    setup({ row: workRow({ refEffort: "min" }), splitLabel: "STEADY" });
+    const value = screen.getByText("STEADY");
     expect(value).toHaveClass("step-editor-target-value");
     expect(value.className).not.toMatch(/no-target/);
   });

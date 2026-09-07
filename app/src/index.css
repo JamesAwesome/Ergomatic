@@ -34,8 +34,9 @@
    round, Task 1) are each shared between real <button>s (already covered)
    and anchor-styled links (auth.tsx's sign-in, WorkoutDetail.tsx's Edit/Log
    it after), which aren't. Left deliberately selectable: plain inline text
-   hyperlinks (e.g.
-   StepEditor.tsx/StepRow.tsx's "Set baselines") — those read as ordinary
+   hyperlinks (e.g. WorkoutDetail.tsx's caption link "Set one up"; the
+   StepEditor/StepRow "Set baselines" links this note used to name went
+   with Phase RW PR B) — those read as ordinary
    body-copy links, not chrome controls, and a copy/look-up callout on
    link text is normal iOS behaviour there. `.filter-token` (Task 4, ui-fix
    round) joins the list for the same reason `.chip` is here: it's a chrome

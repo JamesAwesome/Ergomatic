@@ -719,5 +719,34 @@ test.describe("no baseline: rowing to a word (Phase RW PR B)", () => {
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
     await expect(page.getByRole("heading", { name: "Laminar" })).toBeVisible();
     await expect(page.getByText("no target")).toHaveCount(0);
+
+    // The seam spec §7 asks for (RF24): SAVE, then read the row back
+    // through the API. The persisted step label must be the WORD the rower
+    // read, never the ref they never saw and never MIN. This starts at a
+    // fresh account, upstream of `phases()`, and asserts after the write.
+    await page.getByRole("button", { name: "HELD" }).click();
+    await page.getByRole("button", { name: "Effort 2" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+
+    const labels = await page.evaluate(async () => {
+      const list = await fetch("/api/logs");
+      const rows = (await list.json()) as Array<{
+        id: string;
+        workoutTitle: string;
+      }>;
+      const row = rows.find((r) => r.workoutTitle === "Laminar");
+      if (!row) return null;
+      const detail = await fetch(`/api/logs/${row.id}`);
+      const full = (await detail.json()) as {
+        steps: Array<{ label: string; targetSplit?: number }>;
+      };
+      return full.steps.map((s) => s.label);
+    });
+    expect(labels).not.toBeNull();
+    expect(labels!.length).toBeGreaterThan(0);
+    for (const label of labels!) {
+      expect(label).toMatch(/@ STEADY$/);
+    }
   });
 });

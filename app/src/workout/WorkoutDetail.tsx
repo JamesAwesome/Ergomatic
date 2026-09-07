@@ -539,9 +539,9 @@ function WorkoutDetailView({
         />
         {connectError && <p className="baseline-error">{connectError}</p>}
         {/* Start Timer — spec §4: renamed from "Start" and demoted from L1
-            to L2 now that the hardware primaries hold L1. Still
-            the SAME `handleStart`/`startBlocked`/`replaceStage` logic,
-            unmoved and unmodified — only the copy and the class changed. */}
+            to L2 now that the hardware primaries hold L1. Phase RW PR B
+            removed the `startBlocked` arm this ternary used to open with:
+            nothing gates Start on a baseline any more. */}
         {replaceStage === null ? (
           <button type="button" className="button-l2" onClick={handleStart}>
             Start Timer

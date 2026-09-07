@@ -4715,7 +4715,8 @@ test.describe("timer screen (portrait, DISTANCE phase)", () => {
 // Phase 6B (Task 5): the live timer with an effort-ref TARGET (`ref:
 // {effort:"max"}`) — TimerTargets.tsx's own binding rule: the numeric
 // estimate behind an effort ref is NEVER shown, only the resolved word
-// ("ALL OUT"/"EASY"), with no sub-line underneath it (unlike a split-ref
+// ("ALL OUT"/"STEADY", or any ladder word for a split ref rowed with no
+// baseline), with no sub-line underneath it (unlike a split-ref
 // target's own ref sub-line, ui-fix round Item 1). Time-based (not distance) so the ▶ control
 // shows, distinct from the DISTANCE sweep above.
 test.describe("timer screen (portrait, effort target visible)", () => {

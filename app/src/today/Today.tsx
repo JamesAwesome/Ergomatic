@@ -727,7 +727,10 @@ function PieceRegion({
   baselines,
 }: {
   steps: Step[];
-  baselines: Baselines;
+  // Phase RW PR B (spec §1.2): null-tolerant, so PR C can render this card
+  // for a rower who skipped the doors. `pieceList`/`workAndTotal` take the
+  // same union and a split-ref piece reads its ladder word.
+  baselines: Baselines | null;
 }) {
   const rows = pieceList(steps, baselines);
   const peak = peakIndex(rows, PIECE_CAP);
@@ -1425,17 +1428,15 @@ function TodayView({
                 <span className="today-card-duration">
                   {/* Phase RW PR A: `estimateMinutes` prices with or
                       without a baseline; an assumed estimate carries the
-                      same ~ the Library row does. Unreachable without a
-                      baseline until PR C (`needsDoors` above), but the
-                      mark is here so PR C cannot show one unmarked. */}
+                      same ~ the Library row does. PR B dropped the
+                      non-null assertions this card carried, so PR C can
+                      render it with no baseline at all. */}
                   {cardMinutes(recommended.steps, baselines)}
                 </span>
               </div>
               <h2 className="today-card-title">{recommended.title}</h2>
               <p className="today-card-meta">EFFORT {recommended.effort}/5</p>
-              {/* `baselines` is never null here — same guarantee `today-card-
-                  duration` above already relies on (`needsDoors`). */}
-              <PieceRegion steps={recommended.steps} baselines={baselines!} />
+              <PieceRegion steps={recommended.steps} baselines={baselines} />
               <p className="today-reason-foot">
                 <span className="today-reason-foot-text">
                   {suggestion.reason}

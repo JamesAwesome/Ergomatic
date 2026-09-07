@@ -73,14 +73,14 @@ export default function StepEditor({
   row: BuilderRow;
   index: number;
   // Pre-computed exact resolved split (e.g. "2:12.0" — ui-fix round, Item
-  // 1: never a tolerance band), an effort word ("ALL OUT"/"STEADY"), or null
-  // when baselines are unknown — this component does no pace math of its
-  // own, same convention as StepCard.tsx's own splitLabel prop. Builder's
-  // splitLabelFor is the one place that branches on row.refEffort: an
-  // effort target renders even when baselines are unset (a word needs no
-  // resolution, unlike a split target), which is a deliberate difference
-  // from a split row's null/"no target" case below — not an oversight that
-  // a future baselines check should "fix".
+  // 1: never a tolerance band) or a word: the effort word
+  // ("ALL OUT"/"STEADY") for a max/min row, or (Phase RW PR B) the ladder
+  // word for a split row with no baseline. This component does no pace math
+  // of its own, same convention as StepCard.tsx's own splitLabel prop;
+  // Builder's `splitLabelFor` is the one place that decides which of the
+  // three it is, and since PR B it is never null FOR A WORK ROW — the
+  // remaining null is a rest/test row, which renders no TARGET strip at
+  // all (the `isWork` guard below).
   splitLabel: string | null;
   onChange: (patch: Partial<BuilderRow>) => void;
   onDuplicate: () => void;
