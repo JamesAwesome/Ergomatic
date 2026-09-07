@@ -1284,8 +1284,14 @@ closed with zero Concept2 contact.
       repo — capture one on the next walk so the corpus carries a belted
       0x0039 from a second day and build.
 
-- [ ] **v0.41.0's release note is now FALSE and the next note owes a
-      correction.** It reads "Rows rowed with the PM5 connected now show what
+- [x] **DONE (2026-09-07, PR #348). v0.41.0's release note was FALSE and the
+      next note owed a correction.** Fixed in the same round that corrected
+      v0.42.0's own item 2: v0.41.0 item 1 now reads "what the monitor
+      reports" and no longer lists average heart rate among the session
+      figures — that tile read a dash on every row in that build, so the
+      claim was false when shipped rather than merely outdated — and
+      v0.42.0 item 6 says where the number comes from now.
+      **Original row:** It reads "Rows rowed with the PM5 connected now show what
       the monitor measured: … average heart rate for the session". After
       #345 that figure is NOT what the monitor measured — the monitor sends
       nothing there, and the app works it out from the trace, working strokes
@@ -2119,16 +2125,19 @@ Each needs erg time or a deliberate recording session.
   on Paul's Law (≈ +7.9 s, SECONDARY, a forum post, trained rowers) and says
   in terms that no source grounds a better per-population gap;
   `deriveBaseline.test.ts` pins the constant and nothing about any real pair.
-- **v0.42.0's release note describes behaviour the app no longer has**
-  (found at PR #344's PM gate, 2026-09-07; the tag has NOT been released —
-  James is bundling more work first). `releaseNotes.ts` item 2 promises "a
-  quiet **NO BASELINE SET** line keeps the doors one tap away, and setting a
-  baseline any time puts the numbers back". After #344 a half-set rower reads
-  `2K SET · NO 6K`, not `NO BASELINE SET`, and setting ONE baseline does not
-  put the numbers back — the app now says so out loud. Amend item 2 and name
-  the `Estimate it (+7s)` tap. Rides whatever notes PR precedes the tag; the
-  tag itself needs re-cutting at the new main, since `v0.42.0` currently
-  points at #344's base and nothing has been uploaded from it.
+- **DONE (2026-09-07, PR #348): v0.42.0's notes corrected, and the tag it
+  was written for DELETED unreleased.** Item 2 promised "a quiet **NO
+  BASELINE SET** line" and that "setting a baseline any time puts the numbers
+  back"; after #344 a half-set rower reads `2K SET · NO 6K`, and setting ONE
+  side does not put the numbers back. James, 2026-09-07: "We won't release
+  that tag" — so `v0.42.0` (which sat at `8326fb2c`, #344's base, and never
+  reached TestFlight) was deleted locally and on the remote, and the VERSION
+  is free to be re-cut at whatever main is when he releases. The notes entry
+  keeps its `v0.42.0` label and `e2e/releasePin.ts` is unchanged for the same
+  reason. Its provenance comment was re-counted over the full
+  `v0.41.0..main` range (sixteen merges, RF15) and three items added: the
+  half-set offer (#344), the verification-code narrowing (#341) and AVG HR
+  (#345).
 - **The vitest 5 migration is owed, and it is why the app's dependency group
   went red** (2026-09-07, PR #349 split it out; Dependabot's #340 bundled the
   major with 17 routine patches). Vitest 5 changes the `Assertion` type
@@ -2653,7 +2662,9 @@ trigger is the whole entry.
   wanted.
 - ~~**Row without a baseline set** (James, 2026-08-23)~~ — **DONE.** The Just
   Row half shipped with Phase JR; the every-workout half was Phase RW,
-  closed 2026-09-07 and released in v0.42.0 (ledger row below).
+  closed 2026-09-07; NOT yet released (the first v0.42.0 tag was deleted
+  unreleased, 2026-09-07 — James is bundling more work first). Ledger row
+  below.
 - **"Which days did I override, and what was the other suggestion?"** (James,
   2026-08-12). Two questions in one sentence: the CHECKPOINT half needs no new
   capture (`plan_index ∈ {6,34,62}`, **not** `workout_title`), and the FREE-FORM
@@ -2693,7 +2704,7 @@ RECORD — do not cite it for a live question.
   (STEADY · MODERATE · HARD · ALL OUT) where the split would be, `~`
   durations off an assumed pace, and a stored "row without one for now"
   that survives a reinstall · closed 2026-09-07 · #333, #335, #338 ·
-  released in v0.42.0 · [detail](docs/history/phase-rw.md)
+  awaiting release; the first v0.42.0 tag was deleted unreleased · [detail](docs/history/phase-rw.md)
 - **Phase NF** — Scan NFC: hold the iPhone to the PM5's own tag and the app
   connects to exactly that erg and programs the workout, no Bluetooth picker
   (workout detail and Just Row); the scan screen names the target and can be
