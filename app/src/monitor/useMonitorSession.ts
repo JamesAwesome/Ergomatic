@@ -1673,7 +1673,7 @@ const TARGETED_FAILURE_COPY: Readonly<
 > = {
   TargetAlreadyConnectedError: {
     reason: "target-already-connected",
-    detail: "End this PM5's current connection, then try again.",
+    detail: "End the monitor's current connection, then try again.",
   },
   TargetMonitorAmbiguousError: {
     reason: "target-ambiguous",

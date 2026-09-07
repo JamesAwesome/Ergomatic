@@ -1,5 +1,5 @@
 // Phase NF (design spec 2026-09-03, "User-visible states and copy"): the
-// `✓ PM5 found` state must receive ONE real paint before the interstitial
+// `✓ Monitor found` state must receive ONE real paint before the interstitial
 // replaces it. React may batch the accepted-state assignment and the
 // interstitial mount into one commit, so the handoff waits on an injected
 // barrier of two consecutive `requestAnimationFrame` turns. This promises

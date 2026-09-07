@@ -729,7 +729,7 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
     expect(onProceed).not.toHaveBeenCalled();
   });
 
-  it("accepted swaps the Scan NFC slot for the `✓ PM5 found` status (aria-live), same fill class", () => {
+  it("accepted swaps the Scan NFC slot for the `✓ Monitor found` status (aria-live), same fill class", () => {
     render(
       <MemoryRouter>
         <ConnectAction
@@ -741,7 +741,7 @@ describe("ConnectAction as the shared connection-entry owner (Phase NF)", () => 
       </MemoryRouter>,
     );
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("✓ PM5 found");
+    expect(status).toHaveTextContent("✓ Monitor found");
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveClass("button-nfc");
     expect(screen.queryByRole("button", { name: "Scan NFC" })).toBeNull();

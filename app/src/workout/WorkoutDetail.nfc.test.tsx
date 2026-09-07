@@ -391,7 +391,9 @@ describe("THE ROUTED PROOF: Scan NFC click → native-shaped event → real pars
     );
 
     // The accepted state is committed and painted BEFORE the interstitial.
-    expect(await screen.findByRole("status")).toHaveTextContent("✓ PM5 found");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "✓ Monitor found",
+    );
     expect(screen.queryByText(/Connecting/)).toBeNull();
     await twoFrames();
 

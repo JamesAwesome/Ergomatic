@@ -123,7 +123,7 @@ export interface NfcEntry {
   capability: NfcCapabilityState;
   /** True for the whole attempt: both hardware buttons are disabled. */
   busy: boolean;
-  /** `✓ PM5 found`, for one committed paint before the handoff. */
+  /** `✓ Monitor found`, for one committed paint before the handoff. */
   accepted: boolean;
   run(attemptId: ConnectionAttemptId, sinks: NfcAttemptSinks): Promise<void>;
 }

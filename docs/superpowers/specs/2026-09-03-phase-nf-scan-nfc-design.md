@@ -28,7 +28,7 @@ the workout without a Bluetooth picker or a second confirmation.
 On an NFC-capable iPhone, workout detail gains a filled muted-green **Scan NFC**
 button immediately above the existing filled blue **Connect** button. The two
 are equal primary hardware routes. A successful read gives success haptics and a
-brief `✓ PM5 found` state, then enters the existing connected interstitial,
+brief `✓ Monitor found` state, then enters the existing connected interstitial,
 connects only to the advertised PM5 name encoded by the tag, and programs the
 already-compiled workout. The existing **Connect** path remains unchanged.
 
@@ -392,13 +392,13 @@ does not invent a landscape reflow.
 | ------------------------- | --------------------------- | --------------------------------------------------------------------------------------- |
 | ready                     | workout detail              | `Scan NFC`                                                                              |
 | system scan               | iOS NFC sheet               | `Hold your iPhone near the monitor.`                                                        |
-| accepted                  | NFC button position         | `✓ PM5 found`; success haptic; one committed paint, no duration timer                   |
+| accepted                  | NFC button position         | `✓ Monitor found`; success haptic; one committed paint, no duration timer                   |
 | wrong/malformed record    | workout detail inline error | `Unsupported NFC tag`                                                                   |
 | user cancelled sheet      | workout detail              | quiet return; no error                                                                  |
 | system reader timeout     | workout detail inline error | `No NFC tag detected. Try again.`                                                       |
 | reader invalidated        | workout detail inline error | `NFC scan stopped. Try again.`; cause `tagFailure` → `Couldn't scan the monitor tag. Try again.` (follow-on) |
 | target not advertising    | connected failure card      | `Couldn't reach <name>.` / `Check nothing else is connected to it, then try again.` (follow-on, 2026-09-06); exact-target **Try again** or **Cancel** |
-| exact target already held | connected failure card      | `End this PM5's current connection, then try again.`; exact retry                       |
+| exact target already held | connected failure card      | `End the monitor's current connection, then try again.`; exact retry                       |
 | duplicate exact targets   | connected failure card      | `More than one PM5 has this name. Use Connect.`; no targeted retry                      |
 | target scan interrupted   | connected failure card      | `Connection interrupted. Try again.`; exact retry or **Cancel**                         |
 | BLE cleanup failed        | connected failure card      | `Bluetooth cleanup failed. Restart Ergomatic before trying again.`; no in-process retry |
@@ -599,7 +599,7 @@ For NFC intent:
 2. start the NFC reader;
 3. on one record event, claim the attempt and explicitly close the reader;
 4. parse the PM5 target or show `Unsupported NFC tag` and remain on detail;
-5. fire best-effort success haptics and render `✓ PM5 found`;
+5. fire best-effort success haptics and render `✓ Monitor found`;
 6. cross the one-paint barrier while the same attempt remains current;
 7. compile the same nudged workout, phases, identity, baselines, and log seed as
    today's `handleConnectProceed` (`WorkoutDetail.tsx:224-277`);
@@ -938,7 +938,7 @@ composition tests; adjacent mirrors are not accepted as seam proof.
   through effect replay without losing authorization, while true route unmount
   with no same-ID reclaim discards it.
 - Success paint: the actual detail component cannot mount the interstitial until
-  `✓ PM5 found` has committed across the injected consecutive-animation-frame
+  `✓ Monitor found` has committed across the injected consecutive-animation-frame
   barrier. Immediate-handoff and single-frame mutations fail.
 - Transport propagation: a census covers every implementation and decorator;
   the production composition through `defaultTransport` and `withLiveness`

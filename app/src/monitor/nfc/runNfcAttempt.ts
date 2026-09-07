@@ -49,7 +49,7 @@ export interface RunNfcAttemptDeps {
   /** The paint barrier; the caller passes `paintBarrier` bound to the same
    *  signal. */
   paint: (signal: AbortSignal) => Promise<void>;
-  /** Commits `✓ PM5 found`. Called BEFORE `paint`. */
+  /** Commits `✓ Monitor found`. Called BEFORE `paint`. */
   onAccepted: () => void;
 }
 

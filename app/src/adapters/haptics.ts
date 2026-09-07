@@ -1,4 +1,4 @@
-// Phase NF: the success haptic behind `✓ PM5 found`. Best-effort by
+// Phase NF: the success haptic behind `✓ Monitor found`. Best-effort by
 // contract (design spec 2026-09-03, "User-visible states and copy"): a
 // rejection is instrumented by the caller and never delays or fails
 // Bluetooth discovery; the visual state is the confirmation. Platform
