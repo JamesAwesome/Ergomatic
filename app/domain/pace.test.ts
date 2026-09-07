@@ -8,6 +8,7 @@ import {
   paceWordSpoken,
   refLabel,
   estimationSplit,
+  ASSUMED_BASELINES,
 } from "./pace.js";
 
 const B = { k2Seconds: 112, k6Seconds: 122 };
@@ -140,6 +141,17 @@ describe("effort refs", () => {
       expect(() => estimationSplit(null, { base: "6k", off: 0 })).toThrow(
         /baselines/i,
       );
+    });
+  });
+});
+
+describe("ASSUMED_BASELINES (Phase RW PR A)", () => {
+  // The recommend table's MOST COMMON cell, pinned as literals so a table
+  // edit that moves the mode is seen here, not discovered on a Library row.
+  it("is the table's modal pair, 2:25 / 2:32", () => {
+    expect(ASSUMED_BASELINES).toStrictEqual({
+      k2Seconds: 145,
+      k6Seconds: 152,
     });
   });
 });

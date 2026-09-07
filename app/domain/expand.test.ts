@@ -166,6 +166,7 @@ describe("estimateMinutes", () => {
     expect(estimateMinutes(intervalLadder.steps, B)).toStrictEqual({
       minutes: 50,
       estimated: false,
+      assumed: false,
     });
   });
   it("estimates distance steps at resolved pace and flags it", () => {
@@ -182,6 +183,7 @@ describe("estimateMinutes", () => {
     expect(estimateMinutes(steps, B)).toStrictEqual({
       minutes: 5,
       estimated: false,
+      assumed: false,
     });
   });
 
@@ -282,17 +284,29 @@ describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => 
   });
 });
 
-describe("estimateMinutes with null baselines (Phase 6I: no-baseline onboarding)", () => {
-  // Post-strip First-6k shape — see the note on the same-named fixture
-  // above: no lead-in step of any kind since 2026-08-09.
-  const firstSixK: Step[] = [
+describe("estimateMinutes with null baselines (Phase RW PR A: the assumed pair)", () => {
+  const sixKAtMax: Step[] = [
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 6000 },
+      ref: { effort: "max" },
+    },
+  ];
+  const sixKAtMin: Step[] = [
     {
       k: "w",
       duration: { kind: "distance", meters: 6000 },
       ref: { effort: "min" },
     },
   ];
-  const splitRefSteps: Step[] = [
+  const sixKSplit: Step[] = [
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 6000 },
+      ref: { base: "2k", off: 0 },
+    },
+  ];
+  const timeOnly: Step[] = [
     { k: "r", minutes: 5 },
     {
       k: "w",
@@ -301,37 +315,60 @@ describe("estimateMinutes with null baselines (Phase 6I: no-baseline onboarding)
     },
   ];
 
-  it("returns null for an effort-only workout rather than a partial/misleading number", () => {
-    expect(estimateMinutes(firstSixK, null)).toBeNull();
+  it("prices a time-only split-ref workout exactly, unmarked (was: throw)", () => {
+    expect(estimateMinutes(timeOnly, null)).toStrictEqual({
+      minutes: 10,
+      estimated: false,
+      assumed: false,
+    });
   });
 
-  // 2026-08-08 review fix: the null branch used to short-circuit BEFORE
-  // ever looking at `steps`, so a split-ref workout under null baselines
-  // (a programmer error — the caller forgot to gate on needsBaselines())
-  // silently read as "no estimate" instead of the same loud throw
-  // `phases()`/`estimationSplit` already give that exact misuse.
-  it("throws for a split-ref workout under null baselines — the same programmer-error guard as phases()/estimationSplit", () => {
-    expect(() => estimateMinutes(splitRefSteps, null)).toThrow(/baselines/i);
+  // 6000 m at the mode cell's 2k (2:25 = 145 s/500 m): 1740 s = 29.0'.
+  // Pinned as a literal: pricing at the table's SLOWEST cell (2:30) gives
+  // 1800 s = 30, so a mutation to that cell fails here.
+  it("prices a distance MAX step off the assumed 2k and marks it assumed", () => {
+    expect(estimateMinutes(sixKAtMax, null)).toStrictEqual({
+      minutes: 29,
+      estimated: true,
+      assumed: true,
+    });
   });
 
-  // 2026-08-08 review fix: the reviewer's live tsc compile proved the old
-  // two-overload shape ("Baselines" / bare "null") rejected a caller
-  // holding a `Baselines | null`-typed VARIABLE ("No overload matches
-  // this call") — neither overload's parameter type is a superset of the
-  // union. This is a type-level assertion: the test's mere existence
-  // typechecking is half the proof; the runtime behavior on both branches
-  // (already covered above/elsewhere) is the other half.
+  // MIN prices at k6 + 20 = 152 + 20 = 172 s/500 m: 2064 s = 34.4 -> 34.
+  // At the slowest cell (157 + 20 = 177): 2124 s = 35.4 -> 35.
+  it("prices a distance MIN step off the assumed 6k + 20 and marks it assumed", () => {
+    expect(estimateMinutes(sixKAtMin, null)).toStrictEqual({
+      minutes: 34,
+      estimated: true,
+      assumed: true,
+    });
+  });
+
+  it("prices a distance split-ref step off the assumed pair (was: throw)", () => {
+    expect(estimateMinutes(sixKSplit, null)).toStrictEqual({
+      minutes: 29,
+      estimated: true,
+      assumed: true,
+    });
+  });
+
+  it("never marks a real-baseline estimate as assumed, even a distance one", () => {
+    expect(
+      estimateMinutes(sixKSplit, { k2Seconds: 112, k6Seconds: 122 }),
+    ).toStrictEqual({ minutes: 22, estimated: true, assumed: false });
+  });
+
   it("accepts a Baselines | null-typed variable directly (type-level proof: this must typecheck)", () => {
     function pickBaselines(useReal: boolean): Baselines | null {
       return useReal ? { k2Seconds: 112, k6Seconds: 122 } : null;
     }
     const nullable: Baselines | null = pickBaselines(false);
-    expect(estimateMinutes(firstSixK, nullable)).toBeNull();
-
+    expect(estimateMinutes(timeOnly, nullable).assumed).toBe(false);
     const realNullable: Baselines | null = pickBaselines(true);
-    expect(estimateMinutes(splitRefSteps, realNullable)).toStrictEqual({
-      minutes: 10, // r 5' + w 5' — both time-based, no estimate
+    expect(estimateMinutes(timeOnly, realNullable)).toStrictEqual({
+      minutes: 10,
       estimated: false,
+      assumed: false,
     });
   });
 });

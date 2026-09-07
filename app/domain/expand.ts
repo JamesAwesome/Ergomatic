@@ -1,7 +1,7 @@
 import { fmtSplit } from "./format.js";
-import { needsBaselines } from "./needsBaselines.js";
 import {
   paceWordLabel,
+  ASSUMED_BASELINES,
   estimationSplit,
   isPaceWordRef,
   resolveSplit,
@@ -206,58 +206,31 @@ export function phases(steps: Step[], baselines: Baselines | null): Phase[] {
   return out;
 }
 
-// Phase 6I: overloaded exactly like `estimationSplit` (pace.ts) — a
-// concrete-`Baselines` overload first, so every EXISTING caller (all of
-// which pass one) keeps its exact non-null `{ minutes, estimated }`
-// inferred return type with no null check added, and a second overload
-// declared with the UNION TYPE `Baselines | null` (not a bare `null`
-// literal type) so a caller that itself holds a `Baselines | null`
-// VARIABLE (Task 2's session-flow call sites) resolves against it
-// directly — TS overload resolution matches a call against one of the
-// DECLARED signatures, and a `Baselines | null`-typed argument satisfies
-// neither "exactly `Baselines`" nor "exactly `null`", so the narrower
-// `baselines: null` form (2026-08-08 review fix) failed to compile for
-// exactly that shape.
-//
-// With null baselines this throws for a split-ref workout (a programmer
-// error — `phases()`/`estimationSplit` already throw for the same misuse;
-// returning null here instead would have silently masked "caller forgot
-// to gate on needsBaselines()" as "no estimate"), and returns null for an
-// effort-only workout rather than a partial sum: `phases(steps, null)`
-// can still leave some phases unpriceable (an effort distance step has no
-// targetSplit, so `phaseSeconds` can't estimate it) and silently summing
-// only the priceable phases would produce a real-looking but wrong total
-// — the exact "never a bare dash, never a wrong number" house rule this
-// feature exists to honor. Callers that want a nominal duration without
-// baselines use fixed copy instead (`onboarding.ts`'s
-// `ONBOARDING_DURATION_COPY`).
-export function estimateMinutes(
-  steps: Step[],
-  baselines: Baselines,
-): { minutes: number; estimated: boolean };
+/** Estimated minutes for `steps`. With baselines: time phases exact,
+ *  distance phases at the resolved split (`estimated: true`). Without
+ *  baselines (Phase RW PR A, spec §1.3/§4): distance phases price against
+ *  `ASSUMED_BASELINES` and the result carries `assumed: true`, the flag
+ *  every surface renders as `~`. Time-only workouts price exactly either
+ *  way and are never marked. The phases built against the assumed pair
+ *  are consumed HERE and only here: this function returns numbers, never
+ *  a `Phase`, so no assumed `targetSplit` can reach `pieceList`, the
+ *  compiler or a log (spec §9 item 8; the census test pins the importers). */
 export function estimateMinutes(
   steps: Step[],
   baselines: Baselines | null,
-): { minutes: number; estimated: boolean } | null;
-export function estimateMinutes(
-  steps: Step[],
-  baselines: Baselines | null,
-): { minutes: number; estimated: boolean } | null {
-  if (baselines === null) {
-    if (needsBaselines(steps)) {
-      throw new Error(
-        "estimateMinutes: a split-ref work step needs baselines — callers must gate on needsBaselines() first",
-      );
-    }
-    return null;
-  }
+): { minutes: number; estimated: boolean; assumed: boolean } {
+  const pair = baselines ?? ASSUMED_BASELINES;
   let seconds = 0;
   let estimated = false;
-  for (const p of phases(steps, baselines)) {
+  for (const p of phases(steps, pair)) {
     const s = phaseSeconds(p);
     if (s === null) continue;
     if (p.seconds === undefined) estimated = true;
     seconds += s;
   }
-  return { minutes: Math.round(seconds / 60), estimated };
+  return {
+    minutes: Math.round(seconds / 60),
+    estimated,
+    assumed: baselines === null && estimated,
+  };
 }
