@@ -12,6 +12,17 @@ updates:
       # Re-check `npm view typescript-eslint peerDependencies` before removing.
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
+      # Vitest 5 breaks @testing-library/jest-dom's type augmentation:
+      # every `toHaveValue` / `toHaveAttribute` fails typecheck with
+      # TS2339 against the new Assertion shape, and jest-dom 7.0.1 (latest,
+      # peer `vitest: >= 0.32`) has no build that fixes it. Grouped with 17
+      # routine patches it took the whole group red — see ROADMAP, "the
+      # vitest 5 migration". Take the major deliberately, not as a group
+      # member; re-check jest-dom's releases before removing this.
+      - dependency-name: vitest
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/coverage-v8"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /
     schedule:
