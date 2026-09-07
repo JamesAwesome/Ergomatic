@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@capgo/capacitor-nfc@8.2.5': 30afcb82af2e9a060332756cf52cc9117090b29447437f0226002e4349afbc32
+  '@capgo/capacitor-nfc@8.2.5': 6a377bd76c16c5eabbe0ca8fb1486b73efbd42a33ac311ae62dc08ee9cc510d4
 
 importers:
 
@@ -34,7 +34,7 @@ importers:
         version: 8.0.5(@capacitor/core@8.5.0)
       '@capgo/capacitor-nfc':
         specifier: 8.2.5
-        version: 8.2.5(patch_hash=30afcb82af2e9a060332756cf52cc9117090b29447437f0226002e4349afbc32)(@capacitor/core@8.5.0)
+        version: 8.2.5(patch_hash=6a377bd76c16c5eabbe0ca8fb1486b73efbd42a33ac311ae62dc08ee9cc510d4)(@capacitor/core@8.5.0)
       '@capgo/capacitor-social-login':
         specifier: ^8.4.4
         version: 8.4.4(@capacitor/core@8.5.0)
@@ -4385,7 +4385,7 @@ snapshots:
     dependencies:
       '@capacitor/core': 8.5.0
 
-  '@capgo/capacitor-nfc@8.2.5(patch_hash=30afcb82af2e9a060332756cf52cc9117090b29447437f0226002e4349afbc32)(@capacitor/core@8.5.0)':
+  '@capgo/capacitor-nfc@8.2.5(patch_hash=6a377bd76c16c5eabbe0ca8fb1486b73efbd42a33ac311ae62dc08ee9cc510d4)(@capacitor/core@8.5.0)':
     dependencies:
       '@capacitor/core': 8.5.0
 

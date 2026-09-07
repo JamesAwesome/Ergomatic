@@ -10,6 +10,7 @@
 //   NfcCancelledError → quiet (no error)
 //   NfcTimeoutError → `No NFC tag detected. Try again.`
 //   NfcInvalidatedError, cause multipleTags → `Unsupported NFC tag`
+//   NfcInvalidatedError, cause tagFailure → `Couldn't scan the monitor tag. Try again.`
 //   any other NfcInvalidatedError, NfcStartError → `NFC scan stopped. Try again.`
 //   NfcAbortError (unmount / foreground loss) → quiet
 //   NfcUnsupportedError (cannot happen once the button rendered) → `NFC scan stopped. Try again.`
@@ -30,7 +31,8 @@ export const NFC_ALERT_MESSAGE = "Hold your iPhone near the PM5.";
 export type NfcInlineCopy =
   | "Unsupported NFC tag"
   | "No NFC tag detected. Try again."
-  | "NFC scan stopped. Try again.";
+  | "NFC scan stopped. Try again."
+  | "Couldn't scan the monitor tag. Try again.";
 
 export type NfcAttemptOutcome =
   | { kind: "target"; target: Pm5NfcTarget }
@@ -63,6 +65,17 @@ function endingCopy(err: unknown): NfcAttemptOutcome {
     const cause = (err as { cause?: unknown }).cause;
     if (cause === "multipleTags") {
       return { kind: "inline-error", copy: "Unsupported NFC tag" };
+    }
+    // The controller forced the ending because the TAG failed mid-read
+    // (connect, status or NDEF read; the walk of 2026-09-06 produced one):
+    // the rower's fix is to scan again, so the line says that, in James's
+    // words (follow-on Gate 0). Every other invalidation keeps the generic
+    // line below.
+    if (cause === "tagFailure") {
+      return {
+        kind: "inline-error",
+        copy: "Couldn't scan the monitor tag. Try again.",
+      };
     }
   }
   return { kind: "inline-error", copy: "NFC scan stopped. Try again." };

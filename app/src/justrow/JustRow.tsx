@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import ConnectAction, {
   type ConnectionEntryIntent,
 } from "../monitor/ConnectAction";
-import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
+import type { MonitorDiscoveryRequest } from "../../domain/monitor/types.js";
 import { mintAttemptId } from "../monitor/nfc/attemptIdMint";
+import type { ConnectionAttemptTrace } from "../monitor/nfc/connectionAttemptTrace";
+import { useNfcEntry } from "../monitor/nfc/useNfcEntry";
 import {
   connectGuardStage,
   type ConnectGuardStage,
@@ -70,23 +72,61 @@ export default function JustRow() {
   const [showNumbers, setShowNumbers] = useState(false);
 
   // Phase NF: the press's own attempt ID keys the guard's staged receipt, so
-  // it travels into `connect(request)`; Try again reuses it (the same
-  // attempt on the same record, never a second authorization). Just Row is
-  // NOT the workout detail — no Scan NFC here (spec ruling 3 puts it on
-  // workout detail only), so the entry owner renders Connect alone.
-  const lastAttemptRef = useRef<ConnectionAttemptId | null>(null);
+  // it travels into `connect(request)`; Try again replays the LAST REQUEST
+  // (the same attempt on the same record, never a second authorization —
+  // and, since the follow-on, the same TARGET: a targeted failure's Try
+  // again repeats the exact name and never opens the picker, the rule the
+  // interstitial follows). Follow-on Gate 0 §1 (James, 2026-09-06): Scan
+  // NFC sits above Connect here too; the NFC attempt is `useNfcEntry`'s,
+  // shared with workout detail, and this screen only says where a decoded
+  // target goes (its own session) and where an inline outcome renders.
+  const nfc = useNfcEntry();
+  const [inlineError, setInlineError] = useState<string | null>(null);
+  // The exact name the current attempt is looking for — set by an NFC
+  // handoff, cleared by a manual press; state, not the ref, because the
+  // card reads it during render.
+  const [lookingFor, setLookingFor] = useState<string | null>(null);
+  const lastRequestRef = useRef<{
+    request: MonitorDiscoveryRequest;
+    trace?: ConnectionAttemptTrace;
+  } | null>(null);
   const handleProceed = useCallback(
     (intent: ConnectionEntryIntent) => {
-      lastAttemptRef.current = intent.attemptId;
+      setInlineError(null);
+      if (intent.kind === "nfc") {
+        void nfc.run(intent.attemptId, {
+          onTarget: (request, trace) => {
+            // Kept WITH its trace: a retry records into the same trace, as
+            // the interstitial's does (whole-branch review, should-fix 3).
+            lastRequestRef.current = { request, trace };
+            setLookingFor(
+              request.kind === "advertised-name" ? request.exactName : null,
+            );
+            setStarted(true);
+            void session.connect(request, trace);
+            return true;
+          },
+          onInlineError: setInlineError,
+        });
+        return;
+      }
+      const request: MonitorDiscoveryRequest = {
+        kind: "picker",
+        attemptId: intent.attemptId,
+      };
+      lastRequestRef.current = { request };
+      setLookingFor(null);
       setStarted(true);
-      void session.connect({ kind: "picker", attemptId: intent.attemptId });
+      void session.connect(request);
     },
-    [session],
+    [nfc, session],
   );
   const retryConnect = useCallback(() => {
-    const attemptId = lastAttemptRef.current ?? mintAttemptId();
-    lastAttemptRef.current = attemptId;
-    void session.connect({ kind: "picker", attemptId });
+    const last = lastRequestRef.current ?? {
+      request: { kind: "picker" as const, attemptId: mintAttemptId() },
+    };
+    lastRequestRef.current = last;
+    void session.connect(last.request, last.trace);
   }, [session]);
 
   // AXES, NEVER `session.phase`. `connectedAxes.ts` exists so that no
@@ -188,10 +228,14 @@ export default function JustRow() {
         <div className="action-stack">
           <ConnectAction
             onProceed={handleProceed}
-            nfcCapability="unsupported"
-            busy={false}
-            accepted={false}
+            nfcCapability={nfc.capability}
+            busy={nfc.busy}
+            accepted={nfc.accepted}
           />
+          {/* The same slot workout detail uses, in the same position:
+              between the hardware pair and the next action (follow-on,
+              antagonist F4; `.baseline-error` accent on page 5.35:1). */}
+          {inlineError && <p className="baseline-error">{inlineError}</p>}
           <StartTimerAction />
         </div>
       </main>
@@ -245,9 +289,16 @@ export default function JustRow() {
         <div className="connected-interstitial-body">
           <p className="connected-status-label">JUST ROW</p>
           <h1 className="connected-serif-line">Could not connect</h1>
-          {session.error !== null && (
-            <p className="connected-body-line">{session.error.detail}</p>
-          )}
+          {/* A detail carrying a line break (the not-advertising card,
+              follow-on Gate 0 §3) renders as one body line per line — the
+              same rule the workout interstitial applies (antagonist F2:
+              a second renderer of the same field must keep the break). */}
+          {session.error !== null &&
+            session.error.detail.split("\n").map((line) => (
+              <p key={line} className="connected-body-line">
+                {line}
+              </p>
+            ))}
         </div>
         <div className="action-stack connected-interstitial-actions">
           <button
@@ -330,6 +381,7 @@ export default function JustRow() {
   // `deriveProgram` reads as `"sending"` — so the wait has a screen.
   const sending = axes.program === "sending";
   const ready = axes.program === "armed";
+
   // RC-18 (door spec §3): the `??` arm is DEAD, and the argument now has to
   // cover BOTH cards that render this caption, so it is stated here rather
   // than beside one of them. `sending` is `axes.program === "sending"` and
@@ -396,13 +448,24 @@ export default function JustRow() {
         <p className="connected-status-label">
           {ready ? deviceCaption : "JUST ROW"}
         </p>
+        {/* Gate 0 (James, 2026-09-06): on the NFC route the card names the
+            PM5 the targeted scan is looking for — the same two lines the
+            workout interstitial shows at that moment — instead of telling
+            the rower to wake a monitor the tap just woke. The manual route
+            keeps its own lines. */}
         <h1 className="connected-serif-line">
-          {ready ? "Ready when you pull" : "Connecting to monitor"}
+          {ready
+            ? "Ready when you pull"
+            : lookingFor !== null
+              ? `Looking for ${lookingFor}`
+              : "Connecting to monitor"}
         </h1>
         <p className="connected-body-line">
           {ready
             ? "The clock starts on your first stroke."
-            : "Wake the monitor if its screen is dark."}
+            : lookingFor !== null
+              ? "Keep the PM5 on and close by."
+              : "Wake the monitor if its screen is dark."}
         </p>
         {ready && (
           <p className="connected-keep-on">KEEP YOUR PHONE SCREEN ON</p>

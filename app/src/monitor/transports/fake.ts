@@ -429,7 +429,14 @@ export interface FakeScript {
    *  advertisement. The other kinds drive the interstitial's targeted
    *  failure cards in tests and e2e. */
   targetedScan?:
-    "match" | "not-advertising" | "ambiguous" | "already-connected";
+    | "match"
+    | "not-advertising"
+    | "ambiguous"
+    | "already-connected"
+    /** Never settles on its own: rejects `TargetScanInterruptedError` ONLY
+     *  when the caller aborts — the one way a test or capture can hold the
+     *  targeted-scan screen open (follow-on F1). */
+    | "pending";
   /**
    * The machine already has a workout loaded when this session starts.
    * Give it the loaded workout's interval count; `loadedIntervals()`
@@ -2726,6 +2733,18 @@ export function createFakeTransport(script: FakeScript): Transport &
           return fail("TargetMonitorAmbiguousError");
         case "already-connected":
           return fail("TargetAlreadyConnectedError");
+        case "pending":
+          return new Promise<DiscoveredMonitor[]>((_resolve, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                const err = new Error("TargetScanInterruptedError");
+                err.name = "TargetScanInterruptedError";
+                reject(err);
+              },
+              { once: true },
+            );
+          });
       }
     },
     targetedRequests(): readonly TargetedMonitorDiscoveryRequest[] {

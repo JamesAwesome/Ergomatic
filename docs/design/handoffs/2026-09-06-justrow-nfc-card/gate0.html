@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ergomatic — Just Row NFC card Gate 0 (approved 2026-09-06)</title></head><body><style>
+:root{--page:#f4f1e8;--surface:#fffdf7;--sunken:#efeade;--ink:#1b1a17;--ink-3:#57544c;--rule-3:#b9b3a5;--accent:#b5341f;--blue:#2a6275;--fern:#49624f}
+body{margin:0;background:var(--page);color:var(--ink);font-family:Arial,Helvetica,sans-serif}
+.gate{max-width:1180px;margin:0 auto;padding:24px} h2{font:500 30px/1.05 Georgia,serif;margin:0 0 6px} h3{font:700 13px/1.2 "Courier New",monospace;color:var(--ink-3);margin:0 0 8px} p{max-width:70ch;color:var(--ink-3)}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;align-items:start;margin:14px 0 30px} .row.land{grid-template-columns:1fr}
+.framebox.portrait{width:390px;height:844px} .framebox.landscape{width:844px;height:390px}
+.device{position:relative;background:var(--page);border:1px solid var(--rule-3);border-radius:18px;overflow:hidden;box-sizing:border-box} .device.portrait{width:390px;height:844px} .device.landscape{width:844px;height:390px}
+.document{padding:20px;height:calc(100% - 52px);box-sizing:border-box;overflow:hidden} .device.landscape .document{max-width:440px;margin:0 auto}
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:52px;background:var(--surface);border-top:1px solid var(--rule-3);display:flex;justify-content:space-around;align-items:center;font:700 11px "Courier New",monospace;letter-spacing:.08em;color:var(--ink-3)} .tabbar .on{color:var(--ink);border-top:3px solid var(--accent);padding-top:8px;margin-top:-11px}
+.back{font:700 12px "Courier New",monospace;letter-spacing:.08em;margin-bottom:22px} .chip{display:inline-block;font:700 11px "Courier New",monospace;border:1px solid var(--rule-3);background:var(--surface);padding:4px 8px} .title{font:500 34px/1.1 Georgia,serif;margin:10px 0 16px} .meta{font:12px "Courier New",monospace;letter-spacing:.1em;color:var(--ink-3);margin-bottom:8px} .band{background:var(--sunken);padding:12px 16px;font:13px "Courier New",monospace;color:var(--ink-3);margin-bottom:12px}
+.actions{display:flex;flex-direction:column;gap:12px} .action{min-height:56px;display:flex;align-items:center;justify-content:center;font:600 16px Arial;box-sizing:border-box} .action.nfc{background:var(--fern);color:var(--surface)} .action.connect{background:var(--blue);color:var(--surface)} .action.l2{min-height:52px;background:var(--surface);border:1px solid var(--ink);color:var(--ink)} .action.l1{min-height:56px;background:var(--accent);color:var(--surface)}
+.inter{padding-top:40px} .status{font:700 12px "Courier New",monospace;letter-spacing:.12em;color:var(--ink-3);margin-bottom:12px} .serif{font:500 26px/1.2 Georgia,serif;margin-bottom:12px;text-wrap:balance} .hint{font:14px Arial;color:var(--ink-3)} .detail{font:11px "Courier New",monospace;letter-spacing:.1em;color:var(--ink-3);margin-top:8px}
+.inter-actions{position:absolute;left:20px;right:20px;bottom:64px;display:flex;flex-direction:column;gap:12px} .device.landscape .inter-actions{left:calc(50% - 200px);right:calc(50% - 200px);bottom:60px}
+table{border-collapse:collapse;margin:10px 0 26px} td,th{border:1px solid var(--rule-3);padding:6px 10px;font:13px Arial;text-align:left}
+.sheet{width:390px;border:1px solid var(--rule-3);border-radius:14px;background:#fff;padding:20px;text-align:center;font-family:-apple-system,Arial;color:#111} .sheet .t{font-weight:600;margin-bottom:10px} .sheet .msg{color:#c00}
+blockquote{border-left:3px solid var(--rule-3);margin:8px 0;padding:6px 12px;color:var(--ink)}
+</style><div class="gate">
+<h2>Just Row · the connecting card on the NFC route · Gate 0</h2>
+<p>One card, one route. When Scan NFC on Just Row has read the tag and the app is scanning for that exact PM5 (usually 1-2 s, up to 20 s), Just Row shows its generic connecting card. Proposed: the same two lines workout detail shows at that moment, under Just Row's own label. The manual Connect route keeps the current card unchanged. Cancel is already there on both.</p>
+<h3>Portrait 390×844</h3>
+<div class="row"><div class="case"><h3>Current (NFC route, Just Row)</h3><div class="framebox portrait"><div class="device portrait"><div class="document"><div class="inter"><div class="status">JUST ROW</div><div class="serif">Connecting to monitor</div><div class="hint">Wake the monitor if its screen is dark.</div></div><div class="inter-actions"><div class="action l2">Cancel</div></div></div></div></div></div><div class="case"><h3>Proposed</h3><div class="framebox portrait"><div class="device portrait"><div class="document"><div class="inter"><div class="status">JUST ROW</div><div class="serif">Looking for PM5 432331249 Row</div><div class="hint">Keep the PM5 on and close by.</div></div><div class="inter-actions"><div class="action l2">Cancel</div></div></div></div></div></div></div>
+<h3>Landscape 844×390</h3>
+<div class="row land"><div class="case"><h3>Proposed</h3><div class="framebox landscape"><div class="device landscape"><div class="document"><div class="inter"><div class="status">JUST ROW</div><div class="serif">Looking for PM5 432331249 Row</div><div class="hint">Keep the PM5 on and close by.</div></div><div class="inter-actions"><div class="action l2">Cancel</div></div></div></div></div></div></div>
+<h3>Contrast</h3>
+<table><tr><th>Pairing</th><th>Colours</th><th>Ratio</th><th>Verdict</th></tr>
+<tr><td>JUST ROW label</td><td>ink-3 on page</td><td><b>6.69:1</b></td><td>AA</td></tr>
+<tr><td>Looking for … (serif)</td><td>ink on page</td><td><b>15.41:1</b></td><td>AA</td></tr>
+<tr><td>Keep the PM5 on and close by.</td><td>ink-3 on page</td><td><b>6.69:1</b></td><td>AA</td></tr>
+<tr><td>Cancel (L2)</td><td>ink on surface</td><td><b>17.11:1</b></td><td>AA</td></tr></table>
+<p>Every token and class is the one detail's card already uses (<code>connected-status-label</code>, <code>connected-serif-line</code>, <code>connected-body-line</code>, <code>.button-l2</code>). No new colour, no layout change: the card's geometry is unchanged, only its two text lines on this one route.</p>
+</div></body></html>

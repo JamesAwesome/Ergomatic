@@ -8366,6 +8366,70 @@ had passed over the same document without a single duration in it.
   `willShow` on rotation with the keyboard up; whether `capacitor#6430`'s
   stale inset reproduces on this iOS.
 
+## Phase NF follow-on, delta pass (lens 1 of /harden), 2026-09-06
+
+- **A copy string that carries FORMATTING is a contract with every renderer,
+  and the grep that guards it is blind to the ones that never held the old
+  words.** A `\n` was added to one `ConnectedError.detail` and split in the
+  one screen the spec named; a second screen rendering the same field in a
+  bare `<p>` (no `white-space` rule) collapses it silently. The task's own
+  gate — grep the OLD literal in both directions — cannot find that screen,
+  because it never contained the literal. **Technique: for any change to a
+  shared display string, grep the FIELD's renderers (`error.detail`), not the
+  string's occurrences, and ask which of them the same change makes reachable
+  for the first time.** Three renderers existed; one was newly reachable
+  because the same PR added a second producer of that error class.
+- **A screen with no capture and no e2e assertion has no rig, and a plan that
+  prescribes one is prescribing a fake capability.** The Cancel was going onto
+  a phase no test transport can hold open: both the fake and the replay settle
+  `scanTarget` synchronously in every mode of a closed four-member union, and
+  read the abort signal only at entry. **Technique: before writing a test step
+  for a transient state, grep for an existing assertion on that state; if the
+  only hit is a unit test driving the state directly, the seam that would let
+  an integration test reach it does not exist yet, and building it is part of
+  the task.** The tell is a parenthetical naming a behaviour ("a fake that
+  never settles") rather than a mode that exists.
+- **A required prop with a documented "no default, lens 2" rationale is
+  exactly the prop a task-level plan forgets.** The plan named one of the
+  three props the new caller must now pass; the other two are hardcoded
+  literals whose doc comment already says what a forgetful caller gets.
+  **Technique: for every existing consumer of a component a task is about to
+  re-wire, diff the props it passes TODAY against the props the component
+  declares REQUIRED, and list the deltas in the task.**
+- **A residual filed against one producer of a path is a finding about the
+  path.** The ROADMAP already carried "backgrounding during the targeted scan
+  may arm the never-cleared cleanup poison"; the spec then put a BUTTON on the
+  same abort path and cited neither. **Technique: for any new UI entry into an
+  existing internal path, grep ROADMAP and the walk records for that path's
+  name before claiming the mechanism is vetted — a residual filed for an
+  unreachable producer becomes a live risk the moment a reachable one is
+  added.** The fix is usually a written argument plus one assertion, not code.
+- **A sentinel value left in a fail-closed table is a landmine wearing a
+  comment.** When one row's copy moved to a builder, the row stayed with
+  `detail: ""` and a comment saying where the real value comes from. The table
+  is spread blind at another call site, and an empty detail renders as a blank
+  36px serif line. **Technique: when a lookup gains a guard above it, delete
+  the shadowed row or type the key out of the table; a row that is only
+  correct because of a check somewhere else is one reorder from shipping
+  silence as copy.**
+- **Attacked and HELD (Phase NF vetted ground, extended):** a second caller of
+  the NFC attempt path breaks no single-caller invariant — the keyed
+  staged-retire take, the mount lease's ID map, `targetedAbortRef`'s object
+  identity, `attemptRef`'s counter and the process-scoped capability cache are
+  all ID- or structure-keyed, none duration-keyed; the free row's `armed` event
+  runs the same keyed take as a programmed one. The new Cancel adds no frame
+  where a cancel meets a live driver (`pairing` already carried the same
+  handler, and `driverRef` is null there), cannot poison the operation tail
+  from the preamble, and clears `connectingRef` synchronously so an immediate
+  re-press is not blocked. `cancel()`'s own stated precondition — "a targeted
+  scan is live only in `picking`" — describes exactly the state the button
+  adds, so it holds unchanged.
+- **Process, second occurrence:** the branch advanced two commits DURING the
+  pass and two of the plan's five tasks were already implemented before the
+  hardening dispatch returned. Findings against them land as fix-round items,
+  not plan edits. The cheap half of /harden is worth nothing after the paste —
+  this is now the second phase in a row to prove it.
+
 ### 2026-09-06 — Phase SB status-bar backdrop spec, phase-open anchor (not TRIAD)
 
 - **"`color-mix(in srgb, var(--page) 82%, transparent)` degrades gracefully below
