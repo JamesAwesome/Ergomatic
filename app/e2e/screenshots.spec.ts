@@ -3894,8 +3894,15 @@ test("log-detail", async ({ page }) => {
   // Phase LP §3 (RF7 — recompute the headline from the rows by eye): the
   // machine tier reads the LOGBOOK's arithmetic over the seed — AVG WATTS
   // round(2.80/(124.0/500)³) = 184, CAL / HOUR floor(32×3600/124.0) = 929
-  // (NOT the seeded PM5 figure 931), CALORIES 32 = 16 + 16 below, AVG HR a
-  // dash (this walk wore no belt — `avgHeartRateBpm` is not seeded), RATE 26
+  // (NOT the seeded PM5 figure 931), CALORIES 32 = 16 + 16 below, AVG HR 140
+  // — DERIVED (#345), not seeded: no interval carries `avgHeartRateBpm`, so
+  // the per-interval HR column below is still a dash, but the TILE now
+  // averages this fixture's own trace over WORKING strokes only. Check it
+  // rather than trust it: the trace is `hr = 130 + round(t/244 × 28)`, so
+  // work 1 (t 0..67) averages ~133.5 over 34 samples and work 2 (t 128..183)
+  // ~148 over 28, giving (133.5×34 + 148×28)/62 = 140.0. Its collision with
+  // this row's `machineWatts: 140` is coincidence, and was checked as one.
+  // RATE 26
   // with NO target half (this walk's program authored no display SPM, so
   // no step carries `spm` and the tile reads the rate alone), DRAG 100,
   // REST 242 m = 147 + 95 — and the MACHINE
@@ -3906,7 +3913,7 @@ test("log-detail", async ({ page }) => {
   await expect(lpTiles.nth(0)).toHaveText("AVG WATTS184");
   await expect(lpTiles.nth(2)).toHaveText("CAL / HOUR929");
   await expect(lpTiles.nth(3)).toHaveText("RATE26");
-  await expect(lpTiles.nth(5)).toHaveText("AVG HR—");
+  await expect(lpTiles.nth(5)).toHaveText("AVG HR140");
   const lpStrip = page
     .getByRole("table", { name: "Machine summary per interval" })
     .locator("tbody tr");
