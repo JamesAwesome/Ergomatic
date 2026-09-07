@@ -560,8 +560,9 @@ describe("FromTheLog — door spec §1 PARTIAL marker", () => {
       await screen.findByText("STOPPED EARLY · 2 of 5 intervals measured"),
     ).toBeVisible();
     expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
-    // 1298 m is on no Concept2 ranking list, so its edit form offers no
-    // Verification Code field and a code here would have nowhere to go
+    // The rule is an OR and this row misses on both axes: 1298 m is on no
+    // ranking distance list, and 6:00 is not one of the four rankable
+    // durations. So the edit form offers no field and a code has nowhere to go
     // (measured 2026-09-07,
     // docs/superpowers/research/2026-09-07-c2-verification-field-rule.md).
     // The BLOCK still renders; only the code line is withheld.

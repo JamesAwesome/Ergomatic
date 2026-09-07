@@ -3815,8 +3815,9 @@ test("log-detail", async ({ page }) => {
   await expect(page.getByText("2:04.0 work · 500m")).toBeVisible();
   // NO CODE on this row, and that is the feature (2026-09-07). The fixture is
   // a real walk piece — 500 m of work plus 242 m of rest — so Concept2 sees
-  // 742 m overall, which is on no ranking list, so its edit form offers no
-  // field to type a code into. The app stops printing one rather than showing
+  // 742 m overall and 4:04 overall. The rule is an OR, and this row misses on
+  // BOTH axes: 742 m is on no ranking distance list and 4:04 is not one of the
+  // four rankable durations, so its edit form offers no field to type into. The app stops printing one rather than showing
   // a string with nowhere to go
   // (docs/superpowers/research/2026-09-07-c2-verification-field-rule.md).
   // Asserted as an ABSENCE so the committed PNG keeps proving it: this is the

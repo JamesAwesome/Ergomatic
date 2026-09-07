@@ -2,7 +2,10 @@
 
 **PRIMARY, measured live 2026-09-07** against `log-dev.concept2.com`, account
 2211, by driving a real logged-in Chromium with Playwright. James logged in; the
-script read every page. Twenty-one purpose-built rows, all deleted afterwards
+script read every page. Twenty-one rows for the matrix below (ten listed
+distances, four listed times, four boundaries, three negatives) plus the four
+crossed-experiment rows in the next section and three earlier shape probes —
+twenty-eight in all, every one deleted afterwards
 (the log was confirmed back to its eighteen real rows).
 
 ## The rule
