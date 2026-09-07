@@ -192,9 +192,10 @@ export function applyFilters(
       return false;
     }
     if (f.lastDone === "over21" && isRecent(w.lastDoneDaysAgo)) return false;
-    // Baselines are required to estimate duration; when unknown, the
-    // duration chips are skipped rather than hiding every workout.
-    if (!isUnbounded(f.durationRange) && baselines !== null) {
+    // Phase RW PR A: with no baseline the estimate is the assumed-pace
+    // one (`estimateMinutes` marks it), the SAME integer the row prints,
+    // so the filter and the row still agree.
+    if (!isUnbounded(f.durationRange)) {
       // The SAME integer the row prints — never a float — so a card and
       // the filter can never disagree by rounding (spec §3.6).
       const { minutes } = estimateMinutes(w.steps, baselines);

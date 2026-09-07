@@ -5,6 +5,16 @@ import type {
   PaceWordRef,
   SplitRef,
 } from "./types.js";
+import { MOST_COMMON_ESTIMATE } from "./estimateBaseline.js";
+
+/** Phase RW (spec §1.3): the pair a DURATION is priced against when the
+ *  rower has no baseline. The recommend table's most common cell (2:25 /
+ *  2:32 today), not its slowest: the table is slow-biased because a
+ *  too-fast TARGET is harmful, and a duration estimate has no such
+ *  asymmetry. Used for exactly one thing. It never resolves a target,
+ *  never reaches the wire, never reaches a log; `src/
+ *  assumedBaselinesCensus.test.ts` pins who may import it. */
+export const ASSUMED_BASELINES: Baselines = MOST_COMMON_ESTIMATE;
 
 const EFFORT_RE = /^(max|min)$/i;
 const REF_RE = /^(2k|6k)\s*([+-]\s*\d+(\.\d+)?)?$/i;

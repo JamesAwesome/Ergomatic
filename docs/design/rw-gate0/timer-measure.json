@@ -1,0 +1,60 @@
+{
+  "portrait": {
+    "viewport": [
+      390,
+      844
+    ],
+    "cards": {
+      "w": 350,
+      "scrollW": 350,
+      "clientW": 350
+    },
+    "values": [
+      {
+        "text": "MODERATE",
+        "w": 182.40625,
+        "scrollW": 182,
+        "clientW": 182,
+        "font": "40px"
+      },
+      {
+        "text": "Free",
+        "w": 153.59375,
+        "scrollW": 154,
+        "clientW": 154,
+        "font": "52px"
+      }
+    ],
+    "docScrollW": 390,
+    "docClientW": 390
+  },
+  "landscape": {
+    "viewport": [
+      844,
+      420
+    ],
+    "cards": {
+      "w": 310.375,
+      "scrollW": 310,
+      "clientW": 310
+    },
+    "values": [
+      {
+        "text": "MODERATE",
+        "w": 310.375,
+        "scrollW": 310,
+        "clientW": 310,
+        "font": "56px"
+      },
+      {
+        "text": "Free",
+        "w": 310.375,
+        "scrollW": 310,
+        "clientW": 310,
+        "font": "56px"
+      }
+    ],
+    "docScrollW": 844,
+    "docClientW": 844
+  }
+}

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step, WorkoutType, Baselines } from "../../domain/types.js";
+import { estimateMinutes } from "../../domain/expand.js";
 import {
   buildDraft,
   buildNudgedDraft,
@@ -8,7 +9,6 @@ import {
   loadDraft,
   clearDraft,
   draftSteps,
-  draftMinutes,
   effectiveSteps,
   withNudge,
   startDraft,
@@ -22,7 +22,7 @@ import { buildRun } from "./engine";
 // - Fork Lightning (AN): the effort-ref fixture — `ref: { effort: "max" }` —
 //   proving nudges refuse an entry for it.
 // - Calm Sea (O2): the distance fixture — a single 10,000 m work step —
-//   proving draftMinutes needs baselines and pins an exact total. (Meltemi
+//   proving the priced total needs baselines and pins an exact number. (Meltemi
 //   used to hold this role; the library rewrite turned it into a 5-phase
 //   TIME workout with no distance step at all, so this suite re-anchored to
 //   Calm Sea — same 10,000 m distance, minimizing drift elsewhere.)
@@ -152,102 +152,24 @@ describe("effectiveSteps", () => {
   });
 });
 
-describe("draftMinutes", () => {
+describe("the effective steps price through estimateMinutes (Phase RW PR A: draftMinutes deleted, no production caller)", () => {
   it("computes an exact pinned total for a distance workout (Calm Sea) given baselines", () => {
     const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-3"));
-    // 10,000m @ 6k+12 = 132 s/500m -> 20 * 132 = 2640s -> 2640/60 = 44
-    // exactly. (Was 52 while the workout also carried a wu 8' step; the
-    // warm-up is a SETTING now and no workout contributes one.)
-    expect(draftMinutes(d, baselines)).toBe(44);
+    // 10,000m @ 6k+12 = 132 s/500m -> 20 * 132 = 2640s -> 44.
+    expect(estimateMinutes(draftSteps(d), baselines).minutes).toBe(44);
   });
 
-  it("returns null for a distance workout when baselines are absent", () => {
+  it("prices the same draft with no baseline off the assumed pair", () => {
     const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-4"));
-    expect(draftMinutes(d, null)).toBeNull();
+    // 10,000 m @ 6k+12 against the assumed 6k of 2:32 (152 s): 164 s/500 m
+    // -> 20 * 164 = 3280 s -> 54.67 -> 55.
+    expect(estimateMinutes(draftSteps(d), null).minutes).toBe(55);
   });
 
-  it("also returns null for a TIME-based work step without baselines (any pace ref needs resolving)", () => {
-    // Hoarfrost is time-based (not distance), but its work step still carries
-    // a SplitRef that expand.ts's phases() resolves unconditionally via
-    // resolveSplit(baselines, ref) regardless of duration kind - so it
-    // crashes without baselines exactly like the distance case. The brief
-    // frames the null case as "a distance step needs baselines"; the actual
-    // domain code (domain/pace.ts resolveSplit/estimationSplit, domain/
-    // expand.ts phases()) requires baselines for ANY "w" step, split or
-    // effort ref, time or distance duration. This test pins that broader,
-    // actually-correct rule.
+  it("prices a time-based workout (Hoarfrost) identically with or without a baseline", () => {
     const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-3"));
-    expect(draftMinutes(d, null)).toBeNull();
-  });
-
-  // Phase 6I: `draftMinutes` was ALREADY null-tolerant for an effort-only
-  // workout before this task — it returns null the moment ANY "w" step is
-  // present and baselines are null, with no branch distinguishing effort
-  // from split refs (an estimate is genuinely impossible either way; the
-  // onboarding CARD's fixed nominal copy, not this function, is what
-  // covers "never a bare dash" for the two designated workouts — Task 5).
-  // Pinned here against a REAL effort-only library fixture (Fork
-  // Lightning, needsBaselines() false) specifically because Task 2 is what
-  // makes this path actually REACHABLE in production (the Confirm footer
-  // used to block START before a rower's draft could ever render here with
-  // null baselines) — no production code changed in this file for Task 2,
-  // only this covering test.
-  it("returns null for a REAL effort-only library workout too (Fork Lightning) — no different from any other work step without baselines", () => {
-    const d = buildDraft(draftInputFor("Fork Lightning", "id-fork-null"));
-    expect(draftMinutes(d, null)).toBeNull();
-  });
-
-  it("still computes minutes without baselines when no work step is present", () => {
-    const d: SessionDraft = {
-      v: 1,
-      workoutId: "synthetic",
-      title: "Rest only",
-      type: "O2",
-      // A lone REST row: the only remaining step kind that prices itself
-      // with no pace ref to resolve. (This was a lone `wu` row until
-      // 2026-08-09's warmup setting deleted that step kind; the property
-      // under test — "no work step, so no baselines needed" — is the same.)
-      steps: [{ k: "r", minutes: 5 }],
-      nudges: {},
-      spmOverrides: {},
-      removed: [],
-      createdAt: new Date().toISOString(),
-      startedAt: null,
-    };
-    expect(draftMinutes(d, null)).toBe(5);
-  });
-
-  it("computes an exact pinned total for an effort-ref workout (Fork Lightning) given baselines", () => {
-    const d = buildDraft(draftInputFor("Fork Lightning", "id-fork-lightning"));
-    // reps(5) x [w1{30s work + 45s rest} + w2{30s work + 135s rest}]
-    // = 5 * (30+45+30+135) = 5*240 = 1200s -> 1200/60 = 20 exactly.
-    expect(draftMinutes(d, baselines)).toBe(20);
-  });
-
-  // F1 fix (final whole-branch review): draftMinutes used to price the
-  // recount from the UN-nudged split — nudging a distance step's target
-  // moved the resolved split shown on its own row but never touched the
-  // Confirm footer's minute recount, because draftMinutes called
-  // estimateMinutes over draftSteps(d) while draftSteps folded SPM
-  // overrides but not nudges. (The reviewer's exact probe: nudging a
-  // distance step's split should move its minute recount; instead it read
-  // the same number before and after.) Pinned here with a nudge big enough
-  // to actually change the recount, so a fix that folds the nudge in but
-  // gets the sign or magnitude wrong would still fail this.
-  it("prices a nudge into the recount for a distance workout (the exact case a prior version silently ignored)", () => {
-    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-priced"));
-    const workIndex = d.steps.findIndex((s) => s.k === "w");
-    // Unnudged: 10,000m @ 6k+12 = 132 s/500m -> 20*132 = 2640s ->
-    // 2640/60 = 44 exactly (same pinned total as the earlier "exact pinned
-    // total" test above — this test's whole point is the BEFORE/AFTER
-    // delta, not a fresh number).
-    expect(draftMinutes(d, baselines)).toBe(44);
-
-    // -5s/500m nudge: split becomes 127 -> 20*127 = 2540s ->
-    // round(2540/60) = 42. A version that ignores nudges would still
-    // report 44 here.
-    const nudged = withNudge(d, workIndex, -5);
-    expect(draftMinutes(nudged, baselines)).toBe(42);
+    expect(estimateMinutes(draftSteps(d), null).minutes).toBe(34);
+    expect(estimateMinutes(draftSteps(d), baselines).minutes).toBe(34);
   });
 });
 
@@ -418,7 +340,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     expect(effective.some((s) => s.k === "reps")).toBe(false);
     // Unrepeated: w1{30s work + 45s rest} + w2{30s work + 135s rest} =
     // 240s -> 240/60 = 4 exactly (a fifth of the repeated 20).
-    expect(draftMinutes(loaded!, baselines)).toBe(4);
+    expect(estimateMinutes(draftSteps(loaded!), baselines).minutes).toBe(4);
   });
 
   it("round-trips a Calm Sea (distance) draft byte-identical with a nudge applied", () => {
@@ -426,7 +348,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     // -5, not -1: a -1 nudge (132 -> 131 s/500m) still rounds to the same
     // 44-minute total as unnudged (2620/60 = 43.67 -> 44), so it would pass
-    // whether or not draftMinutes actually priced the nudge in — exactly
+    // whether or not the priced total actually carried the nudge in — exactly
     // the gap the F1 fix ("prices a nudge into the recount…" test above)
     // was found through. -5 changes the total (44 -> 42), so this round
     // trip also proves the nudge survived storage AND still prices
@@ -435,8 +357,10 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     expect(saveDraft(nudged)).toBe(true);
     const loaded = loadDraft();
     expect(loaded).toStrictEqual(nudged);
-    expect(draftMinutes(loaded!, baselines)).toBe(42);
-    expect(draftMinutes(loaded!, null)).toBeNull();
+    expect(estimateMinutes(draftSteps(loaded!), baselines).minutes).toBe(42);
+    // Phase RW PR A: the same nudged draft priced off the assumed 6k
+    // (2:32 + 12 - the nudge) instead of this file's 2:00 one.
+    expect(estimateMinutes(draftSteps(loaded!), null).minutes).toBe(53);
   });
 
   it("round-trips a Hoarfrost (reps marker) draft, keeping the marker live", () => {
@@ -447,7 +371,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     const steps = draftSteps(loaded!);
     expect(steps.some((s) => s.k === "reps")).toBe(true);
     // 2 * (12' work + 5' rest) = 2040s -> 2040/60 = 34 exactly.
-    expect(draftMinutes(loaded!, baselines)).toBe(34);
+    expect(estimateMinutes(draftSteps(loaded!), baselines).minutes).toBe(34);
   });
 
   it("returns null when nothing is stored", () => {

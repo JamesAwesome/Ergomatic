@@ -1,11 +1,5 @@
-import { estimateMinutes } from "../../domain/expand.js";
 import { isPaceWordRef } from "../../domain/pace.js";
-import type {
-  Baselines,
-  PaceRef,
-  Step,
-  WorkoutType,
-} from "../../domain/types.js";
+import type { PaceRef, Step, WorkoutType } from "../../domain/types.js";
 
 /** localStorage key for the session draft — the one artifact 6B's timer
  *  consumes. Exported so callers (and tests) never hardcode it twice. */
@@ -170,7 +164,7 @@ export function clearDraft(): void {
  *  `off` before resolution and never applying a nudge at all are the exact
  *  same number for any consumer that resolves the ref, `estimateMinutes`
  *  (via domain/expand.ts's `phases()`) included. Folding it here, once, is
- *  what makes `draftMinutes` price a nudge instead of silently ignoring it
+ *  what makes `estimateMinutes(draftSteps(d), …)` price a nudge instead of silently ignoring it
  *  (the bug this fixes: nudging a distance step's split used to leave the
  *  minute recount unchanged). PaceWord refs have no `off` to
  *  nudge and are passed through untouched (`withNudge` already refuses to
@@ -198,30 +192,10 @@ export function effectiveSteps(
 
 /** The effective steps as a plain `Step[]` — `effectiveSteps` without the
  *  original-index pairing, for callers that only need the resolved shape
- *  (e.g. `draftMinutes` below). Keeping one implementation
+ *  (e.g. `estimateMinutes(draftSteps(d), baselines)`). Keeping one implementation
  *  (`effectiveSteps`) means the nudge-folding fix above applies here too. */
 export function draftSteps(d: SessionDraft): Step[] {
   return effectiveSteps(d).map((e) => e.step);
-}
-
-/** Estimated minutes for the effective steps, via `estimateMinutes`. Every
- *  work step's pace ref — split or effort, time or distance duration alike —
- *  is resolved against `baselines` unconditionally by domain/expand.ts's
- *  `phases()`, so any work step present with no baselines would crash
- *  `estimateMinutes`; this returns null instead in that case. Uses
- *  `draftSteps` (nudges already folded into `off`), not raw `d.steps` — see
- *  `effectiveSteps`'s comment for why that's the same math as a "real"
- *  nudge. */
-export function draftMinutes(
-  d: SessionDraft,
-  baselines: Baselines | null,
-): number | null {
-  const steps = draftSteps(d);
-  if (baselines === null) {
-    if (steps.some((s) => s.k === "w")) return null;
-    return estimateMinutes(steps, { k2Seconds: 0, k6Seconds: 0 }).minutes;
-  }
-  return estimateMinutes(steps, baselines).minutes;
 }
 
 /** Stamps `startedAt` — the one field 6B requires non-null before it will

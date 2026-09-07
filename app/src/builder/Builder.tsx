@@ -305,9 +305,10 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const spanStart = spanStartIndex(form);
   const rowsInSet = form.rows.length - spanStart;
   const totalsResult = totals(form, baselines);
-  const repeatSubLine = totalsResult
-    ? `${pluralStep(rowsInSet)} · ${fmtMinutes(totalsResult.perSet)} per set`
-    : pluralStep(rowsInSet);
+  // Phase RW PR A: the per-set clause carries the same ~ as TOTAL when the
+  // rows priced off the assumed pair, so the two numbers never disagree
+  // about whether they are estimates.
+  const repeatSubLine = `${pluralStep(rowsInSet)} · ${totalsResult.assumed ? "~" : ""}${fmtMinutes(totalsResult.perSet)} per set`;
   // Empty while loading/erroring rather than blocking the screen on it — AUTO
   // NAME is a nicety, not something worth gating the whole builder on. Worst
   // case (loading not yet resolved) is a suggested name that happens to
@@ -626,7 +627,9 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         <div className="builder-total-row">
           <span className="builder-total-label">TOTAL</span>
           <span className="builder-total-value">
-            {totalsResult ? `${Math.round(totalsResult.total)} MIN` : "— MIN"}
+            {/* Phase RW PR A: an assumed-pace estimate (no baseline) reads
+                with a tilde, the same mark the Library row will carry. */}
+            {`${totalsResult.assumed ? "~" : ""}${Math.round(totalsResult.total)} MIN`}
           </span>
         </div>
       </div>

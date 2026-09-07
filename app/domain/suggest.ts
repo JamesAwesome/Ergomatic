@@ -19,35 +19,13 @@ export interface LibraryEntry {
 export interface SuggestPrefs {
   // Phase SF PR2 (spec §3): a minutes RANGE — mirrors the Library's own
   // `Filters.durationRange` (`domain/duration.ts`'s `DurationRange`,
-  // `inRange`). When set, bounded (not `[0, 120]`) and known (see
-  // `durationsUnknown` below), only entries whose `estMinutes` is inside
-  // survive. Unset or unbounded means "off" — every duration passes.
+  // `inRange`). When set and bounded (not `[0, 120]`), only entries whose
+  // `estMinutes` is inside survive. Unset or unbounded means "off" — every
+  // duration passes. Phase RW PR A: every entry's `estMinutes` is a real
+  // number now (distance work without a baseline prices off the assumed
+  // pair, `domain/expand.ts`), so the `durationsUnknown` escape hatch and
+  // the 0 placeholder it guarded are gone.
   durationRange?: DurationRange;
-  // Set when the caller could not compute a real `estMinutes` for any
-  // library entry (no baselines yet — the standing convention is every
-  // entry gets `estMinutes: 0` in that case). This flag GATES THE FILTER
-  // ITSELF, not merely the reason text: `passesDurationFilter` (below)
-  // skips the bucket-membership check entirely whenever this is true,
-  // regardless of which bucket the 0 placeholder would resolve to.
-  // A 0 placeholder is inside any range whose `min` is 0 — without this
-  // flag such a range would wrongly let every unknown-duration entry
-  // through (a coincidence, not a real match), and a range with `min > 0`
-  // (e.g. `[45, 60]`) would wrongly reject every one of them (treating
-  // "unknowable" as "known short"). Under the
-  // old single-value cap this replaced, the 0 placeholder alone was
-  // sufficient to keep the filter harmless (`0 <= any positive cap`
-  // unconditionally); a bucket UNION has no such universal member, so this
-  // flag — not the placeholder value — is what actually keeps the filter
-  // harmless now. It also still keeps the REASON text honest: without it,
-  // the standard/fellback reasons below would claim a duration was
-  // actually checked ("time filters") when every duration fed
-  // in was a placeholder. Set true and both reasons drop any mention of
-  // time instead of asserting something never verified. An empty/unset
-  // `durations` takes the same no-claim branch for the REASON text, but —
-  // unlike this flag — doesn't need to gate the FILTER specially: an empty
-  // union already means "off" on its own, independent of what any single
-  // entry's estMinutes happens to be.
-  durationsUnknown?: boolean;
   // A union, not a threshold — mirrors Library's own `Filters.effortLevels`
   // (src/library/filters.ts): when non-empty, only entries whose `effort` is
   // IN this set survive. Empty/undefined means "off" — every effort level
@@ -208,7 +186,7 @@ function recencyPhrase(days: number | null): string {
 }
 
 /** Shared by `suggest`/`suggestFreestyle` — the two were textually
- *  identical here before `durationsUnknown` existed, and duplicating the
+ *  identical here before the time clause existed, and duplicating the
  *  new branch a second time was the exact way this class of "the reason
  *  says something no caller checked" bug would recur.
  *
@@ -226,9 +204,7 @@ function buildReason(
   prefs: SuggestPrefs,
 ): string {
   const timeChecked =
-    !!prefs.durationRange &&
-    !isUnbounded(prefs.durationRange) &&
-    !prefs.durationsUnknown;
+    !!prefs.durationRange && !isUnbounded(prefs.durationRange);
   if (pickOverride) {
     return `YOUR PICK: last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
@@ -251,18 +227,12 @@ function buildReason(
 }
 
 /** The TIME clause shared by `suggest`/`suggestFreestyle`'s own filter
- *  predicates: skipped (never excludes) whenever `durationRange` is unset,
- *  unbounded, or `durationsUnknown` is set, otherwise an entry survives
- *  only when its own `estMinutes` is `inRange` — mirrors the Library's own
- *  `applyFilters` (`src/library/filters.ts`) exactly. */
+ *  predicates: skipped (never excludes) whenever `durationRange` is unset
+ *  or unbounded, otherwise an entry survives only when its own
+ *  `estMinutes` is `inRange` — mirrors the Library's own `applyFilters`
+ *  (`src/library/filters.ts`) exactly. */
 function passesDurationFilter(e: LibraryEntry, prefs: SuggestPrefs): boolean {
-  if (
-    !prefs.durationRange ||
-    isUnbounded(prefs.durationRange) ||
-    prefs.durationsUnknown
-  ) {
-    return true;
-  }
+  if (!prefs.durationRange || isUnbounded(prefs.durationRange)) return true;
   return inRange(e.estMinutes, prefs.durationRange);
 }
 

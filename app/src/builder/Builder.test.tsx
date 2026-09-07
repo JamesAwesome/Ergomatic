@@ -359,10 +359,9 @@ describe("Builder", () => {
     expect(screen.getByText("×2")).toBeInTheDocument();
   });
 
-  it("reads the repeat sub-line with singular step and no per-set clause when the total can't resolve", async () => {
-    // No baselines, and this row is metres (needs a resolved split to
-    // convert to minutes), so `totals` returns null — the sub-line still
-    // names the step count, just without a "· M:SS per set" clause.
+  it("reads the repeat sub-line with singular step and a per-set clause even with no baseline (Phase RW PR A)", async () => {
+    // No baselines and a metres row: the row prices off the assumed pair
+    // now, so the sub-line carries its per-set clause like any other.
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
@@ -375,7 +374,7 @@ describe("Builder", () => {
     );
     await userEvent.type(screen.getByLabelText("Row 1 duration"), "2000");
 
-    expect(screen.getByText("1 step")).toBeInTheDocument();
+    expect(screen.getByText(/^1 step · .+ per set$/)).toBeInTheDocument();
   });
 
   // ---- TOTAL / Save to library (task brief test 8) -----------------------
@@ -408,13 +407,10 @@ describe("Builder", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders — MIN when a distance row has no baseline to resolve its pace against", async () => {
-    // TOTAL only ever renders the "— MIN" placeholder when `totals()`
-    // itself returns null (builderState.ts's own "totals" suite: the one
-    // documented null case is a distance-unit row with no baselines to
-    // resolve its pace against) — a blank/default minutes-unit row totals
-    // 0, not null, so a plain fresh builder can't exercise this branch.
-    // Baselines are unset here for exactly that reason.
+  it("renders ~N MIN when a distance row prices off the assumed pair (no baseline, Phase RW PR A)", async () => {
+    // Phase RW PR A: a distance row with no baseline prices off the
+    // assumed pair (2000 m at the assumed 6k of 2:32 = 10.13 -> ~10 MIN)
+    // and TOTAL says so with a tilde; the old "— MIN" placeholder is gone.
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     mockApi(() => new Response(null, { status: 201 }));
 
@@ -430,7 +426,8 @@ describe("Builder", () => {
     };
     await renderBuilder({ kind: "edit", id: "w1", initial });
 
-    expect(screen.getByText("— MIN")).toBeInTheDocument();
+    expect(screen.getByText("~10 MIN")).toBeInTheDocument();
+    expect(screen.queryByText("— MIN")).not.toBeInTheDocument();
     expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
   });
 

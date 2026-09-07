@@ -227,35 +227,6 @@ describe("suggest", () => {
     expect(r.recommendationId).toBeNull();
   });
 
-  it("omits any time claim from the standard reason when durationsUnknown is set", () => {
-    const r = suggest({
-      todayCode: "AT",
-      prefs: {
-        ...prefs,
-        durationRange: prefs.durationRange,
-        durationsUnknown: true,
-      },
-      library: [w("a", { lastDoneDaysAgo: 33 })],
-    });
-    expect(r.reason).toBe("Least recently done (33 days ago).");
-  });
-
-  it("omits 'time' from the fellback reason when durationsUnknown is set (only pain was actually checked)", () => {
-    const r = suggest({
-      todayCode: "AT",
-      prefs: {
-        durationRange: { min: 0, max: 30 },
-        durationsUnknown: true,
-        effortLevels: [1],
-      },
-      library: [w("only", { estMinutes: 0, lastDoneDaysAgo: 33 })],
-    });
-    expect(r.fellBack).toBe(true);
-    expect(r.reason).toMatch(/closest match/i);
-    expect(r.reason).toMatch(/effort filters/i);
-    expect(r.reason).not.toMatch(/time/i);
-  });
-
   it("keeps a pain-3 entry and excludes a pain-4 entry when effortLevels is [1,2,3]", () => {
     const r = suggest({
       todayCode: "AT",
@@ -436,27 +407,23 @@ describe("suggest", () => {
       expect(r.reason).toMatch(/^Nothing fit your effort filters/);
     });
 
-    it("an entry whose estMinutes is the 0 placeholder only survives an active TIME range via durationsUnknown, not because the range happens to start at 0", () => {
-      // 0 is inside any range whose min is 0 — an unknown-duration entry
-      // (baselines unset, Today.tsx's own toLibraryEntry) would wrongly
-      // survive a range starting at 0 if durationsUnknown weren't ALSO
-      // set. This proves the filter is skipped via durationsUnknown, not
-      // "surviving because the range happens to include 0" — the range here
-      // deliberately starts at 45 to tell the two apart.
+    it("filters on estMinutes whenever a bounded time range is set: no unknown-durations escape (Phase RW PR A)", () => {
+      // Every entry carries a real estimate now (the assumed pair prices
+      // distance work without a baseline), so a range starting above the
+      // short entry excludes it and nothing lets it back in.
       const r = suggest({
         todayCode: "AT",
-        prefs: {
-          durationRange: { min: 45, max: 60 },
-          durationsUnknown: true,
-        },
-        library: [w("unknown", { estMinutes: 0, lastDoneDaysAgo: 5 })],
+        prefs: { durationRange: { min: 45, max: 60 } },
+        library: [
+          w("short", { estMinutes: 10, lastDoneDaysAgo: 5 }),
+          w("long", { estMinutes: 50, lastDoneDaysAgo: 5 }),
+        ],
       });
-      expect(r.fellBack).toBe(false);
-      expect(r.poolIds).toStrictEqual(["unknown"]);
+      expect(r.poolIds).toStrictEqual(["long"]);
     });
   });
 
-  describe("standard-reason wording across durations x durationsUnknown x effortLevels", () => {
+  describe("standard-reason wording across durations x effortLevels", () => {
     const base = {
       todayCode: "AT" as const,
       library: [w("a", { lastDoneDaysAgo: 33 })],
@@ -472,32 +439,10 @@ describe("suggest", () => {
       expect(r.reason).toBe("Least recently done (33 days ago).");
     });
 
-    it("durations active, durationsUnknown true -> same plain sentence", () => {
-      const r = suggest({
-        ...base,
-        prefs: {
-          durationRange: { min: 0, max: 60 },
-          durationsUnknown: true,
-        },
-      });
-      expect(r.reason).toBe("Least recently done (33 days ago).");
-    });
-
     it("durations unset (off), known -> same plain sentence", () => {
       const r = suggest({
         ...base,
         prefs: {},
-      });
-      expect(r.reason).toBe("Least recently done (33 days ago).");
-    });
-
-    it("durations empty ([]) and durationsUnknown true -> same plain sentence", () => {
-      const r = suggest({
-        ...base,
-        prefs: {
-          durationRange: undefined,
-          durationsUnknown: true,
-        },
       });
       expect(r.reason).toBe("Least recently done (33 days ago).");
     });
@@ -525,7 +470,7 @@ describe("suggest", () => {
     });
   });
 
-  describe("fellback-reason wording across durations x durationsUnknown x effortLevels", () => {
+  describe("fellback-reason wording across durations x effortLevels", () => {
     const fellbackLib = [
       w("only", {
         estMinutes: 55,
@@ -543,17 +488,6 @@ describe("suggest", () => {
       expect(r.reason).toBe(
         "Nothing fit your time filters. Closest match, last done 33 days ago.",
       );
-    });
-
-    it("time not checked and no other filter: nothing can be excluded, so there is no fallback to explain (Phase DE PR 1)", () => {
-      for (const prefs of [
-        { durationRange: { min: 0, max: 30 }, durationsUnknown: true },
-        {},
-      ]) {
-        const r = suggest({ todayCode: "AT", prefs, library: fellbackLib });
-        expect(r.fellBack).toBe(false);
-        expect(r.reason).toBe("Least recently done (33 days ago).");
-      }
     });
 
     it("time checked, pain filter set (non-contiguous union) -> time/effort", () => {
@@ -595,6 +529,14 @@ describe("suggest", () => {
       expect(r.reason).toBe(
         "Nothing fit your time filters. Closest match, last done 33 days ago.",
       );
+    });
+
+    it("time not checked (unbounded range or none) and no other filter: nothing can be excluded, so there is no fallback to explain", () => {
+      for (const prefs of [{ durationRange: { min: 0, max: 120 } }, {}]) {
+        const r = suggest({ todayCode: "AT", prefs, library: fellbackLib });
+        expect(r.fellBack).toBe(false);
+        expect(r.reason).toBe("Least recently done (33 days ago).");
+      }
     });
   });
 
@@ -903,30 +845,6 @@ describe("suggestFreestyle", () => {
     expect(r.reason.length).toBeGreaterThan(0);
   });
 
-  it("omits any time claim from the standard reason when durationsUnknown is set", () => {
-    const r = suggestFreestyle([w("a", { lastDoneDaysAgo: 33 })], {
-      ...prefs,
-      durationRange: prefs.durationRange,
-      durationsUnknown: true,
-    });
-    expect(r.reason).toBe("Least recently done (33 days ago).");
-  });
-
-  it("omits 'time' from the fellback reason when durationsUnknown is set (only pain was actually checked)", () => {
-    const r = suggestFreestyle(
-      [w("only", { estMinutes: 0, lastDoneDaysAgo: 33 })],
-      {
-        durationRange: { min: 0, max: 30 },
-        durationsUnknown: true,
-        effortLevels: [1],
-      },
-    );
-    expect(r.fellBack).toBe(true);
-    expect(r.reason).toMatch(/closest match/i);
-    expect(r.reason).toMatch(/effort filters/i);
-    expect(r.reason).not.toMatch(/time/i);
-  });
-
   it("keeps a pain-3 entry and excludes a pain-4 entry when effortLevels is [1,2,3]", () => {
     const r = suggestFreestyle(
       [
@@ -999,7 +917,7 @@ describe("suggestFreestyle", () => {
     expect(r.recommendationId).toBe("long");
   });
 
-  describe("standard-reason wording across durations x durationsUnknown x effortLevels (freestyle parity)", () => {
+  describe("standard-reason wording across durations x effortLevels (freestyle parity)", () => {
     const lib = [w("a", { lastDoneDaysAgo: 33 })];
 
     it("durations active, known, no pain filter -> plain recency sentence", () => {
@@ -1009,29 +927,13 @@ describe("suggestFreestyle", () => {
       expect(r.reason).toBe("Least recently done (33 days ago).");
     });
 
-    it("durations active, durationsUnknown true -> same plain sentence", () => {
-      const r = suggestFreestyle(lib, {
-        durationRange: { min: 0, max: 60 },
-        durationsUnknown: true,
-      });
-      expect(r.reason).toBe("Least recently done (33 days ago).");
-    });
-
     it("durations unset (off), known -> same plain sentence", () => {
       const r = suggestFreestyle(lib, {});
       expect(r.reason).toBe("Least recently done (33 days ago).");
     });
-
-    it("durations empty and durationsUnknown true -> same plain sentence", () => {
-      const r = suggestFreestyle(lib, {
-        durationRange: undefined,
-        durationsUnknown: true,
-      });
-      expect(r.reason).toBe("Least recently done (33 days ago).");
-    });
   });
 
-  describe("fellback-reason wording across durations x durationsUnknown x effortLevels (freestyle parity)", () => {
+  describe("fellback-reason wording across durations x effortLevels (freestyle parity)", () => {
     const fellbackLib = [
       w("only", {
         estMinutes: 55,
@@ -1067,6 +969,14 @@ describe("suggestFreestyle", () => {
       expect(r.reason).toBe(
         "Nothing fit your time filters. Closest match, last done 33 days ago.",
       );
+    });
+
+    it("time not checked (unbounded range or none) and no other filter: nothing can be excluded, so there is no fallback to explain", () => {
+      for (const prefs of [{ durationRange: { min: 0, max: 120 } }, {}]) {
+        const r = suggestFreestyle(fellbackLib, prefs);
+        expect(r.fellBack).toBe(false);
+        expect(r.reason).toBe("Least recently done (33 days ago).");
+      }
     });
   });
 });

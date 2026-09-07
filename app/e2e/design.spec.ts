@@ -918,6 +918,10 @@ test.describe("workout detail screen", () => {
     await page.goto("/library");
     await page.locator(".workout-row").first().click();
     await expect(page.locator(".workout-detail-title")).toBeVisible();
+    // Phase RW PR A: the no-baseline Library carries a caption above the
+    // rows, so the row click now lands where Connect renders on the detail
+    // screen and the pointer would rest on it, painting :hover. Park it.
+    await page.mouse.move(0, 0);
   });
 
   test("every visible interactive element has a >=44x44 tap target", async ({
@@ -1029,6 +1033,10 @@ test.describe("workout detail screen (Scan NFC supported)", () => {
     await page.goto("/library");
     await page.locator(".workout-row").first().click();
     await expect(page.locator(".workout-detail-title")).toBeVisible();
+    // Phase RW PR A: the no-baseline Library carries a caption above the
+    // rows, so the row click now lands where Connect renders on the detail
+    // screen and the pointer would rest on it, painting :hover. Park it.
+    await page.mouse.move(0, 0);
   });
 
   test("Scan NFC sits directly above Connect, both 56px, fern and blue fills, no stray L1/primary", async ({
@@ -1184,6 +1192,10 @@ test.describe("workout detail screen (Connect, no Bluetooth API)", () => {
     await page.goto("/library");
     await page.locator(".workout-row").first().click();
     await expect(page.locator(".workout-detail-title")).toBeVisible();
+    // Phase RW PR A: the no-baseline Library carries a caption above the
+    // rows, so the row click now lands where Connect renders on the detail
+    // screen and the pointer would rest on it, painting :hover. Park it.
+    await page.mouse.move(0, 0);
   });
 
   test("Connect's dashed state reverts the blue fill to --surface, keeping the same measured ink-3 contrast", async ({
@@ -11724,5 +11736,33 @@ test.describe("from-the-log detail, machine tier + MACHINE SUMMARY (Phase LP §3
     await expect(page.getByTestId("summary-machine-tier")).toBeVisible();
     await assertTapTargets(page);
     await assertNoA11yViolations(page);
+  });
+});
+
+// Phase RW PR A: the Library's no-baseline caption is new text on the page
+// ground. Its colour is a TOKEN pin (--ink-3, 6.69:1 on --page per Gate 0,
+// docs/design/rw-gate0/contrast.json), not a literal: a rule that drifted to
+// --ink-5 (2.9:1) would still render and only this test would notice.
+test.describe("Library no-baseline caption (Phase RW PR A)", () => {
+  test("is set in --ink-3 at 13px", async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-library-caption@e2e.test",
+      name: "Design Tester",
+    });
+    await page.goto("/library");
+    const caption = page.locator(".library-caption");
+    await expect(caption).toHaveText(
+      "~ times are estimates until you set a baseline",
+    );
+    const styles = await caption.evaluate((el) => {
+      const s = getComputedStyle(el);
+      const ink3 = getComputedStyle(document.documentElement)
+        .getPropertyValue("--ink-3")
+        .trim();
+      return { color: s.color, fontSize: s.fontSize, ink3 };
+    });
+    expect(styles.ink3).toBe("#57544c");
+    expect(styles.color).toBe("rgb(87, 84, 76)"); // --ink-3, 6.69:1 on --page
+    expect(styles.fontSize).toBe("13px");
   });
 });

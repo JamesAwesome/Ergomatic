@@ -489,6 +489,7 @@ describe("totals", () => {
       loose: 0,
       perSet: 16,
       total: 64,
+      assumed: false,
     });
   });
 
@@ -504,6 +505,7 @@ describe("totals", () => {
       loose: 0,
       perSet: 15,
       total: 60,
+      assumed: false,
     });
   });
 
@@ -521,13 +523,27 @@ describe("totals", () => {
     expect(t!.total).toBeCloseTo(14.9333, 3);
   });
 
-  it("returns null when a distance row cannot be estimated without baselines", () => {
+  it("prices a distance row with no baseline off the assumed pair and says so (Phase RW PR A)", () => {
     const f = formWith({
       rows: [
         { ...workRow("a"), durValue: "2000", durUnit: "m", refBase: "2k" },
       ],
     });
-    expect(totals(f, null)).toBeNull();
+    // 2000 m at the assumed 2:25 2k (145 s/500 m) = 580 s = 9.67 min. At
+    // the table's slowest cell (150) it would be 10.0, so a mutation to
+    // that cell fails here.
+    const t = totals(f, null);
+    expect(t.assumed).toBe(true);
+    expect(t.total).toBeCloseTo(9.67, 2);
+  });
+
+  it("never marks a time-only form assumed, with or without a baseline", () => {
+    const f = formWith({
+      rows: [{ ...workRow("a"), durValue: "20:00", durUnit: "min" }],
+    });
+    expect(totals(f, null).assumed).toBe(false);
+    expect(totals(f, null).total).toBe(20);
+    expect(totals(f, { k2Seconds: 112, k6Seconds: 122 }).assumed).toBe(false);
   });
 });
 

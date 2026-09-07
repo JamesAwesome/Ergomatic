@@ -414,6 +414,14 @@ export default function Library() {
             <span className="library-count">{total} WORKOUTS</span>
           )}
         </div>
+        {/* Phase RW PR A (spec §4): one caption, not one per row, while no
+            baseline is set: distance rows price off the assumed pair and
+            read with a leading ~. Gate 0 approved this wording. */}
+        {baselines === null && (
+          <p className="library-caption">
+            ~ times are estimates until you set a baseline
+          </p>
+        )}
         {hasFilters && (
           <div className="library-count-row">
             <span className="library-count">
@@ -463,18 +471,18 @@ export default function Library() {
         </div>
       ) : (
         <ul className="workout-list">
-          {visible.map((workout) => (
-            <li key={workout.id}>
-              <WorkoutRow
-                workout={workout}
-                durationMinutes={
-                  baselines
-                    ? estimateMinutes(workout.steps, baselines).minutes
-                    : null
-                }
-              />
-            </li>
-          ))}
+          {visible.map((workout) => {
+            const est = estimateMinutes(workout.steps, baselines);
+            return (
+              <li key={workout.id}>
+                <WorkoutRow
+                  workout={workout}
+                  durationMinutes={est.minutes}
+                  durationAssumed={est.assumed}
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
     </main>

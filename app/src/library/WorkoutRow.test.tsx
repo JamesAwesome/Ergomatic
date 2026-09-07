@@ -64,7 +64,11 @@ describe("WorkoutRow", () => {
   it("rounds a fractional duration down at .25 rather than printing 2.25′", () => {
     render(
       <MemoryRouter>
-        <WorkoutRow workout={HOARFROST} durationMinutes={2.25} />
+        <WorkoutRow
+          workout={HOARFROST}
+          durationMinutes={2.25}
+          durationAssumed={false}
+        />
       </MemoryRouter>,
     );
 
@@ -75,7 +79,11 @@ describe("WorkoutRow", () => {
   it("rounds a fractional duration up at .5 (Math.round is half-up)", () => {
     render(
       <MemoryRouter>
-        <WorkoutRow workout={HOARFROST} durationMinutes={2.5} />
+        <WorkoutRow
+          workout={HOARFROST}
+          durationMinutes={2.5}
+          durationAssumed={false}
+        />
       </MemoryRouter>,
     );
 
@@ -83,14 +91,24 @@ describe("WorkoutRow", () => {
     expect(screen.queryByText("2.5′")).not.toBeInTheDocument();
   });
 
-  it("renders a — fallback when duration is unknown", () => {
-    render(
+  it("marks an assumed-pace estimate with a tilde and leaves a real one bare (Phase RW PR A)", () => {
+    const { rerender } = render(
       <MemoryRouter>
-        <WorkoutRow workout={HOARFROST} durationMinutes={null} />
+        <WorkoutRow workout={HOARFROST} durationMinutes={16} durationAssumed />
       </MemoryRouter>,
     );
-
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("~16′")).toBeInTheDocument();
+    rerender(
+      <MemoryRouter>
+        <WorkoutRow
+          workout={HOARFROST}
+          durationMinutes={16}
+          durationAssumed={false}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("16′")).toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
   describe("custom badge", () => {
@@ -103,7 +121,11 @@ describe("WorkoutRow", () => {
     it("renders the CUSTOM badge for a non-global workout", () => {
       render(
         <MemoryRouter>
-          <WorkoutRow workout={CUSTOM} durationMinutes={20} />
+          <WorkoutRow
+            workout={CUSTOM}
+            durationMinutes={20}
+            durationAssumed={false}
+          />
         </MemoryRouter>,
       );
 
@@ -113,7 +135,11 @@ describe("WorkoutRow", () => {
     it("omits the CUSTOM badge for a real seeded library workout", () => {
       render(
         <MemoryRouter>
-          <WorkoutRow workout={HOARFROST} durationMinutes={20} />
+          <WorkoutRow
+            workout={HOARFROST}
+            durationMinutes={20}
+            durationAssumed={false}
+          />
         </MemoryRouter>,
       );
 
@@ -123,7 +149,11 @@ describe("WorkoutRow", () => {
     it("adds ', one of my workouts' to the row's accessible name only for the rower's own workouts", () => {
       const { rerender } = render(
         <MemoryRouter>
-          <WorkoutRow workout={HOARFROST} durationMinutes={20} />
+          <WorkoutRow
+            workout={HOARFROST}
+            durationMinutes={20}
+            durationAssumed={false}
+          />
         </MemoryRouter>,
       );
       expect(screen.getByRole("link")).not.toHaveAccessibleName(
@@ -132,7 +162,11 @@ describe("WorkoutRow", () => {
 
       rerender(
         <MemoryRouter>
-          <WorkoutRow workout={CUSTOM} durationMinutes={20} />
+          <WorkoutRow
+            workout={CUSTOM}
+            durationMinutes={20}
+            durationAssumed={false}
+          />
         </MemoryRouter>,
       );
       expect(screen.getByRole("link")).toHaveAccessibleName(
@@ -155,7 +189,13 @@ describe("WorkoutRow", () => {
         <Routes>
           <Route
             path="/library"
-            element={<WorkoutRow workout={HOARFROST} durationMinutes={20} />}
+            element={
+              <WorkoutRow
+                workout={HOARFROST}
+                durationMinutes={20}
+                durationAssumed={false}
+              />
+            }
           />
           <Route path="/library/:id" element={<LocationProbe />} />
         </Routes>
@@ -183,7 +223,11 @@ describe("structure line (line 2 of 3)", () => {
     // 6k+12, no rest — no reps marker, no chain.
     render(
       <MemoryRouter>
-        <WorkoutRow workout={fromSeed("Fine Weather")} durationMinutes={45} />
+        <WorkoutRow
+          workout={fromSeed("Fine Weather")}
+          durationMinutes={45}
+          durationAssumed={false}
+        />
       </MemoryRouter>,
     );
 
@@ -195,7 +239,11 @@ describe("structure line (line 2 of 3)", () => {
     // authored via the reps marker.
     render(
       <MemoryRouter>
-        <WorkoutRow workout={fromSeed("Sea Fret")} durationMinutes={9} />
+        <WorkoutRow
+          workout={fromSeed("Sea Fret")}
+          durationMinutes={9}
+          durationAssumed={false}
+        />
       </MemoryRouter>,
     );
 
@@ -208,7 +256,11 @@ describe("structure line (line 2 of 3)", () => {
     // authored as five distinct "w" steps, no reps marker.
     render(
       <MemoryRouter>
-        <WorkoutRow workout={fromSeed("Millpond")} durationMinutes={18} />
+        <WorkoutRow
+          workout={fromSeed("Millpond")}
+          durationMinutes={18}
+          durationAssumed={false}
+        />
       </MemoryRouter>,
     );
 
@@ -223,7 +275,11 @@ describe("structure line (line 2 of 3)", () => {
     // rower cannot tell a 2k workout from a 6k one without it.
     render(
       <MemoryRouter>
-        <WorkoutRow workout={fromSeed("Ground Fog")} durationMinutes={32} />
+        <WorkoutRow
+          workout={fromSeed("Ground Fog")}
+          durationMinutes={32}
+          durationAssumed={false}
+        />
       </MemoryRouter>,
     );
 
@@ -232,22 +288,22 @@ describe("structure line (line 2 of 3)", () => {
     ).toBeInTheDocument();
   });
 
-  it("still shows the line when durationMinutes is null (no baselines set)", () => {
+  it("still shows the line beside an assumed duration (no baselines set)", () => {
     // HOARFROST above: 2×12:00 at 6k+12, 3' rest — same reps-marker shape
-    // as "Sea Fret". Library.tsx passes durationMinutes={null} for every
+    // as "Sea Fret". Library.tsx passes an assumed estimate for every
     // row exactly when the signed-in user has no baselines yet
-    // (Library.tsx:337-343) — structureLine must not gate on that.
+    // (Library.tsx's row map) — structureLine must not gate on that.
     render(
       <MemoryRouter>
-        <WorkoutRow workout={HOARFROST} durationMinutes={null} />
+        <WorkoutRow workout={HOARFROST} durationMinutes={30} durationAssumed />
       </MemoryRouter>,
     );
 
     expect(screen.getByText("2 × 12:00 @ 6K+12 · 3′ REST")).toBeInTheDocument();
-    // and the row's OWN duration fallback still renders alongside it —
-    // proves the structure line isn't secretly swallowing/replacing the
-    // existing line 1 duration slot.
-    expect(screen.getByText("—")).toBeInTheDocument();
+    // and the row's OWN duration still renders alongside it — proves the
+    // structure line isn't secretly swallowing/replacing the existing
+    // line 1 duration slot.
+    expect(screen.getByText("~30′")).toBeInTheDocument();
   });
 });
 
