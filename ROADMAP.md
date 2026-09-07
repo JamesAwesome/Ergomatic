@@ -2082,6 +2082,23 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **No committed capture shows the free-row summary's machine tiles.**
+      They ship in #351 with a component test on the real 2026-08-31 row, but
+      `docs/screenshots/justrow-log.png` cannot show them:
+      `injectJustRowShotFake` sends no burst, and `fake.test.ts` pins that a
+      burst-less script emits no 0x0039/0x003A. **Attempted and reverted in
+      #351**, so the next attempt starts here rather than from scratch. A
+      `FakeBurst` rides a `FakeBoundaryEvent`, whose `actual` needs
+      `index`, `elapsedSeconds`, `distanceMeters`, `avgSpm`,
+      `avgHeartRateBpm`, `restDistanceMeters` and `restSeconds`, plus
+      sibling `cumulativeElapsedSeconds`/`cumulativeDistanceMeters`.
+      Calories live on 0x003A, which `FakeBurst` takes only as raw bytes, so
+      `summaryOverrides` cannot reach them. Appending such a boundary to the
+      free-row script left Connect permanently disabled and broke four
+      justrow captures — that is the thing to solve. **Also owed:** a
+      `design.spec.ts` assertion that `summary-machine-tier` renders on the
+      free-row door; today it is asserted only on the programmed ones.
+
 - **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
   one and offered the other at the 7 s offset.** James's ruling ("If a user
   sets a 2k or a 6k they should be asked to set both with a suggestion of the
