@@ -109,6 +109,11 @@ import {
   spmIsMeasured,
   type LogStep,
 } from "./logDraft";
+import {
+  logbookCalPerHour,
+  logbookWatts,
+  sessionStrokeRate,
+} from "./logbookDerived";
 import type { SessionRun } from "./run";
 
 /** Per §2A: `AUG 10 · 18:57 · PM5 <id>` / `· TIMER` / `· LOGGED BY HAND`,
@@ -165,6 +170,42 @@ export interface SummaryHeroes {
   timeSeconds?: number;
   distanceMeters?: number;
   totalLine?: string;
+  /** Phase LP (spec 2026-09-06-logbook-parity §3): the six machine tiles
+   *  under the heroes. Present ONLY on a tier-A machine row (the machine's
+   *  own session totals in hand, non-zero); absent on tier B, the timer
+   *  and manual doors, and the zero-totals hardware shape. Inside it,
+   *  each field is `undefined` where the machine did not say — the screen
+   *  renders a dash there, and `0` as 0. */
+  machine?: MachineTier;
+}
+
+/** Phase LP §3 / §3.1 (James, 2026-09-07: "logbook formula"). `avgWatts`
+ *  and `calPerHour` are the LOGBOOK's arithmetic over the stored integers
+ *  (`logbookDerived.ts`), never the PM5's own stored `avgWatts`/
+ *  `avgCalPerHour`, which stay on the record as provenance. `rate` follows
+ *  `sessionStrokeRate`'s finished/terminated rule; `targetRate` is one
+ *  number only when every interval authored the same one. */
+export interface MachineTier {
+  avgWatts?: number;
+  calories?: number;
+  calPerHour?: number;
+  rate?: number;
+  targetRate?: number;
+  drag?: number;
+  restMeters?: number;
+}
+
+/** The session's TARGET stroke rate — a single number only when every
+ *  interval names the same one (spec §3.2); otherwise `undefined`, and the
+ *  per-interval targets stay where they already are, in the INTERVALS
+ *  table. An interval with no target counts as disagreement. */
+export function agreedTargetSpm(
+  targets: readonly (number | null | undefined)[],
+): number | undefined {
+  if (targets.length === 0) return undefined;
+  const first = targets[0];
+  if (typeof first !== "number") return undefined;
+  return targets.every((t) => t === first) ? first : undefined;
 }
 
 /** A judged row's deviation vs. a baseline split — the shape itself stays
@@ -1083,6 +1124,34 @@ function monitorAvgSplit(run: MonitorRun): WorkingAverage {
  *  the rest that hero already counts once. Only tier A and non-legacy
  *  tier B rows — the two shapes whose heroes are genuinely work-only —
  *  get a total line at all. */
+/** Phase LP §3: the machine tier off a tier-A run. Called only when the
+ *  machine's own totals are in hand and non-zero (`monitorHeroes`'s own
+ *  `hasTotals` gate), so watts always derive; everything from 0x003A is
+ *  `undefined` on a record that never stored it (pre-LP rows, a burst
+ *  that lost 0x003A) and renders as a dash. */
+function machineTierFromRun(run: MonitorRun): MachineTier {
+  const t = run.summaryTotals!.workElapsedSeconds;
+  const d = run.summaryTotals!.workDistanceMeters;
+  const detail = run.summaryDetail;
+  const calories = detail?.totalCalories;
+  return {
+    avgWatts: logbookWatts(t, d),
+    calories,
+    calPerHour:
+      calories === undefined ? undefined : logbookCalPerHour(calories, t),
+    rate: sessionStrokeRate({
+      finished: run.endedBy === "finished",
+      avgStrokeRate: detail?.avgStrokeRate,
+      splits: run.actuals
+        .filter((a) => a.index !== null && a.avgSpm !== null)
+        .map((a) => ({ seconds: a.elapsedSeconds, spm: a.avgSpm as number })),
+    }),
+    targetRate: agreedTargetSpm(run.program.intervals.map((i) => i.displaySpm)),
+    drag: detail?.dragFactorAverage,
+    restMeters: detail?.totalRestMeters,
+  };
+}
+
 function monitorHeroes(run: MonitorRun): SummaryHeroes {
   if (run.summaryTotals !== undefined) {
     const distanceMeters = Math.round(run.summaryTotals.workDistanceMeters);
@@ -1100,6 +1169,10 @@ function monitorHeroes(run: MonitorRun): SummaryHeroes {
       avgSplit: hasAvgSplit ? fmtSplit(avgSplitSeconds) : undefined,
       avgSplitSeconds: hasAvgSplit ? avgSplitSeconds : undefined,
       totalLine: buildMonitorTotalLine(run, timeSeconds),
+      // Phase LP §3: the machine tier rides tier A only, and only when the
+      // machine's totals are real (the zero-totals hardware shape keeps
+      // its "every hero absent" contract — nothing fabricated from 0/0).
+      ...(hasTotals ? { machine: machineTierFromRun(run) } : {}),
     };
   }
   const avgSplit = monitorAvgSplit(run);

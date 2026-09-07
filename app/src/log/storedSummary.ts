@@ -105,7 +105,14 @@ import {
   type SummaryHeroes,
   type SummaryMeta,
   type SummaryRow,
+  agreedTargetSpm,
+  type MachineTier,
 } from "../session/summaryModel";
+import {
+  logbookCalPerHour,
+  logbookWatts,
+  sessionStrokeRate,
+} from "../session/logbookDerived";
 
 // Re-typed rather than imported from `server/stores/logs.ts` (this
 // repo's standing rule: client code never imports server/'s module
@@ -740,6 +747,42 @@ function buildStoredTotalLine(
 // `undefined` when its own source has nothing to show (never a
 // fabricated `0:00`/`0 m`) — see this module's own tier comment above
 // for the three branches and their sources.
+function storedMachineTier(
+  row: StoredLog,
+  timeSeconds: number,
+  distanceMeters: number,
+): MachineTier {
+  const ms = row.machineSummary;
+  const calories = ms?.totalCalories;
+  const finished = row.endedBy === "finished" || row.endedBy == null;
+  return {
+    avgWatts: logbookWatts(timeSeconds, distanceMeters),
+    calories,
+    calPerHour:
+      calories === undefined
+        ? undefined
+        : logbookCalPerHour(calories, timeSeconds),
+    rate: sessionStrokeRate({
+      finished,
+      avgStrokeRate: ms?.avgStrokeRate,
+      splits: row.steps
+        .filter(
+          (s) =>
+            s.actualSource === "pm5" &&
+            s.actualSpm !== undefined &&
+            s.actualSeconds !== undefined,
+        )
+        .map((s) => ({
+          seconds: s.actualSeconds as number,
+          spm: s.actualSpm as number,
+        })),
+    }),
+    targetRate: agreedTargetSpm(row.steps.map((s) => s.spm)),
+    drag: ms?.dragFactorAverage,
+    restMeters: ms?.totalRestMeters,
+  };
+}
+
 function buildHeroes(row: StoredLog): SummaryHeroes {
   const hasMachineTotals =
     row.machineWorkSeconds !== null &&
@@ -778,6 +821,15 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
       // `stepSums` here let fallback-2 relabel that rowed work as rest —
       // caught by a dedicated tier-A-with-null-rest-pair test below.
       totalLine: buildStoredTotalLine(row, timeSeconds, {}),
+      // Phase LP §3: the six machine tiles, same arithmetic as the live
+      // door's `machineTierFromRun` (`session/summaryModel.ts`), read off
+      // the stored row: totals from the RC-2/3 columns, everything else
+      // from `machine_summary` — absent keys (any row saved before this
+      // phase, or a burst that lost 0x003A) stay `undefined` and render as
+      // a dash. RATE: `endedBy` `"finished"` or absent (pre-close-reason
+      // rows) reads the stored 0x0039 average; any other close takes the
+      // splits' time-weighted mean (0x0039 doubles on a terminate).
+      machine: storedMachineTier(row, timeSeconds, distanceMeters),
     };
   }
 

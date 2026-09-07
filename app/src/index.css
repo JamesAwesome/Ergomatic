@@ -9309,6 +9309,46 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 20px;
 }
 
+/* Phase LP §3 — the six machine tiles under the heroes (Gate 0 approved
+   2026-09-07 on docs/design/logbook-parity/03-chosen-composed.html).
+   Three columns × two rows at every width the heroes already handle;
+   labels reuse `.summary-hero-label` (--ink-3 on --page, 6.69:1 — the
+   pairing this file's own contrast notes above compute); values are
+   --ink on --page like every hero value, at a size between the total
+   line and the secondary heroes so the tier reads as detail, not as a
+   fourth hero. The unit/suffix `small` is --ink-3, same 6.69:1. */
+.summary-machine-tier {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 10px;
+  margin-top: 14px;
+}
+
+.summary-machine-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.summary-machine-value {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.summary-machine-value small {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  margin-left: 2px;
+  color: var(--ink-3);
+}
+
 .summary-reflection-card {
   display: flex;
   flex-direction: column;

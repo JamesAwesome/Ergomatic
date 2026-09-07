@@ -135,6 +135,67 @@ const EXIT7_STEPS: StoredLog["steps"] = [
 ];
 
 describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL line", () => {
+  // Phase LP (spec §3): the stored row's machine tier, same arithmetic as
+  // the live door. 6000 m in 1550.1 s → watts round(2.80/(1550.1/6000)³) =
+  // round(2.80/0.017245) = round(162.4) = 162; cal/hr floor(372 × 3600 /
+  // 1550.1) = floor(863.9) = 863 — James's photographed 6k session row.
+  it("Phase LP: a stored machine row carries the six tiles from machine_summary — logbook watts and cal/hr, calories/drag/rest verbatim, RATE from the stored 0x0039 average on a finished row, TARGET when every step's spm agrees", () => {
+    const heroes = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "finished",
+        machineWorkSeconds: 1550.1,
+        machineWorkMeters: 6000,
+        machineSummary: {
+          avgPaceSecondsPer500m: 129.2,
+          avgStrokeRate: 27,
+          dragFactorAverage: 101,
+          totalCalories: 372,
+          avgWatts: 162,
+          avgCalPerHour: 864,
+          totalRestMeters: 0,
+        },
+        steps: [
+          { ...measuredStep(313.5, 1200, 130.6), spm: 26, actualSpm: 27 },
+          { ...measuredStep(309.0, 1200, 128.8), spm: 26, actualSpm: 27 },
+        ],
+      }),
+    ).heroes;
+    expect(heroes.machine).toStrictEqual({
+      avgWatts: 162,
+      calories: 372,
+      calPerHour: 863,
+      rate: 27,
+      targetRate: 26,
+      drag: 101,
+      restMeters: 0,
+    });
+  });
+
+  it("Phase LP: a stored machine row saved BEFORE this phase (machine_summary without the 0x003A keys) derives watts and dashes the rest; a manual row has no tier at all", () => {
+    const old = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        endedBy: "finished",
+        machineWorkSeconds: 636,
+        machineWorkMeters: 2440,
+        machineSummary: {
+          avgPaceSecondsPer500m: 130.3,
+          dragFactorAverage: 104,
+        },
+      }),
+    ).heroes.machine;
+    // round(2.80/(636/2440)³) = round(2.80/0.017708) = round(158.1) = 158
+    expect(old?.avgWatts).toBe(158);
+    expect(old?.drag).toBe(104);
+    expect(old?.calories).toBeUndefined();
+    expect(old?.calPerHour).toBeUndefined();
+    expect(old?.restMeters).toBeUndefined();
+    expect(old?.rate).toBeUndefined();
+    expect(buildStoredSummary(baseRow()).heroes.machine).toBeUndefined();
+  });
+
   it("TIER A: a row carrying the machine's own work totals renders them verbatim, including the machine's own avg split, plus the TOTAL line from the RC-1 rest pair — DISCRIMINATING from tier B (design spec §1's own antagonist-established fact: the machine can disagree with the sum of its own rows, walk-2026-08-20's 901-vs-899), so the machine's totals here are deliberately NOT equal to Σ EXIT7_STEPS (500m/124.0s) — a test that used equal values couldn't tell tier A from tier B", () => {
     const view = buildStoredSummary(
       baseRow({

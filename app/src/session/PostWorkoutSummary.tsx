@@ -7,6 +7,7 @@ import type { PlanData } from "../api/usePlan";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import TraceChart from "../log/TraceChart";
 import BackLink from "../shell/BackLink";
+import { DASH } from "../workout/connected/surfaceModel";
 import type {
   MeasuredRow,
   SummaryHeroes,
@@ -309,12 +310,42 @@ export function SummaryMetaBlock({
  *  when every hero is absent" check — a caller never needs to repeat that
  *  gate, it can render this unconditionally and get nothing back when
  *  there's nothing to show (old rows, spec §5B). */
+/** Phase LP §3: one machine tile. `value === undefined` renders the house
+ *  dash (`DASH`, `surfaceModel.ts`) and NO unit/suffix — "the machine did
+ *  not say" is a blank, not a zero with a unit hanging off it; `0` renders
+ *  as 0. `role="group"` + `aria-label` names the tile for a screen reader
+ *  and for tests, the way `.summary-hero`'s label/value pair already
+ *  reads. */
+function MachineTile({
+  label,
+  value,
+  suffix,
+  unit,
+}: {
+  label: string;
+  value: number | undefined;
+  suffix?: string;
+  unit?: string;
+}) {
+  return (
+    <div className="summary-machine-tile" role="group" aria-label={label}>
+      <span className="summary-hero-label">{label}</span>
+      <span className="summary-machine-value">
+        {value === undefined ? DASH : value}
+        {value !== undefined && suffix !== undefined && <small>{suffix}</small>}
+        {value !== undefined && unit !== undefined && <small>{unit}</small>}
+      </span>
+    </div>
+  );
+}
+
 export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
   const hasHero =
     heroes.avgSplit !== undefined ||
     heroes.time !== undefined ||
     heroes.distanceMeters !== undefined;
   if (!hasHero) return null;
+  const machine = heroes.machine;
   return (
     <div className="summary-heroes-block">
       <div className="summary-heroes">
@@ -347,6 +378,33 @@ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
           a monitor row with no measured time at all). */}
       {heroes.totalLine !== undefined && (
         <p className="summary-total-line">{heroes.totalLine}</p>
+      )}
+      {/* Phase LP §3 (Gate 0 approved 2026-09-07, artboard
+          docs/design/logbook-parity/03-chosen-composed.html): the six
+          machine tiles, machine rows only. Watts and cal/hr are the
+          LOGBOOK's arithmetic (§3.1, James: "logbook formula"); RATE /
+          TARGET is one tile, the target shown only when every interval
+          agreed on one. */}
+      {machine !== undefined && (
+        <div
+          className="summary-machine-tier"
+          data-testid="summary-machine-tier"
+        >
+          <MachineTile label="AVG WATTS" value={machine.avgWatts} />
+          <MachineTile label="CALORIES" value={machine.calories} />
+          <MachineTile label="CAL / HR" value={machine.calPerHour} />
+          <MachineTile
+            label="RATE / TARGET"
+            value={machine.rate}
+            suffix={
+              machine.targetRate !== undefined
+                ? ` / ${machine.targetRate}`
+                : undefined
+            }
+          />
+          <MachineTile label="DRAG" value={machine.drag} />
+          <MachineTile label="REST" value={machine.restMeters} unit="m" />
+        </div>
       )}
     </div>
   );

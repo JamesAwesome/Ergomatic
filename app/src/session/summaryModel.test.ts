@@ -680,6 +680,110 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
     avgPaceSecondsPer500m: 124.0, // 0x0039 offset 18-19, decoded (PRIMARY)
   };
 
+  // Phase LP (spec 2026-09-06-logbook-parity §3): the hero's MACHINE tier.
+  // Literals below are hand computed, never via `logbookDerived`: watts =
+  // round(2.80/(124.0/500)³) = round(2.80/0.015253) = round(183.6) = 184
+  // (the exit-7 0x003A reads 184 W too — spec §1.1's identity); cal/hr =
+  // floor(32 × 3600 / 124.0) = floor(929.0) = 929 (the PM5's own 0x003A
+  // says 931 — the logbook's is what we show, §3.1).
+  it("Phase LP: tier A carries the six machine tiles — logbook watts and cal/hr from the totals, calories/drag/rest from the record, RATE from 0x0039 on a finished piece, TARGET only when every interval agrees", () => {
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({
+            kind: "distance",
+            value: 250,
+            restSeconds: 60,
+            displaySpm: 26,
+          }),
+          interval({
+            kind: "distance",
+            value: 250,
+            restSeconds: 60,
+            displaySpm: 26,
+          }),
+        ],
+      },
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: {
+        ...exit7SummaryDetail,
+        totalCalories: 32,
+        avgWatts: 184,
+        avgCalPerHour: 931,
+        totalRestMeters: 242,
+      },
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.heroes.machine).toStrictEqual({
+      avgWatts: 184,
+      calories: 32,
+      calPerHour: 929,
+      rate: 26,
+      targetRate: 26,
+      drag: 100,
+      restMeters: 242,
+    });
+  });
+
+  it("Phase LP: an OLD tier-A row (summaryDetail without 0x003A) still derives watts, and leaves calories / cal-hr / rest undefined — a dash, never 0; TARGET is undefined when the intervals disagree", () => {
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "distance", value: 250, displaySpm: 26 }),
+          interval({ kind: "distance", value: 250, displaySpm: 28 }),
+        ],
+      },
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: exit7SummaryDetail,
+    });
+    const machine = buildSummaryModel({ door: "monitor", run }).heroes.machine;
+    expect(machine?.avgWatts).toBe(184);
+    expect(machine?.calories).toBeUndefined();
+    expect(machine?.calPerHour).toBeUndefined();
+    expect(machine?.restMeters).toBeUndefined();
+    expect(machine?.targetRate).toBeUndefined();
+    expect(machine?.drag).toBe(100);
+  });
+
+  it("Phase LP: a TERMINATED tier-A piece takes RATE from the splits' time-weighted mean, not 0x0039's doubled figure (46 on the wire → 26.3 from the two splits → 26)", () => {
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "rower",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: { ...exit7SummaryDetail, avgStrokeRate: 46 },
+    });
+    // (67.9 × 25 + 56.1 × 28) / 124.0 = (1697.5 + 1570.8) / 124.0 = 26.36
+    expect(
+      buildSummaryModel({ door: "monitor", run }).heroes.machine?.rate,
+    ).toBe(26);
+  });
+
+  it("Phase LP: tier B (no summaryTotals) and the zero-totals hardware shape carry NO machine tier — the tier is the machine's own session, not a quotient of ours", () => {
+    const tierB = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run: tierB }).heroes.machine,
+    ).toBeUndefined();
+    const zero = monitorRun({
+      program: exit7Program,
+      actuals: [],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 0, workDistanceMeters: 0 },
+      summaryDetail: { ...exit7SummaryDetail, totalCalories: 0 },
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run: zero }).heroes.machine,
+    ).toBeUndefined();
+  });
+
   it("tier A (run.summaryTotals present, PR #190): DISTANCE 500, TIME 2:04, AVG SPLIT 2:04.0 — the machine's OWN numbers verbatim, never a quotient of ours; TOTAL line 4:04 · plus 242 m coasting in rest, using RC-1's stored restMeters", () => {
     const run = monitorRun({
       program: exit7Program,
