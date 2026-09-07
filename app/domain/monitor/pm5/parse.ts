@@ -150,8 +150,9 @@ export function parseGeneralStatus(
  *  frame, not just this field. */
 const ADDITIONAL_STATUS_1_MIN_BYTES = 16;
 
-/** 0x0032 — C2 rowing additional status 1, 17 bytes (interface-notes.md
- *  §10). */
+/** 0x0032 — C2 rowing additional status 1, 17 bytes on current firmware —
+ *  16 on pre-V1.26 monitors; see `ADDITIONAL_STATUS_1_MIN_BYTES` above for
+ *  why (interface-notes.md §10). */
 export interface AdditionalStatus1 {
   elapsedSeconds: number;
   speedMetersPerSecond: number;
@@ -274,8 +275,10 @@ export function parseSplitIntervalData(
  *  recorded. */
 const ADDITIONAL_SPLIT_INTERVAL_MIN_BYTES = 18;
 
-/** 0x0038 — C2 rowing additional split/interval data, 19 bytes
- *  (interface-notes.md §10). */
+/** 0x0038 — C2 rowing additional split/interval data, 19 bytes on current
+ *  firmware — 18 on pre-V1.27 monitors; see
+ *  `ADDITIONAL_SPLIT_INTERVAL_MIN_BYTES` above for why (interface-notes.md
+ *  §10). */
 export interface AdditionalSplitIntervalData {
   elapsedSeconds: number;
   splitIntervalAvgStrokeRate: number;
