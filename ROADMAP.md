@@ -1284,6 +1284,15 @@ closed with zero Concept2 contact.
       repo — capture one on the next walk so the corpus carries a belted
       0x0039 from a second day and build.
 
+- [ ] **v0.41.0's release note is now FALSE and the next note owes a
+      correction.** It reads "Rows rowed with the PM5 connected now show what
+      the monitor measured: … average heart rate for the session". After
+      #345 that figure is NOT what the monitor measured — the monitor sends
+      nothing there, and the app works it out from the trace, working strokes
+      only, which can read below the per-interval HR column on the same
+      screen. Notes are shipped copy, not history, and nothing else re-reads
+      them (PM gate #345). **Check:** at any change to where a number comes
+      from, grep `releaseNotes.ts` for that tile's own label.
 - [ ] **`WorkoutDetail.test.tsx` is FLAKY on main and blocks pushes.**
       "still navigates when preferences errored, rather than trapping the
       rower" fails ~2 runs in 3 in isolation with
@@ -1301,9 +1310,13 @@ closed with zero Concept2 contact.
       stale `false`. The reset cannot fix an arrival that has not happened
       yet. **Fix:** await the preceding write's own observable before that
       test ends, or give each test its own spy rather than resetting a shared
-      one. **Why it matters beyond the annoyance:** a suite that fails at
-      random trains everyone to re-run rather than read, which is exactly how
-      a real failure gets waved through.
+      one. **BLOCKING, not an annoyance — it has already cost a deploy.**
+      Found at #345's PM gate: main's post-merge run at `3c319cc8` (#344)
+      FAILED its `app` job on this exact test, so `deploy` was SKIPPED and
+      production sat frozen at #341's deploy. RF28's shape with a flaky test
+      as the cause instead of a dirty host. An earlier version of this row
+      called it an annoyance; a row's severity is a factual claim like any
+      other. Fix it before the next tag, and re-run main first.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
@@ -1800,6 +1813,14 @@ close, not before.**
       and the tile renders 929. The arithmetic was ruled; the LABEL was
       not. A named row for this pass's Gate 0, which LP's own §3.4 admits
       it enlarged by six numbers.
+      **THIRD MEMBER (PM final gate #345, 2026-09-07): AVG HR is derived
+      too**, from the trace rather than the monitor, and it is the first of
+      the three that visibly disagrees with the rows in the same frame — the
+      HR column beneath it is the monitor's own per-interval reading, which
+      measures 3.5-15.2 bpm higher. Not a merge blocker (a rower cannot act
+      differently on 117 versus 125) but three of six tiles under a `PM5`
+      eyebrow are now not the monitor's figure, and each arrived in its own
+      PR. This pass should rule on the label with all three on the table.
 
 **Opened by James's 2026-08-31 ruling** on the axis-quantity question: take the
 three surviving work-versus-rest mismatches together, in ONE design pass with

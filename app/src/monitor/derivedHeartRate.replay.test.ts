@@ -96,8 +96,13 @@ describe("deriveAverageHeartRate, against real captures", () => {
     const withRestCounted = samples.map(({ t, hr }) => ({ t, hr }));
     expect(deriveAverageHeartRate(samples)).toBe(103);
     expect(deriveAverageHeartRate(withRestCounted)).toBe(103);
-    // …and on the capture where they genuinely diverge, the work-only answer
-    // is the higher one, because resting strokes drag a session mean down.
+    // …and on the capture where they genuinely diverge, the two differ by a
+    // single beat — 133 working-strokes-only against 134 counting rest. The
+    // DIRECTION is not fixed and this comment used to claim it was: a rest
+    // stretch pulls the session mean down only if the heart rate actually
+    // falls during it, and over a 60 s rest after a hard interval it often
+    // has not yet. What the assertion pins is that the two answers DIFFER,
+    // which is the whole of option A versus option B.
     const four = samplesFrom("walk-2026-08-16/session-2-wu-4unequal.jsonl");
     expect(deriveAverageHeartRate(four)).toBe(133);
     expect(deriveAverageHeartRate(four.map(({ t, hr }) => ({ t, hr })))).toBe(
