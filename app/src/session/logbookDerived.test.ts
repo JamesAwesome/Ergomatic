@@ -87,6 +87,26 @@ describe("sessionStrokeRate — 0x0039's average for a finished piece, the split
     ).toBe(21);
   });
 
+  it("gives a zero-duration split no weight — a lone 0 s split is no rate at all, and beside a real one it changes nothing", () => {
+    expect(
+      sessionStrokeRate({
+        finished: false,
+        avgStrokeRate: 46,
+        splits: [{ seconds: 0, spm: 99 }],
+      }),
+    ).toBeUndefined();
+    expect(
+      sessionStrokeRate({
+        finished: false,
+        avgStrokeRate: 46,
+        splits: [
+          { seconds: 0, spm: 99 },
+          { seconds: 60, spm: 24 },
+        ],
+      }),
+    ).toBe(24);
+  });
+
   it("is undefined on a terminated piece with no splits, and when 0x0039 gave nothing on a finished one", () => {
     expect(
       sessionStrokeRate({ finished: false, avgStrokeRate: 46, splits: [] }),

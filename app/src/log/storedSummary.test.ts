@@ -215,6 +215,24 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(buildStoredSummary(baseRow()).machineRows).toStrictEqual([]);
   });
 
+  it("Phase LP (review L6): a pre-RC-1 pm5 row (no machine totals) shows neither tiles nor strip — one gate for both", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "finished",
+        workSeconds: 622.5,
+        workMeters: 2400,
+        steps: [
+          { ...measuredStep(313.5, 1200, 130.6), machineCalories: 73 },
+          { ...measuredStep(309.0, 1200, 128.8), machineCalories: 75 },
+        ],
+      }),
+    );
+    expect(view.heroes.machine).toBeUndefined();
+    expect(view.machineRows).toStrictEqual([]);
+  });
+
   it("Phase LP §3: the strip is gated on the row's own source — a by-hand row carrying a pm5-sourced step (the e2e from-the-log fixture's shape) gets NO machine rows", () => {
     const view = buildStoredSummary(
       baseRow({
@@ -239,8 +257,11 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
         endedBy: "finished",
         machineWorkSeconds: 636,
         machineWorkMeters: 2440,
+        // An RC-3-era row: `summaryDetail` always wrote the nine 0x0039
+        // keys (RF3 — a real old machine row carries avgStrokeRate).
         machineSummary: {
           avgPaceSecondsPer500m: 130.3,
+          avgStrokeRate: 24,
           dragFactorAverage: 104,
         },
       }),
@@ -248,10 +269,10 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     // round(2.80/(636/2440)³) = round(2.80/0.017708) = round(158.1) = 158
     expect(old?.avgWatts).toBe(158);
     expect(old?.drag).toBe(104);
+    expect(old?.rate).toBe(24);
     expect(old?.calories).toBeUndefined();
     expect(old?.calPerHour).toBeUndefined();
     expect(old?.restMeters).toBeUndefined();
-    expect(old?.rate).toBeUndefined();
     expect(buildStoredSummary(baseRow()).heroes.machine).toBeUndefined();
   });
 

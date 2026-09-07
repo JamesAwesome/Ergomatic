@@ -3669,7 +3669,7 @@ test("log-detail", async ({ page }) => {
   await expect(lpTiles).toHaveCount(6);
   await expect(lpTiles.nth(0)).toHaveText("AVG WATTS184");
   await expect(lpTiles.nth(2)).toHaveText("CAL / HR929");
-  await expect(lpTiles.nth(3)).toHaveText("RATE / TARGET26");
+  await expect(lpTiles.nth(3)).toHaveText("RATE26");
   const lpStrip = page
     .getByRole("table", { name: "Machine summary per interval" })
     .locator("tbody tr");

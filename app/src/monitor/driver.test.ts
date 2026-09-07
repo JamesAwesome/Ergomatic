@@ -10236,10 +10236,21 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     avgPaceSecondsPer500m: 125,
   };
 
-  // Phase LP: the exit-7 walk's own 0x003A (seq 63, walk-2026-08-24 —
-  // the same frame the rest-distance oracle tests below use): 32 cal,
+  // Phase LP: the exit-7 walk's own 0x003A payload (seq 63, walk-2026-08-24
+  // — the same frame the rest-distance oracle tests below use): 32 cal,
   // 184 W, 242 m rest, 931 cal/hr at offsets 8-9 / 10-11 / 12-14 / 17-18.
+  // Bytes 0-3 (Log Entry Date/Time) are ZEROED here to match
+  // `summaryBytes()`'s synthetic 0x0039, which writes no stamp: the driver
+  // folds 0x003A in only when the two frames' stamps agree (review M6),
+  // and this gate's fixtures are one piece. The real stamp
+  // (`88 35 03 0f`) is what `EXIT7_0X003A_OTHER_PIECE` below carries.
   const EXIT7_0X003A_BURST = new Uint8Array([
+    0x00, 0x00, 0x00, 0x00, 0x02, 0xfa, 0x00, 0x02, 0x20, 0x00, 0xb8, 0x00,
+    0xf2, 0x00, 0x00, 0x00, 0x00, 0xa3, 0x03,
+  ]);
+  /** The same payload under the walk's REAL stamp, 2026-08-24 15:03 —
+   *  against a zero-stamped 0x0039 this is another piece's frame. */
+  const EXIT7_0X003A_OTHER_PIECE = new Uint8Array([
     0x88, 0x35, 0x03, 0x0f, 0x02, 0xfa, 0x00, 0x02, 0x20, 0x00, 0xb8, 0x00,
     0xf2, 0x00, 0x00, 0x00, 0x00, 0xa3, 0x03,
   ]);
@@ -10442,6 +10453,78 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
         verificationBytes: Array.from(verificationBytes),
       },
     ]);
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-1-missing"),
+    ).toHaveLength(1);
+  });
+
+  it("Phase LP (review M6): an 0x003A whose Log Entry stamp differs from the held 0x0039's is another piece's frame — dropped with summary-1-mismatch, the observations carry the nine 0x0039 fields only", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(200);
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    g.clock.advance(300);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 200));
+    g.transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      EXIT7_0X003A_OTHER_PIECE,
+    );
+    const verificationBytes = Uint8Array.from([
+      0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
+    ]);
+    g.clock.advance(38);
+    g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
+    expect(g.timer.pending()).toBeNull();
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 60, workDistanceMeters: 200 },
+        detail: FULL_SUMMARY,
+        verificationBytes: Array.from(verificationBytes),
+      },
+    ]);
+    const mismatch = g.log
+      .entries()
+      .filter((e) => e.kind === "summary-1-mismatch");
+    expect(mismatch).toHaveLength(1);
+    expect(mismatch[0]!.detail).toContain("2026-08-24 15:03");
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-1-missing"),
+    ).toHaveLength(0);
+  });
+
+  it("Phase LP (review L4): a short 0x003A is logged as summary-1-short and stores nothing — the observations then read as missing", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(200);
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    g.clock.advance(300);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 200));
+    g.transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      EXIT7_0X003A_BURST.subarray(0, 18),
+    );
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-1-short"),
+    ).toHaveLength(1);
+    g.clock.advance(38);
+    g.transport.notify(
+      LOGGED_WORKOUT_UUID,
+      Uint8Array.from([0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b]),
+    );
+    g.clock.advance(200);
+    g.timer.pending()!.fire();
+    const observations = g.events.filter(
+      (e) => e.kind === "summary-observations",
+    );
+    expect(observations).toHaveLength(1);
+    expect(
+      (observations[0] as { detail: Record<string, unknown> }).detail,
+    ).not.toHaveProperty("totalCalories");
     expect(
       g.log.entries().filter((e) => e.kind === "summary-1-missing"),
     ).toHaveLength(1);

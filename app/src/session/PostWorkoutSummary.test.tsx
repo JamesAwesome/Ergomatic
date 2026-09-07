@@ -328,7 +328,7 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
       "AVG WATTS",
       "CALORIES",
       "CAL / HR",
-      "RATE / TARGET",
+      "RATE · TARGET",
       "DRAG",
       "REST",
     ]);
@@ -353,7 +353,8 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
     });
     const tier = screen.getByTestId("summary-machine-tier");
     const tiles = within(tier).getAllByRole("group");
-    expect(tiles[3]!).toHaveTextContent(/^RATE \/ TARGET26$/);
+    expect(tiles[3]!.getAttribute("aria-label")).toBe("RATE");
+    expect(tiles[3]!).toHaveTextContent(/^RATE26$/);
     expect(tiles[5]!).toHaveTextContent("242");
     expect(tiles[5]!).toHaveTextContent("m");
   });

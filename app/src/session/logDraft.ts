@@ -884,6 +884,7 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
     if (actual.index !== null) actualByIndex.set(actual.index, actual);
   }
   const out: LogStep[] = [];
+  const programIndices: number[] = [];
   run.program.intervals.forEach((interval, i) => {
     const seedStep = seed.steps[i]!;
     // KEEP — RESTORED at door PR A's whole-branch review (Important 1).
@@ -902,6 +903,7 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
     // DIFFERENT number from the live summary `warmupIndex` keeps frozen.
     // Nothing produces the value any more (`buildLogSeed` above cannot).
     if ((seedStep.kind as string) === "warmup") return;
+    programIndices.push(i);
     const step: LogStep = { label: seedStep.label };
     if (interval.targetSplit !== null) step.targetSplit = interval.targetSplit;
     if (interval.kind === "time") {
@@ -948,8 +950,20 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
       if (actual.watts !== undefined) step.machineWatts = actual.watts;
       if (actual.dragFactor !== undefined)
         step.machineDragFactor = actual.dragFactor;
-      if (actual.restHeartRateBpm !== undefined)
+      // `machineRestHr` is banded exactly like `avgHr` below (whole-branch
+      // review M1): `heartRate()` maps only 0/255 to null, so a wire byte
+      // of 1..19 would reach the POST and the server would refuse the
+      // WHOLE row (`HR_MIN`/`HR_MAX`, `routes/data.ts`). An out-of-band
+      // machine number drops its own field, never the rower's log. `null`
+      // (no belt) passes through as the value it is.
+      if (
+        actual.restHeartRateBpm === null ||
+        (actual.restHeartRateBpm !== undefined &&
+          actual.restHeartRateBpm >= MONITOR_HR_MIN &&
+          actual.restHeartRateBpm <= MONITOR_HR_MAX)
+      ) {
         step.machineRestHr = actual.restHeartRateBpm;
+      }
       if (
         actual.avgHeartRateBpm !== null &&
         actual.avgHeartRateBpm >= MONITOR_HR_MIN &&
@@ -998,7 +1012,22 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
     }
     out.push(step);
   });
+  monitorStepProgramIndex.set(out, programIndices);
   return out;
+}
+
+/** Phase LP (whole-branch review L5): the PROGRAM index of each step
+ *  `buildMonitorLogSteps` emitted, keyed by the emitted array. Output
+ *  position and program index differ by one on a legacy `kind: "warmup"`
+ *  seed (the guard above emits no step for it), so a reader that needs the
+ *  step's own actual — `machineSplitRowsFromRun`'s rest metres — must not
+ *  re-derive the index from position. Absent for any array this builder
+ *  did not produce. */
+const monitorStepProgramIndex = new WeakMap<readonly LogStep[], number[]>();
+export function monitorStepProgramIndices(
+  steps: readonly LogStep[],
+): readonly number[] | undefined {
+  return monitorStepProgramIndex.get(steps);
 }
 
 // Mirrors Today.tsx's own (private, unexported) `formatLogDate` byte for

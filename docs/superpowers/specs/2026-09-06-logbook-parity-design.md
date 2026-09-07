@@ -293,9 +293,9 @@ Rendered wherever a machine row's summary renders — the session door,
 the log detail, Just Row's log — one component.
 
 - **Hero, second tier** — six smaller tiles under AVG SPLIT · TIME ·
-  DISTANCE: **AVG WATTS** (derived, §3.1), **CALORIES** (`machine_calories`),
+  DISTANCE: **AVG WATTS** (derived, §3.1), **CALORIES** (`machineSummary.totalCalories`),
   **CAL / HR** (derived, §3.1), **RATE · TARGET** (§3.2), **DRAG**
-  (`machineSummary.dragFactorAverage`), **REST** (`machine_rest_meters`,
+  (`machineSummary.dragFactorAverage`), **REST** (`machineSummary.totalRestMeters`,
   metres). Absent → `—`.
 - **Today's INTERVALS table is unchanged** — target, actual, Δ, SPM with
   its target, the bars.
@@ -441,10 +441,10 @@ The pass keeps its own Gate 0.
 
 `buildC2Payload` emits, from the stored record and nothing else:
 
-- **Result:** `calories_total` ← `machine_calories`; `drag_factor` ←
+- **Result:** `calories_total` ← `machineSummary.totalCalories`; `drag_factor` ←
   `machineSummary.dragFactorAverage` (already an integer); `heart_rate`
   {average, min, max, ending, recovery} ← `machineSummary`; `rest_distance`
-  ← `machine_rest_meters`; **`rest_time` stays what it is today** — our
+  ← `machineSummary.totalRestMeters`; **`rest_time` stays what it is today** — our
   summed interval rests (`row.restSeconds`, pinned at 1200 tenths by
   `mapping.test.ts`) — _rev 1 replaced it with 0x003A's field, which reads
   0 on 9/9 captures and would have uploaded "no rest" on a piece with two

@@ -17,6 +17,7 @@ import {
   buildLogSteps,
   buildManualLogSteps,
   buildMonitorLogSteps,
+  monitorStepProgramIndices,
   logTotals,
   MonitorLogSeedError,
   MONITOR_HR_MIN,
@@ -1625,6 +1626,40 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(steps[2]!.machineCalories).toBe(0);
     expect(steps[2]!.machineRestHr).toBe(96);
     expect(steps[2]).not.toHaveProperty("machineWatts");
+  });
+
+  it("Phase LP (review M1): an out-of-band rest heart rate drops its own field, never the row — 19 bpm is omitted, 20 kept, null kept as null", () => {
+    const run: MonitorRun = {
+      ...THREE_STEP_RUN,
+      actuals: [
+        { ...THREE_STEP_ACTUALS[0]!, restHeartRateBpm: 19 },
+        { ...THREE_STEP_ACTUALS[1]!, restHeartRateBpm: 20 },
+        { ...THREE_STEP_ACTUALS[2]!, restHeartRateBpm: null },
+      ],
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps[0]).not.toHaveProperty("machineRestHr");
+    expect(steps[1]!.machineRestHr).toBe(20);
+    expect(steps[2]!.machineRestHr).toBeNull();
+  });
+
+  it("Phase LP (review L5): monitorStepProgramIndices names each emitted step's PROGRAM index — one ahead of its position after a legacy warm-up seed step", () => {
+    const legacy: MonitorRun = {
+      ...THREE_STEP_RUN,
+      logSeed: {
+        ...THREE_STEP_RUN.logSeed!,
+        steps: THREE_STEP_RUN.logSeed!.steps.map((step, i) =>
+          i === 0 ? { ...step, kind: "warmup" as unknown as "work" } : step,
+        ),
+      },
+    };
+    const steps = buildMonitorLogSteps(legacy);
+    expect(steps).toHaveLength(2);
+    expect(monitorStepProgramIndices(steps)).toStrictEqual([1, 2]);
+    expect(
+      monitorStepProgramIndices(buildMonitorLogSteps(THREE_STEP_RUN)),
+    ).toStrictEqual([0, 1, 2]);
+    expect(monitorStepProgramIndices([])).toBeUndefined();
   });
 
   it("index:null actuals are dropped entirely", () => {

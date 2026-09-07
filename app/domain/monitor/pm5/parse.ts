@@ -691,7 +691,7 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
  * bundles an interval's trailing rest into itself the same way this
  * characteristic pairs a work value with a sibling rest value, and
  * `IntervalActual` (like `ProgramInterval`) represents the work bout;
- * `splitIntervalRestHeartRateBpm` is decoded but has no slot here.
+ * `splitIntervalRestHeartRateBpm` rides along as `restHeartRateBpm` since Phase LP.
  */
 export function toIntervalActual(raw: RawPm5Status): IntervalActual {
   return {

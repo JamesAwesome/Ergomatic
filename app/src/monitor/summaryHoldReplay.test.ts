@@ -164,6 +164,13 @@ import {
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { releasingSchedule } from "../test/statusSubscriptions";
+import express from "express";
+import request from "supertest";
+import { noStore, requireUser } from "../../server/auth/middleware.js";
+import type { SessionStore, SessionUser } from "../../server/auth/sessions.js";
+import { makeFakeStores } from "../../server/testing/fakes.js";
+import { createDataRouter } from "../../server/routes/data.js";
+import { buildMonitorLogSteps } from "../session/logDraft";
 
 /** Same path-surgery idiom as `burstReplay.test.ts` (jsdom resolves
  *  `new URL(...)` against `http://localhost:3000/`, so string surgery on
@@ -832,6 +839,72 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
     expect(Array.from(fullRecord.verificationBytes!.slice(0, 8))).toStrictEqual(
       [140, 215, 219, 144, 135, 230, 130, 229],
     );
+
+    // Phase LP, THE SEAM (RF24; whole-branch review M2): this test began
+    // at the wire bytes, upstream of the driver's 0x003A stash, and the
+    // record above is what the hook persisted. Now the OTHER half, in the
+    // same test: the body `LogSession.tsx` builds from that record
+    // (`buildMonitorLogSteps` + the `machineSummary` spread, transcribed
+    // from its `save` — the file's own shape, not re-derived) POSTed to
+    // the REAL data router over the fake stores, then read back. Nothing
+    // here seeds the API row by hand.
+    const seamApp = express();
+    seamApp.use(express.json());
+    seamApp.use(noStore);
+    const seamUser: SessionUser = {
+      id: "user-lp",
+      email: "lp@x.com",
+      name: "LP",
+    };
+    seamApp.use(
+      createDataRouter({
+        stores: makeFakeStores(),
+        requireUser: requireUser({
+          resolveSession: async () => ({
+            user: seamUser,
+            expiresAt: new Date(Date.now() + 100_000),
+            refreshed: false,
+          }),
+        } as unknown as SessionStore),
+      }),
+    );
+    const seamBody = {
+      workoutId: null,
+      workoutTitle: fullRecord.title,
+      workoutType: "AN",
+      held: null,
+      effort: null,
+      notes: null,
+      steps: buildMonitorLogSteps(fullRecord),
+      deviceName: fullRecord.deviceName,
+      source: "pm5",
+      endedBy: fullRecord.endedBy,
+      machineWorkSeconds: fullRecord.summaryTotals!.workElapsedSeconds,
+      machineWorkMeters: Math.round(
+        fullRecord.summaryTotals!.workDistanceMeters,
+      ),
+      machineSummary: {
+        verificationBytes: [...fullRecord.verificationBytes!],
+        ...(fullRecord.summaryDetail ?? {}),
+      },
+    };
+    const created = await request(seamApp)
+      .post("/api/logs")
+      .set("Authorization", "Bearer any")
+      .send(seamBody);
+    expect(created.status).toBe(201);
+    const stored = await request(seamApp)
+      .get(`/api/logs/${created.body.id}`)
+      .set("Authorization", "Bearer any");
+    expect(stored.status).toBe(200);
+    // The four 0x003A keys, from seq 295's own bytes to the stored row.
+    expect(stored.body.machineSummary).toMatchObject({
+      totalCalories: 6,
+      avgWatts: 119,
+      avgCalPerHour: 711,
+      totalRestMeters: 0,
+    });
+    expect(stored.body.machineWorkSeconds).toBe(31.5);
 
     // Ordering, not just co-occurrence (spec §6: "write ATTEMPT before
     // release ... this asserts ordering"). Task-3-review finding: the

@@ -829,6 +829,57 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
     ]);
   });
 
+  it("Phase LP (review L5): on a legacy warm-up seed the strip's REST cell reads the step's OWN interval's rest, not its neighbour's", () => {
+    // Program interval 0 was a warm-up (seed kind "warmup" → no step);
+    // intervals 1 and 2 are the two emitted rows. Rest metres 147 / 95
+    // belong to intervals 1 / 2; an off-by-one would read 0's (undefined)
+    // and 1's (147) instead.
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "time", value: 300 }),
+          interval({ kind: "distance", value: 250, restSeconds: 60 }),
+          interval({ kind: "distance", value: 250, restSeconds: 60 }),
+        ],
+      },
+      logSeed: {
+        steps: [
+          { label: "Warm-up", kind: "warmup" as unknown as "work" },
+          { label: "Interval 1", kind: "work" },
+          { label: "Interval 2", kind: "work" },
+        ],
+        paces: {},
+      },
+      actuals: [
+        { ...exit7Actual1, index: 1, calories: 16 },
+        { ...exit7Actual2, index: 2, calories: 16 },
+      ],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: exit7SummaryDetail,
+    });
+    const rows = buildSummaryModel({ door: "monitor", run }).machineRows;
+    expect(rows?.map((r) => [r.index, r.restMeters])).toStrictEqual([
+      [1, 147],
+      [2, 95],
+    ]);
+  });
+
+  it("Phase LP §3: a Just Row with the machine's own totals carries the six tiles and NO strip (steps: [], nothing to number)", () => {
+    const run = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 600, workDistanceMeters: 2400 },
+      summaryDetail: { ...exit7SummaryDetail, totalCalories: 140 },
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    // round(2.80/(600/2400)³) = round(179.2) = 179; floor(140×3600/600) = 840
+    expect(model.heroes.machine?.avgWatts).toBe(179);
+    expect(model.heroes.machine?.calPerHour).toBe(840);
+    expect(model.machineRows).toStrictEqual([]);
+  });
+
   it("Phase LP §3: the monitor model's machineRows come off the run's own steps, with each interval's rest metres from its actual; a run with no seed (Just Row) has none", () => {
     const run = monitorRun({
       program: exit7Program,

@@ -1292,7 +1292,19 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   // edited by hand); the strip is the machine's account of a machine row,
   // so a `manual`/`timer` row gets none however its steps are marked.
   // Caught by the e2e manual-row assertion on the first run, 2026-09-07.
-  const machineRows = row.source === "pm5" ? machineSplitRows(row.steps) : [];
+  // Whole-branch review L6: ONE gate for the tier and the strip — the
+  // machine's own totals in hand (tier A), which `buildHeroes` already
+  // requires for the tiles. A pre-RC-1 `pm5` row (no `machineWork*`)
+  // showed the strip with no tiles above it; now it shows neither, the
+  // same "machine row = the machine's own session" reading on both.
+  const machineRows =
+    row.source === "pm5" &&
+    row.machineWorkSeconds !== null &&
+    row.machineWorkMeters !== null &&
+    row.machineWorkSeconds > 0 &&
+    row.machineWorkMeters > 0
+      ? machineSplitRows(row.steps)
+      : [];
   return {
     meta,
     heroes,

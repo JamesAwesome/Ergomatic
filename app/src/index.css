@@ -9527,8 +9527,13 @@ section:not(.news-pinned) .news-row:last-of-type {
    20px side padding (negative margin + matching padding) so the table's
    first pixel aligns with the INTERVALS list above it and the scroll edge
    reaches the screen edge — safe-area insets stay on `.screen` itself.
-   Text pairings, both computed in this file's contrast notes: --ink on
-   --page (cells, 15.6:1), --ink-3 on --page (headers/eyebrow, 6.69:1). */
+   Text pairings (WCAG relative luminance from theme/tokens.css, never
+   eyeballed): --ink #1b1a17 on --page #f4f1e8 = 15.41:1 (cells), --ink-3
+   #57544c on --page = 6.69:1 (headers/eyebrow). The pinned column's
+   rgba(0,0,0,0.25) box-shadow is a raw colour and a shadow against this
+   sheet's tokens-only/no-shadow habit — sanctioned by spec §3 and the
+   Gate 0 artboard for the one job of showing the pin over scrolled cells,
+   and recorded in docs/design/DEVIATIONS.md's Phase LP row. */
 .machine-summary-block {
   margin: 0 0 24px;
 }
@@ -9563,6 +9568,14 @@ section:not(.news-pinned) .news-row:last-of-type {
   -webkit-overflow-scrolling: touch;
   margin: 0 -20px;
   padding: 0 20px;
+}
+
+/* Keyboard focus on the scroll region (it is a tab stop — see the
+   component): the same 2px --ink outline the rest of this sheet uses for
+   focus-visible, inset so the -20px bleed does not push it off-screen. */
+.machine-summary-scroller:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
 }
 
 .machine-summary {

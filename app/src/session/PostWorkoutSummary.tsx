@@ -394,8 +394,12 @@ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
           <MachineTile label="AVG WATTS" value={machine.avgWatts} />
           <MachineTile label="CALORIES" value={machine.calories} />
           <MachineTile label="CAL / HR" value={machine.calPerHour} />
+          {/* The Gate 0 artboard's own label, `RATE · TARGET`; with no
+              agreed target the label promises one number and shows one
+              (whole-branch review M5 — a two-number label over a lone
+              `26` was never drawn). */}
           <MachineTile
-            label="RATE / TARGET"
+            label={machine.targetRate !== undefined ? "RATE · TARGET" : "RATE"}
             value={machine.rate}
             suffix={
               machine.targetRate !== undefined

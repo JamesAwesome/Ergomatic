@@ -33,7 +33,18 @@ export default function MachineSummaryTable({
         <h3 className="machine-summary-title">MACHINE SUMMARY</h3>
         <span className="machine-summary-eyebrow">PM5 · PER INTERVAL</span>
       </div>
-      <div className="machine-summary-scroller">
+      {/* A scroll container with no focusable content must itself be
+          keyboard-reachable (WCAG 2.1.1; axe `scrollable-region-focusable`,
+          which reports only past a 13 px overflow buffer — the strip
+          overflows a 390 px screen by a few px today and by more with a
+          two-digit `#`, whole-branch review H1). `tabIndex={0}` +
+          `role="region"` name it for the keyboard and the reader. */}
+      <div
+        className="machine-summary-scroller"
+        role="region"
+        aria-label="Machine summary, scrolls sideways"
+        tabIndex={0}
+      >
         <table
           className="machine-summary"
           aria-label="Machine summary per interval"

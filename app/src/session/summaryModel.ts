@@ -108,6 +108,7 @@ import {
   formatLogDate,
   spmIsMeasured,
   type LogStep,
+  monitorStepProgramIndices,
 } from "./logDraft";
 import {
   logbookCalPerHour,
@@ -263,8 +264,14 @@ export function machineSplitRows(
  *  caller (`buildMonitorModel`) has already built the same steps for the
  *  INTERVALS rows, so a run that reaches this line has a matching seed. */
 export function machineSplitRowsFromRun(run: MonitorRun): MachineSplitRow[] {
-  return machineSplitRows(buildMonitorLogSteps(run)).map((row) => {
-    const actual = run.actuals.find((a) => a.index === row.index - 1);
+  const steps = buildMonitorLogSteps(run);
+  // The step's PROGRAM index, not its output position: the two differ by
+  // one after a legacy warm-up seed step (review L5; `logDraft.ts`'s own
+  // `monitorStepProgramIndices`).
+  const programIndices = monitorStepProgramIndices(steps) ?? [];
+  return machineSplitRows(steps).map((row) => {
+    const programIndex = programIndices[row.index - 1];
+    const actual = run.actuals.find((a) => a.index === programIndex);
     return actual?.restDistanceMeters === undefined
       ? row
       : { ...row, restMeters: actual.restDistanceMeters };

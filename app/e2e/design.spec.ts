@@ -11484,8 +11484,48 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
 // (seq 63: 32 cal, 184 W, 242 m rest, 931 cal/hr — `parse.test.ts`) and
 // per-split calories that sum to it (16 + 16 = 32).
 // ---------------------------------------------------------------------
-async function postMachineRowWithLpFields(page: Page): Promise<string> {
-  const result = await page.evaluate(async () => {
+async function postMachineRowWithLpFields(
+  page: Page,
+  intervals = 2,
+): Promise<string> {
+  const result = await page.evaluate(async (count) => {
+    const twoSteps = [
+      {
+        label: "250m @ 2:07.0",
+        targetSplit: 127.0,
+        actualSplit: 135.8,
+        actualSeconds: 67.9,
+        actualSource: "pm5",
+        meters: 250,
+        actualMeters: 250,
+        actualSpm: 25,
+        spm: 26,
+        machineCalories: 16,
+        machineCalPerHour: 848,
+        machineWatts: 140,
+        machineDragFactor: 100,
+        machineRestHr: null,
+      },
+      {
+        label: "250m @ 2:07.0",
+        targetSplit: 127.0,
+        actualSplit: 112.2,
+        actualSeconds: 56.1,
+        actualSource: "pm5",
+        meters: 250,
+        actualMeters: 250,
+        actualSpm: 28,
+        spm: 26,
+        machineCalories: 16,
+        machineCalPerHour: 1146,
+        machineWatts: 248,
+        machineDragFactor: 100,
+        machineRestHr: null,
+      },
+    ];
+    // Review H1: a long piece must overflow the strip so the scroll
+    // behaviour itself can be gated — repeat the two real steps.
+    const steps = Array.from({ length: count }, (_, i) => twoSteps[i % 2]);
     const res = await fetch("/api/logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -11506,40 +11546,7 @@ async function postMachineRowWithLpFields(page: Page): Promise<string> {
         restMeters: 242,
         advancesPlan: false,
         endedBy: "finished",
-        steps: [
-          {
-            label: "250m @ 2:07.0",
-            targetSplit: 127.0,
-            actualSplit: 135.8,
-            actualSeconds: 67.9,
-            actualSource: "pm5",
-            meters: 250,
-            actualMeters: 250,
-            actualSpm: 25,
-            spm: 26,
-            machineCalories: 16,
-            machineCalPerHour: 848,
-            machineWatts: 140,
-            machineDragFactor: 100,
-            machineRestHr: null,
-          },
-          {
-            label: "250m @ 2:07.0",
-            targetSplit: 127.0,
-            actualSplit: 112.2,
-            actualSeconds: 56.1,
-            actualSource: "pm5",
-            meters: 250,
-            actualMeters: 250,
-            actualSpm: 28,
-            spm: 26,
-            machineCalories: 16,
-            machineCalPerHour: 1146,
-            machineWatts: 248,
-            machineDragFactor: 100,
-            machineRestHr: null,
-          },
-        ],
+        steps,
         machineWorkSeconds: 124.0,
         machineWorkMeters: 500,
         machineSummary: {
@@ -11554,7 +11561,7 @@ async function postMachineRowWithLpFields(page: Page): Promise<string> {
       }),
     });
     return { ok: res.ok, status: res.status, body: await res.text() };
-  });
+  }, intervals);
   if (!result.ok) {
     throw new Error(
       `machine-row LP fixture seed failed: ${result.status} ${result.body}`,
@@ -11589,7 +11596,7 @@ test.describe("from-the-log detail, machine tier + MACHINE SUMMARY (Phase LP §3
     await expect(tiles.nth(0)).toHaveText("AVG WATTS184");
     await expect(tiles.nth(1)).toHaveText("CALORIES32");
     await expect(tiles.nth(2)).toHaveText("CAL / HR929");
-    await expect(tiles.nth(3)).toHaveText("RATE / TARGET26 / 26");
+    await expect(tiles.nth(3)).toHaveText("RATE · TARGET26 / 26");
     await expect(tiles.nth(4)).toHaveText("DRAG100");
     await expect(tiles.nth(5)).toHaveText("REST242m");
 
@@ -11630,6 +11637,66 @@ test.describe("from-the-log detail, machine tier + MACHINE SUMMARY (Phase LP §3
     expect(shape.pinBackground).toBe("rgb(244, 241, 232)"); // --page, opaque
     expect(shape.pinWidth).toBeGreaterThan(12);
     expect(shape.pageScrollWidth).toBeLessThanOrEqual(shape.viewport);
+  });
+
+  // Review H1: the two mechanisms new to this stylesheet — a sideways
+  // scroll container and a sticky column — gated on BEHAVIOUR, not on
+  // computed properties: the strip genuinely overflows, the container is
+  // a keyboard stop, and the pinned cell holds its place while the rest
+  // scrolls under it. Ten intervals so the overflow is well past axe's
+  // 13 px `scrollable-region-focusable` buffer.
+  test("a ten-interval machine row overflows the strip: the container scrolls sideways, is keyboard-focusable, and the # column stays put while the cells scroll under it", async ({
+    page,
+  }) => {
+    const id = await postMachineRowWithLpFields(page, 10);
+    await page.goto(`/today/log/${id}`);
+    const table = page.getByRole("table", {
+      name: "Machine summary per interval",
+    });
+    await expect(table.locator("tbody tr")).toHaveCount(10);
+    const scroller = page.getByRole("region", {
+      name: "Machine summary, scrolls sideways",
+    });
+    await expect(scroller).toBeVisible();
+    const before = await scroller.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      tabIndex: (el as HTMLElement).tabIndex,
+      pinLeft: el
+        .querySelector("tbody .machine-summary-pin")!
+        .getBoundingClientRect().left,
+      lastCellLeft: el
+        .querySelector("tbody tr td:last-child")!
+        .getBoundingClientRect().left,
+    }));
+    expect(before.scrollWidth).toBeGreaterThan(before.clientWidth + 13);
+    expect(before.tabIndex).toBe(0);
+    await scroller.focus();
+    expect(
+      await page.evaluate(() =>
+        document.activeElement?.getAttribute("aria-label"),
+      ),
+    ).toBe("Machine summary, scrolls sideways");
+    const after = await scroller.evaluate((el) => {
+      el.scrollLeft = 999;
+      return {
+        scrollLeft: el.scrollLeft,
+        pinLeft: el
+          .querySelector("tbody .machine-summary-pin")!
+          .getBoundingClientRect().left,
+        lastCellLeft: el
+          .querySelector("tbody tr td:last-child")!
+          .getBoundingClientRect().left,
+      };
+    });
+    expect(after.scrollLeft).toBeGreaterThan(0);
+    // The pin did not move; the last cell did, by exactly the scroll.
+    expect(Math.abs(after.pinLeft - before.pinLeft)).toBeLessThan(1);
+    expect(before.lastCellLeft - after.lastCellLeft).toBeCloseTo(
+      after.scrollLeft,
+      0,
+    );
+    await assertNoA11yViolations(page);
   });
 
   test("a manual row shows neither the machine tier nor the MACHINE SUMMARY table", async ({

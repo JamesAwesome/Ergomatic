@@ -1530,3 +1530,41 @@ git commit -m "LP PR1 T11: DEVIATIONS row; pm5-interface-notes path fixed; spec 
 - **Spec coverage:** §2.1 → T2/T4; §2.2 → T3 (+T11 amendment); §2.3 lifetime → T3 (stash + wait + missing log), summary-fallback omission → T2 (optional fields absent by construction); §3 tier → T6; §3 strip → T7; §3.1 arithmetic → T5; §3.2 stroke-rate rule → T5/T6; §3.3 Gate 0 → T12; §4.1 retention → T2/T3 tests, identities → T9, derived pair → T5, fake → T8, screen → T6/T7/T10; §6 PR 1 list → all; DEVIATIONS → T11. §5 (upload) and §4.2 (walk) are PR 2 / the trip — out of this plan by design.
 - **Placeholders:** the `existingRawStatusFixture`, `runWithSummary`, `fakeSplitFrameFor` and the T9 `CAPTURES` table are named as "the file's existing helper — grep names it"; each carries the grep. T10 depends on the existing MACHINE CONFIRMED seed — named by grep.
 - **Type consistency:** `IntervalActual.calories/calPerHour/watts/dragFactor/restHeartRateBpm` (T2) → `LogStep.machineCalories/machineCalPerHour/machineWatts/machineDragFactor/machineRestHr` (T4) → `MachineSplitRow.calories/calPerHour/watts/drag/hr` (T7); `MachineSummaryDetail.totalCalories/avgWatts/avgCalPerHour/totalRestMeters` (T3) → `MachineTier.calories/avgWatts/calPerHour/restMeters` (T6); `logbookWatts/logbookCalPerHour/sessionStrokeRate/agreedTargetSpm` names match across T5–T7.
+
+---
+
+## Execution record (2026-09-07, inline shape, PR #327)
+
+Twelve task commits on `phase-lp-logbook-parity` (T1–T11, T12a captures),
+each failing-test-first. The biting mutation for each, with what its
+failure said — the record the whole-branch review (H2) asked for, kept
+here rather than in commit messages so it is greppable from the plan:
+
+| Task | Mutation (deciding source) | What failed |
+| --- | --- | --- |
+| T1 | `parseAdditionalSummary` reads calories at offset 10 | `expected totalCalories 184 to be 32` (exit-7 frame) |
+| T2 | `calories:` line removed from `toIntervalActual` | `expected undefined to be 73`, `expected undefined to be +0` |
+| T2 | the five new `requireFiniteNumber` guards removed | 3 `ReviewSession` "stays read-only" rows go green→red |
+| T3 | `totalCalories: additional.avgWatts` in `summaryObservationsEvent` | 4 driver tests: `"totalCalories": 184` vs `32` |
+| T4 | `step.machineCalories = actual.calories` removed | `logDraft` "copies the 0x0038 machine fields": `machineCalories: 73` missing |
+| T4 | u16 band `> MACHINE_U16_MAX + 1` | route test `65536` → `expected 201 to be 400` |
+| T5 | `Math.floor` → `Math.round` in `logbookCalPerHour` | `874 vs 873`, `871 vs 870`, `864 vs 863` (James's row) |
+| T5 | `** 3` → `** 2` in `logbookWatts` | all six watts cells fail |
+| T6 | same floor→round, seen through the stored tier | `calPerHour 864 vs 863` |
+| T6 | `machine !== undefined` guard removed in `SummaryHeroesBlock` | "no machine tier on a model without one" fails |
+| T7 | `actualSource !== "pm5"` skip removed in `machineSplitRows` | length 3 vs 2 (manual step appears) |
+| T7 | `cell()` renders `0` for `undefined` | dash assertions fail |
+| T8 | `FAKE_DRAG_FACTOR = 130` | `expected 130 to be 101` |
+| T9 | 0x003A calories at offset 10 | 6 corpus cases: `expected +0 to be 15`, `10 to be 101`… |
+| T9 | `calories: raw.splitIntervalAvgCalories` in `toIntervalActual` | 4 corpus cases: `641 vs 10`, `735 vs 14` |
+| T10 | `border-collapse: collapse` (served bundle, `pnpm e2e`) | `Expected "separate" Received "collapse"` |
+| T10 | `.machine-summary-scroller { overflow-x: visible }` (served bundle) | `Expected "auto" Received "visible"` |
+
+Review fix round (whole-branch review, 2026-09-07): H1 focusable scroll
+region + behavioural overflow e2e; H3 six more recovery-validation rows;
+M1 `machineRestHr` banded like `avgHr`; M2 RF24 seam test in
+`summaryHoldReplay.test.ts` leg 1 (wire → hook record → LogSession body →
+real router → GET); M4 spec §3/§5 names; M5 `RATE · TARGET` / `RATE`; M6
+0x003A folded in only under the held 0x0039's Log Entry stamp
+(`summary-1-mismatch`); L1–L6 as filed. M3 (REST tile duplicates the
+total line's rest metres) is James's call.
