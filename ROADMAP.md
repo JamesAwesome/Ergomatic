@@ -1321,6 +1321,19 @@ X" is a real disposition — most of these are single files.
       layer reports a durability failure and the caller proceeds. Needs a
       rower-facing state, so it carries a Gate 0. **M**
 
+- [ ] **The frame-error flood evicts its own diagnosis.** The ring holds 500
+      entries (`eventLog.ts:51`). A monitor we cannot decode produces a
+      `frame-error` per arrival, roughly eight a second, so the buffer fills
+      in about a minute and the connect-time entries are gone — including
+      `notify-first <char> (<n>B)` (`driver.ts:2301`), which records the
+      MEASURED wire length of every characteristic before the decode and is
+      the single most useful line in the file for this bug class. Found
+      2026-09-07: the reporting rower's export ran seq 5432-5931, exactly 500,
+      already rolled over, so we cannot tell whether that monitor's `0x0033`
+      parses — and a fresh export from them would be equally useless. Rate-limit
+      or count a repeated identical `frame-error`, or reserve connect-time
+      entries from eviction. **S**
+
 - [ ] **We cannot read the monitor's firmware version, and it is the one
       fact every report of this class needs.** Documented at characteristic
       `0x0014` (20 bytes, READ) in the C2 Device Information service
