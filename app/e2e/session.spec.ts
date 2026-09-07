@@ -959,7 +959,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     expect(runAfter).toBe(runBefore);
   });
 
-  test("Log it after is absent (replaced by the no-target/Set baselines idiom) when baselines are unset", async ({
+  test("Log it after is present and the row reads a ladder word when baselines are unset (Phase RW PR B)", async ({
     page,
   }) => {
     const title = "Manual Door No Baselines";
@@ -977,9 +977,13 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
     await expect(page.getByRole("link", { name: "Log it after" })).toHaveCount(
-      0,
+      1,
     );
-    await expect(page.getByText("no target").last()).toBeVisible();
+    // 1:00 @ 6k: 2k-equivalent +7, MODERATE.
+    await expect(page.locator(".step-row-range").first()).toHaveText(
+      "MODERATE",
+    );
+    await expect(page.getByText("no target")).toHaveCount(0);
   });
 
   // Today enhancements (Task 4), rewired by post-workout-summary spec §2F:

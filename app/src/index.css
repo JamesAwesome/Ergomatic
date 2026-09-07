@@ -1505,7 +1505,12 @@ button.back-link:disabled,
   line-height: 1.4;
 }
 
+/* The link keeps the 44px target the old "Set baselines" link had, as an
+   inline-flex box inside the 13px line. */
 .workout-detail-caption a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
   color: var(--ink);
 }
 

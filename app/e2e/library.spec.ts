@@ -696,13 +696,17 @@ test.describe("no baseline: rowing to a word (Phase RW PR B)", () => {
 
     await page.getByRole("button", { name: "Start Timer" }).click();
     await expect(page).toHaveURL(/\/session\/countdown$/);
-    await expect(page.getByText("STEADY")).toBeVisible();
+    await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
+    await expect(page.getByText("STEADY").first()).toBeVisible();
     await page.getByRole("button", { name: "SKIP ›" }).click();
     await expect(page).toHaveURL(/\/session\/run$/);
     const target = page.locator(".timer-card-value").first();
     await expect(target).toHaveText("STEADY");
     await expect(target).toHaveClass(/timer-card-value-word/);
-    await expect(page.locator(".timer-card-caption")).toHaveCount(0);
+    // No sub-line under the word (the RATE card keeps its own "spm" caption).
+    await expect(
+      page.locator(".timer-card").first().locator(".timer-card-caption"),
+    ).toHaveCount(0);
 
     // Log it after on the same workout opens the manual form, not a stub.
     await page.goto("/library");
