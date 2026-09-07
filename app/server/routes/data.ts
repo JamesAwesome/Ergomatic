@@ -1149,6 +1149,17 @@ export function createDataRouter({
   // the client sees what any consumer will now read. Destructive on
   // purpose; the client stages a confirm before calling it.
   router.delete("/api/baselines", async (req, res) => {
+    // Phase RW PR C (spec §3.2): clearing the pair also clears the skip, so
+    // a rower who resets meets the three doors again rather than the bare
+    // suggestion. Flag FIRST, then the pair: these are two stores and not
+    // one transaction, and this order has no stranding failure — if the
+    // second call throws, the rower keeps a false flag and intact
+    // baselines, which renders exactly as before the tap (Express 5
+    // forwards the rejection, so the response is a 500 the caller's
+    // `res.ok` check already handles). On a user with no preferences row
+    // this takes the INSERT arm and materialises a defaults row; every
+    // value equals its column default, so no read changes.
+    await stores.preferences.put(req.user!.id, { baselinesSkipped: false });
     await stores.baselines.clear(req.user!.id);
     res.json({ k2Seconds: null, k6Seconds: null });
   });
@@ -2208,6 +2219,17 @@ export function createDataRouter({
         return;
       }
       patch.startHereDismissed = body.startHereDismissed;
+    }
+    if (body.baselinesSkipped !== undefined) {
+      if (typeof body.baselinesSkipped !== "boolean") {
+        badRequest(
+          res,
+          "baselinesSkipped must be a boolean",
+          "baselinesSkipped",
+        );
+        return;
+      }
+      patch.baselinesSkipped = body.baselinesSkipped;
     }
 
     // An empty patch (body `{}`, or all-unknown keys) must be a no-op read,

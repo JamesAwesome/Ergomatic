@@ -183,6 +183,13 @@
       "when": 1788661093182,
       "tag": "0025_classy_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788795151886,
+      "tag": "0026_parched_robin_chapel",
+      "breakpoints": true
     }
   ]
 }

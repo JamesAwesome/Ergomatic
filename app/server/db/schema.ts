@@ -462,6 +462,14 @@ export const preferences = pgTable("preferences", {
   // `docs/RELEASING.md`'s rollback table for what a drop actually
   // costs), no rider has queued this column's removal.
   startHereDismissed: boolean("start_here_dismissed").notNull().default(false),
+  // Phase RW PR C (spec §3): "this rower chose to go on without a
+  // baseline." The doors card on Today renders iff the pair is unset AND
+  // this is false. Written by the card's skip line and cleared by Today's
+  // return row, the workout detail's caption link, and
+  // `DELETE /api/baselines` (so a rower who resets meets the doors again).
+  // Nothing else reads it. Per-user, never per-device: this column is the
+  // only home, there is no localStorage mirror.
+  baselinesSkipped: boolean("baselines_skipped").notNull().default(false),
 });
 
 export const testHistory = pgTable(
