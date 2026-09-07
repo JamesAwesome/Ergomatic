@@ -5774,3 +5774,58 @@ piece; capture which fallback path fired on every send.
 **Presentation:** 172 words above the fold against ~120, six bullets at the
 limit, two over ~25 at 33 and 40. Improving (#327 was 218/7) and still failing
 the count.
+
+## 2026-09-07 — Phase RW PR C final gate + phase close (#338, TRIAD): the lifetime table went stale in the artefact that outlives the plan
+
+**RF27's lifetime table belongs in the artefact that survives the phase.**
+The antagonist's delta pass found a third clear path (the workout detail's
+"Set one up", promised by spec §2.1 and omitted from §3.3's surfaces list)
+and folded it into the PLAN's table, which was then correct. The SPEC's
+§3.2 still named two. The plan gets archived; the spec is the phase's
+canonical record of the stored shape. **When a review round adds a mint or
+clear site, the fix lands in the spec's lifetime table in the same round.**
+The tell is a plan row that says "spec §X omitted it".
+
+**A dated cross-phase hazard is filed under the phase that will TRIP it,
+not the one that creates it.** RW PR C minted `0026` on `preferences`;
+Phase DE PR 3 is scheduled 2026-09-12, mints `0026` on the same table, and
+is built by a CLOUD ROUTINE that reads the DE row. The warning lived only
+in RW's section and RW's spec. Drizzle skips a stale-`when` migration
+silently and no gate here can see it (integration suites start from an
+empty database; the deploy health check reads no schema), so it surfaces as
+production 500s. Half a condition reads as a whole one.
+
+**"Checkable exits" recurred one level down.** RW exit (5) promised the
+`EASY` grep would return "only the bulk-grammar token `easy` in
+`domain/bulk.ts`". Measured: 62 hits across 25 files, and
+`grep -rni easy app/domain/bulk.ts` returns ZERO — the token is lowercase
+and lives in the test fixtures, which a case-sensitive grep cannot return.
+The spec carried the corrected version; the ROADMAP copy was never
+reconciled. **An exit criterion that names an expected-survivor set is
+checked by RUNNING it at the open gate, and the ROADMAP copy is the one
+verified at close.**
+
+**A new copy line is an assertion, and the spec named the state that
+falsifies it without noticing.** Spec §3.2 and the plan both documented the
+partial baseline pair as a durable state the phase creates. Neither observed
+that the NEW row reads `NO BASELINE SET` for a rower whose 2k IS stored.
+**When a spec documents an edge state in a lifetime table, re-read every new
+COPY string against that state before the design gate.** James's ruling
+(2026-09-07): ask for both, suggested at the 7 s offset — close the state
+rather than describe it.
+
+**Release: one tag at close, and more right than at open.** `git log
+v0.41.0..main` returned NINE merges by close, including a Concept2 pair
+(#336, #337) whose net rower-visible effect is zero. The tag stopped being a
+phase note and became a range note (RF15). **And the phase's headline is
+invisible to the cohort:** a tester with baselines set sees `EASY`→`STEADY`
+on two seeded workouts and one Reset sentence. The note therefore leads with
+"to see it, tap Reset baseline setup", not with the feature.
+
+**The counter-case, recorded because it will come back:** the skip does not
+actually let a rower go — Today's row, its caption, the detail caption and
+the `~` on every distance duration all remain, with no second dismissal. It
+is James's own ruling and Gate 0 showed two of the four stacked. If a
+household report asks "how do I make this go away", the answer today is "set
+a baseline", which is the sentence the phase existed to stop being the
+answer.
