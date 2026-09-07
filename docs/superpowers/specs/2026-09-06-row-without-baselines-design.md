@@ -98,11 +98,17 @@ rung; and 9 workouts read a word that contradicts their type badge on
 EVERY step ("Roaring Forties", "Polar Blast", "Grec", "Beam Sea", "Canary
 Current": TR at `2K+6`, all MODERATE; "Bora": AT at `6K−3`, all HARD;
 "Warm Sector": AT, all STEADY; "Moderate Breeze", "Crepuscular Rays": O2,
-all MODERATE). Zero order inversions, structurally (§9). The thresholds
-stand as James chose them; Gate 0 shows him "Bora" and "Roaring Forties"
-rendered, and the alternative (widening HARD to `2k+6`, which fixes the
-five TR workouts and turns 45 AT steps at `6k−2`/`6k−1` HARD) is on the
-table with that number beside it.
+all MODERATE). Zero order inversions, structurally (§9). **Ruling (James,
+2026-09-06, on the controller's recommendation): the thresholds stand,
+and a workout among the nine that looks wrong on the Gate 0 render is a
+WORKOUT-authoring fix (its ref or its badge, in the seed), never a ladder
+fix.** The ladder is the truth about pace: one scalar, one word, so
+`2k+6` and `6k−1` (the same split) read the same word, and no base-aware
+or type-aware bolt-on may break that. The alternative was measured and
+rejected: widening HARD to `2k+6` fixes the five TR workouts and turns 45
+AT steps at `6k−2`/`6k−1` HARD. The 76 collapses are inherent to a
+four-word ladder; per-type would collapse all 300. Gate 0 still renders
+"Bora" and "Roaring Forties" so the ruling is made on sight.
 
 `paceWordLabel` (today: `"ALL OUT" | "EASY"`) becomes a call into the same
 ladder and its return type becomes `IntensityWord`; `paceWordFromLabel`,
