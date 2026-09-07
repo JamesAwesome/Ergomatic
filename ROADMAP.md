@@ -546,8 +546,8 @@ an L auth wave, so Wave A's "rows a row" clause becomes reachable with no
 domain work inside Wave A. Wave A's exit cites this phase for that clause.
 
 - [ ] **PR A — durations.** `estimateMinutes` prices null baselines off an
-      assumed 2:30 2k / 2:37 6k pair through the existing `estimationSplit`
-      (so `min` prices at 2:57, stated in spec §4); `~24′` on Library, Today,
+      assumed 2:25 2k / 2:32 6k pair (the recommend table's most common cell) through the existing `estimationSplit`
+      (so `min` prices at 2:52, stated in spec §4); `~24′` on Library, Today,
       detail and the Builder; the `estMinutes: 0` placeholder and
       `durationsUnknown` retire; the time filter runs on real numbers.
       Removes no gate. **S**

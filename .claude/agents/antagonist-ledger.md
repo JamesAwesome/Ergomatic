@@ -8520,3 +8520,86 @@ had passed over the same document without a single duration in it.
   (`.overlay-screen`, six routes, now in Gate 0's capture set); and whether iOS
   26's reported landscape-inset instability (Apple Forums 798014) paints a stray
   20px band.
+
+## Phase-open anchor pass, 2026-09-06 (Phase RW, "row without a baseline")
+
+- **"The null-baseline split phase is byte-for-byte the shape an effort phase
+  already has, so every consumer handles it with no branch of its own."** False,
+  and the difference is one field that three consumers read. `expand.ts`'s
+  effort branch sets no `ref`; the proposed phase keeps `ref: s.ref` — and
+  `Phase.ref`'s own doc comment states the invariant being broken ("set ONLY for
+  that case… an effort phase's target is words, never a number to trace back to
+  a ref"). Downstream, `logDraft.ts` checks `targetKind === "effort"` BEFORE
+  `phase.ref !== undefined`, so the new phase takes the effort arm and
+  `paceWordFromLabel(phase.label as "ALL OUT" | "EASY")` maps HARD/MODERATE/
+  STEADY to `"min"` → every connected-door log step stores `@ MIN`. **Technique:
+  for any "shape X is identical to shape Y" claim, diff the two CONSTRUCTOR
+  SITES field by field, then grep every consumer for a branch on a field
+  present in one and absent in the other — and read the branch ORDER, because a
+  discriminant checked first makes a surviving field unreachable.** Corollary:
+  a spec that proposes narrowing a function's parameter type to make a call
+  site safe must grep for CASTS at that call site; both sites here were
+  `as`-casts, which the narrowing cannot reach.
+
+- **"The Today card itself is unchanged."** False, and TypeScript could not have
+  caught it. `Today.tsx` carries two `baselines!` assertions whose own comments
+  say "`baselines` is never null in this branch (`needsDoors` above already
+  gated on it)" — and the spec's skip is precisely what removes `needsDoors`
+  from the card's path. `pieceList`/`workAndTotal` take non-null `Baselines`
+  and call `phases()`, which throws. **Technique (RF18, third instance): before
+  a spec relaxes a render gate, grep the code it un-gates for `!`, `as`, and
+  comments containing "never null", "already gated", "the branch itself is the
+  guarantee". A non-null assertion is a load-bearing claim about the call
+  graph, and relaxing a gate is exactly what invalidates it.**
+
+- **"Per-ref words keep ladders and pyramids readable; a per-TYPE word would
+  erase the build."** True of the mechanism and false of the outcome at the
+  chosen thresholds. Measured over the 300 seeded workouts: 76 have ≥2 distinct
+  refs that ALL collapse to one word (AN 7/7, TR 25/37, AT 21/33, O2 23/25);
+  9 read a word contradicting their own type badge on EVERY step (a TR effort-5
+  `6 × 2000m @ 2K+6` reads MODERATE throughout); and 3 lose ROWS on the detail
+  screen, because `pieceList`'s effort branch nulls the exact fields
+  `joinsRun` compares — a six-rung `2k+3 → 2k−2` ladder rolls to 3-4 identical
+  HARD rows. The spec's accepted-cost table was per-STEP (23/3/11/4, all four
+  verified correct) and James approved on that. **Technique: a per-step cost
+  table is not the cost. Re-aggregate the same mapping at the unit the rower
+  actually reads — the workout, the row, the screen — and count how many lose
+  a DISTINCTION rather than how many change a word. And check the display
+  layer's own identity/rollup predicate: whatever fields the new shape nulls
+  are the fields a run-collapser was comparing.**
+
+- **"ASSUMED_BASELINES = 2:30, the recommend table's slowest cell, the stated
+  conservative bias."** The citation is real, current, and correctly
+  transcribed — and it argues the opposite direction. `estimateBaseline.ts`
+  justifies the slow end because "a too-fast estimate writes TARGETS the rower
+  cannot hold"; the spec uses the number to price a DURATION, where the slowest
+  cell maximises everyone's error. The same file already exports
+  `mostCommonEstimate` (the editor's own seed family), which the spec never
+  considers. **Technique (RF16 second corollary, direction variant): when a
+  constant is borrowed from another feature, quote the sentence that justifies
+  its VALUE and check whether the justification's direction still points the
+  same way in the new use. A bias is safe FOR something; borrowing the number
+  borrows the bias, not the safety.**
+
+- **"A word phase's wire shape is the effort phase's, walked in Phase 7C."**
+  Right conclusion, weak evidence: the walked effort workouts are the two
+  single-interval onboarding tests, and the only committed capture with a
+  null-target interval (`walk-2026-08-17/step-3-…jsonl`) is a MIXED program,
+  1 null of 5 — an all-null multi-interval program has never been transmitted.
+  The claim holds structurally instead: `CompiledPhase` (`program.ts`) carries
+  no `label` and no `ref`, so the compiler is blind by construction to
+  everything the phase changes. **Technique: when a spec justifies "no walk
+  needed" from a walk, check whether the walked artifact has the same SHAPE as
+  the new one — then look for a type that makes the claim unnecessary. An
+  input type with no field for the thing you changed is a stronger proof than
+  any capture, and it does not expire.**
+
+- **Attacked and not broken:** the ladder cannot invert a build (0 inversions
+  over 300 workouts, and it is structural — a monotone step function of one
+  scalar); the census arithmetic and the `+7` conversion sign (all four overlap
+  counts reproduce, and the seed grep is provably complete — 775 of 775 refs
+  single-line); the compiler's `targetKind`-first discriminant; every summary
+  surface's abstain-on-absent-target rule (five sites, all guarded, including
+  a `targetSplit!` that a `targetKind !== "split"` `continue` makes
+  unreachable); and the partial-baseline pair, which every screen collapses to
+  `null` before it can reach `resolveSplit`.
