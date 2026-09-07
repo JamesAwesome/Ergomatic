@@ -22,7 +22,7 @@ import {
 // RF11: the tile's number is checked against the MACHINE's own trace, off a
 // committed capture, not against a fixture this file chose. The corpus fact
 // this whole change rests on is visible here too — the same recordings that
-// carry hundreds of real per-stroke heart rates leave the end-of-workout
+// carry hundreds of real heart-rate readings leave the end-of-workout
 // summary's four heart-rate fields empty, which is why the tile reads `—`.
 const SESSIONS_DIR = import.meta.url
   .replace(/^file:\/\//, "")

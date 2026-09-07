@@ -1245,14 +1245,17 @@ closed with zero Concept2 contact.
       hardware's, and let the suite show the dash. Rides the AVG HR change.
 - [x] **DONE (PR #345). AVG HR is derived from the heart-rate trace.** The tile reads
       `—` on every row because the monitor leaves its summary heart-rate
-      fields empty (row above). The per-stroke trace we already record and
-      store has the data. **Measured on four committed captures with the
-      repo's own parser:** a work-only time-weighted mean and a whole-session
-      one differ by at most 0.5 bpm, while the monitor's own per-interval
-      figure reads 4 to 15 bpm HIGHER than either — what that field measures
-      is not documented (`pm5-interface-notes.md` §539 states no semantics
-      beyond "Split/Interval Work Heartrate"), so the gap is recorded, not
-      explained. Gate 0 APPROVED (option A); the same figure also rides the
+      fields empty (row above). The trace we already record and store has the
+      data — it decimates to roughly 1 Hz, not one sample per stroke.
+      **Measured on four committed captures with the repo's own parser:** a
+      work-only time-weighted mean and a whole-session one differ by at most
+      0.5 bpm, while the monitor's own per-interval figure runs 3.5 to 15.2
+      bpm higher weighted by interval duration, or 0 to 15 as a plain mean
+      with one capture agreeing — the range depends on the aggregation, and
+      an earlier version of this row stated it without one. What that field
+      measures is not documented (`docs/monitor/pm5-interface-notes.md` §10's
+      0x0038 table says only "Split/Interval Work Heartrate"), so the gap is
+      recorded, not explained. Gate 0 APPROVED (option A); the same figure also rides the
       Concept2 upload as `heart_rate.average`, a field Concept2 documents as
       optional and defines no further. **Owed:** James's own belted row is
       the only evidence outside those two recordings, and it is not in the

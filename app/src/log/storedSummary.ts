@@ -794,10 +794,10 @@ function storedMachineTier(
     }),
     targetRate: agreedTargetSpm(row.steps.map((s) => s.spm)),
     drag: ms?.dragFactorAverage,
-    // The monitor's own summary heart rate FIRST, and it is essentially
-    // never there: 11 of 20 committed captures carry a 0x0039 summary and
-    // every one leaves all four heart-rate slots at a sentinel, which is why
-    // this tile has read `—` on every row anyone has saved. The trace we
+    // The monitor's own summary heart rate FIRST, and no capture we hold
+    // carries one — see `domain/monitor/derivedHeartRate.ts` for how narrow
+    // that evidence really is. It is why this tile has read `—` on every row
+    // anyone has saved. The trace we
     // already store does have the data, so derive from it rather than show a
     // dash beside a table full of real heart rates (James, 2026-09-07,
     // option A: working strokes only). `?? undefined` keeps a genuine `null`

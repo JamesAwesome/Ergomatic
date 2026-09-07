@@ -7,9 +7,9 @@
  *
  * HOW STRONG THAT EVIDENCE ACTUALLY IS, stated precisely because the first
  * version of this comment overstated it. Of 20 committed capture FILES, 11
- * carry a 0x0039 summary and every heart-rate slot in all eleven is a
- * sentinel — but two pairs are `.jsonl`/`.gz` encodings of one recording, so
- * that is 9 distinct recordings, and 7 of the 9 had no belt paired at all
+ * carry a 0x0039 summary and every heart-rate slot in each is a sentinel —
+ * but two pairs are `.jsonl`/`.gz` encodings of one recording, so that is 9
+ * distinct recordings, and 7 of the 9 had no belt paired at all
  * (0x0032 live heart rate reads 255 throughout). An empty summary proves
  * nothing on those. **The real base is TWO belted recordings, from one walk,
  * one day, one erg, one belt, all over the web transport.** James's own
@@ -20,13 +20,22 @@
  * WHICH AVERAGE (James, 2026-09-07, Gate 0 option A): the time-weighted mean
  * over WORKING strokes, excluding rest. Measured on four captures with the
  * repo's own parser, that lands within 0.5 bpm of a whole-session mean on
- * every one, and it measures the same quantity as the per-interval HR column
- * beneath the tile, so the two agree by construction. The monitor's own
- * per-interval figure was the third option and was rejected on evidence:
- * weighted by interval duration it runs 3.5 to 15.2 bpm HIGHER than the trace
- * on all four captures (as a plain mean of the intervals, 0 to 15, with one
- * capture agreeing — the range depends on the aggregation, which the first
- * version of this comment failed to state). Concept2
+ * every one.
+ *
+ * IT WILL NOT MATCH THE COLUMN BENEATH IT, and an earlier version of this
+ * comment claimed the opposite "by construction". The MACHINE SUMMARY table's
+ * HR column is the monitor's own 0x0038 per-interval reading — the very field
+ * measured 3.5 to 15.2 bpm ABOVE the trace — so the tile will usually read
+ * below the rows under it. Two different quantities, honestly labelled: the
+ * tile is the heart rate held while working, the column is whatever the
+ * monitor recorded per interval. Worth knowing before anyone "fixes" the tile
+ * to match the rows.
+ *
+ * WHY THAT COLUMN WAS NOT USED as the tile's source (option C, rejected):
+ * weighted by interval duration it runs 3.5 to 15.2 bpm above the trace on
+ * all four captures, or 0 to 15 as a plain mean of the intervals with one
+ * capture agreeing — the range depends on the aggregation, which an earlier
+ * version of this comment failed to state. Concept2
  * documents that field only as "Split/Interval Work Heartrate", never saying
  * whether it is a mean, a final reading or a peak
  * (`docs/monitor/pm5-interface-notes.md` §10). An unexplained gap is not a

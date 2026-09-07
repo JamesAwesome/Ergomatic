@@ -55,7 +55,7 @@ export interface SessionLogRow {
   machineWorkMeters: number | null;
   machineWorkSeconds: number | null;
   machineSummary: Record<string, unknown> | null;
-  /** The per-stroke trace, needed for the ONE field the monitor never
+  /** The trace, needed for the ONE field the monitor never
    *  fills — see the heart-rate block in `buildC2Payload`. Structurally the
    *  store's `LogSeries`, typed loosely here for the same reason
    *  `machineSummary` is: `routes/data.ts` owns its bands. */
@@ -609,7 +609,7 @@ export function buildC2Payload(
   // `domain/monitor/derivedHeartRate.ts` for how narrow that evidence
   // really is: two belted recordings from one walk), so
   // without this the logbook row shows no heart rate at all, exactly as our
-  // own tile did. Derived from the per-stroke trace instead, the same
+  // own tile did. Derived from the trace instead, the same
   // function and the same working-strokes-only rule the tile uses, so the
   // number we send is the number the rower sees (James, 2026-09-07).
   //
