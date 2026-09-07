@@ -527,8 +527,9 @@ recorded in PR 2's body; release note in rower words (spec §6.6).
 `docs/superpowers/specs/2026-09-06-row-without-baselines-design.md`, brainstormed
 with James the same day. PM open gate PASS WITH CONDITIONS 2026-09-06, all
 folded into the spec (three consumers that DO branch, the three-PR cut, one
-tag at close). Antagonist anchor pass owed on the spec before Gate 0; Gate 0
-before any implementation task. PR C is **TRIAD** (stored shape). **M.**
+tag at close). Anchor pass and `/harden` RUN 2026-09-06; **Gate 0 APPROVED
+2026-09-07** (`docs/design/rw-gate0/`). PR A in flight. PR C is **TRIAD**
+(stored shape). **M.**
 
 **Goal:** every workout is rowable with no baseline set. Where a split would
 appear the rower reads STEADY · MODERATE · HARD · ALL OUT, derived from the

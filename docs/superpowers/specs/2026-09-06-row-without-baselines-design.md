@@ -11,8 +11,9 @@ migration index, C8 the "why now"). **Antagonist anchor pass RUN
 claims are §9, the phase's vetted ground. `/harden` lens 2 RUN
 2026-09-06 (7 findings: a fourth log consumer, an undefined identifier in
 §1.3, a stale 2:30 literal, two untested seams, `off` semantics, an exit
-grep exception), all folded; the loop is closed.** Gate 0 before any
-implementation task.
+grep exception), all folded; the loop is closed. Gate 0 APPROVED
+2026-09-07** on prototype `589c67b2` (`docs/design/rw-gate0/`); the
+portrait Timer word renders at 40px (measured), landscape unchanged.
 **ROADMAP:** the "Row without a baseline set" register item (James,
 2026-08-23) becomes this phase; the section is added in the same commit as
 this spec (recurring failure 17).
@@ -261,16 +262,15 @@ rower the table thinks is faster. The mode is the table's own best guess
 and the tilde discloses the rest. It is used for exactly one thing:
 pricing distance steps for a duration estimate when baselines are null
 (§4). **It never resolves a target, never reaches the wire, never reaches
-a log.** The anchor pass named the one leak path and the mechanism closes
-it: `estimateMinutes(steps, null)` prices distance phases in its own loop
-via `estimationSplit(ASSUMED_BASELINES, p.ref ?? { effort:
-paceWordFromLabel(p.label) })` (the fallback is reached only for a true
-`max`/`min` phase, which carries no `ref`; the null-baseline split phase
-always carries one; lens 2's paste-test caught the first draft's undefined
-`effortRef` here), and NEVER
-calls `phases(steps, ASSUMED_BASELINES)`, which would mint `targetKind:
-"split"` phases carrying the assumed number as a real `targetSplit`, one
-refactor away from `pieceList` and the compiler (§9 item 8).
+a log.** The anchor pass named the one leak path (§9 item 8) and PR A closes it with
+an INVARIANT rather than the loop first written here: `estimateMinutes` may
+build phases against `ASSUMED_BASELINES` inside its own body, but no `Phase`
+carrying the assumed number is ever returned, stored, or passed on. The
+gate is `src/assumedBaselinesCensus.test.ts`, which pins the constant's
+importers to `domain/pace.ts`, `domain/expand.ts` and
+`src/builder/builderState.ts`; a fourth importer fails the suite. (The
+null-phases loop this sentence used to prescribe needs §1.2's
+`phases(steps, null)`, which is PR B; PR A ships first.)
 
 ## 2. Surfaces
 
@@ -538,6 +538,8 @@ navigating.
   both orientations at Gate 0 and put the number in this section.** Also
   captured: "Bora" and "Roaring Forties" (§1.1), the ResetBaselineSetup
   confirm line (§2.9), and the left-slot option pair (§2.1).
+- **Gate 0 APPROVED 2026-09-07** as rendered; record in
+  `docs/design/rw-gate0/README.md`.
 - **Design reference:** `docs/design/` gets the approved Gate 0 captures.
   `DEVIATIONS.md` rows that describe the blocked-start states are
   reconciled (recurring failure 9).

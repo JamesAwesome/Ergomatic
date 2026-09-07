@@ -1,0 +1,37 @@
+[
+  {
+    "fg": "--ink-3",
+    "bg": "--page",
+    "fgHex": "#57544c",
+    "bgHex": "#f4f1e8",
+    "ratio": 6.69
+  },
+  {
+    "fg": "--ink-3",
+    "bg": "--surface",
+    "fgHex": "#57544c",
+    "bgHex": "#fffdf7",
+    "ratio": 7.43
+  },
+  {
+    "fg": "--ink",
+    "bg": "--page",
+    "fgHex": "#1b1a17",
+    "bgHex": "#f4f1e8",
+    "ratio": 15.41
+  },
+  {
+    "fg": "--ink",
+    "bg": "--surface",
+    "fgHex": "#1b1a17",
+    "bgHex": "#fffdf7",
+    "ratio": 17.11
+  },
+  {
+    "fg": "--ink-4",
+    "bg": "--page",
+    "fgHex": "#6f6a5f",
+    "bgHex": "#f4f1e8",
+    "ratio": 4.76
+  }
+]
