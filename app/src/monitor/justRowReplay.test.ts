@@ -315,9 +315,14 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     // real monitor does send one — this capture carries 0x0039/0x003A/
     // 0x003F at seq 1801-1803.
     //
-    // EVERY NUMBER BELOW WAS DECODED FROM THE CAPTURE'S OWN BYTES with a
-    // throwaway Python script this session, never read off the rendered
-    // screen and never recomputed with the code under test:
+    // FOUR OF THE SIX LITERALS ARE DECODED, TWO ARE DERIVED — said
+    // precisely, because "every number was decoded" would be false. Rate,
+    // drag, calories and the AVG HR dash come straight off the capture's
+    // bytes, read with a throwaway Python script this session and never
+    // off the rendered screen. AVG WATTS and CAL / HOUR are recomputed by
+    // hand from those bytes using the logbook's published formulas, which
+    // are the same ones `logbookDerived.ts` implements — so those two
+    // check the wiring and the inputs, not the formula itself.
     //   0x0039 `f8 35 0e 12 c0 99 00 88 36 00 19 00 00 00 00 65 00 01 81 05`
     //     → elapsed 393.6 s, distance 1396.0 m, rate 25, drag 101,
     //       HR bytes 11-14 ALL ZERO (no belt on this walk).
@@ -326,17 +331,30 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     // The logbook's two derived figures over those:
     //   AVG WATTS  round(2.80 / (393.6/1396)³) = 125
     //   CAL / HOUR floor(80 × 3600 / 393.6)    = 731
-    // CAVEAT, stated rather than hidden: the logbook's 125 W COINCIDES
-    // with the PM5's own 0x003A watts here, so this tile alone cannot tell
-    // the two apart. `screenshots.spec.ts`'s LP block is where that
-    // separation is pinned (929 vs the seeded 931).
+    // ONE TILE CANNOT SEPARATE THE TWO ARITHMETICS HERE, AND ONE CAN.
+    // AVG WATTS cannot: the logbook's 125 W coincides with the PM5's own
+    // 0x003A watts on this row, so that tile would pass either way.
+    // CAL / HOUR does: the capture's own 0x003A `avgCalPerHour` field
+    // (bytes 17-18, `da 02`) decodes to 730, one BELOW the logbook's 731,
+    // so asserting 731 rejects the machine's figure. Confirmed by
+    // mutation — pointing `calPerHour` at `detail?.avgCalPerHour` renders
+    // `CAL / HOUR730` and this test goes red. `screenshots.spec.ts`'s LP
+    // block pins the same separation with more daylight (929 vs 931).
     //
     // RATE 25 is the machine's own 0x0039 average, and it is the assertion
     // this PR's one behaviour change exists for: a free row ALWAYS
     // terminates, so before `summaryModel.ts`'s `mode === "justrow"` arm
-    // the terminated rule blanked this tile. AVG HR reads a dash because
-    // the wire carried no heart rate, not because the tile is unwired —
-    // `derivedHeartRate.replay.test.ts` drives the belted captures.
+    // the terminated rule blanked this tile.
+    //
+    // AVG HR IS THE WEAK ONE, AND SAYING SO IS THE POINT. It reads a dash
+    // because the wire carried no heart rate: all 699 of this capture's
+    // live 0x0032 frames report 255, and the four 0x0039 heart-rate bytes
+    // are zero. A dash cannot redden on this door's WIRING — hardcoding
+    // `avgHr: undefined` in `machineTierFromRun` leaves this assertion and
+    // `JustRowLog.test.tsx` green, and only `summaryModel.test.ts` bites.
+    // That wiring is covered there and in `PostWorkoutSummary.test.tsx`;
+    // what this line catches is a FABRICATED number appearing where the
+    // wire carried none, which is worth keeping and is all it claims.
     const tier = screen.getByTestId("summary-machine-tier");
     const tiles = within(tier).getAllByRole("group");
     expect(tiles).toHaveLength(6);

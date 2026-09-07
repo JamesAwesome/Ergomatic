@@ -2167,9 +2167,19 @@ Each needs erg time or a deliberate recording session.
       Calories live on 0x003A, which `FakeBurst` takes only as raw bytes, so
       `summaryOverrides` cannot reach them. Appending such a boundary to the
       free-row script left Connect permanently disabled and broke four
-      justrow captures — that is the thing to solve. What is left here is
-      the PICTURE: a `design.spec.ts` or screenshot assertion needs the same
-      burst, so it unblocks only when the fake sends one.
+      justrow captures — that is the thing to solve. **The cheap route was
+      tried and does not work as-is (measured 2026-09-07, four orderings,
+      each a full run of the live free-row flow):** `FakeControls`
+      `deliverSummary` is boundary-free and already Playwright-driven
+      (`connected.spec.ts` uses it on the programmed arm), but on the
+      free-row END path it produced no summary ring event and no
+      `summaryTotals` — delivered immediately after the second END tap,
+      with and without `deliverVerification`, and again after asserting the
+      hand-off hold visibly open ("Wrapping up", that file's own idiom).
+      Whether the free-row arm declines it or the fake needs 0x003A (which
+      `deliverSummary` never writes) is UNRESOLVED and is the next thing to
+      find out. This is a FAKE-side gap only: the same fold works on real
+      wire bytes, which is what `justRowReplay.test.ts` gates.
 
 - **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
   one and offered the other at the 7 s offset.** James's ruling ("If a user
