@@ -55,9 +55,25 @@ real rather than a rubber stamp: the monitor's own distance verifies and a contr
 distance one metre off does not, both with and without `workout.intervals[]`
 (`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`).
 
-**NOT TESTED:** `PATCH` — every measurement above used `POST`. The first task
-proves the endpoint against log-dev before anything is built on it, and this
-spec is void if it does not behave as documented.
+**FALSIFIED, 2026-09-07, and this spec is VOID as written.** The `PATCH` claim
+was documented and never tested; it was tested first, and it does not work. A
+code attached to an EXISTING result is accepted with `200` and silently ignored:
+
+| Arm | Call | Result |
+| --- | --- | --- |
+| Create without a code, then `PATCH` the right code | `PATCH /results/{id}` `{verification_code}` | `200`, `verified: false`, still false on fresh read |
+| `PATCH` the code **with** date, time, distance and workout_type alongside | as above plus the five identifying fields | `200`, `verified: false` |
+| `POST` to the result id (docs say update "also accepts POST") | `POST /results/{id}` `{verification_code}` | `200`, `verified: false` |
+| **Control:** create WITH the code | `POST /results` `{…, verification_code}` | `201`, **`verified: true`** |
+
+The control rules out a bad code, a bad account and a stale token in the same
+run. **The verification code is only honoured at CREATE.** Concept2's developer
+documentation lists `verification_code` among the update endpoint's parameters;
+that is a documentation error, and no error is returned when it is ignored.
+
+Consequence: a row cannot be verified after it has been uploaded. Any design
+that puts a code field on a SAVED row is impossible. Awaiting James's decision
+on the reshape.
 
 ## Stored shape
 
