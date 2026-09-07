@@ -433,6 +433,11 @@ const ACTUAL_SPM_MIN = 1;
 // source-scoped like the pm5 bands above.
 const HR_MIN = 20;
 const HR_MAX = 254;
+// Phase LP: the per-split and session machine fields are the PM5's own
+// u16 (calories, cal/hr, watts) and u8 (drag factor) wire fields, so the
+// band IS the wire's width — anything wider was not read off a PM5.
+const MACHINE_U16_MAX = 65535;
+const MACHINE_DRAG_MAX = 255;
 
 // Amendment (2026-08-02, Phase 6C Task 1.5): Task 1's `logDraft.ts` proved
 // this validation predates effort refs — `targetSplit` was required
@@ -474,6 +479,11 @@ function validateLogStepEntry(
     actualSpm,
     partialMeters,
     partialSeconds,
+    machineCalories,
+    machineCalPerHour,
+    machineWatts,
+    machineDragFactor,
+    machineRestHr,
   } = raw;
 
   if (typeof label !== "string" || label.length < 1 || label.length > 80) {
@@ -649,6 +659,58 @@ function validateLogStepEntry(
     };
   }
 
+  // Phase LP (spec §2.1): the five per-split machine fields, banded to the
+  // PM5's own field widths. Independent of each other — a lost 0x0038
+  // drops all five together upstream, but the server does not enforce
+  // pairing here because `machineRestHr: null` is a legitimate lone value.
+  for (const [name, value] of [
+    ["machineCalories", machineCalories],
+    ["machineCalPerHour", machineCalPerHour],
+    ["machineWatts", machineWatts],
+  ] as const) {
+    if (
+      value !== undefined &&
+      (typeof value !== "number" ||
+        !Number.isInteger(value) ||
+        value < 0 ||
+        value > MACHINE_U16_MAX)
+    ) {
+      return {
+        ok: false,
+        message: at(`${name} must be an integer, 0..${MACHINE_U16_MAX}`),
+      };
+    }
+  }
+  if (
+    machineDragFactor !== undefined &&
+    (typeof machineDragFactor !== "number" ||
+      !Number.isInteger(machineDragFactor) ||
+      machineDragFactor < 0 ||
+      machineDragFactor > MACHINE_DRAG_MAX)
+  ) {
+    return {
+      ok: false,
+      message: at(
+        `machineDragFactor must be an integer, 0..${MACHINE_DRAG_MAX}`,
+      ),
+    };
+  }
+  if (
+    machineRestHr !== undefined &&
+    machineRestHr !== null &&
+    (typeof machineRestHr !== "number" ||
+      !Number.isInteger(machineRestHr) ||
+      machineRestHr < HR_MIN ||
+      machineRestHr > HR_MAX)
+  ) {
+    return {
+      ok: false,
+      message: at(
+        `machineRestHr must be null or an integer, ${HR_MIN}..${HR_MAX}`,
+      ),
+    };
+  }
+
   // Built from an explicit field list (never spread/cast the raw input) so
   // any extra keys the client sent are silently dropped, not persisted.
   const step: LogStep = { label };
@@ -663,6 +725,18 @@ function validateLogStepEntry(
   if (actualSpm !== undefined) step.actualSpm = actualSpm;
   if (meters !== undefined) step.meters = meters;
   if (seconds !== undefined) step.seconds = seconds;
+  // `typeof … === "number"` rather than `!== undefined`: the banded loop
+  // above validated these but (unlike the per-field `if`s) does not narrow
+  // them for the compiler; after it, a defined value IS an integer.
+  if (typeof machineCalories === "number")
+    step.machineCalories = machineCalories;
+  if (typeof machineCalPerHour === "number")
+    step.machineCalPerHour = machineCalPerHour;
+  if (typeof machineWatts === "number") step.machineWatts = machineWatts;
+  if (typeof machineDragFactor === "number")
+    step.machineDragFactor = machineDragFactor;
+  if (machineRestHr === null || typeof machineRestHr === "number")
+    step.machineRestHr = machineRestHr;
   if (partialMeters !== undefined) step.partialMeters = partialMeters as number;
   if (partialSeconds !== undefined)
     step.partialSeconds = partialSeconds as number;
@@ -873,6 +947,37 @@ function validateMachineSummary(
         message: `machineSummary.verificationBytes must be an array of ${VERIFICATION_BYTES_MIN}..${VERIFICATION_BYTES_MAX} integers 0-255`,
       };
     }
+  }
+  // Phase LP (spec §2.2): the four 0x003A session fields, banded to the
+  // wire's own widths (u16 for the three counts, the rest-metres cap the
+  // row's own `restMeters` already uses for the u24 rest distance).
+  for (const key of ["totalCalories", "avgWatts", "avgCalPerHour"] as const) {
+    const v = raw[key];
+    if (
+      v !== undefined &&
+      (typeof v !== "number" ||
+        !Number.isInteger(v) ||
+        v < 0 ||
+        v > MACHINE_U16_MAX)
+    ) {
+      return {
+        ok: false,
+        message: `machineSummary.${key} must be an integer, 0..${MACHINE_U16_MAX}`,
+      };
+    }
+  }
+  const rest = raw.totalRestMeters;
+  if (
+    rest !== undefined &&
+    (typeof rest !== "number" ||
+      !Number.isInteger(rest) ||
+      rest < 0 ||
+      rest > WORK_REST_METERS_MAX)
+  ) {
+    return {
+      ok: false,
+      message: `machineSummary.totalRestMeters must be an integer, 0..${WORK_REST_METERS_MAX}`,
+    };
   }
   return { ok: true, summary: raw };
 }

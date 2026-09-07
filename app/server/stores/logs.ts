@@ -101,6 +101,16 @@ export interface LogStep {
    *  target by the last stroke). */
   partialMeters?: number;
   partialSeconds?: number;
+  /** Phase LP (spec 2026-09-06-logbook-parity §2.1): the PM5's own
+   *  per-split figures, verbatim integers off 0x0038. Independent mirror
+   *  of `src/session/logDraft.ts`'s `LogStep` (this type's convention);
+   *  bands in `routes/data.ts`'s `validateLogStepEntry` (u16 for the
+   *  first three, u8 for drag, the HR band or `null` for rest HR). */
+  machineCalories?: number;
+  machineCalPerHour?: number;
+  machineWatts?: number;
+  machineDragFactor?: number;
+  machineRestHr?: number | null;
 }
 
 // Series capture spec (2026-08-19), §1/§3: a server-side MIRROR of the

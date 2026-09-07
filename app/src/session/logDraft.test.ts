@@ -17,6 +17,7 @@ import {
   buildLogSteps,
   buildManualLogSteps,
   buildMonitorLogSteps,
+  monitorStepProgramIndices,
   logTotals,
   MonitorLogSeedError,
   MONITOR_HR_MIN,
@@ -1586,6 +1587,79 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(steps[1]!.actualSeconds).toBeUndefined();
     expect(steps[1]!.actualMeters).toBeUndefined();
     expect(steps[2]!.actualSource).toBe("pm5");
+  });
+
+  it("Phase LP: copies the 0x0038 machine fields onto the step (calories, cal/hr, watts, drag, rest HR) and omits every one of them when the actual lacks them", () => {
+    const run: MonitorRun = {
+      ...THREE_STEP_RUN,
+      actuals: [
+        {
+          ...THREE_STEP_ACTUALS[0]!,
+          calories: 73,
+          calPerHour: 840,
+          watts: 157,
+          dragFactor: 101,
+          restHeartRateBpm: null,
+        },
+        THREE_STEP_ACTUALS[1]!, // old-shape actual: no machine fields
+        { ...THREE_STEP_ACTUALS[2]!, calories: 0, restHeartRateBpm: 96 },
+      ],
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps[0]).toMatchObject({
+      machineCalories: 73,
+      machineCalPerHour: 840,
+      machineWatts: 157,
+      machineDragFactor: 101,
+      machineRestHr: null,
+    });
+    for (const key of [
+      "machineCalories",
+      "machineCalPerHour",
+      "machineWatts",
+      "machineDragFactor",
+      "machineRestHr",
+    ]) {
+      expect(steps[1]).not.toHaveProperty(key);
+    }
+    // 0 is a value, and a belt reading on the rest is kept.
+    expect(steps[2]!.machineCalories).toBe(0);
+    expect(steps[2]!.machineRestHr).toBe(96);
+    expect(steps[2]).not.toHaveProperty("machineWatts");
+  });
+
+  it("Phase LP (review M1): an out-of-band rest heart rate drops its own field, never the row — 19 bpm is omitted, 20 kept, null kept as null", () => {
+    const run: MonitorRun = {
+      ...THREE_STEP_RUN,
+      actuals: [
+        { ...THREE_STEP_ACTUALS[0]!, restHeartRateBpm: 19 },
+        { ...THREE_STEP_ACTUALS[1]!, restHeartRateBpm: 20 },
+        { ...THREE_STEP_ACTUALS[2]!, restHeartRateBpm: null },
+      ],
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps[0]).not.toHaveProperty("machineRestHr");
+    expect(steps[1]!.machineRestHr).toBe(20);
+    expect(steps[2]!.machineRestHr).toBeNull();
+  });
+
+  it("Phase LP (review L5): monitorStepProgramIndices names each emitted step's PROGRAM index — one ahead of its position after a legacy warm-up seed step", () => {
+    const legacy: MonitorRun = {
+      ...THREE_STEP_RUN,
+      logSeed: {
+        ...THREE_STEP_RUN.logSeed!,
+        steps: THREE_STEP_RUN.logSeed!.steps.map((step, i) =>
+          i === 0 ? { ...step, kind: "warmup" as unknown as "work" } : step,
+        ),
+      },
+    };
+    const steps = buildMonitorLogSteps(legacy);
+    expect(steps).toHaveLength(2);
+    expect(monitorStepProgramIndices(steps)).toStrictEqual([1, 2]);
+    expect(
+      monitorStepProgramIndices(buildMonitorLogSteps(THREE_STEP_RUN)),
+    ).toStrictEqual([0, 1, 2]);
+    expect(monitorStepProgramIndices([])).toBeUndefined();
   });
 
   it("index:null actuals are dropped entirely", () => {

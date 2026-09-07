@@ -8521,6 +8521,71 @@ had passed over the same document without a single duration in it.
   26's reported landscape-inset instability (Apple Forums 798014) paints a stray
   20px band.
 
+## 2026-09-06 — Phase LP anchor (logbook parity, TRIAD ×2): the field that reads zero, and the formula that belongs to the other machine
+
+- **A field that reads 0 on every capture is not "explained" by a
+  hypothesis that also predicts 0.** 0x003A's Interval Rest Time reads 0 on
+  9/9 committed captures, including two with genuine 60 s rests. `parse.ts`
+  calls the meaning UNKNOWN; `pm5-interface-notes.md` §27.4 calls it settled
+  ("the final interval's rest") — and every capture ends on a work interval,
+  so the corpus cannot separate that from "always 0" or "dead". Technique:
+  **before promoting a hypothesis that explains an all-zero corpus, ask what
+  observation would have been DIFFERENT if the hypothesis were false.** Here
+  there is none, so the field stays undetermined regardless of how good the
+  story is. The spec was about to upload it as C2's `rest_time` (documented
+  "total time spent in rest intervals"), replacing a sum that is correct
+  today and pinned by `mapping.test.ts` at 1200.
+- **Two machines can compute the same-named quantity from different inputs,
+  and "the wire's value" is then a guaranteed mismatch.** The PM5's
+  `splitIntervalAvgCalories` is `300 + 4×0.8604×W` (matched to the unit on
+  five frames); Concept2's logbook cal/hr is `calories_total / time × 3600`
+  (matched exactly on the one fully independent data point, 372 cal over
+  1550.1 s → 863). They differ by 24-78 cal/hr across our corpus. Technique:
+  **do not test a formula against a value the formula's own author
+  produced.** The spec's "first check" compared C2's number to the PM's
+  formula, read a 2-unit miss, and concluded the WIRE was right — the miss
+  was evidence the logbook computes something else.
+- **Derive from the quantities you actually upload, not from a display
+  field.** The session-watts worked example computed 162.66 and wrote "→ 162
+  ✓" while its sibling split example required rounding; both examples are
+  reconciled by deriving from (time, distance) rather than from the
+  tenths-quantised pace. Technique: **when two worked examples of one
+  formula need different rounding rules, the input is wrong, not the rule.**
+  Measured: pace-derived and (t,d)-derived watts round differently on 2 of
+  15 committed splits.
+- **Decode the captures by hand before believing any transcription,
+  including this repo's own.** One `python3` pass over the committed
+  `.jsonl.gz` frames settled four questions the spec had queued for a walk:
+  per-split calories (sums equal 0x003A's total on 9/9 captures), cal/hr
+  units, session watts vs derived watts (1/9 disagree by 1 W), and the
+  stroke-rate doubling (2/9 exactly 2×). The bytes are in the repo; the
+  answers cost one command.
+- **"Photograph both apps after our upload" is an echo for every field we
+  sent.** Wave E's anchor already ruled this and the ruling had to be
+  re-derived. The two DERIVED cells are a real oracle; nothing else is. And
+  the ErgData cross-upload the earlier entry proposed is blocked by C2's
+  own dedup (409 on same date+time+distance) unless our row is deleted
+  first — worth knowing before it is proposed a third time.
+- **Corollary to RF16's "list the capture directory by date":** also decode
+  it. A corpus fact expires ("0x0039/0x003A have delivered ZERO frames" was
+  true on 2026-08-21 and false from 2026-08-23; 11 of 20 recordings now
+  carry 0x003A); a corpus SCRIPT does not.
+- **Attacked and HELD (Phase LP's vetted ground):** `splitIntervalTotalCalories`
+  is per-split (9/9 identity); `splitIntervalAvgCalories` is cal/hr (the
+  PM5's); every 0x0038 offset/scale in `parse.ts` matches §10; 0x003A
+  offsets 8-9 / 10-11 / 12-14 / 17-18 confirmed by identities we did not
+  compute, 15-16 the sole exception; Total Rest Distance is a true session
+  total (274 = 130 + 144); `LogStep.spm` exists for the target-rate rule;
+  C2's split `heart_rate` carries `rest` and the result-level one does not;
+  adding calories/HR/drag/splits/targets cannot invalidate the verification
+  code while `C2_WORKOUT_TYPE_BY_ORDINAL` stays frozen; the record has no
+  step-edit path and the 60 s 0x0039 re-fire cannot reach a saved row;
+  machine-rows-only plus dashes is the right shape. **Not established:**
+  whether C2 prefers `wattminutes_total` over time/distance when both are
+  present; whether the logbook rounds or truncates watts (his row fits
+  rounding); the mechanism of the 2× stroke rate; whether 0x003A[15..16]
+  is the final interval's rest or a dead field.
+
 ## Phase-open anchor pass, 2026-09-06 (Phase RW, "row without a baseline")
 
 - **"The null-baseline split phase is byte-for-byte the shape an effort phase

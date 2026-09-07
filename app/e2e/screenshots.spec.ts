@@ -3167,6 +3167,13 @@ async function postLog(
       // `server/stores/logs.ts`'s own `LogStep`.
       partialMeters?: number;
       partialSeconds?: number;
+      // Phase LP: the PM5's own per-split figures, hand-copied like the
+      // rest of this object from `server/stores/logs.ts`'s `LogStep`.
+      machineCalories?: number;
+      machineCalPerHour?: number;
+      machineWatts?: number;
+      machineDragFactor?: number;
+      machineRestHr?: number | null;
     }[];
     // Trace-rendering spec (Phase LT spec 3), Task 3: the stored door's
     // own source. This helper already builds every OTHER field by hand
@@ -3196,6 +3203,14 @@ async function postLog(
     machineSummary?: {
       avgPaceSecondsPer500m?: number;
       verificationBytes: number[];
+      // Phase LP: 0x0039's stroke rate / drag and 0x003A's four keys, the
+      // shape `MachineSummaryDetail` writes (`src/monitor/monitorRun.ts`).
+      avgStrokeRate?: number;
+      dragFactorAverage?: number;
+      totalCalories?: number;
+      avgWatts?: number;
+      avgCalPerHour?: number;
+      totalRestMeters?: number;
     } | null;
     // RC-1's stored work/rest pair, and the reason this helper needs it:
     // a TIER A row (both `machineWork*` set) is handed an EMPTY `stepSums`
@@ -3526,6 +3541,14 @@ test("log-detail", async ({ page }) => {
         // construction.
         actualMeters: 250,
         actualSpm: 25,
+        // Phase LP: this piece's per-split machine fields. 16 + 16 = 32
+        // sums to the 0x003A total below (spec §1.1's identity); the
+        // PM5's own watts/cal-hr are provenance the screen never shows.
+        machineCalories: 16,
+        machineCalPerHour: 848,
+        machineWatts: 140,
+        machineDragFactor: 100,
+        machineRestHr: null,
       },
       {
         label: "250m @ 2:07.0",
@@ -3536,6 +3559,11 @@ test("log-detail", async ({ page }) => {
         meters: 250,
         actualMeters: 250,
         actualSpm: 28,
+        machineCalories: 16,
+        machineCalPerHour: 1146,
+        machineWatts: 248,
+        machineDragFactor: 100,
+        machineRestHr: null,
       },
     ],
     // Trace-rendering spec (Phase LT spec 3), Task 3, re-seeded for the
@@ -3566,6 +3594,15 @@ test("log-detail", async ({ page }) => {
         0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01, 0x00,
         0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       ],
+      // Phase LP: the same walk's real 0x0039 stroke rate / drag and its
+      // real 0x003A frame (seq 63, `88 35 03 0f 02 fa 00 02 20 00 b8 00 f2
+      // 00 00 00 00 a3 03`: 32 cal, 184 W, 242 m rest, 931 cal/hr).
+      avgStrokeRate: 26,
+      dragFactorAverage: 100,
+      totalCalories: 32,
+      avgWatts: 184,
+      avgCalPerHour: 931,
+      totalRestMeters: 242,
     },
   });
 
@@ -3620,6 +3657,29 @@ test("log-detail", async ({ page }) => {
   await expect(rows.nth(1).locator(".summary-row-dev")).toHaveText("−14.8");
   await expect(rows.nth(1).locator(".summary-row-spm")).toHaveText("28");
 
+  // Phase LP §3 (RF7 — recompute the headline from the rows by eye): the
+  // machine tier reads the LOGBOOK's arithmetic over the seed — AVG WATTS
+  // round(2.80/(124.0/500)³) = 184, CAL / HOUR floor(32×3600/124.0) = 929
+  // (NOT the seeded PM5 figure 931), CALORIES 32 = 16 + 16 below, AVG HR a
+  // dash (this walk wore no belt — `avgHeartRateBpm` is not seeded), RATE 26
+  // with NO target half (this walk's program authored no display SPM, so
+  // no step carries `spm` and the tile reads the rate alone), DRAG 100,
+  // REST 242 m = 147 + 95 — and the MACHINE
+  // SUMMARY strip's two rows carry 140 W / 848 and 248 W / 1026 from each
+  // split's own 67.9 s / 56.1 s over 250 m and 16 cal.
+  const lpTiles = page.getByTestId("summary-machine-tier").getByRole("group");
+  await expect(lpTiles).toHaveCount(6);
+  await expect(lpTiles.nth(0)).toHaveText("AVG WATTS184");
+  await expect(lpTiles.nth(2)).toHaveText("CAL / HOUR929");
+  await expect(lpTiles.nth(3)).toHaveText("RATE26");
+  await expect(lpTiles.nth(5)).toHaveText("AVG HR—");
+  const lpStrip = page
+    .getByRole("table", { name: "Machine summary per interval" })
+    .locator("tbody tr");
+  await expect(lpStrip).toHaveCount(2);
+  await expect(lpStrip.nth(0)).toHaveText("1—14016848100—");
+  await expect(lpStrip.nth(1)).toHaveText("2—248161026100—");
+
   // RC-2/RC-3 wave, PR 2, Task 3: the MACHINE CONFIRMED · WORK ONLY block,
   // below the interval rows and above the trace chart — real seeded
   // machine fields (the exit-7 walk's own values), not the absence case.
@@ -3645,6 +3705,18 @@ test("log-detail", async ({ page }) => {
   // itself, is the only way this element is guaranteed visible in the
   // committed record (task-3 brief: "THE BLOCK MUST BE VISIBLE IN A
   // CAPTURE").
+  // Phase LP §3: the machine tier sits under the heroes near the top of
+  // the page, above the fold this test's other captures scroll past — its
+  // own capture, scrolled to the heroes block, is the committed record of
+  // the six tiles on a FRESH machine row (RF7: seeded above, asserted
+  // above, then shot).
+  await page
+    .locator(".summary-heroes-block")
+    .evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-machine-tier.png"),
+  });
+
   await page
     .locator(".log-machine-confirmed")
     .evaluate((el) => el.scrollIntoView({ block: "center" }));

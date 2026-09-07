@@ -72,11 +72,14 @@ import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
+  parseAdditionalSummary,
   parseAdditionalSummaryRest,
+  type AdditionalSummary,
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
   parseSplitIntervalData,
   parseSummaryLogStamp,
+  type SummaryLogStamp,
   toIntervalActual,
   toMonitorFrame,
   toMonitorState,
@@ -1324,6 +1327,28 @@ export function createPm5Driver(
      *  eventually observes reconciles it exactly like an ordinary
      *  in-grace arrival — no separate storage. */
     summaryInGrace: WorkoutSummary | null;
+    /** Phase LP: 0x003A's decoded logbook fields, stashed on arrival so
+     *  `summaryObservationsEvent` can carry them (spec §2.3 — 0x003A is
+     *  part of the summary burst, a drain condition beside 0x003F).
+     *  `null` until it arrives. On the NATURAL-FINISH path the summary
+     *  emits without it after ONE `HASH_SUBWINDOW_MS` wait
+     *  (`additionalSummaryWaited`); the TERMINATE path has no wait — its
+     *  emit is synchronous once the hash is in hand (review L1) and relies
+     *  on 0x003A preceding 0x003F, which every committed capture shows.
+     *  Either way a missing frame logs `summary-1-missing`. Minted with
+     *  the run, never cleared before the run closes — the same lifetime as
+     *  `verificationBytes`. */
+    additionalSummary: AdditionalSummary | null;
+    additionalSummaryWaited: boolean;
+    /** Log Entry Date/Time (offsets 0-3, `parseSummaryLogStamp`) of the
+     *  0x0039 currently HELD (`summaryInGrace`) and of the stashed 0x003A.
+     *  The two frames of one burst carry the same stamp; an 0x003A whose
+     *  stamp differs belongs to ANOTHER piece (a re-fired burst landing on
+     *  a run programmed since — whole-branch review M6) and is dropped at
+     *  emit with `summary-1-mismatch`, never folded in. The wire carries no
+     *  seconds, so this is a same-piece check, not an identity. */
+    summaryStamp: SummaryLogStamp | null;
+    additionalSummaryStamp: SummaryLogStamp | null;
     /** 0x003F's raw, undecoded bytes — the most recent one received while
      *  THIS run was the active run (storage-spine design spec §2, delta-
      *  pass B3). No decode logic lives here or in `pm5/parse.ts`: the
@@ -3192,6 +3217,55 @@ export function createPm5Driver(
   }
 
   /**
+   * Phase LP: keep 0x003A's four logbook fields on the open run (spec
+   * §2.2/§2.3). Attributed exactly as 0x003F is — to whichever run is open
+   * at receipt, closed or not; with no run open there is nothing to
+   * attribute a bare reading to (`noteSummaryHalf` above already logs the
+   * receipt either way). A short frame is logged and NOT partially stored.
+   * Its arrival is a `maybeReconcileImmediately` call site ONLY when the
+   * drain is already waiting on it (split, summary and hash in hand; the
+   * one sub-window `additionalSummaryWaited` marks) — see the guard below.
+   */
+  function stampsEqual(a: SummaryLogStamp, b: SummaryLogStamp): boolean {
+    return (
+      a.year === b.year &&
+      a.month === b.month &&
+      a.day === b.day &&
+      a.hours === b.hours &&
+      a.minutes === b.minutes
+    );
+  }
+  function fmtStamp(s: SummaryLogStamp | null): string {
+    if (s === null) return "(none)";
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    return `${s.year}-${pad(s.month)}-${pad(s.day)} ${pad(s.hours)}:${pad(s.minutes)}`;
+  }
+
+  function noteAdditionalSummary(bytes: Uint8Array): void {
+    const run = activeRun;
+    if (run === null) return;
+    const decoded = parseAdditionalSummary(bytes);
+    if (decoded === null) {
+      log.record(
+        "summary-1-short",
+        `0x003A arrived with ${bytes.length} byte(s); the 19-byte layout was not decoded and nothing was stored`,
+      );
+      return;
+    }
+    run.additionalSummary = decoded;
+    run.additionalSummaryStamp = parseSummaryLogStamp(bytes);
+    // Only when the drain is ALREADY waiting on this frame (the one
+    // sub-window `maybeReconcileImmediately` arms past the hash). Calling
+    // it unconditionally would reach the `verificationBytes === null` arm
+    // from a pre-terminal burst (the keystone's burst-first race, where
+    // 0x003A precedes both the hash and OUR terminal), arming a reconcile
+    // against a run that is not yet closed — the record then declines the
+    // observations write and `recordAvgPaceVerdict` fires twice (measured:
+    // burstReplay/oracleCorpusReplay went red exactly so, 2026-09-06).
+    if (run.additionalSummaryWaited) maybeReconcileImmediately(run);
+  }
+
+  /**
    * 0x0039's own handler (fast-follow Task 2, design spec §5) — the
    * SUMMARY-FALLBACK GATE's entrance, and the only place this driver
    * decodes an end-of-workout summary.
@@ -3352,6 +3426,7 @@ export function createPm5Driver(
             `buffered — 0x0039 arrived while this run is still open, already reporting its final interval (index ${currentIndex} of ${run.program.intervals.length}); held for this run's own natural close (storage-spine design spec §2, early side)`,
           );
           run.summaryInGrace = summary;
+          run.summaryStamp = stamp;
           return;
         }
       } else if (
@@ -3394,6 +3469,7 @@ export function createPm5Driver(
           `buffered — 0x0039 arrived after this run's finish grace already closed (${describeClosedGrace(run)}), but the final split already recorded and its reconcile has not drained yet; held for observations (storage-spine design spec §2, HIGH-1 fix)`,
         );
         run.summaryInGrace = summary;
+        run.summaryStamp = stamp;
         maybeReconcileImmediately(run);
         return;
       }
@@ -3427,6 +3503,7 @@ export function createPm5Driver(
       return;
     }
     run.summaryInGrace = summary;
+    run.summaryStamp = stamp;
     // Review fix round 1, HIGH finding: the LATE side's own immediate
     // trigger — this summary just arrived AFTER our own terminal
     // transition, while the final split had already landed earlier (this
@@ -4111,6 +4188,16 @@ export function createPm5Driver(
       armSummaryReconcile(run, HASH_SUBWINDOW_MS);
       return;
     }
+    // Phase LP (spec §2.3): 0x003A is part of the burst. On every committed
+    // capture it lands ~1 ms after 0x0039 and ~37 ms BEFORE 0x003F, so
+    // this branch is normally already satisfied when the hash arrives; if
+    // it is not, wait out ONE more sub-window for it and then emit
+    // without it (`summary-1-missing`) — never a second wait.
+    if (run.additionalSummary === null && !run.additionalSummaryWaited) {
+      run.additionalSummaryWaited = true;
+      armSummaryReconcile(run, HASH_SUBWINDOW_MS);
+      return;
+    }
     drainSummaryReconcile();
   }
 
@@ -4281,6 +4368,21 @@ export function createPm5Driver(
     totals: { workElapsedSeconds: number; workDistanceMeters: number },
     summary: WorkoutSummary,
   ): MonitorEvent {
+    // Review M6: fold 0x003A in only when it is THIS piece's — same Log
+    // Entry stamp as the 0x0039 being emitted. A differing stamp is
+    // another piece's frame (a re-fired burst on a run programmed since).
+    const stashed = run.additionalSummary;
+    const sameStamp =
+      run.summaryStamp === null ||
+      run.additionalSummaryStamp === null ||
+      stampsEqual(run.summaryStamp, run.additionalSummaryStamp);
+    if (stashed !== null && !sameStamp) {
+      log.record(
+        "summary-1-mismatch",
+        `0x003A's log stamp ${fmtStamp(run.additionalSummaryStamp)} is not the held 0x0039's ${fmtStamp(run.summaryStamp)}; another piece's frame, dropped — calories, avg watts, avg cal/hr and rest distance are absent from this run's observations`,
+      );
+    }
+    const additional = sameStamp ? stashed : null;
     const detail = {
       avgStrokeRate: summary.avgStrokeRate,
       endingHeartRateBpm: summary.endingHeartRateBpm,
@@ -4291,7 +4393,25 @@ export function createPm5Driver(
       workoutType: summary.workoutType,
       recoveryHeartRateBpm: summary.recoveryHeartRateBpm,
       avgPaceSecondsPer500m: summary.avgPaceSecondsPer500m,
+      // Phase LP: 0x003A's four fields ride along when the frame arrived
+      // (spec §2.2). Spread-as-absent, never `undefined`-valued, so
+      // `JSON.stringify` and `Object.keys` treat a missing frame as
+      // missing — the same shape `verificationBytes` below uses.
+      ...(additional !== null
+        ? {
+            totalCalories: additional.totalCalories,
+            avgWatts: additional.avgWatts,
+            avgCalPerHour: additional.avgCalPerHour,
+            totalRestMeters: additional.totalRestDistanceMeters,
+          }
+        : {}),
     };
+    if (stashed === null) {
+      log.record(
+        "summary-1-missing",
+        "0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)",
+      );
+    }
     return run.verificationBytes === null
       ? { kind: "summary-observations", totals, detail }
       : {
@@ -5414,6 +5534,7 @@ export function createPm5Driver(
     // state `noteSummary`'s gate depends on.
     t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (bytes) => {
       noteSummaryHalf("0x003A", bytes);
+      noteAdditionalSummary(bytes);
       recordRestDistanceVerdict(bytes);
     });
 
@@ -6342,6 +6463,10 @@ export function createPm5Driver(
         lastActiveState: null,
         finishGraceUntil: null,
         summaryInGrace: null,
+        additionalSummary: null,
+        additionalSummaryWaited: false,
+        summaryStamp: null,
+        additionalSummaryStamp: null,
         graceClaimed: false,
         verificationBytes: null,
         terminatedAwaitingSummary: false,
@@ -6600,6 +6725,10 @@ export function createPm5Driver(
           lastActiveState: null,
           finishGraceUntil: null,
           summaryInGrace: null,
+          additionalSummary: null,
+          additionalSummaryWaited: false,
+          summaryStamp: null,
+          additionalSummaryStamp: null,
           graceClaimed: false,
           verificationBytes: null,
           terminatedAwaitingSummary: false,

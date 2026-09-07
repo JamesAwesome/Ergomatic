@@ -105,7 +105,16 @@ import {
   type SummaryHeroes,
   type SummaryMeta,
   type SummaryRow,
+  agreedTargetSpm,
+  machineSplitRows,
+  type MachineSplitRow,
+  type MachineTier,
 } from "../session/summaryModel";
+import {
+  logbookCalPerHour,
+  logbookWatts,
+  sessionStrokeRate,
+} from "../session/logbookDerived";
 
 // Re-typed rather than imported from `server/stores/logs.ts` (this
 // repo's standing rule: client code never imports server/'s module
@@ -124,6 +133,14 @@ export interface StoredLogStep {
   avgHr?: number;
   actualSeconds?: number;
   actualMeters?: number;
+  // Phase LP (spec 2026-09-06-logbook-parity §2.1): the PM5's own per-split
+  // figures, verbatim — the lockstep mirror of `LogStep`'s five (see that
+  // interface's own comment for what each is and why two are provenance).
+  machineCalories?: number;
+  machineCalPerHour?: number;
+  machineWatts?: number;
+  machineDragFactor?: number;
+  machineRestHr?: number | null;
   // Phase LT spec 1 (2026-08-18), §2, MEDIUM-1 (Task 1 review): the
   // lockstep line this interface's own header comment demands —
   // `session/logDraft.ts`'s `LogStep` gained this field the same task
@@ -235,6 +252,17 @@ export interface StoredLog {
   machineSummary: {
     verificationBytes?: number[];
     avgPaceSecondsPer500m?: number;
+    // Phase LP (spec §2.2/§3): the hero's machine tier reads these —
+    // 0x0039's stroke rate and drag (always written by `summaryDetail`
+    // since RC-3) and 0x003A's four (absent on any row saved before this
+    // phase, or when the frame missed the burst; rendered as a dash).
+    avgStrokeRate?: number;
+    avgHeartRateBpm?: number | null;
+    dragFactorAverage?: number;
+    totalCalories?: number;
+    avgWatts?: number;
+    avgCalPerHour?: number;
+    totalRestMeters?: number;
   } | null;
   // RC-1 (storage-spine design spec §3, TRIAD): the session's rest pair,
   // required-and-nullable — same convention as `machineWorkSeconds` above
@@ -296,6 +324,11 @@ export interface StoredSummaryView {
   meta: SummaryMeta;
   heroes: SummaryHeroes;
   rows: SummaryRow[];
+  /** Phase LP §3: the MACHINE SUMMARY strip's rows off the stored steps
+   *  (`machineSplitRows`, `session/summaryModel.ts`); empty on manual and
+   *  timer rows and on a Just Row. REST reads a dash on a stored row —
+   *  `StoredLogStep` carries no per-step rest metres. */
+  machineRows: MachineSplitRow[];
   caption?: string;
   readBack: StoredReadBack;
   /** §5E: `Logged to <title> · SESSION <plan_index+1> OF <sequence
@@ -722,6 +755,42 @@ function buildStoredTotalLine(
 // `undefined` when its own source has nothing to show (never a
 // fabricated `0:00`/`0 m`) — see this module's own tier comment above
 // for the three branches and their sources.
+function storedMachineTier(
+  row: StoredLog,
+  timeSeconds: number,
+  distanceMeters: number,
+): MachineTier {
+  const ms = row.machineSummary;
+  const calories = ms?.totalCalories;
+  const finished = row.endedBy === "finished" || row.endedBy == null;
+  return {
+    avgWatts: logbookWatts(timeSeconds, distanceMeters),
+    calories,
+    calPerHour:
+      calories === undefined
+        ? undefined
+        : logbookCalPerHour(calories, timeSeconds),
+    rate: sessionStrokeRate({
+      finished,
+      avgStrokeRate: ms?.avgStrokeRate,
+      splits: row.steps
+        .filter(
+          (s) =>
+            s.actualSource === "pm5" &&
+            s.actualSpm !== undefined &&
+            s.actualSeconds !== undefined,
+        )
+        .map((s) => ({
+          seconds: s.actualSeconds as number,
+          spm: s.actualSpm as number,
+        })),
+    }),
+    targetRate: agreedTargetSpm(row.steps.map((s) => s.spm)),
+    drag: ms?.dragFactorAverage,
+    avgHr: ms?.avgHeartRateBpm ?? undefined,
+  };
+}
+
 function buildHeroes(row: StoredLog): SummaryHeroes {
   const hasMachineTotals =
     row.machineWorkSeconds !== null &&
@@ -760,6 +829,15 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
       // `stepSums` here let fallback-2 relabel that rowed work as rest —
       // caught by a dedicated tier-A-with-null-rest-pair test below.
       totalLine: buildStoredTotalLine(row, timeSeconds, {}),
+      // Phase LP §3: the six machine tiles, same arithmetic as the live
+      // door's `machineTierFromRun` (`session/summaryModel.ts`), read off
+      // the stored row: totals from the RC-2/3 columns, everything else
+      // from `machine_summary` — absent keys (any row saved before this
+      // phase, or a burst that lost 0x003A) stay `undefined` and render as
+      // a dash. RATE: `endedBy` `"finished"` or absent (pre-close-reason
+      // rows) reads the stored 0x0039 average; any other close takes the
+      // splits' time-weighted mean (0x0039 doubles on a terminate).
+      machine: storedMachineTier(row, timeSeconds, distanceMeters),
     };
   }
 
@@ -1209,5 +1287,33 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const readBack = buildReadBack(row);
   const closeLine = buildCloseLine(row);
   const planFooter = buildPlanFooter(row);
-  return { meta, heroes, rows, caption, readBack, planFooter, closeLine };
+  // Phase LP §3: MACHINE rows only — gated on the row's own `source`
+  // column, not on its steps. A by-hand row can carry a `pm5`-sourced step
+  // (the e2e from-the-log fixture does, and so could any pre-sunset row
+  // edited by hand); the strip is the machine's account of a machine row,
+  // so a `manual`/`timer` row gets none however its steps are marked.
+  // Caught by the e2e manual-row assertion on the first run, 2026-09-07.
+  // Whole-branch review L6: ONE gate for the tier and the strip — the
+  // machine's own totals in hand (tier A), which `buildHeroes` already
+  // requires for the tiles. A pre-RC-1 `pm5` row (no `machineWork*`)
+  // showed the strip with no tiles above it; now it shows neither, the
+  // same "machine row = the machine's own session" reading on both.
+  const machineRows =
+    row.source === "pm5" &&
+    row.machineWorkSeconds !== null &&
+    row.machineWorkMeters !== null &&
+    row.machineWorkSeconds > 0 &&
+    row.machineWorkMeters > 0
+      ? machineSplitRows(row.steps)
+      : [];
+  return {
+    meta,
+    heroes,
+    rows,
+    machineRows,
+    caption,
+    readBack,
+    planFooter,
+    closeLine,
+  };
 }

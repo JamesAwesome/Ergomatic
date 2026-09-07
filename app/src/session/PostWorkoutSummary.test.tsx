@@ -299,6 +299,72 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
     ).toBeInTheDocument();
   });
 
+  // Phase LP (spec §3, Gate 0 approved 2026-09-07 on
+  // docs/design/logbook-parity/03-chosen-composed.html): six machine tiles
+  // under the heroes, machine rows only, a dash where the machine did not
+  // say and 0 rendered as 0.
+  it("Phase LP: renders the six machine tiles under the heroes when the model carries the tier, with RATE / TARGET as one tile and a dash for an absent value", () => {
+    renderSummary({
+      model: monitorModel({
+        heroes: {
+          avgSplit: "2:09.2",
+          time: "25:50",
+          distanceMeters: 6000,
+          machine: {
+            avgWatts: 162,
+            calories: 0,
+            calPerHour: 0,
+            rate: 26,
+            targetRate: 26,
+            drag: 101,
+            avgHr: undefined,
+          },
+        },
+      }),
+    });
+    const tier = screen.getByTestId("summary-machine-tier");
+    const tiles = within(tier).getAllByRole("group");
+    expect(tiles.map((t) => t.getAttribute("aria-label"))).toStrictEqual([
+      "AVG WATTS",
+      "CALORIES",
+      "CAL / HOUR",
+      "RATE · TARGET",
+      "DRAG",
+      "AVG HR",
+    ]);
+    expect(within(tiles[0]!).getByText("162")).toBeInTheDocument();
+    // 0 is a value: both zero tiles read 0, never a dash.
+    expect(within(tiles[1]!).getByText("0")).toBeInTheDocument();
+    expect(within(tiles[2]!).getByText("0")).toBeInTheDocument();
+    expect(tiles[3]!).toHaveTextContent("26 / 26");
+    expect(within(tiles[4]!).getByText("101")).toBeInTheDocument();
+    expect(tiles[5]!).toHaveTextContent("—");
+  });
+
+  it("Phase LP: RATE without an agreed TARGET renders the rate alone, and AVG HR shows the belt's number", () => {
+    renderSummary({
+      model: monitorModel({
+        heroes: {
+          time: "25:50",
+          machine: { rate: 26, avgHr: 142 },
+        },
+      }),
+    });
+    const tier = screen.getByTestId("summary-machine-tier");
+    const tiles = within(tier).getAllByRole("group");
+    expect(tiles[3]!.getAttribute("aria-label")).toBe("RATE");
+    expect(tiles[3]!).toHaveTextContent(/^RATE26$/);
+    expect(tiles[5]!).toHaveTextContent("142");
+  });
+
+  it("Phase LP: no machine tier on a model without one (the timer and manual doors)", () => {
+    renderSummary();
+    expect(
+      screen.queryByTestId("summary-machine-tier"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("AVG WATTS")).not.toBeInTheDocument();
+  });
+
   it("omits the TOTAL line when the model has none (e.g. the timer/manual doors, which never set one)", () => {
     renderSummary();
     expect(screen.queryByText(/coasting in rest/)).not.toBeInTheDocument();

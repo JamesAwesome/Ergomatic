@@ -1962,6 +1962,15 @@ describe("createPm5Driver: terminate + Appendix-E — the RUN closes, the driver
         // `restDistanceMeters` above.
         restSeconds: 0,
         type: 0,
+        // Phase LP: the 0x0038 fields `toIntervalActual` now keeps, at the
+        // fake's own PM5 relations for a 1 m / 1 s boundary (hand computed:
+        // W = 2.8/1³ = 2.8 → 3; cal/hr = floor(300 + 3.4416×2.8) = 309;
+        // cal = round(309 × 1 / 3600) = 0 — a genuine 0, a value).
+        calories: 0,
+        calPerHour: 309,
+        watts: 3,
+        dragFactor: 101,
+        restHeartRateBpm: null,
       },
     });
     const outOfRun = log
@@ -10227,6 +10236,35 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     avgPaceSecondsPer500m: 125,
   };
 
+  // Phase LP: the exit-7 walk's own 0x003A payload (seq 63, walk-2026-08-24
+  // — the same frame the rest-distance oracle tests below use): 32 cal,
+  // 184 W, 242 m rest, 931 cal/hr at offsets 8-9 / 10-11 / 12-14 / 17-18.
+  // Bytes 0-3 (Log Entry Date/Time) are ZEROED here to match
+  // `summaryBytes()`'s synthetic 0x0039, which writes no stamp: the driver
+  // folds 0x003A in only when the two frames' stamps agree (review M6),
+  // and this gate's fixtures are one piece. The real stamp
+  // (`88 35 03 0f`) is what `EXIT7_0X003A_OTHER_PIECE` below carries.
+  const EXIT7_0X003A_BURST = new Uint8Array([
+    0x00, 0x00, 0x00, 0x00, 0x02, 0xfa, 0x00, 0x02, 0x20, 0x00, 0xb8, 0x00,
+    0xf2, 0x00, 0x00, 0x00, 0x00, 0xa3, 0x03,
+  ]);
+  /** The same payload under the walk's REAL stamp, 2026-08-24 15:03 —
+   *  against a zero-stamped 0x0039 this is another piece's frame. */
+  const EXIT7_0X003A_OTHER_PIECE = new Uint8Array([
+    0x88, 0x35, 0x03, 0x0f, 0x02, 0xfa, 0x00, 0x02, 0x20, 0x00, 0xb8, 0x00,
+    0xf2, 0x00, 0x00, 0x00, 0x00, 0xa3, 0x03,
+  ]);
+  /** `detail` when 0x003A arrived: the nine 0x0039 fields plus the four
+   *  0x003A ones, INDEPENDENT literals decoded by hand from the bytes
+   *  above (never via `parseAdditionalSummary`). */
+  const FULL_DETAIL_WITH_0X003A = {
+    ...FULL_SUMMARY,
+    totalCalories: 32,
+    avgWatts: 184,
+    avgCalPerHour: 931,
+    totalRestMeters: 242,
+  };
+
   /** 0x003F's eight bytes, the keystone capture's own
    *  (`walk-2026-08-23`'s `photo-w4-verification-code.jpeg` reads
    *  `6EF3-D827 5B55-52E1` off the PM5's own screen against exactly
@@ -10331,6 +10369,13 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
     ]);
     g.clock.advance(38);
+    // Phase LP: 0x003A lands ~37 ms BEFORE the hash on every committed
+    // capture (notes §24 item 1) — the burst's real order, so the drain
+    // below finds it already stashed and takes no extra sub-window.
+    g.transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      EXIT7_0X003A_BURST,
+    );
     g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
     expect(g.timer.pending()).toBeNull();
 
@@ -10364,10 +10409,160 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 60, workDistanceMeters: 200 },
+        detail: FULL_DETAIL_WITH_0X003A,
+        verificationBytes: Array.from(verificationBytes),
+      },
+    ]);
+  });
+
+  it("Phase LP (spec §2.3): when 0x003A never arrives, the drain waits out ONE more sub-window past the hash, then emits the observations WITHOUT the four logbook fields and records summary-1-missing — never a 0, never a second wait", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(200);
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    g.clock.advance(300);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 200));
+    expect(g.timer.pending()?.ms).toBe(200);
+    const verificationBytes = Uint8Array.from([
+      0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
+    ]);
+    g.clock.advance(38);
+    g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
+    // Split + summary + hash in hand, 0x003A not — ONE more sub-window,
+    // re-armed to the same 200 ms slot, not a drain.
+    expect(g.timer.pending()?.ms).toBe(200);
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toHaveLength(0);
+    g.clock.advance(200);
+    const armedBefore = g.timer.calls.length;
+    g.timer.pending()!.fire();
+    // NEVER a second wait: the fired deadline armed nothing new.
+    expect(g.timer.calls).toHaveLength(armedBefore);
+    const observations = g.events.filter(
+      (e) => e.kind === "summary-observations",
+    );
+    // The nine 0x0039 fields and the hash, and NOT the four 0x003A keys —
+    // absent, not `undefined`-valued and never 0.
+    expect(observations).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 60, workDistanceMeters: 200 },
         detail: FULL_SUMMARY,
         verificationBytes: Array.from(verificationBytes),
       },
     ]);
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-1-missing"),
+    ).toHaveLength(1);
+  });
+
+  it("Phase LP (review M6): an 0x003A whose Log Entry stamp differs from the held 0x0039's is another piece's frame — dropped with summary-1-mismatch, the observations carry the nine 0x0039 fields only", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(200);
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    g.clock.advance(300);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 200));
+    g.transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      EXIT7_0X003A_OTHER_PIECE,
+    );
+    const verificationBytes = Uint8Array.from([
+      0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
+    ]);
+    g.clock.advance(38);
+    g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
+    expect(g.timer.pending()).toBeNull();
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 60, workDistanceMeters: 200 },
+        detail: FULL_SUMMARY,
+        verificationBytes: Array.from(verificationBytes),
+      },
+    ]);
+    const mismatch = g.log
+      .entries()
+      .filter((e) => e.kind === "summary-1-mismatch");
+    expect(mismatch).toHaveLength(1);
+    expect(mismatch[0]!.detail).toContain("2026-08-24 15:03");
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-1-missing"),
+    ).toHaveLength(0);
+  });
+
+  it("Phase LP (review L4): a short 0x003A is logged as summary-1-short and stores nothing — the observations then read as missing", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(200);
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    g.clock.advance(300);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 200));
+    g.transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      EXIT7_0X003A_BURST.subarray(0, 18),
+    );
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-1-short"),
+    ).toHaveLength(1);
+    g.clock.advance(38);
+    g.transport.notify(
+      LOGGED_WORKOUT_UUID,
+      Uint8Array.from([0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b]),
+    );
+    g.clock.advance(200);
+    g.timer.pending()!.fire();
+    const observations = g.events.filter(
+      (e) => e.kind === "summary-observations",
+    );
+    expect(observations).toHaveLength(1);
+    expect(
+      (observations[0] as { detail: Record<string, unknown> }).detail,
+    ).not.toHaveProperty("totalCalories");
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-1-missing"),
+    ).toHaveLength(1);
+  });
+
+  it("Phase LP (spec §2.3): 0x003A landing AFTER the hash, inside that one sub-window, drains immediately with the four logbook fields — its arrival is a maybeReconcileImmediately call site like the hash's", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(200);
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    g.clock.advance(300);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 200));
+    const verificationBytes = Uint8Array.from([
+      0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
+    ]);
+    g.clock.advance(38);
+    g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
+    expect(g.timer.pending()?.ms).toBe(200);
+    g.clock.advance(5);
+    g.transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      EXIT7_0X003A_BURST,
+    );
+    expect(g.timer.pending()).toBeNull();
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 60, workDistanceMeters: 200 },
+        detail: FULL_DETAIL_WITH_0X003A,
+        verificationBytes: Array.from(verificationBytes),
+      },
+    ]);
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-1-missing"),
+    ).toHaveLength(0);
   });
 
   it("(a2) PRECEDENCE, THE HARD ORDER: the summary arrives FIRST and a split still beats it — held evidence is discarded unread, never filed ahead of the real thing", async () => {
@@ -10411,6 +10606,13 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
     ]);
     g.clock.advance(38);
+    // Phase LP: 0x003A lands ~37 ms BEFORE the hash on every committed
+    // capture (notes §24 item 1) — the burst's real order, so the drain
+    // below finds it already stashed and takes no extra sub-window.
+    g.transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      EXIT7_0X003A_BURST,
+    );
     g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
     expect(g.timer.pending()).toBeNull();
 
@@ -10438,7 +10640,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 999, workDistanceMeters: 9999 },
-        detail: FULL_SUMMARY,
+        detail: FULL_DETAIL_WITH_0X003A,
         verificationBytes: Array.from(verificationBytes),
       },
     ]);
@@ -11480,6 +11682,13 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     const verificationBytes = Uint8Array.from([
       0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
     ]);
+    // Phase LP: 0x003A lands ~37 ms BEFORE the hash on every committed
+    // capture (notes §24 item 1) — the burst's real order, so the drain
+    // below finds it already stashed and takes no extra sub-window.
+    g.transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      EXIT7_0X003A_BURST,
+    );
     g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
     expect(g.timer.pending()).toBeNull();
 
@@ -11498,7 +11707,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 150, workDistanceMeters: 500 },
-        detail: FULL_SUMMARY,
+        detail: FULL_DETAIL_WITH_0X003A,
         verificationBytes: Array.from(verificationBytes),
       },
     ]);

@@ -4743,6 +4743,13 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         recoveryHeartRateBpm: null,
         workoutType: 1,
         avgPaceSecondsPer500m: 159.8,
+        // Phase LP: LAB_ADDITIONAL_SUMMARY hand-decoded (`88 35 0e 0f 00 4c
+        // 00 01 04 00 56 00 00 00 00 00 00 53 02`): 8-9 `04 00` = 4 cal;
+        // 10-11 `56 00` = 86 W; 12-14 = 0 m; 17-18 `53 02` = 595 cal/hr.
+        totalCalories: 4,
+        avgWatts: 86,
+        avgCalPerHour: 595,
+        totalRestMeters: 0,
       },
       verificationBytes: Array.from(LAB_VERIFICATION),
     });

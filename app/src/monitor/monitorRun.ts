@@ -89,6 +89,20 @@ export type MachineSummaryDetail = {
   workoutType: number;
   recoveryHeartRateBpm: number | null;
   avgPaceSecondsPer500m: number;
+  /** Phase LP (spec 2026-09-06-logbook-parity §2.2): 0x003A's four
+   *  logbook fields, verbatim — Total Calories, Watts, Avg Calories
+   *  (cal/hr) and Total Rest Distance. Additive-optional: absent when the
+   *  additional summary did not arrive inside the summary burst (the
+   *  driver logs `summary-1-missing` and the screen renders a dash), and
+   *  absent on every record persisted before this field existed. `0` is a
+   *  value. `avgWatts`/`avgCalPerHour` are the PM5's OWN and are stored as
+   *  provenance; the screen shows the logbook's derivation
+   *  (`src/session/logbookDerived.ts`). These ride `machine_summary`
+   *  jsonb — no column, no migration. */
+  totalCalories?: number;
+  avgWatts?: number;
+  avgCalPerHour?: number;
+  totalRestMeters?: number;
 };
 
 /** The monitor run: what a connected PM5 is (or just finished) programming

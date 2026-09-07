@@ -108,7 +108,13 @@ import {
   formatLogDate,
   spmIsMeasured,
   type LogStep,
+  monitorStepProgramIndices,
 } from "./logDraft";
+import {
+  logbookCalPerHour,
+  logbookWatts,
+  sessionStrokeRate,
+} from "./logbookDerived";
 import type { SessionRun } from "./run";
 
 /** Per §2A: `AUG 10 · 18:57 · PM5 <id>` / `· TIMER` / `· LOGGED BY HAND`,
@@ -165,6 +171,129 @@ export interface SummaryHeroes {
   timeSeconds?: number;
   distanceMeters?: number;
   totalLine?: string;
+  /** Phase LP (spec 2026-09-06-logbook-parity §3): the six machine tiles
+   *  under the heroes. Present ONLY on a tier-A machine row (the machine's
+   *  own session totals in hand, non-zero); absent on tier B, the timer
+   *  and manual doors, and the zero-totals hardware shape. Inside it,
+   *  each field is `undefined` where the machine did not say — the screen
+   *  renders a dash there, and `0` as 0. */
+  machine?: MachineTier;
+}
+
+/** Phase LP §3 / §3.1 (James, 2026-09-07: "logbook formula"). `avgWatts`
+ *  and `calPerHour` are the LOGBOOK's arithmetic over the stored integers
+ *  (`logbookDerived.ts`), never the PM5's own stored `avgWatts`/
+ *  `avgCalPerHour`, which stay on the record as provenance. `rate` follows
+ *  `sessionStrokeRate`'s finished/terminated rule; `targetRate` is one
+ *  number only when every interval authored the same one. */
+export interface MachineTier {
+  avgWatts?: number;
+  calories?: number;
+  calPerHour?: number;
+  rate?: number;
+  targetRate?: number;
+  drag?: number;
+  /** 0x0039's average heart rate (`summaryDetail.avgHeartRateBpm`);
+   *  `undefined` when no belt was worn (the wire's null) or on a row
+   *  without a summary. James, 2026-09-07 (M3): the REST tile is DROPPED —
+   *  it repeated the total line's rest metres from a second source — and
+   *  AVG HR takes its cell; the PM5's rest total stays stored for PR 2. */
+  avgHr?: number;
+}
+
+/** Phase LP §3: one MACHINE SUMMARY row. `index` is the INTERVALS table's
+ *  own 1-based numbering (position in the step list), so the two tables
+ *  name the same interval by the same number. `hr` is the WORK heart rate
+ *  (`avgHr`); `null` = a belt that reported nothing, `undefined` = no
+ *  reading at all — both render as a dash. `watts`/`calPerHour` are the
+ *  LOGBOOK's arithmetic off the step's own seconds/metres/calories
+ *  (§3.1); `calories`/`drag`/`restMeters` are the machine's own. */
+export interface MachineSplitRow {
+  index: number;
+  hr?: number | null;
+  watts?: number;
+  calories?: number;
+  calPerHour?: number;
+  drag?: number;
+  restMeters?: number;
+}
+
+/** The strip's rows from a step list (live door AND stored row — a
+ *  `StoredLogStep` is `LogStep`'s structural mirror). Manual/stopwatch
+ *  steps are SKIPPED, not dashed: the strip is the machine's account, and a
+ *  step the machine never measured has no row in it. `LogStep` carries no
+ *  per-step rest metres (the session's rest lives on the row), so
+ *  `restMeters` is filled only by `machineSplitRowsFromRun` below, from the
+ *  live run's own `IntervalActual.restDistanceMeters`; a stored row's REST
+ *  column reads a dash — recorded in `docs/design/DEVIATIONS.md`. */
+export function machineSplitRows(
+  steps: readonly Pick<
+    LogStep,
+    | "actualSource"
+    | "actualSeconds"
+    | "actualMeters"
+    | "avgHr"
+    | "machineCalories"
+    | "machineDragFactor"
+  >[],
+): MachineSplitRow[] {
+  const out: MachineSplitRow[] = [];
+  steps.forEach((s, i) => {
+    if (s.actualSource !== "pm5") return;
+    const seconds = s.actualSeconds;
+    const meters = s.actualMeters;
+    out.push({
+      index: i + 1,
+      hr: s.avgHr,
+      watts:
+        seconds !== undefined && meters !== undefined
+          ? logbookWatts(seconds, meters)
+          : undefined,
+      calories: s.machineCalories,
+      calPerHour:
+        s.machineCalories !== undefined && seconds !== undefined
+          ? logbookCalPerHour(s.machineCalories, seconds)
+          : undefined,
+      drag: s.machineDragFactor,
+      restMeters: undefined,
+    });
+  });
+  return out;
+}
+
+/** The live door's rows: `machineSplitRows` over the run's own built
+ *  steps, plus each interval's rest metres off its actual (0x0037's own
+ *  Interval Rest Distance, which the step list does not carry). A Just Row
+ *  (no intervals, a seed with no steps) builds no steps and gets no strip.
+ *  `buildMonitorLogSteps`'s seed-mismatch throw is not caught here: the
+ *  caller (`buildMonitorModel`) has already built the same steps for the
+ *  INTERVALS rows, so a run that reaches this line has a matching seed. */
+export function machineSplitRowsFromRun(run: MonitorRun): MachineSplitRow[] {
+  const steps = buildMonitorLogSteps(run);
+  // The step's PROGRAM index, not its output position: the two differ by
+  // one after a legacy warm-up seed step (review L5; `logDraft.ts`'s own
+  // `monitorStepProgramIndices`).
+  const programIndices = monitorStepProgramIndices(steps) ?? [];
+  return machineSplitRows(steps).map((row) => {
+    const programIndex = programIndices[row.index - 1];
+    const actual = run.actuals.find((a) => a.index === programIndex);
+    return actual?.restDistanceMeters === undefined
+      ? row
+      : { ...row, restMeters: actual.restDistanceMeters };
+  });
+}
+
+/** The session's TARGET stroke rate — a single number only when every
+ *  interval names the same one (spec §3.2); otherwise `undefined`, and the
+ *  per-interval targets stay where they already are, in the INTERVALS
+ *  table. An interval with no target counts as disagreement. */
+export function agreedTargetSpm(
+  targets: readonly (number | null | undefined)[],
+): number | undefined {
+  if (targets.length === 0) return undefined;
+  const first = targets[0];
+  if (typeof first !== "number") return undefined;
+  return targets.every((t) => t === first) ? first : undefined;
 }
 
 /** A judged row's deviation vs. a baseline split — the shape itself stays
@@ -326,6 +455,12 @@ export interface SummaryModel {
   meta: SummaryMeta;
   heroes: SummaryHeroes;
   rows: SummaryRow[];
+  /** Phase LP §3: the MACHINE SUMMARY strip's rows — one per PM5-sourced
+   *  step, empty (and the strip absent) on the timer and manual doors and
+   *  on a Just Row. Optional so a model literal built elsewhere (tests,
+   *  fixtures) reads as "no strip", the same absent-means-none idiom as
+   *  `caption`. */
+  machineRows?: MachineSplitRow[];
   /** The one centred line under the interval table. TWO producers now,
    *  resolved by PRECEDENCE — never stacked, and never more than one
    *  element (door spec 2026-09-02 §6, Gate 0-B decision (c), APPROVED):
@@ -1083,6 +1218,34 @@ function monitorAvgSplit(run: MonitorRun): WorkingAverage {
  *  the rest that hero already counts once. Only tier A and non-legacy
  *  tier B rows — the two shapes whose heroes are genuinely work-only —
  *  get a total line at all. */
+/** Phase LP §3: the machine tier off a tier-A run. Called only when the
+ *  machine's own totals are in hand and non-zero (`monitorHeroes`'s own
+ *  `hasTotals` gate), so watts always derive; everything from 0x003A is
+ *  `undefined` on a record that never stored it (pre-LP rows, a burst
+ *  that lost 0x003A) and renders as a dash. */
+function machineTierFromRun(run: MonitorRun): MachineTier {
+  const t = run.summaryTotals!.workElapsedSeconds;
+  const d = run.summaryTotals!.workDistanceMeters;
+  const detail = run.summaryDetail;
+  const calories = detail?.totalCalories;
+  return {
+    avgWatts: logbookWatts(t, d),
+    calories,
+    calPerHour:
+      calories === undefined ? undefined : logbookCalPerHour(calories, t),
+    rate: sessionStrokeRate({
+      finished: run.endedBy === "finished",
+      avgStrokeRate: detail?.avgStrokeRate,
+      splits: run.actuals
+        .filter((a) => a.index !== null && a.avgSpm !== null)
+        .map((a) => ({ seconds: a.elapsedSeconds, spm: a.avgSpm as number })),
+    }),
+    targetRate: agreedTargetSpm(run.program.intervals.map((i) => i.displaySpm)),
+    drag: detail?.dragFactorAverage,
+    avgHr: detail?.avgHeartRateBpm ?? undefined,
+  };
+}
+
 function monitorHeroes(run: MonitorRun): SummaryHeroes {
   if (run.summaryTotals !== undefined) {
     const distanceMeters = Math.round(run.summaryTotals.workDistanceMeters);
@@ -1100,6 +1263,10 @@ function monitorHeroes(run: MonitorRun): SummaryHeroes {
       avgSplit: hasAvgSplit ? fmtSplit(avgSplitSeconds) : undefined,
       avgSplitSeconds: hasAvgSplit ? avgSplitSeconds : undefined,
       totalLine: buildMonitorTotalLine(run, timeSeconds),
+      // Phase LP §3: the machine tier rides tier A only, and only when the
+      // machine's totals are real (the zero-totals hardware shape keeps
+      // its "every hero absent" contract — nothing fabricated from 0/0).
+      ...(hasTotals ? { machine: machineTierFromRun(run) } : {}),
     };
   }
   const avgSplit = monitorAvgSplit(run);
@@ -1212,6 +1379,8 @@ function buildMonitorModel(run: MonitorRun): SummaryModel {
     rows,
     caption: partialCaption(rows, run.endedBy) ?? targetsOnlyCaption(rows),
     ...(suppressCompletionEyebrow ? { suppressCompletionEyebrow: true } : {}),
+    // Phase LP §3: the strip's rows ride the model; empty on a Just Row.
+    machineRows: machineSplitRowsFromRun(run),
   };
 }
 
