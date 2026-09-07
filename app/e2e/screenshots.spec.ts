@@ -1945,6 +1945,23 @@ test("library", async ({ page }) => {
   await cleanupByTitle(page, customTitle);
 });
 
+// Phase RW PR A: the same screen with NO baseline, the state every new
+// account lands on: exact minutes on time rows, ~ on distance rows, the
+// caption under the count. Gate 0's approved render is the reference
+// (docs/design/rw-gate0/library.png).
+test("library-no-baseline", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-library-no-baseline@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/library");
+  await page.locator(".library-caption").waitFor();
+  await page.locator(".workout-row").first().waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-no-baseline.png"),
+  });
+});
+
 // Phase 6E fix round: "library.png" above deliberately captures the
 // Phase 5H CUSTOM-filter single-row state, so it never shows what the
 // screen actually looks like for the vast majority of visits — the

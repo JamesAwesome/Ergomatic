@@ -790,6 +790,16 @@ button:disabled {
   color: var(--ink-3);
 }
 
+/* Phase RW PR A: one caption under the count while no baseline is set,
+   explaining the ~ on distance rows. --ink-3 on --page: 6.69:1 (Gate 0,
+   docs/design/rw-gate0/contrast.json). */
+.library-caption {
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 /* At rest (no tokens), the count shares the toggle's own row and reads
    right-aligned opposite it — the mockup's "1 · AT REST" state. Once
    filtered, the count moves to `.library-count-row` instead (left-aligned,

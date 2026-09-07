@@ -630,3 +630,44 @@ test.describe("Phase SF PR3: search by name", () => {
     await expect(page.locator(".workout-row")).toHaveCount(total);
   });
 });
+
+// Phase RW PR A (spec §4): a rower with no baseline still gets a duration
+// on every row: exact for time workouts, an assumed-pace estimate marked
+// with a tilde for distance ones, and one caption under the count that
+// says so. Gate 0's approved render is docs/design/rw-gate0/library.png.
+test.describe("no baseline: durations still show (Phase RW PR A)", () => {
+  test("distance rows read ~N′, time rows read N′, one caption explains the tilde, and no dash survives", async ({
+    page,
+  }) => {
+    // A fresh backdoor account has no baseline, and this describe never
+    // sets one.
+    await signInViaBackdoor(page, {
+      email: "library-no-baseline@e2e.test",
+      name: "No Baseline Tester",
+    });
+    await page.goto("/library");
+    await waitForLibraryLoaded(page);
+    await expect(
+      page.getByText("~ times are estimates until you set a baseline"),
+    ).toBeVisible();
+
+    // Laminar is 1000-1000-1000 m at 6K+12 (an assumed estimate); Sea Fret
+    // is 2 × 4:00 (exact). Both are seeded globals on every account.
+    const search = page.getByPlaceholder("SEARCH BY NAME");
+    await search.fill("Laminar");
+    const laminar = page.locator(".workout-row").filter({ hasText: "Laminar" });
+    await expect(laminar.locator(".workout-row-duration")).toHaveText(
+      /^~\d+′$/,
+    );
+    await search.fill("Sea Fret");
+    const seaFret = page
+      .locator(".workout-row")
+      .filter({ hasText: "Sea Fret" });
+    await expect(seaFret.locator(".workout-row-duration")).toHaveText(/^\d+′$/);
+    await search.fill("");
+    await waitForLibraryLoaded(page);
+    await expect(
+      page.locator(".workout-row-duration", { hasText: "—" }),
+    ).toHaveCount(0);
+  });
+});
