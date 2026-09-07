@@ -2476,6 +2476,41 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(posted).not.toHaveProperty("verification_code");
   });
 
+  // RF24: the STORE writes the trace and `buildC2Payload` reads it, and the
+  // route between them has to carry it. Nothing else compares the two, so
+  // this starts at `logs.create` rather than at a hand-built mapping row —
+  // dropping `series` in `toMappingRow` typechecks fine and silently posts a
+  // row with no heart rate, which is the gap this whole change closes.
+  it("Phase LP: a stored row's trace reaches Concept2 as heart_rate.average", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 91010,
+      verified: false,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      // DECISECONDS, uneven gaps inside the cap: 133 weighted, 120 not.
+      series: {
+        samples: [
+          { t: 0, d: 0, p: 1250, spm: 24, hr: 100 },
+          { t: 10, d: 4, p: 1250, spm: 24, hr: 140 },
+          { t: 60, d: 84, p: 1250, spm: 24, hr: 140 },
+        ],
+      },
+    });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    const posted = vi.mocked(client.postResult).mock.calls[0]![1];
+    expect(posted.heart_rate).toStrictEqual({ average: 133 });
+  });
+
   it("Phase LP: every accepted send logs one c2_send event carrying the 201 body's verified flag and which fallback fired", async () => {
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());

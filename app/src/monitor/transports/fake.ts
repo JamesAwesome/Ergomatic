@@ -882,12 +882,23 @@ const DEFAULT_SUMMARY_AVERAGES: Omit<
   "elapsedSeconds" | "meters"
 > = {
   avgStrokeRate: 24,
-  endingHeartRateBpm: 168,
-  avgHeartRateBpm: 152,
-  minHeartRateBpm: 96,
-  maxHeartRateBpm: 175,
+  // NULL, because the hardware has never sent anything else. Measured
+  // 2026-09-07 over the whole committed corpus: 11 of 20 captures carry a
+  // 0x0039 end-of-workout summary and in ALL ELEVEN every one of these four
+  // fields is a 0/255 sentinel — including three walks whose 0x0038 frames
+  // carry real per-interval heart rate at the same moment, so it is not a
+  // belt that was off. The fake used to send 168/152/96/175 here, a world no
+  // monitor has produced, and that fiction is why AVG HR reading `—` on
+  // every saved row went unnoticed for a month: every gate we own was fed a
+  // number the machine does not send (RF3).
+  endingHeartRateBpm: null,
+  avgHeartRateBpm: null,
+  minHeartRateBpm: null,
+  maxHeartRateBpm: null,
   dragFactorAverage: 128,
-  recoveryHeartRateBpm: 120,
+  // The one heart-rate field on this frame with a DOCUMENTED sentinel, and
+  // the corpus agrees: never present.
+  recoveryHeartRateBpm: null,
   workoutType: 8,
   avgPaceSecondsPer500m: 125,
 };

@@ -1419,7 +1419,8 @@ describe("createFakeTransport: disconnect / reconnect", () => {
       // consumer that drops them can be proven to have dropped them
       // (`deliverSummary`'s own doc comment).
       avgStrokeRate: 24,
-      avgHeartRateBpm: 152,
+      // null, as the hardware sends: see DEFAULT_SUMMARY_AVERAGES.
+      avgHeartRateBpm: null,
     });
 
     fake.injectDisconnect();

@@ -12,6 +12,7 @@ import type { LogSource } from "../../domain/types.js";
 import type { LogStep } from "../stores/logs.js";
 import { buildC2Intervals } from "./intervals.js";
 import { c2Tenths, sendableInt } from "./tenths.js";
+import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
 
 // Re-exported so `mapping.test.ts` keeps one name (`scripts/c2-crossconnect.ts`
 // carries its own copy and imports nothing from here); the definition moved
@@ -54,6 +55,13 @@ export interface SessionLogRow {
   machineWorkMeters: number | null;
   machineWorkSeconds: number | null;
   machineSummary: Record<string, unknown> | null;
+  /** The trace, needed for the ONE field the monitor never
+   *  fills — see the heart-rate block in `buildC2Payload`. Structurally the
+   *  store's `LogSeries`, typed loosely here for the same reason
+   *  `machineSummary` is: `routes/data.ts` owns its bands. */
+  series?: {
+    samples?: readonly { t: number; hr?: number; r?: true }[];
+  } | null;
   source: LogSource;
   endedBy: string | null;
   /** Phase LP PR 2 (spec §5): the stored steps, for `workout.intervals[]`.
@@ -596,6 +604,31 @@ export function buildC2Payload(
   ] as const) {
     const bpm = sendableInt(row.machineSummary?.[field], HR_MIN, HR_MAX);
     if (bpm !== undefined) heartRate[key] = bpm;
+  }
+  // The monitor does not fill `average` on any capture we hold (see
+  // `domain/monitor/derivedHeartRate.ts` for how narrow that evidence
+  // really is: two belted recordings from one walk), so
+  // without this the logbook row shows no heart rate at all, exactly as our
+  // own tile did. Derived from the trace instead, the same
+  // function and the same working-strokes-only rule the tile uses, so the
+  // number we send is the number the rower sees (James, 2026-09-07).
+  //
+  // WHAT CONCEPT2 MEANS BY `average` IS UNDEFINED. Their results API
+  // documents `heart_rate` as an "object of strings containing the following
+  // optional values: average, min, max, ending, recovery" and says nothing
+  // more — no unit beyond an integer, no derivation, no requirement. So this
+  // contradicts no stated contract. SECONDARY and unread (c2forum blocks
+  // automated fetching, so this is a search summary, not a quote): ErgData is
+  // reported to upload only each split's ENDING heart rate and let the
+  // logbook average those. If true it would explain why the monitor's own
+  // per-interval field measured 3.5-15.2 bpm above the trace, weighted by
+  // interval duration, on every capture —
+  // and it means our figure is better data than the logbook usually holds,
+  // at the cost of not matching an ErgData-uploaded row.
+  if (heartRate.average === undefined) {
+    const derived = deriveAverageHeartRate(row.series?.samples ?? []);
+    const sendable = sendableInt(derived ?? undefined, HR_MIN, HR_MAX);
+    if (sendable !== undefined) heartRate.average = sendable;
   }
   if (Object.keys(heartRate).length > 0) post.heart_rate = heartRate;
 

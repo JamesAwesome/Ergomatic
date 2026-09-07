@@ -115,6 +115,7 @@ import {
   logbookWatts,
   sessionStrokeRate,
 } from "../session/logbookDerived";
+import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
 
 // Re-typed rather than imported from `server/stores/logs.ts` (this
 // repo's standing rule: client code never imports server/'s module
@@ -793,7 +794,18 @@ function storedMachineTier(
     }),
     targetRate: agreedTargetSpm(row.steps.map((s) => s.spm)),
     drag: ms?.dragFactorAverage,
-    avgHr: ms?.avgHeartRateBpm ?? undefined,
+    // The monitor's own summary heart rate FIRST, and no capture we hold
+    // carries one — see `domain/monitor/derivedHeartRate.ts` for how narrow
+    // that evidence really is. It is why this tile has read `—` on every row
+    // anyone has saved. The trace we
+    // already store does have the data, so derive from it rather than show a
+    // dash beside a table full of real heart rates (James, 2026-09-07,
+    // option A: working strokes only). `?? undefined` keeps a genuine `null`
+    // and a genuine `0` behaving as they always did.
+    avgHr:
+      ms?.avgHeartRateBpm ??
+      deriveAverageHeartRate(row.series?.samples ?? []) ??
+      undefined,
   };
 }
 

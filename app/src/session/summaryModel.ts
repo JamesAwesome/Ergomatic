@@ -115,6 +115,7 @@ import {
   sessionStrokeRate,
 } from "./logbookDerived";
 import type { SessionRun } from "./run";
+import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
 
 /** Per §2A: `AUG 10 · 18:57 · PM5 <id>` / `· TIMER` / `· LOGGED BY HAND`,
  *  plus Phase LM Task 4's fourth answer `· NO MONITOR READING`
@@ -1233,7 +1234,14 @@ function machineTierFromRun(run: MonitorRun): MachineTier {
     }),
     targetRate: agreedTargetSpm(run.program.intervals.map((i) => i.displaySpm)),
     drag: detail?.dragFactorAverage,
-    avgHr: detail?.avgHeartRateBpm ?? undefined,
+    // Same derivation as the saved-row screen, from the same trace, so the
+    // number does not change when the row is reopened later. See
+    // `domain/monitor/derivedHeartRate.ts` for why the monitor's own field
+    // is empty on every capture we hold.
+    avgHr:
+      detail?.avgHeartRateBpm ??
+      deriveAverageHeartRate(run.series?.samples ?? []) ??
+      undefined,
   };
 }
 

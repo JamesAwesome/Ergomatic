@@ -969,3 +969,84 @@ describe("buildC2Payload agrees with the eligibility predicate", () => {
     },
   );
 });
+
+// Phase LP: the derived heart-rate average on the wire.
+describe("buildC2Payload — heart_rate.average is derived when the monitor sends none", () => {
+  // Uneven gaps on purpose, both inside the six-second dropout cap: one
+  // second at 100 then five at 140 is 133 time-weighted and 120 if each
+  // sample counted once, so this pins the weighting, not just the plumbing.
+  // Deciseconds, the unit `Sample.t` actually carries.
+  const trace = {
+    samples: [
+      { t: 0, hr: 100 },
+      { t: 10, hr: 140 },
+      { t: 60, hr: 140 },
+    ],
+  };
+
+  it("derives it from the trace, the same figure and rule the tile shows", () => {
+    const post = buildC2Payload(
+      { ...FINISHED_ROW, series: trace },
+      LINK,
+      "UTC",
+    );
+    expect(post.heart_rate).toStrictEqual({ average: 133 });
+  });
+
+  it("EXCLUDES resting strokes, so the wire agrees with the screen", () => {
+    const resting = {
+      samples: [
+        { t: 0, hr: 100 },
+        { t: 10, hr: 140, r: true as const },
+        { t: 60, hr: 140 },
+      ],
+    };
+    // With the middle stretch resting, only the opening second counts.
+    expect(
+      (
+        buildC2Payload({ ...FINISHED_ROW, series: resting }, LINK, "UTC")
+          .heart_rate as Record<string, number>
+      ).average,
+    ).toBe(100);
+  });
+
+  it("never overrides the monitor's OWN average when it sends one", () => {
+    const post = buildC2Payload(
+      {
+        ...FINISHED_ROW,
+        series: trace,
+        machineSummary: { avgStrokeRate: 24, avgHeartRateBpm: 151 },
+      },
+      LINK,
+      "UTC",
+    );
+    // 151, not the trace's 138: the machine's own reading wins wherever it
+    // exists, which is what keeps this a FALLBACK rather than a replacement.
+    expect(post.heart_rate).toStrictEqual({ average: 151 });
+  });
+
+  it("sends no heart rate at all when there is nothing to send", () => {
+    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC")).not.toHaveProperty(
+      "heart_rate",
+    );
+    expect(
+      buildC2Payload({ ...FINISHED_ROW, series: { samples: [] } }, LINK, "UTC"),
+    ).not.toHaveProperty("heart_rate");
+    // Out of band low: a derived 19 is not a heart rate we will post.
+    expect(
+      buildC2Payload(
+        {
+          ...FINISHED_ROW,
+          series: {
+            samples: [
+              { t: 0, hr: 19 },
+              { t: 10, hr: 19 },
+            ],
+          },
+        },
+        LINK,
+        "UTC",
+      ),
+    ).not.toHaveProperty("heart_rate");
+  });
+});
