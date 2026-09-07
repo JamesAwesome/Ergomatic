@@ -709,9 +709,11 @@ test.describe("no baseline: rowing to a word (Phase RW PR B)", () => {
     ).toHaveCount(0);
 
     // Log it after on the same workout opens the manual form, not a stub.
+    // (The Library remembers the search, so the count reads "1 OF N SHOWN"
+    // here; wait for the row, not the plain count.)
     await page.goto("/library");
-    await waitForLibraryLoaded(page);
     await page.getByPlaceholder("SEARCH BY NAME").fill("Laminar");
+    await page.locator(".workout-row").first().waitFor();
     await page.locator(".workout-row").filter({ hasText: "Laminar" }).click();
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
