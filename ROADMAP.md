@@ -587,8 +587,9 @@ Library, Today, detail and Builder, and not on a time workout's; (4) the
 skip line writes the flag, the Today row clears it, and the baselines reset
 clears it server-side (integration test); (5) `grep -rn "EASY\|Easy\b"
 app/src app/domain app/e2e` returns only the bulk-grammar token `easy` in
-`domain/bulk.ts` and its tests, with any other survivor named and ruled at
-close.
+`domain/bulk.ts` and its tests and the whole-workout effort word
+`EASY BREATH` in `builderState.ts` (a different axis, expected), with any
+other survivor named and ruled at close.
 
 ## Wave A — The front door
 

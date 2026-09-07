@@ -8,8 +8,11 @@ consumers that DO branch, C2 the door copy, C3 the caption's number, C4 the
 three-PR cut, C5 the walk-skip evidence, C6 checkable exits, C7 the
 migration index, C8 the "why now"). **Antagonist anchor pass RUN
 2026-09-06 (5 blocking, 7 substantive, 6 held), all folded; the held
-claims are §9, the phase's vetted ground.** `/harden` lens 2 (prescribed
-content) owed; Gate 0 before any implementation task.
+claims are §9, the phase's vetted ground. `/harden` lens 2 RUN
+2026-09-06 (7 findings: a fourth log consumer, an undefined identifier in
+§1.3, a stale 2:30 literal, two untested seams, `off` semantics, an exit
+grep exception), all folded; the loop is closed.** Gate 0 before any
+implementation task.
 **ROADMAP:** the "Row without a baseline set" register item (James,
 2026-08-23) becomes this phase; the section is added in the same commit as
 this spec (recurring failure 17).
@@ -171,6 +174,18 @@ three were verified to need none.
   either existing branch. **The stored log shape is unchanged**: a
   `LogStep` is still `{label, no targetSplit}`; only which label is
   composed changes.
+- **The manual door's log builder, `buildManualLogSteps` in the same
+  file** (lens 2, F1). It labels every step through `refPaceLabel(…,
+  step.ref)` unconditionally and then calls `resolveSplit(baselines!,
+  step.ref)` for a split ref, under a comment saying the caller "has
+  already confirmed `baselines` is non-null". Loosening the Log-it-after
+  gates (§2.1) makes that comment false: the door would throw, or store
+  `5:00 @ 2K +2`. It branches on "split ref and null baselines" before
+  `resolveSplit` and composes the word form, the same decision as the
+  other two paths; no `targetSplit`, no `actualSplit`. (The spec's
+  earlier citation of a "bare `baselines === null` gate" in
+  `LogSession.tsx` was stale: that site already uses the compound
+  `needsBaselines` form; the KNOWN GAP it described is historical.)
 - **`domain/display/stepDetail.ts`.** `pieceList(steps, baselines:
   Baselines)` takes concrete baselines and drives Today's suggestion card;
   `Today.tsx` carries two `baselines!` assertions on that path. It becomes
@@ -182,7 +197,14 @@ three were verified to need none.
   ladder from six rows to four and removed the pyramid-peak tint from
   every workout (anchor pass S1, measured on "Tehuantepecer", "Humboldt
   Current", "Antarctic Drift"). Rows and peak stay identical to the
-  baseline view; only the split text becomes the word.
+  baseline view; only the split text becomes the word. **`off` is the
+  RAW `ref.off`, exactly as the baseline branch stores it, never the
+  2k-equivalent** (lens 2, F6): converting a 6k ref's offset by +7 would
+  make `peakIndex` disagree between the null and baseline renders of the
+  same workout, and on "Squall Line" (AT, `6k+2` sharpening to `6k−4`,
+  offsets `[2, 0, −2, −4]`) it moves the peak from index 1 to index 3.
+  The 2k-equivalent is what `intensityWord` computes internally for the
+  word and nothing else.
 - **The Builder, `src/builder/Builder.tsx` and `builderState.ts`.** The
   split slot returns `null` with no baselines and the duration estimate
   returns `null`. The slot shows the word; the estimate prices through §4.
@@ -222,8 +244,9 @@ needsBaselines() first" comments are deleted.
 One exported constant beside the ladder:
 
 ```ts
-export const ASSUMED_BASELINES: Baselines = mostCommonEstimate(ESTIMATE_TABLE);
-// 2:25 / 2:32 on today's table (k2 145, k6 152)
+export const ASSUMED_BASELINES: Baselines = MOST_COMMON_ESTIMATE;
+// already exported by domain/estimateBaseline.ts; 2:25 / 2:32 on today's
+// table (k2 145, k6 152)
 ```
 
 The recommend table's MOST COMMON cell (`domain/estimateBaseline.ts`
@@ -240,7 +263,11 @@ pricing distance steps for a duration estimate when baselines are null
 (§4). **It never resolves a target, never reaches the wire, never reaches
 a log.** The anchor pass named the one leak path and the mechanism closes
 it: `estimateMinutes(steps, null)` prices distance phases in its own loop
-via `estimationSplit(ASSUMED_BASELINES, p.ref ?? effortRef)`, and NEVER
+via `estimationSplit(ASSUMED_BASELINES, p.ref ?? { effort:
+paceWordFromLabel(p.label) })` (the fallback is reached only for a true
+`max`/`min` phase, which carries no `ref`; the null-baseline split phase
+always carries one; lens 2's paste-test caught the first draft's undefined
+`effortRef` here), and NEVER
 calls `phases(steps, ASSUMED_BASELINES)`, which would mint `targetKind:
 "split"` phases carrying the assumed number as a real `targetSplit`, one
 refactor away from `pieceList` and the compiler (§9 item 8).
@@ -369,9 +396,13 @@ line, "Workouts with pace targets lose them and can't be started until
 you set a baseline again." Its replacement is Gate 0 copy. **Gate 0 also
 notes the collision:** `HARD` was a DIFFICULTY word until Phase DE removed
 that axis (the v0.39.0 note announces it) and now returns as an intensity
-word meaning something else. The News article `baselines` gains one
-sentence: words stand in for targets until a baseline exists, and what
-the four words mean. No new article.
+word meaning something else. **The exit grep's expected survivor** (lens
+2, F7): `builderState.ts`'s `EFFORT_WORDS` list carries `EASY BREATH`,
+the 1-to-5 whole-workout effort scale's first word, a different axis
+from the work target; it stays and is named in the exit criterion so it
+does not force a close-time ruling. The News article `baselines` gains
+one sentence: words stand in for targets until a baseline exists, and
+what the four words mean. No new article.
 
 ## 3. Skip
 
@@ -555,19 +586,33 @@ missing column.
   and a saved log whose step label is the word. Starts before the producer,
   asserts after the reader.
 - **Durations:** `estimateMinutes` with null baselines on a time-only
-  workout returns `assumed: false` and the exact minutes; on a distance
-  workout returns `assumed: true` and the minutes at 2:30/500m; mutation:
-  price at `k2Seconds` instead of the assumed pair and the literal minutes
-  must change.
+  workout returns `assumed: false` and the exact minutes; on a 2000 m
+  `2k+0` step returns `assumed: true` and 9.67 minutes (2000/500 × 145 s),
+  on a 2000 m `min` step 11.47 (2000/500 × 172 s), both pinned as literals,
+  never derived from the constant; mutation: price at the slowest cell
+  (150) instead of the mode and both literals must change.
 - **Log seed (C1, B4):** a `2k+2` step under null baselines seeds a
   `LogStep` labelled `5:00 @ MODERATE` at BOTH doors (matched draft and
   fallback), never `MIN` and never `2k +2`. Mutations: restore the
   `targetKind`-first ordering (fails on the literal `MIN`); restore the
   `draftStep.ref` path (fails on the literal `2k`). A `min` step still
   seeds its chip word.
-- **Rows and peak (S1):** `pieceList("Tehuantepecer", null)` yields the
-  same row count and the same `peakIndex` as with baselines; mutation:
-  null `off` in the null branch and the count must drop.
+- **Manual door (F1):** `buildManualLogSteps` on a `2k+2` step with null
+  baselines returns `5:00 @ MODERATE`, no `targetSplit`, no
+  `actualSplit`, no throw; the e2e no-baseline walk adds a "Log it after"
+  leg beside the Timer leg.
+- **Rows and peak (S1, F6):** `pieceList("Tehuantepecer", null)` yields
+  the same row count and `peakIndex` as with baselines (all 2k-based, so
+  raw and 2k-equivalent agree); AND `pieceList("Squall Line", null)`
+  yields `peakIndex` 1, the same as with baselines; mutation: convert
+  `off` to 2k-equivalent in the null branch and the second must fail with
+  3.
+- **Reset seam (F4):** a client test starting from a skipped, null-
+  baseline account, through the reset row's DELETE, to a re-mounted Today
+  showing the doors card and not the suggestion.
+- **Library row (F5):** a render test asserting a null-baseline distance
+  workout's row shows `~` and a time workout's does not; Library joins
+  the `pnpm screenshots` set for this phase.
 - **Census, all four plus the workout level:** the test pins 23 / 3 / 11
   / 4 AND the 76 collapsed and 9 badge-contradicting workouts by title,
   so a seed edit that moves a word is seen.
