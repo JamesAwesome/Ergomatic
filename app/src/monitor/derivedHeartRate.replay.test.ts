@@ -105,6 +105,50 @@ describe("deriveAverageHeartRate, against real captures", () => {
     );
   });
 
+  it("pins the dropout cap at SIX seconds, in the deciseconds t carries", () => {
+    // The one constant a weighted mean cannot reveal: the four capture
+    // literals above are scale-invariant, so they held while the cap was ten
+    // times too large. INDEPENDENT literals, not the module's constant: a gap
+    // of 59 deciseconds is a reading that stood for 5.9 s and counts; 60 is a
+    // dropout and does not. Widening the cap to 600 (the shipped bug) makes
+    // the second case return 100 instead of null.
+    expect(
+      deriveAverageHeartRate([
+        { t: 0, hr: 100 },
+        { t: 59, hr: 180 },
+      ]),
+    ).toBe(100);
+    expect(
+      deriveAverageHeartRate([
+        { t: 0, hr: 100 },
+        { t: 60, hr: 180 },
+      ]),
+    ).toBeNull();
+  });
+
+  it("refuses a reading outside the band the wire would refuse", () => {
+    // Banded here so the tile cannot show a figure the upload rejects: a
+    // live MonitorRun trace has not been through the server's validator.
+    expect(
+      deriveAverageHeartRate([
+        { t: 0, hr: 19 },
+        { t: 10, hr: 19 },
+      ]),
+    ).toBeNull();
+    expect(
+      deriveAverageHeartRate([
+        { t: 0, hr: 255 },
+        { t: 10, hr: 255 },
+      ]),
+    ).toBeNull();
+    expect(
+      deriveAverageHeartRate([
+        { t: 0, hr: 20 },
+        { t: 10, hr: 20 },
+      ]),
+    ).toBe(20);
+  });
+
   it("returns null rather than a number when nothing usable is there", () => {
     expect(deriveAverageHeartRate([])).toBeNull();
     expect(deriveAverageHeartRate([{ t: 0, hr: 120 }])).toBeNull();
