@@ -156,9 +156,9 @@ three were verified to need none.
   (anchor pass B4): when a matched draft exists, the normal Timer case,
   the label is composed from `draftStep.ref`, the authored split ref, so
   the stored step would read `5:00 @ 2k +2`, a notation the rower never
-  saw and cannot resolve. **Decision (controller, for James's
-  confirmation at Gate 0): the stored label for a split ref rowed with
-  no baseline is the WORD form, `5:00 @ MODERATE`, at both doors**,
+  saw and cannot resolve. **Decision (James, 2026-09-06): the stored
+  label for a split ref rowed with no baseline is the WORD form,
+  `5:00 @ MODERATE`, at both doors**,
   because the log records what the rower was asked to do and that is
   what they read; the ref survives in the workout, not the row. Both
   `logDraft.ts` paths branch on "split ref and null baselines" before
@@ -222,8 +222,9 @@ export const ASSUMED_BASELINES: Baselines = mostCommonEstimate(ESTIMATE_TABLE);
 
 The recommend table's MOST COMMON cell (`domain/estimateBaseline.ts`
 already exports `mostCommonEstimate`, the You editor's own seed family),
-not its slowest. The first draft borrowed the slowest cell with that
-file's "conservative bias" argument; the anchor pass (S2) showed the
+not its slowest (James, 2026-09-06). The first draft borrowed the slowest
+cell with that file's "conservative bias" argument; the anchor pass (S2)
+showed the
 argument points the other way here. The table is slow-biased because a
 too-fast estimate writes TARGETS a rower cannot hold; a DURATION estimate
 has no such asymmetry, and the slowest cell maximises the error for every
@@ -258,8 +259,9 @@ below is the proposal for that gate, not the approved text.
   by design: "Tehuantepecer" reads `2-2-2-2-2-2 @ 2K+3 → −2 · 2′ REST`
   on the Library with or without a baseline. So a no-baseline detail row
   would read `5:00 @ 2k +2 … MODERATE` and be announced "five minutes at
-  two k plus two". Two options, both to be captured for the gate:
-  (a) **keep the notation everywhere** (recommended): the notation is the
+  two k plus two". **James chose (a), 2026-09-06 ("your recommendations
+  are good"); Gate 0 captures it as chosen, with (b) beside it only as
+  the road not taken.** (a) **keep the notation everywhere**: the notation is the
   workout's identity, identical for every rower, and the `baselines`
   article teaches it; the word is the target. One code path, Library and
   detail agree. (b) **drop `@ ref` from the detail left label while
