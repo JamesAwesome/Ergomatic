@@ -8813,3 +8813,42 @@ had passed over the same document without a single duration in it.
   each new anchor before running the probe that depends on it.** RF21's
   DoorsCard case in this same PR was exactly this: the assertion the probe
   existed to bite had never been written, and the probe reported green.
+
+## TRIAD pass, 2026-09-07 (Phase LP, derived AVG HR — PR #345)
+
+- **"Working strokes only, excluding rest by the monitor's own state."** False
+  in production, true in every test. `seriesRecorder.ts` marks a resting sample
+  `r`; `deriveAverageHeartRate` branched on `rest`. Structural typing makes the
+  real `Sample` assignable to the narrowed `HeartRateSample` with the field
+  simply absent, so nothing typechecked red, and the replay test's own
+  extractor synthesised `rest`, so the rest-exclusion mutation bit a key no
+  producer writes. Measured on a production-shaped trace: 96 bpm shipped where
+  150 was approved — James had chosen option A and the app was doing option B.
+  **Technique: run the pure function over an array built the way the PRODUCER
+  builds it, not the way the test builds it.** Corollary: when a domain
+  function declares its own narrow input interface "structurally what X
+  carries", diff that interface against X's real declaration FIELD BY FIELD; a
+  renamed optional is invisible to the compiler in exactly the direction that
+  matters.
+- **A scale-invariant formula hides a scale-dependent constant.**
+  `MAX_GAP_SECONDS = 60` was applied to `t`, which the recorder stores in
+  DECISECONDS. All four capture literals held under either unit because a
+  weighted mean is scale-invariant; the dropout cap is not, and shipped at
+  6.0 s while its name and comment said 60. **Technique: for any test whose
+  expected value would be UNCHANGED by a unit error, list the constants that
+  would not be — those are the untested ones.**
+- **"11 of 20 captures carry a 0x0039 summary and every heart-rate slot is a
+  sentinel."** Literally true, evidentially near-empty. Two of the 11 files are
+  `.gz` duplicates (9 recordings), and 7 of the 9 had no belt paired at all,
+  where an empty summary HR is the expected reading and proves nothing. The
+  real base was TWO recordings from ONE walk. **Technique: for any "N of M
+  captures show X", first count how many of the N were in a STATE where the
+  absence of X is informative — and de-duplicate the file list before quoting
+  M.** Corollary to RF16's date rule: also check for duplicate encodings of one
+  recording.
+- **Attacked and HELD:** Concept2 documents `heart_rate.average` as an optional
+  value with no unit or derivation, so a derived mean contradicts no stated
+  contract; the unread c2forum ErgData claim is correctly labelled SECONDARY
+  and carries no design weight; all three surfaces derive from one function
+  over one trace, so reopening a row cannot change the figure; the four replay
+  literals reproduce under an independent raw-hex decode.

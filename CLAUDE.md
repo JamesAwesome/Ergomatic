@@ -1077,6 +1077,33 @@ often they recur.
     identifiers, comments, wire notes and walk records are not copy and
     keep the name.
 
+33. **A narrowed input interface that renames the producer's field, and a
+    constant whose unit no assertion can reveal (Phase LP, PR #345,
+    2026-09-07).** Two defects in one function, both invisible to the
+    compiler and to five green tests, and both in the number a rower reads.
+    (1) `seriesRecorder.ts` marks a resting sample `r`; the domain function
+    declared its own input interface "structurally what `Sample` carries" and
+    spelled it `rest`. The field is OPTIONAL, so structural typing accepts
+    the real `Sample` with the key simply absent — no error, no warning — and
+    the rest exclusion was dead on every production path while every test,
+    which built `rest` by hand, proved it worked. The app shipped an average
+    James had explicitly not chosen. **When a domain function declares a
+    narrow input interface described as "structurally what X carries", diff
+    it against X's real declaration FIELD BY FIELD.** A renamed optional is
+    invisible in exactly the direction that matters, and the fix is to make
+    the field REQUIRED with `null` meaning absent, so the compiler becomes
+    the gate. **And one test must build its input from the PRODUCER** — here,
+    driving `createSeriesRecorder` and never naming the field at all.
+    (2) `Sample.t` is DECISECONDS; the dropout cap was named, documented and
+    written in seconds, so it shipped at 6.0 s while claiming 60. Four
+    capture-derived literals held under either unit because **a weighted mean
+    is scale-invariant** — no assertion on the RESULT could ever catch it.
+    **For any test whose expected value would be UNCHANGED by a unit error,
+    list the constants that would not be; those are the untested ones**, and
+    pin them at a boundary with independent literals.
+    _Both were found by review, neither by the author, and the author had
+    already run four mutation probes that all bit._
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;
