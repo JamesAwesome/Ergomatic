@@ -487,6 +487,35 @@ want "how far into THIS interval" read these two fields directly (against
 | 13-15  | Rest Time               | 0.01 sec/lsb                                                        |
 | 16     | Erg Machine Type (enum) | —                                                                   |
 
+**FIRMWARE-DEPENDENT TRAILING FIELD (2026-09-07).** `Erg Machine Type`
+(offset 16) was ADDED to this characteristic in interface-definition
+revision V1.26, dated 11/2/2018 — rev 1.30 Table 1, verbatim: "Added Erg
+Machine Type parameter to characteristic 0x0032/0x0080/ V1.26." That row
+establishes ADDED and nothing else. That the field lands LAST comes from a
+different source: the byte-layout table above, whose field ordering ends
+`Rest Time` (offset 13-15) then `Erg Machine Type` (offset 16).
+
+**INFERENCE, labelled:** the document nowhere states that the pre-V1.26
+form was 16 bytes. That an older monitor sends a clean 16-byte prefix
+ending at Rest Time follows from ADDED plus LAST, not from an observed
+short frame — no capture we hold predates V1.26 (MEASURED, below), so this
+floor is unverified against real pre-2018 hardware. `parse.ts` floors this
+characteristic at 16 bytes, not 17, on that inference
+(`ADDITIONAL_STATUS_1_MIN_BYTES`). The 17-byte figure in this table's own
+heading is still the full documented length; it is silent about the floor,
+and that silence is what a strict 17-byte check read as correct.
+
+Reported by a rower on 2026-09-07 whose session recorded NOTHING: the
+rejected frames meant `driver.ts`'s one-way `seen.as1` latch never opened
+and `maybeEmitFrame` published no frame all session. The same field was
+added to 0x0038 one revision later, V1.27 (11/8/2018) — see that table
+below.
+
+**MEASURED against our own corpus:** across all 20 files in
+`docs/monitor/sessions/`, 0x0032 is 17 bytes in 8248 of 8248 notifications
+and 0x0038 is 19 bytes in 42 of 42 — every monitor we have ever captured is
+post-V1.26.
+
 **0x0033 — C2 rowing additional status 2 (20 bytes, BLE doc p.14-15):**
 
 | Offset | Field                                                | Scale                               |
@@ -546,6 +575,21 @@ both characteristics.
 | 16     | Split Avg Drag Factor          | whole units                                                                                                                                                                                                                  |
 | 17     | Split/Interval Number          | whole                                                                                                                                                                                                                        |
 | 18     | Erg Machine Type (enum)        | —                                                                                                                                                                                                                            |
+
+**FIRMWARE-DEPENDENT TRAILING FIELD, one revision later.** Same mechanism
+and same two-source split as 0x0032's note above. `Erg Machine Type`
+(offset 18) was ADDED in V1.27, 11/8/2018 — rev 1.30 Table 1, verbatim:
+"Added Erg Machine Type parameter to characteristic 0x0038." That row
+establishes ADDED and nothing else; that the field lands LAST comes from
+the byte-layout table above, ending `Split/Interval Number` (offset 17)
+then `Erg Machine Type` (offset 18).
+
+**INFERENCE, labelled, same posture as 0x0032's:** a pre-V1.27 monitor
+sending a clean 18-byte prefix follows from ADDED plus LAST, not from an
+observed short frame, and is equally unverified against real pre-2018
+hardware. `parse.ts` floors this characteristic there on that inference
+(`ADDITIONAL_SPLIT_INTERVAL_MIN_BYTES`), not at the 19-byte full length
+this table's heading states.
 
 ## 11. Programming commands used by `pm5/commands.ts` (CSAFE doc pp.68-71)
 

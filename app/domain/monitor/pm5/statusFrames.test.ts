@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type {
+  AdditionalSplitIntervalData,
+  AdditionalStatus1,
+} from "./parse.js";
 import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
@@ -96,6 +100,55 @@ describe("buildAdditionalStatus1Bytes: round-trips through parseAdditionalStatus
       parseAdditionalStatus1(buildAdditionalStatus1Bytes(status)),
     ).toStrictEqual(status);
   });
+
+  it("ergMachineType omitted (as on a pre-V1.26 fixture) encodes the trailing byte as 0", () => {
+    const status = {
+      elapsedSeconds: 0,
+      speedMetersPerSecond: 0,
+      spm: 0,
+      heartRateBpm: null,
+      currentSplit: 0,
+      averageSplit: 0,
+      restDistanceMeters: 0,
+      restSeconds: 0,
+    };
+    const bytes = buildAdditionalStatus1Bytes(status);
+    expect(bytes[16]).toBe(0);
+    // The builder always emits all 17 bytes, so parsing them back necessarily
+    // yields a PRESENT ergMachineType of 0 — this is a builder-defaulting
+    // test, not a round trip of absence (parse.test.ts's short-frame tests
+    // cover absence itself).
+    expect(parseAdditionalStatus1(bytes)).toStrictEqual({
+      ...status,
+      ergMachineType: 0,
+    });
+  });
+
+  it("the pre-v126 form omits the trailing Erg Machine Type byte and round-trips through the parser", () => {
+    const status: AdditionalStatus1 = {
+      elapsedSeconds: 12.34,
+      speedMetersPerSecond: 3.456,
+      spm: 22,
+      heartRateBpm: 142,
+      currentSplit: 111.5,
+      averageSplit: 113.25,
+      restDistanceMeters: 64,
+      restSeconds: 59.5,
+      ergMachineType: 0,
+    };
+    const long = buildAdditionalStatus1Bytes(status);
+    const short = buildAdditionalStatus1Bytes(status, "pre-v126");
+
+    expect(long.length).toBe(17);
+    expect(short.length).toBe(16);
+    // The short form is a strict PREFIX of the long one — the whole premise.
+    expect([...short]).toStrictEqual([...long.slice(0, 16)]);
+
+    const decoded = parseAdditionalStatus1(short) as AdditionalStatus1;
+    expect(decoded.spm).toBe(22);
+    expect(decoded.restSeconds).toBeCloseTo(59.5, 2);
+    expect(Object.hasOwn(decoded, "ergMachineType")).toBe(false);
+  });
 });
 
 describe("buildAdditionalStatus2Bytes: round-trips through parseAdditionalStatus2", () => {
@@ -178,6 +231,60 @@ describe("buildAdditionalSplitIntervalDataBytes: round-trips through parseAdditi
         buildAdditionalSplitIntervalDataBytes(status),
       ),
     ).toStrictEqual(status);
+  });
+
+  it("ergMachineType omitted (as on a pre-V1.27 fixture) encodes the trailing byte as 0", () => {
+    const status = {
+      elapsedSeconds: 0,
+      splitIntervalAvgStrokeRate: 0,
+      splitIntervalWorkHeartRateBpm: null,
+      splitIntervalRestHeartRateBpm: null,
+      splitIntervalAvgPace: 0,
+      splitIntervalTotalCalories: 0,
+      splitIntervalAvgCalories: 0,
+      splitIntervalSpeedMetersPerSecond: 0,
+      splitIntervalPowerWatts: 0,
+      splitAvgDragFactor: 0,
+      splitIntervalNumber: 0,
+    };
+    const bytes = buildAdditionalSplitIntervalDataBytes(status);
+    expect(bytes[18]).toBe(0);
+    // The builder always emits all 19 bytes, so parsing them back necessarily
+    // yields a PRESENT ergMachineType of 0 — this is a builder-defaulting
+    // test, not a round trip of absence (parse.test.ts's short-frame tests
+    // cover absence itself).
+    expect(parseAdditionalSplitIntervalData(bytes)).toStrictEqual({
+      ...status,
+      ergMachineType: 0,
+    });
+  });
+
+  it("0x0038's pre-v126 form is likewise an 18-byte prefix", () => {
+    const status: AdditionalSplitIntervalData = {
+      elapsedSeconds: 20.5,
+      splitIntervalAvgStrokeRate: 24,
+      splitIntervalWorkHeartRateBpm: 150,
+      splitIntervalRestHeartRateBpm: 120,
+      splitIntervalAvgPace: 113.4,
+      splitIntervalTotalCalories: 73,
+      splitIntervalAvgCalories: 840,
+      splitIntervalSpeedMetersPerSecond: 4.321,
+      splitIntervalPowerWatts: 157,
+      splitAvgDragFactor: 121,
+      splitIntervalNumber: 1,
+      ergMachineType: 0,
+    };
+    const long = buildAdditionalSplitIntervalDataBytes(status);
+    const short = buildAdditionalSplitIntervalDataBytes(status, "pre-v126");
+    expect(long.length).toBe(19);
+    expect(short.length).toBe(18);
+    expect([...short]).toStrictEqual([...long.slice(0, 18)]);
+    expect(
+      Object.hasOwn(
+        parseAdditionalSplitIntervalData(short) as AdditionalSplitIntervalData,
+        "ergMachineType",
+      ),
+    ).toBe(false);
   });
 });
 

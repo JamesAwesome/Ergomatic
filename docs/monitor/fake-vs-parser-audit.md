@@ -92,7 +92,7 @@ Legend: **M** = MODELLED, **H** = HARDCODED (consumed + constant), **U** = UNCON
 | `averageSplit` | **M — CORRECTED (RC-9a)**, was U (quasi-hardcode, `= e.currentSplit`) | `updateSessionAvgSplit(e)` — cumulative work-only, `500·(bankedWorkSeconds+e.elapsedSeconds)/(bankedWorkMeters+e.distanceMeters)` while rowing, held through rest | `driver.ts`'s `recordAvgPaceVerdict` (`lastWorkStateAverageSplit`) |
 | `restDistanceMeters` | U (flat `0` in `armedBundle`; session-tracked elsewhere but still never read downstream) | `sessionMetrics.restDistanceMeters` | none found — **not** the same field as `IntervalActual.restDistanceMeters`, which comes from 0x0037 (see below) |
 | `restSeconds` | **H — CORRECTED, the field this audit exists for, now the dangerous bucket's first occupant** | `0` for every existing fixture (script-authorable since the EST LEFT task, but nothing sets it), fake.ts | `surfaceModel.ts`'s `estElapsedRaw` (EST LEFT task) — the rest-phase live term. See dedicated section. |
-| `ergMachineType` | U (non-zero constant `1`) | `1`, fake.ts:747 | none found |
+| `ergMachineType` | U (non-zero constant `1`) | `1`, fake.ts:747 | none found — now OPTIONAL on the type, absent entirely when the fake runs with `FakeScript.preV126Firmware` |
 
 ### 0x0033 — Additional Status 2 (`AdditionalStatus2`)
 
@@ -136,7 +136,7 @@ Legend: **M** = MODELLED, **H** = HARDCODED (consumed + constant), **U** = UNCON
 | `splitIntervalPowerWatts` | U (flat `0`) | `0`, fake.ts:846 | none found |
 | `splitAvgDragFactor` | U (non-zero constant `130`) | `130`, fake.ts:847 | none found |
 | `splitIntervalNumber` | M | shared with 0x0037's copy | `driver.ts:3381` |
-| `ergMachineType` | U (non-zero constant `1`) | `1`, fake.ts:849 | none found |
+| `ergMachineType` | U (non-zero constant `1`) | `1`, fake.ts:849 | none found — now OPTIONAL on the type, absent entirely when the fake runs with `FakeScript.preV126Firmware` |
 
 ### 0x0039 — End of Workout Summary (`WorkoutSummary`)
 

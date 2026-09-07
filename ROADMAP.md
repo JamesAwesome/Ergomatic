@@ -1324,6 +1324,68 @@ closed with zero Concept2 contact.
       inside a row whose whole purpose was to carry evidence. Tag an
       unreproduced mechanism INFERENCE, or leave the row at the symptom.
 
+- [ ] **DONE, PR OPEN — a monitor older than 2018 is silently unusable.**
+      Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26
+      (2018-11-02) and to `0x0038` in V1.27; our parsers demanded the longer
+      form, so a pre-2018 monitor had every one of those frames rejected.
+      `seen.as1` then never latched and `maybeEmitFrame` published NOTHING
+      for the whole session — the rower sat on `READY`, unwarned, and the
+      row was lost. Reported by a friend of James's, 2026-09-07, with a ring
+      full of `0x0032: expected 17 bytes, got 16` and
+      `rowingActive=unseen`. Spec:
+      `docs/superpowers/specs/2026-09-07-short-status-frames-design.md`. All
+      four plan tasks are complete and the full gate is green on PR #350
+      (`as1-short-frame`); the checkbox above ticks on merge, not before. **M**
+
+- [ ] **A monitor we cannot decode says nothing at all.** The follow-on the
+      spec above names: hundreds of `frame-error` entries reached the ring
+      and NOTHING reached the rower, who kept rowing against an app that
+      had already stopped listening. Recurring failure 25's shape — a lower
+      layer reports a durability failure and the caller proceeds. Needs a
+      rower-facing state, so it carries a Gate 0. **M**
+
+- [ ] **The frame-error flood evicts its own diagnosis.** The ring holds 500
+      entries (`eventLog.ts:51`). A monitor we cannot decode produces a
+      `frame-error` per arrival, roughly eight a second, so the buffer fills
+      in about a minute and the connect-time entries are gone — including
+      `notify-first <char> (<n>B)` (`driver.ts:2301`), which records the
+      MEASURED wire length of every characteristic before the decode and is
+      the single most useful line in the file for this bug class. Found
+      2026-09-07: the reporting rower's export ran seq 5432-5931, exactly 500,
+      already rolled over, so we cannot tell whether that monitor's `0x0033`
+      parses — and a fresh export from them would be equally useless. Rate-limit
+      or count a repeated identical `frame-error`, or reserve connect-time
+      entries from eviction. **S**
+
+- [ ] **We cannot read the monitor's firmware version, and it is the one
+      fact every report of this class needs.** Documented at characteristic
+      `0x0014` (20 bytes, READ) in the C2 Device Information service
+      `0x0010` (BLE doc rev 1.30 attribute table). `Transport` has no read
+      method at all, so this touches both real transports, the fake, replay
+      and three decorators; a connect-time ring entry is the payoff. **Check
+      while implementing:** `DEVICE_INFO_SERVICE_UUID` is built from handle
+      `0x0000` while the document gives `0x0010`, and the constant's own
+      comment concedes we never established whether it or the `PM5` name
+      prefix matched at discovery. **M**
+
+- [ ] **Our arm verification cannot see a dropped rest, or ANY interval past
+      the first.** `expectedArmedStructure` predicts exactly three values —
+      workout type, workout duration, duration type — and the duration pair
+      mirrors INTERVAL 0 only. So a monitor can ack every frame, read back a
+      structure we declare correct, and still run something else: rest is
+      never checked on any interval, and intervals 1..N are never checked at
+      all. Found 2026-09-07 chasing a report that Sea Fret ran as work, work,
+      rest ON THE MONITOR'S OWN SCREEN rather than work, rest, work, rest.
+      **The report is UNREPRODUCED and there is no defect to fix yet:** the
+      compiled program carries `restSeconds: 60` on both intervals and the
+      wire bytes carry `04 02 00 3c` twice, matching the CSAFE worked
+      example byte for byte. What is certain is that no instrument we own
+      would have caught it (recurring failure 19). **OPEN QUESTION:** whether
+      the PM exposes any readback for PROGRAMMED rest — `0x0032`'s rest
+      fields are live values, not configuration — which decides whether this
+      is an extension of the existing check or a different mechanism. Needs
+      the reporter's firmware version and a recorded session. **M**
+
 - [ ] **The Bluetooth scan sheet mixes "PM5" and "monitor" in one flow.**
       `capacitorBle.ts`'s scan copy reads "Looking for your PM5" and then
       "No monitor found. Wake the PM5, then tap Cancel and try again." —
