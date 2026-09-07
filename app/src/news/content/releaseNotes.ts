@@ -5,6 +5,28 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.40.0: git log v0.39.2..main --oneline at d8fe78bd — three merges,
+    // each accounted for (RF15; no --merges):
+    //   #316 Phase NF — Scan NFC on workout detail: read the PM5's tag,
+    //     connect to exactly that PM5, program the workout, no picker —
+    //     item 1 (walked on the erg 2026-09-06).
+    //   #323 Phase SB — a blurred strip behind the status bar so a
+    //     scrolled page never prints under the clock — item 3.
+    //   #324 NF follow-on — Scan NFC on Just Row (item 1's second
+    //     sentence), the named cancellable "Looking for" screen and the
+    //     rewritten not-found / tag-read lines — item 2.
+    //   #325 Just Row's own connecting card names the PM5 on the NFC
+    //     route — folded into item 2 ("on workouts and on Just Row").
+    // This notes-and-captures PR adds packaging, not another behavior.
+    version: "v0.40.0",
+    date: "2026-09-06",
+    items: [
+      "Scan NFC: hold your iPhone to the PM5's tag and Ergomatic connects to that PM5 and loads the workout, with no Bluetooth picker. It sits above Connect on every workout and on Just Row. iPhone only; the PM5 just needs to be awake.",
+      "After a scan, the screen names the PM5 it is looking for, on workouts and on Just Row, and you can cancel. If it can't reach the PM5, the message tells you to check nothing else is connected to it. A tag that fails to read says so and asks for another scan.",
+      "A blurred strip now sits behind the status bar, so a scrolled page never prints under the clock.",
+    ],
+  },
+  {
     // v0.39.2: git log v0.39.1..main --oneline at 343c3b61 — one merge,
     // accounted for (RF15; no --merges):
     //   #321 Phase KB — the tab bar hides while the keyboard is up; the
