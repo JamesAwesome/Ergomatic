@@ -445,7 +445,7 @@ queue a drop. Reusing it would make one column mean two things.
 
 | State | Minted | Cleared | Survives |
 |---|---|---|---|
-| `baselinesSkipped` | The rower taps "Row without one for now" on the doors card (client PATCH `true`) | (a) The rower taps "Set one up" on Today's return row (client PATCH `false`); (b) the server's `DELETE /api/baselines` handler (`data.ts:1010`, the You reset row) clears it | Reinstall, sign-out, relaunch, a full pair being set (it becomes irrelevant, not false), **and a PARTIAL pair** (see below) |
+| `baselinesSkipped` | The rower taps "Row without one for now" on the doors card (client PATCH `true`) | THREE paths: (a) the rower taps "Set one up" on Today's return row (client PATCH `false`); (b) the rower taps "Set one up" in the workout detail's caption, which clears the flag and then navigates to Today, so they land on the doors card rather than on a second "Set one up" (§2.1's own promise; the antagonist's delta pass found this surface missing from §3.3 and the plan, 2026-09-07); (c) the server's `DELETE /api/baselines` handler (the You reset row) clears it | Reinstall, sign-out, relaunch, a full pair being set (it becomes irrelevant, not false), **and a PARTIAL pair** (see below) |
 
 Invariant: **the doors card renders iff `baselines === null && !baselinesSkipped`.** Setting a baseline never touches the flag; it does not need to, because the card's condition is on the pair.
 
@@ -481,6 +481,10 @@ navigating.
   **"Row without one for now"**. Tapping it writes the flag; Today re-renders
   with the suggestion. It is a `button`, not a door (`Link`), because it
   writes; failure shows the card's existing error idiom and leaves the card.
+- **The workout detail's caption:** its "Set one up" is a button, not a
+  link — it clears the flag and then navigates, which is what §2.1 always
+  promised. Without it a skipped rower taps "Set one up" on the detail
+  screen and is shown the same three words again on Today.
 - **Return path on Today:** the "No baseline set · Set one up" row (§2.5).
   "Set one up" is a button that clears the flag; the doors card returns in
   place (there is no standalone doors route, §3.2).

@@ -504,7 +504,17 @@ generation):
       #240; `Ergomatic-wt-aud016` is a stale pre-#239 spec branch.)
 - [ ] **PR 3 — drop compat. SCHEDULED: Saturday 2026-09-12** (James,
       2026-09-05: "We have like five users let's just schedule the work for
-      Saturday"). The earlier zero-`compat.pain_write`-for-seven-days
+      Saturday"). **BEFORE generating this PR's migration: Phase RW PR C
+      merged `0026` on `preferences` first, so delete any migration written
+      off an older main and re-run `pnpm db:generate` against current main.**
+      Drizzle applies journal entries whose `when` is strictly greater than
+      the newest already applied, so a migration generated earlier is
+      skipped **silently** — no error, no log line — and because
+      `db.select().from(preferences)` names every declared column, the next
+      `/api/prefs` 500s for every rower. No gate here can see it: every
+      integration suite starts from an empty database and the deploy health
+      check reads no schema. After this PR deploys, `curl` the deployed
+      `/api/prefs` and confirm the body still carries `baselinesSkipped`. The earlier zero-`compat.pain_write`-for-seven-days
       MEASUREMENT is struck: the cohort is five household testers who all
       update, and `docker logs` only covers the current container, which
       every deploy recreates — so the gate was both overkill and
@@ -587,10 +597,14 @@ a client or e2e test; (3) `~` appears on a distance workout's duration on
 Library, Today, detail and Builder, and not on a time workout's; (4) the
 skip line writes the flag, the Today row clears it, and the baselines reset
 clears it server-side (integration test); (5) `grep -rn "EASY\|Easy\b"
-app/src app/domain app/e2e` returns only the bulk-grammar token `easy` in
-`domain/bulk.ts` and its tests and the whole-workout effort word
-`EASY BREATH` in `builderState.ts` (a different axis, expected), with any
-other survivor named and ruled at close.
+app/src app/domain app/e2e` returns 62 hits (measured 2026-09-07) and every
+one falls in the three classes spec §2.9 names — the different `EFFORT_WORDS`
+axis, Phase WU warm-up history, and the bulk grammar's lowercase `easy`
+token — with any hit outside them named and ruled at close. **The earlier
+wording of this clause was unrunnable:** it promised the grep would return
+the bulk token "in `domain/bulk.ts`", and `grep -rni easy app/domain/bulk.ts`
+returns zero (the token is lowercase and lives in the test fixtures, which a
+case-sensitive grep cannot return).
 
 ## Phase LP — Logbook parity: every number Concept2 shows, and the same number
 
@@ -2182,6 +2196,18 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **`NO BASELINE SET` is false for a rower who has set ONE side** (Phase RW
+  PR C, found at its PM final gate 2026-09-07). Every screen collapses a
+  half baseline pair to `null` (`Today.tsx`'s own derivation), so a rower
+  who skipped the doors, rowed the 2K Test, accepted the measured number
+  and DECLINED the derived 6k has their 2k stored and still reads
+  `NO BASELINE SET` at the top of Today. The row is new in PR C; before it
+  the same state showed the doors card, a softer falsehood. Reachable only
+  by skip + a designated test + a decline, so it is queued rather than
+  fixed in place. **Candidates:** say which side is missing ("NO 6K
+  BASELINE"), or gate the row on both sides being null and let the existing
+  counterpart offer carry the other case. Spec §3.2's own lifetime table
+  names the partial pair as a durable state and did not notice the copy.
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard
