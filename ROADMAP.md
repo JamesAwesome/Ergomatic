@@ -1284,7 +1284,7 @@ closed with zero Concept2 contact.
       repo — capture one on the next walk so the corpus carries a belted
       0x0039 from a second day and build.
 
-- [x] **DONE (2026-09-07, PR #347). v0.41.0's release note was FALSE and the
+- [x] **DONE (2026-09-07, PR #348). v0.41.0's release note was FALSE and the
       next note owed a correction.** Fixed in the same round that corrected
       v0.42.0's own item 2: v0.41.0 item 1 now reads "what the monitor
       reports" and no longer lists average heart rate among the session
@@ -2125,7 +2125,7 @@ Each needs erg time or a deliberate recording session.
   on Paul's Law (≈ +7.9 s, SECONDARY, a forum post, trained rowers) and says
   in terms that no source grounds a better per-population gap;
   `deriveBaseline.test.ts` pins the constant and nothing about any real pair.
-- **DONE (2026-09-07, PR #347): v0.42.0's notes corrected, and the tag it
+- **DONE (2026-09-07, PR #348): v0.42.0's notes corrected, and the tag it
   was written for DELETED unreleased.** Item 2 promised "a quiet **NO
   BASELINE SET** line" and that "setting a baseline any time puts the numbers
   back"; after #344 a half-set rower reads `2K SET · NO 6K`, and setting ONE
