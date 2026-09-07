@@ -82,6 +82,10 @@ export default function JustRow() {
   // target goes (its own session) and where an inline outcome renders.
   const nfc = useNfcEntry();
   const [inlineError, setInlineError] = useState<string | null>(null);
+  // The exact name the current attempt is looking for — set by an NFC
+  // handoff, cleared by a manual press; state, not the ref, because the
+  // card reads it during render.
+  const [lookingFor, setLookingFor] = useState<string | null>(null);
   const lastRequestRef = useRef<{
     request: MonitorDiscoveryRequest;
     trace?: ConnectionAttemptTrace;
@@ -95,6 +99,9 @@ export default function JustRow() {
             // Kept WITH its trace: a retry records into the same trace, as
             // the interstitial's does (whole-branch review, should-fix 3).
             lastRequestRef.current = { request, trace };
+            setLookingFor(
+              request.kind === "advertised-name" ? request.exactName : null,
+            );
             setStarted(true);
             void session.connect(request, trace);
             return true;
@@ -108,6 +115,7 @@ export default function JustRow() {
         attemptId: intent.attemptId,
       };
       lastRequestRef.current = { request };
+      setLookingFor(null);
       setStarted(true);
       void session.connect(request);
     },
@@ -373,6 +381,7 @@ export default function JustRow() {
   // `deriveProgram` reads as `"sending"` — so the wait has a screen.
   const sending = axes.program === "sending";
   const ready = axes.program === "armed";
+
   // RC-18 (door spec §3): the `??` arm is DEAD, and the argument now has to
   // cover BOTH cards that render this caption, so it is stated here rather
   // than beside one of them. `sending` is `axes.program === "sending"` and
@@ -439,13 +448,24 @@ export default function JustRow() {
         <p className="connected-status-label">
           {ready ? deviceCaption : "JUST ROW"}
         </p>
+        {/* Gate 0 (James, 2026-09-06): on the NFC route the card names the
+            PM5 the targeted scan is looking for — the same two lines the
+            workout interstitial shows at that moment — instead of telling
+            the rower to wake a monitor the tap just woke. The manual route
+            keeps its own lines. */}
         <h1 className="connected-serif-line">
-          {ready ? "Ready when you pull" : "Connecting to monitor"}
+          {ready
+            ? "Ready when you pull"
+            : lookingFor !== null
+              ? `Looking for ${lookingFor}`
+              : "Connecting to monitor"}
         </h1>
         <p className="connected-body-line">
           {ready
             ? "The clock starts on your first stroke."
-            : "Wake the monitor if its screen is dark."}
+            : lookingFor !== null
+              ? "Keep the PM5 on and close by."
+              : "Wake the monitor if its screen is dark."}
         </p>
         {ready && (
           <p className="connected-keep-on">KEEP YOUR PHONE SCREEN ON</p>

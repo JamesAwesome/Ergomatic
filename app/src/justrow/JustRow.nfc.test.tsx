@@ -150,6 +150,52 @@ describe("Scan NFC on Just Row: outcomes", () => {
   });
 });
 
+describe("the connecting card on the NFC route (Gate 0, James 2026-09-06)", () => {
+  it("names the PM5 it is looking for and keeps Cancel while the targeted scan runs; the manual route keeps its own card", async () => {
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+    });
+    setFakeScript({
+      program: { intervals: [] },
+      deviceName: FIXTURE_PM5_NAME,
+      targetedScan: "pending",
+    });
+    await renderDoor();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Looking for PM5 432331249 Row",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Keep the PM5 on and close by.")).toHaveClass(
+      "connected-body-line",
+    );
+    expect(screen.queryByText("Connecting to monitor")).toBeNull();
+    expect(screen.queryByText(/Wake the monitor/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("manual Connect keeps the generic card (no target to name)", async () => {
+    setNfcScript({ capability: "supported", outcome: { kind: "cancelled" } });
+    setFakeScript({
+      program: { intervals: [] },
+      deviceName: FIXTURE_PM5_NAME,
+      delayWritesMs: 10_000,
+    });
+    await renderDoor();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Connect" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Connecting to monitor" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Looking for/)).toBeNull();
+  });
+});
+
 describe("THE ROUTED PROOF on Just Row: Scan NFC click → native-shaped event → real parser/entry hook/session → fake radio via the production transport → READY", () => {
   it("reaches Ready when you pull with the exact decoded name at the scanTarget seam and the fixed attempt ID; no picker scan", async () => {
     setNfcScript({
