@@ -311,6 +311,12 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     // Ten seconds at 100 then ten at 140 weights evenly: 120.
     expect(withTrace([at(0, 100), at(10, 140), at(20, 140)])?.avgHr).toBe(120);
 
+    // UNEVEN gaps, which is the only shape that can tell a time-weighted
+    // mean from a plain one: one second at 100 then twenty at 140 is 138
+    // weighted, and 120 if each sample counted once. Every other case here
+    // is evenly spaced, so a plain mean passed them all (found by mutation).
+    expect(withTrace([at(0, 100), at(1, 140), at(21, 140)])?.avgHr).toBe(138);
+
     // The same trace with the SECOND stretch marked rest drops to 100 — the
     // assertion that tells option A from option B, and the reason the two
     // literals here differ by 20 rather than by rounding.
