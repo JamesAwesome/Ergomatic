@@ -26,7 +26,17 @@ a crossed experiment on EACH axis, so neither is inferred from the other:
 | Time | 25:00 | 6:00 | 31:00 | 7302 m, not standard | hidden |
 
 The rule is an OR, so each visible arm is only unconfounded if the OTHER axis
-misses — hence the fourth column. It does in all four rows.
+misses — hence the fourth column, which is load-bearing on the two VISIBLE
+rows and merely corroborating on the hidden ones. Where those figures come
+from, since they decide whether the experiment holds:
+
+- **Distance rows:** the other axis is the posted time, `4200 + 600` and
+  `4800 + 1200` tenths, computed from the payloads the probe sent (8:00 and
+  10:00). Neither is a rankable duration. Not read off the form.
+- **Time rows:** the other axis is the overall distance, and it WAS read off
+  the form — the same page load that judged the field recorded the `distance`
+  input as `7301` and `7302`, with `minutes` reading `30` and `31`. Neither
+  distance is on the rankable list.
 
 In each pair the work figure alone explains neither arm: the row whose WORK is
 standard is the one refused, and the row whose work is not standard is the one

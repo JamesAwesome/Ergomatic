@@ -63,9 +63,10 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
   // The rule itself is measured, not inferred: see
   // `domain/concept2/verificationEligibility.ts`.
   // `machineRestMeters` is the row-level figure `buildC2Payload` prefers
-  // over our summed one, and it lives on `machineSummary`, NOT on the row
-  // (review, blocking 2). Passing `row` alone silently judged a different
-  // number than we post — the field is optional, so nothing complained.
+  // over our summed one, and it lives on `machineSummary`, NOT on the row.
+  // Passing `row` alone judged a different number than we post; the field
+  // WAS optional at the time, so nothing complained. It is required now, so
+  // dropping this spread fails `pnpm typecheck` as well as the suite.
   const code =
     bytes !== undefined &&
     concept2OffersVerification({

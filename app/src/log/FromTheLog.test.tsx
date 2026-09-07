@@ -1455,9 +1455,17 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
 
   it("prints the code at 500 m, a distance Concept2 will take it for", async () => {
     mockApi(() => new Response(JSON.stringify(codeRow(500)), { status: 200 }));
-    await renderFromTheLog();
+    const { container } = await renderFromTheLog();
     await screen.findByRole("heading", { name: "Sea Fret" });
     expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
+    // The CLASS, not only the text: `screenshots.spec.ts` proves the code's
+    // absence by counting `.log-machine-confirmed-code`, and nothing else
+    // asserted that class ever EXISTS — so renaming it would have left that
+    // count green forever (RF21, a gate that cannot fail). Renaming the class
+    // now reddens here.
+    expect(
+      container.querySelector(".log-machine-confirmed-code"),
+    ).not.toBeNull();
   });
 
   it("prints the code on a REST piece whose overall lands on a standard", async () => {
