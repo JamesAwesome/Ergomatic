@@ -182,7 +182,13 @@ describe("JustRowLog (the workout-less log door)", () => {
   it("shows the six machine tiles a programmed piece shows, on a real free row's own numbers", async () => {
     mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
     const capture = closedFreeRow({
-      endedBy: "finished",
+      // "rower", the ONLY close a free row can have: it has no defined end
+      // to reach, so the machine goes straight to TERMINATE — confirmed on
+      // this capture's own 0x0031 transitions (WAITTOBEGIN → WORKOUTROW →
+      // TERMINATE). An earlier version of this test said "finished", a state
+      // production cannot produce here, and that made the RATE assertion
+      // below prove something unreachable (RF3).
+      endedBy: "rower",
       summaryTotals: { workElapsedSeconds: 393.6, workDistanceMeters: 1396 },
       summaryDetail: {
         avgStrokeRate: 25,
@@ -212,11 +218,14 @@ describe("JustRowLog (the workout-less log door)", () => {
     expect(within(tier).getByText("25")).toBeInTheDocument();
     expect(within(tier).getByText("101")).toBeInTheDocument();
     // The rate tile carries NO target on a free row — the program is the
-    // empty interval list — so the label is plain RATE.
+    // empty interval list — so the label is plain RATE, and the value is the
+    // monitor's own average even though the row TERMINATED (James: "trust").
     expect(within(tier).getByText("RATE")).toBeInTheDocument();
     expect(within(tier).queryByText("RATE · TARGET")).not.toBeInTheDocument();
-    // No belt on that row and no trace to derive from, so a dash.
-    expect(within(tier).getByText("AVG HR")).toBeInTheDocument();
+    // No belt on that row and no trace to derive from, so a dash — asserted
+    // as the VALUE, not just the label, or a wrong number would not bite.
+    const hrTile = within(tier).getByRole("group", { name: "AVG HR" });
+    expect(within(hrTile).getByText("—")).toBeInTheDocument();
     // Still no strip: a free row saves no intervals.
     expect(screen.queryByText(/MACHINE SUMMARY/)).not.toBeInTheDocument();
   });

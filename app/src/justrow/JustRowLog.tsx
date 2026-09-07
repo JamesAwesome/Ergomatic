@@ -390,9 +390,14 @@ export function JustRowSummary({
               No MACHINE SUMMARY strip: that table is per interval and a free
               row saves none, so it yields nothing structurally rather than
               by a special case. */}
-          {entry.run.summaryTotals !== undefined && (
-            <MachineTierBlock machine={machineTierFromRun(entry.run)} />
-          )}
+          {/* The programmed door's own gate (`summaryModel.ts`'s `hasTotals`):
+              nothing is fabricated from a 0/0 burst, so a tier never renders
+              over totals that are not there. */}
+          {entry.run.summaryTotals !== undefined &&
+            Math.round(entry.run.summaryTotals.workDistanceMeters) > 0 &&
+            entry.run.summaryTotals.workElapsedSeconds > 0 && (
+              <MachineTierBlock machine={machineTierFromRun(entry.run)} />
+            )}
         </>
       ) : (
         // A recovered record whose burst never landed AND whose trace is

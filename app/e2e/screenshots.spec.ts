@@ -3906,7 +3906,13 @@ test("log-detail", async ({ page }) => {
   await expect(lpTiles.nth(0)).toHaveText("AVG WATTS184");
   await expect(lpTiles.nth(2)).toHaveText("CAL / HOUR929");
   await expect(lpTiles.nth(3)).toHaveText("RATE26");
-  await expect(lpTiles.nth(5)).toHaveText("AVG HR—");
+  // 140, not a dash: PR #345 fills AVG HR from the trace, and this fixture's
+  // own ramp (130 + round(t/244 × 28), with rest marked) gives a work-only
+  // time-weighted mean of 140.30. Recomputed from the ramp's formula, not
+  // read back from the app. **#345 did not run `pnpm screenshots`** — it
+  // judged "no layout moved", true and beside the point: captures assert
+  // VALUES, and the value moved. A number change re-runs them.
+  await expect(lpTiles.nth(5)).toHaveText("AVG HR140");
   const lpStrip = page
     .getByRole("table", { name: "Machine summary per interval" })
     .locator("tbody tr");
