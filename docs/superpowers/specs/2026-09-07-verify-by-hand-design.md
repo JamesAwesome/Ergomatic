@@ -72,8 +72,17 @@ documentation lists `verification_code` among the update endpoint's parameters;
 that is a documentation error, and no error is returned when it is ignored.
 
 Consequence: a row cannot be verified after it has been uploaded. Any design
-that puts a code field on a SAVED row is impossible. Awaiting James's decision
-on the reshape.
+that puts a code field on a SAVED row is impossible.
+
+**RESHAPED (James, 2026-09-07): show the code only on rows Concept2 will
+actually take it for**, and drop the in-app verify action entirely. The
+eligibility rule is now MEASURED end to end, not inferred, in
+`docs/superpowers/research/2026-09-07-c2-verification-field-rule.md`: the field
+is offered exactly when the overall distance is one of ten listed figures or the
+overall time one of four, matched to the metre and the tenth of a second, with
+every listed value and both boundaries tested on real pages in a logged-in
+browser. Sections below this point describe the VOID design and are superseded;
+they stay only so the reasoning that produced the reshape is legible.
 
 ## Stored shape
 
