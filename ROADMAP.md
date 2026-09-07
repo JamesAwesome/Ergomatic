@@ -2037,7 +2037,7 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **DONE (2026-09-07): a rower who sets ONE baseline is told which
+- **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
   one and offered the other at the 7 s offset.** James's ruling ("If a user
   sets a 2k or a 6k they should be asked to set both with a suggestion of the
   7s offset"), raised at Phase RW PR C's PM final gate: every screen collapsed
