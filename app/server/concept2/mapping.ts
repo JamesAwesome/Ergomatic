@@ -12,7 +12,6 @@ import type { LogSource } from "../../domain/types.js";
 import type { LogStep } from "../stores/logs.js";
 import { buildC2Intervals } from "./intervals.js";
 import { c2Tenths, sendableInt } from "./tenths.js";
-import { wireVerificationCode } from "../../domain/monitor/verificationCode.js";
 
 // Re-exported so `mapping.test.ts` keeps one name (`scripts/c2-crossconnect.ts`
 // carries its own copy and imports nothing from here); the definition moved
@@ -600,31 +599,15 @@ export function buildC2Payload(
   }
   if (Object.keys(heartRate).length > 0) post.heart_rate = heartRate;
 
-  // Phase LP PR 2.5 (spec §5 rev 2.6): the PM5's own verification code,
-  // sent ONLY when the posted `time`/`distance` are BOTH the machine's own
-  // totals — the code is minted over those, and the API checks "date, time,
-  // distance, workout_type and machine type".
-  // MEASURED (log-dev): the machine's 5706 returns `verified: true` and the
-  // control 5707 returns false, both WITHOUT the interval array (2026-09-05)
-  // and WITH it (2026-09-07, rows 86044/86045, deleted) — so the array does
-  // not interfere. UNTESTED: production; the parity walk settles it.
-  // INFERENCE (n=4 rows vs 1 control, and the control was also a different
-  // build): Concept2 hides its own Verify button on a result that arrives
-  // with interval data, which is why sending the code matters now. The
-  // change is right either way: verifying at receipt makes the button moot.
-  // A row without machine totals sends no code — it could not verify and
-  // would only read as a mismatch.
-  const bytes = row.machineSummary?.verificationBytes;
-  if (
-    usedMachineMeters &&
-    usedMachineSeconds &&
-    Array.isArray(bytes) &&
-    bytes.every((b) => typeof b === "number" && Number.isInteger(b))
-  ) {
-    const code = wireVerificationCode(bytes as number[]);
-    if (code !== null) post.verification_code = code;
-  }
-
+  // `verification_code` is deliberately NOT sent (James, 2026-09-07).
+  // PR 2.5 sent it and Concept2 verified the row at receipt; the row then
+  // read "Verified: Yes" without the rower having done anything. That is
+  // NOT what ErgData does — Concept2's own app uploads the row and leaves
+  // the rower to verify it — and this phase's north star is parity with
+  // Concept2, so auto-verifying broke the very thing it was meant to serve.
+  // Verification stays a deliberate human act. The measurements PR 2.5
+  // produced are still good (see the research file); what changed is the
+  // product decision, not the wire fact.
   // The per-interval array rides ONLY with a workout_type we map
   // (VariableInterval — every programmed Ergomatic piece) and only when
   // every step can fill the API's REQUIRED keys (`buildC2Intervals`).

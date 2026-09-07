@@ -1361,18 +1361,28 @@ closed with zero Concept2 contact.
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that
       row, show "verified"; a debug reveal shows the raw code when needed.
-      **Half done (Phase LP PR 2.5, 2026-09-07): the send now carries
-      `verification_code`** when the posted totals are the machine's own
-      (spec §5 rev 2.6). The trigger: Concept2 appears to hide its own
-      Verify button on a result carrying `workout.intervals[]` (INFERENCE,
-      James's four rows on the PR 2 build against one v0.41.0 control —
-      build and payload shape are confounded). Verifying at receipt makes
-      the button moot either way. **The code alongside the interval array is
-      MEASURED** (2026-09-07, log-dev: verified with the array at the
-      monitor's distance, not verified at the control distance, both rows
-      deleted). **Production is UNTESTED — the parity walk settles it.** **Still owed:** store `verified` from the 201 body
-      (a new stored key — TRIAD) and render "verified" in place of the raw
-      code with a debug reveal.
+      **REVERSED, 2026-09-07 (James): we do NOT send the code, and a row is
+      NOT auto-verified.** PR #336 sent it; the first real rowed row came
+      back `Verified: Yes` with nothing for the rower to do, and James ruled
+      that a parity REGRESSION — Concept2's own app uploads the row and
+      leaves verification to the rower, so removing that act is the opposite
+      of parity, however well the mechanism worked. The send is gone and a
+      test pins the withholding on the exact row that would verify. The wire
+      facts stand (research file: the code verifies at the monitor's
+      distance, fails at a control, with and without the interval array);
+      what changed is the product decision.
+      **This row is now UNBLOCKED but unstarted**, and means reflecting a
+      verification the ROWER performed, never one we caused.
+- [ ] **Why does Concept2 show no Verify button on a row carrying interval
+      data?** The question that opened the 2026-09-07 thread and STILL
+      UNANSWERED — it was overtaken by the auto-verify change, which has
+      since been reversed. INFERENCE, n=4 rows on the PR 2 build against one
+      v0.41.0 control, so build and payload shape are confounded; the API
+      doc is silent. This is a live defect now, not a curiosity: with the
+      code no longer sent, a rower who cannot press Verify cannot verify
+      their row at all. **First cheap step:** post one row WITHOUT
+      `workout.intervals[]` and one WITH, same account, and look at both
+      pages — that separates payload shape from build.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
