@@ -2059,24 +2059,28 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **A rower who sets ONE baseline is asked to set both, suggested at the 7 s
-  offset (James, 2026-09-07: "If a user sets a 2k or a 6k they should be
-  asked to set both with a suggestion of the 7s offset").** This is the
-  ruling on the partial-pair state, raised at Phase RW PR C's PM final gate:
-  every screen collapses a half pair to `null` (`Today.tsx`'s own
-  derivation), so a rower who set only their 2k reads `NO BASELINE SET` at
-  the top of Today, which is false about their account. The half-measures
-  considered and NOT taken were naming the missing side in the copy, or
-  gating the row on both sides being null; James's answer is to close the
-  state instead of describing it. **The mechanism already exists and is
-  currently declinable:** `domain/deriveBaseline.ts`'s
-  `K2_K6_OFFSET_SECONDS = 7` and the counterpart offer the post-test prompt
-  already makes (`PostTestPrompt.tsx`). The work is to make the ask
-  persistent rather than a one-time offer — wherever a single side is
-  stored, the rower is asked for the other with the derived number
-  suggested. Sizing note: the derivation, the copy and the surface that
-  carries the ask (a Today row, the You editor, or both) are the design
-  question; the arithmetic is done. **S/M.**
+- **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
+  one and offered the other at the 7 s offset.** James's ruling ("If a user
+  sets a 2k or a 6k they should be asked to set both with a suggestion of the
+  7s offset"), raised at Phase RW PR C's PM final gate: every screen collapsed
+  a half pair to `null`, so a rower with a tested 2k read `NO BASELINE SET` on
+  Today, which was false about their account. The PM ruled ASK, not force
+  (forcing would make a 2k test's own result unsavable until a 6k it does not
+  have), and James took the PM's decision. What shipped: Today's row names the
+  stored side (`2K SET · NO 6K`) and fills the other on one tap, stamped
+  `derived`; Library and the workout detail's captions name it too; the doors
+  card states the consequence of leaving them unset. **The doors card now
+  yields to that row whenever one side is stored** — Phase BL PR C had ruled
+  the doors a superset re-entry for any incomplete pair, which sent a rower
+  who typed a 2k in the I-know-my-baseline door back to `SET UP YOUR
+  BASELINE`; that is the ordinary way to hold half a pair, and it never
+  writes `baselinesSkipped`, so the first cut of this work reached only
+  rowers who had skipped first. The estimate is suppressed when the derived
+  split falls outside the storable 60..240 band, matching the refusal
+  `BaselineEditor`'s and `postTestOffer`'s offers already make, and a failed
+  write says so rather than leaving a button that does nothing. The You
+  editor keeps its own existing counterpart offer (`deriveOffer` /
+  `DeriveSlot`) unchanged; no second ask was added there.
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard
