@@ -101,7 +101,7 @@ afterEach(() => {
 // WHERE INTERVAL 0 COMES FROM. It was Sea Fret's own `wu` step until the
 // seeds were stripped (2026-08-09), then the rower's warm-up PREFERENCE
 // passed as `buildRun`'s fourth argument, and Phase WU removed that too.
-// It is now an authored 5' EASY step prepended to the draft's own steps
+// It is now an authored 5' STEADY step prepended to the draft's own steps
 // below. That reproduces the SAME compiled interval byte for byte —
 // `compileProgram` nulls an effort phase's target exactly as it nulled a
 // warm-up's, so `{type: "work", kind: "time", value: 300, targetSplit:
@@ -142,7 +142,7 @@ function seaFretProgram(): WorkoutProgram {
     id: "driver-test-sea-fret",
     title: workout.title,
     type: workout.type,
-    // The 5' EASY opener — see this fixture's own header for why it is an
+    // The 5' STEADY opener — see this fixture's own header for why it is an
     // authored step now and why the compiled interval is unchanged.
     steps: [
       {

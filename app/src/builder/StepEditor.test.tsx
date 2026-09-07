@@ -419,14 +419,6 @@ describe("StepEditor", () => {
   // Coverage: the "no target / Set baselines" fallback (splitLabel null on
   // a work row) — the same honesty treatment StepRowEditor's resolvedSplit
   // used to give, ported here since baselines can still be unset.
-  it("shows a no-target fallback with a link to /you/baselines when splitLabel is null on a work row", () => {
-    setup({ splitLabel: null });
-    expect(screen.getByText("no target")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /set baselines/i }),
-    ).toHaveAttribute("href", "/you/baselines");
-  });
-
   // Task 4: an effort row's TARGET reads the effort word, in the SAME
   // target-value element a resolved (exact) split renders in — Builder's
   // splitLabelFor is what actually resolves refEffort to paceWordLabel(...)

@@ -197,7 +197,7 @@ describe("StepRow effort refs (Phase 5G)", () => {
   //
   // Mixed workout proving words survive alongside the round's exact-split
   // rule (task brief): this same describe block's split-ref tests above
-  // render a plain number, while every test here renders "ALL OUT"/"EASY" —
+  // render a plain number, while every test here renders "ALL OUT"/"STEADY" —
   // an effort ref is never coerced into a number or a bare dash.
   it("renders an effort step's word where the target sits, with no nudges", () => {
     renderStep(
@@ -248,7 +248,7 @@ describe("StepRow effort refs (Phase 5G)", () => {
     expect(screen.getByText("ALL OUT")).toBeInTheDocument();
   });
 
-  it("speaks 'easy', not 'at MIN' or the clumsy 'at easy'", () => {
+  it("speaks 'steady', not 'at MIN' or the clumsy 'at steady'", () => {
     renderStep(
       <StepRow
         step={{
@@ -265,11 +265,11 @@ describe("StepRow effort refs (Phase 5G)", () => {
     // "MIN" spoken aloud is indistinguishable from "minutes" — the exact
     // confusion the display-word pair exists to prevent — so the
     // accessible name drops the chip word entirely for the natural rowing
-    // idiom ("30 seconds easy"), not "30 seconds at MIN" nor the
-    // grammatically symmetric but clumsier "30 seconds at easy".
+    // idiom ("30 seconds steady"), not "30 seconds at MIN" nor the
+    // grammatically symmetric but clumsier "30 seconds at steady".
     const label = screen.getByText("0:30 @ MIN");
-    expect(label).toHaveAccessibleName("30 seconds easy");
-    expect(screen.getByText("EASY")).toBeInTheDocument();
+    expect(label).toHaveAccessibleName("30 seconds steady");
+    expect(screen.getByText("STEADY")).toBeInTheDocument();
   });
 
   it("renders an effort word even with no baselines set, unlike a split ref's no-target fallback", () => {
@@ -291,5 +291,28 @@ describe("StepRow effort refs (Phase 5G)", () => {
     expect(
       screen.queryByRole("button", { name: /nudge/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("a split ref with no baseline (Phase RW PR B)", () => {
+  it("reads the ladder word in the range slot, keeps the notation on the left, and speaks both", () => {
+    renderStep(
+      <StepRow
+        step={{
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { base: "2k", off: 6 },
+        }}
+        baselines={null}
+        nudge={0}
+        onNudge={() => {}}
+      />,
+    );
+    expect(screen.getByText("MODERATE")).toBeInTheDocument();
+    expect(screen.getByText("MODERATE")).toHaveClass("step-row-range");
+    expect(screen.getByText("5:00 @ 2k +6")).toHaveAccessibleName(
+      "5 minutes at 2k +6, moderate",
+    );
+    expect(screen.queryByText("no target")).not.toBeInTheDocument();
   });
 });

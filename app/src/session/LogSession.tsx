@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Link,
   Navigate,
   useNavigate,
   useParams,
@@ -14,7 +13,6 @@ import type { PlanData } from "../api/usePlan";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
 import { isPaceWordRef } from "../../domain/pace.js";
-import { needsBaselines } from "../../domain/needsBaselines.js";
 import type {
   Baselines,
   PaceBase,
@@ -222,27 +220,25 @@ function pacesLockedText(k2: number | null, k6: number | null): string | null {
  *  Expanding first was a no-op that happened to read as thorough. Reading
  *  `steps` directly is both simpler and correct.
  *
- *  Phase 6I close-out fold (Task 2's deferred ledger item): `baselines` is
- *  now `Baselines | null` — `ManualDoorLog` (below) gates on
- *  `needsBaselines(steps)`, not bare `baselines === null`, so an
- *  effort-only workout can reach here with null baselines. `referenced`
- *  can only read true for a base some SPLIT-ref step names, and
- *  `needsBaselines` is exactly "some work step is a split ref" — so
- *  `referenced` and `baselines === null` can never both be true at once;
- *  the `!` below documents that invariant, not a runtime check. */
+ *  Phase RW PR B: `baselines` may be null with split-ref steps present
+ *  (the manual door no longer gates on a baseline; such a step is logged
+ *  as a ladder word with no number). There is then no pace to lock, so
+ *  this returns null for every base rather than reading a pair that does
+ *  not exist. */
 function manualLockedBaseline(
   base: PaceBase,
   steps: Step[],
   baselines: Baselines | null,
 ): number | null {
+  if (baselines === null) return null;
   const referenced = steps.some(
     (step) =>
       step.k === "w" && !isPaceWordRef(step.ref) && step.ref.base === base,
   );
   return referenced
     ? base === "2k"
-      ? baselines!.k2Seconds
-      : baselines!.k6Seconds
+      ? baselines.k2Seconds
+      : baselines.k6Seconds
     : null;
 }
 
@@ -1899,17 +1895,6 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // `WorkoutDetail.tsx`'s own gating link already used this predicate for
   // whether to show this door's link at all (line ~522) — this closes the
   // one remaining site the design spec named that hadn't followed.
-  if (baselines === null && needsBaselines(workout.steps)) {
-    return (
-      <main className="screen">
-        <BackLink />
-        <h1 className="screen-title">Log {workout.title}</h1>
-        <span className="step-row-no-target">
-          <em>no target</em> <Link to="/you/baselines">Set baselines</Link>
-        </span>
-      </main>
-    );
-  }
 
   const logSteps = buildManualLogSteps(workout, baselines);
   // Post-workout-summary spec: the manual door has no run record and no

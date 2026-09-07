@@ -210,7 +210,7 @@ describe("TimerTargets (component)", () => {
     expect(easy.targetSplit).toBe(142); // the estimate exists...
 
     const first = render(<TimerTargets phase={easy} />);
-    expect(screen.getByText("EASY")).toBeInTheDocument();
+    expect(screen.getByText("STEADY")).toBeInTheDocument();
     // ...and is nowhere on the card. 6k 122 + 20 = 142 -> "2:22.0".
     expect(screen.queryByText("2:22.0")).not.toBeInTheDocument();
     expect(screen.getByText("20")).toBeInTheDocument(); // its rate IS real

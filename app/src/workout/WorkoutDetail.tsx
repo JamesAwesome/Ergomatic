@@ -297,17 +297,9 @@ function WorkoutDetailView({
     // already resolves an effort phase with no `targetSplit` (Task 1's own
     // comment fix, domain/monitor/program.ts) — so Connect proceeds with
     // `baselines` passed through AS-IS (possibly null) to `buildRun` below.
-    if (baselines === null && needsBaselines(workout.steps)) {
-      // No screen exists yet to nudge/resolve a target without baselines
-      // (Connect has no Confirm step to defer to, unlike Start) — the same
-      // "no target" fact "Log it after"'s footer already states, worded
-      // for this door instead.
-      setConnectError(
-        "Set your baselines first. Connect needs a target to program.",
-      );
-      discardStagedRetire(request.attemptId);
-      return false;
-    }
+    // Phase RW PR B: no baseline gate. A split ref with no baseline
+    // compiles as an effort-kind phase (no pace target on the wire), the
+    // same shape the effort-only onboarding workouts have always programmed.
     const draft = buildNudgedDraft(workout, nudges);
     const run = buildRun(draft, baselines, new Date());
     const compiled = compileProgram(run.phases);
@@ -453,7 +445,6 @@ function WorkoutDetailView({
   // effort-only by construction; BL PR C's doors card starts nothing at
   // all, so the designated tests now reach Start only through THIS screen,
   // where the same structural exemption holds: they are effort-only.)
-  const startBlocked = baselines === null && needsBaselines(workout.steps);
 
   // Clamps the RESOLVED split (baseline + off + nudge), not the raw nudge
   // number, to the same 60-240 s/500m range the baseline editor
@@ -551,16 +542,7 @@ function WorkoutDetailView({
             to L2 now that the hardware primaries hold L1. Still
             the SAME `handleStart`/`startBlocked`/`replaceStage` logic,
             unmoved and unmodified — only the copy and the class changed. */}
-        {startBlocked ? (
-          <>
-            <button type="button" className="button-l2" disabled>
-              Start Timer
-            </button>
-            <span className="step-row-no-target">
-              <em>no target</em> <Link to="/you/baselines">Set baselines</Link>
-            </span>
-          </>
-        ) : replaceStage === null ? (
+        {replaceStage === null ? (
           <button type="button" className="button-l2" onClick={handleStart}>
             Start Timer
           </button>
@@ -615,18 +597,21 @@ function WorkoutDetailView({
             effort-only workout opened here still hits its OWN "no target"
             block one screen later — same final message, one extra
             navigation, not a data-loss or crash risk. */}
-        {baselines !== null || !needsBaselines(workout.steps) ? (
-          <Link
-            to={`/library/${workout.id}/log`}
-            state={{ from }}
-            className="button-l2"
-          >
-            Log it after
-          </Link>
-        ) : (
-          <span className="step-row-no-target">
-            <em>no target</em> <Link to="/you/baselines">Set baselines</Link>
-          </span>
+        <Link
+          to={`/library/${workout.id}/log`}
+          state={{ from }}
+          className="button-l2"
+        >
+          Log it after
+        </Link>
+        {/* Phase RW PR B (spec §2.1, Gate 0 copy): one quiet caption while
+            this workout has numbers waiting behind a baseline. Effort-only
+            workouts show nothing. */}
+        {baselines === null && needsBaselines(workout.steps) && (
+          <p className="workout-detail-caption">
+            Targets are words until you set a baseline.{" "}
+            <Link to="/today">Set one up</Link>
+          </p>
         )}
         {/* Globals are read-only server-side (a 403 on any mutation) — the
             UI must never present controls whose only outcome is that

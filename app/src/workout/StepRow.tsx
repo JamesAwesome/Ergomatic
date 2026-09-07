@@ -1,6 +1,7 @@
-import { Link } from "react-router-dom";
 import {
   paceWordSpoken,
+  intensityWord,
+  intensityWordSpoken,
   paceWordLabel,
   isPaceWordRef,
   refLabel,
@@ -77,11 +78,13 @@ export default function StepRow({
   // still drives `left` above, but the chip word is ambiguous spoken aloud
   // ("MIN" reads identically to "minutes") — domain/pace.ts's
   // `paceWordSpoken` substitutes real effort language instead ("at max
-  // effort" / "easy"), so the spoken and visible forms diverge here on
+  // effort" / "steady"), so the spoken and visible forms diverge here on
   // purpose.
   const leftSpoken = isPaceWordRef(step.ref)
     ? `${durationSpoken} ${paceWordSpoken(step.ref.effort)}`
-    : `${durationSpoken} at ${pace}`;
+    : baselines
+      ? `${durationSpoken} at ${pace}`
+      : `${durationSpoken} at ${pace}, ${intensityWordSpoken(intensityWord(step.ref))}`;
 
   // Parallel visible/spoken sub-line parts — the rest duration is a
   // positional duration too ("2:30 rest" would otherwise announce as
@@ -109,23 +112,22 @@ export default function StepRow({
           {left}
         </span>
         {isPaceWordRef(step.ref) ? (
-          // An effort word needs no baseline to resolve — "ALL OUT"/"EASY"
+          // An effort word needs no baseline to resolve — "ALL OUT"/"STEADY"
           // is the target, not a computed split, so it renders even when
           // baselines are unset (unlike the split branch's no-target
           // fallback below).
           <span className="step-row-range">
             {paceWordLabel(step.ref.effort)}
           </span>
-        ) : baselines ? (
-          // Ui-fix round, Item 1: the exact resolved split, not a
-          // tolerance band — this display call site now shows only the
-          // single number.
-          <span className="step-row-range">
-            {fmtSplit(resolveSplit(baselines, step.ref, nudge))}
-          </span>
         ) : (
-          <span className="step-row-no-target">
-            <em>no target</em> <Link to="/you/baselines">Set baselines</Link>
+          // Ui-fix round, Item 1: the exact resolved split, not a
+          // tolerance band. Phase RW PR B: with no baseline the slot reads
+          // the ladder word instead (spec §2.1); the left label keeps the
+          // notation.
+          <span className="step-row-range">
+            {baselines
+              ? fmtSplit(resolveSplit(baselines, step.ref, nudge))
+              : intensityWord(step.ref)}
           </span>
         )}
       </div>

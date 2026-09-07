@@ -3,32 +3,10 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { keepAwakeOff, keepAwakeOn } from "../adapters/keepAwake";
 import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
-import { needsBaselines } from "../../domain/needsBaselines.js";
 import type { Baselines } from "../../domain/types.js";
 import { buildRun } from "./engine";
-import { clearDraft, draftSteps, loadDraft, type SessionDraft } from "./draft";
+import { clearDraft, loadDraft, type SessionDraft } from "./draft";
 import { clearRun, loadRun, saveRun, type SessionRun } from "./run";
-
-// Phase 6I: the SAME predicate WorkoutDetail.tsx's own Start guard uses
-// (fast-follow spec §3 moved it there from ConfirmTargets' old footer),
-// applied to the two places Countdown itself must agree with it — the
-// build effect's own gate (below) and the render's redirect (further
-// down). Missing either one reintroduces the exact bug a mismatched pair
-// would produce: gate the effect but not the redirect, and an effort-only
-// workout would render "Couldn't load…"-style limbo behind a redirect
-// that fires anyway; gate the redirect but not the effect, and the run
-// record this screen's whole job is to write never gets built at all — a
-// rower stuck on a screen that looks like it's counting down toward a
-// session that doesn't exist. `draftSteps` (not raw `d.steps`) is the
-// EFFECTIVE view — removed rows dropped, nudges folded — the same one
-// `buildRun` itself resolves against, so this can never disagree with what
-// actually gets built.
-function blocksWithoutBaselines(
-  d: SessionDraft,
-  baselines: Baselines | null,
-): boolean {
-  return baselines === null && needsBaselines(draftSteps(d));
-}
 
 // The countdown's own timing state: `total` is the configured length
 // (preferences.countdownSeconds), `startedAtMs` is the wall-clock instant
@@ -225,7 +203,6 @@ export default function Countdown() {
     // `resolvedBaselines === null` — `buildRun` accepts `Baselines | null`
     // and resolves an effort phase to no target/no estimate rather than
     // crashing (domain/expand.ts's `phases()`).
-    if (blocksWithoutBaselines(draft, resolvedBaselines)) return;
     builtRef.current = true;
 
     const baselines = resolvedBaselines;
@@ -338,24 +315,6 @@ export default function Countdown() {
         </button>
       </main>
     );
-  }
-
-  if (blocksWithoutBaselines(draft, resolvedBaselines)) {
-    // Both hooks are READY by this point (every loading/error branch above
-    // already returned), so this means baselines resolved to genuinely
-    // unset AND this draft's effective steps need one — WorkoutDetail's own
-    // Start button blocks in that exact case (fast-follow spec §3: disabled
-    // + caption, the needsBaselines guard relocated from ConfirmTargets'
-    // old footer), so the only way to land here with this true is a
-    // direct/deep navigation to /session/countdown that skipped that guard
-    // entirely. Bouncing to /today (where the three-door onboarding card
-    // — the no-baselines entry — lives) rather than building a run against
-    // a dummy pair, same
-    // as the shim's own "no draft" arm. An effort-only draft never reaches
-    // this branch, even with `resolvedBaselines === null` — see the build
-    // effect's own identical gate above, and `blocksWithoutBaselines`'s own
-    // comment for why BOTH must share this exact predicate.
-    return <Navigate to="/today" replace />;
   }
 
   // Gate 0 (storage-denial spec §2, APPROVED by James 2026-09-03): the

@@ -865,15 +865,14 @@ describe("Builder", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the no-target treatment with a link to /you/baselines when baselines are unset", async () => {
+  it("shows the ladder word as the open editor's TARGET when baselines are unset (Phase RW PR B)", async () => {
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    expect(screen.getByText("no target")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /set baselines/i }),
-    ).toHaveAttribute("href", "/you/baselines");
+    // A fresh row is 6k ±0: 2k-equivalent +7, MODERATE.
+    expect(screen.getByText("MODERATE")).toBeInTheDocument();
+    expect(screen.queryByText("no target")).not.toBeInTheDocument();
   });
 
   it("live-resolves a work row's typed duration and pace ref into the exact split", async () => {

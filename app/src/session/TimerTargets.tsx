@@ -150,7 +150,18 @@ export default function TimerTargets({
             only other word this surface used to colour differently and
             that's ink now too). `.timer-card-value-accent` had no other
             renderer and is retired from index.css in the same edit. */}
-        <span className="timer-card-value">{target.main}</span>
+        {/* Phase RW PR B: a WORD (effort kind) renders one size down in
+            portrait — MODERATE beside FREE overflowed the card grid at the
+            subhero size (Gate 0, docs/design/rw-gate0/timer-measure.json). */}
+        <span
+          className={
+            phase.targetKind === "effort"
+              ? "timer-card-value timer-card-value-word"
+              : "timer-card-value"
+          }
+        >
+          {target.main}
+        </span>
         {target.sub !== null && (
           <span className="timer-card-caption">{target.sub}</span>
         )}

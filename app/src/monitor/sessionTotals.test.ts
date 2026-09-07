@@ -104,7 +104,7 @@ function seaFretProgram(): WorkoutProgram {
     title: workout.title,
     type: workout.type,
     // Phase WU: interval 0 used to come from the rower's warm-up SETTING,
-    // via `buildRun`'s (now deleted) fourth argument. An authored 5' EASY
+    // via `buildRun`'s (now deleted) fourth argument. An authored 5' STEADY
     // step compiles to the identical interval — `compileProgram` nulls an
     // effort phase's target exactly as it nulled a warm-up's — so every
     // index, count and total in this file is unchanged.

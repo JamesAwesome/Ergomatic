@@ -3,7 +3,7 @@
 // `compileProgram`) — the repo's realistic-fixture rule. "Filling Low" is
 // the same fixture `ConnectedInterstitial.test.tsx` uses: 4 × 2000 m with
 // 3:00 rest between (retuned from 3 reps in Task 3, 2026-08-10
-// library-rebalance, to reach its new 45-60 band), with an 8:00 EASY opener
+// library-rebalance, to reach its new 45-60 band), with an 8:00 STEADY opener
 // prepended, which gives this file everything
 // it needs in one shape — a leading phase with no numeric target, work phases with
 // a real resolved split and a pace ref, folded rest phases (so the
@@ -59,7 +59,7 @@ const DEVICE = "PM5 432331249";
 // WHERE THE LEADING INTERVAL COMES FROM, twice moved. A seeded workout
 // stopped carrying a `wu` step on 2026-08-09, after which every fixture's
 // opening interval came from the rower's warm-up PREFERENCE (`buildRun`'s
-// fourth argument). Phase WU removed that too, so it is an authored EASY
+// fourth argument). Phase WU removed that too, so it is an authored STEADY
 // step now — `leadStep`, prepended to the workout's own steps. The
 // durations are exactly what each workout's `wu` row originally carried, so
 // every interval index, count and duration asserted in this file is
@@ -82,7 +82,7 @@ function libraryFixture(title: string, leadStep: Step | null) {
   return { phases, program };
 }
 
-/** The 8:00 EASY opener, the authored step that replaced Phase WU's
+/** The 8:00 STEADY opener, the authored step that replaced Phase WU's
  *  deleted warm-up setting in this file's fixtures. PaceWord-ref, so the
  *  compiler programs it with no target (`compileProgram` nulls an effort
  *  phase's `targetSplit`) — the same target-less leading interval every
@@ -126,7 +126,7 @@ const WARMUP_WITH_REST = libraryFixture("Filling Low", {
  *  are two different literals from `domain/pace.ts`'s `paceWordLabel` and a
  *  fixture that only ever saw `max` would not notice a mapping that always
  *  returned it:
- *  - `Fog Bow` (O2) is 30' at 6k+12, 5' at MIN, 25' at 6k+10 — the EASY
+ *  - `Fog Bow` (O2) is 30' at 6k+12, 5' at MIN, 25' at 6k+10 — the STEADY
  *    word sandwiched between two numeric targets in ONE program, so the
  *    same model can be asked for both kinds of slot without changing
  *    fixture.
@@ -252,7 +252,7 @@ function model(over: Partial<SurfaceModelInput> = {}) {
  *  are the workout's, not invented ones.
  *
  *  Phase WU: the predicate used to be `type === "work"`, which worked only
- *  because phase 0 was a warm-up. Phase 0 is the EASY opener now — also a
+ *  because phase 0 was a warm-up. Phase 0 is the STEADY opener now — also a
  *  work phase — so this names what it actually wants. */
 function firstWorkPhase(): EnginePhase {
   const p = FIXTURE.phases.find((x) => x.targetKind === "split");
@@ -1334,21 +1334,21 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
     );
   });
 
-  it("work, meters, effort target -> WORK {meters}m · EASY", () => {
+  it("work, meters, effort target -> WORK {meters}m · STEADY", () => {
     // PHASE WU CHANGED BOTH STRINGS IN THIS PAIR. `connectedNextText` had a
     // `case "warmup"` arm that produced `WARM-UP 2000m · Easy` from a
     // warm-up phase's own `label` ("Easy"). The union has no warm-up
     // member, so the kind word is `WORK`, and the phase these fixtures
-    // build is an authored EASY effort step whose `label` is
-    // `paceWordLabel`'s own uppercase `EASY`. The COMPOSITION is unchanged —
+    // build is an authored STEADY effort step whose `label` is
+    // `paceWordLabel`'s own uppercase `STEADY`. The COMPOSITION is unchanged —
     // still `${kind} ${extent} · ${label}` read straight off the phase.
     expect(connectedNextText(WARMUP_METERS.phases, -1)).toBe(
-      "WORK 2000m · EASY",
+      "WORK 2000m · STEADY",
     );
   });
 
-  it("work, time, effort target -> WORK {duration} · EASY", () => {
-    expect(connectedNextText(FIXTURE.phases, -1)).toBe("WORK 8:00 · EASY");
+  it("work, time, effort target -> WORK {duration} · STEADY", () => {
+    expect(connectedNextText(FIXTURE.phases, -1)).toBe("WORK 8:00 · STEADY");
   });
 
   it("test -> TEST · All out (no extent fields exist on a test phase)", () => {
@@ -1672,7 +1672,7 @@ describe("live", () => {
     // review, Minor 7): the point is that a REAL number is being
     // withheld from the slot, and a presence check passes on `null`.
     expect(EFFORT_MIN.phases[1]!.targetSplit).toBe(142);
-    expect(easy.targetSplit.main).toBe("EASY");
+    expect(easy.targetSplit.main).toBe("STEADY");
     expect(easy.targetSplit.sub).toBeNull();
     expect(easy.targetSplit.absent).toBe(true);
     expect(easy.targetSplitCaption).toBe("");
@@ -1879,7 +1879,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
     expect(m.avg.display).toBe("3:20.0");
     expect(m.avg.judgement).toBe("within");
     expect(m.avg.absent).toBe(false);
-    expect(m.targetSplit.main).toBe("EASY"); // Phase WU: was the warm-up's "Easy"
+    expect(m.targetSplit.main).toBe("STEADY"); // Phase WU: was the warm-up's "Easy"
     expect(m.targetSplit.absent).toBe(true);
   });
 
@@ -2428,10 +2428,10 @@ describe("degenerate inputs", () => {
   it("the hero's target NAMES the phase when it carries no split target of its own", () => {
     const m = model({ frame: frame({ intervalIndex: 0 }) });
     expect(FIXTURE.phases[0]!.targetKind).toBe("effort");
-    // Phase WU: the word is the EFFORT phase's own `EASY`, where it used to
+    // Phase WU: the word is the EFFORT phase's own `STEADY`, where it used to
     // be the warm-up phase's `Easy`. Both come from the phase's `label`,
     // read straight through — the rule is unchanged, the phase is not.
-    expect(m.targetSplit.main).toBe("EASY");
+    expect(m.targetSplit.main).toBe("STEADY");
     expect(m.targetSplit.absent).toBe(true);
     // The caption is EMPTY, not "NO SPLIT TARGET": the word above it now
     // says the same thing, and the old caption would only repeat it.
@@ -2581,7 +2581,7 @@ describe("every interval is numbered", () => {
     const m = model({ frame: frame({ intervalIndex: 0, currentSplit: 95 }) });
     expect(FIXTURE.phases[0]!.targetKind).toBe("effort");
     expect(FIXTURE.program.intervals[0]!.targetSplit).toBeNull();
-    expect(m.targetSplit.main).toBe("EASY"); // Phase WU: was "Easy"
+    expect(m.targetSplit.main).toBe("STEADY"); // Phase WU: was "Easy"
     expect(m.targetSplit.absent).toBe(true);
     expect(m.targetRate.main).toBe("Free");
     expect(m.targetRate.absent).toBe(true);

@@ -865,23 +865,6 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
     expect(seed.paces).toStrictEqual({});
   });
 
-  it("throws loudly if a split-ref phase reaches it with null baselines (programmer error — callers gate on needsBaselines)", () => {
-    const draft = buildDraft({
-      id: "id-splitref-seed",
-      title: "Split Ref Seed",
-      type: "AT",
-      steps: [
-        {
-          k: "w",
-          duration: { kind: "time", minutes: 2 },
-          ref: { base: "6k", off: 4 },
-        },
-      ],
-    });
-    const run = buildRun(draft, BASELINES, NOW);
-    expect(() => buildLogSeed(run.phases, null)).toThrow(/needsBaselines/);
-  });
-
   it("emits one seed step per NON-REST phase, in program-interval order, with the manual builder's own label text", () => {
     // w(2' = 120s @ 6k+4, rest 1' = 60s) + w(100m @ 6k+0), with a 5' EASY
     // opener in front — the task brief's own phase shape: work@time,

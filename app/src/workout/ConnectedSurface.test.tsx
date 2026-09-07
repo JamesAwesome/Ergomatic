@@ -165,7 +165,7 @@ function fillingLow(): {
     type: w.type as WorkoutType,
     // Filling Low's own 8:00 `wu` row left the seed on 2026-08-09 and the
     // warm-up PREFERENCE that replaced it left with Phase WU. The leading
-    // interval this whole file's indices assume is an authored 8' EASY step
+    // interval this whole file's indices assume is an authored 8' STEADY step
     // now, which compiles identically. Same 480s interval 0, same
     // everything downstream.
     steps: [
@@ -196,7 +196,7 @@ const FIXTURE = fillingLow();
  *  number, never a literal typed into this file.
  *
  *  Phase WU: this used to find the first `type: "work"` phase, which worked
- *  only because phase 0 was a warm-up. Phase 0 is now the EASY opener — a
+ *  only because phase 0 was a warm-up. Phase 0 is now the STEADY opener — a
  *  work phase, and one that carries an ESTIMATED `targetSplit` — so the
  *  predicate has to name what it actually wants: the piece the rower chose
  *  a pace for, `targetKind === "split"`. */
