@@ -166,9 +166,9 @@
         <table class="st">
           <thead><tr><th class="pin">#</th><th>HR</th><th>WATTS</th><th>CAL</th><th>CAL/HR</th><th>DRAG</th><th>REST m</th></tr></thead>
           <tbody>
-            <tr><td class="pin">1</td><td>132</td><td>155</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td>18</td></tr>
-            <tr><td class="pin">2</td><td>141</td><td>159</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td>21</td></tr>
-            <tr><td class="pin">3</td><td>144</td><td>158</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td>0</td></tr>
+            <tr><td class="pin">1</td><td>132</td><td>155</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+            <tr><td class="pin">2</td><td>141</td><td>159</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+            <tr><td class="pin">3</td><td>144</td><td>158</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
           </tbody>
         </table>
       </div>
@@ -180,5 +180,6 @@
 </div>
 
 <div class="section" style="margin-top:18px">
+  <p style="font-size:12px;color:#444"><b>Corrected 2026-09-07 (PM final gate C2):</b> the old-row strip's REST m column read 18 / 21 / 0 when first approved; a STORED row's REST m is a dash on every row until <code>LogStep</code> carries per-step rest metres (ROADMAP register) — only the live door fills it. James was told the approved artefact moved.</p>
   <p style="font-size:12px;color:#444"><b>Rules drawn in:</b> no ALL row (the tiles are the session); no SPM in the strip (the INTERVALS table shows it with its target); a Just Row gets the tiles and no strip; the pinned column uses <code>border-collapse: separate</code> with an opaque background and a soft shadow; <code>—</code> is the app's own <code>DASH</code>, and <code>0</code> is a value. RATE · TARGET's target shows only when every interval agrees.</p>
 </div>

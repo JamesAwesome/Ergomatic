@@ -5528,3 +5528,67 @@ approval: **a third owed live verification on the same flip.** One trip, filed
 as the flag-flip gate in ROADMAP (2026-09-05 ruling), never as a new phase walk.
 Stale rows found at this gate: Wave E PR B merged #298 and PR C merged #307,
 both still unchecked — ticked.
+
+## 2026-09-07 — Phase LP PR 1 final gate (#327, TRIAD: stored shape): the mockup that promised a column the record cannot fill
+
+**Verdict:** PASS WITH CONDITIONS. Four blocking, none about the code — CI at
+the wrong SHA, a Gate 0 artboard falsified by the shipped record, two stale
+spec/ROADMAP claims, and Gate 0's phone half owed in three places that
+disagreed about whether it blocks merge. All four closed the same day.
+
+**A RENDERED ARTEFACT IS NOT AUTOMATICALLY A TRUE ONE, and this is the first
+time a Gate 0 mockup itself was the defect.** The design gate exists because
+RC-24 was approved on a DESCRIPTION. LP was approved on a real artboard — and
+its "A REAL old machine row" phone drew `REST m` as 18 / 21 / 0, while
+`machineSplitRows` sets `restMeters: undefined` for every stored row, making
+that column a permanent dash. The correction lived in three places on the same
+branch (the function's doc comment, the DEVIATIONS row, a ROADMAP register row)
+and reached neither artefact James approved on — spec §3 still read "Strip 3 of
+6 columns populate — HR, WATTS, REST m". **Before a Gate 0 artboard is
+approved, walk every cell it POPULATES back to the field that fills it in the
+SHIPPING record, not on the wire.** A wire field the record does not keep
+renders as a dash, and a mockup drawn from the wire will lie about it.
+
+**Compare the CI run's `headSha` to the merge head — do not read "green".**
+`gh pr checks 327` said "no checks reported"; the branch's only run was against
+`d08345df`, the commit BEFORE a review fix round that touched domain, server,
+src, e2e and CSS. The PR body then argued forward from it: "`dist:grep` OK (at
+`d08345df`, no bundle-affecting change since except CSS/JSX)" — CSS and JSX ARE
+bundle-affecting, and RF12 settles that class by producing the artifact. The
+briefing checklist already requires "a CI run EXISTS for the exact head"; what
+was missing was the mechanical form, now written into that item.
+
+**Two authorities for one number, four lines apart, with the fixture setting
+them equal.** The REST tile reads 0x003A's own Total Rest Distance; the total
+line's "plus 242 m coasting in rest" reads the RC-1 sum of 0x0037's
+per-interval rest. `driver.ts`'s `recordRestDistanceVerdict` exists to compare
+exactly those two and tolerates `REST_DISTANCE_VERDICT_BAND_METERS = 1`, so the
+repo already expects them to differ — while both screenshot fixtures set 242
+and 242, so no capture and no test can show a split. **When a screen renders
+both sides of an existing verdict function, it has published a comparison the
+rower cannot interpret: either feed both from one value, or show one.** The
+tell is grepping a new tile's source and finding a verdict/oracle function that
+already reads it. James's call (M3); PM's read: keep the tile, feed the total
+line's clause from the same value when present.
+
+**My own open-gate rule recurred one level down.** That entry said "a design
+gate cannot approve a combination no artboard drew". Here the composed artboard
+drew the NEW tier and omitted the EXISTING total line it lands four lines
+above. **An artboard shows the new thing IN its neighbours, not beside a
+blank.** `grep -i "total\|coasting" 03-chosen-composed.html` returned nothing;
+that grep is the check.
+
+**A LABEL is a claim, and ruling the arithmetic does not rule the label.** The
+strip is titled `MACHINE SUMMARY / PM5 · PER INTERVAL`, and two of its six
+columns are Concept2's arithmetic (929 on screen against the 931 the same
+record stores). Not a merge blocker; filed as a named row of the "say which
+number this is" pass.
+
+**Release:** not needed alone, and NOT eligible to carry spec §8's note — "the
+same figures Concept2's logbook shows for that row" is false until PR 2 sends
+the splits. **A parity note ships with the PR that makes parity true, never
+with the PR that makes it visible.**
+
+**Presentation:** 218 words above the fold against ~120, 7 bullets against ~6,
+one 52-word bullet — a mechanism bullet ("jsonb keys, no migration") and a
+Try-it that narrates cases instead of naming one. Cut to 5 bullets.

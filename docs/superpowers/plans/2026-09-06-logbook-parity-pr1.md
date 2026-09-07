@@ -1520,7 +1520,7 @@ git commit -m "LP PR1 T11: DEVIATIONS row; pm5-interface-notes path fixed; spec 
 
 - [ ] `pnpm lint && pnpm typecheck && pnpm format:check && pnpm test --project unit --project client && pnpm build && pnpm dist:grep && pnpm e2e --reporter=line` — all green; no `docs/screenshots` capture moved except ones the spec names (the summary screens — run `pnpm screenshots` twice and retain only `post-workout-summary*.png`, `log-detail*.png` if they show the tier on a seeded machine row; restore the rest).
 - [ ] Push; open the PR (draft) with the human-first body; dispatch the whole-branch review (two-stage) and the PM final gate (TRIAD).
-- [ ] **Gate 0** (spec §3.3): build for Kaito; **ask James before installing**; captures — fresh machine row (session door + log detail), a REAL old machine row, portrait and landscape, beside v0.39.2; the §3.1 option pair stated with its measured deltas; contrast ratios stated from `theme/tokens.css`.
+- [ ] **Gate 0 step 2 = the RELEASE gate, not the merge gate** (PM final gate C4, 2026-09-07; spec §3.3 rev 2.2): build for Kaito; **ask James before installing**; captures — fresh machine row (session door + log detail), a REAL old machine row, portrait and landscape, beside v0.39.2; the §3.1 option pair stated with its measured deltas; contrast ratios stated from `theme/tokens.css`.
 - [ ] Present the verdicts; stop for James's merge approval.
 
 ---

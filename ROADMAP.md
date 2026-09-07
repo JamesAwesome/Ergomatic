@@ -571,8 +571,15 @@ Gate 0 approved on artboard 03; §3.1 ruled "logbook formula"; the four
 session fields ride `machine_summary` jsonb, not columns, on a measured
 DBA benchmark
 (`docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`).
-Owed before merge: `/harden`, the whole-branch review + PM final gate,
-phone captures (fresh + a real old machine row, both orientations).
+Gates on PR #327: `/harden` SKIPPED, spoken — the plan was executed
+inline in full, so its paste-test precondition and every block both
+lenses read are committed code, and the review half covers them; the
+whole-branch review RAN (REQUEST CHANGES → all code findings closed at
+`76a6b18b`, execution record in the plan); PM final gate RAN (PASS WITH
+CONDITIONS, all four record-side, closed). Owed before the TAG that
+carries PR 1, not before merge (PM C4): the phone captures (fresh + a
+real old machine row, both orientations — ASK before installing) and the
+production count of rows clearing the tier-A gate.
 
 **Goal:** a rower who opens the same piece in our app and in the Concept2
 logbook after an upload reads the same numbers — per split: watts, cal,
@@ -1711,6 +1718,15 @@ close, not before.**
   `d`; it is one of three places the same screen mixes two quantities.
 
 ## The "say which number this is" design pass (post-Wave F, unopened)
+
+- [ ] **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
+      columns that are Concept2's arithmetic** (PM final gate #327,
+      2026-09-07, non-blocking): WATTS and CAL/HR are the logbook's
+      derivation (James's §3.1 ruling), differing from the PM5's own by
+      ≤1 W and 24–78 cal/hr — the same record stores `avgCalPerHour: 931`
+      and the tile renders 929. The arithmetic was ruled; the LABEL was
+      not. A named row for this pass's Gate 0, which LP's own §3.4 admits
+      it enlarged by six numbers.
 
 **Opened by James's 2026-08-31 ruling** on the axis-quantity question: take the
 three surviving work-versus-rest mismatches together, in ONE design pass with

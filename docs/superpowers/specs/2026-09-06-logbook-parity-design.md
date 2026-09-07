@@ -21,6 +21,11 @@ logbook row, six cells of six, before any code exists. Manual and by-feel
 rows are untouched. Machine rows saved before this ships render `—` where
 the field never existed.
 
+**Rev 2.2 (2026-09-07, PM final gate #327):** §3's old-row strip claim
+corrected (REST m is a dash on every stored row; the artboard's old-row
+phone corrected to match); §6's "migration" struck; §3.3 step 2 is the
+release gate, not the merge gate.
+
 **Rev 2.1 (2026-09-07):** §2.2 stores the four session fields as
 `machineSummary` jsonb keys, not columns (DBA benchmark cited there; James:
 jsonb). §3.1 ruled "logbook formula" (James, 2026-09-07). Gate 0 approved
@@ -317,8 +322,14 @@ the log detail, Just Row's log — one component.
 - **What an OLD machine row actually renders** (PM, from the stored
   shape): tiles **3 of 6** populate — AVG WATTS (derivable from stored
   time/distance), RATE · TARGET, DRAG; CALORIES, CAL/HR, REST are `—`.
-  Strip **3 of 6** columns populate — HR, WATTS, REST m; CAL, CAL/HR, DRAG
-  are `—`. Not a wall of dashes; Gate 0 shows a real old row.
+  Strip **2 of 6** columns populate — HR (with a belt) and WATTS; CAL,
+  CAL/HR, DRAG are `—`, and REST m is `—` on EVERY stored row, old or new,
+  because `LogStep` carries no per-step rest metres (only the live door
+  fills that column, from `IntervalActual.restDistanceMeters`; ROADMAP
+  register row, PR 2 decides). _Rev 2.2 (2026-09-07, PM final gate C2):
+  this line and the artboard's old-row phone said "3 of 6 — HR, WATTS,
+  REST m"; both corrected._ Not a wall of dashes; Gate 0 shows a real old
+  row.
 - **Copy:** `MACHINE SUMMARY`, `PM5 · PER INTERVAL`, tile labels as above,
   units in the hero's small trailing style. No em-dashes in strings; the
   `—` placeholder is the data glyph, exempt.
@@ -366,7 +377,14 @@ targets staying in the INTERVALS table.
    a fresh machine row and a REAL old machine row, session door and log
    detail, portrait and landscape, beside v0.39.2's screen; the number of
    machine rows in production stated (Wave E PR0 counted 20 rows, 6
-   PM5-eligible, 2026-08-31 — run the query again).
+   PM5-eligible, 2026-08-31 — run the query again, and this time count the
+   rows that clear the tier-A gate: `source = 'pm5'` with both
+   `machine_work_*` non-null and > 0). _Rev 2.2 (PM final gate C4): this
+   step is the RELEASE gate for PR 1, not the merge gate — the web
+   captures plus the e2e overflow / pin / focus / axe gates cover the
+   layout; the phone adds orientation and real-device proportions, which
+   a tester note needs and a merge does not. It runs before the tag that
+   carries PR 1, and its count goes in that note's reasoning._
 3. **Colour pairings:** no new colour; tiles and cells use `--ink` on
    `--page`/`--surface` and `--ink-2` labels, the pairings the hero and
    INTERVALS table carry — the ratios recomputed from `theme/tokens.css` and
@@ -477,8 +495,8 @@ The pass keeps its own Gate 0.
 
 - **PR 1 — record + screen** (TRIAD: stored shape): 0x003A decode
   extension (three fields, §23's table quoted in the code), retention of
-  the 0x0038 fields, the summary-burst drain condition, migration,
-  `MonitorRun` fields, the fake's real values, tiles and MACHINE SUMMARY,
+  the 0x0038 fields, the summary-burst drain condition, the jsonb keys
+  (no migration — §2.2 rev 2.1), `MonitorRun` fields, the fake's real values, tiles and MACHINE SUMMARY,
   the identity and derived-pair tests, DEVIATIONS rows, the stale
   `parse.ts` comments swept ("a wider parser would be undecoded surface
   with no reader" — it has readers now). Gate 0 per §3.3.
