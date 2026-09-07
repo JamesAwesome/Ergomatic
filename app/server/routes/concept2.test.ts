@@ -2492,12 +2492,12 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     });
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id, {
-      // Uneven gaps: 138 time-weighted, 120 unweighted.
+      // DECISECONDS, uneven gaps inside the cap: 133 weighted, 120 not.
       series: {
         samples: [
           { t: 0, d: 0, p: 1250, spm: 24, hr: 100 },
-          { t: 1, d: 4, p: 1250, spm: 24, hr: 140 },
-          { t: 21, d: 84, p: 1250, spm: 24, hr: 140 },
+          { t: 10, d: 4, p: 1250, spm: 24, hr: 140 },
+          { t: 60, d: 84, p: 1250, spm: 24, hr: 140 },
         ],
       },
     });
@@ -2508,7 +2508,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     );
     expect(res.status).toBe(200);
     const posted = vi.mocked(client.postResult).mock.calls[0]![1];
-    expect(posted.heart_rate).toStrictEqual({ average: 138 });
+    expect(posted.heart_rate).toStrictEqual({ average: 133 });
   });
 
   it("Phase LP: every accepted send logs one c2_send event carrying the 201 body's verified flag and which fallback fired", async () => {

@@ -286,13 +286,16 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     // `Sample` carries distance, pace and rate too; they play no part in this
     // derivation, so they are filled with a constant rather than varied,
     // which keeps the heart-rate literals the only thing under test.
-    const at = (t: number, hr?: number, rest?: true) => ({
-      t,
+    // SECONDS in, deciseconds out — `Sample.t` is `round(seconds * 10)`, and
+    // writing these in seconds is how a 60-decisecond dropout cap read as 60
+    // seconds for a whole review round. `r` is the recorder's own key.
+    const at = (seconds: number, hr?: number, resting?: true) => ({
+      t: seconds * 10,
       d: 0,
       p: 1250,
       spm: 24,
       ...(hr === undefined ? {} : { hr }),
-      ...(rest === undefined ? {} : { rest }),
+      ...(resting === undefined ? {} : { r: resting }),
     });
     const withTrace = (samples: ReturnType<typeof at>[]) =>
       buildStoredSummary(
@@ -309,25 +312,27 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
       ).heroes.machine;
 
     // Ten seconds at 100 then ten at 140 weights evenly: 120.
-    expect(withTrace([at(0, 100), at(10, 140), at(20, 140)])?.avgHr).toBe(120);
+    expect(withTrace([at(0, 100), at(1, 140), at(2, 140)])?.avgHr).toBe(120);
 
-    // UNEVEN gaps, which is the only shape that can tell a time-weighted
-    // mean from a plain one: one second at 100 then twenty at 140 is 138
-    // weighted, and 120 if each sample counted once. Every other case here
-    // is evenly spaced, so a plain mean passed them all (found by mutation).
-    expect(withTrace([at(0, 100), at(1, 140), at(21, 140)])?.avgHr).toBe(138);
+    // UNEVEN gaps, the only shape that tells a time-weighted mean from a
+    // plain one: one second at 100 then five at 140 is 133 weighted and 120
+    // if each sample counted once. Every other case is evenly spaced, so a
+    // plain mean passed them all until this was added. Both gaps sit inside
+    // the six-second dropout cap — the twenty-second gaps an earlier version
+    // used are dropouts at the recorder's 1 Hz and count for nothing.
+    expect(withTrace([at(0, 100), at(1, 140), at(6, 140)])?.avgHr).toBe(133);
 
     // The same trace with the SECOND stretch marked rest drops to 100 — the
     // assertion that tells option A from option B, and the reason the two
     // literals here differ by 20 rather than by rounding.
-    expect(withTrace([at(0, 100), at(10, 140, true), at(20, 140)])?.avgHr).toBe(
+    expect(withTrace([at(0, 100), at(1, 140, true), at(2, 140)])?.avgHr).toBe(
       100,
     );
 
     // No trace, or a trace with no readings: the dash stays, rather than a
     // number invented from nothing.
     expect(withTrace([])?.avgHr).toBeUndefined();
-    expect(withTrace([at(0), at(10)])?.avgHr).toBeUndefined();
+    expect(withTrace([at(0), at(1)])?.avgHr).toBeUndefined();
   });
 
   it("prefers the monitor's OWN average when it ever sends one", () => {

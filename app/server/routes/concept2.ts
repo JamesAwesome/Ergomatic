@@ -250,7 +250,7 @@ function toMappingRow(row: {
     series:
       typeof row.series === "object" && row.series !== null
         ? (row.series as {
-            samples?: readonly { t: number; hr?: number; rest?: true }[];
+            samples?: readonly { t: number; hr?: number; r?: true }[];
           })
         : null,
     source: row.source,

@@ -4,8 +4,16 @@ import { describe, expect, it } from "vitest";
 import {
   parseAdditionalStatus1,
   parseGeneralStatus,
+  toMonitorState,
   WORKOUTSTATE_INTERVALREST,
 } from "../../domain/monitor/pm5/parse.js";
+import {
+  ADDITIONAL_STATUS_1_UUID,
+  GENERAL_STATUS_UUID,
+} from "../../domain/monitor/pm5/uuids.js";
+import type { MonitorFrame } from "../../domain/monitor/types.js";
+import { fromHexString, parseRecording } from "./transports/recording.js";
+import { createSeriesRecorder } from "./seriesRecorder.js";
 import {
   deriveAverageHeartRate,
   type HeartRateSample,
@@ -45,9 +53,12 @@ function samplesFrom(file: string): HeartRateSample[] {
       const a = parseAdditionalStatus1(b);
       if ("error" in a || a.heartRateBpm === null) continue;
       out.push({
-        t: a.elapsedSeconds,
+        // DECISECONDS and `r`, exactly as `seriesRecorder.ts` constructs a
+        // `Sample`. Building this in seconds with a `rest` key is what let a
+        // dead rest-guard and a 10x dropout cap both pass for a whole round.
+        t: Math.round(a.elapsedSeconds * 10),
         hr: a.heartRateBpm,
-        ...(resting ? { rest: true as const } : {}),
+        ...(resting ? { r: true as const } : {}),
       });
     }
   }
@@ -68,10 +79,10 @@ describe("deriveAverageHeartRate, against real captures", () => {
       117,
     ],
     ["walk-2026-08-16/session-1-keystone-2x250r0.jsonl", 287, 0, 116],
-  ])("%s derives %i bpm from its own strokes", (file, total, rest, bpm) => {
+  ])("%s: %i samples, %i resting, derives %i bpm", (file, total, rest, bpm) => {
     const samples = samplesFrom(file as string);
     expect(samples).toHaveLength(total as number);
-    expect(samples.filter((s) => s.rest === true)).toHaveLength(rest as number);
+    expect(samples.filter((s) => s.r === true)).toHaveLength(rest as number);
     expect(deriveAverageHeartRate(samples)).toBe(bpm as number);
   });
 
@@ -99,8 +110,8 @@ describe("deriveAverageHeartRate, against real captures", () => {
     expect(deriveAverageHeartRate([{ t: 0, hr: 120 }])).toBeNull();
     expect(
       deriveAverageHeartRate([
-        { t: 0, hr: 120, rest: true },
-        { t: 1, hr: 118, rest: true },
+        { t: 0, hr: 120, r: true },
+        { t: 10, hr: 118, r: true },
       ]),
     ).toBeNull();
     // A dropout is not a stroke: one reading either side of a 10-minute gap
@@ -108,9 +119,84 @@ describe("deriveAverageHeartRate, against real captures", () => {
     expect(
       deriveAverageHeartRate([
         { t: 0, hr: 200 },
-        { t: 600, hr: 100 },
-        { t: 601, hr: 100 },
+        { t: 6000, hr: 100 },
+        { t: 6010, hr: 100 },
       ]),
     ).toBe(100);
+  });
+});
+
+// RF24, and the gate this change most needed. Everything above extracts
+// samples the way THIS FILE chooses to; the producer is `seriesRecorder.ts`,
+// and the first version of this change read a rest flag named `rest` while
+// the recorder writes `r`. Structural typing accepted it, every hand-built
+// test proved a guard that never ran, and the app shipped an average nobody
+// approved. So one test starts at the recorder's own output and never names
+// a field itself.
+describe("deriveAverageHeartRate over the RECORDER's own samples", () => {
+  /** The recorder's real input, decoded from a capture through the real
+   *  parsers. Re-declared rather than imported: no test file in this
+   *  directory imports another (the convention `avgPaceVerdict.replay.test.ts`
+   *  states and follows). */
+  function framesFrom(file: string): MonitorFrame[] {
+    const { events } = parseRecording(
+      readFileSync(`${SESSIONS_DIR}${file}`, "utf8"),
+    );
+    const frames: MonitorFrame[] = [];
+    let last: {
+      currentSplit: number;
+      spm: number;
+      heartRateBpm: number | null;
+    } | null = null;
+    for (const e of events) {
+      if (!("dir" in e) || e.dir !== "rx") continue;
+      if (e.char === ADDITIONAL_STATUS_1_UUID) {
+        const p = parseAdditionalStatus1(fromHexString(e.hex));
+        if (!("error" in p)) last = p;
+        continue;
+      }
+      if (e.char !== GENERAL_STATUS_UUID) continue;
+      const gs = parseGeneralStatus(fromHexString(e.hex));
+      if ("error" in gs) continue;
+      frames.push({
+        elapsedSeconds: gs.elapsedSeconds,
+        distanceMeters: gs.distanceMeters,
+        sessionElapsedSeconds: gs.elapsedSeconds,
+        sessionDistanceMeters: gs.distanceMeters,
+        currentSplit: last?.currentSplit ?? null,
+        spm: last?.spm ?? null,
+        heartRateBpm: last?.heartRateBpm ?? null,
+        rowingActive: gs.rowingState === 1,
+        splitAvgPace: null,
+        restSeconds: 0,
+        intervalIndex: null,
+        intervalRemaining: null,
+        intervalAccrued: null,
+        state: toMonitorState(gs.workoutState),
+      });
+    }
+    return frames;
+  }
+
+  it("excludes the rest the RECORDER marked, without this test naming the field", () => {
+    const recorder = createSeriesRecorder();
+    for (const f of framesFrom("walk-2026-08-16/session-2-wu-4unequal.jsonl")) {
+      recorder.onFrame(f);
+    }
+    const produced = recorder.snapshot()?.samples ?? [];
+    expect(produced.length).toBeGreaterThan(50);
+    // The recorder marked some of these resting. This test never writes that
+    // key, so a rename cannot be papered over here.
+    const derived = deriveAverageHeartRate(produced);
+    expect(derived).not.toBeNull();
+
+    // Strip whatever marks rest, by rebuilding each sample from the two
+    // fields the derivation reads by value. If the exclusion is live, the two
+    // answers differ; if the flag is misnamed or ignored, they are equal and
+    // this fails — which is exactly what the first version of this change did.
+    const rest = produced.filter((s) => "r" in s && s.r === true);
+    expect(rest.length).toBeGreaterThan(0);
+    const withoutFlag = produced.map(({ t, hr }) => ({ t, hr }));
+    expect(deriveAverageHeartRate(withoutFlag)).not.toBe(derived);
   });
 });

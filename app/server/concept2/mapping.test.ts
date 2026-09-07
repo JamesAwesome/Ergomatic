@@ -895,14 +895,15 @@ describe("buildC2Payload — verification_code is never sent", () => {
 
 // Phase LP: the derived heart-rate average on the wire.
 describe("buildC2Payload — heart_rate.average is derived when the monitor sends none", () => {
-  // Uneven gaps on purpose: one second at 100 then twenty at 140 is 138
-  // time-weighted and 120 if each sample counted once, so this pins the
-  // weighting and not merely the plumbing.
+  // Uneven gaps on purpose, both inside the six-second dropout cap: one
+  // second at 100 then five at 140 is 133 time-weighted and 120 if each
+  // sample counted once, so this pins the weighting, not just the plumbing.
+  // Deciseconds, the unit `Sample.t` actually carries.
   const trace = {
     samples: [
       { t: 0, hr: 100 },
-      { t: 1, hr: 140 },
-      { t: 21, hr: 140 },
+      { t: 10, hr: 140 },
+      { t: 60, hr: 140 },
     ],
   };
 
@@ -912,15 +913,15 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
       LINK,
       "UTC",
     );
-    expect(post.heart_rate).toStrictEqual({ average: 138 });
+    expect(post.heart_rate).toStrictEqual({ average: 133 });
   });
 
   it("EXCLUDES resting strokes, so the wire agrees with the screen", () => {
     const resting = {
       samples: [
         { t: 0, hr: 100 },
-        { t: 1, hr: 140, rest: true as const },
-        { t: 21, hr: 140 },
+        { t: 10, hr: 140, r: true as const },
+        { t: 60, hr: 140 },
       ],
     };
     // With the middle stretch resting, only the opening second counts.

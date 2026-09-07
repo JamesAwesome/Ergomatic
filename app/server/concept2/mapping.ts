@@ -60,7 +60,7 @@ export interface SessionLogRow {
    *  store's `LogSeries`, typed loosely here for the same reason
    *  `machineSummary` is: `routes/data.ts` owns its bands. */
   series?: {
-    samples?: readonly { t: number; hr?: number; rest?: true }[];
+    samples?: readonly { t: number; hr?: number; r?: true }[];
   } | null;
   source: LogSource;
   endedBy: string | null;
