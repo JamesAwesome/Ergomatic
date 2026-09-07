@@ -1373,6 +1373,16 @@ closed with zero Concept2 contact.
       what changed is the product decision.
       **This row is now UNBLOCKED but unstarted**, and means reflecting a
       verification the ROWER performed, never one we caused.
+- [ ] **`pnpm screenshots` rewrites ~61 PNGs per run with no content change.**
+      Measured twice on 2026-09-07 (PR #341): two consecutive runs on an
+      unchanged tree each rewrote the same 61 captures, differing only in the
+      clock rendered into the frame (`SEP 7 · 00:15` → `12:49`, diff bounding
+      box 37×11 px). `log-detail-legacy.png` moves 181 bytes despite carrying
+      no machine block at all. **Why it matters:** committed captures are the
+      PR's visual record (RF7), and 61 noisy PNGs bury the two that actually
+      changed — this PR had to revert them by hand twice to keep the record
+      readable. **Fix:** freeze the clock the captures render, the way the
+      fixtures already freeze their data.
 - [ ] **Auto-verification, as an option, DEFAULTED OFF (James, 2026-09-07).**
       Sending the monitor's code with the upload verifies the row at receipt;
       that shipped as #336, was reversed as #337 because it took the act away
