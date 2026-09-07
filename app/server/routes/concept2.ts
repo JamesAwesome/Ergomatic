@@ -26,7 +26,7 @@ import {
   type Concept2Store,
   type LinkSurface,
 } from "../stores/concept2.js";
-import type { LogsStore } from "../stores/logs.js";
+import type { LogStep, LogsStore } from "../stores/logs.js";
 import { tzError } from "./data.js";
 
 // Wave E PR1 Task 6, rebuilt at PR1.75a
@@ -222,6 +222,7 @@ function toMappingRow(row: {
   machineSummary: unknown;
   source: LogSource;
   endedBy: string | null;
+  steps: unknown;
 }): SessionLogRow {
   return {
     loggedAt: row.loggedAt,
@@ -237,6 +238,11 @@ function toMappingRow(row: {
     machineWorkMeters: row.machineWorkMeters,
     machineWorkSeconds: row.machineWorkSeconds,
     machineSummary: row.machineSummary as Record<string, unknown> | null,
+    // Phase LP PR 2: the stored steps feed `workout.intervals[]`. The jsonb
+    // column arrives untyped off `store.get`, the same cast `machineSummary`
+    // above already makes; a non-array (impossible on a row the write
+    // path admitted) reads as no steps, never a partial array.
+    steps: Array.isArray(row.steps) ? (row.steps as LogStep[]) : [],
     source: row.source,
     endedBy: row.endedBy,
   };

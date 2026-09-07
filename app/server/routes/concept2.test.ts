@@ -2207,6 +2207,68 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     expect(stored?.c2UserId).toBe(LINK_INPUT.c2UserId);
   });
 
+  // Phase LP PR 2, the RF24 seam for the new fields: the STORE writes the
+  // steps and the 0x003A keys, `toMappingRow` carries them, `buildC2Payload`
+  // reads them — this test starts at `logs.create`, never at a hand-built
+  // SessionLogRow, so dropping `steps` in `toMappingRow` is caught here.
+  it("Phase LP PR 2: a stored row with complete steps and the 0x003A keys posts workout.intervals, calories_total, drag_factor and heart_rate to Concept2", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({ ok: true, resultId: 9 });
+    const { app, logs } = buildApp({ store, client });
+    const step = {
+      label: "250m @ 2:07.0",
+      targetSplit: 127.0,
+      actualSplit: 135.8,
+      actualSeconds: 67.9,
+      actualSource: "pm5" as const,
+      meters: 250,
+      actualMeters: 250,
+      actualSpm: 25,
+      spm: 26,
+      machineCalories: 16,
+      machineRestSeconds: 60,
+      machineRestMeters: 147,
+    };
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [step, { ...step, actualSeconds: 56.1, actualSpm: 28 }],
+      machineSummary: {
+        avgStrokeRate: 24,
+        workoutType: 8,
+        totalCalories: 32,
+        dragFactorAverage: 100,
+        avgHeartRateBpm: 142,
+        totalRestMeters: 242,
+      },
+    });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    const payload = vi.mocked(client.postResult).mock.calls[0]![1] as Record<
+      string,
+      unknown
+    >;
+    expect(payload).toMatchObject({
+      calories_total: 32,
+      drag_factor: 100,
+      heart_rate: { average: 142 },
+      rest_distance: 242,
+    });
+    const workout = payload.workout as { intervals: unknown[] };
+    expect(workout.intervals).toHaveLength(2);
+    expect(workout.intervals[0]).toMatchObject({
+      type: "distance",
+      time: 679,
+      rest_time: 600,
+      rest_distance: 147,
+      targets: { pace: 1270, stroke_rate: 26 },
+    });
+  });
+
   // Wave E PR C, the RF24 seam: A (the store) writes machineWorkMeters, B
   // (buildC2Payload, via toMappingRow) reads it. This test starts at the
   // stored row — NOT at a hand-built SessionLogRow — so the mutation that
