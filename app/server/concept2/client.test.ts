@@ -613,7 +613,11 @@ describe("createC2Client", () => {
         .mockResolvedValue(jsonResponse(201, RAW_201_BODY));
       const client = createC2Client(cfg, fetchImpl);
       const result = await client.postResult("token", { type: "rower" });
-      expect(result).toStrictEqual({ ok: true, resultId: 85557 });
+      expect(result).toStrictEqual({
+        ok: true,
+        resultId: 85557,
+        verified: false,
+      });
     });
 
     it("RAW 409 duplicate transcript -> duplicate carrying the collider id", async () => {
@@ -700,5 +704,29 @@ describe("createC2Client", () => {
       const result = await client.postResult(marker, { type: "rower" });
       expect(JSON.stringify(result)).not.toContain(marker);
     });
+  });
+});
+
+// Phase LP PR 2.5: the 201 body's `verified` flag rides the result.
+describe("postResult — verified off the 201 body", () => {
+  it("carries verified: true when Concept2 says so, and null when the field is absent or not a boolean", async () => {
+    const verifiedBody = { data: { ...RAW_201_BODY.data, verified: true } };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(201, verifiedBody));
+    const client = createC2Client(cfg, fetchImpl);
+    expect(await client.postResult("token", { type: "rower" })).toStrictEqual({
+      ok: true,
+      resultId: 85557,
+      verified: true,
+    });
+    const noFlag = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(201, { data: { id: 7, verified: "yes" } }),
+      );
+    expect(
+      await createC2Client(cfg, noFlag).postResult("token", { type: "rower" }),
+    ).toStrictEqual({ ok: true, resultId: 7, verified: null });
   });
 });

@@ -9,12 +9,20 @@
  *  - `wireVerificationCode` — the form Concept2's results API accepted
  *    live (`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`:
  *    `verification_code: D9BD-F964-32E2-7F18` → 201, `verified: true`).
- * `null` when fewer than 8 bytes are present — never a padded guess.
+ * `null` when fewer than 8 bytes are present, or when any of the eight is
+ * not a whole byte (0..255) — never a padded guess and never a plausible
+ * wrong code. The write door bands the stored array the same way
+ * (`server/routes/data.ts`); this guard protects the Log screen's display
+ * and the upload from a value that got past it (review L4).
  */
 export function verificationWords(
   bytes: readonly number[],
 ): [string, string] | null {
   if (bytes.length < 8) return null;
+  for (let i = 0; i < 8; i += 1) {
+    const b = bytes[i]!;
+    if (!Number.isInteger(b) || b < 0 || b > 255) return null;
+  }
   const word = (o: number): string =>
     (
       ((bytes[o + 3]! << 24) |

@@ -506,6 +506,19 @@ export function buildC2Payload(
       : row.loggedAt;
   const tz = row.completedAt !== null && row.tz !== null ? row.tz : effectiveTz;
 
+  // PR 2.5 (review L3): ONE derivation feeds the posted numbers AND the
+  // verification-code guard below. Restating the predicate in two places
+  // let a later `??` edit decouple them and pair a code with a summed
+  // number it was never minted over.
+  const usedMachineMeters =
+    row.machineWorkMeters !== null && row.machineWorkMeters > 0;
+  const usedMachineSeconds =
+    row.machineWorkSeconds !== null && row.machineWorkSeconds > 0;
+  const postedMeters = usedMachineMeters ? row.machineWorkMeters! : workMeters;
+  const postedSeconds = usedMachineSeconds
+    ? row.machineWorkSeconds!
+    : workSeconds;
+
   const post: Record<string, unknown> = {
     type: "rower",
     date: formatC2Date(instant, tz),
@@ -523,15 +536,8 @@ export function buildC2Payload(
     // real captures (oracleCorpusReplay KEYSTONE, machine 138.7 vs ours
     // 138.8), gated by a seeded unit test at this store→payload seam while
     // oracleCorpusReplay gates the wire→machine_work_seconds step.
-    distance:
-      row.machineWorkMeters !== null && row.machineWorkMeters > 0
-        ? row.machineWorkMeters
-        : workMeters,
-    time: c2Tenths(
-      row.machineWorkSeconds !== null && row.machineWorkSeconds > 0
-        ? row.machineWorkSeconds
-        : workSeconds,
-    ),
+    distance: postedMeters,
+    time: c2Tenths(postedSeconds),
     weight_class: weightClass,
   };
 
@@ -595,22 +601,23 @@ export function buildC2Payload(
   if (Object.keys(heartRate).length > 0) post.heart_rate = heartRate;
 
   // Phase LP PR 2.5 (spec §5 rev 2.6): the PM5's own verification code,
-  // sent ONLY when the posted `time`/`distance` are the machine's own
-  // totals — the code is minted over those and the API checks "date, time,
-  // distance, workout_type and machine type" (proven live 2026-09-05: the
-  // machine's 5706 verifies, our summed 5708 does not). Concept2 verifies
-  // the result at receipt, which makes its own Verify button — hidden on
-  // results that arrive with interval data (James's four rows, 2026-09-07)
-  // — unnecessary. A row without machine totals sends no code: it could
-  // not verify and would only read as a mismatch.
-  const usedMachineTotals =
-    row.machineWorkMeters !== null &&
-    row.machineWorkMeters > 0 &&
-    row.machineWorkSeconds !== null &&
-    row.machineWorkSeconds > 0;
+  // sent ONLY when the posted `time`/`distance` are BOTH the machine's own
+  // totals — the code is minted over those, and the API checks "date, time,
+  // distance, workout_type and machine type".
+  // MEASURED (2026-09-05, log-dev, a payload with NO `workout.intervals[]`):
+  // the machine's 5706 returns `verified: true`, our summed 5708 returns
+  // false. UNTESTED: the code alongside `workout.intervals[]`, and any of
+  // it on production — the flag-flip parity walk settles both.
+  // INFERENCE (n=4 rows vs 1 control, and the control was also a different
+  // build): Concept2 hides its own Verify button on a result that arrives
+  // with interval data, which is why sending the code matters now. The
+  // change is right either way: verifying at receipt makes the button moot.
+  // A row without machine totals sends no code — it could not verify and
+  // would only read as a mismatch.
   const bytes = row.machineSummary?.verificationBytes;
   if (
-    usedMachineTotals &&
+    usedMachineMeters &&
+    usedMachineSeconds &&
     Array.isArray(bytes) &&
     bytes.every((b) => typeof b === "number" && Number.isInteger(b))
   ) {

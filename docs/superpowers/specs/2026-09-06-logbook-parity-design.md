@@ -526,13 +526,20 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   LE u32 words rendered `XXXX-XXXX-XXXX-XXXX` (`domain/monitor/verificationCode.ts`,
   shared with the Log screen's display), sent ONLY when the posted `time`
   and `distance` are the machine's own totals — the code is minted over those
-  (measured live 2026-09-05: the machine's 5706 verifies, our summed 5708
-  does not, `docs/superpowers/research/2026-09-05-c2-verification-measurement.md`).
+  **MEASURED** 2026-09-05 on **log-dev**, with a payload carrying **no**
+  `workout.intervals[]`: the machine's 5706 returns `verified: true`, our
+  summed 5708 returns `false`
+  (`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`,
+  whose own limits section reads _"NOT tested: production (only log-dev)"_).
+  **UNTESTED and owed to the parity walk:** the code alongside
+  `workout.intervals[]`, and either of them on production.
   Why now: James's four rows sent on the PR 2 build (2026-09-07) show that
   Concept2's own **Verify** affordance is absent on a result that arrives
   with `workout.intervals[]` — only the v0.41.0 (no-array) row still offered
-  it — which is not documented anywhere we can cite (INFERENCE from the four
-  rows; the API doc is silent). Sending the code makes the button
+  it. **INFERENCE, n=4 against a single control**, and the control was also
+  a different build, so build and payload shape are confounded; the API doc
+  is silent. The change is right under either diagnosis: verifying at
+  receipt makes the button moot. Sending the code makes the button
   unnecessary: Concept2 verifies at receipt (`"verified": true` in the 201
   body, proven live). _Rev 2.5's note that the field had never been emitted
   was true when written and is superseded here._ _Rev 2 said `stroke_rate` "per §3.2 (fixes the doubled

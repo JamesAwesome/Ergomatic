@@ -1343,10 +1343,14 @@ closed with zero Concept2 contact.
       and **Phase LP's parity photograph** (the logbook page beside our
       screen after our upload, plus the PM5's own View Detail screens — spec
       §4.2, now SEVEN items: PR 2 added a last-interval-rest piece and the
-      `pace` target's unit as read-backs) all need the same
-      `C2_LINK_ENABLED` flip on James's own account; walk them together,
-      never as separate PR-body lines. LP's exit is blocked on this flip
-      and says so. **For the runsheet's author (PM #332):** choose the
+      `pace` target's unit as read-backs) ride one trip; walk them
+      together, never as separate PR-body lines. **The flip itself HAS
+      HAPPENED on James's own account (2026-09-07, PR 2.5 #336's premise):
+      five rows reached concept2.com from the v0.41.0 and PR 2 builds, the
+      server log showed the sends with no fallback line, and the v0.41.0
+      row verified with its code typed in.** What LP's exit still waits on
+      is the WALK — the parity photograph and the read-backs, on a runsheet
+      with its own PM readiness PASS — not the flag. **For the runsheet's author (PM #332):** choose the
       parity piece to CARRY a final-interval rest, so one rowed piece
       settles both the photograph and the 158-of-300 trailing-rest
       read-back; and capture which fallback path fired from the server
@@ -1359,9 +1363,13 @@ closed with zero Concept2 contact.
       row, show "verified"; a debug reveal shows the raw code when needed.
       **Half done (Phase LP PR 2.5, 2026-09-07): the send now carries
       `verification_code`** when the posted totals are the machine's own
-      (spec §5 rev 2.6), because Concept2 hides its own Verify button on a
-      result that arrives with `workout.intervals[]` (James's four rows on
-      the PR 2 build). **Still owed:** store `verified` from the 201 body
+      (spec §5 rev 2.6). The trigger: Concept2 appears to hide its own
+      Verify button on a result carrying `workout.intervals[]` (INFERENCE,
+      James's four rows on the PR 2 build against one v0.41.0 control —
+      build and payload shape are confounded). Verifying at receipt makes
+      the button moot either way. **The code alongside the interval array,
+      and either on production, are UNTESTED — the parity walk settles
+      them.** **Still owed:** store `verified` from the 201 body
       (a new stored key — TRIAD) and render "verified" in place of the raw
       code with a debug reveal.
 

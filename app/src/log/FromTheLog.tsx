@@ -16,16 +16,14 @@ import { buildStoredSummary, type StoredLog } from "./storedSummary";
 import TraceChart from "./TraceChart";
 import { displayVerificationCode } from "../../domain/monitor/verificationCode.js";
 
-// RC-2/RC-3 wave (docs/superpowers/specs/2026-08-24-summary-record-design.md
-// §3, PR 2), copy amended by the 2026-08-25 plan's Global Constraints
-// (James's label ruling): the LE u32 word rendering the PM5's own
-// Verification screen uses, uppercase hex, `XXXX-XXXX` per word
-// (PRIMARY-photographed, walk-2026-08-23). Reads only the FIRST 8 bytes —
-// a longer array (the jsonb column's cap is 32) still renders exactly one
-// code, matching the hardware screen's own fixed two-word display.
-// Phase LP PR 2.5: the byte→code transform lives in
-// `domain/monitor/verificationCode.ts` so the upload sends the SAME code the
-// screen shows (wire form dashed, display form spaced).
+// The verification code's byte→code transform moved to
+// `domain/monitor/verificationCode.ts` at Phase LP PR 2.5, so the Concept2
+// upload sends the SAME code this screen shows (wire form dashed, display
+// form spaced). Its rules — LE u32 words, uppercase hex, `XXXX-XXXX` each,
+// only the FIRST 8 bytes read (PRIMARY-photographed, walk-2026-08-23;
+// transcribed at docs/monitor/sessions/walk-2026-08-24/README.md) — live
+// there with their tests. Copy here follows the RC-2/RC-3 wave's label
+// ruling (docs/superpowers/specs/2026-08-24-summary-record-design.md §3).
 
 // §3's value line, `2:04.0 work · 500m` for the walk's real values — house
 // elastic-positional time WITH tenths (`fmtSplit`, already imported by

@@ -36,7 +36,10 @@ export type C2TokenResult =
   | { ok: false; grantDead: false }; // network/5xx/timeout — retryable
 
 export type C2PostResult =
-  | { ok: true; resultId: number }
+  // `verified` is the 201 body's own flag (PR 2.5, PM condition 2): the
+  // route logs it per send so the owed "say verified" half has evidence
+  // to start from. `null` when the body carries no boolean.
+  | { ok: true; resultId: number; verified: boolean | null }
   | { ok: false; kind: "duplicate"; resultId: number } // 409, body.id names the collider
   | { ok: false; kind: "auth" } // 401 on the results call
   | { ok: false; kind: "c2_error"; status?: number }; // 422/5xx/network
@@ -393,12 +396,16 @@ export function createC2Client(
         const parsed = await safeJson(res);
         // resultId comes from body.data.id, NOT the top level (this task's
         // second mutation probe targets exactly this line).
-        const id = (parsed as { data?: { id?: unknown } } | undefined)?.data
-          ?.id;
+        const data = (
+          parsed as { data?: { id?: unknown; verified?: unknown } } | undefined
+        )?.data;
+        const id = data?.id;
         if (typeof id !== "number") {
           return { ok: false, kind: "c2_error", status: res.status };
         }
-        return { ok: true, resultId: id };
+        const verified =
+          typeof data?.verified === "boolean" ? data.verified : null;
+        return { ok: true, resultId: id, verified };
       }
       if (res.status === 409) {
         const parsed = await safeJson(res);
