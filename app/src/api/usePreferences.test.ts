@@ -88,3 +88,97 @@ describe("usePreferences", () => {
     expect(typeof result.current.retry).toBe("function");
   });
 });
+
+describe("setBaselinesSkipped (Phase RW PR C)", () => {
+  /** A server that stores what it is told and echoes the row back. */
+  function realisticServer(initial = false) {
+    let stored = initial;
+    const calls: unknown[] = [];
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        const body = JSON.parse(String(init.body)) as {
+          baselinesSkipped?: boolean;
+        };
+        calls.push(body);
+        if (body.baselinesSkipped !== undefined) stored = body.baselinesSkipped;
+      }
+      return new Response(
+        JSON.stringify({ countdownSeconds: 10, baselinesSkipped: stored }),
+        { status: 200 },
+      );
+    });
+    return { api, calls, read: () => stored };
+  }
+
+  it("PUTs the value, resolves true, and refetches so the flag is live", async () => {
+    const server = realisticServer(false);
+    vi.doMock("../api", () => ({ api: server.api }));
+    const { usePreferences } = await import("./usePreferences");
+    const { result } = renderHook(() => usePreferences());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+
+    await expect(result.current.setBaselinesSkipped(true)).resolves.toBe(true);
+    expect(server.calls).toStrictEqual([{ baselinesSkipped: true }]);
+    // The refetch is what makes the doors card disappear without a reload.
+    await waitFor(() => {
+      if (result.current.state !== "ready") throw new Error("not ready");
+      expect(result.current.preferences.baselinesSkipped).toBe(true);
+    });
+  });
+
+  it("resolves FALSE when a 200 comes back without the value — an older server that ignored the key", async () => {
+    // The real shape of a rollback to $PREV: the route silently drops an
+    // unrecognised key, its empty-patch guard returns 200 with the
+    // unchanged row, and `res.ok` is true for a write that stored nothing.
+    const api = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ countdownSeconds: 10 }), { status: 200 }),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { usePreferences } = await import("./usePreferences");
+    const { result } = renderHook(() => usePreferences());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+
+    await expect(result.current.setBaselinesSkipped(true)).resolves.toBe(false);
+  });
+
+  it("resolves FALSE when the server echoes the OTHER value", async () => {
+    const api = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ countdownSeconds: 10, baselinesSkipped: false }),
+          { status: 200 },
+        ),
+    );
+    vi.doMock("../api", () => ({ api }));
+    const { usePreferences } = await import("./usePreferences");
+    const { result } = renderHook(() => usePreferences());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+
+    await expect(result.current.setBaselinesSkipped(true)).resolves.toBe(false);
+  });
+
+  it("resolves FALSE on a non-OK response", async () => {
+    let first = true;
+    const api = vi.fn(async () => {
+      if (first) {
+        first = false;
+        return new Response(
+          JSON.stringify({ countdownSeconds: 10, baselinesSkipped: false }),
+          { status: 200 },
+        );
+      }
+      return new Response("nope", { status: 500 });
+    });
+    vi.doMock("../api", () => ({ api }));
+    const { usePreferences } = await import("./usePreferences");
+    const { result } = renderHook(() => usePreferences());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+
+    await expect(result.current.setBaselinesSkipped(true)).resolves.toBe(false);
+  });
+});

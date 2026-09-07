@@ -158,6 +158,10 @@ const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 const ONLY_K6_BASELINE = { k2Seconds: null, k6Seconds: 122 };
 const DEFAULT_PREFS = {
   timeCapMinutes: 60,
+  // Phase RW PR C. A fixture that omitted this would read `undefined` →
+  // falsy → the doors card, which is the same as false, so nobody should
+  // read a green suite as coverage of the flag.
+  baselinesSkipped: false,
 };
 
 // 84-entry sequence with `code` at `doneN` and a filler code ("O2")
@@ -298,6 +302,23 @@ const LOGS: RecentLog[] = [
   },
 ];
 
+// Phase RW PR C: the doors card's skip line and Today's return row both
+// write through `usePreferences().setBaselinesSkipped`. This records the
+// calls and lets a test choose the resolved value (false = the server did
+// not confirm it).
+const skipWrites: {
+  calls: boolean[];
+  resolve: boolean;
+  fn: (v: boolean) => Promise<boolean>;
+} = {
+  calls: [],
+  resolve: true,
+  fn: (v: boolean) => {
+    skipWrites.calls.push(v);
+    return Promise.resolve(skipWrites.resolve);
+  },
+};
+
 function mockReady(overrides?: {
   workouts?: LibraryWorkout[];
   baselines?: typeof BASELINES | typeof NO_BASELINES | typeof ONLY_K6_BASELINE;
@@ -326,7 +347,15 @@ function mockReady(overrides?: {
     usePlan: () => ({ state: "ready", plan }),
   }));
   vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () => ({ state: "ready", preferences }),
+    // Phase RW PR C: the ready arm gained `setBaselinesSkipped`. A vi mock
+    // is not typechecked against the module, so omitting it would surface
+    // as a runtime TypeError inside one test rather than a typecheck
+    // failure — it is here so every Today test keeps a callable writer.
+    usePreferences: () => ({
+      state: "ready",
+      preferences,
+      setBaselinesSkipped: skipWrites.fn,
+    }),
   }));
   vi.doMock("../api/useRecentLogs", () => ({
     useRecentLogs: (limit: number) => {
@@ -402,6 +431,9 @@ async function openFilterSheet() {
 }
 
 beforeEach(() => {
+  skipWrites.calls = [];
+  skipWrites.resolve = true;
+
   vi.resetModules();
   localStorage.clear();
   rngQueue.length = 0;
@@ -4409,5 +4441,97 @@ describe("Today (Phase SF PR1: draws, day-scoped clear, per-type memory, no-repe
     await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
     expect(storedFilters("AT")?.effortLevels).toStrictEqual([]);
     expect(storedFilters("O2")?.effortLevels).toStrictEqual([5]);
+  });
+});
+
+describe("the stored skip (Phase RW PR C)", () => {
+  it("shows the doors card when the pair is unset and the rower has not skipped", async () => {
+    mockReady({ baselines: NO_BASELINES });
+    await renderToday();
+
+    expect(document.querySelector(".doorscard")).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Row without one for now" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("NO BASELINE SET")).not.toBeInTheDocument();
+  });
+
+  it("shows the suggestion, the NO BASELINE SET row and the ~ caption once skipped", async () => {
+    mockReady({
+      baselines: NO_BASELINES,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(document.querySelector(".doorscard")).toBeNull();
+    expect(screen.getByText("NO BASELINE SET")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Set one up" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("~ times are estimates until you set a baseline"),
+    ).toBeInTheDocument();
+    // The suggestion apparatus is back.
+    expect(screen.getByRole("button", { name: /FILTER/ })).toBeInTheDocument();
+  });
+
+  it("the skip line writes true and Set one up writes false", async () => {
+    mockReady({ baselines: NO_BASELINES });
+    await renderToday();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Row without one for now" }),
+    );
+    expect(skipWrites.calls).toStrictEqual([true]);
+
+    // The return row is the other direction, from the skipped state.
+    vi.resetModules();
+    skipWrites.calls = [];
+    mockReady({
+      baselines: NO_BASELINES,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "Set one up" }));
+    expect(skipWrites.calls).toStrictEqual([false]);
+  });
+
+  it("says so when the server does not confirm the write, and leaves the card up (RF25)", async () => {
+    skipWrites.resolve = false;
+    mockReady({ baselines: NO_BASELINES });
+    await renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Row without one for now" }),
+    );
+    expect(
+      await screen.findByText("Couldn't save that. Try again."),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".doorscard")).not.toBeNull();
+  });
+
+  it("keeps the return row for a PARTIAL pair — the state spec 3.2 calls out", async () => {
+    // One side stored still reads as "no baseline" everywhere (Today's own
+    // derivation collapses a half pair to null), so the flag still decides.
+    // James's 2026-09-07 ruling — ask for both, suggested at the 7s offset —
+    // is the queued fix for the copy; this pins today's behaviour.
+    mockReady({
+      baselines: ONLY_K6_BASELINE,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(document.querySelector(".doorscard")).toBeNull();
+    expect(screen.getByText("NO BASELINE SET")).toBeInTheDocument();
+  });
+
+  it("shows neither the card nor the row once a baseline is set, whatever the flag says", async () => {
+    mockReady({
+      baselines: BASELINES,
+      preferences: { ...DEFAULT_PREFS, baselinesSkipped: true },
+    });
+    await renderToday();
+
+    expect(document.querySelector(".doorscard")).toBeNull();
+    expect(screen.queryByText("NO BASELINE SET")).not.toBeInTheDocument();
   });
 });

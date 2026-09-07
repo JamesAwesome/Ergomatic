@@ -129,6 +129,17 @@ const EFFORT_ONLY_WORKOUT: LibraryWorkout = {
 
 const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 
+// Phase RW PR C: the caption's "Set one up" clears the stored skip before it
+// navigates. This records the calls so a test can assert the write, not just
+// the destination.
+const skipWrites: { calls: boolean[]; fn: (v: boolean) => Promise<boolean> } = {
+  calls: [],
+  fn: (v: boolean) => {
+    skipWrites.calls.push(v);
+    return Promise.resolve(true);
+  },
+};
+
 // Phase RW PR A: a distance split-ref workout, so the header has an
 // assumed-pace estimate to mark. 6000 m at the assumed 2:25 2k (145 s/500 m)
 // = 1740 s = 29 MIN.
@@ -207,7 +218,12 @@ function mockHooks(
       preferences: {
         timeCapMinutes: 60,
         countdownSeconds: 10,
+        baselinesSkipped: false,
       },
+      // Phase RW PR C: the ready arm's writer. A vi factory is not
+      // typechecked against the module, so omitting it would TypeError at
+      // the first click rather than fail the typecheck.
+      setBaselinesSkipped: skipWrites.fn,
     }),
   }));
 }
@@ -336,6 +352,31 @@ async function renderDetailWithCountdownRoute(initialPath: string) {
 // `renderDetailWithCountdownRoute` above, proving the Log it after link
 // actually lands on `/library/:id/log`, not just that it carries the right
 // `href`.
+/** Phase RW PR C: the caption's "Set one up" lands here. */
+async function renderDetailWithTodayRoute(initialPath: string) {
+  const { default: WorkoutDetail } = await import("./WorkoutDetail");
+  render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/today" element={<p>TODAY SCREEN</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+/** Phase RW PR C: preferences ERRORED — the caption has no writer and must
+ *  still navigate rather than trap the rower on this screen. */
+function mockHooksWithPreferencesError(
+  baselines: { k2Seconds: number | null; k6Seconds: number | null },
+  workouts: LibraryWorkout[] = [WORKOUT],
+) {
+  mockHooks(baselines, workouts);
+  vi.doMock("../api/usePreferences", () => ({
+    usePreferences: () => ({ state: "error", retry: () => {} }),
+  }));
+}
+
 async function renderDetailWithLogRoute(initialPath: string) {
   const { default: WorkoutDetail } = await import("./WorkoutDetail");
   render(
@@ -450,9 +491,11 @@ describe("WorkoutDetail", () => {
     const caption = screen.getByText(
       /Targets are words until you set a baseline\./,
     );
+    // Phase RW PR C: a button, not a link — it clears the skip before it
+    // navigates, so a skipped rower lands on the doors card.
     expect(
-      within(caption.closest("p")!).getByRole("link", { name: "Set one up" }),
-    ).toHaveAttribute("href", "/today");
+      within(caption.closest("p")!).getByRole("button", { name: "Set one up" }),
+    ).toBeInTheDocument();
   });
 
   it("shows no caption once a baseline is set", async () => {
@@ -2026,5 +2069,31 @@ describe("header minutes without a baseline (Phase RW PR A)", () => {
     expect(
       screen.queryByText("~20 MIN", { exact: false }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("the caption's Set one up (Phase RW PR C)", () => {
+  it("clears the stored skip and then goes to Today", async () => {
+    skipWrites.calls = [];
+    mockHooks(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetailWithTodayRoute("/library/w-sixk-split");
+
+    await userEvent.click(screen.getByRole("button", { name: "Set one up" }));
+
+    // The write comes FIRST: landing on Today with the flag still set shows
+    // the rower a second "Set one up" instead of the doors.
+    expect(skipWrites.calls).toStrictEqual([false]);
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
+  it("still navigates when preferences errored, rather than trapping the rower", async () => {
+    skipWrites.calls = [];
+    mockHooksWithPreferencesError(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);
+    await renderDetailWithTodayRoute("/library/w-sixk-split");
+
+    await userEvent.click(screen.getByRole("button", { name: "Set one up" }));
+
+    expect(skipWrites.calls).toStrictEqual([]);
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
   });
 });

@@ -10,6 +10,7 @@ export interface PreferencesRow {
   paceToleranceSeconds: number;
   accentColor: string;
   startHereDismissed: boolean;
+  baselinesSkipped: boolean;
 }
 
 // Mirrors the column defaults in app/server/db/schema.ts exactly.
@@ -20,6 +21,7 @@ export const PREFERENCES_DEFAULTS: PreferencesRow = {
   paceToleranceSeconds: 1,
   accentColor: "#b5341f",
   startHereDismissed: false,
+  baselinesSkipped: false,
 };
 
 export type PreferencesPatch = Partial<PreferencesRow>;
@@ -40,6 +42,7 @@ export function createPreferencesStore(db: Db) {
         paceToleranceSeconds: row.paceToleranceSeconds,
         accentColor: row.accentColor,
         startHereDismissed: row.startHereDismissed,
+        baselinesSkipped: row.baselinesSkipped,
       };
     },
 

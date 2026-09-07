@@ -794,6 +794,51 @@ button:disabled {
 /* Phase RW PR A: one caption under the count while no baseline is set,
    explaining the ~ on distance rows. --ink-3 on --page: 6.69:1 (Gate 0,
    docs/design/rw-gate0/contrast.json). */
+/* Phase RW PR C: the doors card's fourth line, and Today's return row while
+   a rower has skipped. --ink-3 on --page is 6.69:1 (Gate 0). (The comment
+   directly above belongs to `.library-caption`, further down.) */
+.doorscard-skip {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  margin-top: 8px;
+  padding: 10px 0;
+  background: none;
+  border: 0;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 15px;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.today-nobaseline-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 14px;
+}
+
+.today-nobaseline-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tap);
+}
+
+.today-nobaseline-link {
+  min-height: var(--tap);
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .library-caption {
   margin: 4px 0 0;
   color: var(--ink-3);
@@ -1506,13 +1551,20 @@ button.back-link:disabled,
   line-height: 1.4;
 }
 
-/* The link keeps the 44px target the old "Set baselines" link had, as an
-   inline-flex box inside the 13px line. */
-.workout-detail-caption a {
+/* Phase RW PR C: a button, not a link — it clears the skip before it
+   navigates (WorkoutDetail.tsx). Keeps the 44px target and the inline
+   look the anchor had, as an inline-flex box inside the 13px line. */
+.workout-detail-caption-link {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
+  padding: 0;
+  background: none;
+  border: 0;
   color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — this is an

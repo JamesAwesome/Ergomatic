@@ -4455,6 +4455,7 @@ describe("GET/PUT /api/prefs", () => {
       paceToleranceSeconds: 2,
       accentColor: "#123456",
       startHereDismissed: true,
+      baselinesSkipped: false,
     });
   });
 
@@ -4474,6 +4475,46 @@ describe("GET/PUT /api/prefs", () => {
     });
     expect(restore.status).toBe(200);
     expect(restore.body.startHereDismissed).toBe(false);
+  });
+
+  it("PUT baselinesSkipped round-trips true then back to false, and defaults false (Phase RW PR C)", async () => {
+    const app = appFor(makeStores());
+    const before = await asA(request(app).get("/api/prefs"));
+    expect(before.body.baselinesSkipped).toBe(false);
+
+    const skip = await asA(request(app).put("/api/prefs")).send({
+      baselinesSkipped: true,
+    });
+    expect(skip.status).toBe(200);
+    expect(skip.body.baselinesSkipped).toBe(true);
+    expect(
+      (await asA(request(app).get("/api/prefs"))).body.baselinesSkipped,
+    ).toBe(true);
+
+    const back = await asA(request(app).put("/api/prefs")).send({
+      baselinesSkipped: false,
+    });
+    expect(back.status).toBe(200);
+    expect(back.body.baselinesSkipped).toBe(false);
+  });
+
+  it("rejects a non-boolean baselinesSkipped with 400 + field", async () => {
+    const res = await asA(request(appFor(makeStores())).put("/api/prefs")).send(
+      { baselinesSkipped: "yes" },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("baselinesSkipped");
+  });
+
+  it("a PUT that omits baselinesSkipped leaves it alone — an older build's write (Phase RW PR C)", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).put("/api/prefs")).send({ baselinesSkipped: true });
+    const other = await asA(request(app).put("/api/prefs")).send({
+      countdownSeconds: 7,
+    });
+    expect(other.status).toBe(200);
+    expect(other.body.baselinesSkipped).toBe(true);
+    expect(other.body.countdownSeconds).toBe(7);
   });
 
   it("rejects a non-boolean startHereDismissed with 400 + field", async () => {

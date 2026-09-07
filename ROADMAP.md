@@ -504,7 +504,17 @@ generation):
       #240; `Ergomatic-wt-aud016` is a stale pre-#239 spec branch.)
 - [ ] **PR 3 — drop compat. SCHEDULED: Saturday 2026-09-12** (James,
       2026-09-05: "We have like five users let's just schedule the work for
-      Saturday"). The earlier zero-`compat.pain_write`-for-seven-days
+      Saturday"). **BEFORE generating this PR's migration: Phase RW PR C
+      merged `0026` on `preferences` first, so delete any migration written
+      off an older main and re-run `pnpm db:generate` against current main.**
+      Drizzle applies journal entries whose `when` is strictly greater than
+      the newest already applied, so a migration generated earlier is
+      skipped **silently** — no error, no log line — and because
+      `db.select().from(preferences)` names every declared column, the next
+      `/api/prefs` 500s for every rower. No gate here can see it: every
+      integration suite starts from an empty database and the deploy health
+      check reads no schema. After this PR deploys, `curl` the deployed
+      `/api/prefs` and confirm the body still carries `baselinesSkipped`. The earlier zero-`compat.pain_write`-for-seven-days
       MEASUREMENT is struck: the cohort is five household testers who all
       update, and `docker logs` only covers the current container, which
       every deploy recreates — so the gate was both overkill and
@@ -587,10 +597,14 @@ a client or e2e test; (3) `~` appears on a distance workout's duration on
 Library, Today, detail and Builder, and not on a time workout's; (4) the
 skip line writes the flag, the Today row clears it, and the baselines reset
 clears it server-side (integration test); (5) `grep -rn "EASY\|Easy\b"
-app/src app/domain app/e2e` returns only the bulk-grammar token `easy` in
-`domain/bulk.ts` and its tests and the whole-workout effort word
-`EASY BREATH` in `builderState.ts` (a different axis, expected), with any
-other survivor named and ruled at close.
+app/src app/domain app/e2e` returns 62 hits (measured 2026-09-07) and every
+one falls in the three classes spec §2.9 names — the different `EFFORT_WORDS`
+axis, Phase WU warm-up history, and the bulk grammar's lowercase `easy`
+token — with any hit outside them named and ruled at close. **The earlier
+wording of this clause was unrunnable:** it promised the grep would return
+the bulk token "in `domain/bulk.ts`", and `grep -rni easy app/domain/bulk.ts`
+returns zero (the token is lowercase and lives in the test fixtures, which a
+case-sensitive grep cannot return).
 
 ## Phase LP — Logbook parity: every number Concept2 shows, and the same number
 
@@ -2192,6 +2206,24 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **A rower who sets ONE baseline is asked to set both, suggested at the 7 s
+  offset (James, 2026-09-07: "If a user sets a 2k or a 6k they should be
+  asked to set both with a suggestion of the 7s offset").** This is the
+  ruling on the partial-pair state, raised at Phase RW PR C's PM final gate:
+  every screen collapses a half pair to `null` (`Today.tsx`'s own
+  derivation), so a rower who set only their 2k reads `NO BASELINE SET` at
+  the top of Today, which is false about their account. The half-measures
+  considered and NOT taken were naming the missing side in the copy, or
+  gating the row on both sides being null; James's answer is to close the
+  state instead of describing it. **The mechanism already exists and is
+  currently declinable:** `domain/deriveBaseline.ts`'s
+  `K2_K6_OFFSET_SECONDS = 7` and the counterpart offer the post-test prompt
+  already makes (`PostTestPrompt.tsx`). The work is to make the ask
+  persistent rather than a one-time offer — wherever a single side is
+  stored, the rower is asked for the other with the derived number
+  suggested. Sizing note: the derivation, the copy and the surface that
+  carries the ask (a Today row, the You editor, or both) are the design
+  question; the arithmetic is done. **S/M.**
 - **`data.test.ts`'s 401 route table is short four routes** (found by the
   review of the `/api/today` removal, 2026-09-05): `DELETE /api/logs/:id`
   and the three `/api/article-reads` routes have no row, so a session-guard

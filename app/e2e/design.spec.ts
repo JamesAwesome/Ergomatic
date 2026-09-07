@@ -1143,9 +1143,11 @@ test.describe("workout detail screen (no baselines: words, not a guard)", () => 
     expect(await caption.evaluate((el) => getComputedStyle(el).color)).toBe(
       "rgb(87, 84, 76)",
     ); // --ink-3, 6.69:1 on --page
+    // Phase RW PR C: a button, not a link — it clears the stored skip
+    // before it navigates, so a skipped rower lands on the doors card.
     await expect(
-      caption.getByRole("link", { name: "Set one up" }),
-    ).toHaveAttribute("href", "/today");
+      caption.getByRole("button", { name: "Set one up" }),
+    ).toBeVisible();
     await expect(page.locator(".step-row-no-target")).toHaveCount(0);
 
     await assertTapTargets(page);
@@ -11752,5 +11754,96 @@ test.describe("Library no-baseline caption (Phase RW PR A)", () => {
     expect(styles.ink3).toBe("#57544c");
     expect(styles.color).toBe("rgb(87, 84, 76)"); // --ink-3, 6.69:1 on --page
     expect(styles.fontSize).toBe("13px");
+  });
+});
+
+// Phase RW PR C: the stored skip, walked end to end. The RELOADS are the
+// point — they are the only oracle in this PR for "the choice is on the
+// server, not in component state" (every client test mocks the hook).
+test.describe("the stored skip (Phase RW PR C)", () => {
+  test("skip, reload, come back, reload: the doors follow the stored flag", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "rw-skip-walk@e2e.test",
+      name: "Skip Walk Tester",
+    });
+    await page.goto("/today");
+    await expect(page.locator(".doorscard")).toBeVisible();
+
+    await page.getByRole("button", { name: "Row without one for now" }).click();
+    await expect(page.locator(".doorscard")).toHaveCount(0);
+    await expect(page.getByText("NO BASELINE SET")).toBeVisible();
+    await expect(
+      page.getByText("~ times are estimates until you set a baseline"),
+    ).toBeVisible();
+
+    // The skipped screen carries two new controls; sweep them (the plan's
+    // Task 3 named this and the first draft dropped it).
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+
+    // Server-side, not component state.
+    await page.reload();
+    await expect(page.getByText("NO BASELINE SET")).toBeVisible();
+    await expect(page.locator(".doorscard")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Set one up" }).click();
+    await expect(page.locator(".doorscard")).toBeVisible();
+    await page.reload();
+    await expect(page.locator(".doorscard")).toBeVisible();
+  });
+
+  test("the workout detail's Set one up clears the skip on its way, so Today shows the DOORS", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "rw-skip-detail@e2e.test",
+      name: "Skip Detail Tester",
+    });
+    await page.goto("/today");
+    await page.getByRole("button", { name: "Row without one for now" }).click();
+    await expect(page.getByText("NO BASELINE SET")).toBeVisible();
+
+    // Any pace-bearing workout carries the caption.
+    await page.goto("/library");
+    await page.getByPlaceholder("SEARCH BY NAME").fill("Laminar");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator(".workout-detail-caption")).toBeVisible();
+    await page
+      .locator(".workout-detail-caption")
+      .getByRole("button", { name: "Set one up" })
+      .click();
+
+    await expect(page).toHaveURL(/\/today$/);
+    // The doors, NOT a second "Set one up" row.
+    await expect(page.locator(".doorscard")).toBeVisible();
+    await expect(page.getByText("NO BASELINE SET")).toHaveCount(0);
+  });
+
+  test("resetting the baselines brings the doors back", async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "rw-skip-reset@e2e.test",
+      name: "Skip Reset Tester",
+    });
+    const put = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k2Seconds: 112, k6Seconds: 122 }),
+      });
+      return res.ok;
+    });
+    expect(put).toBe(true);
+    await page.goto("/today");
+    await expect(page.locator(".doorscard")).toHaveCount(0);
+    await expect(page.getByText("NO BASELINE SET")).toHaveCount(0);
+
+    await page.goto("/you/baselines");
+    await page.getByRole("button", { name: "Reset baseline setup" }).click();
+    await page.getByRole("button", { name: "Reset baseline setup" }).click();
+
+    await page.goto("/today");
+    await expect(page.locator(".doorscard")).toBeVisible();
   });
 });
