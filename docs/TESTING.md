@@ -186,6 +186,18 @@ which is exactly the kind of filler this document tells you not to write.
 Documenting *why* a survivor is safe to leave is the correct response, not
 chasing 100%.
 
+**An optional field that is ABSENT is not the same as one that is
+`undefined`, and only one of those assertions can go red.** Neither
+`noUncheckedIndexedAccess` nor `exactOptionalPropertyTypes` is set in any of
+our tsconfigs, so an out-of-bounds read through a non-null-asserted helper
+(`bytes[offset]!`) typechecks as `number` and evaluates to `undefined` at
+runtime. A test asserting `toBeUndefined()` therefore passes for BOTH the
+correct implementation, which omits the property, AND the half-fix that reads
+past the buffer unguarded. Assert `Object.hasOwn(decoded, "field")` is
+`false` instead: key absence is observable where `undefined` is not.
+Measured 2026-09-07 (PR #350): the half-fix mutation left the seam test green
+and failed only the key-absence assertion.
+
 ## 4. Coverage stance
 
 Coverage is a **floor detector, not a goal**. It tells you code nothing

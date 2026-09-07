@@ -35,7 +35,14 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     //     CORRECTS v0.41.0's own item 1 below (that note called the
     //     session figures "what the monitor measured" and listed average
     //     heart rate among them; the monitor sends nothing there).
-    // This notes-and-captures PR adds packaging, not another behavior.
+    //   #348 corrected two notes below that said things the app does not
+    //     do — a correction to this file, not a change a rower receives.
+    //   #349 sixteen dependency bumps and #347 ledger/ROADMAP writing:
+    //     neither is rower-visible.
+    //   #350 a monitor older than about 2018 goes from unusable to
+    //     working — item 7. Rower-visible only on that hardware; on a
+    //     current monitor nothing about this release differs.
+    // This notes PR adds packaging, not another behavior.
     version: "v0.42.0",
     date: "2026-09-07",
     items: [
@@ -45,6 +52,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "If you have set one baseline and not the other, Today says which one you have set and offers to fill the other in at the usual 7 second gap, in one tap. Library and each workout say the same. Your targets stay words until both are set.",
       "The PM5's verification code now prints only on rows Concept2 will let you type it into: a distance or a time that hits one of their ranking figures exactly, counting rest. Everywhere else it was decoration.",
       "AVG HR now has a number in it. The monitor leaves that field empty, so Ergomatic works it out from the heart-rate trace it already records, over your working strokes. That means it can read a little below the per-interval HR column on the same screen.",
+      "If your monitor is from before about 2018, Ergomatic can read it now. It used to connect, sit on READY and record nothing, because it was throwing away every reading over one byte those monitors do not send. Newer monitors are unaffected.",
     ],
   },
   {

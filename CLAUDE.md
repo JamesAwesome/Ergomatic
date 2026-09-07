@@ -414,9 +414,13 @@ requirements).
   second; it is fail-fast. Pre-push runs unit + client tests only (fast,
   Docker-free — CI runs the full gate incl. integration/e2e). Both hooks fail
   loudly and block if the active Node major is below `.nvmrc`. Don't bypass with
-  `--no-verify`; fix the failure. **Root markdown is NOT formatted by anything**
-  — lint-staged's globs are `app/**` only, so `ROADMAP.md`, `CLAUDE.md` and the
-  root docs have never been Prettier-formatted. Never run `prettier --write` on
+  `--no-verify`; fix the failure. **Root markdown AND everything under `docs/`
+  are formatted by NOTHING** — lint-staged's globs are `app/**/*.{ts,tsx}` and
+  `app/**/*.{json,css,md,html}`, so `ROADMAP.md`, `CLAUDE.md` and the whole
+  `docs/` tree have never been Prettier-formatted. This bullet used to say
+  "the root docs", which reads as ambiguous: a controller told an implementer
+  `docs/**` WAS Prettier-managed on 2026-09-07 and the implementer had to
+  check `package.json` to find otherwise. Never run `prettier --write` on
   them to "fix" a failing check: it reflows the whole file and buries a real
   edit in ~100 lines of rewrapped prose (measured on `ROADMAP.md`, 2026-08-31 —
   226/166 became 118/57 once the reflow was reverted). Wrap by hand to match the
@@ -686,6 +690,19 @@ often they recur.
     code comment recording a hardware DEPARTURE from it; a document this
     project has already caught being wrong does not get a fresh PRIMARY
     tag on the neighbouring claim.
+    **Fourth corollary, 2026-09-07: A VENDOR'S REVISION HISTORY LOGS EDITS
+    TO A DOCUMENT, NOT CHANGES TO THE WIRE.** The short-status-frame fix
+    scoped itself by reading Concept2's revision history end to end and
+    concluding the affected family was exactly two characteristics. The
+    conclusion was right and the method was not: a revision row exists only
+    where an engineer wrote one, and the same pass found three
+    GATT-versus-multiplexed layout divergences carrying no row at all. What
+    rescued it was a second, non-mirror route computed from OUR OWN source —
+    for each parser, `length floor − (highest byte offset of a field that has
+    a consumer)`; exactly two had slack. **When a scope claim rests on a
+    vendor's changelog, re-derive it from a property of our own code and
+    require both routes to agree.** A changelog is corroboration, never the
+    proof.
 
 17. **Opening a phase without writing it into the ROADMAP.** Four phases
     running (PW, CS close, CM, LT), the phase's own gate ran
