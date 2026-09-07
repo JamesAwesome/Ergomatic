@@ -6041,6 +6041,42 @@ async function captureJustRowNfc(
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, file) });
 }
 
+// Gate 0 (2026-09-06): Just Row's connecting card on the NFC route names the
+// target; the fake's `pending` mode holds the scan open for the capture.
+test("just-row-looking", async ({ page }) => {
+  await page.addInitScript(
+    ({ records, name }) => {
+      window.__nfcScript__ = {
+        capability: "supported",
+        outcome: { kind: "records", records },
+      };
+      window.__pm5FakeScript__ = {
+        program: { intervals: [] },
+        deviceName: name,
+        targetedScan: "pending",
+      };
+      Object.defineProperty(navigator, "bluetooth", {
+        value: {},
+        configurable: true,
+      });
+    },
+    { records: pm5NfcFixtureRecordsForShots(), name: "PM5 432331249 Row" },
+  );
+  await signInViaBackdoor(page, {
+    email: "screenshots-justrow-looking@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/justrow");
+  await page.getByRole("button", { name: "Scan NFC" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Looking for PM5 432331249 Row" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "just-row-looking.png"),
+  });
+  await page.getByRole("button", { name: "Cancel" }).click();
+});
+
 test("just-row-nfc", async ({ page }) => {
   await captureJustRowNfc(
     page,
