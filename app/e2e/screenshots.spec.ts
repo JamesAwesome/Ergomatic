@@ -795,6 +795,36 @@ test("today-skipped", async ({ page }) => {
   });
 });
 
+// 2026-09-07: the same row for a rower who has set ONE side — it names which,
+// and offers the other at the offset instead of claiming they have none.
+test("today-half-baseline", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-half@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/today");
+  const seeded = await page.evaluate(async () => {
+    const a = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ k2Seconds: 112 }),
+    });
+    const b = await fetch("/api/prefs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baselinesSkipped: true }),
+    });
+    return a.ok && b.ok;
+  });
+  expect(seeded).toBe(true);
+  await page.reload();
+  await page.locator(".today-nobaseline-row").waitFor();
+  await page.locator(".today-card").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-half-baseline.png"),
+  });
+});
+
 // Phase BL PR C: the door flow screens (canvas Question1/Recommendation/
 // Experienced/RowPath), each in its fullest real state — the
 // questionnaire with an option genuinely selected, the recommendation

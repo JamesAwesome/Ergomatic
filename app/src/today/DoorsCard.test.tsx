@@ -27,6 +27,16 @@ describe("DoorsCard", () => {
     expect(
       screen.getByText(/Every workout's targets come from your 2k and 6k/),
     ).toBeInTheDocument();
+    // The consequence of leaving them unset, stated where it is
+    // unconditionally TRUE: if this card is on screen there is no
+    // recommendation. It must not live on Today's skipped row — a rower who
+    // taps "Row without one for now" DOES get recommendations, with words
+    // instead of pace targets.
+    expect(
+      screen.getByText(
+        /Both set means a recommendation here and a pace target on every workout/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("renders three doors, outcome-framed, each linking to its own flow", () => {

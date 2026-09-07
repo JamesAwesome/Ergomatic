@@ -11847,3 +11847,79 @@ test.describe("the stored skip (Phase RW PR C)", () => {
     await expect(page.locator(".doorscard")).toBeVisible();
   });
 });
+
+// 2026-09-07: a rower who has set ONE baseline is told which one, offered the
+// other at the offset, and never told they have none. Before this, Today read
+// NO BASELINE SET for a rower with a tested 2k.
+test.describe("a half-set baseline pair", () => {
+  test("names the stored side and fills the other on one tap, tagged derived", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "half-pair-walk@e2e.test",
+      name: "Half Pair Tester",
+    });
+    await page.goto("/today");
+    const seeded = await page.evaluate(async () => {
+      const a = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k2Seconds: 112 }),
+      });
+      const b = await fetch("/api/prefs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baselinesSkipped: true }),
+      });
+      return a.ok && b.ok;
+    });
+    expect(seeded).toBe(true);
+    await page.reload();
+
+    await expect(page.getByText("2K SET · NO 6K")).toBeVisible();
+    await expect(page.getByText("NO BASELINE SET")).toHaveCount(0);
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+
+    await page.getByRole("button", { name: "Estimate it (+7s)" }).click();
+
+    // The pair is complete, so the row goes and real targets return.
+    await expect(page.locator(".today-nobaseline-row")).toHaveCount(0);
+    // GET /api/baselines is numbers-only on purpose (stores/baselines.ts:
+    // "provenance is stored, never shown"), so this leg proves the NUMBER
+    // reached Postgres through the real route. The "derived" stamp is
+    // proven at both halves of the same seam instead: Today.test.tsx pins
+    // the request body the tap sends, and baselineProvenance.integration
+    // .test.ts sends that exact body and reads the stored column back.
+    const stored = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines");
+      return (await res.json()) as { k2Seconds: number; k6Seconds: number };
+    });
+    expect(stored.k2Seconds).toBe(112);
+    expect(stored.k6Seconds).toBe(119);
+  });
+
+  test("the workout detail names the stored side too", async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "half-pair-detail@e2e.test",
+      name: "Half Pair Detail Tester",
+    });
+    await page.goto("/today");
+    const seeded = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k6Seconds: 122 }),
+      });
+      return res.ok;
+    });
+    expect(seeded).toBe(true);
+
+    await page.goto("/library");
+    await page.getByPlaceholder("SEARCH BY NAME").fill("Laminar");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator(".workout-detail-caption")).toContainText(
+      "Your 6k is set. Targets stay words until the 2k is too.",
+    );
+  });
+});
