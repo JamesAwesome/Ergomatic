@@ -823,6 +823,7 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
         actualMeters: 1200,
         avgHr: undefined,
         machineCalories: 75,
+        machineRestMeters: 18,
       },
     ]);
     expect(rows).toStrictEqual([
@@ -842,12 +843,12 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
         calories: 75,
         calPerHour: 878,
         drag: undefined,
-        restMeters: undefined,
+        restMeters: 18,
       },
     ]);
   });
 
-  it("Phase LP (review L5): on a legacy warm-up seed the strip's REST cell reads the step's OWN interval's rest, not its neighbour's", () => {
+  it("Phase LP (review L5, PR 2): on a legacy warm-up seed the strip's REST cell reads the step's OWN interval's rest — now carried on the step itself, no index arithmetic", () => {
     // Program interval 0 was a warm-up (seed kind "warmup" → no step);
     // intervals 1 and 2 are the two emitted rows. Rest metres 147 / 95
     // belong to intervals 1 / 2; an off-by-one would read 0's (undefined)

@@ -11505,6 +11505,8 @@ async function postMachineRowWithLpFields(
         machineWatts: 140,
         machineDragFactor: 100,
         machineRestHr: null,
+        machineRestSeconds: 60,
+        machineRestMeters: 147,
       },
       {
         label: "250m @ 2:07.0",
@@ -11521,6 +11523,8 @@ async function postMachineRowWithLpFields(
         machineWatts: 248,
         machineDragFactor: 100,
         machineRestHr: null,
+        machineRestSeconds: 60,
+        machineRestMeters: 95,
       },
     ];
     // Review H1: a long piece must overflow the strip so the scroll
@@ -11612,8 +11616,8 @@ test.describe("from-the-log detail, machine tier + MACHINE SUMMARY (Phase LP §3
     await expect(table).toBeVisible();
     const rows = table.locator("tbody tr");
     await expect(rows).toHaveCount(2);
-    await expect(rows.nth(0)).toHaveText("1—14016848100—");
-    await expect(rows.nth(1)).toHaveText("2—248161026100—");
+    await expect(rows.nth(0)).toHaveText("1—14016848100147");
+    await expect(rows.nth(1)).toHaveText("2—24816102610095");
 
     // Structure (RF21: measure the CELL's own box, never an inline child).
     const shape = await table.evaluate((el) => {

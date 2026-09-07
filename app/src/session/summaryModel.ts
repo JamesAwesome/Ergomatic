@@ -108,7 +108,6 @@ import {
   formatLogDate,
   spmIsMeasured,
   type LogStep,
-  monitorStepProgramIndices,
 } from "./logDraft";
 import {
   logbookCalPerHour,
@@ -223,9 +222,9 @@ export interface MachineSplitRow {
  *  steps are SKIPPED, not dashed: the strip is the machine's account, and a
  *  step the machine never measured has no row in it. `LogStep` carries no
  *  per-step rest metres (the session's rest lives on the row), so
- *  `restMeters` is filled only by `machineSplitRowsFromRun` below, from the
- *  live run's own `IntervalActual.restDistanceMeters`; a stored row's REST
- *  column reads a dash — recorded in `docs/design/DEVIATIONS.md`. */
+ *  `restMeters` reads the step's own `machineRestMeters` (Phase LP PR 2 —
+ *  the 0x0037 rest distance now rides the step), so the live door and a
+ *  stored row show the same REST column. */
 export function machineSplitRows(
   steps: readonly Pick<
     LogStep,
@@ -235,6 +234,7 @@ export function machineSplitRows(
     | "avgHr"
     | "machineCalories"
     | "machineDragFactor"
+    | "machineRestMeters"
   >[],
 ): MachineSplitRow[] {
   const out: MachineSplitRow[] = [];
@@ -255,32 +255,23 @@ export function machineSplitRows(
           ? logbookCalPerHour(s.machineCalories, seconds)
           : undefined,
       drag: s.machineDragFactor,
-      restMeters: undefined,
+      restMeters: s.machineRestMeters,
     });
   });
   return out;
 }
 
 /** The live door's rows: `machineSplitRows` over the run's own built
- *  steps, plus each interval's rest metres off its actual (0x0037's own
- *  Interval Rest Distance, which the step list does not carry). A Just Row
+ *  steps. Since Phase LP PR 2 the step carries its interval's rest metres
+ *  itself (`buildMonitorLogSteps` copies `IntervalActual.restDistanceMeters`
+ *  onto `machineRestMeters`), so no program-index lookup is needed and a
+ *  legacy warm-up seed cannot shift a rest onto its neighbour. A Just Row
  *  (no intervals, a seed with no steps) builds no steps and gets no strip.
  *  `buildMonitorLogSteps`'s seed-mismatch throw is not caught here: the
  *  caller (`buildMonitorModel`) has already built the same steps for the
  *  INTERVALS rows, so a run that reaches this line has a matching seed. */
 export function machineSplitRowsFromRun(run: MonitorRun): MachineSplitRow[] {
-  const steps = buildMonitorLogSteps(run);
-  // The step's PROGRAM index, not its output position: the two differ by
-  // one after a legacy warm-up seed step (review L5; `logDraft.ts`'s own
-  // `monitorStepProgramIndices`).
-  const programIndices = monitorStepProgramIndices(steps) ?? [];
-  return machineSplitRows(steps).map((row) => {
-    const programIndex = programIndices[row.index - 1];
-    const actual = run.actuals.find((a) => a.index === programIndex);
-    return actual?.restDistanceMeters === undefined
-      ? row
-      : { ...row, restMeters: actual.restDistanceMeters };
-  });
+  return machineSplitRows(buildMonitorLogSteps(run));
 }
 
 /** The session's TARGET stroke rate — a single number only when every

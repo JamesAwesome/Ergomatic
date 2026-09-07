@@ -17,7 +17,6 @@ import {
   buildLogSteps,
   buildManualLogSteps,
   buildMonitorLogSteps,
-  monitorStepProgramIndices,
   logTotals,
   MonitorLogSeedError,
   MONITOR_HR_MIN,
@@ -1673,25 +1672,6 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(steps[0]).not.toHaveProperty("machineRestHr");
     expect(steps[1]!.machineRestHr).toBe(20);
     expect(steps[2]!.machineRestHr).toBeNull();
-  });
-
-  it("Phase LP (review L5): monitorStepProgramIndices names each emitted step's PROGRAM index — one ahead of its position after a legacy warm-up seed step", () => {
-    const legacy: MonitorRun = {
-      ...THREE_STEP_RUN,
-      logSeed: {
-        ...THREE_STEP_RUN.logSeed!,
-        steps: THREE_STEP_RUN.logSeed!.steps.map((step, i) =>
-          i === 0 ? { ...step, kind: "warmup" as unknown as "work" } : step,
-        ),
-      },
-    };
-    const steps = buildMonitorLogSteps(legacy);
-    expect(steps).toHaveLength(2);
-    expect(monitorStepProgramIndices(steps)).toStrictEqual([1, 2]);
-    expect(
-      monitorStepProgramIndices(buildMonitorLogSteps(THREE_STEP_RUN)),
-    ).toStrictEqual([0, 1, 2]);
-    expect(monitorStepProgramIndices([])).toBeUndefined();
   });
 
   it("index:null actuals are dropped entirely", () => {

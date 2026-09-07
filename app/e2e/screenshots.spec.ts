@@ -3174,6 +3174,9 @@ async function postLog(
       machineWatts?: number;
       machineDragFactor?: number;
       machineRestHr?: number | null;
+      // Phase LP PR 2: the interval's rest readback (s) and rest metres.
+      machineRestSeconds?: number;
+      machineRestMeters?: number;
     }[];
     // Trace-rendering spec (Phase LT spec 3), Task 3: the stored door's
     // own source. This helper already builds every OTHER field by hand
@@ -3549,6 +3552,8 @@ test("log-detail", async ({ page }) => {
         machineWatts: 140,
         machineDragFactor: 100,
         machineRestHr: null,
+        machineRestSeconds: 60,
+        machineRestMeters: 147,
       },
       {
         label: "250m @ 2:07.0",
@@ -3564,6 +3569,8 @@ test("log-detail", async ({ page }) => {
         machineWatts: 248,
         machineDragFactor: 100,
         machineRestHr: null,
+        machineRestSeconds: 60,
+        machineRestMeters: 95,
       },
     ],
     // Trace-rendering spec (Phase LT spec 3), Task 3, re-seeded for the
@@ -3677,8 +3684,8 @@ test("log-detail", async ({ page }) => {
     .getByRole("table", { name: "Machine summary per interval" })
     .locator("tbody tr");
   await expect(lpStrip).toHaveCount(2);
-  await expect(lpStrip.nth(0)).toHaveText("1—14016848100—");
-  await expect(lpStrip.nth(1)).toHaveText("2—248161026100—");
+  await expect(lpStrip.nth(0)).toHaveText("1—14016848100147");
+  await expect(lpStrip.nth(1)).toHaveText("2—24816102610095");
 
   // RC-2/RC-3 wave, PR 2, Task 3: the MACHINE CONFIRMED · WORK ONLY block,
   // below the interval rows and above the trace chart — real seeded
