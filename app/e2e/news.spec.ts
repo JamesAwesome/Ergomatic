@@ -209,7 +209,7 @@ test("/news/releases lists every version, newest first", async ({ page }) => {
   const versions = page.locator(".news-release-version");
   await expect(versions).toHaveCount(43);
   await expect(versions.nth(0)).toContainText(NEWEST_RELEASE_VERSION);
-  await expect(versions.nth(1)).toContainText("v0.39.1");
+  await expect(versions.nth(1)).toContainText("v0.39.2");
   await expect(versions.nth(2)).toContainText("v0.39.0");
   await expect(versions.nth(3)).toContainText("v0.38.1");
   await expect(versions.nth(4)).toContainText("v0.38.0");
