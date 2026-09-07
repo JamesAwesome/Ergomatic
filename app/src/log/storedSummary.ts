@@ -106,6 +106,8 @@ import {
   type SummaryMeta,
   type SummaryRow,
   agreedTargetSpm,
+  machineSplitRows,
+  type MachineSplitRow,
   type MachineTier,
 } from "../session/summaryModel";
 import {
@@ -321,6 +323,11 @@ export interface StoredSummaryView {
   meta: SummaryMeta;
   heroes: SummaryHeroes;
   rows: SummaryRow[];
+  /** Phase LP §3: the MACHINE SUMMARY strip's rows off the stored steps
+   *  (`machineSplitRows`, `session/summaryModel.ts`); empty on manual and
+   *  timer rows and on a Just Row. REST reads a dash on a stored row —
+   *  `StoredLogStep` carries no per-step rest metres. */
+  machineRows: MachineSplitRow[];
   caption?: string;
   readBack: StoredReadBack;
   /** §5E: `Logged to <title> · SESSION <plan_index+1> OF <sequence
@@ -1279,5 +1286,15 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const readBack = buildReadBack(row);
   const closeLine = buildCloseLine(row);
   const planFooter = buildPlanFooter(row);
-  return { meta, heroes, rows, caption, readBack, planFooter, closeLine };
+  const machineRows = machineSplitRows(row.steps);
+  return {
+    meta,
+    heroes,
+    rows,
+    machineRows,
+    caption,
+    readBack,
+    planFooter,
+    closeLine,
+  };
 }

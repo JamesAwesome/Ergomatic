@@ -173,6 +173,48 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     });
   });
 
+  it("Phase LP §3: a stored row's machineRows come off its pm5 steps (REST a dash — no per-step rest on a stored row); a manual row has none", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        endedBy: "finished",
+        machineWorkSeconds: 622.5,
+        machineWorkMeters: 2400,
+        machineSummary: { avgPaceSecondsPer500m: 129.7 },
+        steps: [
+          {
+            ...measuredStep(313.5, 1200, 130.6),
+            avgHr: 142,
+            machineCalories: 73,
+            machineDragFactor: 101,
+          },
+          { ...measuredStep(309.0, 1200, 128.8), machineCalories: 75 },
+        ],
+      }),
+    );
+    expect(view.machineRows).toStrictEqual([
+      {
+        index: 1,
+        hr: 142,
+        watts: 157,
+        calories: 73,
+        calPerHour: 838,
+        drag: 101,
+        restMeters: undefined,
+      },
+      {
+        index: 2,
+        hr: undefined,
+        watts: 164,
+        calories: 75,
+        calPerHour: 873,
+        drag: undefined,
+        restMeters: undefined,
+      },
+    ]);
+    expect(buildStoredSummary(baseRow()).machineRows).toStrictEqual([]);
+  });
+
   it("Phase LP: a stored machine row saved BEFORE this phase (machine_summary without the 0x003A keys) derives watts and dashes the rest; a manual row has no tier at all", () => {
     const old = buildStoredSummary(
       baseRow({

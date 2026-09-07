@@ -195,6 +195,82 @@ export interface MachineTier {
   restMeters?: number;
 }
 
+/** Phase LP §3: one MACHINE SUMMARY row. `index` is the INTERVALS table's
+ *  own 1-based numbering (position in the step list), so the two tables
+ *  name the same interval by the same number. `hr` is the WORK heart rate
+ *  (`avgHr`); `null` = a belt that reported nothing, `undefined` = no
+ *  reading at all — both render as a dash. `watts`/`calPerHour` are the
+ *  LOGBOOK's arithmetic off the step's own seconds/metres/calories
+ *  (§3.1); `calories`/`drag`/`restMeters` are the machine's own. */
+export interface MachineSplitRow {
+  index: number;
+  hr?: number | null;
+  watts?: number;
+  calories?: number;
+  calPerHour?: number;
+  drag?: number;
+  restMeters?: number;
+}
+
+/** The strip's rows from a step list (live door AND stored row — a
+ *  `StoredLogStep` is `LogStep`'s structural mirror). Manual/stopwatch
+ *  steps are SKIPPED, not dashed: the strip is the machine's account, and a
+ *  step the machine never measured has no row in it. `LogStep` carries no
+ *  per-step rest metres (the session's rest lives on the row), so
+ *  `restMeters` is filled only by `machineSplitRowsFromRun` below, from the
+ *  live run's own `IntervalActual.restDistanceMeters`; a stored row's REST
+ *  column reads a dash — recorded in `docs/design/DEVIATIONS.md`. */
+export function machineSplitRows(
+  steps: readonly Pick<
+    LogStep,
+    | "actualSource"
+    | "actualSeconds"
+    | "actualMeters"
+    | "avgHr"
+    | "machineCalories"
+    | "machineDragFactor"
+  >[],
+): MachineSplitRow[] {
+  const out: MachineSplitRow[] = [];
+  steps.forEach((s, i) => {
+    if (s.actualSource !== "pm5") return;
+    const seconds = s.actualSeconds;
+    const meters = s.actualMeters;
+    out.push({
+      index: i + 1,
+      hr: s.avgHr,
+      watts:
+        seconds !== undefined && meters !== undefined
+          ? logbookWatts(seconds, meters)
+          : undefined,
+      calories: s.machineCalories,
+      calPerHour:
+        s.machineCalories !== undefined && seconds !== undefined
+          ? logbookCalPerHour(s.machineCalories, seconds)
+          : undefined,
+      drag: s.machineDragFactor,
+      restMeters: undefined,
+    });
+  });
+  return out;
+}
+
+/** The live door's rows: `machineSplitRows` over the run's own built
+ *  steps, plus each interval's rest metres off its actual (0x0037's own
+ *  Interval Rest Distance, which the step list does not carry). A Just Row
+ *  (no intervals, a seed with no steps) builds no steps and gets no strip.
+ *  `buildMonitorLogSteps`'s seed-mismatch throw is not caught here: the
+ *  caller (`buildMonitorModel`) has already built the same steps for the
+ *  INTERVALS rows, so a run that reaches this line has a matching seed. */
+export function machineSplitRowsFromRun(run: MonitorRun): MachineSplitRow[] {
+  return machineSplitRows(buildMonitorLogSteps(run)).map((row) => {
+    const actual = run.actuals.find((a) => a.index === row.index - 1);
+    return actual?.restDistanceMeters === undefined
+      ? row
+      : { ...row, restMeters: actual.restDistanceMeters };
+  });
+}
+
 /** The session's TARGET stroke rate — a single number only when every
  *  interval names the same one (spec §3.2); otherwise `undefined`, and the
  *  per-interval targets stay where they already are, in the INTERVALS
@@ -367,6 +443,12 @@ export interface SummaryModel {
   meta: SummaryMeta;
   heroes: SummaryHeroes;
   rows: SummaryRow[];
+  /** Phase LP §3: the MACHINE SUMMARY strip's rows — one per PM5-sourced
+   *  step, empty (and the strip absent) on the timer and manual doors and
+   *  on a Just Row. Optional so a model literal built elsewhere (tests,
+   *  fixtures) reads as "no strip", the same absent-means-none idiom as
+   *  `caption`. */
+  machineRows?: MachineSplitRow[];
   /** The one centred line under the interval table. TWO producers now,
    *  resolved by PRECEDENCE — never stacked, and never more than one
    *  element (door spec 2026-09-02 §6, Gate 0-B decision (c), APPROVED):
@@ -1285,6 +1367,8 @@ function buildMonitorModel(run: MonitorRun): SummaryModel {
     rows,
     caption: partialCaption(rows, run.endedBy) ?? targetsOnlyCaption(rows),
     ...(suppressCompletionEyebrow ? { suppressCompletionEyebrow: true } : {}),
+    // Phase LP §3: the strip's rows ride the model; empty on a Just Row.
+    machineRows: machineSplitRowsFromRun(run),
   };
 }
 

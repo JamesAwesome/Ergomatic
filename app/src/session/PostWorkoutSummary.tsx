@@ -8,6 +8,7 @@ import type { SeriesData } from "../monitor/seriesRecorder.js";
 import TraceChart from "../log/TraceChart";
 import BackLink from "../shell/BackLink";
 import { DASH } from "../workout/connected/surfaceModel";
+import MachineSummaryTable from "./MachineSummaryTable";
 import type {
   MeasuredRow,
   SummaryHeroes,
@@ -684,7 +685,7 @@ export default function PostWorkoutSummary({
   saveDisabled = false,
   children,
 }: PostWorkoutSummaryProps) {
-  const { meta, heroes, rows, caption } = model;
+  const { meta, heroes, rows, caption, machineRows = [] } = model;
 
   // §2F: `Log against plan` carries the plan's own position information
   // (`Log against plan · SESSION n OF N`) whether it's leading or demoted —
@@ -791,6 +792,11 @@ export default function PostWorkoutSummary({
         pacesOffCaption={pacesOffCaption}
         caption={caption}
       />
+
+      {/* Phase LP §3: the PM5's per-interval figures, directly under the
+          INTERVALS table it numbers the same way. Renders nothing without
+          machine rows. */}
+      <MachineSummaryTable rows={machineRows} />
 
       {/* Trace-rendering spec (Phase LT spec 3), §1: "below the INTERVALS
           list ... above the save stack on the live door" — placed here,

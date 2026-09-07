@@ -29,6 +29,7 @@ import {
 } from "./logDraft";
 import type { SessionRun } from "./run";
 import {
+  machineSplitRows,
   buildSpmCell,
   buildSummaryModel,
   buildTotalLine,
@@ -782,6 +783,86 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
     expect(
       buildSummaryModel({ door: "monitor", run: zero }).heroes.machine,
     ).toBeUndefined();
+  });
+
+  it("Phase LP §3: machineSplitRows maps pm5 steps to the strip's rows — the INTERVALS table's own numbering, logbook watts and cal/hr off the step's seconds/metres/calories, a null belt kept as null — and skips manual steps entirely", () => {
+    // 1200 m in 313.5 s → 157 W; 73 cal → floor(73×3600/313.5) = 838.
+    // 1200 m in 307.4 s → round(2.80/(307.4/1200)³) = round(166.5) = 167;
+    // 75 cal → floor(75×3600/307.4) = floor(878.3) = 878.
+    const rows = machineSplitRows([
+      {
+        actualSource: "pm5",
+        actualSeconds: 313.5,
+        actualMeters: 1200,
+        avgHr: 55,
+        machineCalories: 73,
+        machineDragFactor: 101,
+      },
+      { actualSource: "assumed", actualSeconds: 300, actualMeters: 1200 },
+      {
+        actualSource: "pm5",
+        actualSeconds: 307.4,
+        actualMeters: 1200,
+        avgHr: undefined,
+        machineCalories: 75,
+      },
+    ]);
+    expect(rows).toStrictEqual([
+      {
+        index: 1,
+        hr: 55,
+        watts: 157,
+        calories: 73,
+        calPerHour: 838,
+        drag: 101,
+        restMeters: undefined,
+      },
+      {
+        index: 3,
+        hr: undefined,
+        watts: 167,
+        calories: 75,
+        calPerHour: 878,
+        drag: undefined,
+        restMeters: undefined,
+      },
+    ]);
+  });
+
+  it("Phase LP §3: the monitor model's machineRows come off the run's own steps, with each interval's rest metres from its actual; a run with no seed (Just Row) has none", () => {
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [
+        { ...exit7Actual1, calories: 16, dragFactor: 100 },
+        { ...exit7Actual2, calories: 16, dragFactor: 100 },
+      ],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: exit7SummaryDetail,
+    });
+    const rows = buildSummaryModel({ door: "monitor", run }).machineRows;
+    // 250 m in 67.9 s → round(2.80/(67.9/250)³) = round(2.80/0.020033) = 140;
+    // 16 cal → floor(16×3600/67.9) = floor(848.3) = 848.
+    expect(rows?.[0]).toStrictEqual({
+      index: 1,
+      hr: undefined,
+      watts: 140,
+      calories: 16,
+      calPerHour: 848,
+      drag: 100,
+      restMeters: 147,
+    });
+    expect(rows?.[1]?.restMeters).toBe(95);
+    // A Just Row: no intervals, a seed with no steps (the shape
+    // `completeMonitorRun` stores for a free row).
+    const justRow = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "finished",
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run: justRow }).machineRows,
+    ).toStrictEqual([]);
   });
 
   it("tier A (run.summaryTotals present, PR #190): DISTANCE 500, TIME 2:04, AVG SPLIT 2:04.0 — the machine's OWN numbers verbatim, never a quotient of ours; TOTAL line 4:04 · plus 242 m coasting in rest, using RC-1's stored restMeters", () => {

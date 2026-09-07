@@ -9516,6 +9516,89 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin: 0 0 24px;
 }
 
+/* Phase LP §3 — MACHINE SUMMARY (Gate 0 approved 2026-09-07 on
+   docs/design/logbook-parity/03-chosen-composed.html). The strip scrolls
+   sideways inside its own container; the PAGE never scrolls sideways
+   (e2e pins document.scrollWidth <= innerWidth). `border-collapse:
+   separate` on purpose: collapsed borders belong to the table and do not
+   travel with a stuck cell (WebKit bug 128486, csswg-drafts #3136), so the
+   pinned `#` column paints its own opaque --page background and a soft
+   right shadow instead of a border. The scroller bleeds into `.screen`'s
+   20px side padding (negative margin + matching padding) so the table's
+   first pixel aligns with the INTERVALS list above it and the scroll edge
+   reaches the screen edge — safe-area insets stay on `.screen` itself.
+   Text pairings, both computed in this file's contrast notes: --ink on
+   --page (cells, 15.6:1), --ink-3 on --page (headers/eyebrow, 6.69:1). */
+.machine-summary-block {
+  margin: 0 0 24px;
+}
+
+.machine-summary-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.machine-summary-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+.machine-summary-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.machine-summary-scroller {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -20px;
+  padding: 0 20px;
+}
+
+.machine-summary {
+  border-collapse: separate;
+  border-spacing: 0;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.machine-summary th,
+.machine-summary td {
+  padding: 9px 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+}
+
+.machine-summary th {
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.machine-summary .machine-summary-pin {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  padding-left: 0;
+  background: var(--page);
+  box-shadow: 6px 0 6px -6px rgba(0, 0, 0, 0.25);
+}
+
 .summary-intervals-header {
   display: flex;
   align-items: baseline;
