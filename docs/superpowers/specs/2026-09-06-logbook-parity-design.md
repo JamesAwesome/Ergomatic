@@ -521,11 +521,21 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   130 + 144 included; its real value is covering the row whose RC-1 rest
   pair is null because one actual lacked a rest field, antagonist delta
   2026-09-07); `stroke_rate`, `workout_type`, `time`, `distance`,
-  `weight_class` **untouched**. _`verification_code` is NOT in this list
-  because `buildC2Payload` has never emitted it — `grep -rn verification_code
-  app/` finds only the dev-only desk harness and one display component, and
-  PR 0's 201 body reads `"verified": false`. Rev 2.5 listed it as untouched;
-  a field that does not exist cannot be untouched (antagonist delta 5)._ _Rev 2 said `stroke_rate` "per §3.2 (fixes the doubled
+  `weight_class` **untouched**. **`verification_code` — SENT from rev 2.6
+  (PR 2.5, 2026-09-07).** The PM5's code from 0x003F's first 8 bytes, two
+  LE u32 words rendered `XXXX-XXXX-XXXX-XXXX` (`domain/monitor/verificationCode.ts`,
+  shared with the Log screen's display), sent ONLY when the posted `time`
+  and `distance` are the machine's own totals — the code is minted over those
+  (measured live 2026-09-05: the machine's 5706 verifies, our summed 5708
+  does not, `docs/superpowers/research/2026-09-05-c2-verification-measurement.md`).
+  Why now: James's four rows sent on the PR 2 build (2026-09-07) show that
+  Concept2's own **Verify** affordance is absent on a result that arrives
+  with `workout.intervals[]` — only the v0.41.0 (no-array) row still offered
+  it — which is not documented anywhere we can cite (INFERENCE from the four
+  rows; the API doc is silent). Sending the code makes the button
+  unnecessary: Concept2 verifies at receipt (`"verified": true` in the 201
+  body, proven live). _Rev 2.5's note that the field had never been emitted
+  was true when written and is superseded here._ _Rev 2 said `stroke_rate` "per §3.2 (fixes the doubled
   value on terminated pieces)": MOOT on this path — `eligibilityFailure`
   admits only `endedBy === "finished"`, so no terminated row ever reaches
   `buildC2Payload`; the 0x0039 average is the right one for every row it

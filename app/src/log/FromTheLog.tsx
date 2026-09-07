@@ -14,6 +14,7 @@ import { resolveBackTarget } from "../shell/BackLink";
 import Concept2SendBlock from "./Concept2SendBlock";
 import { buildStoredSummary, type StoredLog } from "./storedSummary";
 import TraceChart from "./TraceChart";
+import { displayVerificationCode } from "../../domain/monitor/verificationCode.js";
 
 // RC-2/RC-3 wave (docs/superpowers/specs/2026-08-24-summary-record-design.md
 // §3, PR 2), copy amended by the 2026-08-25 plan's Global Constraints
@@ -22,21 +23,9 @@ import TraceChart from "./TraceChart";
 // (PRIMARY-photographed, walk-2026-08-23). Reads only the FIRST 8 bytes —
 // a longer array (the jsonb column's cap is 32) still renders exactly one
 // code, matching the hardware screen's own fixed two-word display.
-function verificationCode(bytes: number[]): string {
-  const word = (o: number) =>
-    (
-      ((bytes[o + 3] << 24) |
-        (bytes[o + 2] << 16) |
-        (bytes[o + 1] << 8) |
-        bytes[o]) >>>
-      0
-    )
-      .toString(16)
-      .toUpperCase()
-      .padStart(8, "0");
-  const dash = (w: string) => `${w.slice(0, 4)}-${w.slice(4)}`;
-  return `${dash(word(0))} ${dash(word(4))}`;
-}
+// Phase LP PR 2.5: the byte→code transform lives in
+// `domain/monitor/verificationCode.ts` so the upload sends the SAME code the
+// screen shows (wire form dashed, display form spaced).
 
 // §3's value line, `2:04.0 work · 500m` for the walk's real values — house
 // elastic-positional time WITH tenths (`fmtSplit`, already imported by
@@ -68,8 +57,8 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
   if (row.machineWorkSeconds === null) return null;
   const bytes = row.machineSummary?.verificationBytes;
   const code =
-    bytes !== undefined && bytes.length >= 8
-      ? verificationCode(bytes)
+    bytes !== undefined
+      ? (displayVerificationCode(bytes) ?? undefined)
       : undefined;
   return (
     <div

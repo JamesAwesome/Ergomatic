@@ -1357,10 +1357,13 @@ closed with zero Concept2 contact.
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that
       row, show "verified"; a debug reveal shows the raw code when needed.
-      **PARKED until the confirming send proves PR C's codes verify on new
-      rows** (the row above). Needs a way to learn `verified` from Concept2
-      (re-read the result, or our own send carrying the code once the
-      byte→code transform is known — PR C spec §8).
+      **Half done (Phase LP PR 2.5, 2026-09-07): the send now carries
+      `verification_code`** when the posted totals are the machine's own
+      (spec §5 rev 2.6), because Concept2 hides its own Verify button on a
+      result that arrives with `workout.intervals[]` (James's four rows on
+      the PR 2 build). **Still owed:** store `verified` from the 201 body
+      (a new stored key — TRIAD) and render "verified" in place of the raw
+      code with a debug reveal.
 
 **Standing warning this wave inherits.** `recordTwdVerdict` was retired for
 being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
