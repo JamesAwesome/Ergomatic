@@ -5928,3 +5928,60 @@ a baseline pair. It reached almost none of them.
 - **The ASK-not-force ruling stands and should not be re-litigated.** Forcing
   both baselines makes a 2k test's own result unsavable until a 6k the rower
   has not rowed. James took the PM's call ("Go with the pms decision").
+
+## 2026-09-07 — Phase LP PR 2.5 final gate (#336, TRIAD: wire meaning)
+
+**A NEW TOP-LEVEL FIELD ON A THIRD PARTY'S PERMANENT RECORD INHERITS THE
+FALLBACK ITS PREDECESSOR BUILT.** PR 2 added `workout.intervals[]` behind an
+explicit promise — "the upload can never regress because of the array" — and a
+4xx retry that strips it. PR 2.5 added `verification_code` with no such path,
+and the retry was gated on the OLD field's presence, so a code-caused 4xx on a
+no-array row would fail an upload that main accepted. **At a gate, read the
+previous PR's fallback CONDITION and ask whether the new field is inside it.**
+
+**THE RESPONSE BODY ALREADY CARRIED THE ANSWER THE OWED HALF NEEDED.** The
+ROADMAP row is "hide the code, say verified"; the send half shipped while the
+201's `verified` — parsed in the same function that reads `resultId` — was
+thrown away. A stored key is TRIAD and rightly deferred; a log line is not.
+**When a PR ships the first half of a two-half row, ask what the half it ships
+already RECEIVES and discards.**
+
+**Postscript, same day: the whole feature was reversed by James** (#337).
+Verification is the rower's deliberate act, and ErgData leaves it to them, so
+auto-verifying broke the parity the phase exists for. The gate judged the
+mechanism and the record and never asked whether the product should do this at
+all. **A PM gate on a change that removes a human action asks who is losing the
+action, even when the request that started it looked like a bug report.**
+
+## 2026-09-07 — Phase LP PR 3 final gate (#345, TRIAD: a number a rower reads
+## and a number Concept2 stores)
+
+**A THIN CORPUS IS NOT LOAD-BEARING WHEN THE DERIVED VALUE IS A FALLBACK BEHIND
+THE AUTHORITY.** The PR rested on "the monitor leaves the summary heart-rate
+fields empty", correctly cut from "eleven of eleven captures" to TWO belted
+recordings from one walk — which reads as a reason to wait for more evidence.
+It is not: `avgHr: ms?.avgHeartRateBpm ?? derived` puts the monitor's own value
+first, so a belted summary carrying a real average simply suppresses the
+derivation. The thin corpus is load-bearing on the NARRATIVE and irrelevant to
+the BEHAVIOUR. **Read the preference order before ruling that weak evidence
+blocks a derived number; the converse — a derivation that OVERRIDES the
+authority — needs the full corpus.**
+
+**Three of six tiles under a `PM5` eyebrow are now not the monitor's figure**
+(watts, cal/hour, and now AVG HR), each arriving in a separate PR, and AVG HR
+is the first that visibly disagrees with the rows in the same frame. **When a
+filed label row gains a third member, say so at the gate rather than letting
+each PR add one quietly.**
+
+**A SHIPPED RELEASE NOTE IS A CLAIM THAT LATER PRs CAN FALSIFY.** v0.41.0's
+note says rows "show what the monitor measured: … average heart rate for the
+session". Harmlessly wrong while the tile read a dash; visibly wrong once it
+fills. **At any gate that changes where a number comes from, grep
+`releaseNotes.ts` for that tile's own label.**
+
+**RF28 fired again, at a gate rather than at a walk.** main's post-merge run
+was RED with `deploy` SKIPPED — production frozen a merge back — on a flaky
+test the same branch had just filed as "an annoyance". **A flake that skips a
+deploy is not an annoyance; a ROADMAP row's severity is a factual claim too.**
+`gh run list --branch main --limit 3` belongs in every final gate, not only the
+release gate.
