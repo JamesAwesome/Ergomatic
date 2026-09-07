@@ -2,8 +2,12 @@
 
 **Date:** 2026-09-06. Brainstormed with James the same day; every ruling
 below is his unless marked as a controller assumption.
-**Status:** spec approved in chat; antagonist anchor pass and PM open gate
-owed on this document before any implementation task starts.
+**Status:** spec approved in chat 2026-09-06. **PM open gate: PASS WITH
+CONDITIONS (2026-09-06), all eight conditions folded below** (C1 the three
+consumers that DO branch, C2 the door copy, C3 the caption's number, C4 the
+three-PR cut, C5 the walk-skip evidence, C6 checkable exits, C7 the
+migration index, C8 the "why now"). Antagonist anchor pass owed; Gate 0
+before any implementation task.
 **ROADMAP:** the "Row without a baseline set" register item (James,
 2026-08-23) becomes this phase; the section is added in the same commit as
 this spec (recurring failure 17).
@@ -103,20 +107,51 @@ baselines produces:
   ref: s.ref, spm: s.spm, set, originalStepIndex, /* no targetSplit */ }
 ```
 
-That is byte-for-byte the shape an effort phase already has under null
-baselines (Phase 6I), so every consumer that handles it today handles the
-new case with no branch of its own:
+The OBJECT is the shape an effort phase already has under null baselines
+(Phase 6I) plus a `ref`. That does not make every consumer safe: the PM open
+gate grepped the discriminant (`grep -rn targetKind app/src app/domain`)
+and read every branch. Three consumers need a change and are in scope;
+three were verified to need none.
 
-- **The PM5 compiler** (`domain/monitor/program.ts`, the H8 path) programs
-  the interval with no pace target when `targetKind === "effort"`; it
-  checks `targetKind` first and never `targetSplit === undefined`.
-- **The Timer / Countdown** (`TimerTargets.tsx`) renders `phase.label` alone
-  with no sub-line when there is no split to trace a ref for.
-- **The log seed** (`logDraft.ts`) writes `LogStep.label` with no
-  `targetSplit`, the effort-step path. **No stored log shape changes**: a
-  row logged this way is indistinguishable in storage from an effort-only
-  row today.
-- **The judge** has no target and produces no verdict, as for effort phases.
+**Need a branch (in scope, PR B):**
+
+- **The log seed, `src/session/logDraft.ts`.** `buildLogSeed` tests
+  `targetKind === "effort"` FIRST and composes the stored label through
+  `paceWordFromLabel(phase.label as "ALL OUT" | "EASY")`, which returns
+  `min` for any word but `ALL OUT`. A `2k+2` step under null baselines
+  would be stored as `5:00 @ MIN`. Both that branch and the draft-absent
+  fallback beside it test `phase.ref !== undefined` first and reconstruct
+  through `refPaceLabel` with the ref; the effort branch becomes the
+  `ref`-less remainder. The fallback's own comment ("the cast is safe:
+  this branch only runs when `targetKind === "effort"`, and expand.ts
+  sets `label` to exactly `paceWordLabel(ref.effort)` in that case, never
+  any other string") is the RF18 tripwire this change steps over and is
+  rewritten in the same commit. **The stored log shape is unchanged**: a
+  `LogStep` is still `{label, no targetSplit}`; only which label is
+  composed changes.
+- **`domain/display/stepDetail.ts`.** `pieceList(steps, baselines:
+  Baselines)` takes concrete baselines and drives Today's suggestion card;
+  `Today.tsx` carries two `baselines!` assertions on that path. It becomes
+  `Baselines | null`, and a split-ref piece under null carries the word
+  where `refTextFull` held the split. The assertions go.
+- **The Builder, `src/builder/Builder.tsx` and `builderState.ts`.** The
+  split slot returns `null` with no baselines and the duration estimate
+  returns `null`. The slot shows the word; the estimate prices through §4.
+  The Builder joins §2 and Gate 0 (§2.7).
+
+**Verified to need none (PM open gate, 2026-09-06):**
+
+- **The PM5 compiler** (`domain/monitor/program.ts`) checks `targetKind`
+  first and never `targetSplit === undefined` (its H8 sites), so an
+  effort-kind phase programs the interval with no pace target.
+- **The Timer / Countdown** (`TimerTargets.tsx`) renders `phase.label`
+  alone when there is no split to trace a ref for.
+- **The judge** has no target and produces no verdict, as for effort
+  phases.
+
+The implementer re-runs the discriminant grep at plan time and accounts
+for every hit by name; a hit not in this list is a plan finding, not a
+silent fix.
 
 `targetKind: "effort"` keeps its name (a rename is churn with no behaviour;
 its meaning is now "the target is a word from the ladder", which is what
@@ -204,14 +239,32 @@ that is now absent.
 - While `baselines === null && baselinesSkipped`: the suggestion apparatus
   returns (header, filters, shuffle, card) with a one-line row above it:
   **"No baseline set · Set one up"** (a button that clears the flag, §3.3)
-  and the durations caption (§4). The card itself is unchanged: type, effort, `~24′`, steps.
+  and the durations caption (§4). The card's layout is unchanged: type,
+  effort, `~24′`, steps; its step rows read words through the null-tolerant
+  `pieceList` (§1.2), and that IS a change to the card and is in Gate 0.
 
 ### 2.6 Library
 
 Rows show `24′` or `~24′` (§4); the caption rides the header while
 `baselines === null`. No other change.
 
-### 2.7 Copy retirements
+### 2.7 Builder (`src/builder/`)
+
+The split slot on a split-ref row shows the word when baselines are null
+(today: blank). The duration estimate prices through §4 and reads `~`.
+Nothing else on the Builder changes. In Gate 0.
+
+### 2.8 Row to find (`src/onboarding/RowToFind.tsx`)
+
+Unchanged, and its fixed duration copy (`ONBOARDING_DURATION_COPY`,
+`ABOUT 25 MIN` / `ABOUT 8 MIN`) stays: it is a door, and §8 keeps the
+doors out of scope. The assumed pricing would print the 6K Test at `~30′`
+and the 2K at `~10′` wherever those workouts appear OUTSIDE the door
+(Library, detail), so Gate 0 captures RowToFind beside the 6K Test's
+detail screen and James sees the two figures side by side before either
+is approved.
+
+### 2.9 Copy retirements
 
 Every `EASY` becomes `STEADY`; every spoken "easy" becomes "steady". Sites
 found by `grep -rn "EASY\|Easy\b" app/src app/domain` on 2026-09-06 and
@@ -264,8 +317,15 @@ Invariant: **the doors card renders iff `baselines === null && !baselinesSkipped
 
 - `estimateMinutes(steps, null)` returns `{ minutes, estimated, assumed }`
   where `assumed` is true iff any distance work step was priced off
-  `ASSUMED_BASELINES`. Time steps price exactly. The `null` return and
-  `ONBOARDING_DURATION_COPY`'s fixed-copy fallback retire.
+  `ASSUMED_BASELINES`. Time steps price exactly. The `null` return retires.
+  `ONBOARDING_DURATION_COPY` stays on its door (§2.8).
+- **What the assumed pair actually prices, per ref class** (recomputed at
+  the PM open gate; the pricing goes through the existing `estimationSplit`,
+  so it is NOT a flat 2:30/500m): `2k+off` at 2:30+off; `6k+off` at
+  2:37+off; `max` at 2:30; `min` at k6+20 = **2:57**. A 500 m ALL OUT step
+  reads `~2.5′` against a plausible real 1:50. Gate 0 shows James these
+  figures on real rows (a 500 m sprint, a 6k+10 steady piece, a `min`
+  piece) before the caption is approved.
 - Rendering: `24′` when `!assumed`, `~24′` when `assumed`, on Library rows,
   Today's card and the detail screen. The tilde marks "assumed pace" only;
   a distance workout priced from a real baseline stays `24′` as today
@@ -274,9 +334,11 @@ Invariant: **the doors card renders iff `baselines === null && !baselinesSkipped
 - The time filter runs against these numbers: `durationsUnknown` and the
   `estMinutes: 0` placeholder in `Today.tsx:244` and `domain/suggest.ts`
   retire.
-- Caption, once per screen, not per row: **"Times marked ~ assume
-  2:30/500m"** on the Today row and the Library header while
-  `baselines === null`.
+- Caption, once per screen, not per row, on the Today row and the Library
+  header while `baselines === null`. **The number is out of the caption**:
+  "assume 2:30/500m" was true only for `2k+0` and `max` (PM open gate C3).
+  Proposed: **"~ times are estimates until you set a baseline"**. Gate 0
+  decides the wording with the per-step figures above on the table.
 
 ## 5. Gates, spoken
 
@@ -292,21 +354,44 @@ Invariant: **the doors card renders iff `baselines === null && !baselinesSkipped
 - **Gate 0:** captures of detail, Timer, one connected pane, Today (both
   states) and Library, both orientations, beside today's screens, contrast
   as numbers. Before any implementation task.
-- **Hardware walk: none, said aloud.** A word phase's wire shape is the
-  effort phase's, walked in Phase 7C and every walk since with the
-  designated onboarding workouts. The PM may disagree at open.
+- **Hardware walk: none, said aloud; PM ACCEPTED at open (2026-09-06)
+  on the compiler's discriminant** (`program.ts` checks `targetKind`
+  first, never `targetSplit === undefined`, verified at the gate). The
+  spec's earlier sentence "walked in Phase 7C and every walk since" was a
+  hardware claim from memory: `docs/monitor/sessions/` was searched
+  2026-09-06 for the onboarding titles (`6K Test`, `2K Test`) and for any
+  all-effort multi-interval program, and **no committed capture names
+  one**. The skip stands on the compiler read; "PM5 accepts an all-effort
+  multi-interval program" rides the NEXT walk's runsheet as an added
+  observation, not a session of its own.
 - **Design reference:** `docs/design/` gets the approved Gate 0 captures.
   `DEVIATIONS.md` rows that describe the blocked-start states are
   reconciled (recurring failure 9).
 
-## 6. PR shape
+## 6. PR shape (PM open gate C4: three slices, one tag)
 
-1. **PR 1: words and unblocking.** §1, §2, §4, copy retirements, article
-   sentence, e2e and captures. No stored shape.
-2. **PR 2: skip.** §3: migration, route, `PreferencesData`, the card line,
-   the Today row, the reset-route clear. TRIAD.
-3. **Notes PR** and the tag; PR 1 alone is tester-visible and could ship
-   first if PR 2 waits on its gate.
+1. **PR A: durations.** §1.3 and §4: `estimateMinutes` prices null
+   baselines off `ASSUMED_BASELINES`, the `~` marker, `durationsUnknown`
+   and the `estMinutes: 0` placeholder retire, the time filter runs on real
+   numbers. Removes no gate; deployable alone. Outcome: a no-baseline
+   rower's Library shows `~24′` and the duration filter works.
+2. **PR B: the ladder and unblocking.** §1.1, §1.2 (including the three
+   consumers that branch), §2 and its copy retirements, the article
+   sentence, e2e and captures. PM final gate (a split becomes a word).
+3. **PR C: the skip.** §3: migration, route, `PreferencesData`, the card
+   line, the Today row, the reset-route clear. TRIAD.
+4. **Notes PR and ONE tag at phase close** (PM ruling): PR B alone unblocks
+   Start via Library while the doors card still owns Today for exactly the
+   rower the phase serves, and its only tester-visible change would be
+   `EASY` → `STEADY`. If PR C slips its gate, PR B may ship alone and the
+   note says the doors card still owns Today.
+
+**Migration index (C7):** `app/drizzle/` tops out at `0025`, and Phase DE
+PR 3 (scheduled 2026-09-12) drops `preferences.difficulties` and will also
+mint `0026` on the same table. Whichever of RW PR C and DE PR 3 merges
+second regenerates its migration off the new main before its PR is marked
+ready; a duplicate index is skipped silently and the API 500s on the
+missing column.
 
 ## 7. Testing
 
@@ -331,6 +416,14 @@ Invariant: **the doors card renders iff `baselines === null && !baselinesSkipped
   workout returns `assumed: true` and the minutes at 2:30/500m; mutation:
   price at `k2Seconds` instead of the assumed pair and the literal minutes
   must change.
+- **Log seed (C1):** a `2k+2` step under null baselines seeds a `LogStep`
+  whose label carries the ref (the `refPaceLabel` form), never `MIN`.
+  Mutation: restore the `targetKind`-first ordering and the test must
+  fail on the literal `MIN`. A `min` step still seeds its chip word.
+- **`pieceList(steps, null)`** carries the word for a split-ref piece;
+  Today's card renders it with no assertion.
+- **Builder:** a split-ref row with null baselines shows the word in the
+  split slot and a `~` estimate.
 - **Skip:** the route round-trips the flag; `DELETE /api/baselines` clears
   it (integration test, mutation: drop the clear and assert the flag
   survives); the card's render condition on both flags.
@@ -345,6 +438,7 @@ Invariant: **the doors card renders iff `baselines === null && !baselinesSkipped
 - Marking baseline-derived distance estimates (`estimated: true`) with any
   symbol.
 - Dropping `startHereDismissed`.
+- The Row-to-find door and its fixed duration copy (§2.8).
 - Any change to the doors, the recommend table, or the post-test offer.
 - Auto-capturing a baseline from a logged row (register item, its own
   trigger).

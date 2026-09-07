@@ -525,9 +525,10 @@ recorded in PR 2's body; release note in rower words (spec §6.6).
 
 **Status:** OPENED 2026-09-06. Spec
 `docs/superpowers/specs/2026-09-06-row-without-baselines-design.md`, brainstormed
-with James the same day. Antagonist anchor pass and PM open gate owed on the
-spec before Gate 0; Gate 0 before any implementation task. PR 2 is **TRIAD**
-(stored shape). **M.**
+with James the same day. PM open gate PASS WITH CONDITIONS 2026-09-06, all
+folded into the spec (three consumers that DO branch, the three-PR cut, one
+tag at close). Antagonist anchor pass owed on the spec before Gate 0; Gate 0
+before any implementation task. PR C is **TRIAD** (stored shape). **M.**
 
 **Goal:** every workout is rowable with no baseline set. Where a split would
 appear the rower reads STEADY · MODERATE · HARD · ALL OUT, derived from the
@@ -538,22 +539,35 @@ rest is). Durations still show, distance ones priced off a stated assumed
 stays on Today until a baseline exists.
 
 **Why now:** it is the register's "Row without a baseline set" item (James,
-2026-08-23), half-delivered by Phase JR's Just Row door, and it is the
-shape Wave A's exit ("a stranger rows a row") has to pass through.
+2026-08-23), half-delivered by Phase JR's Just Row door. It does NOT itself
+unblock a stranger (the proven blocker is deny-by-default sign-up,
+`server/auth/signin.ts:33`); it is M-sized and keeps a domain change out of
+an L auth wave, so Wave A's "rows a row" clause becomes reachable with no
+domain work inside Wave A. Wave A's exit cites this phase for that clause.
 
-- [ ] **PR 1 — words and unblocking.** `intensityWord(ref)` in
+- [ ] **PR A — durations.** `estimateMinutes` prices null baselines off an
+      assumed 2:30 2k / 2:37 6k pair through the existing `estimationSplit`
+      (so `min` prices at 2:57, stated in spec §4); `~24′` on Library, Today,
+      detail and the Builder; the `estMinutes: 0` placeholder and
+      `durationsUnknown` retire; the time filter runs on real numbers.
+      Removes no gate. **S**
+- [ ] **PR B — the ladder and unblocking.** `intensityWord(ref)` in
       `domain/pace.ts` (2k-equivalent thresholds, exported); `phases(steps,
-      null)` emits an effort-shaped phase for a split ref instead of
-      throwing; the compiler, Timer, log seed and judge need no branch; every
-      Start/Connect/Log gate and the Countdown redirect go; `~24′` and the
-      caption; every `EASY` becomes `STEADY`. Gate 0 captures, PM final gate
-      (a split becomes a word). **M**
-- [ ] **PR 2 — skip.** `preferences.baselines_skipped` (migration 0026,
-      additive route), the card line, the Today return row (a button that
-      clears the flag: the doors have no standalone route), `DELETE
-      /api/baselines` clears it server-side. Lifetime table in spec §3.2.
-      TRIAD. **S**
-- [ ] Notes PR and tag.
+      null)` emits an effort-kind phase carrying its `ref` instead of
+      throwing; the compiler, Timer and judge verified to need no branch;
+      **the log seed, `pieceList` and the Builder DO** (spec §1.2); every
+      Start/Connect/Log gate and the Countdown redirect go; every `EASY`
+      becomes `STEADY`. Gate 0 captures, PM final gate (a split becomes a
+      word). **M**
+- [ ] **PR C — skip.** `preferences.baselines_skipped` (additive route), the
+      card line, the Today return row (a button that clears the flag: the
+      doors have no standalone route), `DELETE /api/baselines` clears it
+      server-side. Lifetime table in spec §3.2. TRIAD. **Migration index
+      collides with Phase DE PR 3 (scheduled 2026-09-12, same table, also
+      `0026`): whichever merges second regenerates off new main first.** **S**
+- [ ] Notes PR and **one tag at phase close** (PM ruling, 2026-09-06): PR B
+      alone would put `EASY` → `STEADY` in front of testers while the doors
+      card still owns Today.
 
 **Gates, spoken:** one antagonist anchor pass on the spec (thresholds, the
 assumed pair's reach, the flag's lifetime); PM open, per-PR final, close;
@@ -561,10 +575,19 @@ Gate 0 on detail, Timer, a connected pane, Today both states, Library;
 **no hardware walk** (a word phase's wire shape is the effort phase's, walked
 since Phase 7C; PM may disagree at open).
 
-**Exit:** a fresh account with no baseline can open any workout, Start,
-Connect and Log it after, sees words where splits would be and `~` on
-assumed durations, can skip the doors and get them back, and `EASY` appears
-on no surface.
+**Exit (each clause names its oracle):** (1) on web e2e, a fresh account
+with no baseline opens a split-ref workout and Start, Log it after and the
+web Connect path (the fake monitor is web-only; the native path is covered
+by the compiler test plus the next walk's added observation) all proceed;
+(2) the word renders on every surface in spec §2: detail step rows, Timer,
+the connected pane, Today's card, the Builder's split slot, each pinned by
+a client or e2e test; (3) `~` appears on a distance workout's duration on
+Library, Today, detail and Builder, and not on a time workout's; (4) the
+skip line writes the flag, the Today row clears it, and the baselines reset
+clears it server-side (integration test); (5) `grep -rn "EASY\|Easy\b"
+app/src app/domain app/e2e` returns only the bulk-grammar token `easy` in
+`domain/bulk.ts` and its tests, with any other survivor named and ruled at
+close.
 
 ## Wave A — The front door
 
@@ -621,8 +644,10 @@ it lands the stranger on this same denial.
       sign-in-adjacent onboarding screen. **S**
 
 **Exit:** a stranger installs from TestFlight, signs in with Apple or Google,
-gets an empty working account, rows a row, and deletes the account and all of
-its data from inside the app.
+gets an empty working account, rows a row (the "rows a row" clause is closed
+by Phase RW, opened 2026-09-06: a no-baseline account can Start any workout;
+this wave verifies it once, on the stranger's account, not twice), and
+deletes the account and all of its data from inside the app.
 
 ---
 
