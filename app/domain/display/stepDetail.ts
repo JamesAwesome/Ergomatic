@@ -1,7 +1,7 @@
 import { phases, estimateMinutes, phaseSeconds } from "../expand.js";
 import { fmtDuration } from "../duration.js";
 import { fmtSplit } from "../format.js";
-import { isPaceWordRef } from "../pace.js";
+import { ASSUMED_BASELINES, isPaceWordRef } from "../pace.js";
 import type { Baselines, PaceRef, Step } from "../types.js";
 
 /** Per-piece display rows for Today's suggestion card (spec §1/§2).
@@ -215,14 +215,21 @@ export function peakIndex(
  *  (the duration chip's); WORK is the work phases alone. With the
  *  trailing-rest deviation, WORK plus every displayed rest equals
  *  TOTAL by construction — where a rolled row's rest counts once per
- *  piece in its run (`count` × rest), not once per row. */
+ *  piece in its run (`count` × rest), not once per row.
+ *
+ *  Phase RW PR B: WORK prices against the SAME pair TOTAL does — the
+ *  rower's own baselines, or `ASSUMED_BASELINES` when they have none.
+ *  Without that, a distance step under null baselines is an effort-kind
+ *  phase with no `targetSplit`, `phaseSeconds` returns null, and WORK
+ *  reads 0 beside a TOTAL that priced the very same step (branch review,
+ *  finding 1: it breaks the invariant this comment states). */
 export function workAndTotal(
   steps: Step[],
   baselines: Baselines | null,
 ): { workMinutes: number; totalMinutes: number } {
   const totalMinutes = estimateMinutes(steps, baselines).minutes;
   let workSeconds = 0;
-  for (const p of phases(steps, baselines)) {
+  for (const p of phases(steps, baselines ?? ASSUMED_BASELINES)) {
     if (p.type !== "work" && p.type !== "test") continue;
     workSeconds += phaseSeconds(p) ?? 0;
   }

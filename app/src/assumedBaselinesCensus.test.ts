@@ -12,7 +12,17 @@ import { describe, expect, it } from "vitest";
  *  import statement, not the bare name, so a comment may mention it.
  *  Same shape as `judgeBand.test.ts`: read the source, not the runtime. */
 const ROOT = path.resolve(__dirname, "..");
-const ALLOWED_IMPORTERS = ["domain/expand.ts", "src/builder/builderState.ts"];
+/** Every importer prices a DURATION and returns numbers only. No `Phase`
+ *  built against the assumed pair leaves any of them:
+ *  - `expand.ts` — `estimateMinutes` (PR A).
+ *  - `builderState.ts` — `rowMinutes` (PR A).
+ *  - `display/stepDetail.ts` — `workAndTotal`'s WORK half (PR B), which
+ *    must price against the same pair TOTAL does or the two disagree. */
+const ALLOWED_IMPORTERS = [
+  "domain/expand.ts",
+  "domain/display/stepDetail.ts",
+  "src/builder/builderState.ts",
+];
 const DEFINITION = "domain/pace.ts";
 const IMPORT_RE =
   /import\s+(?:type\s+)?\{[^}]*\bASSUMED_BASELINES\b[^}]*\}\s+from\s+"[^"]*pace\.js"/;

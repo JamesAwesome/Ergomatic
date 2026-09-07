@@ -483,10 +483,9 @@ describe("WorkoutDetail", () => {
     expect(await screen.findByText("LOG SCREEN")).toBeInTheDocument();
   });
 
-  // Phase 6I amendment: this test's fixture (the default WORKOUT) has a
-  // split-ref work step — `needsBaselines()` reads true, so the gate below
-  // still fires exactly as before this task. The sibling test right after
-  // this one pins the OTHER branch the predicate now opens.
+  // Phase RW PR B: the split-ref fixture is the one that used to be
+  // blocked here. The sibling test right after pins the effort-only case,
+  // which was always allowed.
   it("keeps Log it after as a real link for a split-ref workout with baselines unset (Phase RW PR B)", async () => {
     mockHooks(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);
     await renderDetail("/library/w-sixk-split");
@@ -557,10 +556,10 @@ describe("WorkoutDetail", () => {
     expect(draft!.workoutId).toBe("w-effort");
   });
 
-  // The split-ref regression companion — the branch the guard NOW blocks,
-  // the exact gap fast-follow Task 4 closes (adversarial I1): before this
-  // task, a split-ref workout's Start reached ConfirmTargets unconditionally
-  // and relied on THAT screen's own footer to block it; that screen is
+  // The split-ref companion. HISTORY, for the reader who wonders why this
+  // pair exists: a split-ref workout's Start was blocked here from the
+  // fast-follow round until Phase RW PR B removed the guard entirely. The
+  // screen that first owned that footer block is
   // gone, so the block has to happen here or not at all.
   it("Start is enabled for a split-ref workout with baselines unset and saves a started draft (Phase RW PR B: the guard is gone)", async () => {
     mockHooks(NO_BASELINES, [SIX_K_DISTANCE_WORKOUT]);

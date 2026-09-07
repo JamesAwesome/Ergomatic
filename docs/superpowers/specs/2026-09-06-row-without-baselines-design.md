@@ -98,10 +98,11 @@ measured over the 300 seeded workouts with these thresholds; the script
 rides PR B as the census test in §7):** 76 workouts have two or more
 distinct refs that all collapse to one word (AN 7 of 7, TR 25 of 37, AT
 21 of 33, O2 23 of 25), so a `2k+0 → 2k+4` build reads HARD on every
-rung (the committed census, `domain/intensityCensus.test.ts`, pins 79
-under its own definition, which also counts a workout whose `max`/`min`
-steps share the word; the anchor's 76 came from a script that is not
-committed, and the pinned figure is the one that guards drift); and 9 workouts read a word that contradicts their type badge on
+rung (the committed census, `domain/intensityCensus.test.ts`, pins 79 under
+its own stated definition — two or more distinct SPLIT refs, every
+ref-carrying phase reading one word, `max`/`min` steps outside the word
+set since they carry no ref; the anchor's 76 came from a script that is
+not committed, and the pinned figure is the one that guards drift); and 9 workouts read a word that contradicts their type badge on
 EVERY step ("Roaring Forties", "Polar Blast", "Grec", "Beam Sea", "Canary
 Current": TR at `2K+6`, all MODERATE; "Bora": AT at `6K−3`, all HARD;
 "Warm Sector": AT, all STEADY; "Moderate Breeze", "Crepuscular Rays": O2,
@@ -241,7 +242,12 @@ comment, which names every gate site, is rewritten. The four throw sites
 (`expand.ts` `phases()` and `estimateMinutes`, `pace.ts`
 `estimationSplit`, `logDraft.ts` `buildLogSeed`; counted by
 `grep -rn "must gate on needsBaselines"`) and their "callers must gate on
-needsBaselines() first" comments are deleted.
+needsBaselines() first" comments are deleted. **As shipped, two of the
+four survive as unreachable construction asserts** rather than deletions:
+`estimationSplit`'s split-ref throw (its only null-passing caller now
+sits inside the pace-word arm) and `buildLogSeed`'s, reworded to say a
+split-KIND phase with no baselines cannot be minted. Both are
+by-construction claims about `phases()`, not gates on a caller.
 
 ### 1.3 The assumed pair
 
@@ -270,8 +276,10 @@ an INVARIANT rather than the loop first written here: `estimateMinutes` may
 build phases against `ASSUMED_BASELINES` inside its own body, but no `Phase`
 carrying the assumed number is ever returned, stored, or passed on. The
 gate is `src/assumedBaselinesCensus.test.ts`, which pins the constant's
-importers to `domain/pace.ts`, `domain/expand.ts` and
-`src/builder/builderState.ts`; a fourth importer fails the suite. (The
+importers to `domain/expand.ts`, `src/builder/builderState.ts` and (PR B)
+`domain/display/stepDetail.ts`, and its definition to `domain/pace.ts`; a
+further importer fails the suite. Every one prices a DURATION and returns
+numbers. (The
 null-phases loop this sentence used to prescribe needs §1.2's
 `phases(steps, null)`, which is PR B; PR A ships first.)
 
@@ -402,8 +410,10 @@ that axis (the v0.39.0 note announces it) and now returns as an intensity
 word meaning something else. **The exit grep's expected survivors**, run
 at PR B's head and classified there rather than left to the close gate
 (the PM final gate found the first version of this claim false):
-`grep -rn "EASY\|Easy\b" app/src app/domain app/e2e` returns 67 hits, and
-every one is in one of three classes, none of them a live pace word:
+`grep -rn "EASY\|Easy\b" app/src app/domain app/e2e` returns 62 hits
+(measured at PR B's head; the first count of this list said 67 and was
+itself wrong), and every one is in one of three classes, none of them a
+live pace word:
 (a) the DIFFERENT AXIS — `builderState.ts`'s `EFFORT_WORDS` carries
 `EASY BREATH`, the 1-to-5 whole-workout scale's first word, plus the
 difficulty-era chip labels in `Today`/`CellGrid`/`TokenRow` tests;
@@ -411,7 +421,10 @@ difficulty-era chip labels in `Today`/`CellGrid`/`TokenRow` tests;
 Phase WU deleted (its label was `Easy`) and the v0.39.0 release note;
 (c) the bulk grammar's `easy` token, which still parses to
 `{effort:"min"}` on purpose (§1.1). A hit outside those three is a
-defect; PR B fixed the four that were. The News article `baselines` gains
+defect; PR B fixed six — four found by the PM final gate, and two more
+found by the branch review that class (b) had wrongly absorbed
+(`ConnectedSurface.screens.test.tsx` and `screenshots.spec.ts` each
+asserted a CURRENT rendered `EASY`, not history). The News article `baselines` gains
 one sentence: words stand in for targets until a baseline exists, and
 what the four words mean. No new article.
 

@@ -435,17 +435,6 @@ function WorkoutDetailView({
       ? "NEVER DONE"
       : `LAST DONE ${workout.lastDoneDaysAgo} DAYS AGO`;
 
-  // Fast-follow spec §3 (adversarial I1): ConfirmTargets' own `isStartBlocked`
-  // guard, relocated onto Start itself now that screen is gone — the SAME
-  // per-workout predicate (`needsBaselines`, the single predicate every
-  // coupled guard site in this file already shares: the manual-door Link
-  // just below, and Connect's own `handleConnectProceed` gate above). Start
-  // renders disabled with a caption instead of a click handler. (The old
-  // no-baseline BaselineCard carried no equivalent guard — its workout was
-  // effort-only by construction; BL PR C's doors card starts nothing at
-  // all, so the designated tests now reach Start only through THIS screen,
-  // where the same structural exemption holds: they are effort-only.)
-
   // Clamps the RESOLVED split (baseline + off + nudge), not the raw nudge
   // number, to the same 60-240 s/500m range the baseline editor
   // (you/baselineDraft.ts) and the API enforce. Unclamped, extreme nudges
@@ -489,7 +478,14 @@ function WorkoutDetailView({
       <p className="mono-status">
         {minutesLabel} · EFFORT {workout.effort}/5 · {daysLabel}
       </p>
-      <p className="workout-detail-note">PREVIEW · NUDGE ANY TARGET</p>
+      {/* Phase RW PR B: nudging needs a resolved split, and `StepRow` only
+          renders the nudge controls when one exists — so with no baseline
+          this note would head a list with nothing to nudge (branch review,
+          finding 9). The caption under the actions says what the words are
+          instead. */}
+      {baselines !== null && (
+        <p className="workout-detail-note">PREVIEW · NUDGE ANY TARGET</p>
+      )}
       <div className="step-list">
         {workout.steps.map((step, index) =>
           step.k === "reps" ? (
@@ -584,19 +580,12 @@ function WorkoutDetailView({
         {(startError ?? rowInsteadError) && (
           <p className="baseline-error">{startError ?? rowInsteadError}</p>
         )}
-        {/* Task 3 (the manual door), Phase 6I amendment: gated on the SAME
-            `needsBaselines` predicate every other coupled guard site
-            shares, not bare `baselines` — an effort-only workout has
-            nothing to resolve against baselines at all. A plain `Link`
-            (not a `navigate()` button): this is a one-way hand-off to a new
-            route, the same idiom `OwnerActions`' own Edit link below uses.
-            KNOWN GAP (flagged in Task 2's own report, not fixed here — out
-            of this task's file list and the phase's own "don't touch the
-            Log screen" collision note): `LogSession.tsx`'s `ManualDoorLog`
-            still gates on bare `baselines === null` unconditionally, so an
-            effort-only workout opened here still hits its OWN "no target"
-            block one screen later — same final message, one extra
-            navigation, not a data-loss or crash risk. */}
+        {/* The manual door. Ungated since Phase RW PR B: every workout can
+            be logged with or without a baseline (the KNOWN GAP this comment
+            used to record, `ManualDoorLog`'s own bare `baselines === null`
+            block, went with it). A plain `Link` (not a `navigate()`
+            button): a one-way hand-off to a new route, the same idiom
+            `OwnerActions`' own Edit link below uses. */}
         <Link
           to={`/library/${workout.id}/log`}
           state={{ from }}

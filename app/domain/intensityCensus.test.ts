@@ -47,6 +47,12 @@ describe("the ladder over the seeded library", () => {
   // every word-phase, max/min included, reading one word) counts 79. The
   // number pinned is this definition's, so a seed edit that moves it is
   // seen; the spec records both figures.
+  // Definition, stated because the number is only meaningful with it: a
+  // workout counts when it authors two or more DISTINCT SPLIT refs and
+  // every phase that carries a ref reads the same word. A max/min step
+  // carries no `ref` (expand.ts) and so is outside the word set entirely —
+  // a workout can count here while a `max` step beside its split refs
+  // still reads ALL OUT to the rower.
   it("reads one word on every rung of exactly the 79 multi-ref workouts this census defines", () => {
     const collapsed = LIBRARY_WORKOUTS.filter((w) => {
       const distinct = new Set(

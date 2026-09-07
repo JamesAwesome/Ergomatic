@@ -709,8 +709,13 @@ describe("pieceList without a baseline (Phase RW PR B, spec §1.2)", () => {
     expect(peakIndex(pieceList(w.steps, null), 8)).toBe(1);
   });
 
-  it("workAndTotal prices through estimateMinutes with null (Laminar, ~16)", () => {
+  it("workAndTotal prices WORK and TOTAL off the same pair with null (Laminar): never 0 work beside a real total", () => {
     const w = seeded("Laminar");
-    expect(workAndTotal(w.steps, null).totalMinutes).toBe(16);
+    // 3 x 1000 m @ 6k+12 at the assumed 6k (2:32 -> 164 s/500 m): 984 s of
+    // work = 16', and the workout carries no rest, so WORK equals TOTAL.
+    expect(workAndTotal(w.steps, null)).toStrictEqual({
+      workMinutes: 16,
+      totalMinutes: 16,
+    });
   });
 });

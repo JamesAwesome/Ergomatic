@@ -1134,7 +1134,7 @@ test.describe("workout detail screen (no baselines: words, not a guard)", () => 
     await expect(word).toHaveText("MODERATE");
     expect(await word.evaluate((el) => getComputedStyle(el).color)).toBe(
       "rgb(181, 52, 31)",
-    ); // --accent, 5.94:1 on --page
+    ); // --accent on --page: 5.35:1 (tokens.css lists 5.94/5.35/5.03 for page/surface/sunken)
 
     const caption = page.locator(".workout-detail-caption");
     await expect(caption).toHaveText(

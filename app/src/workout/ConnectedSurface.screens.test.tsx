@@ -612,8 +612,9 @@ describe("screen fixtures for pnpm screenshots", () => {
    *  the caption reads a numbered `1 OF 5 · WORK` and the progress bar has
    *  only its usual two tones (active/upcoming). What did NOT change,
    *  because an effort-ref phase has never carried a numeric target either:
-   *  both target slots still name the phase rather than a number (`EASY`,
-   *  `Free`), still greyed, and the pace hero is still unjudged — verified
+   *  both target slots still name the phase rather than a number (`STEADY`
+   *  since Phase RW PR B retired EASY, and `Free`), still greyed, and the
+   *  pace hero is still unjudged — verified
    *  against this fixture's own committed markup, not assumed carried
    *  over. */
   it("pane B, the opening interval", async () => {

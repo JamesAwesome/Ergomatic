@@ -33,12 +33,11 @@ export interface EnginePhase extends Omit<Phase, "originalStepIndex"> {
  *  deep-equal records (byte-stable), since nothing here reads the clock or
  *  storage.
  *
- *  Phase 6I: `baselines` is `Baselines | null` — `phases()` (domain/
- *  expand.ts) already accepts the union and is the ONE place that decides
- *  what null means: no `targetSplit`/no estimate for an effort work phase,
- *  a loud throw for a split-ref one. Callers here must gate on
- *  `needsBaselines()` first, exactly like every other coupled call site
- *  (domain/needsBaselines.ts's own header comment names them).
+ *  `baselines` is `Baselines | null` — `phases()` (domain/expand.ts)
+ *  accepts the union and is the ONE place that decides what null means:
+ *  no `targetSplit` and no estimate for an effort work phase, and (Phase
+ *  RW PR B) a ladder word for a split-ref one. No caller gates on
+ *  `needsBaselines()` any more; nothing throws.
  *
  *  `originalIndex` attribution is a lookup, not a reimplementation:
  *  `phases()` itself stamps every `Phase` with `originalStepIndex` — the

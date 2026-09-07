@@ -116,14 +116,11 @@ export default function Countdown() {
   // Resolved once baselines are READY — `null` covers both "not ready yet"
   // (loading/error; the render below returns before this matters) and the
   // genuine case this exists to catch: ready, but the rower has never set
-  // baselines. WorkoutDetail.tsx's own Start guard blocks in that case
-  // ONLY when `needsBaselines()` reads true for the draft's effective steps
-  // (Phase 6I — before that task it blocked unconditionally); an
-  // effort-only workout's `resolvedBaselines === null` is therefore a
-  // GENUINE, expected case reaching this screen now, not just a
-  // direct/deep-link that skipped that guard. `blocksWithoutBaselines`
-  // (module scope, above) is what actually decides whether this null value
-  // blocks the build effect/render below — see its own comment.
+  // baselines. Phase RW PR B: that is now an ORDINARY case for every
+  // workout, not just the effort-only ones. Nothing blocks on it — the
+  // guard this comment used to name (`blocksWithoutBaselines`, and
+  // WorkoutDetail's matching Start guard) is deleted; `buildRun` takes the
+  // union and a split ref resolves to a ladder word.
   // useMemo, not a plain `const`: `baselinesState` itself is a STABLE
   // reference across renders that don't touch it (the countdown's own 1s
   // repaint interval re-renders this component every second once running),
@@ -192,17 +189,14 @@ export default function Countdown() {
     if (existingRun !== null && hasRunProgress(existingRun)) return;
     if (baselinesState.state !== "ready") return;
     if (preferencesState.state !== "ready") return;
-    // Ready but unset AND the draft actually needs baselines to resolve
-    // (Phase 6I: `blocksWithoutBaselines`, module scope) — never build
-    // here; the render below redirects to /today instead. `builtRef` is
-    // deliberately NOT flipped in this branch: this isn't "built once,
-    // never rebuild," it's "nothing to build yet," so a hypothetical future
-    // render with real baselines (there isn't one today; nothing here
-    // re-fetches) wouldn't be wrongly blocked by a stale guard. An
-    // effort-only draft falls THROUGH this check even with
-    // `resolvedBaselines === null` — `buildRun` accepts `Baselines | null`
-    // and resolves an effort phase to no target/no estimate rather than
-    // crashing (domain/expand.ts's `phases()`).
+    // Phase RW PR B: there is no "ready but unset" early return here any
+    // more — a null pair builds a run whose split refs read ladder words.
+    // `builtRef` is
+    // deliberately NOT flipped in the loading branches above: that isn't
+    // "built once, never rebuild," it's "nothing to build yet," so a
+    // later render with real baselines is not wrongly blocked by a stale
+    // guard. `buildRun` accepts `Baselines | null` throughout
+    // (domain/expand.ts's `phases()`).
     builtRef.current = true;
 
     const baselines = resolvedBaselines;
