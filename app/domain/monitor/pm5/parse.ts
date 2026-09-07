@@ -139,15 +139,21 @@ export function parseGeneralStatus(
   };
 }
 
-/** The pre-V1.26 length of 0x0032. `Erg Machine Type` was APPENDED to this
- *  characteristic in interface-definition revision V1.26 (2018-11-02, rev 1.30
- *  Table 1, verbatim: "Added Erg Machine Type parameter to characteristic
- *  0x0032/0x0080/ V1.26."), so a monitor on older firmware sends a clean
- *  16-byte prefix. Every field we CONSUME ends at byte 15 (`restSeconds`, a
- *  u24 at offset 13), so rejecting those frames discarded a whole session's
- *  readings over a byte with no consumer — and because `driver.ts`'s
- *  `seen.as1` is a one-way latch set only on a successful parse, it cost every
- *  frame, not just this field. */
+/** The pre-V1.26 length of 0x0032. `Erg Machine Type` was ADDED to this
+ *  characteristic in interface-definition revision V1.26 (2018-11-02, rev
+ *  1.30 Table 1, verbatim: "Added Erg Machine Type parameter to
+ *  characteristic 0x0032/0x0080/ V1.26."). That row establishes ADDED and
+ *  nothing else; that the field lands LAST (offset 16) comes from a
+ *  different source — interface-notes.md §10's 0x0032 table, whose field
+ *  ordering ends `Rest Time` then `Erg Machine Type`. INFERENCE, labelled:
+ *  that a pre-V1.26 monitor sends a clean 16-byte prefix follows from ADDED
+ *  plus LAST, not from an observed short frame, and is unverified against
+ *  real pre-2018 hardware (interface-notes.md §10's note under that table
+ *  has the full account). Every field we CONSUME ends at byte 15
+ *  (`restSeconds`, a u24 at offset 13), so rejecting those frames discarded
+ *  a whole session's readings over a byte with no consumer — and because
+ *  `driver.ts`'s `seen.as1` is a one-way latch set only on a successful
+ *  parse, it cost every frame, not just this field. */
 const ADDITIONAL_STATUS_1_MIN_BYTES = 16;
 
 /** 0x0032 — C2 rowing additional status 1, 17 bytes on current firmware —
@@ -265,14 +271,18 @@ export function parseSplitIntervalData(
   };
 }
 
-/** The pre-V1.27 length of 0x0038 — same mechanism as
- *  `ADDITIONAL_STATUS_1_MIN_BYTES`, one revision later (rev 1.30 Table 1:
- *  "Added Erg Machine Type parameter to characteristic 0x0038."). Every
- *  consumed field ends at byte 17 (`splitIntervalNumber`). Losing this
- *  characteristic costs more than one field: `driver.ts`'s `noteBoundaryHalf`
- *  emits `intervalComplete` only when BOTH 0x0037 and 0x0038 arrive for the
- *  same split number, so a dead 0x0038 means no `IntervalActual` is ever
- *  recorded. */
+/** The pre-V1.27 length of 0x0038 — same mechanism and same two-source split
+ *  as `ADDITIONAL_STATUS_1_MIN_BYTES`, one revision later. `Erg Machine
+ *  Type` was ADDED in V1.27 (rev 1.30 Table 1: "Added Erg Machine Type
+ *  parameter to characteristic 0x0038."); that it lands LAST (offset 18)
+ *  comes from interface-notes.md §10's 0x0038 table, whose ordering ends
+ *  `Split/Interval Number` then `Erg Machine Type`. INFERENCE, labelled,
+ *  same posture as 0x0032's: an 18-byte pre-V1.27 prefix is not an observed
+ *  short frame and is equally unverified. Every consumed field ends at
+ *  byte 17 (`splitIntervalNumber`). Losing this characteristic costs more
+ *  than one field: `driver.ts`'s `noteBoundaryHalf` emits `intervalComplete`
+ *  only when BOTH 0x0037 and 0x0038 arrive for the same split number, so a
+ *  dead 0x0038 means no `IntervalActual` is ever recorded. */
 const ADDITIONAL_SPLIT_INTERVAL_MIN_BYTES = 18;
 
 /** 0x0038 — C2 rowing additional split/interval data, 19 bytes on current
