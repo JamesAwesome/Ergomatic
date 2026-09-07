@@ -1336,6 +1336,8 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       avgHr: WALK4_ACTUALS[0]!.avgHeartRateBpm ?? undefined,
       actualSeconds: WALK4_ACTUALS[0]!.elapsedSeconds,
       actualMeters: WALK4_ACTUALS[0]!.distanceMeters,
+      // Phase LP PR 2: the fixture actual carries restDistanceMeters 0.
+      machineRestMeters: 0,
     });
   });
 
@@ -1361,6 +1363,8 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       avgHr: WALK4_ACTUALS[1]!.avgHeartRateBpm ?? undefined,
       actualSeconds: WALK4_ACTUALS[1]!.elapsedSeconds,
       actualMeters: WALK4_ACTUALS[1]!.distanceMeters,
+      // Phase LP PR 2: the fixture actual carries restDistanceMeters 0.
+      machineRestMeters: 0,
     });
   });
 
@@ -1628,6 +1632,34 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(steps[2]).not.toHaveProperty("machineWatts");
   });
 
+  it("Phase LP PR 2: copies the interval's rest readback and rest metres onto the step, and omits both when the actual lacks them", () => {
+    const {
+      restSeconds: _s,
+      restDistanceMeters: _m,
+      ...bare
+    } = THREE_STEP_ACTUALS[2]!;
+    const run: MonitorRun = {
+      ...THREE_STEP_RUN,
+      actuals: [
+        { ...THREE_STEP_ACTUALS[0]!, restSeconds: 60, restDistanceMeters: 147 },
+        { ...THREE_STEP_ACTUALS[1]!, restSeconds: 0, restDistanceMeters: 0 },
+        bare,
+      ],
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps[0]).toMatchObject({
+      machineRestSeconds: 60,
+      machineRestMeters: 147,
+    });
+    // 0 is a value on both (an r0 piece, the keystone).
+    expect(steps[1]).toMatchObject({
+      machineRestSeconds: 0,
+      machineRestMeters: 0,
+    });
+    expect(steps[2]).not.toHaveProperty("machineRestSeconds");
+    expect(steps[2]).not.toHaveProperty("machineRestMeters");
+  });
+
   it("Phase LP (review M1): an out-of-band rest heart rate drops its own field, never the row — 19 bpm is omitted, 20 kept, null kept as null", () => {
     const run: MonitorRun = {
       ...THREE_STEP_RUN,
@@ -1759,6 +1791,8 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       actualSeconds: 30,
       actualMeters: 120,
       seconds: 30,
+      // Phase LP PR 2: the fixture actual carries restDistanceMeters 0.
+      machineRestMeters: 0,
     });
   });
 
@@ -1793,6 +1827,8 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       avgHr: WALK4_ACTUALS[0]!.avgHeartRateBpm ?? undefined,
       actualSeconds: WALK4_ACTUALS[0]!.elapsedSeconds,
       actualMeters: WALK4_ACTUALS[0]!.distanceMeters,
+      // Phase LP PR 2: the fixture actual carries restDistanceMeters 0.
+      machineRestMeters: 0,
     });
   });
 
@@ -1871,6 +1907,8 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       avgHr: WALK4_ACTUALS[0]!.avgHeartRateBpm ?? undefined,
       actualSeconds: WALK4_ACTUALS[0]!.elapsedSeconds,
       actualMeters: WALK4_ACTUALS[0]!.distanceMeters,
+      // Phase LP PR 2: the fixture actual carries restDistanceMeters 0.
+      machineRestMeters: 0,
     });
     // Both band edges (Phase LT spec 1, §2: the floor moved from 0 to 1 — a
     // u8 field, sub-1 unrepresentable, so an exact 0 can only mean "no
@@ -2082,6 +2120,8 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       avgHr: 141,
       actualSeconds: 145.5,
       actualMeters: 500,
+      // Phase LP PR 2: the fixture actual carries restDistanceMeters 0.
+      machineRestMeters: 0,
     });
   });
 

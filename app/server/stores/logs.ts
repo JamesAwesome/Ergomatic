@@ -111,6 +111,10 @@ export interface LogStep {
   machineWatts?: number;
   machineDragFactor?: number;
   machineRestHr?: number | null;
+  /** Phase LP PR 2 (spec §2.1 rev 2.5): the interval's 0x0037 rest readback
+   *  (whole seconds) and measured rest metres; bands in `routes/data.ts`. */
+  machineRestSeconds?: number;
+  machineRestMeters?: number;
 }
 
 // Series capture spec (2026-08-19), §1/§3: a server-side MIRROR of the

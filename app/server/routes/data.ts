@@ -438,6 +438,8 @@ const HR_MAX = 254;
 // band IS the wire's width — anything wider was not read off a PM5.
 const MACHINE_U16_MAX = 65535;
 const MACHINE_DRAG_MAX = 255;
+// Phase LP PR 2: a rest readback longer than a day is not a reading.
+const MACHINE_REST_SECONDS_MAX = 86400;
 
 // Amendment (2026-08-02, Phase 6C Task 1.5): Task 1's `logDraft.ts` proved
 // this validation predates effort refs — `targetSplit` was required
@@ -484,6 +486,8 @@ function validateLogStepEntry(
     machineWatts,
     machineDragFactor,
     machineRestHr,
+    machineRestSeconds,
+    machineRestMeters,
   } = raw;
 
   if (typeof label !== "string" || label.length < 1 || label.length > 80) {
@@ -696,6 +700,34 @@ function validateLogStepEntry(
     };
   }
   if (
+    machineRestSeconds !== undefined &&
+    (typeof machineRestSeconds !== "number" ||
+      !Number.isInteger(machineRestSeconds) ||
+      machineRestSeconds < 0 ||
+      machineRestSeconds > MACHINE_REST_SECONDS_MAX)
+  ) {
+    return {
+      ok: false,
+      message: at(
+        `machineRestSeconds must be an integer, 0..${MACHINE_REST_SECONDS_MAX}`,
+      ),
+    };
+  }
+  if (
+    machineRestMeters !== undefined &&
+    (typeof machineRestMeters !== "number" ||
+      !Number.isInteger(machineRestMeters) ||
+      machineRestMeters < 0 ||
+      machineRestMeters > WORK_REST_METERS_MAX)
+  ) {
+    return {
+      ok: false,
+      message: at(
+        `machineRestMeters must be an integer, 0..${WORK_REST_METERS_MAX}`,
+      ),
+    };
+  }
+  if (
     machineRestHr !== undefined &&
     machineRestHr !== null &&
     (typeof machineRestHr !== "number" ||
@@ -737,6 +769,10 @@ function validateLogStepEntry(
     step.machineDragFactor = machineDragFactor;
   if (machineRestHr === null || typeof machineRestHr === "number")
     step.machineRestHr = machineRestHr;
+  if (typeof machineRestSeconds === "number")
+    step.machineRestSeconds = machineRestSeconds;
+  if (typeof machineRestMeters === "number")
+    step.machineRestMeters = machineRestMeters;
   if (partialMeters !== undefined) step.partialMeters = partialMeters as number;
   if (partialSeconds !== undefined)
     step.partialSeconds = partialSeconds as number;

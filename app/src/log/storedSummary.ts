@@ -141,6 +141,9 @@ export interface StoredLogStep {
   machineWatts?: number;
   machineDragFactor?: number;
   machineRestHr?: number | null;
+  // Phase LP PR 2: the interval's rest readback (s) and rest metres.
+  machineRestSeconds?: number;
+  machineRestMeters?: number;
   // Phase LT spec 1 (2026-08-18), §2, MEDIUM-1 (Task 1 review): the
   // lockstep line this interface's own header comment demands —
   // `session/logDraft.ts`'s `LogStep` gained this field the same task
