@@ -1293,82 +1293,30 @@ closed with zero Concept2 contact.
       screen. Notes are shipped copy, not history, and nothing else re-reads
       them (PM gate #345). **Check:** at any change to where a number comes
       from, grep `releaseNotes.ts` for that tile's own label.
-- [ ] **`WorkoutDetail.test.tsx` is FLAKY on main and blocks pushes.**
-      "still navigates when preferences errored, rather than trapping the
-      rower" fails ~2 runs in 3 in isolation with
-      `AssertionError: expected [ false ] to strictly equal []`. **Measured
-      2026-09-07** on `lp-avg-hr` (three isolated runs: fail, fail, pass) and
-      it blocked `git push` twice through the pre-push hook, which is how it
-      was found. **Not introduced by that branch** — the test arrived with
-      Phase RW PR C (#338) and was last touched by #344; the branch never
-      opened that file.
-      **Mechanism (INFERENCE, from reading the two tests):** `skipWrites` is
-      a module-scoped spy shared across the file. The preceding test asserts
-      `skipWrites.calls` equals `[false]`, and this one resets the array to
-      `[]` at its own start — so a write from the PREVIOUS test that resolves
-      after the reset lands in the new array and the assertion sees the
-      stale `false`. The reset cannot fix an arrival that has not happened
-      yet. **Fix:** await the preceding write's own observable before that
-      test ends, or give each test its own spy rather than resetting a shared
-      one. **BLOCKING, not an annoyance — it has already cost a deploy.**
-      Found at #345's PM gate: main's post-merge run at `3c319cc8` (#344)
-      FAILED its `app` job on this exact test, so `deploy` was SKIPPED and
-      production sat frozen at #341's deploy. RF28's shape with a flaky test
-      as the cause instead of a dirty host. An earlier version of this row
-      called it an annoyance; a row's severity is a factual claim like any
-      other. Fix it before the next tag, and re-run main first.
-
-**Standing warning this wave inherits.** `recordTwdVerdict` was retired for
-being a mirror: Total Work Distance is work PLUS rest-coast metres and so is our
-sum, while Concept2's logbook — the actual authority — stores work only. **An
-oracle that shares your definition is a mirror.** Before trusting any number
-this wave pulls back, state what it measures and confirm it is the same thing we
-are trying to be right about.
-
-**Exit — RC exit criterion (d) transcribed VERBATIM at open, per the close
-gate's binding:** _"a row posted to the Concept2 sandbox comes back through
-`export/` matching what we stored, or the reason it cannot is documented."_
-The hatch is bounded (PM open gate): "cannot" is acceptable for a field C2
-rejects or does not return, never for a field we chose not to send. Plus,
-from the widened scope: a linked user sends an eligible row from the app ON
-THE PHONE and C2's result id is stored on it, with the duplicate (409) and
-failure states each observed for real at least once; the link flow's
-request bodies carry NO new user attribute (the countable form of
-minimal-PII, STRENGTHENED by the 2026-09-03 ruling — it used to read
-"exactly ONE new user attribute, `weight_class`"); **the UNIT of Concept2's
-`weight` field is measured on James's log-dev profile before the flag
-flips — a DESK step, not a walk step, and it takes TWO readings** (the
-profile's unit preference on kg, then on lb, because the profile carries no
-unit field and one reading cannot detect a per-user display unit). The same
-desk session answers two more questions no status code can: which Concept2
-page carries the weight and weight-class fields (2i's link-out target is
-provisional until then), and whether a non-rower result carries a class.
-**It gates less than it used to:** with the declaration as the primary
-producer the unit only matters for a rower who has declared nothing, and
-the derivation's plausibility band already refuses four of the SIX wrong
-unit readings — the two it admits are hundredths-of-a-kilogram, which is
-the assumed-correct reading, and hundredths-of-a-pound, a 2.2x error no
-band can exclude, which is exactly what the second reading settles. Plus
-the
-dedup-granularity, `state`-echo and
-zero-rest-post questions each carry a measured answer in PR0's report —
-"unknown" leaves the wave open. (RC-9(b)'s live ring verdict moved OUT to
-the open-item register at the PM open gate: no shared mechanism, PR, or
-risk model with this wave.)
-
----
-
----
-
-# The open-item register
-
-Work with no wave, lifted out of archived phase bodies so it does not die with
-them. **Every entry names where its evidence now lives.** An item here is real
-and unscheduled; it is not a wish.
-
-**How an entry leaves:** it rides the next PR that touches its area, it is
-promoted into a wave, or it is killed with a reason. "Rides the next PR touching
-X" is a real disposition — most of these are single files.
+- [x] **DONE (#346). `WorkoutDetail.test.tsx` flaked on a MOCK REGISTRATION
+      RACE, and my first diagnosis of it was wrong.** Kept because the wrong
+      diagnosis is the lesson. The symptom: "still navigates when preferences
+      errored" failed ~2 runs in 3 with `expected [ false ] to strictly equal
+      []`, blocked three pushes here, and — found at #345's PM gate — failed
+      main's `app` job at `3c319cc8`, which SKIPPED `deploy` and froze
+      production a merge back. **I filed the mechanism as a shared
+      module-scoped `skipWrites` spy reset while a previous test's write was
+      still in flight. That is false**: the write is pushed synchronously
+      inside the mock during the click, so it cannot outlive its own test.
+      **The real one** (the no-baselines session, verified here by reading
+      `a1967244^`): `mockHooksWithPreferencesError` called `mockHooks`, which
+      registers a READY `usePreferences`, and then `vi.doMock`'d an ERRORED
+      one for the same path. `@vitest/mocker`'s `queueMock` registers each
+      inside an async RPC's `.then`, so two registrations for one path race
+      and the last to resolve wins; when the ready arm won, the errored test
+      got a live writer and recorded the write it asserts never happens. Fix:
+      the preferences arm is a parameter, so the path is registered once, plus
+      a census script that fails lint on the shape (one instance repo-wide).
+      **The lesson: a mechanism I could not reproduce got written down as
+      though I had.** I observed the failure rate and the provenance, both
+      true, and then inferred a cause from reading two tests — RF16's shape,
+      inside a row whose whole purpose was to carry evidence. Tag an
+      unreproduced mechanism INFERENCE, or leave the row at the symptom.
 
 - [ ] **The Bluetooth scan sheet mixes "PM5" and "monitor" in one flow.**
       `capacitorBle.ts`'s scan copy reads "Looking for your PM5" and then
