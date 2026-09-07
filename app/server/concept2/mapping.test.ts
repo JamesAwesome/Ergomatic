@@ -9,6 +9,7 @@ import {
   type C2ResultRow,
   type SessionLogRow,
 } from "./mapping.js";
+import { concept2OverallTotals } from "../../domain/concept2/verificationEligibility.js";
 
 // Wave E PR1 Task 5 (task-5-brief.md). FIXTURE transcribed from
 // docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json:65-67
@@ -891,6 +892,82 @@ describe("buildC2Payload — verification_code is never sent", () => {
     expect(post.distance).toBe(500);
     expect(post.time).toBe(1240);
   });
+});
+
+// The seam the branch review named as ungated, and the one that would have
+// caught the real bug in it: the Log screen decides whether to print a
+// verification code from `concept2OverallTotals`, while THIS module decides
+// what Concept2 actually receives. If the two disagree, the screen promises
+// or withholds a code against numbers Concept2 never saw. Nothing else
+// compares them — RF24's shape, where both halves are well tested and the
+// seam between them is not. Reproducing the review's bug here (feeding the
+// predicate `machineRestMeters: null`) fails the second case with
+// "expected 6206 to be 6231", the 25 m between our summed rest and the
+// monitor's own.
+describe("buildC2Payload agrees with the eligibility predicate", () => {
+  const cases: [string, SessionLogRow][] = [
+    ["our summed totals, with rest", FINISHED_ROW],
+    [
+      "the monitor's own totals, with the monitor's own rest",
+      {
+        ...FINISHED_ROW,
+        machineWorkMeters: 5706,
+        machineWorkSeconds: 1319.3,
+        restSeconds: 300,
+        restMeters: 500,
+        machineSummary: {
+          avgStrokeRate: 21,
+          workoutType: 8,
+          totalRestMeters: 525,
+        },
+      },
+    ],
+    [
+      "a monitor total of ZERO, which both sides must ignore",
+      { ...FINISHED_ROW, machineWorkMeters: 0, machineWorkSeconds: 0 },
+    ],
+    [
+      "no rest at all",
+      { ...FINISHED_ROW, restSeconds: null, restMeters: null },
+    ],
+    [
+      "a machine rest total out of band, so both fall back to ours",
+      {
+        ...FINISHED_ROW,
+        machineSummary: {
+          avgStrokeRate: 24,
+          workoutType: 8,
+          totalRestMeters: 0,
+        },
+      },
+    ],
+    [
+      "a fractional seconds pair, where rounding could diverge",
+      { ...FINISHED_ROW, workSeconds: 254.85, restSeconds: 120.04 },
+    ],
+  ];
+
+  it.each(cases)(
+    "posts the same overall figures the screen judges: %s",
+    (_label, row) => {
+      const post = buildC2Payload(row, LINK, "UTC");
+      const overall = concept2OverallTotals({
+        ...row,
+        machineRestMeters:
+          typeof row.machineSummary?.totalRestMeters === "number"
+            ? row.machineSummary.totalRestMeters
+            : null,
+      });
+      expect(overall).not.toBeNull();
+      // What Concept2 receives, added up the way its own form displays it.
+      const postedMeters =
+        (post.distance as number) + ((post.rest_distance as number) ?? 0);
+      const postedTenths =
+        (post.time as number) + ((post.rest_time as number) ?? 0);
+      expect(overall!.meters).toBe(postedMeters);
+      expect(overall!.tenths).toBe(postedTenths);
+    },
+  );
 });
 
 // Phase LP: the derived heart-rate average on the wire.

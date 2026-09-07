@@ -11847,3 +11847,86 @@ test.describe("the stored skip (Phase RW PR C)", () => {
     await expect(page.locator(".doorscard")).toBeVisible();
   });
 });
+
+// 2026-09-07: a rower who has set ONE baseline is told which one, offered the
+// other at the offset, and never told they have none. Before this, Today read
+// NO BASELINE SET for a rower with a tested 2k.
+test.describe("a half-set baseline pair", () => {
+  test("names the stored side and fills the other on one tap, tagged derived", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "half-pair-walk@e2e.test",
+      name: "Half Pair Tester",
+    });
+    await page.goto("/today");
+    // No skip is written: this is the ORDINARY way to hold half a pair —
+    // the I-know-my-baseline door saves whichever field was touched. Before
+    // 2026-09-07 this rower got the three-door card instead of the row.
+    const seeded = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k2Seconds: 112 }),
+      });
+      return res.ok;
+    });
+    expect(seeded).toBe(true);
+    await page.reload();
+
+    await expect(page.getByText("2K SET · NO 6K")).toBeVisible();
+    await expect(page.getByText("SET UP YOUR BASELINE")).toHaveCount(0);
+    await expect(page.getByText("NO BASELINE SET")).toHaveCount(0);
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+
+    await page.getByRole("button", { name: "Estimate it (+7s)" }).click();
+
+    // The pair is complete, so the row goes and real targets return.
+    await expect(page.locator(".today-nobaseline-row")).toHaveCount(0);
+    // GET /api/baselines is numbers-only on purpose (stores/baselines.ts:
+    // "provenance is stored, never shown"), so this leg proves the NUMBER
+    // reached Postgres through the real route. The "derived" stamp is
+    // proven at both halves of the same seam instead: Today.test.tsx pins
+    // the request body the tap sends, and baselineProvenance.integration
+    // .test.ts sends that exact body and reads the stored column back.
+    const stored = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines");
+      return (await res.json()) as { k2Seconds: number; k6Seconds: number };
+    });
+    expect(stored.k2Seconds).toBe(112);
+    expect(stored.k6Seconds).toBe(119);
+  });
+
+  test("Library names the stored side in its caption, and the detail names the missing one", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "half-pair-detail@e2e.test",
+      name: "Half Pair Detail Tester",
+    });
+    await page.goto("/today");
+    const seeded = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k6Seconds: 122 }),
+      });
+      return res.ok;
+    });
+    expect(seeded).toBe(true);
+
+    await page.goto("/library");
+    await expect(page.locator(".library-caption")).toHaveText(
+      "Your 6k is set. ~ times are estimates until the 2k is too.",
+    );
+    await page.getByPlaceholder("SEARCH BY NAME").fill("Laminar");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator(".workout-detail-caption")).toContainText(
+      "Your 6k is set. Targets stay words until the 2k is too.",
+    );
+    await expect(
+      page.getByRole("button", { name: "Set your 2k" }),
+    ).toBeVisible();
+  });
+});
