@@ -153,6 +153,30 @@ describe("DELETE /api/baselines against real Postgres (Phase BL PR C)", () => {
     expect(row.k2Source).toBe("manual");
   });
 
+  it("clears the Phase RW skip so a reset rower meets the doors again", async () => {
+    // Phase RW PR C (spec §3.2): the reset is the (c) clear path. Order is
+    // the flag first, then the pair — see the route's own comment.
+    await request(app)
+      .put("/api/baselines")
+      .set("Authorization", bearer)
+      .send({ k2Seconds: 112, k6Seconds: 122 });
+    const skip = await request(app)
+      .put("/api/prefs")
+      .set("Authorization", bearer)
+      .send({ baselinesSkipped: true });
+    expect(skip.body.baselinesSkipped).toBe(true);
+
+    const del = await request(app)
+      .delete("/api/baselines")
+      .set("Authorization", bearer);
+    expect(del.status).toBe(200);
+
+    const prefs = await request(app)
+      .get("/api/prefs")
+      .set("Authorization", bearer);
+    expect(prefs.body.baselinesSkipped).toBe(false);
+  });
+
   it("a second DELETE (nothing left to clear) is still a clean 200 no-op", async () => {
     await request(app).delete("/api/baselines").set("Authorization", bearer);
     const again = await request(app)
