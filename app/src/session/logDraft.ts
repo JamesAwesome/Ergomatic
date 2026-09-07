@@ -6,6 +6,7 @@ import {
   isPaceWordRef,
   refLabel,
   resolveSplit,
+  intensityWord,
 } from "../../domain/pace.js";
 import type { Baselines, PaceRef, SplitRef, Step } from "../../domain/types.js";
 import type { EnginePhase } from "./engine";
@@ -435,9 +436,11 @@ export function buildLogSteps(
     // is undefined): an effort phase still has a ref to reconstruct — the
     // chip word ("MAX"/"MIN") recovers from the frozen display word via
     // paceWordFromLabel's inverse (the cast is safe: this branch only runs
-    // when `targetKind === "effort"`, and domain/expand.ts's "case w" sets
-    // `label` to exactly `paceWordLabel(ref.effort)` in that case, never any
-    // other string) — so it still goes through `refPaceLabel`. A split-ref
+    // when `targetKind === "effort"` AND the phase carries no `ref`, and
+    // domain/expand.ts's "case w" sets `label` to exactly
+    // `paceWordLabel(ref.effort)` in that case, never any other string; a
+    // ref-carrying effort phase is the Phase RW word branch above, which
+    // never reaches this cast) — so it still goes through `refPaceLabel`. A split-ref
     // phase now ALSO reconstructs through `refPaceLabel` (ui-fix round
     // Task 2 fix round, F1b): `phase.ref` carries the same effective ref
     // `targetSplit` was resolved from, so this composes the identical chip
@@ -447,7 +450,15 @@ export function buildLogSteps(
     // reconstruct from; that one case keeps the phase's own frozen `label`
     // verbatim.
     let label: string;
-    if (draftStep !== undefined) {
+    if (phase.targetKind === "effort" && phase.ref !== undefined) {
+      // Phase RW PR B (James, 2026-09-06): a split ref rowed with no
+      // baseline logs the WORD the rower read, at every door: never the
+      // ref (they never saw a number) and never MIN (the effort arm below
+      // maps any word but ALL OUT to it). Checked FIRST, before the
+      // matched-draft path, which would otherwise compose the authored
+      // ref from `draftStep.ref`.
+      label = `${durationText(phase)} @ ${phase.label}`;
+    } else if (draftStep !== undefined) {
       // `draft` is guaranteed non-null here: `draftWorkStep` (above) can
       // only return non-undefined when its own `draft` argument was
       // non-null (it short-circuits via `draft?.steps[...]` otherwise).
@@ -584,6 +595,12 @@ export function buildManualLogSteps(
       step.duration.kind === "time"
         ? fmtDuration(step.duration.minutes)
         : `${step.duration.meters} m`;
+    if (!isPaceWord && baselines === null) {
+      // Phase RW PR B: a split ref logged by hand with no baseline is the
+      // word form, no target and no actual (there is no number to hold).
+      out.push({ label: `${durationLabel} @ ${intensityWord(step.ref)}` });
+      continue;
+    }
     const logStep: LogStep = {
       label: refPaceLabel(durationLabel, step.ref),
     };
@@ -689,14 +706,11 @@ export interface LogSeed {
  *  and records CURRENT `baselines` under whichever base(s) were actually
  *  referenced — the same F1 rule `manualLockedBaseline` (`LogSession.tsx`)
  *  already established for the manual door. */
-/** Rebase seam (6I over 7C, 2026-08-09): 6I loosened the Connect guard so
- *  an effort-only workout can program a monitor with NULL baselines — and
- *  this function (7C) is directly downstream of that guard. Baselines are
- *  read ONLY in the split-ref branch below, which `needsBaselines` gating
- *  at the Connect door guarantees is unreachable when they're null; a
- *  split-ref phase arriving here with null anyway is a programmer error
- *  and throws loudly, the exact convention `phases()`/`estimationSplit`
- *  established (domain/expand.ts). */
+/** Baselines are read ONLY in the split-KIND branch below. Phase RW PR B:
+ *  with null baselines `phases()` emits a split ref as an effort-kind
+ *  phase carrying its `ref`, which the first branch logs as the word, so
+ *  the split-kind branch and its baseline read are only ever reached with
+ *  a real pair (the Connect door no longer gates on one). */
 export function buildLogSeed(
   phases: EnginePhase[],
   baselines: Baselines | null,
@@ -714,7 +728,12 @@ export function buildLogSeed(
     }
     const isPaceWord = phase.targetKind === "effort";
     let label: string;
-    if (isPaceWord) {
+    if (isPaceWord && phase.ref !== undefined) {
+      // Phase RW PR B: a split ref rowed with no baseline, the word form
+      // (see buildLogSteps). No pace is recorded for it either: `paces`
+      // below walks the split-KIND branch only.
+      label = `${durationText(phase)} @ ${phase.label}`;
+    } else if (isPaceWord) {
       label = refPaceLabel(durationText(phase), {
         effort: paceWordFromLabel(phase.label as "ALL OUT" | "STEADY"),
       });
@@ -730,8 +749,11 @@ export function buildLogSeed(
       // enforces upstream, not a possibility this function needs to guard.
       const splitRef = phase.ref as SplitRef;
       if (baselines === null) {
+        // Unreachable by construction since Phase RW PR B: `phases()`
+        // mints a split-KIND phase only from a real pair (a split ref with
+        // no baseline arrives as effort-kind with a ref, logged above).
         throw new Error(
-          "buildLogSeed: a split-ref phase needs baselines — callers must gate on needsBaselines() first",
+          "buildLogSeed: a split-kind phase with no baselines cannot exist",
         );
       }
       if (splitRef.base === "2k") {

@@ -2596,3 +2596,66 @@ describe("logTotals", () => {
     });
   });
 });
+
+describe("a split ref rowed with no baseline logs the WORD at every door (Phase RW PR B)", () => {
+  const NOW_RW = new Date("2026-09-07T10:00:00.000Z");
+  const step: Step = {
+    k: "w",
+    duration: { kind: "time", minutes: 5 },
+    ref: { base: "2k", off: 6 },
+  };
+  const workout = {
+    id: "w-rw",
+    title: "Words",
+    type: "TR" as WorkoutType,
+    steps: [step],
+  };
+
+  it("timer door, matched draft: 5:00 @ MODERATE, no targetSplit", () => {
+    const draft = buildDraft(workout);
+    const run = buildRun(draft, null, NOW_RW);
+    const [logged] = buildLogSteps(run, draft);
+    expect(logged).toMatchObject({ label: "5:00 @ MODERATE" });
+    expect(logged).not.toHaveProperty("targetSplit");
+    expect(logged).not.toHaveProperty("actualSplit");
+  });
+
+  it("timer door, no draft (fallback): the same label", () => {
+    const draft = buildDraft(workout);
+    const run = buildRun(draft, null, NOW_RW);
+    expect(buildLogSteps(run, null)[0]!.label).toBe("5:00 @ MODERATE");
+  });
+
+  it("connected door: 5:00 @ MODERATE and no pace recorded", () => {
+    const draft = buildDraft(workout);
+    const run = buildRun(draft, null, NOW_RW);
+    const seed = buildLogSeed(run.phases, null);
+    expect(seed.steps[0]!.label).toBe("5:00 @ MODERATE");
+    expect(seed.paces).toStrictEqual({});
+  });
+
+  it("manual door: 5:00 @ MODERATE, no targetSplit, no actualSplit, no throw", () => {
+    expect(buildManualLogSteps({ steps: [step] }, null)).toStrictEqual([
+      { label: "5:00 @ MODERATE" },
+    ]);
+  });
+
+  it("a true MIN step still logs its chip word at the manual door", () => {
+    const min: Step = {
+      k: "w",
+      duration: { kind: "time", minutes: 5 },
+      ref: { effort: "min" },
+    };
+    expect(buildManualLogSteps({ steps: [min] }, null)[0]!.label).toBe(
+      "5:00 @ MIN",
+    );
+  });
+
+  it("with a baseline the timer door still logs the ref, and the number", () => {
+    const draft = buildDraft(workout);
+    const run = buildRun(draft, { k2Seconds: 112, k6Seconds: 122 }, NOW_RW);
+    const [logged] = buildLogSteps(run, draft);
+    expect(logged!.label).toBe("5:00 @ 2k +6");
+    expect(logged!.targetSplit).toBe(118);
+  });
+});
