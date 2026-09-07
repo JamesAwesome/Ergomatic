@@ -8791,3 +8791,25 @@ had passed over the same document without a single duration in it.
   exactly ONE production caller of `clear`. **Technique: a "never cleared is
   safe" claim is settled by counting the producers of the state that would
   make it unsafe**, not by reasoning about the flag.
+
+- **A mutation that breaks the BUILD reads as a passing probe, and the
+  e2e stack is where this bites (PR #344, 2026-09-07).** Three probes in one
+  session "passed" because the mutation left an import unused, `pnpm build`
+  exited 2 inside `docker compose up --build`, compose kept the previous
+  image, and Playwright ran green against UNMUTATED code. **Technique: an e2e
+  mutation must COMPILE — prefer swapping one call for another that keeps
+  every import used (here, swapping the two derive directions) over deleting
+  a call — and the probe run must show the build succeeding before the test
+  result is read.** This is RF12's shape one machine over: the artifact you
+  reason about is not the artifact that ran.
+
+- **A multi-edit script that writes once at the end lands NOTHING when an
+  early assertion fails — and the failure looks like a partial edit.** Twice
+  in this session a Python edit script asserted an anchor, aborted, and left
+  the file untouched while earlier replacements appeared to have "not
+  landed"; the previous round's variant wrote the file per-edit and DID land
+  a subset. Either way the next step was a probe run against a tree nobody
+  had verified. **Technique: after any scripted multi-file edit, `grep -c`
+  each new anchor before running the probe that depends on it.** RF21's
+  DoorsCard case in this same PR was exactly this: the assertion the probe
+  existed to bite had never been written, and the probe reported green.
