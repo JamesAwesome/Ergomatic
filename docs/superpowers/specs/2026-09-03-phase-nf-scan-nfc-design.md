@@ -391,7 +391,7 @@ does not invent a landscape reflow.
 | State                     | Surface                     | Copy/behavior                                                                           |
 | ------------------------- | --------------------------- | --------------------------------------------------------------------------------------- |
 | ready                     | workout detail              | `Scan NFC`                                                                              |
-| system scan               | iOS NFC sheet               | `Hold your iPhone near the PM5.`                                                        |
+| system scan               | iOS NFC sheet               | `Hold your iPhone near the monitor.`                                                        |
 | accepted                  | NFC button position         | `✓ PM5 found`; success haptic; one committed paint, no duration timer                   |
 | wrong/malformed record    | workout detail inline error | `Unsupported NFC tag`                                                                   |
 | user cancelled sheet      | workout detail              | quiet return; no error                                                                  |

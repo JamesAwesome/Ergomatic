@@ -85,7 +85,7 @@ function start(signal = new AbortController().signal) {
   const trace = createConnectionAttemptTrace(() => 0);
   const result = createNativeNfcReader().readOne({
     attemptId: ATTEMPT,
-    alertMessage: "Hold your iPhone near the PM5.",
+    alertMessage: "Hold your iPhone near the monitor.",
     signal,
     trace,
   });
@@ -117,7 +117,7 @@ describe("createNativeNfcReader", () => {
     ]);
     expect(mocks.startScanning).toHaveBeenCalledWith({
       attemptId: ATTEMPT,
-      alertMessage: "Hold your iPhone near the PM5.",
+      alertMessage: "Hold your iPhone near the monitor.",
       iosSessionType: "ndef",
       invalidateAfterFirstRead: false,
     });
