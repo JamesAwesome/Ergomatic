@@ -1249,6 +1249,17 @@ closed with zero Concept2 contact.
       is worse than sending them there, since a verified row cannot be
       un-verified through our upload path. TRIAD (stored shape): Gate 0,
       then a full antagonist pass, then a PM gate on the PR.
+      **Gate 0 APPROVED 2026-09-07** (artifact
+      `99e95a96-9d8b-4818-9362-e20727763689`, copy rev 3): control labelled
+      `AUTO VERIFY` on the Concept2 card under SENDING MODE, ON = "Rows arrive
+      verified.", OFF = "Concept2 leaves verifying to you."; the saved row
+      carries a bare `VERIFIED ✓` on the MACHINE CONFIRMED title line and the
+      CODE line is withdrawn when it appears. Both antagonist passes folded.
+      **Ships as TWO PRs:** PR 1 (setting + send + mark) is unblocked; PR 2
+      (the reconciliation James approved) is BLOCKED on one authenticated GET
+      confirming Concept2's results list carries `verified` — the log-dev
+      token expired 2026-09-07 20:04 UTC and `C2_CLIENT_ID`/`C2_CLIENT_SECRET`
+      are not in the environment.
 - [ ] **Why does Concept2 show no Verify button on a row carrying interval
       data?** **ANSWERED 2026-09-07 and CLOSED — it was never about interval
       data.** Concept2 offers the Verification Code field only when the row's

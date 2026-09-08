@@ -1,7 +1,14 @@
 # Optional auto-verification — design
 
-**Status:** Gate 0 PRESENTED 2026-09-07, artifact
-`99e95a96-9d8b-4818-9362-e20727763689`, awaiting James. Revised after a full
+**Status:** Gate 0 **APPROVED** (James, 2026-09-07, artifact
+`99e95a96-9d8b-4818-9362-e20727763689`, copy rev 3). **Option A taken** — the
+mark reads a bare `VERIFIED ✓`, no date. Its cost stands as recorded:
+whether Concept2 can turn a verified row back is UNMEASURED, n = 0, so a stale
+tick is possible rather than impossible.
+**Approved copy, verbatim:** the control is labelled `AUTO VERIFY` (James cut
+"with Concept2" from his own first phrasing as redundant inside a card already
+titled CONCEPT2); ON reads "Rows arrive verified."; OFF reads "Concept2 leaves
+verifying to you.". Revised after a full
 antagonist pass and a delta pass, both folded (TRIAD).
 **The gate asks two things:** the shape (control placement and copy, mark
 placement), and the mark's wording — bare `VERIFIED ✓` or dated. It states the
@@ -547,6 +554,23 @@ edit form left to type it into (M6).
   setting both to `true` stays green through exactly that mutation.
 - **No new wire research.** M1-M5 are measured; this spec adds no claim about
   what Concept2 does.
+
+## Shipping shape — two PRs, and why
+
+**PR 1: the setting, the send, and the mark.** Everything the gate approved.
+Coherent on its own: the switch does what it says and the rower can see that it
+did.
+
+**PR 2: the reconciliation.** BLOCKED, not deferred by choice — it reads a
+field whose presence in the live list response is INFERENCE (PRIMARY only for
+Concept2's documented example), and the confirming GET cannot run while the
+log-dev token is expired and the client credentials are absent. Splitting here
+costs nothing: the rendered mark is identical either way, and reconciliation
+only widens what can set it. Shipping PR 1 first is not shipping a promise —
+the mark means "Concept2 accepted this when we sent it", which is true today.
+
+**This split does NOT weaken the gate.** The approved copy carries no tense and
+no date, so it stays honest under both meanings of the stored field.
 
 ## Gates this work carries
 
