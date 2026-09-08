@@ -4484,6 +4484,149 @@ test.describe("settings screen (judged colours)", () => {
   });
 });
 
+// Phase JC Task 7 — THE SEAM TEST, at the strength it earns and no more
+// (recurring failure 26). This file ALREADY proves that *a* judged colour
+// reaches a pixel: `expectedJudgedRgb`/`judgedColor` read live computed
+// styles at seven call sites and the from-the-log describe reads two more.
+// Every one of those runs at the DEFAULTS, because no other test opens the
+// SETTINGS screen.
+//
+// WHAT THESE TWO TESTS CLAIM, AND IT IS THE ONE THING NOTHING ELSE COVERS:
+//   (A) a colour the ROWER PICKED on `/you/settings` reaches a judged cell
+//       on a different screen, live, with no reload in between; and
+//   (B) that the same choice is still on the cell after a reload — the only
+//       gate anywhere on `main.tsx`'s boot-time
+//       `applyJudgeColors(loadJudgeColors())`, a line `vitest.config.ts`
+//       excludes from coverage entirely.
+// They claim nothing about iOS, nothing about the connected panes (whose
+// per-metric classes are the client suites' job), and nothing about any
+// slot other than PACE SLOWER.
+//
+// THE TWO LEGS TEST DIFFERENT THINGS, AND THE CLICK IS WHY. The settings
+// screen's own `applyJudgeColors` writes the four resolved custom
+// properties as INLINE style on `documentElement`: they survive a
+// client-side navigation and die with the document on a reload. So leg A
+// can ride the settings screen's write, and leg B can only ride
+// `main.tsx`'s. Reaching the summary with `page.goto` would collapse the
+// pair into the same test twice — deleting the `main.tsx` call would then
+// redden both, and the claim above would be false.
+//
+// SO EACH LEG PROVES ITS OWN NAVIGATION HAPPENED THE WAY IT CLAIMS
+// (recurring failure 21: an assertion nobody can redden is decoration). A
+// sentinel is set on `window` at the settings screen and asserted PRESENT
+// at the end of leg A — no document was ever replaced — and ABSENT at the
+// end of leg B, where one was. A tab link that silently did a full load, or
+// a `reload()` that silently did not, is a failing test rather than a
+// quietly duplicated one.
+const JC_SAME_DOCUMENT = "__jcSameDocument";
+
+/** Signs a fresh rower in, seeds the four-row judged log, opens the
+ *  settings screen and taps BLUE on PACE SLOWER. Ends on `/you/settings`
+ *  with the sentinel set. */
+async function chooseBlueForPaceSlower(
+  page: Page,
+  email: string,
+): Promise<void> {
+  await signInViaBackdoor(page, { email, name: "Design Judge Seam Tester" });
+  // The same mixed fixture the from-the-log describe uses: row 2 is the
+  // SLOWER one (target 130, actual 140), so its pace cell wears
+  // `judge-pace-slower` — the class the tap below recolours.
+  await postJudgmentMixLog(page);
+  await page.goto("/you/settings");
+  const paceSlower = page.getByRole("radiogroup", {
+    name: "Pace slower color",
+  });
+  const blue = paceSlower.getByRole("radio", { name: "BLUE", exact: true });
+  // The precondition the whole test rests on: this rower has never chosen,
+  // so the slot sits at its RED default and a blue cell later can only be
+  // this tap's doing.
+  await expect(
+    paceSlower.getByRole("radio", { name: "RED", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
+  await blue.click();
+  await expect(blue).toHaveAttribute("aria-checked", "true");
+  await page.evaluate((key) => {
+    (window as unknown as Record<string, boolean>)[key] = true;
+  }, JC_SAME_DOCUMENT);
+}
+
+/** Settings -> the TODAY tab -> the seeded row, every hop a client-side
+ *  `Link`/`NavLink`. The rower has exactly one log, so LAST THREE's
+ *  three-row cap cannot hide it and no ALL SESSIONS detour is needed. */
+async function clickThroughToTheSeededLog(page: Page): Promise<void> {
+  await page.locator(".tabbar").getByRole("link", { name: "TODAY" }).click();
+  const row = page.locator(".today-log-row").first();
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+}
+
+/** True while the document that ran `chooseBlueForPaceSlower` is still the
+ *  one on screen. */
+async function stillTheSameDocument(page: Page): Promise<boolean> {
+  return page.evaluate(
+    (key) => (window as unknown as Record<string, boolean>)[key] === true,
+    JC_SAME_DOCUMENT,
+  );
+}
+
+test.describe("the rower's own judged colour reaches a judged row (Phase JC seam)", () => {
+  test("live: PACE SLOWER set to BLUE paints the slower row's pace cell blue, with no reload in between", async ({
+    page,
+  }, testInfo) => {
+    await chooseBlueForPaceSlower(
+      page,
+      `design-judge-seam-live-${testInfo.parallelIndex}@e2e.test`,
+    );
+    await clickThroughToTheSeededLog(page);
+
+    const slowerRow = page.locator(".summary-row").nth(1);
+    // An INDEPENDENT literal, never a value read back from the token
+    // (recurring failure 21's "a test that imports the constant it gates
+    // proves nothing about it"): retuning `--judge-blue` retunes the app,
+    // and it must not retune this.
+    await expect(slowerRow.locator(".summary-row-pace")).toHaveCSS(
+      "color",
+      "rgb(29, 78, 137)", // --judge-blue
+    );
+    // Read AFTER the colour on purpose, so a mutation that sends this cell
+    // to the wrong slot reddens the COLOUR assertion — the one this test
+    // exists for — rather than being caught early by a class name.
+    await expect(slowerRow.locator(".summary-row-pace")).toHaveClass(
+      /judge-pace-slower/,
+    );
+    await expect(slowerRow.locator(".summary-row-index")).toHaveText("2");
+
+    expect(await stillTheSameDocument(page)).toBe(true);
+  });
+
+  test("boot: the choice is still on the cell after a reload — the only gate on main.tsx's boot apply", async ({
+    page,
+  }, testInfo) => {
+    await chooseBlueForPaceSlower(
+      page,
+      `design-judge-seam-boot-${testInfo.parallelIndex}@e2e.test`,
+    );
+    await clickThroughToTheSeededLog(page);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+    // The reload really replaced the document, so the settings screen's
+    // inline properties went with it: anything blue below came from
+    // `main.tsx` reading localStorage before the first render.
+    expect(await stillTheSameDocument(page)).toBe(false);
+
+    const slowerRow = page.locator(".summary-row").nth(1);
+    await expect(slowerRow.locator(".summary-row-pace")).toHaveCSS(
+      "color",
+      "rgb(29, 78, 137)", // --judge-blue
+    );
+    await expect(slowerRow.locator(".summary-row-pace")).toHaveClass(
+      /judge-pace-slower/,
+    );
+    await expect(slowerRow.locator(".summary-row-index")).toHaveText("2");
+  });
+});
+
 /** A plausible mix of the driver's own real `log.record` kinds, same idiom
  *  `screenshots.spec.ts`'s own `sessionLogRing` uses (duplicated rather
  *  than shared across e2e files, this file's own established precedent for
