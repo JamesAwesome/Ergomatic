@@ -7325,7 +7325,11 @@ test.describe("connected screens (fake-driven)", () => {
     // reachability half is asserted — this frame carries a DETAIL panel and
     // four full-width buttons, so its landscape column genuinely does not
     // fit and its headline is legitimately clipped at the BOTTOM. What is
-    // never legitimate is content above the scroll origin.
+    // never legitimate is content above the scroll origin. Under the same
+    // `justify-content: center` mutation this frame fails hardest of the two
+    // — "the frame's first child sits 70.5px above the minimum reachable
+    // scroll position" — which is the defect the committed
+    // `connected-interstitial-failed-landscape.png` shows.
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(failed).toBeVisible();
     assertNothingAboveTheScrollOrigin(await measureFailureFrame(page));
@@ -7378,8 +7382,11 @@ test.describe("connected screens (fake-driven)", () => {
   // reason recurring failure 21 exists: without it, a refusal that rendered
   // no link at all would sail through the sweep and read as coverage.
   //
-  // MUTATION THAT MUST BITE: drop `min-height: var(--tap)` from
-  // `.connected-support-link` in `src/index.css`.
+  // MUTATION, RUN: drop `min-height: var(--tap)` from
+  // `.connected-support-link` in `src/index.css`. The sweep fails with
+  // `height < 44 for: <a class="connected-support-link" …>WHICH ERGS WORK ›`,
+  // `Received: 15` — the link collapses to its 15px line box. (The CSS
+  // comment's own estimate was ~18px, from the design pass's replica.)
   test("the interstitial's REFUSED state (unsupported machine): axe, the 44px floor over the support link, and the ink-4 rule", async ({
     page,
   }) => {
@@ -7402,9 +7409,29 @@ test.describe("connected screens (fake-driven)", () => {
   // is the overflow being split above and below the window, which is what
   // `justify-content: center` did and what the auto margins now prevent.
   //
-  // MUTATION THAT MUST BITE: restore `justify-content: center` on
-  // `.connected-interstitial-body` (it is `flex-start` plus auto margins on
-  // the first and last child).
+  // MUTATIONS, RUN — the two assertions here fail to DIFFERENT things, and
+  // what it took to make each go red is the honest measure of what each one
+  // is worth:
+  //
+  //   - Restore `justify-content: center` on `.connected-interstitial-body`
+  //     (it is `flex-start` plus auto margins on the first and last child).
+  //     The REACHABILITY assertion fails: "the frame's first child sits 7.5px
+  //     above the minimum reachable scroll position", `Received: -7.5`. The
+  //     auto margins do NOT save it — they resolve to zero once the free
+  //     space is negative, which is exactly when this matters — so flipping
+  //     that one declaration is enough. Deleting the auto margins as well
+  //     (the full pre-#366 shape) reproduces the same -7.5px, not the -99px
+  //     the design pass measured, because #366 also dropped the DETAIL panel
+  //     from this frame: those historical figures are not reachable by a
+  //     CSS-only mutation any more.
+  //   - The CONTAINMENT assertion needs the landscape body window below 58px
+  //     to bite, and four buttons leave 78px, so removing the
+  //     `--refusal` pairing alone does NOT make it fail (window 78px,
+  //     headline at 22..58, test green). It goes red on the shape the
+  //     ROADMAP already files as a real defect — the FIVE-button stack, with
+  //     the pairing gone: window 10px, "the headline ends 48px below the
+  //     body's visible bottom", `Received: 58`. That is its whole job: it
+  //     pins the landscape ACTION-STACK BUDGET, not the centring.
   test("the REFUSED frame's headline is on screen at rest in landscape, and nothing sits above the scroll origin", async ({
     page,
   }) => {
