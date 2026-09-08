@@ -7404,8 +7404,9 @@ test.describe("connected screens (fake-driven)", () => {
 
   // GATE (b), on the frame whose landscape budget is tightest — the gate
   // that would have caught the landscape bug in the first place. At 844x390
-  // the refusal's four buttons leave a body window of roughly 142px for a
-  // taller column, so the frame overflows BY DESIGN; what must never happen
+  // the refusal's four buttons leave a body window of 142px (measured here,
+  // matching `index.css`'s own figure) for a taller column, so the frame
+  // overflows BY DESIGN; what must never happen
   // is the overflow being split above and below the window, which is what
   // `justify-content: center` did and what the auto margins now prevent.
   //
@@ -7425,9 +7426,8 @@ test.describe("connected screens (fake-driven)", () => {
   //     from this frame: those historical figures are not reachable by a
   //     CSS-only mutation any more.
   //   - The CONTAINMENT assertion needs the landscape body window below 58px
-  //     to bite, and four buttons leave 78px, so removing the
-  //     `--refusal` pairing alone does NOT make it fail (window 78px,
-  //     headline at 22..58, test green). It goes red on the shape the
+  //     to bite, so removing the `--refusal` pairing alone does NOT make it
+  //     fail — measured: window 78px, headline at 22..58, test green. It goes red on the shape the
   //     ROADMAP already files as a real defect — the FIVE-button stack, with
   //     the pairing gone: window 10px, "the headline ends 48px below the
   //     body's visible bottom", `Received: 58`. That is its whole job: it
