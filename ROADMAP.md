@@ -145,13 +145,19 @@ workout_type and machine type match".
 TRIAD (it decides what a stored row may MEAN): full antagonist pass on the
 spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
 
-- [ ] **PR 1 — the refusal.** A domain denylist over the vendor enum's named
-      static ski (128, 143) and bike (192-194, 207) values; the driver emits on
-      two consecutive agreeing readings of one characteristic; the hook routes
-      it through the existing `fail()` path, which chains a `terminate()` ahead
-      of the disconnect so the workout we just sent is withdrawn from the erg.
-      No run opens, so no row can be stored and nothing reaches Concept2. No
-      stored-shape change and no migration. **M**
+- [ ] **PR 1 — the refusal, the link, and the matrix.** A domain denylist
+      stating the RULE rather than a subset of it: refuse every value the vendor
+      NAMES as not rowing — 64 (Dyno), 128/143 (ski), 192-194/207 (bike),
+      225/226 (MultiErg ski/bike) — and allow everything else, named or not,
+      including 224 (MultiErg on a rowing interval). The driver classifies on
+      the FIRST decode; the hook routes it through the existing `fail()` path,
+      which chains a `terminate()` ahead of the disconnect so the workout we
+      just sent is withdrawn from the erg. Safety is an invariant, not a race:
+      `maybeEmitFrame` cannot emit before a 0x0032 has decoded and no record
+      opens without a frame, so nothing can be stored or sent on either connect
+      door. Plus one link, `WHICH ERGS WORK ›`, into `connect-the-monitor`, and
+      a three-tier support matrix published there. No stored-shape change and no
+      migration. **M**
 
 ### Owed by this phase, filed here rather than in a PR body
 
@@ -167,7 +173,13 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       Just Row ~449 ms forever to protect against a machine nobody owns. The
       handler's comment is corrected in the same PR; this row is the residual.
       **S**
-- [ ] **A MultiErg on a ski or bike interval would be refused outright.** The
+- [ ] **The published matrix goes stale silently.** It is a claim in the app's
+      own voice, the same class as a shipped release note (RF9's drift class).
+      Changing `mapping.ts`'s hardcoded `type` or the denylist reconciles the
+      middle tier of `connect-the-monitor` and recounts the registry `minutes`.
+      The trigger is also recorded in the article's own source comment. **S**
+- [ ] **A MultiErg reporting a STATIC ski or bike value would be refused
+      outright.** The
       vendor sentence that would exclude this — "this will be the one of the
       MultiErg Machine Types" — is footnote 23, on `0x003C`, the one carrier we
       do not subscribe. The two we read (footnotes 7 and 11) say only "the

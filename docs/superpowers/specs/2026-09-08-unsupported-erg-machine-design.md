@@ -135,11 +135,12 @@ missed.
 
 ## The classification
 
-A pure domain module, `app/domain/monitor/pm5/ergMachine.ts`, holding the
-denylist and nothing else.
+A pure domain module, `app/domain/monitor/pm5/ergMachine.ts`, holding the rule
+and nothing else.
 
 ```
-unsupportedErgMachine(value: number | null): "ski" | "bike" | null
+export type UnsupportedMachine = "ski" | "bike" | "dyno";
+unsupportedErgMachine(value: number | null): UnsupportedMachine | null
 ```
 
 **`number | null`, never `number | undefined` (RF33).** An optional-typed input
@@ -149,27 +150,52 @@ meaning "absent" makes the compiler the gate. The caller reads
 `decoded.ergMachineType ?? null` at the one site that knows the property may be
 omitted.
 
-- `128`, `143` -> `"ski"`
-- `192`, `193`, `194`, `207` -> `"bike"`
-- `null` (the field was absent from the frame) -> `null`
-- **every other value, including values this enum does not name** -> `null`
+**The rule, in one sentence: refuse every value the vendor NAMES as not
+rowing; allow everything else, named or not.**
 
-**Denylist, not allowlist, and the direction is the decision** (James,
-2026-09-08). An allowlist over the named static-RowErg values would also catch
-a machine Concept2 invents after rev 1.30 — and would refuse a **RowErg** model
-added after rev 1.30, turning a working erg into an unusable one. A false
-refusal is total and silent-until-reported; a missed future non-rowing machine
-leaves us exactly where we are today. The asymmetry decides it.
+| Value | Vendor name | Result |
+| --- | --- | --- |
+| `64` | `ERGMACHINE_TYPE_STATIC_DYNO` | `"dyno"` |
+| `128`, `143` | `STATIC_SKI`, `STATIC_SKI_SIMULATOR` | `"ski"` |
+| `192`, `193`, `194`, `207` | `BIKE`, `BIKE_ARMS`, `BIKE_NOARMS`, `BIKE_SIMULATOR` | `"bike"` |
+| `225` | `MULTIERG_SKI` | `"ski"` |
+| `226` | `MULTIERG_BIKE` | `"bike"` |
+| `224` | `MULTIERG_ROW` | `null` — a MultiErg on a rowing interval IS rowing |
+| `null` | the field was absent from the frame | `null` |
+| anything else | unnamed by rev 1.30 | `null` |
 
-The consequence is stated rather than hidden: `STATIC_DYNAMIC` (8), the
-`SLIDES_*` family (16-20, 32), `STATIC_DYNO` (64) and the `MULTIERG_*` family
-(224-226) all proceed, and a piece on any of them is still posted to Concept2
-as `type: "rower"` when Concept2's own enum has `dynamic`, `slides` and
-`multierg` members for three of them. That is pre-existing and unchanged. It is
-not smuggled in as "out of scope": it is a deliberate consequence of the
-approved fail direction, it is a smaller wrong than a SkiErg (all of them ARE
-rowing except the Dyno), and it gets a ROADMAP register row in this PR rather
-than a sentence in a PR body (RF14).
+**This is still a DENYLIST and the fail direction is unchanged** (James,
+2026-09-08): an unnamed value proceeds, so a RowErg model Concept2 adds after
+rev 1.30 can never be bricked by us. What changed is that the list now matches
+the rule James stated rather than a subset of it.
+
+**Why the Dyno is in, having been left out of the first revision.** An earlier
+option list offered to "widen the denylist" and bundled `STATIC_DYNO` with all
+three `MULTIERG_*` values including `MULTIERG_ROW` — which is rowing. That
+bundle was the controller's invention, not the vendor's grouping, and it made a
+bad option out of a good half; James declined it on those terms. Taken on its
+own, `64` is a strength machine with no 500 m pace and nothing this app models.
+Leaving it out would put a Dyno in a published "supported" tier, which is not a
+hedge but a falsehood — and the denylist's own justification does not cover it,
+because that justification is about UNNAMED FUTURE values ("an allowlist would
+refuse a RowErg model added after rev 1.30"), while `64` is named, quoted, and
+cannot become a RowErg. RF34: a spec that states "the app should never be able
+to record a sport it does not support" and then applies it to two of the three
+named non-rowing machines in the enum it quoted.
+
+**Why `225`/`226` are in and `224` is not.** These are the MultiErg subfamily,
+and the vendor's own 0x003C footnote spells out that a MultiErg reports "one of
+the MultiErg Machine Types". A monitor reporting `225` is on a ski interval, so
+refusing it is the CORRECT case rather than a new risk class — it is the same
+judgement as `128`, one enum family over. `224` is a MultiErg on a rowing
+interval and proceeds. The residual MultiErg risk in wire fact (a) is
+unchanged and points the other way: a MultiErg might report a STATIC ski value
+and be refused for the whole sitting.
+
+The consequence still stated rather than hidden: `STATIC_DYNAMIC` (8) and the
+`SLIDES_*` family (16-20, 32) proceed, and a piece on either is posted to
+Concept2 as `type: "rower"` when Concept2's own enum has `dynamic` and `slides`
+members. Unchanged, and it has a ROADMAP row.
 
 ## The trigger
 
@@ -177,7 +203,7 @@ The driver classifies inside the callbacks it already runs on a successful
 decode of 0x0032 and 0x0038 (`driver.ts`'s `mergeStatus` calls), and emits:
 
 ```
-| { kind: "unsupported-machine"; machine: "ski" | "bike"; value: number }
+| { kind: "unsupported-machine"; machine: UnsupportedMachine; value: number }
 ```
 
 **On the FIRST classifying observation. There is no streak, and the reason it
@@ -405,14 +431,122 @@ machine. That has two consequences the copy must live inside:
 - the standing line "End whatever is showing on the monitor, then try again."
   is suppressed, which is correct — it would be nonsense here.
 
-Draft for the gate, not approved: serif **"Ergomatic records rowing only."**,
-body **"This monitor is on a SkiErg. Nothing here will start."** — and per the
-Try again finding above, no promise of a chooser.
+**Approved (James, 2026-09-08):** serif **"Erg type not supported"**, body
+**"This monitor is on a SkiErg. Nothing here will start."** — with "BikeErg" or
+"Dyno" substituted for what the machine actually is. Per the Try again finding
+above, no line promises a chooser.
+
+The headline is a terse fragment because its neighbours are: `Could not
+connect`, `Lost the monitor` and `Bluetooth permission needed` are the other
+hard-coded serif lines on these two screens, and none is a sentence. The PM
+argued for reverting to the earlier full sentence on the grounds that a status
+code invites an explanation link; the register evidence does not support that
+reading, and James kept his. Both are in `pm-ledger.md`.
+
+### The link to the support matrix
+
+**Approved (James, 2026-09-08), with the design pass's recommendation and
+against the PM's — both recorded.** The screen carries one link,
+**`WHICH ERGS WORK ›`**, into the existing `connect-the-monitor` article.
+
+Every number here is MEASURED: the design pass replicated the real CSS and
+faces in Playwright on chromium and webkit at 390x844 and 844x390, and
+validated the harness against the committed landscape capture first (predicted
+action-stack top 96 px, capture ~97 px).
+
+- **NOT a fifth button.** The landscape column is 338 px. Four buttons leave
+  78 px of body; five leave **14 px** — less than one 11 px mono line. That is
+  a deleted screen, not a compressed one.
+- **NOT an inline anchor** inside `.connected-body-line`. `e2e/design.spec.ts`'s
+  `assertTapTargets` sweeps every `a, button, [role=button], input, select` for
+  44 px in BOTH dimensions with one carve-out, and already runs on the failed
+  interstitial. A 13 px mono anchor is ~18 px tall and fails the gate.
+- **A block link** in the `.reader-next` idiom (`display: flex; align-items:
+  center; min-height: var(--tap)`), measured **350x44 portrait, 440x44
+  landscape**.
+- **Position is load-bearing, not taste.** `.connected-interstitial-body` is
+  `justify-content: center`, so DOM order decides what the 78 px landscape
+  window shows at rest. After the body line and before `.connected-reassurance`
+  it is fully visible at rest on both engines; placed last, below DETAIL, it
+  needs a scroll to 99 (chromium) / 101 (webkit). Stress-tested at rest across
+  a longer device name, a BikeErg body line, a two-line headline, and a DETAIL
+  panel with no raw line — visible in all four, both engines.
+- **Keep the DETAIL panel.** It is ballast that holds the link inside the
+  visible band, and it is what a tester needs if the machine-type read is ever
+  wrong.
+- **Ink, not accent.** `--ink` on `--page` = 15.41:1, the app's most-used
+  pairing, so this introduces NO new colour pairing. Accent would have passed
+  (5.35:1) and still been wrong: `Try again` is already solid accent,
+  `.button-connect` exists precisely because two reds compete, and
+  `docs/design/README.md`'s "accent means exactly four things" does not include
+  a text link. The underline carries the affordance the colour cannot.
+- **A router `Link` carrying `state={{ from: location.pathname }}`.** An
+  `<a href>` full-page-navigates and tears the app down. Without the `from`
+  key, Reader's ✕ resolves `origin ?? "/news"` and dumps the rower on the News
+  tab — `ArticleLink.tsx`'s own recorded field bug, verbatim. `ArticleLink`
+  itself is NOT reusable here: it reads `useReadingTrail()`, which a product
+  screen has no trail for.
+- **Both doors, same link, same words, same position.** JustRow has room and
+  then some: two buttons leave a 206 px landscape body against 149 px of
+  content, so it does not scroll at all with the link added.
+
+**The cost, stated because both opinions found it independently:** the link is
+an EXIT, not a detour. `started` is local `useState` in `WorkoutDetail.tsx` and
+`JustRow.tsx`, so navigating away unmounts the refusal frame — keep-awake off,
+mount lease released — and the rower returns to the workout detail, which
+offers Connect again, not to this screen. Accepted: by the time the refusal
+renders, `fail()` has already disconnected and cleared `driverRef`, so there is
+no live session to strand.
+
+**This is the app's first product→article link since the 2026-08-23
+teaching-surfaces ruling.** The PM recommended against spending that precedent
+on this screen; its reasoning is in `pm-ledger.md`. James ruled for the link.
+
+## The support matrix
+
+Published as a section in the existing `connect-the-monitor` article — NOT a
+new article, and NOT a table: `.reader-body`'s CSS set is body, inset, figure,
+header, meta, title, next and close, with no table rules at all, so a table
+would be new CSS and a bad screen in a 320 px column. Three `h2`-led tiers,
+prose and plain lists, using only what the reader already renders.
+
+**The tier names are James's** (2026-09-08), and the honesty goal he gave them
+decides how the middle one is WRITTEN: by its named limitation, not by our
+confidence in it.
+
+- **Supported — confirmed.** One row, and that is the point: the only erg this
+  project has ever measured reports `0`, which the vendor enum names
+  `STATIC_D`. Every other RowErg model is an inference from a sibling enum
+  value, which is the tier below.
+- **Supported — best effort.** Dynamic RowErg, RowErg on slides, MultiErg on a
+  rowing interval, RowErg models A/B/C/E, a monitor too old to say which
+  machine it is, and any value rev 1.30 does not name. Written as what is true
+  rather than as a confidence claim: *the piece itself is right — it is rowing,
+  and pace per 500 m means what it says — but Ergomatic tells Concept2 it was a
+  plain RowErg, so the logbook entry names the wrong machine and its
+  verification code will not be accepted.* That is deterministic, not a risk:
+  Concept2's own documentation makes the code conditional on machine type
+  matching, and `mapping.ts` sends `rower`.
+- **Unsupported.** SkiErg, BikeErg, Dyno. Refused: nothing programmed, nothing
+  recorded, nothing sent.
+
+**Word budget, so the registry stays honest.** `connect-the-monitor` is
+recorded at 217 words / `minutes: 2`, and ceil(360/180) = 2, so under 143 added
+words leaves `minutes` untouched. The recount is recorded either way — the
+registry comment requires the number, not the change.
+
+**Gate 0 for the article is WORDING-ONLY** — James reads the prose, no captures
+(the no-screenshots-for-copy ruling, 2026-08-23).
+
+**A published matrix is a claim later PRs can falsify**, the same class as a
+shipped release note. Its ROADMAP row names the reconciliation trigger, and so
+does a comment in the article's own source beside the recount habit already
+living there.
 
 ## What this deliberately does not do
 
 Each of these gets a ROADMAP register row in this PR rather than a PR-body
-mention (RF14). **Five rows, and the count is checkable against the Phase MT
+mention (RF14). **The count is checkable against the Phase MT
 section** — an earlier revision claimed three and filed two.
 
 1. **No stored column.** Option A means no record from a named unsupported
@@ -421,17 +555,23 @@ section** — an earlier revision claimed three and filed two.
    needed — this is the approved shape itself, not an owed follow-up. Stated
    here because the earlier revision counted it as a row that was never filed.*
 2. **`mapping.ts`'s `type: "rower"` literal is untouched.** Correct for every
-   record this app can now open. Still wrong for `dynamic`, `slides` and
-   `multierg` machines, which the approved denylist lets through.
+   record this app can now open. Still wrong for `dynamic`, `slides` and the
+   MultiErg-on-a-rowing-interval case, which the denylist lets through — and
+   the published matrix now states that limitation in the app's own voice, so
+   this row also carries the reconciliation trigger: changing `mapping.ts` or
+   the denylist reconciles the article's middle tier and recounts `minutes`.
 3. **No handling for a machine we cannot identify.** Absent means pre-2018
    firmware, and refusing on ignorance would break a working erg. **`0x0016` is
    NOT the safe fallback an earlier revision implied:** rev 1.30's own revision
    history reads *"2/3/2017 ... Deleted Machine Type information in Device Info
    Service as firmware unable to support it. V1.21."* — so the parked answer
    may not exist on the wire at all, and the row says so.
-4. **A MultiErg on a ski or bike interval may be refused outright** (see wire
-   fact (a)). Unowned risk, accepted, no capture and no vendor sentence to
-   settle it.
+4. **A MultiErg reporting a STATIC ski or bike value would be refused for the
+   whole sitting** (see wire fact (a)). Unowned risk, accepted, no capture and
+   no vendor sentence to settle it. Note the direction: `MULTIERG_SKI`/`_BIKE`
+   (225/226) being refused is the CORRECT case and is now in the denylist; this
+   row is about a MultiErg reporting `128`/`192` instead, which we cannot
+   distinguish from a real SkiErg.
 5. **The refused machine is remembered.** `ConnectedInterstitial.tsx` calls
    `saveLastDevice(session.deviceName)` on every successful pair, so a refused
    SkiErg still becomes `LAST USED` on workout detail. Cosmetic, and fixing it
@@ -445,7 +585,9 @@ Following docs/TESTING.md. Domain gets the heaviest coverage.
   each family, `null`, and the unnamed values between families. The table is
   written from the quoted enum with independent literals — never derived from
   the module's own map, which would make a mistyped constant self-consistent
-  (RF21's first smell).
+  (RF21's first smell). **`224` and `225` are adjacent and disagree**, which is
+  the pair most likely to be typo'd into agreement; both get their own row and
+  the test title says why.
 - **Producer-first, not seeded past it (RF24).** At least one test starts
   UPSTREAM: real 0x0032 bytes through `parseAdditionalStatus1` into the driver,
   asserting the refusal — never a hand-built decoded object. `statusFrames.ts`'s
@@ -467,6 +609,12 @@ Following docs/TESTING.md. Domain gets the heaviest coverage.
   terminate argument to `fail()`; delete the `seen.as1` conjunct from
   `maybeEmitFrame`. Each probe runs against a COMMITTED tree (RF22), anchored on
   a grep proven to return exactly one hit.
+- **The link, gated where it can go red.** One test drives the link and asserts
+  it carries `state.from`, because the failure it prevents (Reader's ✕ landing
+  on the News tab) is invisible to a test that only asserts the link renders —
+  RF4's "assert it works, not that it exists". The design sweep's
+  `assertTapTargets` already runs on the failed interstitial and covers the
+  44 px floor with no carve-out needed.
 - `pnpm e2e` and `pnpm screenshots`, per RF1 — the diff touches `app/src/`.
 
 ## Exit criteria
@@ -483,3 +631,8 @@ Following docs/TESTING.md. Domain gets the heaviest coverage.
 6. Gate 0 approved on BOTH rendered screens, with the stated contrast numbers.
 7. The `armed` handler's comment no longer claims a precondition this design
    falsifies.
+8. A Dyno (`64`) and a `MULTIERG_SKI` (`225`) are refused; a `MULTIERG_ROW`
+   (`224`) is not — asserted per value, from the quoted enum.
+9. The link carries `state.from`, proven by a test that fails without it.
+10. The article's middle tier states the Concept2 `type` limitation, and the
+    registry's `minutes` recount is recorded whether or not it changed.
