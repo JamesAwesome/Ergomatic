@@ -2307,6 +2307,56 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(JSON.parse(sent!)).toMatchObject({ codeSent: true, verified: true });
   });
 
+  it.each([
+    ["429, a rate limit", 429],
+    ["400, a bad request", 400],
+  ])(
+    "a %s does NOT strip the code — only 422, the status Concept2 uses for payload validation",
+    async (_label, status) => {
+      // Gating the narrowing itself. Widening `refusedForCode` back to any
+      // 4xx left 190/190 green, so the decision to be narrower than the
+      // array arm had no test behind it.
+      //
+      // The stake: a dropped code is PERMANENT (honoured at CREATE, ignored
+      // on update), so under any-4xx a rate limit would strip it, the retry
+      // would succeed, and the rower would get a successfully-sent row
+      // silently missing the thing they opted in for. Left unsent instead,
+      // the row is still re-sendable WITH its code.
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      await store.setAutoVerify(userA.id, true);
+      const client = makeStubClient();
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: false,
+        kind: "c2_error",
+        status,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id, {
+        steps: [],
+        machineWorkMeters: 500,
+        machineWorkSeconds: 124.0,
+        machineSummary: {
+          avgStrokeRate: 26,
+          workoutType: 8,
+          verificationBytes: [
+            0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+            0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          ],
+        },
+      });
+      await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      // ONE post. The row stays unsent and re-sendable, code intact.
+      const calls = vi.mocked(client.postResult).mock.calls;
+      expect(calls).toHaveLength(1);
+      expect(calls[0]![1]).toHaveProperty("verification_code");
+    },
+  );
+
   it("the code-strip retry meeting a dead grant flags needs_reauth, with no third post", async () => {
     // Review F2: the code arm's repeat-401 block was entirely ungated —
     // deleting it left 188/188 green. Without it the rower falls through to
