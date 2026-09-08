@@ -7210,8 +7210,10 @@ async function walkToSurface(page: Page): Promise<void> {
  *  a webkit project is added. What bites today is the first child's top. */
 async function measureFailureFrame(page: Page): Promise<{
   clientHeight: number;
+  contentHeight: number;
   serifTop: number;
   serifBottom: number;
+  remedyTop: number | null;
   minScrollTop: number;
   firstChildTopAtMinScroll: number;
 }> {
@@ -7230,15 +7232,24 @@ async function measureFailureFrame(page: Page): Promise<{
     const serifRect = serif.getBoundingClientRect();
     const atRest = {
       clientHeight: body.clientHeight,
+      contentHeight: body.scrollHeight,
       serifTop: serifRect.top - restTop,
       serifBottom: serifRect.bottom - restTop,
     };
+    const remedy = body.querySelector<HTMLElement>(".connected-body-line");
+    const remedyTop =
+      remedy === null ? null : remedy.getBoundingClientRect().top - restTop;
     body.scrollTop = -9999;
     const minScrollTop = body.scrollTop;
     const firstChildTopAtMinScroll =
       first.getBoundingClientRect().top - clientTopOf(body);
     body.scrollTop = 0;
-    return { ...atRest, minScrollTop, firstChildTopAtMinScroll };
+    return {
+      ...atRest,
+      remedyTop,
+      minScrollTop,
+      firstChildTopAtMinScroll,
+    };
   });
 }
 
@@ -7396,6 +7407,27 @@ test.describe("connected screens (fake-driven)", () => {
     const m = await measureFailureFrame(page);
     assertHeadlineOnFrame(m);
     assertNothingAboveTheScrollOrigin(m);
+
+    // THE ASSERTION THAT PINS THE PAIRING COUNT, and it is here rather than on
+    // the other two frames because this is the only failure screen whose body
+    // line is a REMEDY — "Allow Bluetooth for Ergomatic in Settings" — rather
+    // than a restatement of the headline. A rower who cannot see it begin has
+    // been told something is wrong and not what to do.
+    //
+    // Reverting the rule to `nth-last-child(-n + 2)` — the shape that shipped
+    // for `unsupported-machine` alone — leaves every OTHER assertion in this
+    // file green: at 142px a two-line headline running to y94 still clears the
+    // fold, so nothing above notices. Only this one bites, at 102 against a
+    // 74px window.
+    expect(
+      m.remedyTop,
+      "the frame has no body line to read as the remedy",
+    ).not.toBeNull();
+    expect(
+      m.remedyTop,
+      `the remedy sentence starts ${(m.remedyTop ?? 0) - m.clientHeight}px below the fold, so the rower is told something is wrong and not what to do`,
+    ).toBeLessThan(m.clientHeight);
+
     await page.setViewportSize({ width: 390, height: 844 });
 
     await cleanupAllConnected(page, title);
