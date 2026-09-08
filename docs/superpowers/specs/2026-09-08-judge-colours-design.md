@@ -64,8 +64,12 @@ Device-local, following `today/todayFilters.ts`, which is this repo's
 established localStorage-store pattern (undated key, whole-object read,
 `catch` to defaults, boolean-returning save).
 
+**The block below is a SIGNATURE SKETCH, not prescribed code** — it is
+declaration-only and would not compile as written. The implementation plan
+owes the real blocks and their paste-test; nothing here has had one.
+
 ```ts
-/** src/you/judgeColors.ts */
+/** src/you/judgeColors.ts — signatures only */
 export const JUDGE_COLORS_KEY = "ergomatic.judgeColors";
 
 export type JudgeColor = "red" | "blue" | "off";
@@ -164,7 +168,18 @@ on-target is plain ink by design. `judgedClass`/`cellClass` keep emitting
 `timer-card-actual-stale` for the stale member.
 
 **Six call sites, each of which already knows its own metric** — no new
-data has to be threaded through `surfaceModel`:
+data has to be threaded through `surfaceModel`. Counted, not eyeballed (run
+in `app/`, worktree `.claude/worktrees/jc` at `08f6e99a`):
+
+```
+$ grep -rn "judgedClass(\|cellClass(\|judgedColorClass(" \
+    src/workout/connected/PaneLive.tsx \
+    src/workout/connected/PaneGrid.tsx \
+    src/session/PostWorkoutSummary.tsx \
+  | grep -v "^[^:]*:[0-9]*:function " | wc -l
+6
+```
+
 
 | file | site | metric |
 | --- | --- | --- |
@@ -201,8 +216,16 @@ two plausible tokens to reach for. Their contrast measurements and the
 `--judge-red`.
 
 `ConnectedSurface.test.tsx` asserts on the literal strings
-`var(--judge-faster)` / `var(--judge-slower)` at four places (lines
-~1005-1006, ~1513, ~1527); those move with the tokens. The invariant one of
+`var(--judge-faster)` / `var(--judge-slower)`; those move with the tokens.
+Cited by command rather than by line, since line numbers drift:
+
+```
+$ grep -rn "var(--judge-" src/workout/ConnectedSurface.test.tsx | wc -l
+4
+```
+
+(run in `app/`, worktree `.claude/worktrees/jc` at `08f6e99a`). Two are the
+tint assertions, two are `.connected-lost`'s `background`. The invariant one of
 them pins — *"NOTHING ELSE on the connected surface may take a filled red
 ground"* — still holds and is still worth pinning: every judged tint is a
 `color`, never a `background`, and the summary's bar (`background:
@@ -364,9 +387,19 @@ unmutated code and the probe reads as green.
 | `--ink` #1b1a17 (OFF) | 17.11:1 | 15.41:1 |
 | `--ink-3` #57544c (stale) | 7.43:1 | 6.69:1 |
 
-Computed with the WCAG relative-luminance formula, 2026-09-08; the first
-two reproduce the numbers already recorded in `tokens.css` and
-`index.css`, which is the check that the method matches the repo's. Every
+Reproduced by this command, not by eye (2026-09-08):
+
+```
+node -e 'const l=c=>(c/=255)<=0.03928?c/12.92:((c+0.055)/1.055)**2.4,\
+L=h=>{const n=parseInt(h.slice(1),16);return 0.2126*l(n>>16&255)+\
+0.7152*l(n>>8&255)+0.0722*l(n&255)},r=(a,b)=>((Math.max(L(a),L(b))+0.05)/\
+(Math.min(L(a),L(b))+0.05)).toFixed(2);for(const[n,c]of[["blue","#1d4e89"],\
+["red","#962718"],["ink","#1b1a17"],["ink-3","#57544c"]])\
+console.log(n,r(c,"#fffdf7"),r(c,"#f4f1e8"))'
+```
+
+The first two rows reproduce the numbers already recorded in `tokens.css`
+and `index.css`, which is the check that this method matches the repo's. Every
 one of the 81 reachable slot combinations is drawn from this table, so no
 combination needs its own measurement.
 
