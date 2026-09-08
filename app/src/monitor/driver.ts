@@ -444,6 +444,20 @@ type PendingAckOutcome = "disconnected" | "ack-timeout" | AckArrival;
  *  them, never a clock. */
 export interface DriverOptions {
   ackTimeout?: { ticks: number };
+  /** Has the ROWER'S SITTING ever produced a readable frame? Injected because
+   *  the driver cannot answer it: its own `seen` flags are reborn with this
+   *  closure on every `connect()`, and Try again calls `connect()` again
+   *  after a BLE drop, so a monitor read fine a minute ago would look unread
+   *  to a driver-local check. The hook owns the fact, at the lifetime that
+   *  matches the rower sitting at the erg (design spec 2026-09-07, corrected
+   *  after the hardening pass proved the driver-local version false).
+   *
+   *  Absent means "no such fact available", which reads as NOT-yet-emitted
+   *  and therefore permits the warning — deliberately fail-LOUD rather than
+   *  fail-open, because the failure it announces is a rower stranded on a
+   *  screen that says nothing. A caller that wires nothing gets today's
+   *  behaviour plus the warning, never silence. */
+  framesEverEmitted?: () => boolean;
   /**
    * Bounds `program()`'s verification phase (design spec §1, plan Task 2)
    * in GENERAL_STATUS_UUID ticks — the same tick pulse `ackTimeout` counts,
@@ -1808,6 +1822,25 @@ export function createPm5Driver(
    *  about whether the gate accepted it. */
   let summarySeen = false;
   const seen = { general: false, as1: false, as2: false };
+  /** UNDECODABLE-MONITOR WATCH (design spec 2026-09-07). Two thresholds, both
+   *  required, borrowed in SHAPE from `armedWatch` and deliberately not in
+   *  CONSTANTS: that watch runs in the decode-SUCCESS branch after a program
+   *  has armed, this one runs in the FAILURE branch when nothing may ever
+   *  have decoded, so its settle story does not transfer. Nothing in this
+   *  repo measures how long a healthy monitor can legitimately produce
+   *  undecodable bytes after a fresh resubscribe; these are a floor chosen
+   *  to be well past any plausible one at the ~2 Hz status cadence, and they
+   *  are a guess until something measures them.
+   *
+   *  KEYED PER CHARACTERISTIC, which is not a detail. A single shared
+   *  counter fails in both directions: incremented on ANY failure it lets
+   *  two unrelated characteristics combine into a false trigger; reset on
+   *  ANY success it can never accumulate in the reported incident's own
+   *  shape, where a broken 0x0032 sits behind healthy 0x0031/0x0033 ticks. */
+  const UNDECODABLE_TICKS = 12;
+  const UNDECODABLE_WINDOW_MS = 5000;
+  const decodeFail = new Map<string, { streak: number; since: number }>();
+  let undecodableFired = false;
   /**
    * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): the
    * Split/Interval Number each half of the pending boundary reported, or
@@ -2310,8 +2343,35 @@ export function createPm5Driver(
           "frame-error",
           `${characteristic}: expected ${decoded.error.expected} bytes, got ${decoded.error.actual}`,
         );
+        // THE THIRD CONDITION IS `!framesEverEmitted()`, and it is what keeps
+        // this off a working monitor. The driver cannot answer it alone: its
+        // own `seen` flags are reborn with the closure on every `connect()`,
+        // and the rower's Try again button calls `connect()` again after a
+        // BLE drop — so a monitor read fine a minute ago would look unread.
+        // The fact is therefore owned one layer up, by the hook, whose
+        // lifetime is the rower's sitting rather than one attempt.
+        const prior = decodeFail.get(characteristic);
+        const continues = prior !== undefined;
+        const streak = continues ? prior.streak + 1 : 1;
+        const since = continues ? prior.since : now();
+        decodeFail.set(characteristic, { streak, since });
+        if (
+          !undecodableFired &&
+          !options.framesEverEmitted?.() &&
+          streak >= UNDECODABLE_TICKS &&
+          now() - since >= UNDECODABLE_WINDOW_MS
+        ) {
+          undecodableFired = true;
+          log.record(
+            "undecodable",
+            `${characteristic}: ${streak} consecutive failures over ${now() - since}ms with no frame ever emitted this sitting`,
+          );
+          emit({ kind: "undecodable", characteristic });
+        }
         return;
       }
+      // A clean decode breaks THIS characteristic's run and no other's.
+      decodeFail.delete(characteristic);
       raw = { ...raw, ...decoded };
       after(decoded, bytes);
     });

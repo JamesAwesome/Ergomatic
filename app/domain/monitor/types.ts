@@ -429,6 +429,18 @@ export interface IntervalActual {
  */
 export type MonitorEvent =
   | { kind: "frame"; frame: MonitorFrame }
+  // A characteristic has failed to decode steadily and this session has
+  // never once produced a readable frame — so the app cannot read this
+  // monitor at all, as opposed to having lost it (silence, which the
+  // liveness path owns) or having a hiccup mid-session.
+  //
+  // `characteristic` is diagnostic only. NOTHING rower-facing names it: a
+  // parse failure is OUR verdict about bytes, never the monitor's about
+  // itself, and every one this project has had was our own length guard
+  // being behind a firmware revision. Blaming the device on screen would
+  // have told the rower whose report produced this that their working erg
+  // was the problem.
+  | { kind: "undecodable"; characteristic: string }
   // Programming done, the PM waits for stroke one. `freeRow` names WHICH
   // arm answered, because the two have different acceptance semantics and a
   // consumer has to be able to tell them apart (spec 2026-09-03 Part 2):

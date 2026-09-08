@@ -1976,6 +1976,7 @@ describe("RC-37 ([R5]): the nudge survives Menu-at-READY, the same way it surviv
     function baseSession(overrides: Partial<Session>): Session {
       return {
         phase: "idle",
+        undecodable: false,
         error: null,
         deviceName: null,
         frame: null,

@@ -13537,3 +13537,103 @@ describe("beginFreeRow", () => {
     expect(events.some((e) => e.kind === "programDropped")).toBe(false);
   });
 });
+
+describe("createPm5Driver: a monitor whose bytes never decode", () => {
+  // The fake holds 0x0032 undecodable while 0x0031/0x0033 stay healthy —
+  // the reported incident's exact shape, and the one neither existing
+  // control could reproduce (`injectGarbledFrame` is one-shot and targets
+  // 0x0031, which decoded fine; `preV126Firmware` now decodes by design).
+  /** CORRUPTION FIRST, THEN ARM — the reported incident's actual order, and
+   *  the reason this helper was rewritten. An earlier version armed first and
+   *  corrupted after, which let `deliverArmedBundle` deliver one clean
+   *  AS1/AS2/0x0031 set and emit a real `frame` BEFORE corruption began. Its
+   *  tests then only passed because `framesEverEmitted` was left unwired and
+   *  its absent default reads as "never emitted" — the flagship test was
+   *  green because of a permissive default rather than because the trigger
+   *  works. Wired realistically, as production wires it, that version goes
+   *  red. Found at review.
+   *
+   *  `framesEverEmitted` is now DERIVED from the driver's own `frame` events,
+   *  exactly as `useMonitorSession` derives it, so the third condition is
+   *  under test rather than stubbed. Arming still works with AS1 dead:
+   *  `verifyArmed` reads 0x0031, which stays healthy. */
+  async function brokenAs1(opts: { pretendAlreadyRead?: boolean } = {}) {
+    const clock = manualClock();
+    const fake = createFakeTransport({ program: MINIMAL_PROGRAM });
+    const log = createEventLog();
+    let sawFrame = false;
+    const driver = createSubscribedDriver(fake, log, {
+      now: clock.now,
+      framesEverEmitted: () => opts.pretendAlreadyRead === true || sawFrame,
+    });
+    const events: MonitorEvent[] = [];
+    driver.events((e) => {
+      if (e.kind === "frame") sawFrame = true;
+      events.push(e);
+    });
+    fake.corruptCharacteristic(ADDITIONAL_STATUS_1_UUID);
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    events.length = 0;
+    return { clock, fake, driver, events, framesSeen: () => sawFrame };
+  }
+  const undecodables = (events: MonitorEvent[]) =>
+    events.filter((e) => e.kind === "undecodable");
+
+  it("says so once both thresholds are met, naming the characteristic for the ring only", async () => {
+    const { clock, fake, events, framesSeen } = await brokenAs1();
+    // The premise this test rests on, asserted rather than assumed: with AS1
+    // dead from the start, NO frame is ever emitted, so condition 3 is
+    // genuinely true rather than true because the option was left unwired.
+    expect(framesSeen()).toBe(false);
+    for (let i = 0; i < 20; i += 1) {
+      clock.advance(500);
+      fake.tick(500);
+    }
+    const fired = undecodables(events);
+    expect(fired).toHaveLength(1);
+    expect(fired[0]).toMatchObject({ characteristic: "0x0032" });
+  });
+
+  it("stays quiet when only the COUNT is met and the window is not", async () => {
+    const { clock, fake, events } = await brokenAs1();
+    // Many failures, almost no elapsed time: a burst, not a steady state.
+    for (let i = 0; i < 20; i += 1) {
+      clock.advance(1);
+      fake.tick(1);
+    }
+    expect(undecodables(events)).toHaveLength(0);
+  });
+
+  it("stays quiet when only the WINDOW is met and the count is not", async () => {
+    const { clock, fake, events } = await brokenAs1();
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(9000);
+      fake.tick(9000);
+    }
+    expect(undecodables(events)).toHaveLength(0);
+  });
+
+  it("NEVER fires once this sitting has read a frame — the condition the hardening pass corrected", async () => {
+    // The fact is injected because the driver cannot answer it: its own
+    // latches are reborn on every connect(), and Try again reconnects.
+    const { clock, fake, events } = await brokenAs1({
+      pretendAlreadyRead: true,
+    });
+    for (let i = 0; i < 40; i += 1) {
+      clock.advance(500);
+      fake.tick(500);
+    }
+    expect(undecodables(events)).toHaveLength(0);
+  });
+
+  it("keys the run per characteristic: healthy 0x0031 ticks alongside do NOT reset the broken one", async () => {
+    // This is the reported shape. A shared counter reset on any success
+    // could never accumulate here, and would never have fired at all.
+    const { clock, fake, events } = await brokenAs1();
+    for (let i = 0; i < 20; i += 1) {
+      clock.advance(500);
+      fake.tick(500); // delivers healthy 0x0031 and 0x0033 every tick
+    }
+    expect(undecodables(events)).toHaveLength(1);
+  });
+});

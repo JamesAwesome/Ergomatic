@@ -332,6 +332,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
   localStorage.setItem(LAST_PANE_KEY, pane);
   const session: MonitorSession = {
     phase: options.phase ?? "live",
+    undecodable: false,
     error: null,
     deviceName: DEVICE,
     frame: liveFrame(options.frame),

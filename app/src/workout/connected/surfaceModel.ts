@@ -343,6 +343,9 @@ export interface SurfaceModelInput {
    *  exact class of laundering (`?? "live"`) this module already deleted
    *  once. */
   linkLost: boolean;
+  /** The app cannot read this monitor at all (`MonitorSession.undecodable`).
+   *  Replaces the READY word rather than annotating it — Gate 0, Option 1. */
+  undecodable?: boolean;
   frame: MonitorFrame | null;
   deviceName: string | null;
   /** Everything the machine has reported finishing, straight off the hook.
@@ -854,6 +857,7 @@ export function formatRestCountdown(restSeconds: number): string {
 
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const { phases, program, deviceName, status } = input;
+  const undecodable = input.undecodable === true;
   const frame = input.frame ?? NO_FRAME;
   // ONE READ, one local, every stale consumer below (Phase LM PR 1 Task 2 —
   // `staleFor` is gone; see the note where it used to live).
@@ -1277,8 +1281,19 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // `intervalOrdinalLabel` above is exactly the prefix this needs, so the
   // two cannot drift apart the same way the grid `#` column and this
   // caption already cannot (`ordinal`, read once, both places).
-  const readyLabel =
-    intervalOrdinalLabel === null ? "READY" : `${intervalOrdinalLabel} · READY`;
+  // NO READINGS REPLACES READY, never sits above it (Gate 0, James
+  // 2026-09-07, Option 1: "a banner over a screen still reading READY
+  // annotates the lie rather than correcting it"). The word states the FACT
+  // and accuses nobody — every decode failure this project has had was our
+  // own length guard being behind a firmware revision, so blaming the erg
+  // would have told the rower whose report produced this that their working
+  // machine was at fault. The notice beneath it names the app as the
+  // subject; this word does not need to.
+  const readyLabel = undecodable
+    ? "NO READINGS"
+    : intervalOrdinalLabel === null
+      ? "READY"
+      : `${intervalOrdinalLabel} · READY`;
 
   return {
     status,

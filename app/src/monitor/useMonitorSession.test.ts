@@ -15446,3 +15446,111 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     expect(result.current.exportLog()).not.toContain("connect-guard-armed");
   });
 });
+
+describe("the app cannot read this monitor: the fact belongs to the SITTING", () => {
+  // THE SEAM TEST. The design's safety argument is that the warning can only
+  // reach a monitor this rower has never once read. The hardening pass proved
+  // the driver cannot answer that: its latches are reborn with its closure on
+  // every connect(), and Try again calls connect() again after a drop. So the
+  // fact lives in a hook ref, and THIS is the only test that crosses that
+  // seam — every driver-level test lives inside one instance and could not
+  // have caught the defect the spec was corrected for (RF24, one layer up).
+  it("does NOT accuse a monitor it already read, after a drop and a fresh connect", async () => {
+    let ms = 0;
+    const { result, fake } = harness(
+      { program: ONE_INTERVAL },
+      {
+        driverOptions: { now: () => ms, settleTicks: 0, prepareSettleTicks: 0 },
+      },
+    );
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    // Read it fine first: a frame reaches the hook and sets the sitting fact.
+    tick(fake, 1);
+    expect(result.current.frame).not.toBeNull();
+    expect(result.current.undecodable).toBe(false);
+
+    // The rower's own Try again path: a real drop, then a fresh connect that
+    // builds a NEW driver with NEW latches.
+    act(() => {
+      fake.injectDisconnect();
+    });
+    fake.corruptCharacteristic(ADDITIONAL_STATUS_1_UUID);
+    await connect(result);
+    // The fake WITHHOLDS delivery between a drop and this call, caching
+    // instead. Without it the second leg produces no notifications at all
+    // and this test asserts nothing — which is exactly what it did until a
+    // mutation probe failed to bite and a ring census showed zero decode
+    // failures on the reconnect leg.
+    act(() => {
+      fake.completeReconnect();
+    });
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    for (let i = 0; i < 40; i += 1) {
+      ms += 500;
+      tick(fake, 500);
+    }
+
+    // THE PREMISE, ASSERTED RATHER THAN ASSUMED: the reconnect leg really
+    // did produce more decode failures than the trigger's threshold, so a
+    // silent result means the sitting fact suppressed it — not that nothing
+    // happened. Counted by SUMMING `repeated`, because the ring coalesces
+    // consecutive identical entries: counting rows undercounts events, and
+    // this assertion read 3 before that was noticed.
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      repeated?: number;
+    }[];
+    const failures = ring
+      .filter((e) => e.kind === "frame-error")
+      .reduce((n, e) => n + (e.repeated ?? 1), 0);
+    expect(failures).toBeGreaterThan(12);
+
+    // The driver's own view says "never read"; the sitting's says otherwise,
+    // and the sitting is the one that decides.
+    expect(result.current.undecodable).toBe(false);
+  });
+
+  it("DOES say so on a monitor this sitting has never read", async () => {
+    // The harness pins a fixed clock, so the elapsed threshold could never
+    // pass; these two drive the driver's own `now` by hand.
+    let ms = 0;
+    const { result, fake } = harness(
+      { program: ONE_INTERVAL },
+      {
+        driverOptions: { now: () => ms, settleTicks: 0, prepareSettleTicks: 0 },
+      },
+    );
+    fake.corruptCharacteristic(ADDITIONAL_STATUS_1_UUID);
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    expect(result.current.frame).toBeNull();
+    for (let i = 0; i < 40; i += 1) {
+      ms += 500;
+      tick(fake, 500);
+    }
+    expect(result.current.undecodable).toBe(true);
+  });
+
+  it("clears the moment a readable frame finally arrives", async () => {
+    let ms = 0;
+    const { result, fake } = harness(
+      { program: ONE_INTERVAL },
+      {
+        driverOptions: { now: () => ms, settleTicks: 0, prepareSettleTicks: 0 },
+      },
+    );
+    fake.corruptCharacteristic(ADDITIONAL_STATUS_1_UUID);
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    for (let i = 0; i < 40; i += 1) {
+      ms += 500;
+      tick(fake, 500);
+    }
+    expect(result.current.undecodable).toBe(true);
+
+    fake.healCharacteristic(ADDITIONAL_STATUS_1_UUID);
+    tick(fake, 500);
+    expect(result.current.undecodable).toBe(false);
+  });
+});

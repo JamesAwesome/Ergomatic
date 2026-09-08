@@ -1425,12 +1425,36 @@ closed with zero Concept2 contact.
       four plan tasks are complete and merged as #350 and released in v0.42.0 (build 902, 2026-09-07)
       (`as1-short-frame`); the checkbox stays open until the reporter confirms it fixed THEIR monitor — see the two open items below. **M**
 
-- [ ] **A monitor we cannot decode says nothing at all.** The follow-on the
-      spec above names: hundreds of `frame-error` entries reached the ring
-      and NOTHING reached the rower, who kept rowing against an app that
-      had already stopped listening. Recurring failure 25's shape — a lower
-      layer reports a durability failure and the caller proceeds. Needs a
-      rower-facing state, so it carries a Gate 0. **M**
+- [ ] **IN FLIGHT — A monitor we cannot decode says nothing at all.**
+      Spec: `docs/superpowers/specs/2026-09-07-undecodable-monitor-design.md`.
+      Gate 0 APPROVED 2026-09-07 (Option 1: the warning REPLACES the READY
+      state rather than sitting above it — a banner over a screen still
+      reading READY annotates the lie rather than correcting it). Trigger
+      copies `armedWatch`'s two-threshold shape, NOT the liveness watchdog's,
+      because our failure is bytes arriving and failing to decode rather than
+      silence. Gated on no frame having EVER been emitted, so it is
+      unreachable mid-row. **Tooling prerequisite, inside this work rather
+      than a reorder:** `injectGarbledFrame` cannot exercise it — it is
+      one-shot and targets 0x0031, the characteristic that WORKED in the
+      reported incident. Needs a fake control holding a NAMED characteristic
+      undecodable, shaped like `failSubscribe`. **M**
+
+- [ ] **We never check WHICH Concept2 machine is attached, and record
+      everything as a row.** James, 2026-09-08. The PM5 fits the RowErg,
+      SkiErg and BikeErg, and `ergMachineType` — the field that says which —
+      has NO consumer anywhere in `app/src` or `app/domain`. So a SkiErg
+      connects, gets programmed, and its piece is stored as a row: every
+      number internally consistent and quietly wrong about what was done.
+      **The codebase already knows these differ, in exactly one corner:**
+      `domain/concept2/verificationEligibility.ts` keeps a separate rankable
+      list for the BikeErg and says outright that we ship no BikeErg and that
+      guessing its behaviour from the RowErg's would be wrong. Two things
+      make this harder than a lookup. `ergMachineType` is ABSENT on the
+      pre-2018 firmware #350 just started supporting, so any check must
+      handle not knowing; and the right response to a SkiErg is a product
+      decision (refuse, warn, or support) rather than a warning to bolt on.
+      NOT covered by #361, which fires on bytes that fail to parse — a
+      SkiErg's parse perfectly, they just describe skiing. **M**
 
 - [ ] **The frame-error flood evicts its own diagnosis.** The ring holds 500
       entries (`eventLog.ts:51`). A monitor we cannot decode produces a

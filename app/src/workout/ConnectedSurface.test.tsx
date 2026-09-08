@@ -239,6 +239,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
   return {
     phase: "live" as ConnectedPhase,
+    undecodable: false,
     error: null,
     deviceName: DEVICE,
     frame: frame(),
@@ -2665,5 +2666,31 @@ describe("the free-row ended frame with no numbers to vouch for", () => {
     expect(screen.getByText("Your numbers are kept.")).toBeInTheDocument();
     expect(screen.queryByText(/0:00/)).not.toBeInTheDocument();
     expect(screen.queryByText(/0 m kept/)).not.toBeInTheDocument();
+  });
+});
+
+describe("the app cannot read this monitor (Gate 0, Option 1)", () => {
+  it("REPLACES the READY word and names the APP as what can't read it", () => {
+    renderSurface({ phase: "ready", frame: null, undecodable: true });
+
+    // Option 1, not Option 2. A banner sitting above a screen that still
+    // reads READY was the rejected shape: it annotates the lie instead of
+    // correcting it.
+    expect(screen.queryByText(/READY/)).not.toBeInTheDocument();
+    expect(screen.getByText(/NO READINGS/)).toBeInTheDocument();
+
+    const alert = screen.getByRole("alert");
+    // The subject is Ergomatic. Every decode failure this project has had
+    // was our own length guard behind a firmware revision, so blaming the
+    // erg would be both unkind and, on the evidence, wrong.
+    expect(alert).toHaveTextContent(/Ergomatic can't read this monitor/i);
+    // And it points at the way out the app already has.
+    expect(alert).toHaveTextContent(/log it by hand/i);
+  });
+
+  it("keeps READY and says nothing on an ordinary armed session", () => {
+    renderSurface({ phase: "ready", frame: null });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText(/READY/)).toBeInTheDocument();
   });
 });
