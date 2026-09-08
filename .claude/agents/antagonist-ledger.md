@@ -9422,3 +9422,120 @@ chaining; and the fake's need for a new `FakeScript` field. Also: the kinship
 with `verificationEligibility.ts` is earned and was UNDERSTATED — that module's
 "we ship no BikeErg" assertion is false today, and this design is what makes it
 true.
+
+## Phase MEM anchor + prescribed-code lens, 2026-09-08 ("local test memory")
+
+One `/harden` run, two lenses, on a spec about local test runs being killed
+for memory. The spec's own author wrote every claim below and every one of
+them was wrong; the techniques are what settled them.
+
+- **"A memory kill exits 1 — indistinguishable from a test failure."** This
+  was the spec's ENTIRE premise, and it was an artifact of the measuring
+  apparatus. `pnpm exec` collapses a signal death to exit 1
+  (`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL`); a raw binary and `pnpm run` both
+  preserve it — **134** for a V8 fatal, **137** for SIGKILL — and the real
+  entry points (`pnpm test`, `.husky/pre-push`) are `pnpm run` shape.
+  **Technique: when a claim is "the system gives us no signal", re-run it
+  through every INVOCATION SHAPE the production path uses.** A wrapper that
+  eats the signal is not the system. Bitter corollary: CLAUDE.md itself
+  prescribes the `pnpm exec` form as the scoped-run workaround, so the repo's
+  own advice routes agents onto the one path where the signal dies.
+
+- **A vendor string chosen by reading one reproduction is a SAMPLE, not a
+  set — and this recurred three times in one spec.** Draft 1 keyed on
+  `Reached heap limit`; re-running the identical probe four times gave
+  `Ineffective mark-compacts` on 4 of 4, because gradual growth and abrupt
+  allocation take different V8 paths. Draft 2 keyed on the substring common
+  to those two, and lens 2 found a THIRD fatal string in the same binary
+  (`Allocation failed - process out of memory`) carrying no `heap` wording.
+  **Technique: enumerate the candidates in the artifact and COUNT what each
+  matches, rather than generalising from the output you happened to see.**
+  `strings $(which node) | grep -i "out of memory"` returns 23; `Allocation
+  failed` matches exactly the 2 fatal ones, while the tempting
+  generalisation `out of memory` matches 14 — including `ERR_HTTP2_NO_MEM`
+  and wasm errors that are RECOVERABLE. Breadth would have promoted a caught
+  error to a fatal verdict (RF26). **Run the probe more than once, then count
+  the population; do not do either alone.**
+
+- **"A memory kill prints no test summary."** True only of the MAIN process.
+  Vitest 4 defaults to `pool: "forks"` and each fork has its own 4192 MB
+  heap limit; a fork OOM leaves the parent alive, exits **1**, and prints a
+  full `Test Files` summary. Every rule in the draft classifier missed it.
+  **Technique: for any claim about what a crash looks like, ask WHICH PROCESS
+  died and reproduce each one separately.** A pooled runner has at least two
+  crash sites with different signatures, and the one that survives the
+  parent is the one that looks like flake.
+
+- **"`Killed: 9` appears in the output."** Unreachable. That string is written
+  by the parent shell's job control to its own stderr, never by the child:
+  `out=$(node -e '…SIGKILL…' 2>&1)` gives rc 137 and an EMPTY capture.
+  **Technique: before grepping for a message, establish WHO writes it and to
+  which stream.** A wrapper that captures its child can never see what its
+  own shell printed about that child.
+
+- **A selector whose "nothing matched" and "your input was garbage" are the
+  same value is a gate that cannot go red.** `vitest run --changed
+  origin/does-not-exist` exits **0**, "No test files found" — git exits 128,
+  but the runner's git helper does not throw, so the change set is empty.
+  **Technique: for any gate keyed on an external NAME, run it against a name
+  that does not exist and read the exit code.**
+
+- **A dependency-graph selector cannot see a test whose subject is a file it
+  READS.** `--changed` walks vite's module graph, so every census/contract
+  test in this repo — `readFileSync`, `readdirSync`, or a spawned process —
+  is structurally unselectable. Measured: `vitest.config.ts` → **0 tests**,
+  `pnpm-lock.yaml` → 0, `src/native/webAuth.ts` → 7 *without* the contract
+  test that exists to guard it. **Technique: to find a selector's blind spot,
+  list the tests whose SUBJECT IS NOT AN IMPORT.** In this repo that is the
+  whole-tree invariant family — exactly the gates worth keeping. And the
+  obvious repair does not compose: `--changed` and a path filter INTERSECT,
+  so "also run `scripts/`" is two invocations, not one flag.
+
+- **"This oracle is insensitive to what else is running."** Falsified by one
+  command. `ps -Ao args | grep -c '[v]itest/dist/worker'` returned **9** with
+  nothing of mine under test — nine workers from a different worktree — and
+  the propagation evidence being defended was "2 capped against 9 unset".
+  **Technique: run a machine-wide sampler ONCE WITH NOTHING UNDER TEST and
+  record the floor; treat a non-zero floor as an invalid measurement, and
+  make the script enforce that itself.** An instruction to "check the floor"
+  attached to a script that prints only the maximum is an operator
+  instruction nobody can follow (RF13).
+
+- **`set -e` is the environment, not a style choice.** `.husky/_/h` runs hook
+  bodies as `sh -e "$s"`, so a prescribed guard written as a bare fallible
+  statement ABORTS the hook — and husky's `pre-push script failed (code 1)`
+  reads exactly like the test failure the design existed to disambiguate.
+  **Technique: read the harness that will execute your prescribed block
+  before writing it**, and run the block under that harness rather than in
+  your own shell.
+
+- **Truthiness on `process.env.X` is a bug whenever the value can be a word.**
+  `CI=false` and `CI=0` are both truthy strings, so `process.env.CI ? …`
+  silently removed both worker caps on the machine they protect. **Technique:
+  for every env read, run absent / empty / `"false"` / `"0"` / valued** — and
+  make the effective value visible in output, because a cap that vanishes is
+  otherwise indistinguishable from one that is working.
+
+- **Stating an invariant and applying it to a list you already thought of is
+  RF34 with extra steps.** The spec's clause CITING RF34 said the e2e
+  instruction lives in "all three places" and named three; a repo-wide grep
+  found **five**, including a second site in CLAUDE.md itself and one in
+  `README.md`. **Technique: the sweep is `grep -rn` over the repo, never over
+  an enumeration** — an enumeration can only confirm the sites you remembered.
+
+### Attacked and NOT broken (Phase MEM vetted ground)
+
+`--changed` uses a THREE-DOT (`<ref>...HEAD`) merge-base diff, so a stale
+`origin/main` OVER-selects rather than under-selects — only a *missing* ref is
+dangerous. An empty `--changed` selection exits 0 (because `passWithNoTests`
+defaults true — now load-bearing, and recorded as such). The `Test Files` line
+survives stdout redirection, so capturing output does not break the classifier.
+Top-level `test.maxWorkers` genuinely propagates into `projects[]` (unset → 9,
+2 → 2, 4 → 4, re-measured path-scoped against a verified floor of 0), and
+`maxWorkers: undefined` reads as unset. Playwright's local default really is 5
+(`takeFirst(..., "50%")` + `resolveWorkers`), `workers: undefined` falls
+through to it, and both B-block expressions pass `tsc --noEmit`, `eslint` and
+`prettier --check` (no `exactOptionalPropertyTypes` anywhere in the repo). The
+per-fork heap limit is 4192 MB. Idle compose stacks cost 236 MB across two, and
+`--coverage` adds 50 MB — both falsified as memory levers, both recorded so
+nobody re-derives them.
