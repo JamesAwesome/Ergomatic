@@ -11492,7 +11492,7 @@ test.describe("the tab bar's bottom edge", () => {
   });
 });
 
-test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
+test.describe("You's doors group: BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS", () => {
   const C2_UNLINKED = {
     available: true,
     linked: false,
@@ -11553,7 +11553,7 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
     await assertNoA11yViolations(page);
   });
 
-  test("the three doors read as ONE group: each starts where the one above ends, in both orientations (R7)", async ({
+  test("the four doors read as ONE group: each starts where the one above ends, in both orientations (R7)", async ({
     page,
   }) => {
     // Invariant R7 (spec §5.1): exactly one auto top margin separates the
@@ -11572,23 +11572,32 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
       const c2 = await stableBoundingBox(
         page.getByRole("link", { name: /CONCEPT2/ }),
       );
+      const settings = await stableBoundingBox(
+        page.getByRole("link", { name: "SETTINGS" }),
+      );
       const diag = await stableBoundingBox(
         page.getByRole("link", { name: /DIAGNOSTICS/ }),
       );
-      if (baselines == null || c2 == null || diag == null)
+      if (baselines == null || c2 == null || settings == null || diag == null)
         throw new Error("a door did not render");
-      // BASELINES, then CONCEPT2, then DIAGNOSTICS — the y-adjacency also
-      // pins the ORDER, which presence assertions never would. Probed
-      // (RF21) by swapping the two rows in You.tsx and REBUILDING the
-      // stack: this line fails, `Math.abs(...)` being the row height
+      // BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS — the y-adjacency also
+      // pins the ORDER, which presence assertions never would. Phase JC's
+      // Gate 0 ruling 3 (James, 2026-09-08) put SETTINGS third; this chain
+      // is what makes that a gate rather than a sentence. Probed (RF21) by
+      // swapping two rows in You.tsx and REBUILDING the stack: the
+      // corresponding line fails, `Math.abs(...)` being the row height
       // rather than 0. The rebuild is the point — the same swap against a
       // stale image passed in 929ms (RF12).
       expect(
         Math.abs(c2.y - (baselines.y + baselines.height)),
       ).toBeLessThanOrEqual(1);
-      expect(Math.abs(diag.y - (c2.y + c2.height))).toBeLessThanOrEqual(1);
+      expect(Math.abs(settings.y - (c2.y + c2.height))).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(diag.y - (settings.y + settings.height)),
+      ).toBeLessThanOrEqual(1);
       expect(baselines.height).toBeGreaterThanOrEqual(44);
       expect(c2.height).toBeGreaterThanOrEqual(44);
+      expect(settings.height).toBeGreaterThanOrEqual(44);
       expect(diag.height).toBeGreaterThanOrEqual(44);
       // R7's OTHER half: the ONE auto margin pins the group to the FOOT.
       // Measured against `.you-screen`'s own box, because a mutant that moves
