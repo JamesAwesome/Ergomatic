@@ -2719,6 +2719,30 @@ Each needs erg time or a deliberate recording session.
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
 an iceboxed item is not a phase-close requirement.
 
+- **Ask for the account picker only when the rower asked to switch — James,
+  2026-09-07.** **Trigger:** the extra tap actually annoys someone. #356 sends
+  `prompt=select_account` on EVERY web sign-in, which fixes signing out and
+  back in as a different account but also costs one mandatory tap on an
+  ordinary 60-day session expiry that used to bounce back silently. Judged
+  worth it at an allowlist of about five people, and the cost is stated in
+  that PR's spec rather than left as a silence.
+  **The narrower shape, if the trigger fires:** carry the prompt only on a
+  sign-in that follows an explicit sign-out — sign-out sets a short-lived
+  marker, `/api/auth/signin` reads it once and clears it. Small: our sign-out
+  already touches a cookie.
+  **Two alternatives considered and NOT chosen**, recorded so they are not
+  re-derived. `login_hint`, which Google documents as suppressing the account
+  chooser and either pre-filling the email box "or selects the proper
+  session" — the opposite lever, telling Google who we expect rather than
+  always asking; it suits an app that remembers the last account, which we do
+  not. And splitting the affordance into an ordinary sign-in plus a separate
+  "sign in as someone else", which suits products where switching is a real
+  workflow rather than a rare event.
+  **Google publishes no guidance on this trade-off** (checked, 2026-09-07:
+  its OpenID Connect page documents the three `prompt` values and
+  `login_hint`, and recommends nothing about when to use which). So every
+  option here is convention, not a documented recommendation.
+
 - **Correct Resume — deferred by James, 2026-09-03.** **Trigger:** a
   diagnostic-backed, naturally occurring authoritative mid-row link drop
   demonstrates that today's End/save fallback materially fails the rower.
