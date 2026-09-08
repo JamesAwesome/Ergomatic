@@ -270,6 +270,42 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       firmware unable to support it. V1.21." Establish that before costing it.
       **S**
 
+## Phase JC — the rower chooses what red and blue mean
+
+**Status: SPEC WRITTEN 2026-09-08, awaiting Gate 0.** Shape approved by James
+2026-09-07: four slots, each RED / BLUE / OFF; both the connected pane and the
+post-workout summary obey; device-local; a new SETTINGS door in You. Spec:
+[docs/superpowers/specs/2026-09-08-judge-colours-design.md](docs/superpowers/specs/2026-09-08-judge-colours-design.md).
+
+Blue-for-faster and red-for-slower were a tester's request in August 2026 and
+have been hardcoded since. Some rowers read red on a number as an alarm; some
+want the split coloured and the stroke rate left alone. It is a preference,
+so it becomes one. Defaults are exactly today's appearance.
+
+TRIAD (a stored shape), so the spec takes a full antagonist pass and the PR
+takes a PM final gate. It changes user-visible copy and layout, so Gate 0 —
+the rendered screen, the door group, and before/after captures of a connected
+pane and a summary — is approved before task 1.
+
+- [ ] **Gate 0.** Six artifacts, listed in the spec's own closing section,
+      including the door-row ORDER question and whether the screen needs a
+      word about the two SPM slots not reaching the summary. **S**
+- [ ] **The PR.** Seven tasks, spec §"PR shape". The load-bearing one is the
+      e2e seam test: Vitest mocks every `.css` import to an empty string here,
+      so **no client test can prove a colour lands on a pixel** — only e2e can
+      start upstream of the producer (recurring failure 24). **M**
+
+**Two structural notes worth keeping even if the phase changes shape.**
+`index.css` currently documents "ONE PAIR SERVES BOTH JUDGED METRICS ... There
+is no per-metric colour branch to keep in step"; per-slot control retires that
+sentence, and the six judged call sites each already know their own metric, so
+nothing new threads through `surfaceModel`. And `--judge-slower` is doing two
+jobs — the judged tint AND `.connected-lost`'s red alarm background — which is
+why the spec splits raw inks (`--judge-red`/`--judge-blue`) from resolved
+slots rather than overriding the existing tokens in place. Overriding in place
+would have been fewer lines and would have turned the LOST THE MONITOR banner
+blue for any rower who chose all-blue.
+
 ## Phase JR — Just Row
 
 **Status: CLOSED 2026-09-01 — released v0.32.0 (build 811), exit walk
@@ -3162,7 +3198,12 @@ trigger is the whole entry.
   the import screen rides any PR touching import. **S**
 - **Two single-rower comfort settings** from the old Phase 9: pre-workout
   countdown length 0–60 s, and pace tolerance 0–3 s. **Trigger:** the next
-  You-screen PR — they are cheap and they ride it.
+  You-screen PR — they are cheap and they ride it. **Phase JC IS that PR
+  (2026-09-08), and its spec recommends they do NOT ride it:** pace tolerance
+  changes what a judged number MEANS, which is the triad's first clause, and
+  it would put a second independent risk model into one review. James decides
+  at JC's Gate 0. If he agrees, this trigger retargets to the SECOND SETTINGS
+  PR rather than being struck.
 - **The rest of the old Phase 9's preferences**, which was killed as a phase for
   its multi-user framing (_"Two users with different preferences get different
   Today suggestions"_) rather than for its content: the suggest-workouts-at
