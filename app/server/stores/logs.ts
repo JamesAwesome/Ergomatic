@@ -1039,6 +1039,51 @@ export function createLogsStore(db: Db) {
     // suite green; see task-3-fix-1-report.md). The `filter` below is what
     // the type genuinely requires and costs no claim, and it also removes
     // the `as number` cast the predicate version needed.
+    /** Phase AV's reconciliation: mark OUR rows verified for the given
+     *  Concept2 account, from ids Concept2 itself reported as verified on
+     *  the results list. Returns how many rows actually moved.
+     *
+     *  UPGRADE-ONLY, and that is the whole safety argument. The `WHERE`
+     *  requires the stored value to be distinct from `true`, so this can
+     *  turn `false`/`null` into `true` and can NEVER turn a `true` back —
+     *  which matters because the read behind it sees one page of 50 rows
+     *  and only on a send, so a row's absence from that page is not
+     *  evidence of anything.
+     *
+     *  SCOPED BY ACCOUNT as well as user: the ids come from a list fetched
+     *  with one account's token, and a stale id from a different Concept2
+     *  account must not select a row here (same rule `sentC2ResultIds`
+     *  below is written to).
+     *
+     *  An empty id set writes nothing — `inArray` with `[]` is a SQL error
+     *  in some drivers and a full-table predicate in others, and neither is
+     *  what "nothing to reconcile" means. */
+    async markC2Verified(
+      userId: string,
+      c2UserId: number,
+      resultIds: readonly number[],
+    ): Promise<number> {
+      if (resultIds.length === 0) return 0;
+      const rows = await db
+        .update(sessionLogs)
+        .set({ verified: true })
+        .where(
+          and(
+            eq(sessionLogs.userId, userId),
+            eq(sessionLogs.c2UserId, c2UserId),
+            inArray(sessionLogs.c2ResultId, [...resultIds]),
+            // `IS DISTINCT FROM`, not `<> true`. The column is nullable and
+            // `NULL <> true` evaluates to NULL, which is not TRUE, so a
+            // plain inequality would silently skip every row whose verdict
+            // we never heard — the 409-duplicate rows, which are exactly the
+            // ones a later reconciliation is most likely to rescue.
+            sql`${sessionLogs.verified} IS DISTINCT FROM TRUE`,
+          ),
+        )
+        .returning({ id: sessionLogs.id });
+      return rows.length;
+    },
+
     async sentC2ResultIds(
       userId: string,
       c2UserId: number,

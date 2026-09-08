@@ -1199,9 +1199,55 @@ export function createConcept2Router({
           };
         }
         const ourResultIds = await logs.sentC2ResultIds(userId, c2UserId);
-        const ourRowsSkipped = list.rows.filter(
+        const ourRows = list.rows.filter(
           (row) => row.id !== null && ourResultIds.has(row.id),
-        ).length;
+        );
+        const ourRowsSkipped = ourRows.length;
+
+        // PHASE AV'S RECONCILIATION. This read already exists — it is the
+        // weight-class declaration — and since 2026-09-08 we know the live
+        // response carries `verified` on every row (research file of that
+        // date; before it, INFERENCE from the vendor's example). The only
+        // new cost here is the write.
+        //
+        // UPGRADE-ONLY, enforced by the store. This is the ONLY mechanism
+        // that can ever see a verification the ROWER performed — our own 201
+        // sees receipt time and nothing after it — which is what the
+        // inherited "say verified" ROADMAP row actually asked for.
+        //
+        // WHAT IT STILL CANNOT DO, so the surface's rule is unchanged: it
+        // fires only ON A SEND, reads ONE page (`DECLARATION_PAGE_SIZE`),
+        // and never walks `links.next`. A row falls out of view permanently
+        // once that many newer rows exist. So a stored `false` still means
+        // "not verified the last time we happened to look, which may be
+        // never", and the surface still may not state the negative.
+        //
+        // Failures are swallowed deliberately: this is a side effect of a
+        // read taken for another purpose, and a send must not fail because a
+        // verdict could not be refreshed.
+        const nowVerified = ourRows
+          .filter((row) => row.verified === true && row.id !== null)
+          .map((row) => row.id as number);
+        if (nowVerified.length > 0) {
+          try {
+            const upgraded = await logs.markC2Verified(
+              userId,
+              c2UserId,
+              nowVerified,
+            );
+            if (upgraded > 0) {
+              console.log(
+                JSON.stringify({
+                  event: "c2_reconcile",
+                  seen: nowVerified.length,
+                  upgraded,
+                }),
+              );
+            }
+          } catch {
+            // See above: never fail a send over this.
+          }
+        }
         const declared = pickDeclaredWeightClass(list.rows, {
           ourResultIds,
           now: now().getTime(),

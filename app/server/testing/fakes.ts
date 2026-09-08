@@ -803,6 +803,28 @@ function makeFakeLogsStore(
     // declaration read. The null is a TYPE NARROWING and not a claimed
     // guard, mirroring the real store's own shape for the reason its
     // comment gives.
+    async markC2Verified(
+      userId: string,
+      c2UserId: number,
+      resultIds: readonly number[],
+    ) {
+      if (resultIds.length === 0) return 0;
+      const rows = byUser.get(userId) ?? [];
+      let upgraded = 0;
+      for (const row of rows) {
+        if (
+          row.c2UserId === c2UserId &&
+          row.c2ResultId !== null &&
+          resultIds.includes(row.c2ResultId) &&
+          row.verified !== true
+        ) {
+          row.verified = true;
+          upgraded += 1;
+        }
+      }
+      return upgraded;
+    },
+
     async sentC2ResultIds(userId: string, c2UserId: number) {
       const rows = byUser.get(userId) ?? [];
       return new Set(

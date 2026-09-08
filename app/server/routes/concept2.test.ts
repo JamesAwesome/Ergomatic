@@ -120,6 +120,7 @@ function makeStubClient(): C2Client {
           weightClass: "H",
           dateUtc: "2026-09-02 10:00:30",
           date: "2026-09-02 06:00:30",
+          verified: null,
         },
       ],
     })),
@@ -2132,6 +2133,112 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(posted).not.toHaveProperty("verification_code");
   });
 
+  // THE RECONCILIATION (Phase AV PR 3). It rides the weight-class
+  // declaration read, which every send already makes, and upgrades OUR rows
+  // when Concept2 now reports them verified. It is the only mechanism that
+  // can ever see a verification the ROWER performed by hand.
+  describe("the reconciliation", () => {
+    async function sendWithList(
+      rows: { id: number; verified: boolean | null }[],
+      seed: { c2ResultId: number; c2UserId: number; verified: boolean | null },
+    ) {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      vi.mocked(client.fetchResults).mockResolvedValue({
+        ok: true,
+        rows: rows.map((r) => ({
+          id: r.id,
+          type: "rower",
+          weightClass: "H",
+          dateUtc: "2026-09-07 11:06:08",
+          date: "2026-09-07 11:06:08",
+          verified: r.verified,
+        })),
+      });
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: true,
+        resultId: 700,
+        verified: false,
+      });
+      const { app, logs } = buildApp({ store, client });
+      // TWO rows, and the distinction is the whole point. `olderId` was sent
+      // on a PREVIOUS send and is what the reconciliation acts on. `freshId`
+      // is the row being sent NOW — its own 201 verdict is newer than
+      // anything the list can say, and it lands after the reconciliation, so
+      // asserting on it would only ever measure the send. An earlier version
+      // of this helper used one row for both and failed for exactly that
+      // reason.
+      const olderId = await seedEligibleLog(logs, userA.id);
+      await logs.recordC2Result(
+        userA.id,
+        olderId,
+        seed.c2ResultId,
+        seed.c2UserId,
+        seed.verified,
+      );
+      const freshId = await seedEligibleLog(logs, userA.id);
+      await asA(
+        request(app)
+          .post(`/api/concept2/results/${freshId}`)
+          .send({ tz: "America/New_York" }),
+      );
+      return { logs, id: olderId };
+    }
+
+    it("upgrades OUR row when Concept2 now says verified — the rower's own act, finally seen", async () => {
+      const { logs, id } = await sendWithList([{ id: 501, verified: true }], {
+        c2ResultId: 501,
+        c2UserId: 2211,
+        verified: false,
+      });
+      expect((await logs.get(userA.id, id))?.verified).toBe(true);
+    });
+
+    it("upgrades a row whose verdict we NEVER heard (null), not just a false one", async () => {
+      // The 409-duplicate rows. A plain `verified <> true` in SQL would skip
+      // every one of them, because NULL <> true is NULL — which is why the
+      // store says IS DISTINCT FROM.
+      const { logs, id } = await sendWithList([{ id: 502, verified: true }], {
+        c2ResultId: 502,
+        c2UserId: 2211,
+        verified: null,
+      });
+      expect((await logs.get(userA.id, id))?.verified).toBe(true);
+    });
+
+    it("NEVER downgrades: a row we hold as verified survives Concept2 reporting false", async () => {
+      // The whole safety argument. The read sees one page of 50 and only on
+      // a send, so a `false` from it is not evidence of anything.
+      const { logs, id } = await sendWithList([{ id: 503, verified: false }], {
+        c2ResultId: 503,
+        c2UserId: 2211,
+        verified: true,
+      });
+      expect((await logs.get(userA.id, id))?.verified).toBe(true);
+    });
+
+    it("leaves a row alone when Concept2 says false and we never heard", async () => {
+      const { logs, id } = await sendWithList([{ id: 504, verified: false }], {
+        c2ResultId: 504,
+        c2UserId: 2211,
+        verified: null,
+      });
+      expect((await logs.get(userA.id, id))?.verified).toBeNull();
+    });
+
+    it("touches NOTHING for a verified row that is not ours", async () => {
+      // The page is the rower's whole logbook. A verified row we did not
+      // send must not select any row of ours.
+      const { logs, id } = await sendWithList([{ id: 999, verified: true }], {
+        c2ResultId: 505,
+        c2UserId: 2211,
+        verified: null,
+      });
+      expect((await logs.get(userA.id, id))?.verified).toBeNull();
+    });
+  });
+
   // PR 2's three withdrawn Mechanism items, gated. All three were specced in
   // PR 1, none shipped, and the round-1 review caught the spec still
   // asserting them.
@@ -3341,6 +3448,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
           weightClass: "H",
           dateUtc: "2025-12-31 10:00:30",
           date: "2025-12-31 06:00:30",
+          verified: null,
         },
       ],
     });
@@ -3393,6 +3501,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
           weightClass: "H",
           dateUtc: "2025-12-31 10:00:30",
           date: "2025-12-31 06:00:30",
+          verified: null,
         },
       ],
     });
@@ -4362,6 +4471,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
           weightClass: "L",
           dateUtc: "2026-09-02 10:00:30",
           date: "2026-09-02 06:00:30",
+          verified: null,
         },
       ],
     });
@@ -4453,6 +4563,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     weightClass: "H",
     dateUtc: "2026-09-02 10:00:30",
     date: "2026-09-02 06:00:30",
+    verified: null,
   });
 
   it("finds a declaration sitting under SIX of our own consecutive sends", async () => {
@@ -4470,6 +4581,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         weightClass: "L",
         dateUtc: "2026-08-20 10:00:30",
         date: "2026-08-20 06:00:30",
+        verified: null,
       },
     ]);
     // The exclusion set itself is stubbed rather than seeded through 51
@@ -4606,6 +4718,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
         weightClass: "L",
         dateUtc: "2026-09-03 11:00:00",
         date: "2026-09-03 07:00:00",
+        verified: null,
       },
     ];
     vi.mocked(client.fetchMe).mockClear();
@@ -4821,6 +4934,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
             weightClass: "L",
             dateUtc: "2026-09-02 10:00:30",
             date: "2026-09-02 06:00:30",
+            verified: null,
           },
         ],
       });
@@ -4931,6 +5045,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
           weightClass: declared[call++] ?? "H",
           dateUtc: "2026-09-02 10:00:30",
           date: "2026-09-02 06:00:30",
+          verified: null,
         },
       ],
     }));
