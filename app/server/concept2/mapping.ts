@@ -176,15 +176,31 @@ export type WeightClassFailure =
  *  go and set it again, forever. */
 export type C2ProfileWeight = number | "unreadable" | null;
 
-/** One row of the rower's Concept2 results list, projected to the four
- *  fields the declaration read decides on (`client.fetchResults`'s own
- *  comment says what each is for). */
+/** One row of the rower's Concept2 results list, projected to the fields the
+ *  declaration read decides on (`client.fetchResults`'s own comment says what
+ *  each is for) plus, since Phase AV's reconciliation, `verified`.
+ *
+ *  THE PROJECTION STAYS NARROW ON PURPOSE. `client.fetchResults`'s comment
+ *  is explicit that the rower's other logbook rows are not ours to hold, log
+ *  or render, and `verified` does not change that: it is READ for every row
+ *  in the page because a projection cannot know which ids are ours, and
+ *  DISCARDED for every row that is not — the reconciliation intersects with
+ *  `sentC2ResultIds` before it writes anything.
+ *
+ *  MEASURED, not assumed (2026-09-08,
+ *  `docs/superpowers/research/2026-09-08-c2-results-list-verified.md`): the
+ *  live list carries `verified` on every row with varying values. Before that
+ *  GET this was INFERENCE from the vendor's documented example, and the spec
+ *  blocked the reconciliation on measuring it. */
 export interface C2ResultRow {
   id: number | null;
   type: string | null;
   weightClass: string | null;
   dateUtc: string | null;
   date: string | null;
+  /** `null` when the key is absent or not a boolean — a server or a row that
+   *  does not say is not a row that says NO. */
+  verified: boolean | null;
 }
 
 /** The result types Concept2 REQUIRES a weight class on, and therefore the

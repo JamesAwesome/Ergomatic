@@ -1486,7 +1486,7 @@ describe("FromTheLog — VERIFIED ✓ (Phase AV)", () => {
   });
 
   it.each([
-    ["false — Concept2 said no AT RECEIPT", false],
+    ["false — Concept2 had not verified it the last time we looked", false],
     ["null — we never heard (the 409 branch)", null],
   ])(
     "renders NO mark and NO negative claim when verified is %s",

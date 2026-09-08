@@ -427,11 +427,18 @@ describe("createC2Client", () => {
   });
 
   describe("fetchResults", () => {
-    it("projects the four decision fields per row, in Concept2's own order, and asks for the page size it was given", async () => {
+    it("projects the five fields it keeps per row, in Concept2's own order, and asks for the page size it was given", async () => {
       // Shape MEASURED 2026-09-03 against log-dev: the list is
-      // DATE-descending and every row carries `weight_class`. Only four
+      // DATE-descending and every row carries `weight_class`. Only five
       // fields are kept — the rower's other logbook data is not ours to
-      // hold, log or render.
+      // hold, log or render, and `distance`/`comments` below are here to
+      // prove the projection drops them.
+      //
+      // `verified` joined the five on 2026-09-08, when a live GET confirmed
+      // the list actually carries it (research file of that date; before
+      // that it was INFERENCE from the vendor's documented example). The
+      // rows below cover all three readings: a real `true`, a real `false`,
+      // and absent.
       const fetchImpl = vi.fn().mockResolvedValue(
         jsonResponse(200, {
           data: [
@@ -441,10 +448,20 @@ describe("createC2Client", () => {
               weight_class: "H",
               date_utc: "2026-09-02 10:00:30",
               date: "2026-09-02 06:00:30",
+              verified: true,
               distance: 2000,
               comments: "a private note",
             },
-            { id: 85562, type: "skierg", weight_class: null, date_utc: null },
+            {
+              id: 85562,
+              type: "skierg",
+              weight_class: null,
+              date_utc: null,
+              verified: false,
+            },
+            // A row with no `verified` key at all — an older server, or a
+            // shape we have not seen. Absent is NOT false.
+            { id: 85563, type: "rower", weight_class: "L" },
           ],
         }),
       );
@@ -459,6 +476,7 @@ describe("createC2Client", () => {
             weightClass: "H",
             dateUtc: "2026-09-02 10:00:30",
             date: "2026-09-02 06:00:30",
+            verified: true,
           },
           {
             id: 85562,
@@ -466,6 +484,15 @@ describe("createC2Client", () => {
             weightClass: null,
             dateUtc: null,
             date: null,
+            verified: false,
+          },
+          {
+            id: 85563,
+            type: "rower",
+            weightClass: "L",
+            dateUtc: null,
+            date: null,
+            verified: null,
           },
         ],
       });

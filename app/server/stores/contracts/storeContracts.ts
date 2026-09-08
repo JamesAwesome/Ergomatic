@@ -533,6 +533,67 @@ export function describeStoreContracts(
       // load-bearing and neither is visible to `pnpm typecheck` — the fake
       // ends `as unknown as LogsStore` — so the contract suite is where the
       // real store and the fake are held to the same answer.
+      // docs/TESTING.md §5: a new store method ships with a new contract
+      // case in the same PR, because a method with no case is one whose fake
+      // and real behaviour have never been checked against each other.
+      // Measured cost of skipping it here: BOTH of the fake's safety clauses
+      // were unfalsifiable — dropping either left 2128 unit tests green, so
+      // the route's five behavioural tests were validating against a
+      // fiction (round-1 review of #365, findings B1/B2).
+      it("markC2Verified upgrades false and null, never true, and only for THIS user and account", async () => {
+        const stores = await makeStores();
+        const mine = await stores.makeUser();
+        const theirs = await stores.makeUser();
+
+        const wasFalse = await stores.logs.create(mine, logInput());
+        const wasNull = await stores.logs.create(mine, logInput());
+        const wasTrue = await stores.logs.create(mine, logInput());
+        const otherAccount = await stores.logs.create(mine, logInput());
+        const otherUser = await stores.logs.create(theirs, logInput());
+
+        await stores.logs.recordC2Result(mine, wasFalse.id, 401, 2211, false);
+        await stores.logs.recordC2Result(mine, wasNull.id, 402, 2211, null);
+        await stores.logs.recordC2Result(mine, wasTrue.id, 403, 2211, true);
+        // Same ids, the wrong account and the wrong user. Both must be
+        // untouched: the ids come from a list fetched with ONE account's
+        // token.
+        await stores.logs.recordC2Result(
+          mine,
+          otherAccount.id,
+          404,
+          9999,
+          null,
+        );
+        await stores.logs.recordC2Result(theirs, otherUser.id, 405, 2211, null);
+
+        const upgraded = await stores.logs.markC2Verified(
+          mine,
+          2211,
+          [401, 402, 403, 404, 405],
+        );
+
+        // Two moved: the false and the null. The true was already there.
+        expect(upgraded).toBe(2);
+        expect((await stores.logs.get(mine, wasFalse.id))?.verified).toBe(true);
+        expect((await stores.logs.get(mine, wasNull.id))?.verified).toBe(true);
+        expect((await stores.logs.get(mine, wasTrue.id))?.verified).toBe(true);
+        expect(
+          (await stores.logs.get(mine, otherAccount.id))?.verified,
+        ).toBeNull();
+        expect(
+          (await stores.logs.get(theirs, otherUser.id))?.verified,
+        ).toBeNull();
+      });
+
+      it("markC2Verified writes nothing for an empty id list", async () => {
+        const stores = await makeStores();
+        const mine = await stores.makeUser();
+        const row = await stores.logs.create(mine, logInput());
+        await stores.logs.recordC2Result(mine, row.id, 406, 2211, null);
+        expect(await stores.logs.markC2Verified(mine, 2211, [])).toBe(0);
+        expect((await stores.logs.get(mine, row.id))?.verified).toBeNull();
+      });
+
       it("sentC2ResultIds returns only THIS user's rows for THIS Concept2 account, and never a null result id", async () => {
         const stores = await makeStores();
         const mine = await stores.makeUser();

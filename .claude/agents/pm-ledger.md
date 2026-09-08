@@ -6009,3 +6009,97 @@ release gate.
 - **An unconfirmed-on-device fix's ROADMAP row states its own confirmation
   condition**, mirroring the sibling pre-2018-monitor row on the same page
   ("checkbox stays open until the reporter confirms"). Flagged here, landed.
+
+## 2026-09-08 — Phase AV final gate + phase close (#360, #363, #365, TRIAD: two stored shapes and a field whose meaning widened)
+
+**Verdict PASS WITH CONDITIONS. The phase ran three PRs with NO PM gate until
+the last one was already open** — #360 and #363 both merged through a gate
+CLAUDE.md requires for TRIAD work. Nothing found at the late gate would have
+stopped either merge, which is the good news and also the reason this is a
+process finding rather than a damage report. **What the missing phase-OPEN
+gate cost is the re-pricing question, and it is the one worth keeping:** the
+authorising row said *"Not its own phase: one setting, one assignment behind
+one predicate"*, and the phase shipped three PRs, two stored shapes, a widened
+field meaning, a new SQL predicate and a background write. Every increment was
+individually approved by James; the cumulative size was never re-asked. **When
+a phase's own ROADMAP row sizes it in a clause ("one X behind one Y"), quote
+that clause at the close and say what it actually became.**
+
+**RF24's producer is sometimes a THIRD PARTY'S WEBSITE, and then no CI gate can
+ever be the answer.** #365's headline is "a row YOU verified on Concept2 now
+shows verified." The chain is: rower taps Verify on concept2.com → their list
+row's `verified` flips → our declaration read sees it → we upgrade. The
+research that unblocked the PR measured hop 3 only (the field is on the list
+and varies, `[true,false,false,false,true]`); every test seeds `verified: true`
+into our own fake or straight into Postgres. **Hop 2 — that a hand
+verification is what sets the flag — is measured nowhere, and if it is wrong
+the feature does nothing, silently, forever, indistinguishable from "nobody
+verified anything yet."** The fix is one desk round trip, not a walk:
+hand-verify one log-dev row, re-read the list. **The rule: when RF24's upstream
+producer is outside the repo, the gate is a MEASUREMENT appended to the
+research file, and the release note may not make the claim until it exists.**
+
+**AN HONESTY RULE THAT BINDS THE ROW MAY NOT BIND THE SETTING, AND THE GAP
+LIVES IN THE GAP.** AV's design rule — the surface states the positive and may
+never state the negative, because a stored `false` only means "not verified
+last time we looked" — is correct at the log row and should not be
+re-litigated. But the SETTING card's ON state reads "Rows arrive verified.",
+a present-tense general claim, and the same rule guarantees no row will ever
+contradict it. Read against the spec's own M8/M9 (Concept2 checks `date`;
+`date` is the PHONE's; the monitor's stamp runs 1.29-3.23 min earlier across
+seven captures, trending with date) the failure mode is: the setting stops
+working and the card keeps saying it works. **When a design rule forbids a
+surface from stating a negative, check every OTHER surface that makes a
+positive promise about the same mechanism — the rule protects one and strands
+the other.**
+
+**The phase PASSES the test LP PR 2 failed, and that is worth recording as a
+win.** The standing question is *"when a degradation path returns success, ask
+what query would find its victims; if the answer is none, that is the
+finding."* Here the answer is not none —
+`SELECT count(*) FROM session_logs WHERE c2_result_id IS NOT NULL AND verified
+IS NOT TRUE` — because the phase stored the observable instead of logging it to
+a console. **Storing a third party's verdict is what turns an invisible
+degradation into a countable one; ask for the column, not the dashboard.** Per
+the five-users ruling, what is owed is one run of that count after the first
+opted-in sends, not a measurement gate.
+
+**A SILENT WRITE TO ROWS THE ROWER IS NOT TOUCHING IS FINE WHEN IT PROPAGATES A
+THIRD PARTY'S FACT ABOUT THE ROWER'S OWN ACT.** The reconciliation writes rows
+nobody tapped, on a read taken for another purpose, with no notification.
+Ruled correct and the reasoning generalises: nothing is asserted on anyone's
+behalf (contrast the fake PAUSED state, which asserted a concept the PM5 does
+not have), the write is upgrade-only and enforced in SQL, and it is triple
+scoped (user, c2 account, our own minted ids). **What IS owed is a release
+note**, because a tick appearing on an old row after sending a DIFFERENT row
+is a state change with no visible cause and reads as a ghost.
+
+**`IS DISTINCT FROM TRUE`, not `<> true`, on any nullable boolean upgrade.**
+`NULL <> true` is NULL, which is not TRUE, so a plain inequality silently skips
+every row whose verdict was never heard — here the 409-duplicate rows, exactly
+the ones a later reconciliation most needs to rescue. The fake reimplements the
+predicate in JavaScript and structurally cannot see that mutation (RF11), so
+the SQL was gated separately against real Postgres. **Copy this split: a
+three-valued-logic predicate is gated at the database, never at the fake that
+has no NULLs.**
+
+**The stale-head check caught a real one, again.** The body said "Head
+`d8604a38`" while HEAD was `dfcfcf71` — two round-1 fix commits later, both
+touching code, so the gate counts, the mutation list and the head line all
+described a superseded tree. **Run `git rev-parse HEAD` against the body's own
+head claim as the first move of every final gate; it is five seconds and it has
+now bitten in three consecutive phases.**
+
+**Presentation:** 147 words above the fold against ~120, five bullets averaging
+25.2 (bullets pass). Best of the last four gated PRs (#228 ~270, #230 266,
+#327 218, LP PR 2 172) and still failing the total. **The count is trending the
+right way and should not be relaxed for it.**
+
+**Release: v0.43.0, MINOR, recommended, and NOT held for the parity walk.**
+`git log v0.42.0..main --oneline` returned 13 merges plus #365. The auth fix
+James was waiting on landed three times over (#353, #356, #359). Two note lines
+are non-negotiable: the old-row tick (or a correct feature reads as a ghost),
+and #353's "Continue as X" caveat (or a working sign-out fix reads as a failed
+one). **Phase LP's parity walk gates neither — and AV's own owed measurement is
+a desk round trip, so do not bundle it into a hardware runsheet where it waits
+on a calendar.**

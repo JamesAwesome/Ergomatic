@@ -886,6 +886,69 @@ describe("domain stores against real Postgres", () => {
       // branch review committed the real bug — a `.set()` that omits the
       // column when the verdict is null — and every one of those tests
       // stayed green. This is the layer that can see it.
+      // Phase AV PR 3, against REAL Postgres. The route's five reconciliation
+      // tests run on `testing/fakes.ts`, which reimplements the predicate in
+      // JavaScript — a mirror that would prove itself, not the SQL (RF11).
+      // The clause under test is `IS DISTINCT FROM TRUE`; a plain
+      // `verified <> true` is the mutation, and it is invisible to the fake
+      // because JavaScript's `!==` has no three-valued logic.
+      it("markC2Verified upgrades false AND null, never downgrades, and is scoped by account", async () => {
+        const logs = createLogsStore(db);
+        const users = createUserStore(db);
+        const u = await users.createUser({
+          googleSub: "log-c2-reconcile",
+          email: "c2reconcile@x.com",
+          name: "LCR",
+        });
+        const mk = async (
+          resultId: number,
+          c2UserId: number,
+          verified: boolean | null,
+        ): Promise<string> => {
+          const { id } = await logs.create(u.id, logInput());
+          await logs.recordC2Result(u.id, id, resultId, c2UserId, verified);
+          return id;
+        };
+        const wasFalse = await mk(601, 2211, false);
+        const wasNull = await mk(602, 2211, null);
+        const wasTrue = await mk(603, 2211, true);
+        // Same result id, DIFFERENT Concept2 account — the ids come from a
+        // list fetched with one account's token and must not reach another's
+        // rows.
+        const otherAccount = await mk(604, 9999, null);
+
+        const upgraded = await logs.markC2Verified(
+          u.id,
+          2211,
+          [601, 602, 603, 604],
+        );
+
+        // Three ids matched the account; only the two that were not already
+        // true actually moved.
+        expect(upgraded).toBe(2);
+        expect((await logs.get(u.id, wasFalse))?.verified).toBe(true);
+        expect((await logs.get(u.id, wasNull))?.verified).toBe(true);
+        expect((await logs.get(u.id, wasTrue))?.verified).toBe(true);
+        expect((await logs.get(u.id, otherAccount))?.verified).toBeNull();
+      });
+
+      it("markC2Verified writes nothing for an empty id list", async () => {
+        // `inArray` with `[]` is a SQL error in some drivers and a
+        // full-table predicate in others, and neither is what "nothing to
+        // reconcile" means.
+        const logs = createLogsStore(db);
+        const users = createUserStore(db);
+        const u = await users.createUser({
+          googleSub: "log-c2-reconcile-empty",
+          email: "c2reconcileempty@x.com",
+          name: "LCRE",
+        });
+        const { id } = await logs.create(u.id, logInput());
+        await logs.recordC2Result(u.id, id, 605, 2211, null);
+        expect(await logs.markC2Verified(u.id, 2211, [])).toBe(0);
+        expect((await logs.get(u.id, id))?.verified).toBeNull();
+      });
+
       it("a null verdict OVERWRITES a previous true, it does not leave it", async () => {
         const logs = createLogsStore(db);
         const users = createUserStore(db);
