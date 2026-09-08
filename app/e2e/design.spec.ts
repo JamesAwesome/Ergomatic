@@ -7365,13 +7365,17 @@ test.describe("connected screens (fake-driven)", () => {
     // SUPERSEDED CLAIM (Phase MT follow-on): this comment used to assert only
     // the reachability half, on the ground that four full-width buttons left a
     // window this frame's headline "legitimately" overran. That is no longer
-    // true and was never a good deal — the landscape stack now pairs its last
-    // four buttons, taking the window 78px -> 206px against a 94px headline,
-    // so the whole frame fits and the containment half is a real gate here.
-    // Under the `justify-content: center` mutation this frame still fails
-    // hardest of the three ("the frame's first child sits 70.5px above the
-    // minimum reachable scroll position"), which is the defect the committed
-    // `connected-interstitial-failed-landscape.png` shows.
+    // true — the landscape stack now pairs its last four buttons, taking the
+    // window 78px -> 206px against a 94px headline, so the headline clears the
+    // fold and the containment half is a real gate here. The frame as a whole
+    // still overflows, by 13px (content 219px), which is what keeps the
+    // reachability half falsifiable on this frame: under the
+    // `justify-content: center` mutation it fails at 6.5px, half of that
+    // overflow. TWO FIGURES CORRECTED FROM REVIEW ROUND 0: that number was
+    // written as 70.5px, which was measured against the OLD 78px window, and
+    // this frame was called the one that "fails hardest of the three" — it is
+    // now the mildest, since `permission-denied` carries 308px of content into
+    // the same 206px window and fails at 29px on the headline.
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(failed).toBeVisible();
     const lf = await measureFailureFrame(page);
@@ -7408,17 +7412,25 @@ test.describe("connected screens (fake-driven)", () => {
     assertHeadlineOnFrame(m);
     assertNothingAboveTheScrollOrigin(m);
 
-    // THE ASSERTION THAT PINS THE PAIRING COUNT, and it is here rather than on
-    // the other two frames because this is the only failure screen whose body
-    // line is a REMEDY — "Allow Bluetooth for Ergomatic in Settings" — rather
-    // than a restatement of the headline. A rower who cannot see it begin has
-    // been told something is wrong and not what to do.
+    // The remedy must at least BEGIN on screen. This is the only failure
+    // screen whose body line tells the rower what to DO — "Allow Bluetooth for
+    // Ergomatic in Settings" — rather than restating the headline, so a rower
+    // who cannot see it start has been told something is wrong and not how to
+    // fix it. It bites when this frame loses its `--failure` modifier.
     //
-    // Reverting the rule to `nth-last-child(-n + 2)` — the shape that shipped
-    // for `unsupported-machine` alone — leaves every OTHER assertion in this
-    // file green: at 142px a two-line headline running to y94 still clears the
-    // fold, so nothing above notices. Only this one bites, at 102 against a
-    // 74px window.
+    // WHAT IT CANNOT DO IS PIN THE PAIRING COUNT, and the comment that shipped
+    // here in review round 0 claimed it did — a claim this PR's own probe
+    // table and ROADMAP row both contradicted while it sat here (it survived a
+    // `git checkout --` that reverted an unrelated probe, RF22 exactly).
+    // MEASURED: reverting the rule to `nth-last-child(-n + 2)` leaves all
+    // seven failure-frame assertions in this file GREEN. The reason is
+    // platform. On iOS this frame also renders `Open Settings`, and it is the
+    // FIVE-button stack whose window falls to 74px against a headline running
+    // to y94; `canOpenAppSettings()` is `isNative()`, so the web build is four
+    // buttons by construction and the deciding shape is unreachable from here.
+    // At four buttons `-n + 2` still gives 142px and everything clears the
+    // fold. `-n + 4` is approved on the Gate 0 captures and pinned by nothing
+    // in this suite; the gap has its own ROADMAP row.
     expect(
       m.remedyTop,
       "the frame has no body line to read as the remedy",
@@ -7497,11 +7509,26 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  // GATE (b), on the frame whose landscape budget is tightest — the gate
-  // that would have caught the landscape bug in the first place. At 844x390
-  // the refusal's four buttons leave a body window of 142px (measured here,
-  // matching `index.css`'s own figure) for a taller column, so the frame
-  // overflows BY DESIGN; what must never happen
+  // GATE (b) on the refusal frame. WHAT THIS TEST STILL PROVES, AND WHAT IT NO
+  // LONGER CAN (Phase MT follow-on rev 2, review round 0 finding 3): the
+  // landscape budget fix took this frame's window 142px -> 206px against 157px
+  // of content, so it is the one failure frame that now FITS. With no overflow
+  // there is no free space to split, which makes `justify-content: center` and
+  // the auto margins indistinguishable here — the -7.5px mutation this
+  // comment's own option table names can no longer redden either geometry
+  // assertion below, and the containment half needs a window under 58px, which
+  // nothing reaches on this frame. Both are kept deliberately, as tripwires
+  // for a future line added to this frame, and the `contentHeight` assertion
+  // pins the precondition that makes them dormant, so a frame that starts
+  // overflowing again reddens HERE rather than silently re-arming them.
+  // THE FALSIFIABLE COPIES LIVE ON THE OTHER TWO FRAMES, which still overflow:
+  // measured under that mutation, `link-failed` fails at 6.5px and
+  // `permission-denied` at 29px. What this test uniquely still gates is the
+  // 44px sweep with the support link in the DOM, which reddens at 15px.
+  //
+  // The historical text: at 844x390 four full-width buttons left a 142px
+  // window for a taller column, so the frame overflowed BY DESIGN; what must
+  // never happen
   // is the overflow being split above and below the window, which is what
   // `justify-content: center` did and what the auto margins now prevent.
   //
@@ -7521,8 +7548,11 @@ test.describe("connected screens (fake-driven)", () => {
   //     from this frame: those historical figures are not reachable by a
   //     CSS-only mutation any more.
   //   - The CONTAINMENT assertion needs the landscape body window below 58px
-  //     to bite, so removing the `--refusal` pairing alone does NOT make it
-  //     fail — measured: window 78px, headline at 22..58, test green. It goes red on the shape the
+  //     to bite, so removing the pairing alone did NOT make it fail —
+  //     measured: window 78px, headline at 22..58, test green. (That table was
+  //     written against `--refusal`, the modifier this rule carried when it
+  //     applied to the refusal alone; it is `--failure` now, on every failure
+  //     frame.) It goes red on the shape the
   //     ROADMAP already files as a real defect — the FIVE-button stack, with
   //     the pairing gone: window 10px, "the headline ends 48px below the
   //     body's visible bottom", `Received: 58`. That is its whole job: it
@@ -7546,6 +7576,13 @@ test.describe("connected screens (fake-driven)", () => {
     await assertTapTargets(page);
 
     const m = await measureFailureFrame(page);
+    // The precondition for the two assertions below being dormant rather than
+    // broken (see this test's own header). If a line is ever added to this
+    // frame this is what goes red first.
+    expect(
+      m.contentHeight,
+      `this frame overflows its window by ${m.contentHeight - m.clientHeight}px, so the two geometry assertions below are live again and their comment is stale`,
+    ).toBeLessThanOrEqual(m.clientHeight);
     assertHeadlineOnFrame(m);
     assertNothingAboveTheScrollOrigin(m);
 
