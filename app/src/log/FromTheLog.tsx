@@ -13,6 +13,8 @@ import MachineSummaryTable from "../session/MachineSummaryTable";
 import { resolveBackTarget } from "../shell/BackLink";
 import Concept2SendBlock from "./Concept2SendBlock";
 import { buildStoredSummary, type StoredLog } from "./storedSummary";
+import { useConcept2Link } from "../api/useConcept2Link";
+import { sentResultId } from "./concept2Send";
 import TraceChart from "./TraceChart";
 import { displayVerificationCode } from "../../domain/monitor/verificationCode.js";
 import { concept2OffersVerification } from "../../domain/concept2/verificationEligibility.js";
@@ -53,8 +55,34 @@ function machineConfirmedValueLine(row: StoredLog): string {
 // StoredLog row and NOTHING else") — this screen's ONE other component
 // that skips the view model, by the same spec's own explicit instruction.
 function MachineConfirmedBlock({ row }: { row: StoredLog }) {
+  // Phase AV: the LIVE link, for the account gate below. This is a SECOND
+  // `useConcept2Link()` on this screen — `Concept2SendBlock` already calls
+  // it — so the log detail now issues two GET /api/concept2/link. Filed in
+  // ROADMAP rather than left silent; the hook has no shared cache today and
+  // lifting it is a refactor this PR does not need to carry.
+  const { link } = useConcept2Link();
   if (row.machineWorkSeconds === null) return null;
   const bytes = row.machineSummary?.verificationBytes;
+  // Phase AV (Gate 0 approved 2026-09-07): Concept2 accepted this row as
+  // verified when we sent it.
+  //
+  // GATED ON THE ACCOUNT, not on the stored flag alone. Nothing ever clears
+  // `verified`, exactly as nothing clears the two ids beside it, so the mark
+  // is kept honest by `sentResultId` — the same rule that already hides a
+  // SENT state whose account no longer matches. Without it, a row verified
+  // on one Concept2 account keeps its tick after relinking to another that
+  // never saw it.
+  //
+  // ONLY THE POSITIVE. `false` and `null` render identically, as no mark:
+  // `false` means Concept2 said no AT RECEIPT and the rower may have
+  // verified by hand since, which nothing here would learn; `null` means we
+  // did not hear (the 409-duplicate branch). There is no NOT VERIFIED state
+  // anywhere in this design, and the absence is the honest rendering.
+  // A null link is "not read yet, or unreadable" — no mark, deliberately:
+  // the gate below needs an account to compare against, and an unread link
+  // is not evidence that this row's account still matches.
+  const verified =
+    row.verified === true && link !== null && sentResultId(row, link) !== null;
   // The code is printed ONLY when Concept2 will actually let the rower type
   // it in (James, 2026-09-07: "show the code but only for pieces that we
   // know will get the verification option"). A code with nowhere to go is
@@ -82,12 +110,17 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
       aria-label="MACHINE CONFIRMED · WORK ONLY"
     >
       <p className="log-machine-confirmed-title">
-        MACHINE CONFIRMED · WORK ONLY
+        <span>MACHINE CONFIRMED · WORK ONLY</span>
+        {verified && <span className="log-machine-verified">VERIFIED ✓</span>}
       </p>
       <p className="log-machine-confirmed-value">
         {machineConfirmedValueLine(row)}
       </p>
-      {code !== undefined && (
+      {/* THE CODE IS WITHDRAWN ONCE THE MARK APPEARS. A code exists to be
+          typed into Concept2, and a verified row has no edit form left to
+          type it into — showing both would be showing an instruction beside
+          its own completion. */}
+      {!verified && code !== undefined && (
         <p className="log-machine-confirmed-code">CODE {code}</p>
       )}
       {/* NO CAPTION (James, 2026-08-27: "just no prose"). This block used to

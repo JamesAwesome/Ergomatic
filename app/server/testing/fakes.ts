@@ -399,6 +399,7 @@ type FakeLogRow = Omit<LogInput, "advancesPlan"> & {
   // stamps both null, and `recordC2Result` is the ONE writer after that.
   c2ResultId: number | null;
   c2UserId: number | null;
+  verified: boolean | null;
 };
 
 // Log-delete spec (2026-08-18), §2: the SAME newest-wins resolution
@@ -755,6 +756,9 @@ function makeFakeLogsStore(
         // sets either column either.
         c2ResultId: null,
         c2UserId: null,
+        // Phase AV: null at create, exactly like the two ids above — a row
+        // that has never been sent has no verdict.
+        verified: null,
         planKey,
         planIndex,
         id: crypto.randomUUID(),
@@ -781,13 +785,14 @@ function makeFakeLogsStore(
       id: string,
       c2ResultId: number,
       c2UserId: number,
+      verified: boolean | null,
     ) {
       const rows = byUser.get(userId) ?? [];
       const idx = rows.findIndex(
         (r) => r.id.toLowerCase() === id.toLowerCase(),
       );
       if (idx === -1) return false;
-      rows[idx] = { ...rows[idx], c2ResultId, c2UserId };
+      rows[idx] = { ...rows[idx], c2ResultId, c2UserId, verified };
       byUser.set(userId, rows);
       return true;
     },
@@ -1003,6 +1008,14 @@ export function makeFakeConcept2Store(
           existing !== undefined && existing.c2UserId === link.c2UserId
             ? existing.autoSend
             : false,
+        // Phase AV: the same split, its own column. This is a MIRROR of the
+        // SQL and cannot prove it (RF11) — the gate that does lives in
+        // `stores/concept2.integration.test.ts`, against real Postgres, with
+        // the two flags opposed.
+        autoVerify:
+          existing !== undefined && existing.c2UserId === link.c2UserId
+            ? existing.autoVerify
+            : false,
         sendFailedAt: null,
         sendFailedReason: null,
         createdAt: existing?.createdAt ?? now,
@@ -1018,6 +1031,13 @@ export function makeFakeConcept2Store(
       const existing = links.get(userId);
       if (!existing) return false;
       links.set(userId, { ...existing, autoSend, updatedAt: clock() });
+      return true;
+    },
+
+    async setAutoVerify(userId: string, autoVerify: boolean) {
+      const existing = links.get(userId);
+      if (!existing) return false;
+      links.set(userId, { ...existing, autoVerify, updatedAt: clock() });
       return true;
     },
 

@@ -212,6 +212,62 @@ describe("concept2 store against real Postgres", () => {
       expect(row?.autoSend).toBe(false);
     });
 
+    // Phase AV (spec 2026-09-07-optional-auto-verify): `auto_verify` borrows
+    // `auto_send`'s account-switch reset, and these two tests are the reason
+    // the borrow is safe rather than assumed. They run against REAL Postgres,
+    // not `testing/fakes.ts`'s JavaScript re-implementation of the CASE —
+    // that mirror would prove itself, not the SQL (RF11).
+    //
+    // THE TWO FLAGS ARE SET TO DIFFERENT VALUES ON PURPOSE, and that choice
+    // was MEASURED rather than argued (2026-09-07). The copy-paste failure it
+    // guards is a second CASE expression that still reads `auto_send` inside
+    // the `auto_verify` assignment. Both arms run against real Postgres:
+    //   - mutant CASE + these opposed values  -> RED, "expected false to be
+    //     true" on the same-account reconnect.
+    //   - mutant CASE + the naive shape (both flags set true)  -> GREEN,
+    //     34/34. The bug ships.
+    // So the opposition is the gate, not the assertion count.
+    it("a reconnect of the SAME account keeps auto_verify, independently of auto_send", async () => {
+      const store = createConcept2Store(db);
+      await store.upsertLink(userA, link({ c2UserId: 15 }));
+      await store.setAutoSend(userA, false);
+      await store.setAutoVerify(userA, true);
+      await store.upsertLink(
+        userA,
+        link({ c2UserId: 15, accessToken: "at-3", refreshToken: "rt-3" }),
+      );
+      const row = await store.getLink(userA);
+      expect(row?.autoVerify).toBe(true);
+      expect(row?.autoSend).toBe(false);
+    });
+
+    it("a relink to a DIFFERENT account resets auto_verify, independently of auto_send", async () => {
+      const store = createConcept2Store(db);
+      await store.upsertLink(userA, link({ c2UserId: 16 }));
+      await store.setAutoSend(userA, true);
+      await store.setAutoVerify(userA, false);
+      // Opposed the other way round. STATED PRECISELY, because an earlier
+      // version of this comment claimed more than the test delivers: in the
+      // DIFFERENT-account case the CASE takes its ELSE branch, so the THEN
+      // expression is unobservable and this test structurally CANNOT catch
+      // the read-the-wrong-column mutant — only its same-account sibling
+      // above does (measured: that mutant reddens 1 of 34, and it is the
+      // sibling). What this test does catch is the ELSE branch itself:
+      // `ELSE false` -> `ELSE ${autoVerify}` reddens here, 1 of 34.
+      await store.setAutoVerify(userA, true);
+      await store.setAutoSend(userA, false);
+      await store.upsertLink(userA, link({ c2UserId: 17 }));
+      const row = await store.getLink(userA);
+      expect(row?.c2UserId).toBe(17);
+      expect(row?.autoVerify).toBe(false);
+      expect(row?.autoSend).toBe(false);
+    });
+
+    it("setAutoVerify returns false when there is no link row", async () => {
+      const store = createConcept2Store(db);
+      expect(await store.setAutoVerify(userB, true)).toBe(false);
+    });
+
     it("setSendFailed stores the instant and the SUB-reason; clearSendFailed nulls both", async () => {
       const store = createConcept2Store(db);
       await store.upsertLink(userA, link({ c2UserId: 15 }));

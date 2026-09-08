@@ -1704,7 +1704,19 @@ button.back-link:disabled,
    together — the alignment cannot drift the way two hand-tuned numbers
    would. 24px clears "2K"/"6K" at 11px mono with 0.08em tracking (~15px)
    with room to spare. Pinned by design.spec.ts's own box comparison,
-   which measures 36px of drift if either half is removed. */
+   which measures 36px of drift if either half is removed.
+
+   THE TOKEN IS NOW ACTUALLY DEFINED (Phase AV, 2026-09-07). It never was:
+   both readers said `var(--baseline-label-col, 24px)` against a name
+   nothing declared, so the "single source" this comment claims was really
+   `24px` written out twice in two fallbacks, one of them inside a `calc`.
+   The behaviour is unchanged — the declared value is the same 24px the
+   fallbacks supplied — but the sentence above is true now, and changing the
+   column here really does move both. Declared in `theme/tokens.css` with
+   the other tokens, NOT here — `tokens.test.ts` pins that index.css has
+   exactly one `:root`, inside its landscape media query, and a second one
+   for this would have broken that. Found by
+   `theme/customPropertyCensus.test.ts` on its first run. */
 .baseline-label {
   flex: none;
   width: var(--baseline-label-col, 24px);
@@ -2819,12 +2831,27 @@ button.back-link:disabled,
   margin: 20px 0 0;
 }
 
+/* Phase AV: the title line now carries the mark opposite it, so it becomes a
+   row. Baseline-aligned, and the mark never wraps under the label. */
 .log-machine-confirmed-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   margin: 0 0 4px;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+/* VERIFIED ✓ — --ink #1b1a17 on --page #f4f1e8 = 15.41:1, computed. The same
+   pairing the title beside it already uses, so no new colour and no new
+   check. `white-space: nowrap` because the mark is two tokens and a broken
+   one reads as two separate labels. */
+.log-machine-verified {
+  white-space: nowrap;
   color: var(--ink);
 }
 
@@ -10746,6 +10773,40 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 .c2-card-mode-is-armed > .c2-card-mode-btn:not(.c2-card-mode-armed) {
   display: none;
+}
+
+/* Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
+   2026-09-07). AUTO VERIFY's own two-segment control, under SENDING MODE.
+
+   TWO columns, not three — `.c2-card-mode` above is a `1fr 1fr 1fr` grid and
+   an unmodified second control would leave the third track empty and the two
+   segments two-thirds width, which reads as a broken row rather than a
+   different control.
+
+   Contrast, computed (not sampled): the label is --ink #1b1a17 on --surface
+   #fffdf7 = 17.11:1, and the line below it is --ink-3 #57544c on the same
+   ground = 7.43:1. Both clear the 4.5:1 text floor; both pairings already
+   exist elsewhere on this card. No new colour is introduced. */
+.c2-card-mode-two {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* The control's own name, which SENDING MODE above does without because it
+   is the card's first control and the card's label serves it. A second
+   control on the same card cannot borrow that. Spaced above to break from
+   the sending mode's explanatory line rather than reading as its
+   continuation. */
+.c2-card-row-label {
+  margin: 18px 0 8px;
+  /* `--font-mono`, NOT `--mono`. The first draft wrote the latter: one
+     reference, zero definitions, so the declaration was invalid at
+     computed-value time and the label silently inherited the body sans
+     while every neighbouring label stayed IBM Plex Mono. It shipped into
+     two committed captures before the branch review read it off them. */
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  color: var(--ink);
 }
 
 /* The line beneath the control (Gate 0 §1a, §3, §4a). `--ink-3` at rest,

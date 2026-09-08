@@ -39,6 +39,7 @@ const LINKED: Concept2Link = {
   needsReauth: false,
   logbookBaseUrl: "https://log-dev.concept2.com",
   autoSend: false,
+  autoVerify: false,
   sendFailedAt: null,
   sendFailedReason: null,
 };

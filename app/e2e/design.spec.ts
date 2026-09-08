@@ -10610,7 +10610,21 @@ test.describe("Concept2 card: the landscape interior (Gate 0 amendment §1a-1j)"
       // segment is the row's 44px — measured on the pressed one, which is
       // the only segment a selector can name once.
       ["c2-card-armed.html", ".c2-card-mode-armed", 52],
-      ["c2-card-linked.html", '.c2-card-mode-btn[aria-pressed="true"]', 44],
+      // Phase AV added a SECOND control sharing `.c2-card-mode-btn`, so this
+      // selector stopped naming one element. Both pressed segments are
+      // checked rather than one being scoped away — the new control owes the
+      // same 44px floor as the old, and a test that dodged it would leave
+      // the row it was added for ungated.
+      [
+        "c2-card-linked.html",
+        '[aria-label="Sending mode"] .c2-card-mode-btn[aria-pressed="true"]',
+        44,
+      ],
+      [
+        "c2-card-linked.html",
+        '[aria-label="Auto verify"] .c2-card-mode-btn[aria-pressed="true"]',
+        44,
+      ],
       ["c2-card-read-failed.html", ".c2-card-retry", 52],
     ];
     for (const vp of [PHONE_PORTRAIT, PHONE_LANDSCAPE]) {
@@ -10979,13 +10993,15 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
       await page.setViewportSize(vp);
       // Wave E auto-send: the three-segment control where Unlink was; every
       // segment is a tappable this sweep measures in the real column.
-      await expect(page.getByRole("button", { name: "OFF" })).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "OFF", exact: true }),
+      ).toBeVisible();
       await assertTapTargets(page);
     }
     // And the ARMED state, whose control is a different element with
     // different text — a sweep of the resting card alone would never
     // measure it.
-    await page.getByRole("button", { name: "OFF" }).click();
+    await page.getByRole("button", { name: "OFF", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Tap again to unlink" }),
     ).toBeVisible();
@@ -11070,7 +11086,7 @@ test.describe("Concept2 surfaces on the real screens (Wave E PR2)", () => {
       });
     });
     // Wave E auto-send: the unlink is the control's OFF segment.
-    await page.getByRole("button", { name: "OFF" }).click();
+    await page.getByRole("button", { name: "OFF", exact: true }).click();
     await page.getByRole("button", { name: "Tap again to unlink" }).click();
     const reason = page.locator(".c2-card-panel-reason");
     await expect(reason).toBeVisible();

@@ -527,8 +527,17 @@ every load-bearing row quoted; three rev-2 claims corrected and marked._
   page and nothing for the rower to do. **That is a parity REGRESSION, and
   this phase is about parity.** Concept2's own app uploads the row and leaves
   verification to the rower; auto-verifying takes away an act the rower
-  performs deliberately. Reverted in full — the mapper withholds the code
-  even on a row that would verify, and a test pins that.
+  performs deliberately. Reverted in full at the time — the mapper withheld
+  the code even on a row that would verify, and a test pinned that.
+  **SUPERSEDED 2026-09-07 by Phase AV (#360), and this is where the absolute
+  was ARGUED, so it is corrected here rather than only where it was used.**
+  "NOT SENT" is no longer unconditional: the code rides an opt-in setting,
+  `concept2_links.auto_verify`, DEFAULTED OFF. With it off — every rower,
+  until they choose otherwise — the behaviour above is exactly what still
+  happens, and the test that pins the withholding is still there as the OFF
+  arm. What changed is that the rower can now ask for it. The parity
+  reasoning stands and is why the default is off; it was never an argument
+  that the capability should not exist.
   _The wire facts rev 2.6 measured still stand and are worth keeping_
   (`docs/superpowers/research/2026-09-05-c2-verification-measurement.md`:
   the code verifies at 5706 and fails at 5707, with and without

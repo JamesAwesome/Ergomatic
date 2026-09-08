@@ -48,6 +48,7 @@ function eligibleRow(over: Partial<StoredLog> = {}): StoredLog {
     source: "pm5",
     c2ResultId: null,
     c2UserId: null,
+    verified: null,
     steps: [],
     avgSplitSeconds: 130,
     timeSeconds: 1550,

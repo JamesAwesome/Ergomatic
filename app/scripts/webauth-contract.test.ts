@@ -221,6 +221,7 @@ describe("WebAuth plugin contract (Swift <-> TS <-> plist)", () => {
     // files at once would keep the set equality green.
     expect(emitted).toStrictEqual([
       "autoSend",
+      "autoVerify",
       "available",
       "c2UserId",
       "c2Username",
