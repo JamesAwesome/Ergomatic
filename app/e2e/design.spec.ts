@@ -7190,15 +7190,23 @@ async function walkToSurface(page: Page): Promise<void> {
  *  numbers come back RELATIVE to `.connected-interstitial-body`'s own client
  *  box — the box the rower can actually see.
  *
- *  `minScrollTop` is the second half, and it pins the nastier one. Assigning
- *  a negative `scrollTop` asks the engine for the region ABOVE the scroll
- *  origin: chromium clamps that at 0 and reports a `scrollHeight` that does
- *  not know the overflowing region exists, so content placed above the origin
- *  is UNREACHABLE rather than merely scrolled past, while webkit allowed
- *  `scrollTop: -99` on the same frame (both measurements are recorded in
- *  `src/index.css`'s own `.connected-interstitial-body` comment). This suite
- *  runs chromium only, so what bites here is the first child's top at the
- *  minimum reachable scroll position. */
+ *  `firstChildTopAtMinScroll` is the second half, and it pins the nastier
+ *  one. Assigning a negative `scrollTop` asks the engine for the region ABOVE
+ *  the scroll origin: chromium clamps that at 0 and reports a `scrollHeight`
+ *  that does not know the overflowing region exists, so content placed above
+ *  the origin is UNREACHABLE rather than merely scrolled past, while webkit
+ *  allowed `scrollTop: -99` on the same frame (both measurements are recorded
+ *  in `src/index.css`'s own `.connected-interstitial-body` comment).
+ *
+ *  BE CLEAR ABOUT WHICH READ DOES THE WORK. This suite runs chromium only, so
+ *  the `-9999` write always clamps to 0 and this read lands at the SAME offset
+ *  as the at-rest one — it discriminates nothing here, and `minScrollTop` is
+ *  returned as a recorded observation, never asserted on, because on chromium
+ *  it is a constant no CSS can change (an earlier revision asserted
+ *  `toBe(0)`; that assertion could not go red, so it is gone — RF21). The
+ *  write stays because it is what makes the number mean "at the minimum
+ *  REACHABLE position" rather than "at rest", which is the difference the day
+ *  a webkit project is added. What bites today is the first child's top. */
 async function measureFailureFrame(page: Page): Promise<{
   clientHeight: number;
   serifTop: number;
@@ -7239,7 +7247,6 @@ async function measureFailureFrame(page: Page): Promise<{
 function assertNothingAboveTheScrollOrigin(
   m: Awaited<ReturnType<typeof measureFailureFrame>>,
 ): void {
-  expect(m.minScrollTop).toBe(0);
   expect(
     m.firstChildTopAtMinScroll,
     `the frame's first child sits ${-m.firstChildTopAtMinScroll}px above the ` +
@@ -7443,6 +7450,12 @@ test.describe("connected screens (fake-driven)", () => {
     );
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(refused).toBeVisible();
+
+    // The 44px floor AT THIS VIEWPORT. The portrait case above sweeps at the
+    // project's default 390x844; `.connected-support-link`'s own comment
+    // claims the floor in BOTH orientations ("350x44 portrait, 440x44
+    // landscape"), and half a claim gated reads as all of it.
+    await assertTapTargets(page);
 
     const m = await measureFailureFrame(page);
     expect(
