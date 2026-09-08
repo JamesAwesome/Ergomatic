@@ -1350,6 +1350,15 @@ closed with zero Concept2 contact.
       NOT released on its own (James, 2026-09-07: rides his next batch).
       Spec: `docs/superpowers/specs/2026-09-07-signout-ends-google-design.md`. **S**
 
+- [ ] **Two `v8 ignore`s that no longer earn themselves, same class.**
+      (a) `nativeSignIn` — see below. (b) `server/auth/google.ts`'s
+      `callbackClaims`, found at #356's antagonist pass: it sits under an
+      ignore labelled "thin openid-client wrapper" while containing
+      `c.email ?? ""` and `c.name ?? c.email ?? "Rower"` fallback chains that
+      feed the allowlist and identity decision. Not thin by the standard #356
+      itself just applied to the authorization parameters. Both are
+      pre-existing debt, neither introduced by the PR that found them. **S**
+
 - [ ] **`nativeSignIn` keeps a `v8 ignore` it no longer earns.** Found at
       #353's code review. That PR narrowed the file-wide ignore on the
       argument that it "stops being honest the moment it holds ordering logic

@@ -12,9 +12,14 @@ export interface OAuthProvider {
   callbackClaims(currentUrl: URL, cookiePayload: string): Promise<Claims>;
 }
 
-/* v8 ignore start -- discovery is a thin openid-client wrapper; proven by
-   the live sign-in, not by a test that would just mock Google. The
-   `authorizationUrl` body below is deliberately OUTSIDE this ignore — which
+/* v8 ignore start -- covers `discovery`, the PKCE/state helpers AND
+   `callbackClaims` below, all thin openid-client wrappers proven by the live
+   sign-in rather than by tests that would just mock Google. Named precisely
+   because an earlier version of this comment said only "discovery" while the
+   span reached much further, and `callbackClaims`'s own `?? ""` / `?? "Rower"`
+   fallbacks feed an identity decision and are arguably not thin by the same
+   standard this file just applied to `prompt` (ROADMAP row).
+   The `buildAuthorizationUrl` call is deliberately OUTSIDE the ignore: which
    parameters we ask Google for is the opposite of thin, and got a rower a
    sign-in screen that never appeared (`google.test.ts`). */
 export async function createGoogleProvider(opts: {
