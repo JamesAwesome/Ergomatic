@@ -209,6 +209,19 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       not clearly wrong, since the likeliest cause of that screen is picking
       the wrong monitor from a list and that rower does have a RowErg. Filed
       at the design gate rather than found later. **S**
+- [ ] **The refusal-survives-its-own-consequences guard is UNGATED.** `fail()`
+      refuses to let a standing `unsupported-machine` error be overwritten by
+      the `program()` rejection the refusal itself caused — without it the
+      rower watches the machine message become a generic failure screen a beat
+      later. The guard is correct on its face and NO TEST CAN MAKE IT FAIL.
+      Three routes were tried and all three go green with the guard deleted:
+      `deaf` starves the terminate's own settle so nothing rejects;
+      `failNextProgramFrame` rejects before the status subscriptions release,
+      so the refusal never fires; `lagStructureOneTick` produces no second
+      `fail()` at all. **What it needs is a fake control that withholds 0x0031
+      for a bounded number of ticks without starving the CSAFE ack path.** On
+      hardware the window is the measured 544 ms between the first 0x0032 and
+      `armed`. Found by the whole-branch review, finding 1. **S**
 - [ ] **`connected.spec.ts:1703` poisons its own origin for a later run.** The
       QuotaExceededError leg fills origin storage until `setItem` genuinely
       throws; its own title says "junk cleaned up after", but a SECOND run

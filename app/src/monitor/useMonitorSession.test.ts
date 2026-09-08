@@ -15701,51 +15701,27 @@ describe("useMonitorSession: an unsupported erg machine", () => {
 });
 
 /**
- * PHASE MT, review finding 1 — THE REFUSAL MUST SURVIVE ITS OWN CONSEQUENCES.
+ * PHASE MT, review finding 1 — NO GATE HERE YET, AND THAT IS RECORDED RATHER
+ * THAN PAPERED OVER.
  *
- * On the programmed door the refusal fires from the first 0x0032 while
- * `program()` is still awaiting `verifyArmed`, which needs a 0x0031. The
- * refusal's own `terminate()` un-arms the erg and its chained `disconnect()`
- * rejects that pending verify — so `program()` throws, its catch runs
- * `fail()` a second time, and `update()` is a blind overwrite. The rower
- * would watch "Erg type not supported" become a link-failure screen with no
- * mention of the machine and no support link.
+ * `fail()` carries a guard stopping a standing `unsupported-machine` refusal
+ * from being overwritten by the `program()` rejection the refusal itself
+ * caused. The guard is correct on its face, and it is UNGATED: three attempts
+ * to reproduce the overwrite all went green for the wrong reason, and each
+ * failure says something about the fake worth keeping.
  *
- * EVERY OTHER TEST IN THIS FILE COLLAPSES THIS WINDOW. `deliverArmedBundle`
- * notifies 0x0033, 0x0032 and 0x0031 in ONE synchronous tick, so `verifyArmed`
- * resolves before the refusal's disconnect can reject it — the 544 ms the spec
- * measured on hardware is zero in the fake. `deaf` is what reopens it: it
- * drops general-status notifications on the floor, so 0x0032 still classifies
- * and 0x0031 never arrives.
+ *   - `deaf` withholds 0x0031 so `verifyArmed` stays pending — but it also
+ *     starves the refusal's own `terminate()` settle, so the chained
+ *     `disconnect()` never runs and nothing ever rejects.
+ *   - `failNextProgramFrame: "reject"` rejects BEFORE
+ *     `releaseStatusSubscriptions("arm")`, so no 0x0032 is ever delivered, the
+ *     refusal never fires, and `nak` is the honest outcome.
+ *   - `lagStructureOneTick` holds the structure readback back while 0x0032 has
+ *     landed — the closest shape to hardware — and still produces no second
+ *     `fail()`, so a test written against it passes with the guard deleted.
+ *
+ * What the gate needs is a fake control that withholds 0x0031 for a bounded
+ * number of ticks WITHOUT starving the CSAFE ack path, which no control does
+ * today. Filed under Phase MT in ROADMAP.md. A test that cannot fail is worse
+ * than no test, so there is none here (RF21).
  */
-describe("useMonitorSession: a refusal is not overwritten by the program it cancelled", () => {
-  it("keeps unsupported-machine when the in-flight program() then fails because of it", async () => {
-    const { result, fake } = harness({
-      program: TWO_INTERVALS,
-      ergMachineType: 128,
-      // THE WINDOW, reopened. `verifyArmed` needs a 0x0031 whose structure
-      // matches; this holds that structure back one tick while 0x0032 — the
-      // frame that classifies — has already been delivered. That is the
-      // hardware ordering in miniature: on a real erg the gap is 544 ms.
-      lagStructureOneTick: true,
-    });
-
-    await connect(result);
-    await act(async () => {
-      void result.current
-        .program(TWO_INTERVALS, TWO_IDENTITY)
-        .catch(() => undefined);
-      for (let i = 0; i < 60; i += 1) {
-        fake.tick(0);
-        await flush();
-      }
-    });
-
-    expect(result.current.phase).toBe("failed");
-    // Independent literal. Without the guard in `fail()` this reads the
-    // program rejection's own reason and the rower never learns what machine
-    // they are on.
-    expect(result.current.error?.reason).toBe("unsupported-machine");
-    expect(result.current.error?.detail).toContain("on a SkiErg");
-  });
-});
