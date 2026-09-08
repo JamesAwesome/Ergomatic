@@ -9331,3 +9331,94 @@ only the same-account sibling can catch the wrong-column mutant), the
 `=== true` client normalisation, and the producer→consumer seam: the
 integration test starts upstream of the write with a real router, real
 Postgres and a real 201 body, and asserts the verdict off the GET.
+
+## Phase MT — the app refuses a machine it cannot record (2026-09-08)
+
+- **"The refusal lands well before `armed`, and the margin is measured — a CSAFE
+  ack takes 1698-2058 ms while status samples tick at the fastest documented
+  rate."** The ack is not margin: it is what RELEASES the deferred status
+  subscriptions, so it is a shared prefix of both events. The real margin is
+  544 ms and comes from subscribe ORDER inside the deferred group; the real tick
+  rate is 508 ms (six captures) or 1008 ms (two), never the 100 ms
+  `buildSampleRateConfig()` asks for. The spec's own two-reading streak
+  therefore won by 36 ms on the 2 Hz captures and LOST by 464 ms on the 1 Hz
+  ones. **Technique — three, each cheap:** (1) when a spec cites a latency as
+  MARGIN, find what that latency is a precondition OF; a number that gates both
+  sides of a race is a prefix, not a head start. (2) Never take a configured
+  rate as the observed rate: count `dir: "rx"` arrivals per characteristic
+  across the committed recordings and divide — eight captures took one command
+  and falsified the sentence. (3) Event rings carry `atMs`; the ordering claim a
+  spec argues in prose is usually already SUBTRACTABLE from a committed walk.
+
+- **"A single observation can be trusted, because the vendor's footnote gives
+  MultiErg its own disjoint enum values — and the same footnote hangs off every
+  carrier of the field."** The footnote is not the same. Rev 1.30 carries four
+  distinct texts across five carriers, and the sentence the argument needs
+  ("this will be the one of the MultiErg Machine Types") is footnote 23, on
+  0x003C — the one carrier the spec explicitly declined to subscribe. The two it
+  DOES read say only "the Machine Type of the current interval". **Technique:
+  when a spec says a footnote is uniform, `grep` the extracted vendor text for
+  the footnote's distinctive phrase and count the HITS AND THE VARIANTS, then
+  map each marker back to its own characteristic by finding the nearest table
+  heading above it.** A drafter who spells something out in one place and not
+  another meant the difference. RF16's second corollary with an extra step: the
+  citation was not merely under-read, it was attributed to the wrong carrier.
+
+- **"No run is ever opened, because a run is opened by `program()` and ONLY by
+  `program()`."** True of the DRIVER's `activeRun`; irrelevant to the stored
+  `MonitorRun`, which is a different object with a different open condition —
+  and the quoted comment is falsified nineteen lines below itself by
+  `beginFreeRow()`. The real fact is stronger and lives one layer up
+  (`useMonitorSession`: "a run only opens at the `ready` -> `live` transition"),
+  which combined with `maybeEmitFrame`'s `seen.as1` conjunct turns the whole
+  design from a race into an invariant. **Technique: for any "nothing can be
+  stored" claim, do not read the comment that sounds like the rule — grep for
+  the WRITER and read its guard. And when quoting a doc comment as an invariant,
+  read the REST of the same doc comment**: this one carried its own exception in
+  the very next field.
+
+- **A second connect door can invert an ordering invariant, and the spec named
+  only the first.** The programmed door arms on a structural READBACK (needs
+  status ticks, so frames come first); the free-row door arms on the CSAFE ACK
+  (which is what releases the subscriptions, so frames come second — 449 ms
+  after `armed`, structurally). **Technique: before accepting any "X happens
+  before Y" claim about a hook, enumerate every SURFACE that calls the hook
+  (`grep -l useMonitorSession app/src --include='*.tsx'`) and re-run the ordering
+  against each entry point.** Two doors, opposite answers, one mechanism.
+
+- **"`fail()` is safe after `armed` too."** `armed` is the handoff store's
+  ACCEPTANCE POINT — it retires the rower's previous unlogged record — and its
+  own comment states the precondition the new failure violates: "the first point
+  a failed or cancelled attempt CANNOT reach". `fail()` also skips every piece
+  of `teardown()`'s run handling. **Technique: RF18's tripwire grep, run on the
+  HANDLER you are about to reach, not on the function you are adding to** —
+  "cannot reach", "first point", "strictly after", "unreachable" mark invariants
+  held up by the current event graph, and a new failure mode is exactly what
+  changes it. Corollary: to judge whether a shared failure path is safe LATE,
+  diff it against the teardown path line by line and list what teardown does
+  that it does not.
+
+- **A streak nobody can make fire for its stated reason.** Proposed as one frame
+  of insurance against "a single anomalous byte" — but BLE PDUs are CRC'd and
+  retransmitted, a short/garbled frame returns a typed parse error and never
+  classifies, and the field reads 0 in 3448/3448 committed frames. Neither a
+  false positive nor a false negative could be constructed. **Technique: price
+  the guard against the margin it spends before arguing about whether it is
+  free.** "One sample interval" sounded free; measured, it was 94% of the only
+  margin the design had. A threshold's cost is measured in the same units as the
+  invariant it protects, or it is not being measured at all.
+
+### Attacked and NOT broken (Phase MT vetted ground)
+
+The enum transcription (re-extracted and diffed line by line, including the
+vendor's own `ERGMACHINE_TYPE_BIKE= 192` spacing typo); the V1.26/V1.27
+attribution; absence-not-`undefined` semantics at both min-byte floors;
+`ConnectedInterstitial` programming on the pairing transition rather than on a
+frame; `mapping.ts`'s `type: "rower"` literal; the external-harm inference
+(Concept2's "must match" is a necessary condition, so mismatch implies rejection
+is modus tollens, and `post.verification_code` is genuinely sent, so the harm is
+reachable); the `fail`/`terminate` signatures and terminate-before-disconnect
+chaining; and the fake's need for a new `FakeScript` field. Also: the kinship
+with `verificationEligibility.ts` is earned and was UNDERSTATED — that module's
+"we ship no BikeErg" assertion is false today, and this design is what makes it
+true.

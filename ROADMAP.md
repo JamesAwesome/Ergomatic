@@ -155,6 +155,28 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
 
 ### Owed by this phase, filed here rather than in a PR body
 
+- [ ] **A refused sitting on the FREE-ROW door can still retire a record.**
+      `beginFreeRow()` emits `armed` on the CSAFE ack — the same ack that
+      releases the status subscriptions — so on that door `armed` precedes the
+      first classifiable frame structurally (449 ms, measured in
+      `docs/monitor/sessions/walk-2026-09-03-connect-sooner/ring-2-free-row.json`),
+      and the `armed` handler is where a staged handoff retire fires. James
+      ruled 2026-09-08: ACCEPT, because reaching a staged retire at all requires
+      the rower to have confirmed "connect anyway" over that record, and the
+      alternative (holding the free row's arm until classification) costs every
+      Just Row ~449 ms forever to protect against a machine nobody owns. The
+      handler's comment is corrected in the same PR; this row is the residual.
+      **S**
+- [ ] **A MultiErg on a ski or bike interval would be refused outright.** The
+      vendor sentence that would exclude this — "this will be the one of the
+      MultiErg Machine Types" — is footnote 23, on `0x003C`, the one carrier we
+      do not subscribe. The two we read (footnotes 7 and 11) say only "the
+      Machine Type of the current interval". No capture and no vendor sentence
+      settles what a real MultiErg reports on 0x0032. Unowned, accepted. **S**
+- [ ] **A refused machine is still remembered as `LAST USED`.**
+      `ConnectedInterstitial.tsx` calls `saveLastDevice` on every successful
+      pair, and a refusal happens after pairing. Cosmetic; fixing it inside the
+      refusal PR would widen it into the handoff-memory surface. **S**
 - [ ] **`type: "rower"` is still hardcoded for machines the denylist lets
       through.** Concept2's results enum has separate `dynamic`, `slides` and
       `multierg` members, and the PM5 enum names `STATIC_DYNAMIC` (8), the
@@ -168,7 +190,11 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       Phase MT does nothing on absence — refusing on ignorance would break a
       working erg. `0x0016` ("Connected Erg Machine Type", READ) would settle
       it and needs a `Transport.read`, which is the existing firmware-version
-      register row's dependency too. Both are unblocked by the same work. **S**
+      register row's dependency too. Both are unblocked by the same work.
+      **But `0x0016` may not exist:** rev 1.30's revision history reads
+      "2/3/2017 ... Deleted Machine Type information in Device Info Service as
+      firmware unable to support it. V1.21." Establish that before costing it.
+      **S**
 
 ## Phase JR — Just Row
 
