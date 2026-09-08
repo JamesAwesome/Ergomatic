@@ -1391,7 +1391,21 @@ closed with zero Concept2 contact.
       four plan tasks are complete and merged as #350 and released in v0.42.0 (build 902, 2026-09-07)
       (`as1-short-frame`); the checkbox stays open until the reporter confirms it fixed THEIR monitor — see the two open items below. **M**
 
-- [ ] **A monitor we cannot decode says nothing at all.** The follow-on the
+- [ ] **IN FLIGHT — A monitor we cannot decode says nothing at all.**
+      Spec: `docs/superpowers/specs/2026-09-07-undecodable-monitor-design.md`.
+      Gate 0 APPROVED 2026-09-07 (Option 1: the warning REPLACES the READY
+      state rather than sitting above it — a banner over a screen still
+      reading READY annotates the lie rather than correcting it). Trigger
+      copies `armedWatch`'s two-threshold shape, NOT the liveness watchdog's,
+      because our failure is bytes arriving and failing to decode rather than
+      silence. Gated on no frame having EVER been emitted, so it is
+      unreachable mid-row. **Tooling prerequisite, inside this work rather
+      than a reorder:** `injectGarbledFrame` cannot exercise it — it is
+      one-shot and targets 0x0031, the characteristic that WORKED in the
+      reported incident. Needs a fake control holding a NAMED characteristic
+      undecodable, shaped like `failSubscribe`. **M**
+
+- [ ] **(superseded by the row above)** The follow-on the
       spec above names: hundreds of `frame-error` entries reached the ring
       and NOTHING reached the rower, who kept rowing against an app that
       had already stopped listening. Recurring failure 25's shape — a lower
