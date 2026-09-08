@@ -2049,6 +2049,89 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect((await logs.get(userA.id, id))?.verified).toBe(true);
   });
 
+  // THE FEATURE ITSELF, gated at the ROUTE (RF24). Written because the
+  // branch review proved its absence: hard-wiring the route to never forward
+  // the rower's setting (`autoVerify: locked.autoVerify` -> `false`) left
+  // 7708 tests and 543 e2e green. The only ON-path assertion this branch had
+  // called `buildC2Payload(..., true)` with a LITERAL, so nothing tied the
+  // STORED flag to the wire.
+  //
+  // The failure that would have shipped: AUTO VERIFY switched on, the
+  // setting stored, the card reading ON and "Rows arrive verified.", and no
+  // row ever verified. Every gate green.
+  it("the STORED setting reaches the wire: auto_verify on -> the code is posted", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 91,
+      verified: true,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const posted = vi.mocked(client.postResult).mock.calls[0]![1] as Record<
+      string,
+      unknown
+    >;
+    // Derived by hand from the bytes, not read off the implementation: two
+    // LE u32 words from the first EIGHT bytes. 06 47 99 AF -> 0xAF994706;
+    // 54 B0 21 C0 -> 0xC021B054.
+    expect(posted.verification_code).toBe("AF99-4706-C021-B054");
+  });
+
+  it("the STORED setting is obeyed when OFF: the same row posts no code", async () => {
+    // The other arm, on the SAME row, so the only difference is the flag.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 92,
+      verified: false,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const posted = vi.mocked(client.postResult).mock.calls[0]![1] as Record<
+      string,
+      unknown
+    >;
+    expect(posted).not.toHaveProperty("verification_code");
+  });
+
   // THE STALE-TRUE BUG, gated. Found by the delta antagonist pass before it
   // could ship: a row verified on ONE Concept2 account, re-sent after
   // relinking to ANOTHER (which the already-sent short-circuit deliberately

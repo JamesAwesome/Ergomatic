@@ -413,6 +413,14 @@ const LOG_LIST_COLUMNS = {
   // here).
   c2ResultId: sessionLogs.c2ResultId,
   c2UserId: sessionLogs.c2UserId,
+  // Phase AV: the verdict rides the list too, same reasoning as the pair
+  // above — a small scalar with no blob to exclude. Added here because the
+  // census pin below CAUGHT its absence: `verified` reached the schema and
+  // not this hand-maintained mirror, and only the REAL store failed, because
+  // `testing/fakes.ts` projects the list with a rest-spread and so carried
+  // the column the production query dropped. A fake that mirrors by spread
+  // cannot see a projection that mirrors by hand.
+  verified: sessionLogs.verified,
   completedAt: sessionLogs.completedAt,
   tz: sessionLogs.tz,
   // Door spec (2026-09-02) §1.3: the list cannot evaluate clause 3 —
