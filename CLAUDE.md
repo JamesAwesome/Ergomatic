@@ -1162,6 +1162,47 @@ often they recur.
     finding sits inside the very function under change: pre-existing is a fact
     about history, not an argument about scope.
 
+35. **A FIX IS A CLAIM, AND ITS GATE CAN MISS FOR A REASON THE ORIGINAL DID
+    NOT (Phase AV, PR #360, 2026-09-08).** RF31 says a fix gets the gate the
+    original claim got. This is the sharper half: the gate you write FOR a
+    fix can fail to bite for a reason that has nothing to do with the bug.
+    Measured three times in one branch.
+    (1) A reviewer proved the stale-true bug by mutating the real store to
+    drop a column when the verdict is `null`. The fix added a verdict
+    assertion to the real-Postgres seam test — and the mutant still passed,
+    because that test's send is a 2xx and the mutant only fires on the null
+    path. It needed its own test at the store.
+    (2) A gate written for the resolved-once-per-send invariant flipped the
+    setting inside the refresh mock. `acquireAccessToken` takes its locked
+    read BEFORE refreshing, so the reassigned value still carried the old
+    flag and the mutant was behaviourally identical. Moving the toggle into
+    the FIRST post — the only interleaving where the retry's own read can see
+    something newer — made it bite.
+    (3) A fail-closed ordering claim shipped with no gate at all; a probe
+    moving one write above another's validation passed 178 of 178.
+    **The rule: run the reviewer's OWN mutant against your fix, not a mutant
+    of your own choosing.** A fix verified by a probe you designed after the
+    fix tests the fix's shape, not the defect. And when a fix's gate passes
+    on the first try, ask which arm of the predicate the test actually
+    reaches — (1) and (2) both passed on the wrong arm.
+
+36. **A COMMIT MESSAGE IS A CLAIM ABOUT ITS OWN DIFF, AND NOTHING CHECKS IT
+    (Phase AV, PR #360, 2026-09-08).** A fix commit's message said it
+    "removed two stray fields from link fixtures". It removed none — the
+    count in the message matched exactly what was still in the tree, so the
+    work had been intended and skipped, and the message read as evidence that
+    it had happened. Caught by a reviewer running `git show <sha> -U0 | grep
+    '^-'` and finding no such deletion.
+    **Before writing a commit message, diff it against the diff:** every
+    concrete claim ("removed X", "added Y", "N files") is checkable against
+    `git diff --cached` in the moment it is written, and a claim that fails
+    that check is worse than silence — CLAUDE.md already requires a command
+    or citation behind every factual claim in a report or code comment, and a
+    commit message is the one place that rule was never spelled out. This
+    matters more than a PR body (RF14) because a PR body is a presentation
+    that someone reads once; a commit message is what `git log` hands the
+    next person forever.
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;
