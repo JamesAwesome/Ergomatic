@@ -288,9 +288,10 @@ takes a PM final gate. It changes user-visible copy and layout, so Gate 0 —
 the rendered screen, the door group, and before/after captures of a connected
 pane and a summary — is approved before task 1.
 
-- [ ] **Gate 0.** Six artifacts, listed in the spec's own closing section,
-      including the door-row ORDER question and whether the screen needs a
-      word about the two SPM slots not reaching the summary. **S**
+- [ ] **Gate 0.** Nine artifacts, listed in the spec's own closing section.
+      **Ruled 2026-09-08:** the door order is BASELINES, CONCEPT2, SETTINGS,
+      DIAGNOSTICS (James: "put settings under concept 2 but above
+      diagnostics"). Eight rulings still open, the legend among them. **S**
 - [ ] **The PR.** Nine tasks, spec §"PR shape". The load-bearing one is the
       e2e seam test: Vitest mocks every `.css` import to an empty string here,
       so **no client test can prove a colour lands on a pixel** — only e2e can

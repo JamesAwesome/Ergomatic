@@ -399,12 +399,17 @@ route sits with the other `/you/*` routes in `shell/AppRoutes.tsx` and
 carries the same `state={{ from: "/you" }}` origin idiom, so its BackLink
 returns to You.
 
-**Order: SETTINGS, BASELINES, CONCEPT2, DIAGNOSTICS.** The existing three
-are ordered by ruling 7 (CONCEPT2 above DIAGNOSTICS, DIAGNOSTICS last) and
-by "BASELINES on top because it is the only one a rower reads FOR its
-value". SETTINGS is not read for its value either, so it goes above
-BASELINES rather than between it and CONCEPT2 — a Gate 0 question, not a
-spec decision.
+**Order: BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS** (James, Gate 0,
+2026-09-08: "put settings under concept 2 but above diagnostics"). The
+spec's own suggestion — SETTINGS on top — was declined. The existing three
+keep their ruling-7 relationship (CONCEPT2 above DIAGNOSTICS, DIAGNOSTICS
+still You's last child), and BASELINES stays on top as the one door a rower
+reads FOR its value.
+
+**One consequence to note rather than design around:** `Concept2Row` renders
+NOTHING unless a successful read has said `available: true` for the account,
+so on an account without it SETTINGS sits directly beneath BASELINES. That is
+the same collapse the group already does today and needs no special case.
 
 ### The three-way control, and its honest cost
 
@@ -688,8 +693,9 @@ pairing's ratio stated as a number:
    in its **new** styling, its checked-state affordance, and the live
    preview — plus contrast rows for all of it, which the table above does
    not cover.
-2. The You door group with SETTINGS in it, against today's three-row group,
-   and the ORDER question (SETTINGS above BASELINES, or below).
+2. ~~The ORDER question~~ — **RULED 2026-09-08**: BASELINES, CONCEPT2,
+   SETTINGS, DIAGNOSTICS. The four-row group still gets a capture against
+   today's three-row one.
 3. A connected `PaneLive`, landscape and portrait, at the default setting
    and at `spmFaster: off`, side by side.
 4. A connected `PaneGrid` at the default and at all-red, side by side —
