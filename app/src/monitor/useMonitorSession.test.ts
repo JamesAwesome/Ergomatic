@@ -15477,11 +15477,34 @@ describe("the app cannot read this monitor: the fact belongs to the SITTING", ()
     });
     fake.corruptCharacteristic(ADDITIONAL_STATUS_1_UUID);
     await connect(result);
+    // The fake WITHHOLDS delivery between a drop and this call, caching
+    // instead. Without it the second leg produces no notifications at all
+    // and this test asserts nothing — which is exactly what it did until a
+    // mutation probe failed to bite and a ring census showed zero decode
+    // failures on the reconnect leg.
+    act(() => {
+      fake.completeReconnect();
+    });
     await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
     for (let i = 0; i < 40; i += 1) {
       ms += 500;
       tick(fake, 500);
     }
+
+    // THE PREMISE, ASSERTED RATHER THAN ASSUMED: the reconnect leg really
+    // did produce more decode failures than the trigger's threshold, so a
+    // silent result means the sitting fact suppressed it — not that nothing
+    // happened. Counted by SUMMING `repeated`, because the ring coalesces
+    // consecutive identical entries: counting rows undercounts events, and
+    // this assertion read 3 before that was noticed.
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      repeated?: number;
+    }[];
+    const failures = ring
+      .filter((e) => e.kind === "frame-error")
+      .reduce((n, e) => n + (e.repeated ?? 1), 0);
+    expect(failures).toBeGreaterThan(12);
 
     // The driver's own view says "never read"; the sitting's says otherwise,
     // and the sitting is the one that decides.
