@@ -35,6 +35,7 @@ import You from "../You";
 import BaselinesScreen from "../you/BaselinesScreen";
 import Diagnostics from "../you/Diagnostics";
 import Concept2Screen from "../you/Concept2Screen";
+import SettingsScreen from "../you/SettingsScreen";
 import MonitorLogs from "../you/MonitorLogs";
 import type { Me } from "../useMe";
 import TabBar from "./TabBar";
@@ -277,6 +278,13 @@ export default function AppRoutes({
               path="/you/concept2"
               element={<Concept2Screen email={user.email} />}
             />
+            {/* Phase JC (Gate 0, 2026-09-08): the judged-colour settings
+                screen behind You's SETTINGS row. Flat, a sibling of /you
+                like the three above, and inside this signed-in fragment
+                because its door is — the preference itself is device-local
+                and needs no account. NOT in HIDDEN_TABBAR_PREFIXES: the tab
+                bar stays, as on every other /you/* door. */}
+            <Route path="/you/settings" element={<SettingsScreen />} />
             <Route
               path="/you/diagnostics/monitor-logs"
               element={<MonitorLogs />}

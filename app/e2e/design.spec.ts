@@ -4381,6 +4381,100 @@ test.describe("diagnostics screen", () => {
   });
 });
 
+// Phase JC (Gate 0 approved 2026-09-08): the judged-colour settings screen
+// behind You's SETTINGS row. TESTING.md, §"structural design assertions":
+// "a new screen with no entry here is a screen the a11y/tap-target/token
+// rules aren't actually checking". The ratios named below are `index.css`'s
+// own, computed there by the WCAG relative-luminance method and repeated
+// here as numbers rather than judged by eye (recurring failure 6).
+//
+// WHAT THIS BLOCK CLAIMS, AT THE STRENGTH IT EARNS (recurring failure 26):
+// that the SETTINGS SCREEN'S OWN chrome paints from the palette and that a
+// tap repaints the preview specimen ON THIS SCREEN. It says nothing about
+// whether the choice reaches a judged row elsewhere in the app, or survives
+// a reload — that is the seam test's claim, and it is a different test.
+test.describe("settings screen (judged colours)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-settings@e2e.test",
+      name: "Design Settings Tester",
+    });
+    await page.goto("/you/settings");
+    await expect(
+      page.getByRole("heading", { name: "Settings", exact: true }),
+    ).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the checked option is an accent border, the resting one a quiet rule", async ({
+    page,
+  }) => {
+    const group = page.getByRole("radiogroup", { name: "Pace slower color" });
+    const red = group.getByRole("radio", { name: "RED", exact: true });
+    const blue = group.getByRole("radio", { name: "BLUE", exact: true });
+    // The default: SLOWER is RED, on a fresh device with nothing stored.
+    await expect(red).toHaveAttribute("aria-checked", "true");
+
+    const border = (locator: typeof red) =>
+      locator.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          width: cs.borderTopWidth,
+          color: cs.borderTopColor,
+          background: cs.backgroundColor,
+        };
+      });
+
+    expect(await border(red)).toStrictEqual({
+      width: "2px",
+      color: "rgb(181, 52, 31)", // --accent, 5.94:1 on --surface (>=3:1)
+      background: "rgb(255, 253, 247)", // --surface
+    });
+    expect(await border(blue)).toStrictEqual({
+      width: "1px",
+      color: "rgb(201, 195, 178)", // --rule-3, decoration at 1.73:1
+      background: "rgb(255, 253, 247)",
+    });
+  });
+
+  test("a tap repaints this screen's preview specimen, and leaves the swatches saying what red and blue ARE", async ({
+    page,
+  }) => {
+    const specimen = page.locator(".judge-preview-value.judge-pace-slower");
+    const swatch = (color: string) =>
+      page.locator(`.judge-swatch[data-color="${color}"]`).first();
+
+    await expect(specimen).toHaveCSS("color", "rgb(150, 39, 24)"); // --judge-red
+    await page
+      .getByRole("radiogroup", { name: "Pace slower color" })
+      .getByRole("radio", { name: "BLUE", exact: true })
+      .click();
+    await expect(specimen).toHaveCSS("color", "rgb(29, 78, 137)"); // --judge-blue
+
+    // THE SWATCHES DO NOT MOVE. They paint from the RAW inks, so the RED
+    // option still shows red after the slot it belongs to has gone blue —
+    // a swatch that followed its own slot would be offering the rower a
+    // choice it had already made for them.
+    await expect(swatch("red")).toHaveCSS(
+      "background-color",
+      "rgb(150, 39, 24)",
+    );
+    await expect(swatch("blue")).toHaveCSS(
+      "background-color",
+      "rgb(29, 78, 137)",
+    );
+  });
+});
+
 /** A plausible mix of the driver's own real `log.record` kinds, same idiom
  *  `screenshots.spec.ts`'s own `sessionLogRing` uses (duplicated rather
  *  than shared across e2e files, this file's own established precedent for

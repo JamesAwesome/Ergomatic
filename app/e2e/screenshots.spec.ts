@@ -20,6 +20,7 @@ import {
   type TodayOverrides,
 } from "../src/today/todayOverrides";
 import { RUN_KEY, type SessionRun } from "../src/session/run";
+import { JUDGE_COLORS_KEY, type JudgeColors } from "../src/you/judgeColors";
 
 // Committed into docs/screenshots/ for PR bodies. NOT diff-asserted — a
 // human judges these, this spec only judges "did it render" (see
@@ -2629,6 +2630,39 @@ test("you", async ({ page }) => {
   await page.getByText("2K 1:52.0 · 6K 2:02.0").waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
+  });
+});
+
+// Phase JC (Gate 0 approved 2026-09-08): the screen behind You's new
+// SETTINGS row. Captured with a NON-DEFAULT set stored — pace swapped and
+// SPM turned off entirely — because a capture of the defaults shows the
+// screen in the one state that is indistinguishable from the feature not
+// existing (recurring failure 7). Seeded, then navigated to with a full
+// document load, so `main.tsx`'s boot apply is what paints the two preview
+// strips rather than the screen's own change handler.
+test("you-settings-colors", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-settings@e2e.test",
+    name: "Screenshot Tester",
+  });
+  const chosen: JudgeColors = {
+    paceFaster: "red",
+    paceSlower: "blue",
+    spmFaster: "off",
+    spmSlower: "off",
+  };
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: JUDGE_COLORS_KEY,
+    value: JSON.stringify(chosen),
+  });
+  await page.goto("/you/settings");
+  await expect(
+    page
+      .getByRole("radiogroup", { name: "Pace faster color" })
+      .getByRole("radio", { name: "RED", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-settings-colors.png"),
   });
 });
 

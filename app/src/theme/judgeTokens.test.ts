@@ -284,6 +284,11 @@ const JUDGED_CELL_CLASSES = [
   "summary-row-pace",
   "summary-row-dev",
   "summary-row-bar",
+  // Task 6's settings screen (`you/SettingsScreen.tsx`): each group's live
+  // preview specimen wears the same verdict class a real row does, on an
+  // element whose own class sits ~5,700 lines lower in this stylesheet —
+  // the exact source-order shape that broke the summary above.
+  "judge-preview-value",
 ] as const;
 
 /** Every `selector { decl }` where a bare judged-cell class sets `color`. */
