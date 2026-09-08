@@ -6105,11 +6105,14 @@ section:not(.news-pinned) .news-row:last-of-type {
    actually fixes the error — full width above two pairs.
 
    SCOPED TO `--failure`, NOT TO `.connected-interstitial-actions`, and that is
-   load-bearing rather than tidy: eleven stacks carry the base class (JustRow's
-   four, JustRowObserver, and this file's pairing / programming / ready /
-   handoff screens), and FOUR of them hold a SINGLE button, which
-   `grid-column: auto` would render at half width. The modifier replaces
-   `--refusal`, which this rule used to key off `unsupported-machine` alone.
+   load-bearing rather than tidy. ELEVEN stacks carry the base class — JustRow's
+   four, JustRowObserver's, and this file's pairing / programming / ready /
+   handoff screens — none of which is a failure frame or was in the approved
+   design. Measured on the base-class version: the READY interstitial's stack
+   goes from full-width buttons to two 214px buttons side by side in a 440px
+   row. So the modifier is what keeps this rule inside the three frames it was
+   approved for; it replaces `--refusal`, which keyed the same rule to
+   `unsupported-machine` alone.
 
    NO NEW COLOUR PAIRING: layout only. A paired button measures 214x52, clear
    of the 44px floor, and `e2e/design.spec.ts` sweeps all three frames for it
