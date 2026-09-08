@@ -39,7 +39,7 @@ describe("article registry invariants", () => {
     for (const a of ARTICLES) expect(a.minutes).toBeGreaterThanOrEqual(1);
   });
 
-  it("your-first-row is PINNED (James 2026-08-23: the pinned shelf carries the teaching alone), connect-the-monitor unpinned; both published 2026-08-08, minutes by the 6H formula (ceil(words/180)) — your-first-row 288 words -> 2 min, connect-the-monitor 217 words -> 2 min", () => {
+  it("your-first-row is PINNED (James 2026-08-23: the pinned shelf carries the teaching alone), connect-the-monitor unpinned; both published 2026-08-08, minutes by the 6H formula (ceil(words/180)) — your-first-row 288 words -> 2 min, connect-the-monitor 375 words -> 3 min since Phase MT's support matrix", () => {
     const yourFirstRow = articleBySlug("your-first-row")!;
     expect(yourFirstRow.pinned).toBe(true);
     expect(yourFirstRow.publishedAt).toBe("2026-08-08");
@@ -48,7 +48,13 @@ describe("article registry invariants", () => {
     const connectTheMonitor = articleBySlug("connect-the-monitor")!;
     expect(connectTheMonitor.pinned).toBe(false);
     expect(connectTheMonitor.publishedAt).toBe("2026-08-08");
-    expect(connectTheMonitor.minutes).toBe(2);
+    // 2 -> 3 (Phase MT, 2026-09-08): the "Which ergs work" support matrix
+    // added 158 words, 217 + 158 = 375, ceil(375/180) = 3. This assertion is
+    // the gate that caught the drift — the first version of that section came
+    // in at 127 added words and left the figure at 2, and the PM gate's two
+    // copy corrections then crossed the boundary. An independent literal, not
+    // derived from the registry, which is why it could go red at all.
+    expect(connectTheMonitor.minutes).toBe(3);
   });
 
   it("the shelf: three pins (your-first-row took the last seat, James 2026-08-23) plus four latest stories", () => {
