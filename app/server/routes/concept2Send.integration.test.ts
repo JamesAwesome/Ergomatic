@@ -121,6 +121,7 @@ function declarationListBody(declared: "H" | "L") {
 // Every user this file signs in — BOTH the sign-in allowlist and the Wave E
 // per-user C2 list, so each test exercises the send rather than the gate.
 const SEND_EMAILS = new Set([
+  "send-reconcile@c2send.test",
   "send-eligibility@c2send.test",
   "send-sent@c2send.test",
   "send-declared@c2send.test",
@@ -163,6 +164,10 @@ function finishedLogBody(extra: Record<string, unknown> = {}) {
 // reusing one literal across three `it()`s is exactly how a later test's
 // callback answers 409 Already linked instead of the outcome it asserts.
 const C2_USER_SENT = 700339;
+// Its own Concept2 account: `concept2_links` holds `c2_user_id` UNIQUE, so
+// two users linking the same account is a 409 by design, and reusing
+// C2_USER_SENT here reddened the sibling test rather than this one.
+const C2_USER_RECONCILE = 700399;
 const C2_USER_DUP = 700340;
 const C2_USER_FIRST = 700341;
 const C2_USER_SECOND = 700342;
@@ -437,6 +442,93 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
       "manual, finished, with both work columns: false",
       "no-reading, finished, with both work columns: false",
     ]);
+  });
+
+  it("the reconciliation: raw Concept2 JSON saying `verified` reaches the DB row (RF24, end to end)", async () => {
+    // THE ONE TEST THAT SPANS THE WHOLE CHAIN. The reconciliation was
+    // otherwise gated in three separate segments that met nowhere: JSON to
+    // row in `client.test.ts`, row to ids at the route against the FAKE
+    // store, ids to SQL in `stores.integration.test.ts`. Both blocking
+    // findings of the round-1 review lived in that gap — the fake's mirrors
+    // of the account scope and the never-downgrade clause were both
+    // unfalsifiable, so the route's five behavioural tests were validating
+    // against a fiction.
+    //
+    // Here the producer is CONCEPT2'S OWN RESPONSE BODY: raw JSON with a
+    // `verified` key, parsed by the real `createC2Client`, intersected by
+    // the real route, written by the real store, into real Postgres, and
+    // read back through the real GET. Nothing is seeded into the column and
+    // no response is hand-built above the wire.
+    const { bearer, userId } = await signIn("send-reconcile");
+    await linkAccount({
+      userId,
+      c2UserId: C2_USER_RECONCILE,
+      username: "jamesawesome",
+    });
+
+    // An OLDER row, already sent and NOT verified — this is what the
+    // reconciliation acts on.
+    const olderId = await postLog(bearer);
+    fetchMock.mockImplementation(async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.includes("/api/users/me/results?")) {
+        return jsonResponse(200, declarationListBody("H"));
+      }
+      return jsonResponse(201, created201(9101, C2_USER_RECONCILE));
+    });
+    await request(app)
+      .post(`/api/concept2/results/${olderId}`)
+      .set("Authorization", bearer)
+      .send({ tz: "Europe/London" });
+    // The 201 above carries no `verified`, so the row starts unverified.
+    // Asserted rather than assumed: if it started true this test could not
+    // tell an upgrade from a no-op.
+    expect((await readRow(bearer, olderId)).verified).not.toBe(true);
+
+    // Now a SECOND send. Its declaration read reports the older row as
+    // verified — which is what a rower typing the code in on Concept2
+    // between the two sends looks like from here.
+    const freshId = await postLog(bearer);
+    fetchMock.mockImplementation(async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.includes("/api/users/me/results?")) {
+        const body = declarationListBody("H");
+        return jsonResponse(200, {
+          data: [
+            {
+              id: 9101,
+              type: "rower",
+              weight_class: "H",
+              date_utc: "2026-08-22 10:00:30",
+              date: "2026-08-22 06:00:30",
+              verified: true,
+            },
+            // A verified row that is NOT ours, in the same page. Its id must
+            // never reach the write — this is the assertion the round-1
+            // review found could not go red at the route.
+            {
+              id: 424242,
+              type: "rower",
+              weight_class: "H",
+              date_utc: "2026-08-22 09:00:30",
+              date: "2026-08-22 05:00:30",
+              verified: true,
+            },
+            ...body.data,
+          ],
+        });
+      }
+      return jsonResponse(201, created201(9102, C2_USER_RECONCILE));
+    });
+    const second = await request(app)
+      .post(`/api/concept2/results/${freshId}`)
+      .set("Authorization", bearer)
+      .send({ tz: "Europe/London" });
+    expect(second.status).toBe(200);
+
+    // THE OLDER ROW PICKED IT UP, from Concept2's own word, through every
+    // real layer.
+    expect((await readRow(bearer, olderId)).verified).toBe(true);
   });
 
   it("a row sent through the real route reads back as SENT to the client's own predicate", async () => {
