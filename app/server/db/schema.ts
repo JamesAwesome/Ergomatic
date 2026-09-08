@@ -381,7 +381,13 @@ export const sessionLogs = pgTable(
     // two ids above.
     //
     // THIS IS NOT A MIRROR OF CONCEPT2'S CURRENT STATE, and reading it as
-    // one is the mistake to avoid. It records what Concept2 said AT RECEIPT.
+    // one is the mistake to avoid. **Its meaning WIDENED when the
+    // reconciliation landed (Phase AV PR 3):** it was "what Concept2 said at
+    // receipt"; it is now "the best thing Concept2 has said about this row
+    // the last time we happened to look". That is still not "current" — the
+    // reconciliation fires only on a send, reads one page of 50, and never
+    // walks `links.next`, so a row falls out of view permanently once that
+    // many newer rows exist.
     // `true` can only become more true, so it is safe to render. `false` and
     // `null` are NOT distinguishable to the reader and must never be — both
     // render as no mark. `null` means we did not learn (the 409-duplicate

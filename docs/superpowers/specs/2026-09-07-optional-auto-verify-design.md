@@ -368,10 +368,12 @@ result id and the account id from the same response and is the only place a
 send's outcome lands.
 
 **The asymmetry that governs every word of the copy.** Our 201 tells us
-whether the row verified AT RECEIPT.
+whether the row verified AT RECEIPT; since the reconciliation shipped (PR 3,
+#365) a later send can also upgrade it. Neither is "now".
 
 - `verified: true` — true, and it stays true. Say so.
-- `verified: false` — means "not verified at receipt", and **nothing more**.
+- `verified: false` — means "not verified the last time we looked", and
+  **nothing more**.
 
 **An earlier draft justified this by saying nothing re-reads a row from
 Concept2 after the send. That is false, and the correction matters.** Every
