@@ -345,12 +345,26 @@ function spyTransport(inner: Transport & FakeControls): Transport &
   return spy;
 }
 
+/** The spy's own shape, named so `harness`'s `wrap` can preserve it. Typing
+ *  that parameter as a bare `Transport & FakeControls` widened `transport`
+ *  for EVERY test in this file and erased `scans`/`disconnects`/`wireWrites`
+ *  — 80 typecheck errors, none of them in the new tests, all caught by the
+ *  pre-commit hook rather than by vitest, which does not typecheck. */
+type SpiedTransport = ReturnType<typeof spyTransport>;
+
 function harness(
   script: FakeScript,
   deps: Omit<MonitorSessionDeps, "createTransport"> = {},
+  /** Phase MT: an optional extra layer around the spy, for the one test that
+   *  needs the ORDER of writes and the hang-up rather than their counts.
+   *  Threaded through here rather than hand-rolling a `renderHook` beside it,
+   *  because the driver options below are what make the fake's terminate
+   *  settle at all — a bare render leaves the chained disconnect waiting
+   *  forever on a promise that never resolves, which cost a debugging round. */
+  wrap: (t: SpiedTransport) => SpiedTransport = (t) => t,
 ) {
   const fake = createFakeTransport({ deviceName: DEVICE_NAME, ...script });
-  const transport = spyTransport(fake);
+  const transport = wrap(spyTransport(fake));
   const rendered = renderHook(() =>
     useMonitorSession({
       createTransport: () => transport,
@@ -15552,5 +15566,136 @@ describe("the app cannot read this monitor: the fact belongs to the SITTING", ()
     fake.healCharacteristic(ADDITIONAL_STATUS_1_UUID);
     tick(fake, 500);
     expect(result.current.undecodable).toBe(false);
+  });
+});
+
+/**
+ * PHASE MT — the session refuses a machine it cannot record.
+ *
+ * Driven through the REAL fake transport with a script-level machine type, so
+ * these start upstream of the encoder and run the whole seam: fake writes the
+ * byte at its offset, `parseAdditionalStatus1` reads it back, the driver
+ * classifies, the hook refuses. A test that pushed a synthetic
+ * `unsupported-machine` event at the hook would prove only the last hop.
+ */
+describe("useMonitorSession: an unsupported erg machine", () => {
+  it("a SkiErg sitting fails with the approved copy, and names the machine", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 128,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error).toStrictEqual({
+      reason: "unsupported-machine",
+      detail:
+        "Erg type not supported\nThis monitor is on a SkiErg. Nothing here will start.",
+    });
+  });
+
+  it("a BikeErg says BikeErg, and a Dyno says Dyno — the copy is not one string", async () => {
+    const bike = harness({ program: TWO_INTERVALS, ergMachineType: 192 });
+    await connect(bike.result);
+    await programAndArm(bike.result, bike.fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(bike.result.current.error?.detail).toContain("on a BikeErg");
+
+    const dyno = harness({ program: TWO_INTERVALS, ergMachineType: 64 });
+    await connect(dyno.result);
+    await programAndArm(dyno.result, dyno.fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(dyno.result.current.error?.detail).toContain("on a Dyno");
+  });
+
+  it("a RowErg sitting is untouched — this is the arm that must never fire", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 0,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    // Reached READY, which is the whole point: the arm that must never fire
+    // did not, and the sitting is usable. Asserting only "error is null"
+    // would pass from `pairing` too, before any status frame had arrived.
+    expect(result.current.error).toBeNull();
+    expect(result.current.phase).toBe("ready");
+  });
+
+  it("a monitor too old to carry the field is untouched", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 128,
+      // The frame is 16 bytes, so the machine-type byte is not on the wire at
+      // all — a SkiErg on pre-2018 firmware is indistinguishable from a
+      // RowErg, and refusing on ignorance would break a working erg.
+      preV126Firmware: true,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.phase).toBe("ready");
+  });
+
+  /**
+   * EXIT CRITERION 3, asserted by ORDERING rather than by both merely
+   * happening. `fail()` chains the disconnect behind the terminate promise
+   * because hanging up while a terminate write is in flight can abort it,
+   * leaving the erg ARMED with the workout we just refused (DEVIATIONS row
+   * 63). A test that only checked "terminate was called" and "disconnect was
+   * called" would pass with the chain removed.
+   */
+  it("terminates the erg BEFORE hanging up, never the other way round", async () => {
+    const order: string[] = [];
+    const { result, fake } = harness(
+      { program: TWO_INTERVALS, ergMachineType: 128 },
+      {},
+      (t) => ({
+        ...t,
+        write: (uuid: string, bytes: Uint8Array) => {
+          order.push("write");
+          return t.write(uuid, bytes);
+        },
+        disconnect: () => {
+          order.push("disconnect");
+          return t.disconnect();
+        },
+      }),
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    // The hang-up is CHAINED behind the terminate promise, so it cannot land
+    // until that settles on the fake's own clock. The lag IS the behaviour
+    // under test: an unchained `disconnect()` would already sit in `order`,
+    // ahead of the terminate write this assertion requires it to follow.
+    await act(async () => {
+      for (let i = 0; i < 25; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+    });
+
+    expect(result.current.error?.reason).toBe("unsupported-machine");
+    expect(order).toContain("disconnect");
+    expect(order.lastIndexOf("write")).toBeLessThan(
+      order.indexOf("disconnect"),
+    );
+  });
+
+  it("opens no run, so nothing can be stored or sent", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 128,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    expect(result.current.runOpen).toBe(false);
   });
 });
