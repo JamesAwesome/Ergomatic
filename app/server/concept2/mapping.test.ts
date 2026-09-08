@@ -186,7 +186,7 @@ describe("buildC2Payload", () => {
   it("maps the fixture row to EXACTLY PR0's accepted payload", () => {
     // effectiveTz is a decoy ("UTC") to prove the stored completedAt+tz
     // pair wins over it when both are present (precedence rule).
-    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC")).toStrictEqual({
+    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC", false)).toStrictEqual({
       type: "rower",
       date: "2026-08-25 17:42:03",
       timezone: "America/New_York",
@@ -220,7 +220,7 @@ describe("buildC2Payload", () => {
       machineWorkMeters: 5706,
       machineWorkSeconds: 1499.8,
     };
-    const payload = buildC2Payload(row, LINK, "UTC");
+    const payload = buildC2Payload(row, LINK, "UTC", false);
     expect(payload.distance).toBe(5706);
     expect(payload.time).toBe(14998); // c2Tenths(1499.8), NOT c2Tenths(1500)=15000
   });
@@ -235,7 +235,7 @@ describe("buildC2Payload", () => {
       machineWorkMeters: null,
       machineWorkSeconds: null,
     };
-    const payload = buildC2Payload(row, LINK, "UTC");
+    const payload = buildC2Payload(row, LINK, "UTC", false);
     expect(payload.distance).toBe(5708);
     expect(payload.time).toBe(15000);
   });
@@ -252,7 +252,7 @@ describe("buildC2Payload", () => {
       machineWorkMeters: 0,
       machineWorkSeconds: 0,
     };
-    const payload = buildC2Payload(row, LINK, "UTC");
+    const payload = buildC2Payload(row, LINK, "UTC", false);
     expect(payload.distance).toBe(5708);
     expect(payload.distance).not.toBe(0);
     expect(payload.time).toBe(15000);
@@ -265,7 +265,7 @@ describe("buildC2Payload", () => {
       completedAt: null,
       tz: null,
     };
-    const payload = buildC2Payload(legacyRow, LINK, "America/New_York");
+    const payload = buildC2Payload(legacyRow, LINK, "America/New_York", false);
     expect(payload.date).toBe(
       formatC2Date(legacyRow.loggedAt, "America/New_York"),
     );
@@ -274,7 +274,7 @@ describe("buildC2Payload", () => {
 
   it("falls back to loggedAt + effectiveTz when only tz is null", () => {
     const row: SessionLogRow = { ...FINISHED_ROW, tz: null };
-    const payload = buildC2Payload(row, LINK, "America/Los_Angeles");
+    const payload = buildC2Payload(row, LINK, "America/Los_Angeles", false);
     expect(payload.date).toBe(
       formatC2Date(row.loggedAt, "America/Los_Angeles"),
     );
@@ -283,7 +283,7 @@ describe("buildC2Payload", () => {
 
   it("falls back to loggedAt + effectiveTz when only completedAt is null", () => {
     const row: SessionLogRow = { ...FINISHED_ROW, completedAt: null };
-    const payload = buildC2Payload(row, LINK, "America/Los_Angeles");
+    const payload = buildC2Payload(row, LINK, "America/Los_Angeles", false);
     expect(payload.date).toBe(
       formatC2Date(row.loggedAt, "America/Los_Angeles"),
     );
@@ -296,7 +296,7 @@ describe("buildC2Payload", () => {
       restSeconds: 0,
       restMeters: 0,
     };
-    const payload = buildC2Payload(row, LINK, "UTC");
+    const payload = buildC2Payload(row, LINK, "UTC", false);
     expect(payload).not.toHaveProperty("rest_time");
     expect(payload).not.toHaveProperty("rest_distance");
   });
@@ -307,14 +307,14 @@ describe("buildC2Payload", () => {
       restSeconds: null,
       restMeters: null,
     };
-    const payload = buildC2Payload(row, LINK, "UTC");
+    const payload = buildC2Payload(row, LINK, "UTC", false);
     expect(payload).not.toHaveProperty("rest_time");
     expect(payload).not.toHaveProperty("rest_distance");
   });
 
   it("omits stroke_rate/workout_type when machineSummary is absent (null)", () => {
     const row: SessionLogRow = { ...FINISHED_ROW, machineSummary: null };
-    const payload = buildC2Payload(row, LINK, "UTC");
+    const payload = buildC2Payload(row, LINK, "UTC", false);
     expect(payload).not.toHaveProperty("stroke_rate");
     expect(payload).not.toHaveProperty("workout_type");
   });
@@ -333,7 +333,7 @@ describe("buildC2Payload", () => {
           avgStrokeRate: value,
         },
       };
-      expect(buildC2Payload(row, LINK, "UTC")).not.toHaveProperty(
+      expect(buildC2Payload(row, LINK, "UTC", false)).not.toHaveProperty(
         "stroke_rate",
       );
     });
@@ -347,8 +347,8 @@ describe("buildC2Payload", () => {
         ...FINISHED_ROW,
         machineSummary: { ...FINISHED_ROW.machineSummary, avgStrokeRate: 99 },
       };
-      expect(buildC2Payload(low, LINK, "UTC").stroke_rate).toBe(1);
-      expect(buildC2Payload(high, LINK, "UTC").stroke_rate).toBe(99);
+      expect(buildC2Payload(low, LINK, "UTC", false).stroke_rate).toBe(1);
+      expect(buildC2Payload(high, LINK, "UTC", false).stroke_rate).toBe(99);
     });
   });
 
@@ -362,7 +362,7 @@ describe("buildC2Payload", () => {
         ...FINISHED_ROW,
         machineSummary: { ...FINISHED_ROW.machineSummary, workoutType: value },
       };
-      expect(buildC2Payload(row, LINK, "UTC")).not.toHaveProperty(
+      expect(buildC2Payload(row, LINK, "UTC", false)).not.toHaveProperty(
         "workout_type",
       );
     });
@@ -370,7 +370,7 @@ describe("buildC2Payload", () => {
 
   it("throws if called on a row that has not passed eligibilityFailure (defensive contract)", () => {
     const row: SessionLogRow = { ...FINISHED_ROW, workSeconds: null };
-    expect(() => buildC2Payload(row, LINK, "UTC")).toThrow();
+    expect(() => buildC2Payload(row, LINK, "UTC", false)).toThrow();
   });
 });
 
@@ -621,6 +621,7 @@ describe("buildC2Payload — Phase LP PR 2, result-level fields", () => {
       { ...FINISHED_ROW, machineSummary: LP_SUMMARY },
       LINK,
       "UTC",
+      false,
     );
     expect(post).toMatchObject({
       calories_total: 372,
@@ -640,6 +641,7 @@ describe("buildC2Payload — Phase LP PR 2, result-level fields", () => {
       },
       LINK,
       "UTC",
+      false,
     );
     expect(zero.calories_total).toBe(0);
     expect(zero).not.toHaveProperty("drag_factor");
@@ -656,6 +658,7 @@ describe("buildC2Payload — Phase LP PR 2, result-level fields", () => {
         },
         LINK,
         "UTC",
+        false,
       ),
     ).not.toHaveProperty("drag_factor");
     expect(zero).not.toHaveProperty("heart_rate");
@@ -674,6 +677,7 @@ describe("buildC2Payload — Phase LP PR 2, result-level fields", () => {
       },
       LINK,
       "UTC",
+      false,
     );
     expect(nulls).not.toHaveProperty("heart_rate");
   });
@@ -690,6 +694,7 @@ describe("buildC2Payload — Phase LP PR 2, result-level fields", () => {
       },
       LINK,
       "UTC",
+      false,
     );
     expect(withMachine.rest_distance).toBe(275);
     const zeroMachine = buildC2Payload(
@@ -703,9 +708,12 @@ describe("buildC2Payload — Phase LP PR 2, result-level fields", () => {
       },
       LINK,
       "UTC",
+      false,
     );
     expect(zeroMachine.rest_distance).toBe(274);
-    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC").rest_distance).toBe(274);
+    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC", false).rest_distance).toBe(
+      274,
+    );
   });
 
   it("a non-integer or string stored value is omitted, never sent (the API fails the whole workout on one decimal)", () => {
@@ -722,6 +730,7 @@ describe("buildC2Payload — Phase LP PR 2, result-level fields", () => {
       },
       LINK,
       "UTC",
+      false,
     );
     expect(post).not.toHaveProperty("calories_total");
     expect(post).not.toHaveProperty("drag_factor");
@@ -758,6 +767,7 @@ describe("buildC2Payload — Phase LP PR 2, workout.intervals[]", () => {
       { ...FINISHED_ROW, steps: [STEP_1, STEP_2] },
       LINK,
       "UTC",
+      false,
     );
     expect(post.workout).toStrictEqual({
       intervals: [
@@ -783,7 +793,7 @@ describe("buildC2Payload — Phase LP PR 2, workout.intervals[]", () => {
         },
       ],
     });
-    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC")).not.toHaveProperty(
+    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC", false)).not.toHaveProperty(
       "workout",
     );
   });
@@ -797,6 +807,7 @@ describe("buildC2Payload — Phase LP PR 2, workout.intervals[]", () => {
       },
       LINK,
       "UTC",
+      false,
     );
     expect(post).not.toHaveProperty("workout_type");
     expect(post).not.toHaveProperty("workout");
@@ -808,6 +819,7 @@ describe("buildC2Payload — Phase LP PR 2, workout.intervals[]", () => {
       { ...FINISHED_ROW, steps: [STEP_1, prePr2] },
       LINK,
       "UTC",
+      false,
     );
     expect(post).not.toHaveProperty("workout");
     expect(post.workout_type).toBe("VariableInterval");
@@ -831,6 +843,7 @@ describe("buildC2Payload — Phase LP PR 2, workout.intervals[]", () => {
           },
           LINK,
           "UTC",
+          false,
         ),
       ),
     ) as unknown;
@@ -860,37 +873,70 @@ describe("buildC2Payload — Phase LP PR 2, workout.intervals[]", () => {
   });
 });
 
-// Phase LP PR 2.5 REVERSED (James, 2026-09-07): the code is never sent —
-// Concept2's own app leaves verification to the rower, and this phase is
-// about parity with Concept2.
-describe("buildC2Payload — verification_code is never sent", () => {
+// Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved): the code
+// is sent ONLY when the rower has turned AUTO VERIFY on. OFF is the default
+// and remains PR #337's behaviour verbatim — Concept2's own app leaves
+// verifying to the rower, so the app must not do it uninvited.
+//
+// BOTH ARMS ARE PINNED. The OFF arm is not the weaker test here; it is the
+// default every rower gets and the one a regression would ship silently.
+describe("buildC2Payload — verification_code rides the AUTO VERIFY flag", () => {
   const EXIT7_BYTES = [
     0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01, 0x00,
     0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   ];
 
-  it("withholds the code even on the row that would verify: machine totals posted AND the bytes stored", () => {
+  const VERIFIABLE_ROW = {
+    ...FINISHED_ROW,
+    machineWorkMeters: 500,
+    machineWorkSeconds: 124.0,
+    machineSummary: {
+      avgStrokeRate: 26,
+      workoutType: 8,
+      verificationBytes: EXIT7_BYTES,
+    },
+  };
+
+  it("OFF: withholds the code even on the row that would verify", () => {
     // This is exactly the row PR 2.5 sent a code for (it verified live,
-    // rows 86044/5706). Re-adding the send reddens this.
-    const post = buildC2Payload(
-      {
-        ...FINISHED_ROW,
-        machineWorkMeters: 500,
-        machineWorkSeconds: 124.0,
-        machineSummary: {
-          avgStrokeRate: 26,
-          workoutType: 8,
-          verificationBytes: EXIT7_BYTES,
-        },
-      },
-      LINK,
-      "UTC",
-    );
+    // rows 86044/5706), so nothing about the row explains the withholding —
+    // only the flag does.
+    const post = buildC2Payload(VERIFIABLE_ROW, LINK, "UTC", false);
     expect(post).not.toHaveProperty("verification_code");
     // The numbers the code WOULD have been checked against still post — the
     // rower can read the code off the monitor and verify by hand.
     expect(post.distance).toBe(500);
     expect(post.time).toBe(1240);
+  });
+
+  it("ON: sends the code, and the numbers it is checked against are unchanged", () => {
+    const post = buildC2Payload(VERIFIABLE_ROW, LINK, "UTC", true);
+    // Derived by hand from EXIT7_BYTES, not read off the implementation:
+    // two LE u32 words from the FIRST EIGHT bytes only. 06 47 99 AF ->
+    // 0xAF994706 -> "AF99-4706"; 54 B0 21 C0 -> 0xC021B054 -> "C021-B054".
+    // Corroborated independently by `FromTheLog.test.tsx`, which derives the
+    // display form "AF99-4706 C021-B054" from these same walk bytes.
+    expect(post.verification_code).toBe("AF99-4706-C021-B054");
+    expect(post.distance).toBe(500);
+    expect(post.time).toBe(1240);
+  });
+
+  it("ON but no machine totals: still no code, because it could only mismatch", () => {
+    // The guard that survives from #336 verbatim. The code is minted over the
+    // MACHINE's own distance and time; a row falling back to our interval
+    // sums would post a code against numbers it was never minted over, and
+    // measurement says that returns verified:false (the 5707 control).
+    const post = buildC2Payload(
+      {
+        ...VERIFIABLE_ROW,
+        machineWorkMeters: null,
+        machineWorkSeconds: null,
+      },
+      LINK,
+      "UTC",
+      true,
+    );
+    expect(post).not.toHaveProperty("verification_code");
   });
 });
 
@@ -950,7 +996,7 @@ describe("buildC2Payload agrees with the eligibility predicate", () => {
   it.each(cases)(
     "posts the same overall figures the screen judges: %s",
     (_label, row) => {
-      const post = buildC2Payload(row, LINK, "UTC");
+      const post = buildC2Payload(row, LINK, "UTC", false);
       const overall = concept2OverallTotals({
         ...row,
         machineRestMeters:
@@ -989,6 +1035,7 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
       { ...FINISHED_ROW, series: trace },
       LINK,
       "UTC",
+      false,
     );
     expect(post.heart_rate).toStrictEqual({ average: 133 });
   });
@@ -1004,7 +1051,7 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
     // With the middle stretch resting, only the opening second counts.
     expect(
       (
-        buildC2Payload({ ...FINISHED_ROW, series: resting }, LINK, "UTC")
+        buildC2Payload({ ...FINISHED_ROW, series: resting }, LINK, "UTC", false)
           .heart_rate as Record<string, number>
       ).average,
     ).toBe(100);
@@ -1019,6 +1066,7 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
       },
       LINK,
       "UTC",
+      false,
     );
     // 151, not the trace's 138: the machine's own reading wins wherever it
     // exists, which is what keeps this a FALLBACK rather than a replacement.
@@ -1026,11 +1074,16 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
   });
 
   it("sends no heart rate at all when there is nothing to send", () => {
-    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC")).not.toHaveProperty(
+    expect(buildC2Payload(FINISHED_ROW, LINK, "UTC", false)).not.toHaveProperty(
       "heart_rate",
     );
     expect(
-      buildC2Payload({ ...FINISHED_ROW, series: { samples: [] } }, LINK, "UTC"),
+      buildC2Payload(
+        { ...FINISHED_ROW, series: { samples: [] } },
+        LINK,
+        "UTC",
+        false,
+      ),
     ).not.toHaveProperty("heart_rate");
     // Out of band low: a derived 19 is not a heart rate we will post.
     expect(
@@ -1046,6 +1099,7 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
         },
         LINK,
         "UTC",
+        false,
       ),
     ).not.toHaveProperty("heart_rate");
   });

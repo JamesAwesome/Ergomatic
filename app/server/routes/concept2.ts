@@ -987,7 +987,13 @@ export function createConcept2Router({
       // Ruling (i) narrowed this to ONE field: `weightClass` used to ride
       // here too, read off the stored link row. There is no stored class
       // any more (migration 0023) — it is resolved from Concept2 below.
-      type LinkIdentity = { c2UserId: number };
+      // Phase AV widened this from `{ c2UserId }`. AUTO VERIFY is read from
+      // the LOCKED re-read, beside the access token and for the same reason:
+      // it is the authoritative value at the moment this request sends, and
+      // a concurrent PATCH from another request is visible here or not at
+      // all. Reading it from an earlier unlocked fetch would let one send
+      // carry a policy the rower had already changed.
+      type LinkIdentity = { c2UserId: number; autoVerify: boolean };
       type TokenOutcome =
         | { ok: true; accessToken: string; link: LinkIdentity }
         | { ok: false; status: number; body: Record<string, unknown> };
@@ -1032,7 +1038,10 @@ export function createConcept2Router({
               },
             };
           }
-          const identity: LinkIdentity = { c2UserId: locked.c2UserId };
+          const identity: LinkIdentity = {
+            c2UserId: locked.c2UserId,
+            autoVerify: locked.autoVerify,
+          };
           if (
             retry !== undefined &&
             locked.accessToken !== retry.staleAccessToken
@@ -1342,10 +1351,16 @@ export function createConcept2Router({
         return;
       }
 
+      // Phase AV: resolved ONCE, here, from the link this request locked —
+      // and deliberately NOT re-read below, where `lockedLink` is reassigned
+      // by the refresh retry. Same discipline as the weight class (R13): one
+      // send carries one policy.
+      const autoVerify = lockedLink.autoVerify;
       let payload = buildC2Payload(
         mappingRow,
         resolved.weightClass,
         effectiveTz,
+        autoVerify,
       );
       let postResult = await client.postResult(accessToken, payload);
 
@@ -1367,7 +1382,16 @@ export function createConcept2Router({
         lockedLink = retryOutcome.link;
         // Same class, deliberately: resolved ONCE per request (ruling R13),
         // reused across this retry so one send can never carry two classes.
-        payload = buildC2Payload(mappingRow, resolved.weightClass, effectiveTz);
+        // Same class AND same AUTO VERIFY, deliberately: both resolved ONCE
+        // per request (ruling R13; Phase AV), reused across this retry so one
+        // send can never carry two policies. `lockedLink` was reassigned on
+        // the line above, which is exactly why this reads the captured value.
+        payload = buildC2Payload(
+          mappingRow,
+          resolved.weightClass,
+          effectiveTz,
+          autoVerify,
+        );
         postResult = await client.postResult(accessToken, payload);
 
         // I2: a REPEAT 401 immediately after a GENUINE refresh (or after

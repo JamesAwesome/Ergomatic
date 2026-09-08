@@ -270,6 +270,7 @@ describe("POST/GET /api/logs: completedAt/tz round-trip through the real route a
       },
       "H",
       "Pacific/Kiritimati",
+      false,
     );
     expect(payload.timezone).toBe(row.tz);
     expect(payload.date).toBe(formatC2Date(new Date(closed), row.tz as string));

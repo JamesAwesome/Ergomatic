@@ -11,6 +11,7 @@
 import type { LogSource } from "../../domain/types.js";
 import type { LogStep } from "../stores/logs.js";
 import { buildC2Intervals } from "./intervals.js";
+import { wireVerificationCode } from "../../domain/monitor/verificationCode.js";
 import { c2Tenths, sendableInt } from "./tenths.js";
 import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
 
@@ -502,6 +503,18 @@ export function buildC2Payload(
   // stale name outliving the refactor.
   weightClass: WeightClass,
   effectiveTz: string,
+  // Phase AV: the rower's AUTO VERIFY setting, read from the LINK row.
+  // Passed positionally like `weightClass` above and for the same reason —
+  // it is a per-user resolution the send path produced, and the alternative
+  // (build the payload, then delete the key in the route) moves the decision
+  // to a seam this module's own tests cannot reach.
+  //
+  // RESOLVED ONCE PER REQUEST, never re-read on the retry. `buildC2Payload`
+  // is called twice and `lockedLink` is REASSIGNED between the two calls, so
+  // a rower toggling the setting mid-send could otherwise have one send carry
+  // two policies — the same rule the weight class states at its second call
+  // site (ruling R13).
+  autoVerify: boolean,
 ): Record<string, unknown> {
   const { workSeconds, workMeters } = requireWorkTotals(row);
 
@@ -632,15 +645,51 @@ export function buildC2Payload(
   }
   if (Object.keys(heartRate).length > 0) post.heart_rate = heartRate;
 
-  // `verification_code` is deliberately NOT sent (James, 2026-09-07).
-  // PR 2.5 sent it and Concept2 verified the row at receipt; the row then
-  // read "Verified: Yes" without the rower having done anything. That is
-  // NOT what ErgData does — Concept2's own app uploads the row and leaves
-  // the rower to verify it — and this phase's north star is parity with
-  // Concept2, so auto-verifying broke the very thing it was meant to serve.
-  // Verification stays a deliberate human act. The measurements PR 2.5
-  // produced are still good (see the research file); what changed is the
-  // product decision, not the wire fact.
+  // Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
+  // 2026-09-07): the PM5's own verification code, sent ONLY when the rower
+  // turned AUTO VERIFY on AND the posted `time`/`distance` are BOTH the
+  // machine's own totals.
+  //
+  // WHY THE FLAG EXISTS. PR #336 sent this unconditionally; the first real
+  // rowed row came back "Verified: Yes" with nothing for the rower to do,
+  // and James ruled that a parity REGRESSION — Concept2's own app leaves
+  // verifying to the rower, so doing it for them removes the act. #337
+  // reverted it. It is back as a setting, defaulted OFF, so the default
+  // behaviour is still #337's.
+  //
+  // WHY BOTH MACHINE TOTALS. The code is minted over the MACHINE's distance
+  // and time and the API checks "date, time, distance, workout_type and
+  // machine type". MEASURED against log-dev: the machine's 5706 returns
+  // `verified: true` and the control 5707 returns false, both without the
+  // interval array (2026-09-05) and with it (2026-09-07, rows 86044/86045,
+  // deleted) — so the array does not interfere. A row falling back to our
+  // interval sums sends no code: it could only mismatch.
+  //
+  // ONE PREMISE THIS BLOCK NO LONGER CARRIES. #336's version justified
+  // itself partly by an INFERENCE that Concept2 hides its own Verify button
+  // on a result carrying interval data. That was CLOSED and falsified on
+  // 2026-09-07: the button keys on the row's OVERALL distance or time
+  // hitting a ranking standard, measured over 21 rows, with no interval
+  // dependence at all (`domain/concept2/verificationEligibility.ts`). The
+  // reason to offer this setting is the ranking rule, not the array.
+  //
+  // NOT TESTED: `date` is the PHONE's clock, and it is one of the five
+  // fields the code is checked against. Across seven committed captures the
+  // monitor's own log stamp reads 1.3-3.2 minutes earlier than the wall
+  // clock; the one live test verified anyway, which suggests tolerance
+  // rather than agreement. Spec M8/M9.
+  if (autoVerify) {
+    const bytes = row.machineSummary?.verificationBytes;
+    if (
+      usedMachineMeters &&
+      usedMachineSeconds &&
+      Array.isArray(bytes) &&
+      bytes.every((b) => typeof b === "number" && Number.isInteger(b))
+    ) {
+      const code = wireVerificationCode(bytes as number[]);
+      if (code !== null) post.verification_code = code;
+    }
+  }
   // The per-interval array rides ONLY with a workout_type we map
   // (VariableInterval — every programmed Ergomatic piece) and only when
   // every step can fill the API's REQUIRED keys (`buildC2Intervals`).
