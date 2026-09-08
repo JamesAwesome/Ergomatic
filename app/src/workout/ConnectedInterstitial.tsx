@@ -19,6 +19,7 @@
 // `monitorRun.ts` directly.
 
 import { useEffect, useRef, useState } from "react";
+import SupportMatrixLink from "../monitor/SupportMatrixLink";
 import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { MonitorDiscoveryRequest } from "../../domain/monitor/types.js";
@@ -93,6 +94,11 @@ const NOT_A_MACHINE_REFUSAL: Record<ConnectedError["reason"], boolean> = {
   "scan-dismissed": true,
   "permission-denied": true,
   disconnected: true,
+  // Phase MT: OUR refusal of the machine, not the machine's refusal of our
+  // workout — so `true`, and the "End whatever is showing on the monitor,
+  // then try again" line stays suppressed. There is nothing on the monitor to
+  // end: the refusal terminated it before hanging up.
+  "unsupported-machine": true,
   // Phase NF: lookup/cleanup failures, never a machine refusal.
   "target-not-advertising": true,
   "target-already-connected": true,
@@ -618,6 +624,7 @@ export default function ConnectedInterstitial({
               {error.reason === "permission-denied" && (
                 <p className="connected-body-line">{error.detail}</p>
               )}
+              {error.reason === "unsupported-machine" && <SupportMatrixLink />}
               <p className="connected-reassurance">
                 YOUR WORKOUT AND NUDGES ARE KEPT
               </p>

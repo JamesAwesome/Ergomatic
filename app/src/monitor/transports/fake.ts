@@ -602,6 +602,21 @@ export interface FakeScript {
    *  including during the arm sequence, opens it permanently and any test
    *  relying on this would go green while proving nothing. */
   preV126Firmware?: boolean;
+  /** Phase MT: the `Erg Machine Type` byte this fake monitor reports on BOTH
+   *  0x0032 (offset 16) and 0x0038 (offset 18). Defaults to `0`
+   *  (`ERGMACHINE_TYPE_STATIC_D`), which is what the real erg reports in 3448
+   *  of 3448 committed frames — so every existing test is unaffected.
+   *
+   *  NONE of the existing controls could stand in for this, which is why it
+   *  had to be built: `preV126Firmware` REMOVES the field entirely, and
+   *  `injectGarbledFrame` breaks the decode so the byte is never read. Set it
+   *  to 128 for a SkiErg, 192 for a BikeErg, 64 for a Dyno.
+   *
+   *  Deliberately a raw NUMBER, not a `"ski" | "bike"` union: a test that
+   *  names the machine could not exercise the enum boundaries or the
+   *  unnamed-value arm, which are most of what
+   *  `domain/monitor/pm5/ergMachine.ts` exists to get right. */
+  ergMachineType?: number;
   /** The post-"armed" session timeline, ascending by `atMs`. `tick(ms)`
    *  advances a purely virtual clock (no timers, no wall clock anywhere in
    *  this file) and delivers every event whose `atMs` has now been
@@ -1876,7 +1891,7 @@ export function createFakeTransport(script: FakeScript): Transport &
     notify(
       ADDITIONAL_STATUS_1_UUID,
       buildAdditionalStatus1Bytes(
-        as1,
+        withErgMachineType(as1),
         script.preV126Firmware ? "pre-v126" : "v126",
       ),
     );
@@ -1893,13 +1908,36 @@ export function createFakeTransport(script: FakeScript): Transport &
    *  emission that did fire read its averages from the PREVIOUS boundary's
    *  0x0038 — one `intervalComplete` for a two-interval workout, carrying
    *  interval 2's identity with interval 1's numbers. */
+  /**
+   * Phase MT: stamp the script's `Erg Machine Type` onto whichever status
+   * object is about to be encoded.
+   *
+   * APPLIED AT THE ENCODE SITE, not inside `statusBundle`/`boundaryBundle`.
+   * Those are module-level helpers with no access to `script`, and threading
+   * the byte through three signatures to reach two writes would put the
+   * override far from the `preV126Firmware` switch it has to agree with. Here
+   * the two decisions about this field — what value it carries, and whether
+   * the frame is long enough to carry it at all — sit on adjacent lines.
+   *
+   * Generic over both carriers because 0x0032 and 0x0038 spell the field
+   * identically; `buildAdditionalStatus1Bytes` and its split sibling each
+   * write it at their own offset.
+   */
+  function withErgMachineType<T extends { ergMachineType?: number }>(
+    status: T,
+  ): T {
+    return script.ergMachineType === undefined
+      ? status
+      : { ...status, ergMachineType: script.ergMachineType };
+  }
+
   function deliverBoundary(e: FakeBoundaryEvent): void {
     const { split, asSplit } = boundaryBundle(e, machineState, script.program);
     notify(SPLIT_INTERVAL_DATA_UUID, buildSplitIntervalDataBytes(split));
     notify(
       ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
       buildAdditionalSplitIntervalDataBytes(
-        asSplit,
+        withErgMachineType(asSplit),
         script.preV126Firmware ? "pre-v126" : "v126",
       ),
     );
@@ -1939,7 +1977,7 @@ export function createFakeTransport(script: FakeScript): Transport &
     notify(
       ADDITIONAL_STATUS_1_UUID,
       buildAdditionalStatus1Bytes(
-        as1,
+        withErgMachineType(as1),
         script.preV126Firmware ? "pre-v126" : "v126",
       ),
     );

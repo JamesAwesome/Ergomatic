@@ -36,7 +36,16 @@ import { NotationBody } from "./bodies/notation";
 // both grew their bodies — recounted at 256 words (your-first-row) and 476
 // words (baselines, body + the IN THE APP aside together); both stay at
 // their existing `minutes` value above (ceil(256/180)=2, ceil(476/180)=3),
-// no registry change needed this round. Phase BL PR C
+// no registry change needed this round.
+//
+// Phase MT (2026-09-08): connect-the-monitor gained the "Which ergs work"
+// support matrix, which the refusal screen links to. Recounted at 344 words
+// (217 + 127); ceil(344/180) = 2, so `minutes` is UNCHANGED. Recorded anyway,
+// because this comment asks for the number rather than for the change. The
+// matrix is a published claim that goes stale silently — changing
+// `server/concept2/mapping.ts`'s hardcoded `type` or the denylist in
+// `domain/monitor/pm5/ergMachine.ts` reconciles its middle tier and recounts
+// this figure. Phase BL PR C
 // (2026-08-23): your-first-row rewritten for the three doors (the single
 // "row 6k and it sets your baseline" story was a shipped lie — nothing
 // wrote a baseline until PR B's post-save offer) — recounted at 288
