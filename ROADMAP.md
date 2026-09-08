@@ -2170,6 +2170,23 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **No committed capture shows `VERIFIED ✓`.** Phase AV ships the mark
+      with client tests and two biting mutations, but the screenshots stack
+      cannot photograph it, for a reason already written down at length in
+      `e2e/screenshots.spec.ts`'s Wave E PR2 header: this stack is
+      Concept2-DARK by construction (`compose.yml` passes
+      `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`, `screenshots.sh` exports
+      nothing, and `scripts/compose-env.test.sh` enforces it), so
+      `POST /api/concept2/results/:logId` 403s before it writes anything.
+      **That route is the only writer of `verified`, exactly as it is the
+      only writer of `c2_result_id`** — the note's own words: "a capture step
+      that says 'seed state X' must be able to name a WRITER of X reachable
+      in the environment the capture runs in; here there is none." The SENT
+      and NO-WEIGHT captures already drive a tap against a routed answer
+      instead; the mark needs the row READ routed too, which is a larger
+      fake than either. Unblocks with the same work that would let this stack
+      photograph a sent row at all.
+
 - [ ] **The log detail issues TWO `GET /api/concept2/link` per view.** Phase AV
       added the verified mark to `MachineConfirmedBlock`, which needs the live
       link for its account gate, and `Concept2SendBlock` on the same screen
