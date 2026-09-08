@@ -40,7 +40,9 @@ Command: `ps -Ao rss,comm`, `vm_stat`, `sysctl vm.swapusage`,
 `git worktree list`.
 
 **`pnpm exec vitest run --project client` (215 files), peak RSS of the
-node process tree, sampled at 0.5 s:**
+node process tree, sampled at 0.5 s by `scripts/measure-test-memory.sh`
+(prescribed below), run from `app/` with
+`NODE_OPTIONS=--no-experimental-webstorage`:**
 
 | `--maxWorkers` | Wall | Peak node RSS |
 | --- | --- | --- |
@@ -138,12 +140,23 @@ does not swallow one. A clean pass prints nothing extra.
 The classifier's own correctness is gated by
 `app/scripts/test-run.test.sh` (the pattern `scripts/*.test.sh`
 already established, run by CI's `scripts` job), feeding it captured
-fixture output for **six** cases: a heap OOM, an exit-137 kill, a
-no-summary non-zero exit, a real test failure, a clean pass, and
-`--changed` with an empty selection (C1). The last three assert that
-**no** banner appears, and the no-summary case asserts it gets the
-*second* banner rather than the first — so the gate can go red in both
-directions and on the distinction between them (recurring failure 21).
+fixture output for each case below. The list is the specification; no
+count is written down, because a count restated in two places is a
+thing that goes stale rather than a thing that is checked.
+
+| Fixture | Expected |
+| --- | --- |
+| Heap OOM (`Reached heap limit`) | memory banner |
+| Exit 137 / `Killed: 9` | memory banner |
+| Non-zero exit, no `Test Files` line | **incomplete** banner, not the memory one |
+| A real test failure | no banner |
+| A clean pass | no banner |
+| `--changed` with an empty selection | no banner |
+
+The third row is the one that can go red in the interesting direction:
+it fails if the classifier promotes an unexplained crash to a memory
+verdict (recurring failure 21, and the over-claim recurring failure 26
+describes).
 
 **A2. A CLAUDE.md recurring-failure entry.** New RF37: a non-zero exit
 with no `Test Files` line is never flake, and is never re-run. It
@@ -169,6 +182,44 @@ ignored and rewritten. Blocking was considered and rejected; the
 warning's job is to make the *next* line of output interpretable when
 the run does get killed.
 
+### Verified before prescribing
+
+Every block in Part B was pasted and run before this spec claimed
+anything about it (the author's paste-test, `.claude/agent-briefing.md`
+"Plan authoring"). Three claims were load-bearing and none had been
+checked when they were first written; the oracle is
+`scripts/count-test-workers.sh` below, which samples the number of
+concurrent processes matching `vitest/dist/worker`.
+
+| Claim | Probe | Result |
+| --- | --- | --- |
+| A top-level `test.maxWorkers` reaches `projects[]` | Self-contained config, `maxWorkers: 2`, real client project and corpus | **2 concurrent workers**, against **9** unset. Propagates. |
+| `maxWorkers: undefined` reads as unset, not 0 | Same config, `maxWorkers: undefined` | **9 concurrent workers.** Unset. |
+| Playwright accepts `workers: undefined` | `playwright test --list` over a config spreading the real one | Config loads, **703 tests in 18 files** listed. Accepted. |
+
+**The paste-test found one defect in the prescribed expression.** Run
+through absent / empty / valued (the `?code=` read):
+
+```
+undefined -> 4     "abc"  -> 4
+""        -> 4     " 6 "  -> 6
+"0"       -> 4     "-2"   -> -2      <-- passes through
+"8"       -> 8     "999"  -> 999     <-- passes through
+```
+
+`||` catches absent, empty, non-numeric and `"0"`, all of which land on
+the default. It does **not** catch a negative or an absurd value, and a
+negative worker count is not a setting anyone means. So the prescribed
+expression clamps, and both B1 and B2 use the clamped form:
+
+```ts
+Math.max(1, Number(process.env.ERGOMATIC_TEST_WORKERS) || 4)
+```
+
+Recorded rather than quietly fixed because the unclamped version is
+what a reader would reach for, and its failure is invisible until
+someone typos a minus sign.
+
 ### Part B — a local run costs less
 
 **B1. `maxWorkers` defaults to 4 in `vitest.config.ts`, and is
@@ -177,7 +228,7 @@ overridable.** Written as:
 ```ts
 maxWorkers: process.env.CI
   ? undefined
-  : Number(process.env.ERGOMATIC_TEST_WORKERS) || 4,
+  : Math.max(1, Number(process.env.ERGOMATIC_TEST_WORKERS) || 4),
 ```
 
 at the top-level `test` block, so it applies to every project.
@@ -203,7 +254,7 @@ Three deliberate properties:
 **B2. Playwright `workers` gets the same shape.** Currently unset, so
 Playwright defaults to half the logical cores — 5 concurrent Chromium
 instances locally. Becomes `process.env.CI ? undefined :
-Number(process.env.ERGOMATIC_E2E_WORKERS) || 2`. **Cost untested:** no
+Math.max(1, Number(process.env.ERGOMATIC_E2E_WORKERS) || 2)`. **Cost untested:** no
 wall-clock or RSS measurement of the e2e suite at either setting was
 taken for this spec, because each run rebuilds and boots a compose
 stack. Flagged rather than guessed (recurring failure 30); the
@@ -286,7 +337,7 @@ comes from moves.
 
 | Change | How it is proven |
 | --- | --- |
-| A1 classifier | `scripts/test-run.test.sh`, six fixtures: heap OOM, exit 137, no-summary, real failure, clean pass, empty `--changed`. The last three assert no banner; no-summary asserts the second banner, not the first. |
+| A1 classifier | `scripts/test-run.test.sh`, one fixture per row of the table in A1, asserting that row's expected banner (or absence of one). |
 | A1 end to end | Run the real client suite under `--max-old-space-size=48` and assert the banner appears and the exit code is preserved. |
 | A3 advisory | Two fixtures: a live pidfile (advisory prints) and a stale one whose pid is gone (silent, file rewritten). |
 | B1 | The measurement table is re-run at the default and the number recorded in the PR. Two more cases: `ERGOMATIC_TEST_WORKERS=8` is observed taking effect, and `CI=1` is observed leaving Vitest's default in place. |
@@ -307,3 +358,65 @@ is a CLAUDE.md rule rather than a convention, and that A2's banner
 makes the other new failure mode loud. If over-claiming shows up in
 review, the answer is to strengthen C4's wording, not to revert C1 —
 the full local suite was never the thing keeping main green.
+
+## Appendix — the measurement scripts
+
+Every number in this spec came from one of these two. They land in
+`app/scripts/` in the implementing PR, because B1 and B2 both prescribe
+re-running them, and a measurement nobody can repeat is a claim rather
+than a number (this spec's own first draft had exactly that problem —
+the sampler lived in a scratchpad and would have vanished with the
+session).
+
+Both have been run as written; every table above is their output.
+
+`app/scripts/measure-test-memory.sh` — peak RSS of the node process
+tree while a command runs:
+
+```bash
+#!/usr/bin/env bash
+# Usage: bash scripts/measure-test-memory.sh <logfile> <command...>
+# Prints exit code, wall seconds, and peak total RSS of node processes.
+set -uo pipefail
+LOG="$1"; shift
+: > "$LOG"
+( while true; do
+    ps -Ao rss,comm | grep -E 'node|vitest' | awk '{s+=$1} END{print s/1024}' >> "$LOG"
+    sleep 0.5
+  done ) & SAMPLER=$!
+START=$(date +%s)
+"$@" >/dev/null 2>&1; RC=$?
+END=$(date +%s)
+kill "$SAMPLER" 2>/dev/null
+echo "exit=$RC wall=$((END-START))s peak_node_rss=$(sort -rn "$LOG" | head -1)MB"
+```
+
+`app/scripts/count-test-workers.sh` — max concurrent Vitest workers,
+the oracle that settled the three claims in "Verified before
+prescribing". This one is the more useful of the two: it is
+insensitive to whatever else is running on the machine, where peak RSS
+is not.
+
+```bash
+#!/usr/bin/env bash
+# Usage: bash scripts/count-test-workers.sh <logfile> <command...>
+# Prints exit code and the max number of concurrent vitest worker processes.
+set -uo pipefail
+LOG="$1"; shift
+: > "$LOG"
+( while true; do
+    ps -Ao args | grep -c '[v]itest/dist/worker' >> "$LOG"
+    sleep 0.3
+  done ) & SAMPLER=$!
+"$@" >/dev/null 2>&1; RC=$?
+kill "$SAMPLER" 2>/dev/null
+echo "exit=$RC max_concurrent_workers=$(sort -rn "$LOG" | head -1)"
+```
+
+**A caveat on each, so neither is over-read.** The RSS sampler greps
+every `node` process on the machine, so its floor moves with whatever
+else is running; it discriminates between settings within one sitting
+and should not be compared across days. Two readings taken minutes
+apart at the same setting differed by ~0.9 GB during this spec's own
+measurement, which is why the worker COUNT — 9 unset, 2 capped — and
+not the RSS is what settles the propagation claim.
