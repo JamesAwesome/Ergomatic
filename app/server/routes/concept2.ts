@@ -755,6 +755,9 @@ export function createConcept2Router({
         // verbatim (`no_weight` | `unreadable_weight` | `implausible_weight`
         // | `no_gender`), the key the rower-facing sentence is chosen by.
         autoSend: link.autoSend,
+        // Phase AV: emitted alongside the sending mode, so the card can draw
+        // the pressed segment from the SERVER's value rather than the tap's.
+        autoVerify: link.autoVerify,
         sendFailedAt: link.sendFailedAt?.toISOString() ?? null,
         sendFailedReason: link.sendFailedReason,
       });

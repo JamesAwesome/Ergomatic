@@ -10751,6 +10751,35 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* The line beneath the control (Gate 0 §1a, §3, §4a). `--ink-3` at rest,
    `--ink` when it carries the send-failed reason — the same two steps the
    card's helper and explain lines already use, no new colour. */
+/* Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
+   2026-09-07). AUTO VERIFY's own two-segment control, under SENDING MODE.
+
+   TWO columns, not three — `.c2-card-mode` above is a `1fr 1fr 1fr` grid and
+   an unmodified second control would leave the third track empty and the two
+   segments two-thirds width, which reads as a broken row rather than a
+   different control.
+
+   Contrast, computed (not sampled): the label is --ink #1b1a17 on --surface
+   #fffdf7 = 17.11:1, and the line below it is --ink-3 #57544c on the same
+   ground = 7.43:1. Both clear the 4.5:1 text floor; both pairings already
+   exist elsewhere on this card. No new colour is introduced. */
+.c2-card-mode-two {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* The control's own name, which SENDING MODE above does without because it
+   is the card's first control and the card's label serves it. A second
+   control on the same card cannot borrow that. Spaced above to break from
+   the sending mode's explanatory line rather than reading as its
+   continuation. */
+.c2-card-row-label {
+  margin: 18px 0 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+}
+
 .c2-card-mode-line {
   margin: 0;
   font-size: 12px;

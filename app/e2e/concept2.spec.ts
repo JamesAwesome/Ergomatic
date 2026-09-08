@@ -57,6 +57,9 @@ interface LinkBody {
   logbookBaseUrl?: string | null;
   // Wave E auto-send §3.1.
   autoSend?: boolean;
+  // Phase AV. Optional here on purpose: an absent key is what a server
+  // predating the column sends, and the card must read that as OFF.
+  autoVerify?: boolean;
   sendFailedAt?: string | null;
   sendFailedReason?: string | null;
 }
@@ -1175,6 +1178,7 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     const fake = await signIn(page, "send-failed");
     fake.linked({
       autoSend: true,
+      autoVerify: false,
       sendFailedAt: "2026-09-05T12:00:00.000Z",
       sendFailedReason: "no_weight",
     });

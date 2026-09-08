@@ -1954,6 +1954,7 @@ describe("LogSession: the automatic Concept2 send (Wave E auto-send §3.3)", () 
     needsReauth: false,
     logbookBaseUrl: "https://log-dev.concept2.com",
     autoSend: true,
+    autoVerify: false,
   };
 
   function sends(fn: ReturnType<typeof mockApi>) {

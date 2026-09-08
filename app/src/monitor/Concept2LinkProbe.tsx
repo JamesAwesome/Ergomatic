@@ -76,9 +76,10 @@ import { startLink, type LinkOutcome } from "../adapters/linkFlow";
  * it renders neither.
  */
 // The three Wave E auto-send keys (`autoSend`, `sendFailedAt`,
-// `sendFailedReason`) are declared below so `scripts/webauth-contract.test.ts`'s
-// key-set pin stays true; the probe renders none of them. No comments INSIDE
-// the braces — that pin's extractor reads the interface body verbatim.
+// `sendFailedReason`) plus Phase AV's `autoVerify` are declared below so
+// `scripts/webauth-contract.test.ts`'s key-set pin stays true; the probe
+// renders none of them. No comments INSIDE the braces — that pin's extractor
+// reads the interface body verbatim.
 interface LinkStatus {
   available: boolean;
   linked?: boolean;
@@ -87,6 +88,7 @@ interface LinkStatus {
   logbookBaseUrl?: string;
   needsReauth?: boolean;
   autoSend?: boolean;
+  autoVerify?: boolean;
   sendFailedAt?: string | null;
   sendFailedReason?: string | null;
 }

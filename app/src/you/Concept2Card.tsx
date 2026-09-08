@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactElement,
 } from "react";
 import { api } from "../api";
 import { startLink, type LinkOutcome } from "../adapters/linkFlow";
@@ -127,6 +128,126 @@ function FailurePanel({ failure }: { failure: LinkFailure }) {
  * group's description (`aria-describedby`) while it is rendered, so moving
  * by control announces what MANUAL or AUTOMATIC does.
  */
+/** Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
+ *  2026-09-07): AUTO VERIFY, under SENDING MODE on the same card.
+ *
+ *  TWO SEGMENTS, not a switch, because this app has no switch component —
+ *  every on/off control in it is a hand-rolled `aria-pressed` button, and
+ *  the control directly above this one is a segmented group. A toggle
+ *  switch here would be the only one in the app, two centimetres under a
+ *  segmented control doing the same kind of job.
+ *
+ *  PESSIMISTIC, exactly like its neighbour: PATCH, then RE-READ, and the
+ *  pressed segment is drawn from `link` — never from the tap. A refused or
+ *  thrown write therefore leaves the pressed state on the SERVER's value by
+ *  construction and adds the error line (RF25).
+ *
+ *  NOT a radiogroup, same reason `SendingModeControl` gives: the roving
+ *  idiom commits on arrow, and an arrow that fires a PATCH is a control that
+ *  changes what the app does while you are looking for the other option. */
+function AutoVerifyControl({
+  link,
+  busy,
+  reload,
+}: {
+  link: Concept2Link;
+  busy: boolean;
+  reload: () => Promise<void>;
+}): ReactElement {
+  const [writeBusy, setWriteBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const groupRef = useRef<HTMLDivElement | null>(null);
+
+  async function set(autoVerify: boolean): Promise<void> {
+    setFailed(false);
+    if (link.autoVerify === autoVerify) return;
+    setWriteBusy(true);
+    try {
+      const res = await api("/api/concept2/link", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        // The ONE key, deliberately: a control that sent the whole link
+        // would rewrite the sending mode as a side effect of a verify tap.
+        body: JSON.stringify({ autoVerify }),
+      });
+      if (!res.ok) setFailed(true);
+    } catch {
+      setFailed(true);
+    } finally {
+      await reload();
+      setWriteBusy(false);
+    }
+  }
+
+  function moveFocus(e: KeyboardEvent<HTMLDivElement>): void {
+    const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (step === 0 || groupRef.current === null) return;
+    const buttons = [
+      ...groupRef.current.querySelectorAll<HTMLButtonElement>("button"),
+    ];
+    const at = buttons.findIndex((b) => b === document.activeElement);
+    if (at === -1) return;
+    e.preventDefault();
+    buttons[(at + step + buttons.length) % buttons.length]?.focus();
+  }
+
+  const disabled = busy || writeBusy;
+  return (
+    <>
+      <p className="c2-card-row-label">AUTO VERIFY</p>
+      <div
+        ref={groupRef}
+        className="c2-card-mode c2-card-mode-two"
+        role="group"
+        aria-label="Auto verify"
+        aria-describedby="c2-card-verify-line"
+        onKeyDown={moveFocus}
+      >
+        {/* THE VISIBLE WORDS ARE THE APPROVED ONES; the accessible names are
+            not the same string. This card already has an OFF — the sending
+            mode's first segment, which UNLINKS the account — so two buttons
+            reading "OFF" would sit within a centimetre of each other, one
+            turning off verification and one disconnecting Concept2. Sighted
+            readers are disambiguated by the AUTO VERIFY label above; nothing
+            disambiguated a screen reader, or a test asking for the button
+            named OFF (13 of them broke on the ambiguity, which is how this
+            was found). `aria-label` gives each one the context the layout
+            already gives, without changing a word James approved. */}
+        <button
+          type="button"
+          className="c2-card-mode-btn"
+          aria-label="Auto verify off"
+          aria-pressed={!link.autoVerify}
+          disabled={disabled}
+          onClick={() => void set(false)}
+        >
+          OFF
+        </button>
+        <button
+          type="button"
+          className="c2-card-mode-btn"
+          aria-label="Auto verify on"
+          aria-pressed={link.autoVerify}
+          disabled={disabled}
+          onClick={() => void set(true)}
+        >
+          ON
+        </button>
+      </div>
+      <p id="c2-card-verify-line" className="c2-card-mode-line">
+        {link.autoVerify
+          ? "Rows arrive verified."
+          : "Concept2 leaves verifying to you."}
+      </p>
+      {failed && (
+        <p className="c2-card-mode-error">
+          Couldn&apos;t change this. Try again.
+        </p>
+      )}
+    </>
+  );
+}
+
 function SendingModeControl({
   link,
   armed,
@@ -741,6 +862,13 @@ export default function Concept2Card({ email }: { email: string }) {
                 disarm={disarm}
                 reload={reload}
               />
+              {/* Phase AV: below the sending mode, and only while the link
+                  is not armed for unlink — the armed state hides everything
+                  but the two-tap OFF, and a second control under it would
+                  offer a choice the arm is about to make moot. */}
+              {!armed && (
+                <AutoVerifyControl link={link} busy={busy} reload={reload} />
+              )}
             </>
           )}
 

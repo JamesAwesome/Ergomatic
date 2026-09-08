@@ -686,6 +686,111 @@ describe("Concept2Card panel lines no type protects (Task 1 review F9)", () => {
 // link and re-read it. Every PATCH assertion below reads the BODY the wire
 // would carry, not a call count — the delta pass's F1 was a send call that
 // did not typecheck behind a green count.
+// Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
+// 2026-09-07). AUTO VERIFY sits under SENDING MODE on the same card and is
+// its own two-segment control. It persists the way its neighbour does —
+// PATCH, then RE-READ — so the pressed segment is always the server's answer
+// and never the tap's optimism.
+describe("the AUTO VERIFY control (Phase AV)", () => {
+  function mountFollowingVerify(initial: typeof LINKED) {
+    let current: Record<string, unknown> = { ...initial };
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        current = { ...current, ...body };
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify(current), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    return { api };
+  }
+
+  it("renders OFF pressed for a fresh link — the default is off, always", async () => {
+    mount(LINKED);
+    await renderCard();
+    const group = await screen.findByRole("group", { name: "Auto verify" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toStrictEqual(["OFF", "ON"]);
+    // The accessible names are NOT the visible words — this card's other
+    // OFF unlinks the account.
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toStrictEqual([
+      "Auto verify off",
+      "Auto verify on",
+    ]);
+    expect(buttons.map((b) => b.getAttribute("aria-pressed"))).toStrictEqual([
+      "true",
+      "false",
+    ]);
+    expect(
+      screen.getByText("Concept2 leaves verifying to you."),
+    ).toBeInTheDocument();
+  });
+
+  it("ON pressed when the server says so, with its own line", async () => {
+    mount({ ...LINKED, autoVerify: true });
+    await renderCard();
+    expect(
+      await screen.findByRole("button", {
+        name: "Auto verify on",
+        pressed: true,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Rows arrive verified.")).toBeInTheDocument();
+  });
+
+  it("a tap PATCHes autoVerify alone and the pressed state follows the RE-READ", async () => {
+    const { api } = mountFollowingVerify(LINKED);
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Auto verify on" }),
+    );
+    const patch = api.mock.calls.find(
+      (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
+    );
+    // autoVerify ALONE: a control that sent the whole link would rewrite the
+    // sending mode as a side effect of a verify tap.
+    expect(JSON.parse(String((patch![1] as RequestInit).body))).toStrictEqual({
+      autoVerify: true,
+    });
+    expect(
+      await screen.findByRole("button", {
+        name: "Auto verify on",
+        pressed: true,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("a REFUSED write leaves the pressed state on the server's value and says so", async () => {
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") return new Response(null, { status: 500 });
+      return new Response(JSON.stringify(LINKED), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Auto verify on" }),
+    );
+    expect(
+      await screen.findByText("Couldn't change this. Try again."),
+    ).toBeInTheDocument();
+    // Still OFF, because the pressed segment is drawn from `link`, never
+    // from the tap (RF25: a write the server did not confirm leaves the
+    // screen as it was and says so).
+    expect(
+      screen.getByRole("button", { name: "Auto verify off", pressed: true }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("the sending-mode control (Wave E auto-send §3.2)", () => {
   function patches(api: ReturnType<typeof vi.fn>) {
     return api.mock.calls
@@ -1137,6 +1242,7 @@ describe("the mode line and pill under needsReauth and SEND FAILED (Wave E auto-
       mount({
         ...LINKED,
         autoSend: true,
+        autoVerify: false,
         sendFailedAt: "2026-09-05T12:00:00.000Z",
         sendFailedReason: reason,
       });

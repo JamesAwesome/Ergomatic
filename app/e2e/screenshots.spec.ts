@@ -6855,6 +6855,7 @@ test("you-concept2-send-failed", async ({ page }) => {
       body: {
         ...C2_SHOT_LINKED,
         autoSend: true,
+        autoVerify: false,
         sendFailedAt: "2026-09-05T12:00:00.000Z",
         sendFailedReason: "no_weight",
       },
@@ -7003,6 +7004,7 @@ test("concept2-screen-send-failed", async ({ page }) => {
       body: {
         ...C2_SHOT_LINKED,
         autoSend: true,
+        autoVerify: false,
         sendFailedAt: "2026-09-05T12:00:00.000Z",
         sendFailedReason: "no_weight",
       },

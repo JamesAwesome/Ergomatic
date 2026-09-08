@@ -1907,6 +1907,7 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
       needsReauth: false,
       // Wave E auto-send §3.1: a fresh link is MANUAL with no failure flag.
       autoSend: false,
+      autoVerify: false,
       sendFailedAt: null,
       sendFailedReason: null,
     });
