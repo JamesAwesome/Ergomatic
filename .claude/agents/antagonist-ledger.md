@@ -8936,3 +8936,41 @@ had passed over the same document without a single duration in it.
   and carries no design weight; all three surfaces derive from one function
   over one trace, so reopening a row cannot change the figure; the four replay
   literals reproduce under an independent raw-hex decode.
+
+## Scoped re-review, 2026-09-07 (Phase LP, Just Row parity — PR #351 delta)
+
+Not an antagonist dispatch; a scoped branch re-review of three commits. Landed
+here because two of its findings are technique, not code, and the next
+antagonist should start with them.
+
+- **"Every number was decoded from the capture's own bytes."** Four of the six
+  were. Two — AVG WATTS and CAL / HOUR — were recomputed by hand using the
+  same published formulas the code under test implements, three lines below a
+  sentence promising they had not been. Both readings are defensible; stating
+  them as one is not. **Technique: count the literals in a proof claim and
+  sort them by METHOD before writing the claim, because "decoded" and
+  "derived" read identically in prose and only one of them is independent.**
+- **A tile whose assertion cannot redden on the wiring it appears to gate.**
+  `AVG HR—` was asserted beside five value assertions and reads as their peer.
+  Hardcoding `avgHr: undefined` in the builder left that assertion AND the
+  door's own suite green; only `summaryModel.test.ts` bit. The dash is worth
+  keeping — it catches a fabricated number where the wire carried none — but
+  it is not a wiring gate, and the comment claimed a sibling replay suite
+  covered that wiring when that file never touches the tile. **Technique: for
+  every assertion on an ABSENT value, run the mutation that removes the
+  producer. If the suite stays green, the assertion gates fabrication, not
+  wiring — say which, and cite the file that actually bit.**
+- **A discriminator hiding inside a caveat.** The comment disclosed that
+  AVG WATTS 125 coincides with the machine's own 0x003A watts, and said
+  nothing about CAL / HOUR — which reads as the same weakness applying to
+  both. It does not: the capture's `avgCalPerHour` is 730 against the
+  logbook's 731, so that one assertion rejects the machine's figure outright
+  (confirmed by pointing `calPerHour` at `detail?.avgCalPerHour` — renders
+  730, test red). **Technique: when disclosing that one assertion is a mirror,
+  check its siblings for the opposite property; an undisclosed discriminator
+  is a claim left on the table.**
+- **Attacked and HELD:** `within(tier).getAllByRole("group")` is scoped to
+  descendants (`@testing-library/dom` `role.js` queries the container, never
+  concatenates it), and a tile rendering its label with no value fails the
+  assertion, so an empty tile cannot pass. The four decoded literals reproduce
+  under an independent raw-hex decode against `pm5/parse.ts`.
