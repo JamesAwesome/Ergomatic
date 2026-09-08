@@ -443,7 +443,7 @@ accepted this row as verified when we sent it"* survives all of them, because
 it is a claim about a past moment. It would stop being the whole truth the
 moment a reconciliation lands, which is the open scope question below.
 
-## Open scope question: the free reconciliation
+## The reconciliation — TAKEN (James, 2026-09-07)
 
 The declaration read hands us, on every send, up to 50 of the rower's recent
 Concept2 rows with our own ids already marked. An **upgrade-only**
@@ -459,9 +459,38 @@ star is about. It also changes the stored field's meaning from "at receipt" to
 "as of the last time we looked", so the surface would then owe a vaguer tense
 than the past-tense sentence above.
 
-Not taken unilaterally: it is a scope increase on work James has already sized
-once. **Owed to him as a yes/no before Gate 0**, together with the one
-authenticated GET that confirms the list response really carries the field.
+**DECIDED: in scope.** It is what makes the mark mean "this row is verified"
+rather than "we verified this row", and it is the only path to the thing the
+inherited ROADMAP row asked for.
+
+**Consequences that follow, and they are not free even if the wire call is:**
+
+- **The stored field stops meaning "at receipt".** It becomes "verified as of
+  the last time we looked", so the surface's past-tense sentence
+  ("…when we sent it") no longer covers it. The Gate 0 copy is written against
+  the new meaning, and a `verifiedAt` timestamp is the obvious way to keep the
+  claim honest — decided at the gate, with the rendered thing in hand.
+- **The asymmetry is UNCHANGED.** Reconciliation only upgrades. It still cannot
+  support a negative, for the three reasons above: it fires only on a send, it
+  reads one page of 50 with no pagination, and a row falls out of view
+  permanently once 50 newer rows exist.
+- **It reads `verified` only for ids that are ours.** The client's projection
+  comment is explicit that the rower's other logbook rows are not ours to hold,
+  log or render, and that stays true — the field is read and discarded for
+  every row not in our own id set.
+- **A third write site.** Reconciliation writes the column outside
+  `recordC2Result`, so the lifetime table gains a row and the "written once per
+  send" phrasing goes.
+
+**RECEIPT OWED, AND CURRENTLY BLOCKED.** That the list response carries
+`verified` is PRIMARY for Concept2's documented example and INFERENCE for our
+live responses — no LIST capture is committed anywhere in `docs/monitor/`. One
+authenticated GET settles it. **It cannot be run right now:** the log-dev token
+at `~/.ergomatic-c2-dev.json` expired 2026-09-07 20:04 UTC, and
+`app/scripts/c2-crossconnect.ts` needs `C2_CLIENT_ID` and `C2_CLIENT_SECRET`,
+which are not in the environment. **No implementation task that depends on the
+field may start before this is measured** — that is RF30 as amended, applied to
+this spec's own capability claim rather than to someone else's.
 
 
 ## Gate 0 — what James approves before anything is built
