@@ -6009,3 +6009,81 @@ release gate.
 - **An unconfirmed-on-device fix's ROADMAP row states its own confirmation
   condition**, mirroring the sibling pre-2018-monitor row on the same page
   ("checkbox stays open until the reporter confirms"). Flagged here, landed.
+
+## 2026-09-08 — Phase MT: the support matrix, and where an explanation belongs
+
+James asked what of a three-tier support matrix belongs on the SkiErg refusal
+screen, leaning "just a link to save space". **PM recommendation: neither a
+link nor the matrix — publish it as a section in `connect-the-monitor`, and
+spend the effort on the headline and the Dyno instead.** Not because a link is
+forbidden, but because of what the rower is doing: standing at a machine with
+two live questions the screen already answers. "What does this app support in
+general?" is a desk question.
+
+**The 2026-08-23 teaching-surfaces ruling does not literally forbid this, and
+that is the wrong axis.** His words governed *unsolicited teaching pushed at a
+rower doing something else* (Today's START HERE, You's Learning row, News's
+pin). An explanation at a wall the rower hit is a different act. What decides
+it is precedent: `grep '"/news' app/src` outside `src/news/` returns zero hits
+sixteen days on, and the surface a first exception establishes ("failure
+screens may link to articles") already has five eligible members shipped —
+`link-failed`, `bluetooth-off`, `permission-denied`, `target-ambiguous`, the
+not-advertising card. Do not spend that precedent on the one screen no member
+of the cohort can reach without owning a SkiErg.
+
+**A link off a connected-mode failure screen is an EXIT, not a detour.**
+`started` is local `useState` in `WorkoutDetail.tsx` and `JustRow.tsx`, so
+navigating away unmounts the refusal frame; the rower returns to the *route*,
+which offers Connect again. Same class as James's 2026-08-09 field bug that
+produced `ArticleLink`. Check this before proposing any product→article link.
+**Independently reached by the design pass in the same round**, which adds the
+mechanism: keep-awake goes off and the mount lease releases on that unmount.
+
+**"Best effort" is a hedge; the limitation is the honesty.** The middle tier
+(dynamic / slides / MultiErg-row) has zero evidence behind any confidence
+claim, and it hides a deterministic defect we can state in one sentence:
+`mapping.ts` posts `type: "rower"`, and Concept2's own documentation makes the
+verification code conditional on machine type matching — so those uploads are
+*guaranteed* to fail verification. **Label a tier by its named limitation,
+never by our confidence.** When a matrix or tier list is published in the app's
+voice it is a claim later PRs can falsify (same class as a shipped release
+note): its ROADMAP row names the reconciliation trigger, and so does the
+article's source comment.
+
+**Format ruling for reader prose: `.reader-body` has no table CSS** — the
+`.reader-*` set is body, inset, figure, header, meta, title, next, close, and
+nothing else (verified by the controller independently). A matrix ships as
+`h2`-led sections, not a table: zero new CSS, and a wording-only Gate 0 per the
+no-screenshots-for-copy rule. Budget: `connect-the-monitor` is recorded at 217
+words / `minutes: 2`, and ceil(360/180) = 2, so under 143 added words leaves
+`minutes` untouched. Record the recount regardless.
+
+**The Dyno is an in-phase fix, not a row — RF34, one day after #353.** The
+denylist's justification is explicitly about *unnamed future* values ("would
+refuse a RowErg model added after rev 1.30"). `STATIC_DYNO` (64) is named, in
+the table being built from, and conceded by the spec's own sentence. There is
+no false-refusal risk to trade against. **Ship the rule instead of the list:
+refuse every value the vendor NAMES as not-rowing, allow everything else named
+or not** — 64, 128, 143, 192-194, 207, 225, 226; 224 (`MULTIERG_ROW`) allowed.
+Same fail direction, one sentence, and it is what makes a published matrix true
+rather than false. **Controller's note on the framing:** James DID decline a
+"widen it" option on 2026-09-08, but that option bundled the Dyno with all
+three MultiErg values including `MULTIERG_ROW`, which is rowing. The bundle was
+the controller's, not the vendor's, and it made a bad option out of a good
+half. Re-ask honestly rather than treating the earlier decline as settled.
+
+**A refusal screen that reads like a status code creates demand for an
+explanation link.** Before adding a control that explains a screen, check
+whether the screen's own first line is doing its job. *(Recorded as the PM's
+argument; the controller's counter is that the neighbouring hard-coded
+headlines — "Could not connect", "Lost the monitor", "Bluetooth permission
+needed" — are all terse fragments in exactly the register James chose, so the
+register argument does not favour either.)*
+
+**Filed at this gate rather than found later:** the interstitial's failure
+screen offers "Row on the phone timer instead", which after a SkiErg refusal
+routes the rower to store the ski piece as a rowing log. Checked —
+`eligibilityFailure` gates on `source !== "pm5"`, so no Concept2 upload
+follows; the local harm does. Not clearly wrong (the likeliest cause of this
+screen is picking the wrong monitor, and that rower has a RowErg), so: a
+ROADMAP row and one Gate 0 sentence, not a blocker.

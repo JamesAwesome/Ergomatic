@@ -173,6 +173,30 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       do not subscribe. The two we read (footnotes 7 and 11) say only "the
       Machine Type of the current interval". No capture and no vendor sentence
       settles what a real MultiErg reports on 0x0032. Unowned, accepted. **S**
+- [ ] **`permission-denied` already ships a five-button action stack, and it
+      leaves a 10px body in landscape.** Measured in Playwright against both
+      engines during Phase MT's design pass, with the harness validated against
+      the committed landscape capture (predicted action-stack top 96px, capture
+      ~97px). `ConnectedInterstitial.tsx` renders `Open Settings` above
+      `Try again` whenever the reason is `permission-denied` and
+      `canOpenAppSettings()`: actions 316px of a 338px column. Pre-existing and
+      unrelated to Phase MT, found only because MT priced a fifth button
+      (4 buttons leave 78px, 5 leave 14px). **S**
+- [ ] **On the web build, the top of an overflowing interstitial body cannot be
+      scrolled to at all.** `.connected-interstitial-body` is
+      `justify-content: center`, which overflows in BOTH directions; chromium
+      clamps `scrollTop` at 0 while the first child sits at -30 to -100px, so
+      the headline is unreachable. WebKit permits negative `scrollTop`
+      (measured range [-101, 102]), so the iOS app can pull it into view and
+      the web build never can. This is why the committed landscape capture
+      shows a headline nobody can scroll to. Web-only, pre-existing. **S**
+- [ ] **"Row on the phone timer instead" is offered on the refusal screen.**
+      After a SkiErg refusal it routes the rower to store the ski piece as a
+      rowing log by hand. No Concept2 upload follows — `eligibilityFailure`
+      gates on `source !== "pm5"` — so only the local harm applies, and it is
+      not clearly wrong, since the likeliest cause of that screen is picking
+      the wrong monitor from a list and that rower does have a RowErg. Filed
+      at the design gate rather than found later. **S**
 - [ ] **A refused machine is still remembered as `LAST USED`.**
       `ConnectedInterstitial.tsx` calls `saveLastDevice` on every successful
       pair, and a refusal happens after pairing. Cosmetic; fixing it inside the
