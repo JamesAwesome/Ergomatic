@@ -295,6 +295,18 @@ pane and a summary — is approved before task 1.
       `← FASTER (BLUE) · SLOWER (RED) →` legend is DELETED** rather than
       derived from the slots; and the parked comfort settings do NOT ride this
       PR. **S**
+- **LESSON FOUND MID-IMPLEMENTATION, 2026-09-08 — candidate recurring failure,
+      to be decided at the merge-time agent-config check.** Phase JC's rename moved
+      the summary's verdict classes onto a shared family ~5000 lines UP `index.css`,
+      and `.summary-row-pace { color: var(--ink) }` sits below them at identical
+      (0,1,0) specificity — so later won and **every judged row on the post-workout
+      summary rendered plain ink**. The old `.summary-row-faster` had sat 30 lines
+      BELOW that rule and beaten it, which is why nothing ever had to know. **No
+      class-name assertion could see this by construction** (jsdom resolves no
+      `var()`); `pnpm e2e` caught it. `index.css` already stated the rule in prose
+      after the identical bug on a connected pane's hero — prose is not a gate.
+      Shape: *moving a rule in a stylesheet silently changes which of two
+      equal-specificity rules wins, and only a real browser can see it.*
 - [ ] **The PR.** Nine tasks, spec §"PR shape". The load-bearing one is the
       e2e seam test: Vitest mocks every `.css` import to an empty string here,
       so **no client test can prove a colour lands on a pixel** — only e2e can

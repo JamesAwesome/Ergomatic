@@ -179,7 +179,7 @@ Defaults `{paceFaster:"blue", paceSlower:"red", spmFaster:"blue", spmSlower:"red
 
 ### Task 3: The rename
 
-**Files:** Modify `app/src/workout/connected/PaneLive.tsx` (3 sites), `PaneGrid.tsx` (2), `app/src/session/PostWorkoutSummary.tsx` (1), `app/src/index.css`, `app/src/theme/tokens.css`, `app/src/workout/ConnectedSurface.test.tsx`, `app/src/workout/connected/PaneLive.test.tsx`, `app/src/workout/connected/PaneGrid.test.tsx`, `app/src/session/PostWorkoutSummary.test.tsx`, `app/e2e/design.spec.ts`, `app/e2e/screenshots.spec.ts`; regenerate `app/e2e/fixtures/connected-*.html`.
+**Files:** Modify `app/src/workout/connected/PaneLive.tsx` (3 sites), `PaneGrid.tsx` (2), `app/src/session/PostWorkoutSummary.tsx` (1), `app/src/index.css`, `app/src/theme/tokens.css`, `app/src/workout/ConnectedSurface.test.tsx`, `app/src/workout/connected/PaneLive.test.tsx`, `app/src/workout/connected/PaneGrid.test.tsx`, `app/src/session/PostWorkoutSummary.test.tsx`, `app/e2e/design.spec.ts`, `app/e2e/screenshots.spec.ts`, **`app/src/theme/judgeTokens.test.ts`** (Task 2 created it carrying a test titled *"keeps `--judge-faster`/`--judge-slower` alive as aliases for Task 3 to retire"* — unambiguously this task's, and the revision-2 file list omitted it); regenerate `app/e2e/fixtures/connected-*.html` (**6 of the 12 change** — only those carrying `faster`/`slower`).
 
 **Invariants:** I-1, I-3, I-7. **Consumes** Task 2's four class names.
 
@@ -223,7 +223,7 @@ $ grep -rl "timer-card-actual-" e2e/fixtures | wc -l  # 12 (the glob connected-*
 | `stale` | `timer-card-actual-stale` — **unchanged** |
 | `within` | `timer-card-actual-within` — **unchanged** (no CSS rule at all today, deliberately: `grep -c "^\.timer-card-actual-within" src/index.css` → `0`) |
 
-**Owed to this task by Task 2, which could not run the e2e gate:** `e2e/design.spec.ts` defines `JUDGE_SLOWER_RGB = "rgb(150, 39, 24)"` (`:7371`, used at `:7382` and `:9530`) for the LOST banner's fill, with comments at `:3179`, `:3192`, `:3198`, `:5083`, `:5805`, `:5816` and `:9521` naming `--judge-slower` as that ground. The assertions still pass — the rgb has not moved — but the constant and every one of those comments point at a token this task DELETES. Rename and reconcile; the banner's ground is `--judge-red`.
+**Owed to this task by Task 2, which could not run the e2e gate:** `e2e/design.spec.ts` defines `JUDGE_SLOWER_RGB = "rgb(150, 39, 24)"` (`:7371`, used at `:7382` and `:9530`) for the LOST banner's fill, with comments naming `--judge-slower` as that ground at **eleven** sites, not the seven revision 2 listed: `:3179`, `:3191`, `:3192`, `:3197`, `:3198`, `:5083`, `:5805`, `:5816`, `:5821`, `:9521`, `:9591` (the extra four found during execution). The assertions still pass — the rgb has not moved — but the constant and every one of those comments point at a token this task DELETES. Rename and reconcile; the banner's ground is `--judge-red`.
 
 **Retire in this task, now that nothing emits them:** `.timer-card-actual-faster`, `.timer-card-actual-slower`, `.summary-row-faster`, `.summary-row-slower`, and the `--judge-faster` / `--judge-slower` aliases Task 2 left. `grep -rn "var(--judge-faster)\|var(--judge-slower)" src e2e` must return zero.
 
@@ -365,13 +365,15 @@ The second reaches `src/session/TimerTargets.tsx` and `src/workout/connected/sur
 
 - [ ] **Step 2: Recompute the contrast numbers rather than carrying them.** `index.css` records `--ink-3` at **7.44:1** on `--surface` at three sites (`:4832`, `:4852`, `:6344`) and at **7.43:1** at `:644` — the file contradicts itself and 7.43 is correct. Recompute all of them once (`node -e` with the WCAG relative-luminance formula) and write the right number; carrying the existing text forward would propagate the error.
 
-- [ ] **Step 3: DEVIATIONS row 138.** Verbatim today: *"BLUE for faster than target, RED for slower, from dedicated `--judge-faster` (#1d4e89) / `--judge-slower` (#962718) tokens … and the CSS hooks are `.timer-card-actual-faster/-slower`"*. Every noun changes. It also claims the SPM half *"needed no code — the class suffix IS the `Judgement` value … satisfied structurally rather than by a convention someone maintains."* That is now false: there IS a per-metric branch, deliberately, because a rower may want them different.
+- [ ] **Step 3: DEVIATIONS row 103** (added during Task 3, which found it and could not own it). It says the LOST banner's ground is `--judge-slower`. That token no longer exists: Task 2 repointed the banner to the raw `--judge-red`, and Task 3 deleted the alias. Reconcile.
 
-- [ ] **Step 4: DEVIATIONS row 139.** It glosses the split hero as carrying no unit because *"judged colour alone says what it is"*. **With both pace slots OFF that is false** — neither unit nor colour. Still readable (the target sits beneath it), so this is a reconciliation, not a design reopening. Say so.
+- [ ] **Step 4: DEVIATIONS row 138.** Verbatim today: *"BLUE for faster than target, RED for slower, from dedicated `--judge-faster` (#1d4e89) / `--judge-slower` (#962718) tokens … and the CSS hooks are `.timer-card-actual-faster/-slower`"*. Every noun changes. It also claims the SPM half *"needed no code — the class suffix IS the `Judgement` value … satisfied structurally rather than by a convention someone maintains."* That is now false: there IS a per-metric branch, deliberately, because a rower may want them different.
 
-- [ ] **Step 5: `ROADMAP.md`.** Tick Phase JC's PR row; file anything found during implementation that has a life after merge (recurring failure 14).
+- [ ] **Step 5: DEVIATIONS row 139.** It glosses the split hero as carrying no unit because *"judged colour alone says what it is"*. **With both pace slots OFF that is false** — neither unit nor colour. Still readable (the target sits beneath it), so this is a reconciliation, not a design reopening. Say so.
 
-- [ ] **Step 6: Final gates.** `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm e2e`, `pnpm screenshots`, `pnpm dist:grep`. Per-file coverage for every file the branch touched, as numbers. Commit.
+- [ ] **Step 6: `ROADMAP.md`.** Tick Phase JC's PR row; file anything found during implementation that has a life after merge (recurring failure 14).
+
+- [ ] **Step 7: Final gates.** `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm e2e`, `pnpm screenshots`, `pnpm dist:grep`. Per-file coverage for every file the branch touched, as numbers. Commit.
 
 ---
 
