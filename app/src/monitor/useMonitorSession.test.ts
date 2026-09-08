@@ -15578,6 +15578,15 @@ describe("the app cannot read this monitor: the fact belongs to the SITTING", ()
  * classifies, the hook refuses. A test that pushed a synthetic
  * `unsupported-machine` event at the hook would prove only the last hop.
  */
+/** The exact CSAFE frames `driver.terminate()` puts on the wire, built from
+ *  the same producer the driver uses so a change to the command cannot leave
+ *  this matcher quietly matching nothing. */
+const terminateFrames = buildTerminate().flat();
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
 describe("useMonitorSession: an unsupported erg machine", () => {
   it("a SkiErg sitting fails with the approved copy, and names the machine", async () => {
     const { result, fake } = harness({
@@ -15657,7 +15666,18 @@ describe("useMonitorSession: an unsupported erg machine", () => {
       (t) => ({
         ...t,
         write: (uuid: string, bytes: Uint8Array) => {
-          order.push("write");
+          // THE TERMINATE IS IDENTIFIED BY ITS BYTES, not counted among
+          // "writes". An earlier version of this test recorded every write
+          // alike and asserted `lastIndexOf("write") < indexOf("disconnect")`
+          // — which passes with the `terminate()` argument to `fail()`
+          // DELETED, because the program's own writes still precede the
+          // hang-up. It proved the ordering of things that were never at
+          // risk. The probe found it, not review.
+          order.push(
+            terminateFrames.some((frame) => bytesEqual(frame, bytes))
+              ? "terminate"
+              : "write",
+          );
           return t.write(uuid, bytes);
         },
         disconnect: () => {
@@ -15681,8 +15701,14 @@ describe("useMonitorSession: an unsupported erg machine", () => {
     });
 
     expect(result.current.error?.reason).toBe("unsupported-machine");
+    // Both halves matter. The terminate must HAPPEN — deleting `fail()`'s
+    // `driver.terminate()` argument removes it entirely, and the erg is left
+    // armed with the workout we just refused — and it must happen BEFORE the
+    // hang-up, because CoreBluetooth's `cancelPeripheralConnection(_:)` is
+    // nonblocking and can abort a write still in flight (DEVIATIONS row 63).
+    expect(order).toContain("terminate");
     expect(order).toContain("disconnect");
-    expect(order.lastIndexOf("write")).toBeLessThan(
+    expect(order.indexOf("terminate")).toBeLessThan(
       order.indexOf("disconnect"),
     );
   });
