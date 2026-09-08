@@ -1206,27 +1206,30 @@ closed with zero Concept2 contact.
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that
       row, show "verified"; a debug reveal shows the raw code when needed.
-      **REVERSED, 2026-09-07 (James): we do NOT send the code, and a row is
-      NOT auto-verified.** PR #336 sent it; the first real rowed row came
-      back `Verified: Yes` with nothing for the rower to do, and James ruled
-      that a parity REGRESSION — Concept2's own app uploads the row and
-      leaves verification to the rower, so removing that act is the opposite
-      of parity, however well the mechanism worked. The send is gone and a
-      test pins the withholding on the exact row that would verify. The wire
-      facts stand (research file: the code verifies at the monitor's
-      distance, fails at a control, with and without the interval array);
-      what changed is the product decision.
-      **PARTLY DELIVERED by Phase AV PR 1 (#360), and the rest is still
-      open — read both halves.** What ships: a row Concept2 accepted as
+      **REVERSED 2026-09-07 (James), THEN MADE OPTIONAL the same day —
+      the reversal below is history, and the sentences are in the past tense
+      because none of them describes the code at HEAD.** PR #336 sent the
+      code unconditionally; the first real rowed row came back
+      `Verified: Yes` with nothing for the rower to do, and James ruled that
+      a parity REGRESSION — Concept2's own app uploads the row and leaves
+      verification to the rower, so removing that act was the opposite of
+      parity, however well the mechanism worked. #337 removed the send and a
+      test pinned the withholding. **Since #360 the send exists again behind
+      `concept2_links.auto_verify`, DEFAULTED OFF**, and that pinning test is
+      now the OFF arm of a two-armed pair — so "we do NOT send the code" is
+      true only of a rower who has not turned it on, which is everyone until
+      they do. The wire facts were never in question (research file: the code
+      verifies at the monitor's distance, fails at a control, with and
+      without the interval array); what moved twice was the product
+      decision.
+      **PARTLY DELIVERED by Phase AV PR 1 (#360).** What ships: a row Concept2 accepted as
       verified when we sent it now reads `VERIFIED ✓`, and the raw code is
       withdrawn once there is nothing left to type it into. What does NOT:
       the ask this row was written for — *"a verification the ROWER
       performed, never one we caused"* — is exactly what a receipt-time
       verdict cannot see. Only the reconciliation (PR 2, blocked on one
       authenticated GET) can, and it can only ever UPGRADE. **The reversal
-      language above stands as history and no longer describes the code:**
-      since #360 the mapper DOES send the code, when and only when the rower
-      has turned AUTO VERIFY on.
+      reversal narrative above is written as history for the same reason.**
 - [ ] **`pnpm screenshots` rewrites ~61 PNGs per run with no content change.**
       Measured twice on 2026-09-07 (PR #341): two consecutive runs on an
       unchanged tree each rewrote the same 61 captures, differing only in the

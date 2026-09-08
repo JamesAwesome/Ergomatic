@@ -680,12 +680,16 @@ export function buildC2Payload(
   // rather than agreement. Spec M8/M9.
   if (autoVerify) {
     const bytes = row.machineSummary?.verificationBytes;
-    if (
-      usedMachineMeters &&
-      usedMachineSeconds &&
-      Array.isArray(bytes) &&
-      bytes.every((b) => typeof b === "number" && Number.isInteger(b))
-    ) {
+    // `Array.isArray` narrows `unknown` off the jsonb blob so the cast below
+    // is honest. The per-byte `Number.isInteger` check #336 also had here is
+    // GONE, and its removal is the point: `verificationWords` performs
+    // exactly that check itself and returns `null`, which the `code !== null`
+    // guard below already catches. Round 2 proved the duplicate could not be
+    // told from its absence — deleting it left all 249 tests green — so it
+    // was an unfalsifiable clause in a TRIAD predicate, which this repo's own
+    // rule says to delete rather than keep for the look of it. Byte validity
+    // has ONE owner now.
+    if (usedMachineMeters && usedMachineSeconds && Array.isArray(bytes)) {
       const code = wireVerificationCode(bytes as number[]);
       if (code !== null) post.verification_code = code;
     }

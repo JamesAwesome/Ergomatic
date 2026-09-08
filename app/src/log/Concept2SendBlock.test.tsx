@@ -17,7 +17,6 @@ const LINKED = {
   available: true,
   linked: true,
   c2UserId: 2211,
-  verified: null,
   c2Username: "jamesawesome",
   needsReauth: false,
   logbookBaseUrl: "https://log-dev.concept2.com",

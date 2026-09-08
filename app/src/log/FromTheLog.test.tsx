@@ -1466,6 +1466,25 @@ describe("FromTheLog — VERIFIED ✓ (Phase AV)", () => {
     expect(screen.queryByText("VERIFIED ✓")).toBeNull();
   });
 
+  it("shows NO mark when the link read FAILED — an unread link is not a matching account", async () => {
+    // Round-2 N14a: reachable and unpinned. `useConcept2Link` hands back
+    // `null` on a failed read, and the gate treats that as "no account to
+    // compare against" rather than as a match.
+    mockApi((path) =>
+      path.includes("/api/concept2/link")
+        ? new Response("<html>502</html>", { status: 502 })
+        : new Response(JSON.stringify(storedRow(VERIFIED_ROW)), {
+            status: 200,
+          }),
+    );
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    expect(
+      await screen.findByText("MACHINE CONFIRMED · WORK ONLY"),
+    ).toBeVisible();
+    expect(screen.queryByText("VERIFIED ✓")).toBeNull();
+  });
+
   it.each([
     ["false — Concept2 said no AT RECEIPT", false],
     ["null — we never heard (the 409 branch)", null],
@@ -1729,7 +1748,6 @@ describe("Concept2 send block placement (Wave E PR2, Surface 2)", () => {
     available: true,
     linked: true,
     c2UserId: 2211,
-    verified: null,
     c2Username: "jamesawesome",
     needsReauth: false,
     logbookBaseUrl: "https://log-dev.concept2.com",

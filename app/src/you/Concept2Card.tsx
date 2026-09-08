@@ -169,8 +169,12 @@ function AutoVerifyControl({
   }, [writeBusy]);
 
   async function set(autoVerify: boolean): Promise<void> {
-    setFailed(false);
+    // The no-op check comes FIRST. Clearing the error before it let a tap on
+    // the already-pressed segment erase "Couldn't change this. Try again."
+    // without retrying anything — the rower's last write is still un-landed
+    // and the screen would have stopped saying so (round-2 review N13).
     if (link.autoVerify === autoVerify) return;
+    setFailed(false);
     const active = document.activeElement;
     refocusRef.current =
       active instanceof HTMLButtonElement &&

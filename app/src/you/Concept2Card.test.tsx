@@ -793,6 +793,16 @@ describe("the AUTO VERIFY control (Phase AV)", () => {
   it("returns focus to the tapped segment after the write, not to the body", async () => {
     // Both segments are disabled while the PATCH is in flight; without the
     // restore a keyboard user lands on `<body>` mid-control.
+    //
+    // HONEST LIMIT (round-2 N10): this assertion CANNOT go red in jsdom.
+    // jsdom does not blur a focused element when it becomes `disabled` and
+    // React reuses the node, so focus never leaves and gutting the restore
+    // leaves all 77 tests green — measured. The same is true of
+    // `SendingModeControl`'s identical effect, so this is inherited rather
+    // than introduced. The production behaviour is real (browsers DO blur);
+    // what is missing is a gate, and the layer that could provide one is
+    // Playwright. Kept as documentation of intent, labelled, not counted as
+    // proof.
     mountFollowingVerify(LINKED);
     await renderCard();
     const on = await screen.findByRole("button", { name: "Auto verify on" });
@@ -824,17 +834,38 @@ describe("the AUTO VERIFY control (Phase AV)", () => {
     ).toBeInTheDocument();
   });
 
-  it("tapping the segment that is already pressed writes nothing", async () => {
-    const { api } = mountFollowingVerify(LINKED);
+  it("tapping the segment that is already pressed writes nothing, and does NOT clear a standing error", async () => {
+    // The second half is the round-2 finding (N13): `setFailed(false)` used
+    // to run BEFORE the no-op return, so a tap on the pressed segment wiped
+    // the failure line while the rower's last write was still un-landed.
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") return new Response(null, { status: 500 });
+      return new Response(JSON.stringify(LINKED), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
     await renderCard();
+    // Earn the error.
     await userEvent.click(
-      await screen.findByRole("button", { name: "Auto verify off" }),
+      await screen.findByRole("button", { name: "Auto verify on" }),
+    );
+    const failure = await screen.findByText("Couldn't change this. Try again.");
+    const patchesAfterFailure = api.mock.calls.filter(
+      (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
+    ).length;
+    // Now tap the segment the server still says is pressed.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Auto verify off" }),
     );
     expect(
       api.mock.calls.filter(
         (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
       ),
-    ).toHaveLength(0);
+    ).toHaveLength(patchesAfterFailure);
+    expect(failure).toBeInTheDocument();
   });
 
   it("turns back OFF again, which is the segment nothing had exercised", async () => {

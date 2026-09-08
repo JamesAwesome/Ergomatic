@@ -10775,9 +10775,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   display: none;
 }
 
-/* The line beneath the control (Gate 0 §1a, §3, §4a). `--ink-3` at rest,
-   `--ink` when it carries the send-failed reason — the same two steps the
-   card's helper and explain lines already use, no new colour. */
 /* Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
    2026-09-07). AUTO VERIFY's own two-segment control, under SENDING MODE.
 
@@ -10812,6 +10809,9 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink);
 }
 
+/* The line beneath the control (Gate 0 §1a, §3, §4a). `--ink-3` at rest,
+   `--ink` when it carries the send-failed reason — the same two steps the
+   card's helper and explain lines already use, no new colour. */
 .c2-card-mode-line {
   margin: 0;
   font-size: 12px;
