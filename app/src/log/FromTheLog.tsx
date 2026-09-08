@@ -63,8 +63,9 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
   const { link } = useConcept2Link();
   if (row.machineWorkSeconds === null) return null;
   const bytes = row.machineSummary?.verificationBytes;
-  // Phase AV (Gate 0 approved 2026-09-07): Concept2 accepted this row as
-  // verified when we sent it.
+  // Phase AV (Gate 0 approved 2026-09-07): Concept2 has accepted this row
+  // as verified — when we sent it, or by the time of a later send's
+  // reconciliation.
   //
   // GATED ON THE ACCOUNT, not on the stored flag alone. Nothing ever clears
   // `verified`, exactly as nothing clears the two ids beside it, so the mark
@@ -74,7 +75,9 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
   // never saw it.
   //
   // ONLY THE POSITIVE. `false` and `null` render identically, as no mark:
-  // `false` means Concept2 said no AT RECEIPT and the rower may have
+  // `false` means Concept2 had not verified it the last time we looked —
+  // at receipt, or at the most recent send's reconciliation — and the rower
+  // may have
   // verified by hand since, which nothing here would learn; `null` means we
   // did not hear (the 409-duplicate branch). There is no NOT VERIFIED state
   // anywhere in this design, and the absence is the honest rendering.

@@ -60,6 +60,12 @@ export type UnsupportedMachine = "ski" | "bike" | "dyno";
  * and `MULTIERG_BIKE` (226) are refused. 224 and 225 are adjacent and
  * disagree; `ergMachine.test.ts` asserts them separately for that reason.
  */
+/* PHASE MT TRIGGER: this map is PUBLISHED. The "Which ergs work" section of
+ * `src/news/content/bodies/connectTheMonitor.tsx` lists these machines to the
+ * rower in the app's own voice, and `articles.tsx` carries a word count that
+ * moves when that prose does. Adding or removing a value here reconciles both.
+ * Recorded at the map rather than only beside the claim, because a staleness
+ * note at the reader never reaches whoever edits the code. */
 const UNSUPPORTED: ReadonlyMap<number, UnsupportedMachine> = new Map([
   [64, "dyno"], // ERGMACHINE_TYPE_STATIC_DYNO
   [128, "ski"], // ERGMACHINE_TYPE_STATIC_SKI

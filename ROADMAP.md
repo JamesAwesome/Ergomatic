@@ -209,6 +209,15 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       not clearly wrong, since the likeliest cause of that screen is picking
       the wrong monitor from a list and that rower does have a RowErg. Filed
       at the design gate rather than found later. **S**
+- [ ] **`connected.spec.ts:1703` poisons its own origin for a later run.** The
+      QuotaExceededError leg fills origin storage until `setItem` genuinely
+      throws; its own title says "junk cleaned up after", but a SECOND run
+      against the same already-booted stack fails at `signInViaBackdoor`,
+      before any assertion. Seen 2026-09-08 during Phase MT: full `pnpm e2e`
+      passed 545/545 on a fresh stack, and re-running that one test against the
+      surviving stack failed. Either the cleanup misses something or the
+      failure is in the harness's own storage use. Costs a debugging round to
+      whoever meets it next. **S**
 - [ ] **A refused machine is still remembered as `LAST USED`.**
       `ConnectedInterstitial.tsx` calls `saveLastDevice` on every successful
       pair, and a refusal happens after pairing. Cosmetic; fixing it inside the
@@ -1340,9 +1349,14 @@ closed with zero Concept2 contact.
       withdrawn once there is nothing left to type it into. What does NOT:
       the ask this row was written for — *"a verification the ROWER
       performed, never one we caused"* — is exactly what a receipt-time
-      verdict cannot see. Only the reconciliation (PR 2, blocked on one
-      authenticated GET) can, and it can only ever UPGRADE. **The reversal
-      reversal narrative above is written as history for the same reason.**
+      verdict cannot see. **The reconciliation (#365, 2026-09-08) is what
+      can, and it shipped**, so the ask is now MET for any row still inside
+      the declaration read's reach: it upgrades only, never downgrades, and
+      it sees a hand-verification the next time the rower sends anything.
+      **What is still not met, and closes this row only when it is:** a row
+      that falls out of that one page of 50, or a rower who verifies by hand
+      and never sends again, is never seen. The reversal narrative above is
+      written as history for the same reason.
 - [ ] **`pnpm screenshots` rewrites ~61 PNGs per run with no content change.**
       Measured twice on 2026-09-07 (PR #341): two consecutive runs on an
       unchanged tree each rewrote the same 61 captures, differing only in the
@@ -1382,11 +1396,14 @@ closed with zero Concept2 contact.
       CODE line is withdrawn when it appears. Both antagonist passes folded.
       **Ships as THREE PRs** (was two): PR 1 (setting + send + mark) MERGED
       #360; #363 carries the fallback work, the 409 exclusion and `codeSent`,
-      which PR 1's spec withdrew; and the reconciliation James approved is
-      BLOCKED on one authenticated GET
-      confirming Concept2's results list carries `verified` — the log-dev
-      token expired 2026-09-07 20:04 UTC and `C2_CLIENT_ID`/`C2_CLIENT_SECRET`
-      are not in the environment.
+      which PR 1's spec withdrew; and the reconciliation James approved shipped
+      as #365 (2026-09-08). **The GET that blocked it is PAID:**
+      `docs/superpowers/research/2026-09-08-c2-results-list-verified.md` —
+      the live results list carries `verified` on every row, measured against
+      log-dev. Two things it cost to learn: the credentials in the repo-root
+      `.env` are `LOGBOOK_CLIENT_ID_DEV`/`LOGBOOK_CLIENT_SECRET_DEV`, not the
+      `C2_*` names `c2-crossconnect.ts` reads; and a token refresh with scope
+      `results:read` is REJECTED, it needs `user:read,results:write`.
 - [ ] **Why does Concept2 show no Verify button on a row carrying interval
       data?** **ANSWERED 2026-09-07 and CLOSED — it was never about interval
       data.** Concept2 offers the Verification Code field only when the row's
@@ -2373,6 +2390,60 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **NOBODY HAS MEASURED THAT A HAND VERIFICATION ON concept2.com SETS THE
+      LIST'S `verified` — and #365's headline rests on it.** Filed by the PM
+      gate (2026-09-08, C3). The chain is: rower taps Verify on the website →
+      their list row's `verified` flips → our declaration read sees it → we
+      upgrade. **Hop 3 is measured** (2026-09-08 research: the field is on the
+      list and varies). **Hop 2 is measured nowhere.** Every `true` on that
+      account is a receipt-time verification WE caused by posting a code, and
+      every test seeds `verified: true` into our own fake or straight into
+      Postgres — so the producer, a human tapping Verify, is upstream of all
+      of them. RF24's shape, with the producer outside the repo.
+      **If hop 2 is wrong the feature does nothing, silently, forever**, and
+      that is indistinguishable from "nobody has hand-verified anything yet".
+      **The fix is a desk round trip, not a walk:** hand-verify one eligible
+      log-dev row on the website, re-read `GET /api/users/me/results`, confirm
+      that row's `verified` flipped, append it to
+      `docs/superpowers/research/2026-09-08-c2-results-list-verified.md`.
+      Needs James's browser; zero erg time. **Until it exists, the release
+      note may not claim that rows you verify yourself pick up their tick** —
+      it covers the setting and the mark only. **S**
+
+- [ ] **Count the victims once AUTO VERIFY has been on for a few sends.** The
+      PM gate's standing test is "when a degradation path returns success, ask
+      what query would find its victims; if the answer is none, that is the
+      finding." Here the answer is not none, because the phase STORED the
+      verdict instead of logging it:
+      `SELECT count(*) FROM session_logs WHERE c2_result_id IS NOT NULL AND
+      verified IS NOT TRUE;`
+      Run it ONCE after the first opted-in sends. If it is not zero, the date
+      hypothesis is live — Concept2 checks `date`, we send the PHONE's clock,
+      and the monitor's own stamp ran 1.29-3.23 minutes earlier across seven
+      captures (spec M8/M9). Per the five-users ruling this is one query, not
+      a measurement gate or a dashboard. **XS**
+
+- [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
+      catch in `routes/concept2.ts`'s reconciliation now warns rather than
+      swallowing silently — that was the real defect (RF24's shape: a
+      permanently broken mechanism emitting nothing, forever). What has no
+      test is the other half: that the send still returns 200 when
+      `markC2Verified` throws. **Four attempts, all abandoned honestly
+      (2026-09-08):** every shape produced a 500 from the FIXTURE rather than
+      from the code under test, including one that 500s with no override at
+      all, so the setup is what could not be got right.
+      `makeFakeStores()` returns interlinked stores — handing the router a
+      `logs` from a second call breaks the sharing — and the reconciliation
+      sits inside `resolveWeightClass`, several layers below the file's
+      helpers. Deliberately shipped as a gap rather than as a green test
+      that proves the wrong thing. **The likely route:** an integration test
+      in `concept2Send.integration.test.ts`, where the store is real and can
+      be made to fail at the DB rather than by replacing a method.
+      **ALSO IN THE ICEBOX, with its trigger** (a send that 500s for no
+      visible reason, or anyone editing that `try`/`catch`), because what
+      would make this matter is an EVENT, not a date — this row is the
+      to-do, the icebox entry is the tripwire. Keep them in step. **S**
+
 - [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
       Filed by #363's review (F7). `postResult` answers a 409 whose body
       carries no numeric `id` as `{kind:"c2_error", status:409}`, and #363
@@ -2957,6 +3028,32 @@ Each needs erg time or a deliberate recording session.
 
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
 an iceboxed item is not a phase-close requirement.
+
+- **"A failing reconciliation does not fail the send" has no test — Phase AV,
+  2026-09-08.** **Trigger:** a Concept2 send returns 500, or a rower reports a
+  send that failed for no visible reason, at a time when `markC2Verified`
+  could have been throwing. Also fires if anyone edits that `try`/`catch` or
+  moves the reconciliation out of `resolveWeightClass`.
+  **What is guarded and what is not.** The catch demonstrably WORKS: a forced
+  `throw` placed inside the route's own try returns 200 and only the row
+  assertion fails. What has no gate is that a store failure cannot fail the
+  SEND — so an edit that broke it would ship silently, and the symptom would
+  be a send failing because a verdict could not be refreshed, which is exactly
+  what the catch exists to prevent.
+  **Why it is iceboxed rather than queued.** Four attempts, all abandoned
+  honestly. Every shape 500s in the FIXTURE rather than in the code, including
+  a minimal case with no store override and no spy at all, while the five
+  tests beside it pass — so something in `concept2.test.ts`'s reconciliation
+  describe is order- or id-dependent and was not found. Shipping a green test
+  that proved the wrong thing would have been worse than the gap (RF21).
+  **The route most likely to work, if the trigger fires:** an integration test
+  in `concept2Send.integration.test.ts`, where the store is REAL and can be
+  made to fail at the database rather than by replacing a method — which is
+  the manoeuvre that produced every one of the four fixture 500s.
+  **What DID ship, so this is a missing gate and not a missing fix:** the
+  catch warns instead of swallowing silently. Before it, a permanently broken
+  reconciliation emitted nothing at all, forever, because the success log is
+  gated on `upgraded > 0` — RF24's shape.
 
 - **Ask for the account picker only when the rower asked to switch — James,
   2026-09-07.** **Trigger:** the extra tap actually annoys someone. #356 sends

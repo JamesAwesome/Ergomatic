@@ -1057,6 +1057,56 @@ export function createLogsStore(db: Db) {
       );
     },
 
+    /** Phase AV's reconciliation: mark OUR rows verified for the given
+     *  Concept2 account, from ids Concept2 itself reported as verified on
+     *  the results list. Returns how many rows actually moved.
+     *
+     *  UPGRADE-ONLY, and that is the whole safety argument. The `WHERE`
+     *  requires the stored value to be distinct from `true`, so this can
+     *  turn `false`/`null` into `true` and can NEVER turn a `true` back —
+     *  which matters because the read behind it sees one page of 50 rows
+     *  and only on a send, so a row's absence from that page is not
+     *  evidence of anything.
+     *
+     *  SCOPED BY ACCOUNT as well as user: the ids come from a list fetched
+     *  with one account's token, and a stale id from a different Concept2
+     *  account must not select a row here (same rule `sentC2ResultIds`
+     *  below is written to).
+     *
+     *  An empty id set returns early. The REASON, corrected after review:
+     *  an earlier version of this comment claimed `inArray` with `[]` is "a
+     *  SQL error in some drivers and a full-table predicate in others",
+     *  which is invented and false for ours — drizzle-orm's `inArray`
+     *  returns `sql\`false\`` for an empty array
+     *  (`sql/expressions/conditions.cjs`), so the query would be harmless
+     *  and simply match nothing. The real reason is the round trip: there is
+     *  no point asking Postgres a question whose answer we already know. */
+    async markC2Verified(
+      userId: string,
+      c2UserId: number,
+      resultIds: readonly number[],
+    ): Promise<number> {
+      if (resultIds.length === 0) return 0;
+      const rows = await db
+        .update(sessionLogs)
+        .set({ verified: true })
+        .where(
+          and(
+            eq(sessionLogs.userId, userId),
+            eq(sessionLogs.c2UserId, c2UserId),
+            inArray(sessionLogs.c2ResultId, [...resultIds]),
+            // `IS DISTINCT FROM`, not `<> true`. The column is nullable and
+            // `NULL <> true` evaluates to NULL, which is not TRUE, so a
+            // plain inequality would silently skip every row whose verdict
+            // we never heard — the 409-duplicate rows, which are exactly the
+            // ones a later reconciliation is most likely to rescue.
+            sql`${sessionLogs.verified} IS DISTINCT FROM TRUE`,
+          ),
+        )
+        .returning({ id: sessionLogs.id });
+      return rows.length;
+    },
+
     // Wave E PR1 Task 6, plan deviation 2: legacy-row upload persist-on-
     // first-use. The `tz IS NULL` guard rides IN the WHERE clause (not a
     // read-then-write in JS) so a concurrent second upload attempt for the

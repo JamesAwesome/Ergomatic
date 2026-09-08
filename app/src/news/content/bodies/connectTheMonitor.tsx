@@ -55,24 +55,27 @@ export function ConnectTheMonitorBody() {
       <h2>Which ergs work</h2>
 
       <p>
-        <strong>Supported &mdash; confirmed.</strong> One machine: the RowErg
-        this app was built and tested against. Everything below this line is
-        honest guesswork until someone rows on one and tells us.
+        <strong>Supported: confirmed.</strong> One machine: the RowErg this app
+        was built and tested against. Everything below this line is honest
+        guesswork until someone rows on one and tells us.
       </p>
 
       <p>
-        <strong>Supported &mdash; best effort.</strong> Dynamic RowErgs, RowErgs
-        on slides, MultiErgs on a rowing interval, and any monitor too old to
-        tell us what it is. The piece itself is right: it is rowing, and pace
-        per 500m means what it says. But Ergomatic tells Concept2 it was a plain
-        RowErg, so the logbook entry names the wrong machine and its
-        verification code will not be accepted. That one is on the list to fix.
+        <strong>Supported: best effort.</strong> Dynamic RowErgs, RowErgs on
+        slides, MultiErgs on a rowing interval, and any monitor too old to tell
+        us what it is. The piece itself is right: it is rowing, and pace per
+        500m means what it says. But Ergomatic tells Concept2 it was a plain
+        RowErg, so the logbook entry names the wrong machine. If you have auto
+        verification on, that row's code will not be accepted either. Both are
+        on the list to fix.
       </p>
 
       <p>
-        <strong>Unsupported.</strong> SkiErg, BikeErg and Dyno. Ergomatic
-        refuses these rather than storing them as rows: nothing is programmed,
-        nothing is recorded, nothing is sent.
+        <strong>Unsupported.</strong> SkiErg, BikeErg and Dyno. On a monitor new
+        enough to say what it is, Ergomatic refuses these rather than storing
+        them as rows: nothing is programmed, nothing is recorded, nothing is
+        sent. A monitor made before 2018 does not report its machine, so it is
+        treated as a RowErg.
       </p>
     </>
   );

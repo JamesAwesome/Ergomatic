@@ -383,6 +383,7 @@ function resultRow(over: Partial<C2ResultRow> = {}): C2ResultRow {
     weightClass: "H",
     dateUtc: "2026-09-02 10:00:30",
     date: "2026-09-02 06:00:30",
+    verified: null,
     ...over,
   };
 }

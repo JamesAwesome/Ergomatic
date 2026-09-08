@@ -377,17 +377,28 @@ export const sessionLogs = pgTable(
     c2ResultId: integer("c2_result_id"),
     c2UserId: integer("c2_user_id"),
     // Phase AV (spec 2026-09-07-optional-auto-verify): Concept2's own
-    // `verified`, off the 201 body, written by the SAME call that writes the
-    // two ids above.
+    // `verified`. Written first off the 201 body, by the same call that
+    // writes the two ids above — and SINCE PR 3 also by the reconciliation
+    // (`markC2Verified`), which upgrades it from a later send's declaration
+    // read. Two writers, not one; the "written once per send" phrasing this
+    // comment used to carry is gone.
     //
     // THIS IS NOT A MIRROR OF CONCEPT2'S CURRENT STATE, and reading it as
-    // one is the mistake to avoid. It records what Concept2 said AT RECEIPT.
+    // one is the mistake to avoid. **Its meaning WIDENED when the
+    // reconciliation landed (Phase AV PR 3):** it was "what Concept2 said at
+    // receipt"; it is now "the best thing Concept2 has said about this row
+    // the last time we happened to look". That is still not "current" — the
+    // reconciliation fires only on a send, reads one page of 50, and never
+    // walks `links.next`, so a row falls out of view permanently once that
+    // many newer rows exist.
     // `true` can only become more true, so it is safe to render. `false` and
     // `null` are NOT distinguishable to the reader and must never be — both
     // render as no mark. `null` means we did not learn (the 409-duplicate
     // branch, which tells us Concept2 HAS the row and nothing about its
-    // state); `false` means Concept2 said no at receipt, and the rower may
-    // have verified by hand since, which nothing here would see.
+    // state); `false` means Concept2 had not verified it the last time we
+    // looked, and the rower may have verified by hand since. The
+    // reconciliation NARROWS that window on every send but never closes it —
+    // it reads one page of 50 and only when a send happens.
     //
     // So the surface may state the POSITIVE and may never state the
     // negative. There is no "not verified" anywhere in the design.

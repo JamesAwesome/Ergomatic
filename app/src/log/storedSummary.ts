@@ -312,7 +312,9 @@ export interface StoredLog {
   // `c2UserId` matches the LIVE link's (spec anchor F8).
   c2ResultId: number | null;
   c2UserId: number | null;
-  /** Phase AV: Concept2's own verdict AT RECEIPT, from the 201 body. NOT a
+  /** Phase AV: Concept2's own verdict as of the last time we looked — the
+   *  201 body when the row was sent, and since PR 3 also any later send's
+   *  reconciliation, which can only UPGRADE it. NOT a
    *  mirror of their current state — `true` can only become more true and is
    *  safe to render; `false` (they said no) and `null` (we did not hear, the
    *  409 branch) are NOT distinguishable to the reader and both render as no

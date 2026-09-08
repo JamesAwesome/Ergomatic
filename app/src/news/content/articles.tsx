@@ -39,13 +39,25 @@ import { NotationBody } from "./bodies/notation";
 // no registry change needed this round.
 //
 // Phase MT (2026-09-08): connect-the-monitor gained the "Which ergs work"
-// support matrix, which the refusal screen links to. Recounted at 344 words
-// (217 + 127); ceil(344/180) = 2, so `minutes` is UNCHANGED. Recorded anyway,
-// because this comment asks for the number rather than for the change. The
-// matrix is a published claim that goes stale silently — changing
+// support matrix, which the refusal screen links to. Recounted at 375 words
+// (217 + 158), so `minutes` goes 2 -> 3: ceil(375/180) = 3.
+//
+// THE RECOUNT MOVED IT, and only on the second pass. The section first landed
+// at 127 added words (344 total, ceil = 2, unchanged) and the PM gate then
+// corrected two over-claims in it — the tier-3 refusal needed "on a monitor
+// new enough to say what it is", because pre-2018 firmware carries no machine
+// type and a SkiErg on it is still recorded; and the tier-2 verification
+// sentence needed the auto-verify condition, because `verification_code` only
+// ships inside `if (autoVerify)`. Those 31 words crossed the boundary. This is
+// what the recount habit is FOR: the figure was honestly right when written
+// and wrong an hour later.
+//
+// The matrix is a published claim that goes stale silently — changing
 // `server/concept2/mapping.ts`'s hardcoded `type` or the denylist in
 // `domain/monitor/pm5/ergMachine.ts` reconciles its middle tier and recounts
-// this figure. Phase BL PR C
+// this figure. Both of those files carry the same trigger at the line that
+// would falsify the claim, because a trigger recorded only at the READER
+// never fires for the person editing the code. Phase BL PR C
 // (2026-08-23): your-first-row rewritten for the three doors (the single
 // "row 6k and it sets your baseline" story was a shipped lie — nothing
 // wrote a baseline until PR B's post-save offer) — recounted at 288
@@ -117,7 +129,7 @@ export const ARTICLES: NewsArticle[] = [
   {
     slug: "connect-the-monitor",
     title: "Connect the monitor, and it drives the piece",
-    minutes: 2,
+    minutes: 3,
     kind: "first-party",
     pinned: false,
     publishedAt: "2026-08-08",

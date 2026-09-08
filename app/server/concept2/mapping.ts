@@ -176,15 +176,31 @@ export type WeightClassFailure =
  *  go and set it again, forever. */
 export type C2ProfileWeight = number | "unreadable" | null;
 
-/** One row of the rower's Concept2 results list, projected to the four
- *  fields the declaration read decides on (`client.fetchResults`'s own
- *  comment says what each is for). */
+/** One row of the rower's Concept2 results list, projected to the fields the
+ *  declaration read decides on (`client.fetchResults`'s own comment says what
+ *  each is for) plus, since Phase AV's reconciliation, `verified`.
+ *
+ *  THE PROJECTION STAYS NARROW ON PURPOSE. `client.fetchResults`'s comment
+ *  is explicit that the rower's other logbook rows are not ours to hold, log
+ *  or render, and `verified` does not change that: it is READ for every row
+ *  in the page because a projection cannot know which ids are ours, and
+ *  DISCARDED for every row that is not — the reconciliation intersects with
+ *  `sentC2ResultIds` before it writes anything.
+ *
+ *  MEASURED, not assumed (2026-09-08,
+ *  `docs/superpowers/research/2026-09-08-c2-results-list-verified.md`): the
+ *  live list carries `verified` on every row with varying values. Before that
+ *  GET this was INFERENCE from the vendor's documented example, and the spec
+ *  blocked the reconciliation on measuring it. */
 export interface C2ResultRow {
   id: number | null;
   type: string | null;
   weightClass: string | null;
   dateUtc: string | null;
   date: string | null;
+  /** `null` when the key is absent or not a boolean — a server or a row that
+   *  does not say is not a row that says NO. */
+  verified: boolean | null;
 }
 
 /** The result types Concept2 REQUIRES a weight class on, and therefore the
@@ -540,6 +556,21 @@ export function buildC2Payload(
     : workSeconds;
 
   const post: Record<string, unknown> = {
+    // PHASE MT TRIGGER (2026-09-08). This literal is correct for every row the
+    // app can now open — `domain/monitor/pm5/ergMachine.ts` refuses every
+    // machine the PM5 names as not rowing before a record can exist. It stays
+    // WRONG for a Dynamic RowErg, a RowErg on slides, and a MultiErg on a
+    // rowing interval, which the denylist deliberately lets through and for
+    // which Concept2's own results enum has `dynamic`, `slides` and `multierg`
+    // members.
+    //
+    // THE APP SAYS SO OUT LOUD, so changing this line is not a local edit: the
+    // "Which ergs work" section of `src/news/content/bodies/connectTheMonitor.tsx`
+    // states this limitation in the app's own voice, and its `minutes` figure
+    // in `articles.tsx` is recounted whenever that prose changes. Reconcile
+    // both here, not later. The trigger lives at THIS line rather than only
+    // beside the claim, because a staleness note recorded at the reader never
+    // reaches the person editing the code that falsifies it.
     type: "rower",
     date: formatC2Date(instant, tz),
     timezone: tz,

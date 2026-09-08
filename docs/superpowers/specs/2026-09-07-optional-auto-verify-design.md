@@ -208,6 +208,18 @@ row is already read on the send path.
 | --- | --- | --- | --- | --- | --- |
 | `concept2_links.auto_verify` | `upsertLink` INSERT, `DEFAULT false` | `setAutoVerify` (PATCH); row DELETE on unlink (`stores/concept2.ts:266`) | **false** — row deleted, fresh insert | **false** — the `CASE`'s ELSE branch | **kept** — `c2UserId` equal, so the THEN branch |
 | the `autoVerify` value used by ONE send | resolved once, before the first post | end of request | — | — | **must not be re-read on the retry** |
+| `session_logs.verified` | `recordC2Result`'s 2xx branch, from the 201 body | **NONE** — nothing clears it, exactly as nothing clears the two ids beside it | unchanged (the row belongs to whichever account `c2UserId` names) | unchanged, but the MARK hides — the render gate is `sentResultId`, not the column | unchanged |
+| — its SECOND writer, the 409 branch | `recordC2Result` with `null` | as above | as above | as above | as above |
+| — its THIRD writer (PR 3) | `markC2Verified`, from a later send's declaration read | as above | as above | as above | as above |
+
+**On the third writer and ordering**, which is the question this table exists
+to answer: within one request the reconciliation runs during the declaration
+read, BEFORE the row being sent gets its own verdict. They can only touch the
+same row if it is already in `ourResultIds` — and the already-sent
+short-circuit returns 200 before the declaration read for a same-account row
+that carries a result id, while a different-account row is excluded twice
+(by `sentC2ResultIds`'s account scope and by `markC2Verified`'s own). The
+reconciliation is upgrade-only, so even an overlap could not lose a `true`.
 
 **Shape:** `autoVerify: boolean("auto_verify").notNull().default(false)`,
 matching every other boolean in this schema. Reset alongside `autoSend` in the
@@ -368,10 +380,12 @@ result id and the account id from the same response and is the only place a
 send's outcome lands.
 
 **The asymmetry that governs every word of the copy.** Our 201 tells us
-whether the row verified AT RECEIPT.
+whether the row verified AT RECEIPT; since the reconciliation shipped (PR 3,
+#365) a later send can also upgrade it. Neither is "now".
 
 - `verified: true` — true, and it stays true. Say so.
-- `verified: false` — means "not verified at receipt", and **nothing more**.
+- `verified: false` — means "not verified the last time we looked", and
+  **nothing more**.
 
 **An earlier draft justified this by saying nothing re-reads a row from
 Concept2 after the send. That is false, and the correction matters.** Every
@@ -517,7 +531,20 @@ inherited ROADMAP row asked for.
   `recordC2Result`, so the lifetime table gains a row and the "written once per
   send" phrasing goes.
 
-**RECEIPT OWED, AND CURRENTLY BLOCKED.** That the list response carries
+**RECEIPT PAID 2026-09-08, and the reconciliation SHIPPED in #365.** The
+measurement this section demanded is
+`docs/superpowers/research/2026-09-08-c2-results-list-verified.md`: one
+read-only GET against log-dev returned five rows, every one carrying
+`verified`, values varying. Two things it cost to learn, both recorded there:
+the credentials are `LOGBOOK_CLIENT_ID_DEV`/`LOGBOOK_CLIENT_SECRET_DEV` (not
+the `C2_*` names the crossconnect script reads), and a refresh with scope
+`results:read` is REJECTED — it needs `user:read,results:write`.
+
+The original blocking language is kept below, struck, because the RULE it
+states is the durable part: no implementation task depending on a field may
+start before the field is measured.
+
+> ~~**RECEIPT OWED, AND CURRENTLY BLOCKED.** That the list response carries
 `verified` is PRIMARY for Concept2's documented example and INFERENCE for our
 live responses — no LIST capture is committed anywhere in `docs/monitor/`. One
 authenticated GET settles it. **It cannot be run right now:** the log-dev token
@@ -525,7 +552,8 @@ at `~/.ergomatic-c2-dev.json` expired 2026-09-07 20:04 UTC, and
 `app/scripts/c2-crossconnect.ts` needs `C2_CLIENT_ID` and `C2_CLIENT_SECRET`,
 which are not in the environment. **No implementation task that depends on the
 field may start before this is measured** — that is RF30 as amended, applied to
-this spec's own capability claim rather than to someone else's.
+this spec's own capability claim rather than to someone else's.~~
+
 
 
 ## Gate 0 — what James approves before anything is built
@@ -584,13 +612,12 @@ edit form left to type it into (M6).
 Coherent on its own: the switch does what it says and the rower can see that it
 did.
 
-**PR 2: the reconciliation.** BLOCKED, not deferred by choice — it reads a
-field whose presence in the live list response is INFERENCE (PRIMARY only for
-Concept2's documented example), and the confirming GET cannot run while the
-log-dev token is expired and the client credentials are absent. Splitting here
-costs nothing: the rendered mark is identical either way, and reconciliation
-only widens what can set it. Shipping PR 1 first is not shipping a promise —
-the mark means "Concept2 accepted this when we sent it", which is true today.
+**PR 2 (#363): the fallback work, the 409 exclusion and `codeSent`** — the
+three Mechanism items PR 1 withdrew. **PR 3 (#365): the reconciliation**,
+unblocked 2026-09-08 by the GET above and shipped. The original text called
+PR 2 "the reconciliation, BLOCKED"; the phase grew a third PR when #360's
+review sent those Mechanism items forward, and this line is corrected rather
+than left naming the same work two ways.
 
 **This split does NOT weaken the gate.** The approved copy carries no tense and
 no date, so it stays honest under both meanings of the stored field.

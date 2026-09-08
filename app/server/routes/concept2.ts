@@ -1199,9 +1199,67 @@ export function createConcept2Router({
           };
         }
         const ourResultIds = await logs.sentC2ResultIds(userId, c2UserId);
-        const ourRowsSkipped = list.rows.filter(
+        const ourRows = list.rows.filter(
           (row) => row.id !== null && ourResultIds.has(row.id),
-        ).length;
+        );
+        const ourRowsSkipped = ourRows.length;
+
+        // PHASE AV'S RECONCILIATION. This read already exists — it is the
+        // weight-class declaration — and since 2026-09-08 we know the live
+        // response carries `verified` on every row (research file of that
+        // date; before it, INFERENCE from the vendor's example). The only
+        // new cost here is the write.
+        //
+        // UPGRADE-ONLY, enforced by the store. This is the ONLY mechanism
+        // that can ever see a verification the ROWER performed — our own 201
+        // sees receipt time and nothing after it — which is what the
+        // inherited "say verified" ROADMAP row actually asked for.
+        //
+        // WHAT IT STILL CANNOT DO, so the surface's rule is unchanged: it
+        // fires only ON A SEND, reads ONE page (`DECLARATION_PAGE_SIZE`),
+        // and never walks `links.next`. A row falls out of view permanently
+        // once that many newer rows exist. So a stored `false` still means
+        // "not verified the last time we happened to look, which may be
+        // never", and the surface still may not state the negative.
+        //
+        // Failures are swallowed deliberately: this is a side effect of a
+        // read taken for another purpose, and a send must not fail because a
+        // verdict could not be refreshed.
+        // `ourRows` already filtered on `id !== null`, so re-testing it here
+        // was dead — and it was what forced the `as number` cast below. One
+        // narrowing, at the place that does the work.
+        const nowVerified = ourRows.flatMap((row) =>
+          row.verified === true && row.id !== null ? [row.id] : [],
+        );
+        if (nowVerified.length > 0) {
+          try {
+            const upgraded = await logs.markC2Verified(
+              userId,
+              c2UserId,
+              nowVerified,
+            );
+            if (upgraded > 0) {
+              console.log(
+                JSON.stringify({
+                  event: "c2_reconcile",
+                  seen: nowVerified.length,
+                  upgraded,
+                }),
+              );
+            }
+          } catch (err) {
+            // Never fail a send over this — but never go SILENT either. The
+            // catch was empty and the success log is gated on `upgraded > 0`,
+            // so a permanently failing reconciliation emitted nothing at all,
+            // forever: no signal that the one mechanism which can see a
+            // rower's own verification had stopped working. That is RF24's
+            // shape (a headline feature all of whose gates stay green), and
+            // every sibling failure path here warns.
+            console.warn(
+              `concept2 reconcile: could not upgrade ${String(nowVerified.length)} verified row(s) (user ${userId}); the send is unaffected — ${err instanceof Error ? err.message : "unknown"}`,
+            );
+          }
+        }
         const declared = pickDeclaredWeightClass(list.rows, {
           ourResultIds,
           now: now().getTime(),

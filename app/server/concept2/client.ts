@@ -361,6 +361,7 @@ export function createC2Client(
             weight_class?: unknown;
             date_utc?: unknown;
             date?: unknown;
+            verified?: unknown;
           } | null;
           return {
             id: typeof row?.id === "number" ? row.id : null,
@@ -369,6 +370,10 @@ export function createC2Client(
               typeof row?.weight_class === "string" ? row.weight_class : null,
             dateUtc: typeof row?.date_utc === "string" ? row.date_utc : null,
             date: typeof row?.date === "string" ? row.date : null,
+            // Phase AV: a real boolean or `null`, never truthiness. A row
+            // that does not say is not a row that says no, and only the
+            // reconciliation's positive arm acts on this.
+            verified: typeof row?.verified === "boolean" ? row.verified : null,
           };
         }),
       };
