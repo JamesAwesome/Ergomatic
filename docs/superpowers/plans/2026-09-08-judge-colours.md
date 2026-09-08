@@ -246,6 +246,8 @@ $ grep -rl "timer-card-actual-" e2e/fixtures | wc -l  # 12 (the glob connected-*
 
 ### Task 4: Delete the summary legend
 
+*(The spec's PR-shape list calls this work item 6; this plan calls it Task 4. Cite by name, not by number. Line numbers in this document have moved as tasks landed — cite by provenance, per the briefing.)*
+
 **Files:** Modify `app/src/session/PostWorkoutSummary.tsx`, `app/src/index.css`, `app/src/session/PostWorkoutSummary.test.tsx`, `app/e2e/design.spec.ts`; reconcile comments in `app/src/log/TraceChart.tsx`, `app/src/session/summaryModel.ts`.
 
 **Invariant:** I-8. **Gate 0 ruling 7, James, 2026-09-08: DELETE** — eight of the nine reachable pace configurations make `← FASTER (BLUE) · SLOWER (RED) →` false.
@@ -254,8 +256,10 @@ $ grep -rl "timer-card-actual-" e2e/fixtures | wc -l  # 12 (the glob connected-*
 
 1. The `<p className="summary-legend">` element.
 2. The `.summary-legend` CSS rule (`index.css:10038`).
-3. `design.spec.ts`'s `.summary-legend` `toHaveText` assertion (`:5823`).
+3. `design.spec.ts`'s `.summary-legend` `toHaveText` assertion — **REPLACED, not deleted** (corrected during execution; the spec was right and this plan was wrong). The spec's gating section says *"whichever Gate 0 option lands, ITS ASSERTION REPLACES `design.spec.ts`'s current `toHaveText` pin"*, and calls e2e the load-bearing layer for I-8. Deleting outright leaves I-8 with no e2e gate at all. The same locator now asserts `toHaveCount(0)` on the same page, and it bites.
 4. **`hasJudgedRow`.** `grep -rn "hasJudgedRow" src` returns **three** lines: the definition and its use in `PostWorkoutSummary.tsx`, and a `TraceChart.tsx` comment naming it as a live guard. The use IS the legend's guard, so the local dies with it and lint will say so.
+
+**Two sweep hits revision 2 omitted, both found during execution:** `src/log/TraceChart.test.tsx` carries the same precedent comment test-side, and `docs/design/DEVIATIONS.md:75` names `.summary-legend` as a live sibling in a quiet-mono-label contrast decision — deleting the class makes that row stale (recurring failure 9).
 
 **The grep sweep is part of this task.** Scope it to code and design docs — **not** `docs/superpowers/`, which holds records including this plan, and a census that greps the document stating it is wrong the moment it is written:
 
@@ -265,7 +269,7 @@ $ grep -rn "FASTER (BLUE)\|SLOWER (RED)" app/src app/e2e docs/design ROADMAP.md
 
 Reconcile by class: **code, must change** — `PostWorkoutSummary.tsx`, `PostWorkoutSummary.test.tsx` (×2: one asserts presence, one absence), `design.spec.ts`. **Comments citing the legend as a live idiom, must change** — `TraceChart.tsx` (which is also the precedent that ruled this deletion: *"carries no colour word on purpose … naming a colour here would just be a second thing to get wrong later"*), `summaryModel.ts`, and `index.css`'s two `.summary-legend` sibling-idiom comments. **Records, must NOT change** — `docs/design/handoffs/`.
 
-- [ ] **Step 1: Failing test.** Invert the existing presence assertion: with a judged row, `screen.queryByText(/FASTER \(BLUE\)/)` is `null`. The existing absence test must still pass.
+- [ ] **Step 1: Failing test.** Invert the existing presence assertion: with a judged row, the legend is absent. **Do NOT keep the second assertion** — revision 2 said "the existing absence test must still pass", which leaves an RF21 residue: before the change the two differed (presence vs absence); after it both assert absence, and the unjudged one sits under a strictly weaker precondition, so nothing can redden it that does not redden the judged one first. Keep the inverted assertion on the judged model — the only state that ever rendered the legend — and delete the now-decorative clause rather than keeping it for the count.
 - [ ] **Step 2: Fail. Step 3: Delete all four. Step 4: Green. Step 5: Commit.**
 - [ ] **Step 6: Mutation.** Re-add the `<p>` alone. The new test goes red.
 
