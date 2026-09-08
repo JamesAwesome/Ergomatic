@@ -8974,3 +8974,116 @@ antagonist should start with them.
   concatenates it), and a tile rendering its label with no value fails the
   assertion, so an empty tile cannot pass. The four decoded literals reproduce
   under an independent raw-hex decode against `pm5/parse.ts`.
+
+## Full pass, 2026-09-07 — optional auto-verification (TRIAD, stored shape)
+
+- **"The verification code is checked against numbers the machine gave us."** True
+  of three fields and false of the one nobody looked at: Concept2's own quoted line
+  names FIVE (`date`, `time`, `distance`, `workout_type`, `machine_type`), and
+  `date` comes from the PHONE (`completionStamp.ts:42-53` → `run.completedAt` +
+  `Intl` tz). The monitor reports its own log date/time on the very frame that
+  carries the code — `parseSummaryLogStamp` decodes 0x0039 offsets 0-3 and
+  `driver.ts:3316-3332` logs `wire=… wall=…` in ONE ring line, marked "DIAGNOSTIC
+  only" — and nothing carries it further. **Technique: for any external check
+  described as "must match", enumerate the fields the AUTHORITY names and ask, per
+  field, whether the value we send is one the machine reported or one we made up.
+  Then grep for a parser that already decodes the machine's version.** Three of
+  five were deterministic and the fourth was a coincidence with an unused oracle
+  sitting in the ring — the free-oracle pattern (RC-9) applied to a field nobody
+  had classified.
+  **FOLLOW-UP MEASUREMENT by the controller, same day, which the pass invited and
+  did not run:** all seven committed rings carrying that line were decoded. The
+  monitor's stamp reads 1.29-3.23 min EARLIER than the wall clock at the summary,
+  in 7 of 7. The innocent explanation — that the stamp is the piece's START — is
+  falsified by subtracting each capture's own elapsed, which WIDENS the spread
+  from 116 s to 227 s instead of collapsing it; the residual trends upward with
+  date, which is what a drifting RTC looks like. **And the one live verification
+  test passed anyway, with a phone-sourced date against this same monitor** — so
+  either the `date` check has minutes of tolerance, or it is looser than "must
+  match" implies, or the code does not encode the log date. All three favour the
+  feature; none is established. **Technique: a ring line marked "DIAGNOSTIC only"
+  is a free oracle with the wiring already done — decode the committed corpus
+  before designing around the uncertainty.**
+
+- **"A row with no 0x0039 summary sends a code that silently fails."** False, and
+  the correction matters more than the claim: `verificationBytes` only ever travels
+  INSIDE the `summaryTotals`-gated block at all three writers (`driver.ts:4415-4422`,
+  `monitorRun.ts:1394-1419`, `JustRowLog.tsx:314-327` / `LogSession.tsx:2262-2266`),
+  so such a row has no code to send. **Technique: before believing a "sends the
+  wrong thing" hazard, find the gate the two values share.** The real residue was
+  the opposite shape — the SERVER validates the three fields independently with no
+  cross-field rule (`routes/data.ts:1856-1878`), so the pairing is producer
+  discipline, not a stored-shape constraint.
+
+- **"Free rows are the population that most needs auto-verification."** False, and
+  they cannot be uploaded at all: `eligibilityFailure` refuses `endedBy !==
+  "finished"` (`mapping.ts:95`), the free row's only close writes `"rower"` or
+  `"link-lost"` (`useMonitorSession.ts:5668`), and a Just Row never reaches state 12
+  (`useMonitorSession.ts:2874-2875`; 1660 status frames, `2026-08-24-just-row-design.md:522-524`).
+  `JustRowLog.tsx:332-334` asserts the opposite in a comment. **Technique: when a
+  design's value proposition names a population, find the eligibility predicate and
+  trace ONE field backwards to its writer.** One expression settled it, and it also
+  rescued a `workout_type` hazard — every eligible row is a naturally-finished
+  programmed piece reading byte 17 = 08.
+
+- **"A verification failure will be visible."** False, exhaustively: `verified` is
+  `console.log` only (`routes/concept2.ts:1416`), absent from the 200 body
+  (`:1455-1459`), never stored (`stores/logs.ts:995-1007`; no column in `schema.ts`),
+  and read by nothing in `app/src`. **Technique for any opt-in setting: trace the
+  OUTCOME field from the wire to a pixel, and if the trail ends at a log line, the
+  setting is a promise the product cannot confirm or deny.** The route's own comment
+  concedes it ("until it is stored, the server log is where it accumulates").
+
+- **"401 and 409 never reach the 4xx fallback as `c2_error` with those statuses."**
+  A live code comment (`routes/concept2.ts:1370-1372`), false for 409:
+  `client.ts`'s `postResult` returns `{kind: "c2_error", status: 409}` when a 409
+  body carries no numeric `id`, and 409 is inside `400..499`. **Technique: for any
+  "X can never reach here" comment, read the classifier's FALLTHROUGH branches, not
+  its happy path.** Hardening debt, not a defect — no observed Concept2 409 lacks an
+  `id` — but a spec was about to re-inherit the sentence verbatim.
+
+- **A remedy that costs more than the risk it insures.** The draft restored #336's
+  COMBINED 4xx strip (`workout` + `verification_code`). An ARRAY-caused refusal
+  would then also drop the code, and by M7 that row can never be verified again by
+  any route — converting "thinned but verified" into "permanently unverifiable", on
+  exactly the population that opted in. Meanwhile the failure it insures against
+  (a 4xx caused by the code) has never been observed and our producer cannot make a
+  malformed code. **Technique: for any bundled fallback, ask what it drops that the
+  failure did not implicate, and whether that drop is recoverable.**
+
+- **Citation ranges, three of three wrong in one spec, one of them substantive.**
+  `mapping.ts:514-518` (actual 516-519), `ROADMAP.md:1205-1221` (1221 is the next
+  bullet), and `ROADMAP.md:2252-2279` — actually 2261-2288, where 2252-2260 are two
+  unrelated bullets AND the truncation cut off the row's own "Owed before any fix"
+  half, which is precisely the half PR #307 closed. The spec then described the
+  row's surviving sub-case as "a row with no 0x0039 summary" when the row asks
+  "whether a single-interval or JustRow row verifies fine". **Technique: for every
+  `file:N-M` citation, print N-1 and M+1.** Two overruns landed inside a DIFFERENT
+  record, which is how a spec amends the wrong row — and the truncation hid the
+  sentence that would have corrected the argument.
+
+- **A cost claim untested at the gate and decisive in the design, in one document.**
+  M6 ("a verified row shows no editable form", n=1) was correctly marked "presented
+  as untested" in the Gate 0 section and used four paragraphs earlier as the reason
+  the flag belongs on the link table. **Technique: grep the spec for every USE of a
+  claim it has flagged untested.** RF30's inward-facing twin — a hedge in one
+  section and a premise in another.
+
+### Attacked and NOT broken (vetted ground for this phase)
+
+- The `autoSend` `CASE` (`stores/concept2.ts:186`) has correct ON CONFLICT
+  semantics and IS gated against real Postgres on both branches
+  (`concept2.integration.test.ts:192-213`), not only against the JS mirror in
+  `testing/fakes.ts:999-1005`.
+- `deleteLink` DELETEs the row, so no flag survives an unlink→relink even to the
+  same account; and there is no "setting on, no link" orphan state.
+- The account-switch-without-unlink state HAS a supported producer: RECONNECT,
+  offered only while `linked && needsReauth` (`Concept2Card.tsx:710-723`). Narrow,
+  but real.
+- #336's `usedMachineMeters && usedMachineSeconds` guard closes the mismatched-pair
+  hazard.
+- M7 (honoured at CREATE only) is genuinely measured — four arms plus a control
+  against log-dev, commit `7ee5c759`. The spec's fault was carrying it UNCITED in a
+  list where every sibling carried a citation.
+- `wireVerificationCode` really has zero production consumers (standing RF29 debt
+  with no ROADMAP row); this feature closes it.

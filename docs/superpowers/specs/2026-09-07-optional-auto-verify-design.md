@@ -1,6 +1,10 @@
 # Optional auto-verification — design
 
-**Status:** DRAFT. Gate 0 not yet presented.
+**Status:** DRAFT, revised after a full antagonist pass (TRIAD). Gate 0 not yet
+presented, and one question below is owed James before it can be.
+**Lens 2 (prescribed code) SKIPPED and on the record:** this spec prescribes no
+executable blocks — one type-shape line and one SQL fragment described in
+prose. Nothing to paste-test.
 **Trigger:** James, 2026-09-07 — auto-verification as a setting the rower turns
 on, defaulted off, after Just Row parity (merged #351).
 **Supersedes nothing.** PR #336 shipped this behaviour unconditionally and
@@ -15,7 +19,13 @@ rower does on purpose — Concept2's own app leaves it to them, and doing it for
 them is the opposite of the parity this phase is about.
 
 But the code is only typeable on Concept2's website when the row's overall
-distance or time hits a ranking standard, and most rows do not. So for most
+distance or time hits a ranking standard, and **most rows do not — a claim
+nobody has counted** (RF30). The predicate to count it with already exists and
+is measured (`concept2OffersVerification`), and the count belongs beside the
+gate's copy, since that copy will be judged on it. The reasoning for expecting
+it to be true, offered as INFERENCE and not as evidence: the rule reads on
+OVERALL distance, work plus rest coast, and rest coast metres are arbitrary, so
+any row with rest essentially never lands on a listed figure. So for most
 pieces the rower has no way to verify at all, and the code the monitor printed
 is dead. This setting gives that back: leave it off and nothing changes; turn
 it on and every row we send arrives verified, including the ones the website
@@ -48,8 +58,24 @@ code being checked rather than a well-formed post being rubber-stamped.
 `…/2026-09-07-c2-verification-field-rule.md`: row 86049 was 200 m — a figure
 whose Verification Code field the website never shows — and it is
 `verified: true` because the code was posted through the API. **This is the
-whole value of the setting**, and it is also the thing that makes it more than
-parity: it verifies rows the rower could not verify by hand.
+value of the setting**: it verifies rows the rower could not verify by hand.
+**But read it against M10 before pricing it** — the odd distances this most
+obviously helps are disproportionately free rows, and free rows cannot be
+uploaded at all today.
+
+**M10. Only naturally-finished PROGRAMMED pieces can reach Concept2.**
+`eligibilityFailure` refuses anything whose `endedBy !== "finished"`
+(`mapping.ts:95`). A free row's only close writes `"rower"` or `"link-lost"`
+(`useMonitorSession.ts:5668`); the sole producer of `"finished"` is
+`endByMachine` on the driver's `workoutComplete`, and a Just Row never reaches
+the terminal state that fires it (`useMonitorSession.ts:2874-2875`, and the
+Just Row spec's own 1660-status-frame census: only states 0, 1 and 11 ever
+appeared). **`JustRowLog.tsx:332-334` asserts the opposite in a comment** — "a
+free row that ends `finished` is as uploadable as any other" — which is
+aspirational, and a tripwire this spec is recording rather than stepping over.
+Consequence: every eligible row is a programmed piece that finished naturally,
+which is why `workout_type` is deterministic (byte 17 reads `08`), and why the
+population this setting serves is narrower than M4 alone suggests.
 
 **M5. The website's rule, for the copy's sake.** Same source: the field is
 visible if and only if the row's overall distance is one of 100, 500, 1000,
@@ -63,10 +89,49 @@ Marked as the single observation it is. If it generalises, turning this setting
 on trades away the ability to correct those rows on the website, and the gate's
 copy owes the rower that sentence.
 
-**M7. The code is only sent at CREATE.** `verification_code` is accepted on the
-POST that creates a result; a later PATCH does not carry it. So the setting is
-**forward-only by force, not by choice** — turning it on cannot verify a row
-already uploaded, and the design does not get to offer that.
+**M7. The code is only honoured at CREATE.** PRIMARY, measured against
+`log-dev` in commit `7ee5c759`, recorded in
+`docs/superpowers/specs/2026-09-07-verify-by-hand-design.md`: four arms plus a
+control. `PATCH {verification_code}` returned 200 with `verified: false`;
+PATCH with all five identifying fields alongside, the same; `POST
+/results/{id}`, the same; and the control `POST /results` carrying the code
+returned 201 with `verified: true`. The load-bearing sentence: *"Concept2's
+developer documentation lists `verification_code` among the update endpoint's
+parameters; that is a documentation error, and no error is returned when it is
+ignored."* So the setting is **forward-only by force, not by choice**.
+
+**M8. `date` is one of the five checked fields, and it is the PHONE's, not the
+monitor's.** Of M1's five, `distance` and `time` are numbers the machine sent
+us (PR C posts `machineWorkMeters`/`machineWorkSeconds`, `mapping.ts:520-527`)
+and `workout_type` is deterministic on the eligible population (M10). **`date`
+is ours**: `completionStamp.ts:42-53` returns `run.completedAt` — the phone's
+clock — plus the phone's `Intl` timezone, and `mapping.ts:531` formats that.
+The monitor reports its OWN log date and time on the very frame that carries
+the code; `parseSummaryLogStamp` decodes 0x0039 offsets 0-3 and
+`driver.ts:3316-3332` writes one ring line comparing them. **That comparison
+reaches no record, no server and no payload.** It is a free oracle we already
+compute and discard.
+
+**M9. The two clocks disagree, measured — and the disagreement is not the
+piece's duration.** Seven committed captures carry the ring comparison
+(`walk-2026-08-25` ×2, `walk-2026-08-28`, `walk-2026-08-28-codebase-audit` ×2,
+`walk-2026-09-03-resume-edge`, `walk-2026-09-04-wave-f`). The monitor's stamp
+reads **1.29 to 3.23 minutes EARLIER** than the wall clock at the summary, in
+all seven. The obvious innocent explanation — that the stamp is the piece's
+START — is falsified by the numbers: subtracting each capture's own elapsed
+widens the spread from 116 s to 227 s instead of collapsing it toward zero.
+The residual trends upward with date (08-25 ≈ 1.3-2.1 min, 08-28 ≈ 2.2-2.5,
+09-03/09-04 ≈ 2.6-3.2), which is what a slowly drifting monitor RTC looks
+like. **Caveats, stated:** the wire stamp is minute-granular, so each reading
+carries up to 60 s of truncation, and this is one monitor with one owner.
+
+**M9a. And the live test verified anyway — which is evidence, not luck.** The
+2026-09-05 arm that returned `verified: true` posted a PHONE-sourced date
+against this same monitor. So one of three things is true: Concept2's `date`
+check carries at least a few minutes of tolerance, it is not checked as
+tightly as the documentation's "must match" implies, or the code does not
+encode the monitor's log date at all. **All three are good for this feature**,
+and none of them is established. n = 1.
 
 ## What this owes
 
@@ -93,17 +158,44 @@ account switch must not carry AUTOMATIC onto another Concept2 account); a
 reconnect of the same account keeps it."* The mechanism is a `CASE` in the
 upsert (`stores/concept2.ts:186`).
 
-**Auto-verification wants exactly that property and wants it more.** Sending a
-row to a Concept2 account the rower did not choose it for is bad; VERIFYING a
-row on an account they did not choose it for is worse, because M6 suggests a
-verified row may no longer be editable and M7 guarantees it cannot be undone
-through our upload path. A `preferences` column has no account to reset
-against and would silently carry the setting across a relink.
+**Auto-verification wants that property.** Sending a row to a Concept2 account
+the rower did not choose it for is bad; verifying one there is worse, because
+M7 guarantees it cannot be undone through any path this app offers. **M6 is
+deliberately NOT part of this argument** — it is n=1 and flagged untested at
+Gate 0, and a claim cannot be a hedge in one section and a premise in another.
+A `preferences` column has no account to reset against and would silently
+carry the setting across a relink.
+
+**Two honest qualifications, because the borrowed property is weaker here than
+it is for `autoSend`.**
+
+- **The reset is SILENT.** When `autoSend` resets, the You screen shows MANUAL
+  and rows stop uploading — the rower notices within a session. When
+  `auto_verify` resets, nothing changes anywhere they look, and rows quietly
+  stop being verified. See "What the rower can see", which is this spec's open
+  question.
+- **The `CASE` fires on ONE path.** The ordinary account switch is unlink then
+  Connect, and the row is DELETED there, so the flag goes by deletion, not by
+  the `CASE`. The `CASE`'s ELSE branch is reachable only via RECONNECT, which
+  the card offers only while `linked && needsReauth`
+  (`Concept2Card.tsx:710-723`) and where the rower signs into a different
+  Concept2 account at Concept2's own page. That is a supported producer, so the
+  argument stands — but it is one narrow path, not a broad property.
+- **A cost, named rather than waved off:** a rower who deliberately moves to a
+  new Concept2 account and expects the setting to follow is overridden
+  silently. That is the trade, and it is the right one, but it is a trade.
 
 It is also cheaper. `Concept2RouterDeps` (`routes/concept2.ts:49-80`) has no
 preferences store and `app.ts:125-135` wires exactly that list, so a
 preferences column costs a new router dependency and a wiring line; the link
 row is already read on the send path.
+
+### Lifetime table (RF27)
+
+| Value | Mint | Clear / reset | Unlink → relink, same account | Relink, different account, no unlink | Token expiry / re-consent |
+| --- | --- | --- | --- | --- | --- |
+| `concept2_links.auto_verify` | `upsertLink` INSERT, `DEFAULT false` | `setAutoVerify` (PATCH); row DELETE on unlink (`stores/concept2.ts:266`) | **false** — row deleted, fresh insert | **false** — the `CASE`'s ELSE branch | **kept** — `c2UserId` equal, so the THEN branch |
+| the `autoVerify` value used by ONE send | resolved once, before the first post | end of request | — | — | **must not be re-read on the retry** |
 
 **Shape:** `autoVerify: boolean("auto_verify").notNull().default(false)`,
 matching every other boolean in this schema. Reset alongside `autoSend` in the
@@ -124,10 +216,42 @@ branch and no flag to flip: the code is genuinely not sent.
 preference, so it gains a fourth argument. The send route already holds the
 link row.
 
-**The 4xx fallback widens back.** `#336` had it strip `workout` AND
-`verification_code` (label `without_workout_and_code`); `#337` narrowed it to
-`workout` alone. It widens again, because a row refused with a code should be
-retried without one rather than lost — but only when a code was actually sent.
+**`autoVerify` is resolved ONCE per request**, before the first post, and the
+retry reuses that value. `buildC2Payload` is called twice
+(`routes/concept2.ts:1308` and `:1333`) and `lockedLink` is REASSIGNED between
+them, so re-reading the flag off the refreshed row would let one send carry two
+policies if the rower toggles mid-send. The sibling field already states this
+rule at the second call site — *"Same class, deliberately: resolved ONCE per
+request (ruling R13), reused across this retry so one send can never carry two
+classes."* The same sentence now covers this flag.
+
+**The 4xx fallback: the ENTRANCE widens, the STRIP stays conditional.** `#336`
+had it strip `workout` AND `verification_code` together (label
+`without_workout_and_code`); `#337` narrowed it to `workout` alone. Restoring
+the combined strip would be a real regression on exactly the opted-in
+population: an ARRAY-caused 4xx would also drop the code, and by M7 that row
+can then never be verified by any route — whereas today it arrives thinned but
+verified. So: a code-carrying row with no array may now enter the fallback at
+all (it cannot today), and the strip drops `workout` when present and drops
+`verification_code` only when there is no array to blame.
+
+**And the condition being remedied has never been observed.** #336's own
+comment said so and an earlier draft of this spec dropped the sentence: a
+WRONG well-formed code returned 201 `verified: false`, not a 4xx (the 5707
+control); a malformed one was never measured, and our producer cannot make one
+— `wireVerificationCode` returns `null` rather than a padded guess
+(`verificationCode.ts:18-37`), and the byte band is enforced at the write door
+(`routes/data.ts:970-983`) and re-checked in the mapper. The fallback is
+insurance against an unobserved failure, and is priced as such.
+
+**One false clause gets fixed rather than inherited.** `routes/concept2.ts:1370-1372`
+says *"401 and 409 never reach here as `c2_error` with those statuses."* True
+of 401; false of 409 — `client.ts`'s `postResult` returns
+`{kind: "c2_error", status: 409}` when a 409 body carries no numeric `id`, and
+409 is inside `400..499`, so a duplicate we cannot parse would re-POST a row
+Concept2 already has. No observed Concept2 409 lacks an `id`, so this is
+hardening debt rather than a live defect — but the widened entrance strictly
+enlarges the population that reaches the sentence, so it is fixed here.
 
 **`codeSent` returns to the `c2_send` log line.** `#337` deleted it. It is the
 only evidence a send leaves about whether the code went out, and the "say
@@ -144,16 +268,18 @@ verified" row downstream reads that log.
   premise.** It reads *"a verification the ROWER performed, never one we
   caused."* For an opted-in rower we DO cause it. That row is amended in this
   PR, not silently invalidated.
-- **A stale comment gets fixed in passing.** `mapping.ts:514-518` still says
+- **A stale comment gets fixed in passing.** `mapping.ts:516-519` still says
   the derivation feeds *"the verification-code guard below"*. `#337` deleted
   that guard. The comment has been wrong since 11:23 on 2026-09-07.
-- **The TRIAD register row at `ROADMAP.md:2252-2279`** ("a verification code
+- **The TRIAD register row at `ROADMAP.md:2261-2288`** ("a verification code
   cannot validate") predates PR #307 and is unamended. #307 closed its main
-  case by posting the monitor's own total. The sub-case it names survives and
-  is this spec's own limit: **a row with no 0x0039 summary falls back to our
-  interval sums and can never verify**, setting or no setting
-  (`mapping.ts:541` says so in the code). The row is amended to say which half
-  closed.
+  case by posting the monitor's own total. **The question it actually leaves
+  open is not the one an earlier draft of this spec substituted for it.** The
+  row asks, at `ROADMAP.md:2282-2284`: *"whether a single-interval or JustRow
+  row verifies fine (the two numbers coincide there), which would explain why
+  nothing caught it."* M10 answers the JustRow half — such a row cannot be
+  sent at all — and leaves the single-interval half open. The row is amended
+  to that, not to a limit it never named.
 
 ## What the setting can and cannot do
 
@@ -164,7 +290,40 @@ Stated plainly because the gate's copy has to be true.
 | Rows it verifies | every row we send that carries a 0x0039 summary, INCLUDING ones Concept2's own website would never offer a code box for (M4) |
 | Rows it cannot | any row with no monitor summary — we fall back to our interval sums, which the code was not minted over (M2, `mapping.ts:541`) |
 | Rows already sent | none. The code is honoured at create and ignored on update (M7) |
-| Undo | turning the setting off stops future sends; it cannot un-verify a row |
+| Free rows | none. They cannot be uploaded at all (M10) |
+| Undo | turning the setting off stops future sends. It cannot un-verify a row **through any path this app offers** — Concept2's own `DELETE /results/{id}` exists and returned 200 on 28 test rows, but has not been tested on a verified one |
+
+**The "can never verify" row is a non-event, not a silent failure.**
+`verificationBytes` only ever travels inside the `summaryTotals`-gated block at
+all three writers (`driver.ts:4415-4422`, `monitorRun.ts:1394-1419`, and both
+doors), so a row with no summary carries no code to send, and #336's own
+two-part guard refuses to send one. That guard survives verbatim. The caveat:
+the SERVER validates the three fields independently with no cross-field rule
+(`routes/data.ts:1856-1878`), so the pairing is producer discipline rather than
+a stored-shape constraint — the mapper's guard is what makes it safe.
+
+## What the rower can see — the open question
+
+**Nothing, as specced, and this is the spec's weakest point.** Concept2's 201
+body carries `verified`. We receive it (`routes/concept2.ts:1416`), log it to a
+server console, and stop: it is absent from our own 200 body (`:1455-1459`),
+never stored (`stores/logs.ts:995-1007` writes `c2ResultId`/`c2UserId` only,
+and no column exists), and read by nothing in `app/src`. The route's own
+comment concedes it — *"until it is stored, the server log is where it
+accumulates."*
+
+So a code that verified, a code that was refused, and a code that was never
+sent are **indistinguishable to the rower**. Returning `codeSent` to the log
+line answers this for us, not for them. Combined with M8/M9 — a `date` field
+we have never validated against the monitor, on a monitor measurably 1-3
+minutes off — the failure mode is: the rower turns it on, nothing visibly
+changes, and nothing ever tells them whether it worked.
+
+**This is James's call and it is the one thing Gate 0 cannot decide for him:**
+ship the setting with no in-app feedback and let the "hide it, say verified"
+row (`ROADMAP.md:1205-1220`) follow, or bundle that row's stored `verified` and
+its rendered state into this work so the switch has an observable. The spec
+does not choose.
 
 ## Gate 0 — what James approves before anything is built
 
@@ -180,13 +339,27 @@ A rendered artifact, per the design-gate rule, showing:
 
 ## Testing
 
-- **RF24:** one test starts upstream of the producer — the send route with the
-  link's flag on — and asserts the posted body downstream. Both arms.
-- **The pinning tests become two-armed** rather than being deleted.
+- **RF24, and the producer is the BYTES, not the setting.** A test that starts
+  at the send route with the flag on is upstream of the setting and downstream
+  of the thing that has actually broken here — the client writing
+  `machineSummary.verificationBytes` through `POST /api/logs`, which is RF24's
+  own case study. Seed through `logs.create` with a stored `machineSummary`,
+  never a hand-built mapping row. The pattern already exists three lines away
+  (`routes/concept2.test.ts:2479-2484`, which starts at `logs.create` because
+  *"dropping `series` in `toMappingRow` typechecks fine and silently posts a
+  row with no heart rate"*).
+- **The pinning tests become two-armed** rather than being deleted. Note their
+  fixture is a naturally-finished programmed row, so the ON arm exercises the
+  one shape that always works; it is not evidence for the capability table.
 - **A biting mutation per assertion**, reported with what the failure said.
-- **The account-switch reset is tested at the store**, the way `autoSend`'s is:
-  relink with a different `c2_user_id` clears it; relink with the same one
-  keeps it.
+- **The account-switch reset is tested against REAL POSTGRES**, in
+  `app/server/stores/concept2.integration.test.ts` (where `autoSend`'s lives at
+  `:192-213`) — not against `testing/fakes.ts:999-1005`, which reimplements the
+  `CASE` in JavaScript and would prove the mirror rather than the SQL (RF11).
+  **The two flags are set to DIFFERENT values in that test** (`autoSend: false,
+  autoVerify: true`), because the copy-paste failure this guards is a second
+  `CASE` that reads `autoSend` inside the `autoVerify` assignment — and a test
+  setting both to `true` stays green through exactly that mutation.
 - **No new wire research.** M1-M5 are measured; this spec adds no claim about
   what Concept2 does.
 
