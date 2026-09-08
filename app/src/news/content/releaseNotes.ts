@@ -5,6 +5,54 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.43.0: git log v0.42.0..main --oneline at a476cbc6 — FIFTEEN merges,
+    // each accounted for (RF15; no --merges, which returns empty on this
+    // squash-merged repo):
+    //   #351 the free row's summary carries the machine's own tiles — item 7.
+    //   #353 sign out ends the Google session and works offline, and #359
+    //     makes a failed sign-out say so instead of looking like it worked.
+    //     One item between them (item 5): a rower does not experience those
+    //     as two changes.
+    //   #354 / #355 / #362 CLAUDE.md recurring failures and ledger writing;
+    //     #364 and #357 are ROADMAP only. None is rower-visible.
+    //   #356 web sign-in asks Google which account — item 6, and web only:
+    //     the iOS build already used the native chooser.
+    //   #358 the diagnostics ring stops evicting its own diagnosis. Real
+    //     code, and it changes only what an EXPORTED log contains, which no
+    //     rower reads unless they are sending us one. No note.
+    //   #360 auto verification as a setting you turn on — item 1. It
+    //     deliberately reinstates, behind a switch, what #337 removed before
+    //     v0.42.0 on the grounds that verifying a row is the rower's own act.
+    //   #361 the app says NO READINGS instead of promising a piece it cannot
+    //     start — item 4.
+    //   #363 a send that failed on its verification code can retry without
+    //     it — item 3.
+    //   #365 a row you verified yourself on Concept2 reads as verified here
+    //     — item 2.
+    //   #366 Phase MT: an unsupported erg is refused rather than recorded —
+    //     item 8 — plus the "Which ergs work" section in Connect the monitor
+    //     that item points at, and a landscape fix (item 9) that is NOT
+    //     Phase MT's own: `justify-content: center` had been putting the top
+    //     of any overflowing failure screen above the scroll origin, where
+    //     the web build could never reach it.
+    // Item 8 is the one nobody in the household can trigger: no tester owns
+    // a SkiErg, BikeErg or Dyno. It is noted anyway because the article
+    // section it links to is visible to everyone.
+    version: "v0.43.0",
+    date: "2026-09-08",
+    items: [
+      "Ergomatic can verify your Concept2 rows for you, if you switch it on. Auto verification sits on the Concept2 screen and starts off, because saying a row is verified is your claim about your own rowing, not ours to make for you.",
+      "A row you verified yourself on Concept2 now reads as verified here too, instead of looking like it never went through.",
+      "If a send fails over its verification code, the retry now goes without the code rather than failing the same way twice. The row still lands; you can type the code in on Concept2 yourself.",
+      "When Ergomatic cannot read your monitor at all, the screen now says NO READINGS. It used to say READY and promise a piece it had no way to start.",
+      "Sign out now ends your Google session on the device, and works with no network. If it does fail, the screen says so instead of looking like it worked.",
+      "Signing in on the web asks Google which account you want. It used to reuse the last one silently, which was wrong on a shared computer. The iPhone app already did this.",
+      "A free row's summary now shows the machine's own tiles, the same ones a programmed piece gets.",
+      "If your monitor is on a SkiErg, BikeErg or Dyno, Ergomatic now says so and stops, instead of quietly filing your piece as a rowing row and sending it to Concept2 as one. Connect the monitor, in News, has a new Which ergs work section listing what is supported and what is not.",
+      "On a failure screen in landscape, the reason is back on screen. The headline and the explanation had been sitting above the top of the scroll area, where on the web they could not be reached at all.",
+    ],
+  },
+  {
     // v0.42.0: git log v0.41.0..main --oneline at b96c780d — SIXTEEN
     // merges, each accounted for (RF15; no --merges). Re-counted 2026-09-07
     // after the first v0.42.0 tag was DELETED unreleased (it sat at
