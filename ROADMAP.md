@@ -1421,6 +1421,7 @@ closed with zero Concept2 contact.
       decision (refuse, warn, or support) rather than a warning to bolt on.
       NOT covered by #361, which fires on bytes that fail to parse — a
       SkiErg's parse perfectly, they just describe skiing. **M**
+
 - [ ] **The frame-error flood evicts its own diagnosis.** The ring holds 500
       entries (`eventLog.ts:51`). A monitor we cannot decode produces a
       `frame-error` per arrival, roughly eight a second, so the buffer fills

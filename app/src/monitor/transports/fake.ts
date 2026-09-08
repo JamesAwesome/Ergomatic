@@ -866,7 +866,8 @@ export interface FakeControls {
    */
   suppressFrames(fromTick: number, toTick: number): void;
   /** Hold `characteristicUuid` PERSISTENTLY undecodable — the FULL BLE UUID
-   *  `notify()` keys on, not the short `0x0032` label `MonitorEvent` carries: every notification on
+   *  `notify()` keys on, not the short `0x0032` label `MonitorEvent`
+   *  carries: every notification on
    *  it from now on arrives as two bytes, which is under every status
    *  characteristic's length floor, so the real parser rejects it. The link
    *  stays up and the subscription stays live — this reproduces a monitor
