@@ -9087,3 +9087,71 @@ antagonist should start with them.
   list where every sibling carried a citation.
 - `wireVerificationCode` really has zero production consumers (standing RF29 debt
   with no ROADMAP row); this feature closes it.
+
+## Delta pass, 2026-09-07 — the auto-verify OBSERVABLE (TRIAD, second stored shape)
+
+- **"Nothing re-reads a row from Concept2 after the send."** FALSE, and it was the
+  load-bearing sentence under the design's whole asymmetry. Every send calls
+  `client.fetchResults(token, 50)` for the weight-class declaration
+  (`routes/concept2.ts:1142`) and immediately intersects the page with
+  `logs.sentC2ResultIds` (`:1152-1155`) — the route's own comment says "the results
+  list contains the rows this app posted." Concept2's Get Results example response
+  carries `"verified": false` two lines below the `"weight_class"` we already parse
+  off that same endpoint; our mapper simply drops it (`client.ts:365-370`). An
+  upgrade-only reconciliation was therefore free, and the spec had ruled it out in a
+  clause. **Technique: for any "nothing ever reads X back" claim, do not grep for X —
+  grep for every call to the third party and read what its response object CONTAINS.
+  The read that exists for another purpose is the one nobody counts.** The design's
+  CONCLUSION survived on different ground (the read fires only on a send, one page of
+  50, no `links.next` walk — so a stored false still means "not verified last time we
+  looked, which may be never"), which is the reason the spec should have given.
+
+- **A second call site with no value to write.** `recordC2Result` is described as
+  "one writer… the only place a send's outcome lands" — true of the FUNCTION and
+  false of the CALL SITES: the 409-duplicate branch (`routes/concept2.ts:1477`) calls
+  it too, and `C2PostResult`'s duplicate variant carries no `verified`. Left to
+  "don't touch the column", a row verified on account A and re-sent after a reconnect
+  to account B (the short-circuit at `:891` deliberately lets that through) renders
+  VERIFIED against a row B never verified. **Technique: when a spec adds a field to an
+  existing writer, count the writer's CALL SITES and demand a value from each — a
+  writer with one function and two callers has two lifetimes, not one.**
+
+- **A lifetime table whose "clear" column names a clear that does not exist.**
+  "Cleared by whatever clears those" — nothing clears `c2ResultId`/`c2UserId`;
+  `recordC2Result` only SETs, and `deleteLink` removes the link row and touches
+  `session_logs` not at all. **Technique: for every "cleared by X" in a lifetime
+  table, grep for a writer that sets the column to null. If there is none, the row
+  reads "NEVER", and the surface needs a render GATE instead** — here
+  `sentResultId(row, link)` (`src/log/concept2Send.ts:101-106`), the existing rule
+  that already hides a sent state whose account no longer matches.
+
+- **An amendment that answers a different question than the row asked.**
+  `ROADMAP.md:1220` asks for "a verification the ROWER performed, never one we
+  caused" — the exact case the receipt-time observable cannot see. The proposed
+  amendment ("Concept2 accepted this row as verified when we sent it") is true and is
+  about something else; landing it as THE amendment retires the ask silently.
+  **Technique: before amending an inherited row, ask whether the new sentence
+  ANSWERS the old one or merely REPLACES it — and if the phase's own governing spec
+  repeats the withdrawn premise, that is where the claim was argued.**
+  `2026-09-06-logbook-parity-design.md:524-531` carried it in its strongest form
+  ("Reverted in full… and a test pins that") and was missing from the spec's census.
+
+- **A spec arguing both sides of one fact.** It argues "most rows have no way to
+  verify at all" (to justify the feature) and "the rower can type the code in
+  afterwards" (to justify never saying not-verified). M5's measured rule makes the
+  second available only on a listed distance or time — the population the first calls
+  rare. **Technique: when a design needs a case to be RARE in one section and
+  AVAILABLE in another, grep the spec for both uses of the same measurement.**
+  RF30's inward-facing twin, one hop over from the M6 instance the full pass caught.
+
+### Attacked and NOT broken (delta ground)
+
+- `recordC2Result` satisfies RF25 on the path that matters: it returns `boolean` and
+  the 2xx caller branches into a 502 with a documented recovery
+  (`routes/concept2.ts:1432-1441`); the 409 caller ignores it with a written
+  justification. The rendered mark is not a claim about an unobserved write.
+- The fallback stores attempt 2's `verified`, which is correct — attempt 1 4xx'd and
+  created nothing, so storing its value would describe a row that does not exist.
+- The past tense in "Concept2 accepted this row as verified when we sent it" survives
+  four drifts (row deleted, un-verified, edited, relinked) because it is a claim
+  about a past moment. It stops being the whole truth only if a reconciliation lands.

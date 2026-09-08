@@ -333,13 +333,41 @@ result id and the account id from the same response and is the only place a
 send's outcome lands.
 
 **The asymmetry that governs every word of the copy.** Our 201 tells us
-whether the row verified AT RECEIPT. That is the only moment we observe.
+whether the row verified AT RECEIPT.
 
 - `verified: true` — true, and it stays true. Say so.
 - `verified: false` — means "not verified at receipt", and **nothing more**.
-  The rower can go and type the code into Concept2 afterwards, exactly as they
-  do today, and we would never learn it: nothing re-reads a row from Concept2
-  after the send.
+
+**An earlier draft justified this by saying nothing re-reads a row from
+Concept2 after the send. That is false, and the correction matters.** Every
+send already calls `client.fetchResults(token, 50)` for the weight-class
+declaration (`routes/concept2.ts:1142`) and intersects that page with our own
+stored result ids (`:1152-1155`); the route's own comment says *"the results
+list contains the rows this app posted."* Concept2's documented Get Results
+response carries `"verified"` two lines below the `"weight_class"` we already
+parse off that same endpoint — PRIMARY for the documented example, INFERENCE
+for our live responses, since no LIST capture is committed anywhere. **One
+authenticated GET against log-dev settles it and is owed before this ships**
+(RF30 as amended in #354: a cost or capability asserted in a clause needs the
+receipt).
+
+**The conclusion survives, on three honest grounds rather than the false one:**
+
+1. The read fires **only on a send**. A rower who verifies by hand and never
+   uploads again is never seen.
+2. **One page, 50 rows, and the caller never walks `links.next`** (the
+   client's own comment). A row falls out of view permanently once 50 newer
+   rows exist, and a future-dated row can pin the top.
+3. So a stored `false` means *"not verified the last time we happened to
+   look, which may be never"* — still not a present-tense claim.
+
+**And one internal contradiction, corrected rather than left standing:** this
+spec argues that most rows have no way to verify at all, AND that the rower
+can type the code in afterwards. M5's measured rule makes the second available
+only on a listed distance or time — the very population the first calls rare.
+Both cannot be load-bearing at full strength. The asymmetry rests on grounds
+1-3 above, not on how common the hand-verified case is; a rare case is still a
+case, and it is the worst possible reader to be wrong about.
 
 So the surface may state the positive and **may never state the negative**. "Not
 verified" would be a claim about the present tense that we cannot support, and
@@ -347,18 +375,94 @@ it would be wrong precisely for the rower who did the thing this phase exists
 to respect. The absence of the mark is the only honest rendering of the
 `false` case, and the gate's copy is judged on that.
 
-**This also settles the row it inherits.** `ROADMAP.md:1205-1220` reads *"a
-verification the ROWER performed, never one we caused."* With the setting on we
-DO cause it, and the stored field cannot tell the two apart — both arrive as
-`verified: true` in a 201. The row is amended to what is actually observable:
-Concept2 accepted this row as verified when we sent it. That sentence is true
-under either cause, which is what makes it safe to render.
+**The row it inherits is NARROWED, not fulfilled, and the spec says so.**
+`ROADMAP.md:1205-1220` asks for *"a verification the ROWER performed, never one
+we caused."* The receipt-time observable can see exactly one thing —
+verification at receipt, caused by us — which is the opposite of what the row
+asked for. Amending it to "Concept2 accepted this row as verified when we sent
+it" answers a different question, and landing that as THE amendment would
+retire the ask silently. So the row is amended to record both: what this work
+delivers, and that **the rower-performed half stays OPEN**, with the
+declaration read named as the mechanism that could close it.
 
-**Second stored shape, second lifetime row.** `verified` is written once per
-successful send, alongside `c2ResultId`, and cleared by whatever clears those
-(the send-claim path is the only writer). It is NOT a mirror of Concept2's
-current state and the column's own comment must say so, or a future reader will
-treat a stale `false` as authority.
+**The census of the withdrawn premise runs past ROADMAP.** Correcting the
+claim where it was argued and leaving it where it was used is the failure
+PR #246 is named for. The hits:
+
+- `ROADMAP.md:1220` — amended here.
+- **`docs/superpowers/specs/2026-09-06-logbook-parity-design.md:524-531` — the
+  phase's own governing spec**, carrying the absolute in its strongest form:
+  *"Reverted in full — the mapper withholds the code even on a row that would
+  verify, and a test pins that."* This is where the claim was ARGUED and an
+  earlier draft of this spec missed it.
+- `mapping.test.ts:864` and `routes/concept2.test.ts:2475` — comments
+  repeating *"Concept2's own app leaves verification to the rower"* on the two
+  tests going two-armed; reconciled in the same round as the tests.
+- `src/news/content/releaseNotes.ts:22` — a HISTORICAL range record of what
+  #337 did. It stands, deliberately, and is listed so it is not read as an
+  unswept hit.
+
+### The observable's lifetime table, and the stale-true bug it exposes
+
+| Value | Mint | Clear | Second write | |
+| --- | --- | --- | --- | --- |
+| `session_logs.verified` | `recordC2Result`'s 2xx branch (`routes/concept2.ts:1426`), from the 201 body's `verified: boolean \| null` | **NONE — nothing clears it, and nothing clears `c2ResultId`/`c2UserId` either** | `recordC2Result`'s **409-duplicate** branch (`:1477`), which today has no `verified` value to pass | |
+
+An earlier draft said this column is "cleared by whatever clears those." There
+is no such clear: `recordC2Result` only ever SETs, and `deleteLink` removes the
+LINK row and touches `session_logs` not at all.
+
+**The concrete bug that falls out, and its fix.** A row sent to account A with
+the setting on stores `verified: true` and `c2UserId: A`. The rower reconnects
+to account **B**; `auto_verify` resets to false, but the already-sent
+short-circuit does not fire, because it requires `row.c2UserId === link.c2UserId`
+(`:891`) and its own comment says resending after relinking to a different
+account is deliberately allowed. The row posts to B with no code, comes back
+unverified or 409s, `recordC2Result` overwrites the account id to B's — **and
+the mark now reads VERIFIED against a row account B never verified.**
+
+Two rules close it:
+
+- **Every `recordC2Result` call site passes `verified` explicitly**, including
+  the 409-duplicate branch, which passes `null`: a 409 tells us Concept2 has
+  the row and nothing about its state. A writer with one function and two
+  callers has two lifetimes, not one.
+- **The mark renders behind the existing account gate**, `sentResultId(row,
+  link) !== null` (`src/log/concept2Send.ts:101-106`) — the rule that already
+  hides a sent state whose account no longer matches. Without it the mark
+  outlives the state that justifies it.
+
+**`null` and `false` render identically** — as no mark — and the column's
+comment must say so, or a future author will build a "we asked and it said no"
+surface on a difference the reader never sees. The column is NOT a mirror of
+Concept2's current state.
+
+**The past tense is load-bearing and stays.** Tested against four drifts — the
+rower deletes the row, un-verifies it, edits it, or relinks — *"Concept2
+accepted this row as verified when we sent it"* survives all of them, because
+it is a claim about a past moment. It would stop being the whole truth the
+moment a reconciliation lands, which is the open scope question below.
+
+## Open scope question: the free reconciliation
+
+The declaration read hands us, on every send, up to 50 of the rower's recent
+Concept2 rows with our own ids already marked. An **upgrade-only**
+reconciliation is therefore available at no wire cost: for each returned row
+whose id is ours and whose `verified` is `true` while our stored value is not,
+write `true`. Monotonic, no new call, no new token scope, no new page, and it
+reads `verified` only for ids that are ours — the client's projection comment
+is explicit that the rower's other logbook rows are not ours to hold.
+
+**It is the only mechanism that can ever see the rower's OWN act**, which is
+what the inherited ROADMAP row actually asked for and what this phase's north
+star is about. It also changes the stored field's meaning from "at receipt" to
+"as of the last time we looked", so the surface would then owe a vaguer tense
+than the past-tense sentence above.
+
+Not taken unilaterally: it is a scope increase on work James has already sized
+once. **Owed to him as a yes/no before Gate 0**, together with the one
+authenticated GET that confirms the list response really carries the field.
+
 
 ## Gate 0 — what James approves before anything is built
 
