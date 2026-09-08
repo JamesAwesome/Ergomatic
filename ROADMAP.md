@@ -2027,6 +2027,51 @@ closed with zero Concept2 contact.
   reapplies and re-reviews the patch and re-runs the 31 native tests before
   the dependency is accepted** (`docs/RELEASING.md` step 3 has the command).
 
+## Phase MEM — local test runs stop OOMing, and stop reading as flake
+
+Opened 2026-09-08. Spec:
+`docs/superpowers/specs/2026-09-08-local-test-memory-design.md`.
+
+**The problem, measured on James's machine 2026-09-08:** a V8 heap OOM
+exits **1** — the same code as a test failure — prints **no test
+summary at all**, and buries its one diagnostic line under a 15-frame
+native stack trace. An agent reads a non-zero exit with no named
+failing test, calls it flake, and re-runs into a machine that just
+proved it has no room. Baseline at rest is 8.8 GB of 16 GB RSS with
+swap at 6.6 of 7.2 GB and 66 MB of free pages, across 3 live agent
+sessions and 6 worktrees; the client suite peaks at **2.76 GB** at
+Vitest's default 10 workers and **1.84 GB** at 4 (38 s vs 25 s).
+Six workers is strictly dominated by four — 41 s *and* 2.63 GB — the
+chip has 4 performance cores.
+
+**Two premises were falsified in the same pass and are recorded so
+nobody re-derives them:** idle per-worktree compose stacks cost
+**236 MB across two** (not a memory lever — force `E2E_KEEP=0` for
+staleness if at all, not for RAM), and `--coverage` adds **50 MB**
+(2.81 vs 2.76 GB), so the v8 provider is not a factor either.
+
+**Three parts, James-approved 2026-09-08:** (A) a wrapper that
+classifies a killed run and prints `MEMORY KILL — not a flaky test`,
+plus a CLAUDE.md recurring failure making "non-zero exit, no
+`Test Files` line" un-retryable; a preflight advisory that **warns and
+does not block** (his call). (B) `maxWorkers` default 4 and Playwright
+`workers` default 2, both env-var overridable
+(`ERGOMATIC_TEST_WORKERS`, `ERGOMATIC_E2E_WORKERS`) and both
+**disabled under CI**, so a more powerful machine pays nothing (his
+call). (C) pre-push runs `--changed origin/main` only, `pnpm test:full`
+becomes the explicit full run, and CI is the only place the full suite
+is mandatory — which amends recurring failure 1 from "run `pnpm e2e`"
+to "push and read the e2e job".
+
+**Out of scope, deliberately:** the standing baseline (Chrome at
+2.3 GB, three concurrent sessions, six worktrees) is a working-style
+question, not a code one. If the levers above prove insufficient,
+that is the next place to look.
+
+**Owed at implementation:** Playwright's cost at 2 workers is
+**unmeasured** and tagged as such in the spec (recurring failure 30);
+the implementing PR measures it and replaces the tag with a number.
+
 ## Needs a decision from James
 
 - **The 1 000 ms collision window is paid on every NFC connect.**
