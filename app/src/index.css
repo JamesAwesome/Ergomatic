@@ -6022,9 +6022,12 @@ section:not(.news-pinned) .news-row:last-of-type {
    a flat column, top-packed, with up to 600px of dead space beneath a
    short state on a tall phone. `.connected-interstitial-body` is
    everything ABOVE the action stack; `flex: 1` gives it the room between
-   the frame's top and the stack, `justify-content: center` centres its own
-   children within that room, exactly like Countdown's centred digit
-   display one call up in this file. */
+   the frame's top and the stack, and its children are centred within that
+   room, exactly like Countdown's centred digit display one call up in this
+   file. THE CENTRING IS NOW THE AUTO MARGINS BELOW, not `justify-content:
+   center`, which is what this paragraph said until the Phase MT follow-on and
+   what the rule itself stopped saying — see that rule's own comment for the
+   overflow it split. */
 .connected-interstitial-body {
   flex: 1;
   display: flex;
@@ -6168,7 +6171,12 @@ section:not(.news-pinned) .news-row:last-of-type {
    predicted action-stack top 96px, capture ~97px):
 
      - A FIFTH BUTTON is fatal in landscape. The column is 338px; four buttons
-       leave 78px of body, five leave 14px — less than one 11px mono line.
+       leave 78px of body, five leave 10px — less than one 11px mono line.
+       (Both figures are the UNPAIRED stack this bullet was written against,
+       and both are now measured on the shipped frame rather than the replica,
+       which predicted 14px for the five. The landscape pairing rule below
+       came later and takes the five-button window to 74px — which changes the
+       arithmetic, not the conclusion: this link is not a button.)
      - AN INLINE ANCHOR in 13px mono measures ~18px tall and WOULD fail
        `e2e/design.spec.ts`'s `assertTapTargets`, which sweeps every
        a/button/[role=button]/input/select for 44px in BOTH dimensions with one
@@ -6178,9 +6186,11 @@ section:not(.news-pinned) .news-row:last-of-type {
        `link-failed` failure, and this link renders only for
        `unsupported-machine`, so the sweep has never measured it. The floor is
        met by construction (350x44 portrait, 440x44 landscape, measured).
-       GATED SINCE the Phase MT follow-on: `design.spec.ts`'s REFUSED
-       interstitial case drives `ergMachineType: 128` through the same sweep,
-       and deleting `min-height` below makes it fail.
+       GATED SINCE the Phase MT follow-on, in BOTH orientations, because
+       half a claim gated reads as all of it: `design.spec.ts`'s REFUSED
+       interstitial case drives `ergMachineType: 128` through the same sweep
+       at 390x844, and its landscape sibling runs the sweep again at 844x390.
+       Deleting `min-height` below fails both, at 15px.
      - THIS shape measures 350x44 portrait and 440x44 landscape, clearing the
        floor in both dimensions with no carve-out.
 

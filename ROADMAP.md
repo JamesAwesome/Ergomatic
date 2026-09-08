@@ -199,12 +199,14 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       ~97px). `ConnectedInterstitial.tsx` renders `Open Settings` above
       `Try again` whenever the reason is `permission-denied` and
       `canOpenAppSettings()`: actions 316px of a 338px column. Pre-existing and
-      unrelated to Phase MT, found only because MT priced a fifth button
-      (4 buttons leave 78px, 5 leave 14px). The refusal frame's landscape
-      pairing rule is what keeps five buttons survivable — measured while
-      probing the gate below: with the pairing the five-button window is 74px
-      and the headline is on screen; without it, 10px, and the headline sits
-      48px below the fold. **S**
+      unrelated to Phase MT, found only because MT priced a fifth button.
+      MEASURED on the shipped frame while probing the gate below: without the
+      refusal frame's landscape pairing rule, four buttons leave 78px —
+      confirming the design pass's replica — and five leave 10px, with the
+      headline 48px below the fold, so the replica's 14px is superseded and
+      this row's own headline figure stands. WITH the pairing, five leave 74px
+      and the headline is on screen: it is what keeps a five-button stack
+      survivable, and `permission-denied` does not get it. **S**
 - [x] **On the web build, the top of an overflowing interstitial body cannot be
       scrolled to at all.** CLOSED by #366's landscape fix: the body is
       `flex-start` plus auto margins on its first and last child, so overflow
@@ -212,7 +214,7 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       overflowed in BOTH directions; chromium clamps `scrollTop` at 0 while the
       first child sat at -30 to -100px, so the headline was unreachable, while
       WebKit permits negative `scrollTop` (measured range [-101, 102]) and the
-      iOS app could pull it into view. Now GATED, by the row below.
+      iOS app could pull it into view. Now GATED, by the row below. **S**
 - [ ] **"Row on the phone timer instead" is offered on the refusal screen.**
       After a SkiErg refusal it routes the rower to store the ski piece as a
       rowing log by hand. No Concept2 upload follows — `eligibilityFailure`
@@ -230,8 +232,11 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       for `unsupported-machine`. Dropping `min-height: var(--tap)` fails the
       sweep at `Received: 15`. (b) At 844x390 the same frame asserts the
       headline lies inside `.connected-interstitial-body`'s client box and
-      that nothing sits above the minimum reachable scroll position; the
-      FAILED case gets the second half too, for the price of a resize.
+      that nothing sits above the minimum reachable scroll position (on
+      chromium that position is always 0, so what the assertion reads is the
+      first child's top; the review pass deleted a `minScrollTop === 0`
+      companion that no CSS could fail); the FAILED case gets the second half
+      too, for the price of a resize.
       Restoring `justify-content: center` fails it at -7.5px on the refusal
       frame and -70.5px on the link-failed one. TWO CORRECTIONS TO THIS ROW'S
       OWN PRESCRIPTION, both measured: the auto margins are not what saves the
