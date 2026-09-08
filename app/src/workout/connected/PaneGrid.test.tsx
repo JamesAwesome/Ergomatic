@@ -406,6 +406,7 @@ function actualFor(index: number, program: WorkoutProgram): IntervalActual {
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
   return {
     phase: "live" as ConnectedPhase,
+    undecodable: false,
     error: null,
     deviceName: DEVICE,
     frame: frame(),

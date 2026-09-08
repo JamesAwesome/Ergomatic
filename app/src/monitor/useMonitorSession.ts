@@ -919,6 +919,12 @@ function defaultSeriesFlushSchedule(cb: () => void, ms: number): () => void {
 
 export interface MonitorSession {
   phase: ConnectedPhase;
+  /** The app cannot read this monitor: a characteristic failed to decode
+   *  steadily and this SITTING has never produced a readable frame. Distinct
+   *  from a lost link, which is silence and belongs to the liveness path —
+   *  here the bytes arrive fine and our parser cannot make sense of them.
+   *  Latched: it clears only when a frame finally arrives. */
+  undecodable: boolean;
   error: ConnectedError | null;
   deviceName: string | null;
   frame: MonitorFrame | null;
@@ -1496,6 +1502,8 @@ export function nextRowingStreak(
 
 interface SessionState {
   phase: ConnectedPhase;
+  /** See `MonitorSession.undecodable`. */
+  undecodable: boolean;
   error: ConnectedError | null;
   deviceName: string | null;
   frame: MonitorFrame | null;
@@ -1542,6 +1550,7 @@ interface SessionState {
 
 const INITIAL_STATE: SessionState = {
   phase: "idle",
+  undecodable: false,
   error: null,
   deviceName: null,
   frame: null,
@@ -1911,6 +1920,14 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
+  /** HAS THIS SITTING EVER PRODUCED A READABLE FRAME? Minted at mount,
+   *  cleared at teardown, and NOT at `connect()` — which is the whole point.
+   *  `createPm5Driver`'s closure is rebuilt on every connect, including the
+   *  one the rower's own Try again button triggers after a BLE drop, so the
+   *  driver's own latches cannot answer this without calling a
+   *  proven-readable monitor unreadable. RF27 lifetime table lives in the
+   *  design spec. */
+  const framesEverEmittedRef = useRef(false);
   /** Door spec (2026-09-02) §5.3's LIFETIME TABLE, in one ref.
    *
    *  MINT: every `state === "rowing"` frame of the LIVE run whose
@@ -3654,7 +3671,16 @@ export function useMonitorSession(
    *  without a null question nobody can answer differently. */
   const handleEvent = useCallback(
     (event: MonitorEvent, driver: MonitorDriver): void => {
+      if (event.kind === "undecodable") {
+        update({ undecodable: true });
+        return;
+      }
       if (event.kind === "frame") {
+        // Spans reconnects on purpose — see `framesEverEmitted` at the
+        // driver's construction. Also clears the warning: a frame arriving
+        // is the only evidence that could refute it.
+        framesEverEmittedRef.current = true;
+        if (stateRef.current.undecodable) update({ undecodable: false });
         handleFrame(event.frame, driver);
         // NOTHING about a frame touches the hand-off hold (walk day 3). A
         // status tick after the machine's finish used to release it, on the
@@ -5124,6 +5150,16 @@ export function useMonitorSession(
         const driver = createPm5Driver(transport, log, {
           ...depsRef.current.driverOptions,
           deviceName: device.name,
+          // THE ROWER'S SITTING, NOT THIS ATTEMPT. The driver cannot answer
+          // this itself: its `seen` latches are reborn with its closure
+          // here, and this very function runs again when the rower taps Try
+          // again after a BLE drop. A driver-local check would call a
+          // monitor it read fine ninety seconds ago unreadable. This ref is
+          // minted at mount and cleared only at teardown, so it spans every
+          // reconnect within one sitting — the lifetime the design's safety
+          // argument always meant (design spec 2026-09-07, corrected after
+          // the hardening pass proved the driver-local version false).
+          framesEverEmitted: () => framesEverEmittedRef.current,
         });
         driverRef.current = driver;
         unsubscribeRef.current = driver.events((event) =>
@@ -6006,6 +6042,7 @@ export function useMonitorSession(
 
   return {
     phase: state.phase,
+    undecodable: state.undecodable,
     error: state.error,
     deviceName: state.deviceName,
     frame: state.frame,

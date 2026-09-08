@@ -151,6 +151,7 @@ const FIXTURE = fillingLow();
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
   return {
     phase: "idle",
+    undecodable: false,
     error: null,
     deviceName: null,
     frame: null,

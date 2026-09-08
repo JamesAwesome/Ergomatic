@@ -148,6 +148,7 @@ function realDriverLog(): string {
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
   return {
     phase: "live" as ConnectedPhase,
+    undecodable: false,
     error: null,
     deviceName: DEVICE,
     frame: frame(),

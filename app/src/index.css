@@ -11315,3 +11315,33 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 14px;
   cursor: pointer;
 }
+
+/* THE APP CANNOT READ THIS MONITOR (Gate 0, Option 1, 2026-09-07). Exactly
+   the house `.notice` treatment the sign-in screen uses: `--surface` ground,
+   1px `--ink` border, ink text.
+
+   NOT `--accent`, which the Gate 0 mockup drew and which I tried first. The
+   ACCENT CENSUS in `PaneGrid.test.tsx` reads every `var(--accent)` consumer
+   out of this stylesheet and pins the set at three, none of them a pane —
+   accent is a CONTROL colour here and a warning is not a control. The census
+   went red on the fourth consumer, which is the gate working. The state is
+   already carried by the phase word changing from `READY` to `NO READINGS`,
+   so the border was never what made it legible.
+
+   Contrast, computed from the token hex values rather than judged:
+   `--ink` #1b1a17 on `--surface` #fffdf7 is 17.11:1, clear of both the 4.5:1
+   text floor and the 3:1 graphic floor for the border. */
+.connected-undecodable {
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  color: var(--ink);
+  margin: 0 var(--edge-inset, 12px) 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.connected-undecodable b {
+  display: block;
+  font-weight: 600;
+}

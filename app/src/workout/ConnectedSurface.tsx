@@ -627,6 +627,7 @@ export default function ConnectedSurface({
     program,
     status,
     linkLost,
+    undecodable: session.undecodable,
     frame: session.frame,
     deviceName: session.deviceName,
     actuals: session.actuals,
@@ -732,6 +733,24 @@ export default function ConnectedSurface({
         </button>
       </div>
       {model.stale && <LostBanner kept={model.measuredIntervals} />}
+      {/* THE APP CANNOT READ THIS MONITOR (Gate 0, Option 1, James
+          2026-09-07). Sits under the header, above the pane, and the phase
+          word above it has already changed from `READY` to `NO READINGS` —
+          the two are one state, not a banner annotating a contradictory
+          word. `role="alert"` because it appears without the rower doing
+          anything.
+
+          THE SUBJECT IS THE APP, deliberately. Every decode failure this
+          project has had was our own length guard being behind a firmware
+          revision — the incident that produced this feature was exactly
+          that. "This monitor is broken" would have told the rower whose
+          report started it that their working erg was at fault. */}
+      {session.undecodable && (
+        <p className="connected-undecodable" role="alert">
+          <b>Ergomatic can&apos;t read this monitor.</b> Row your piece on the
+          machine, then log it by hand from Today. Nothing here will start.
+        </p>
+      )}
       <div className="connected-surface-body">
         {/* Phase JR PR 2: a free row ALWAYS renders LIVE, whatever
             `loadLastPane()` restored — the persisted pane choice belongs to
