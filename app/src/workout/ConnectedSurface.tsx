@@ -751,7 +751,13 @@ export default function ConnectedSurface({
           machine, then log it by hand from Today. Nothing here will start.
         </p>
       )}
-      <div className="connected-surface-body">
+      <div
+        className={
+          session.undecodable
+            ? "connected-surface-body connected-surface-body-unread"
+            : "connected-surface-body"
+        }
+      >
         {/* Phase JR PR 2: a free row ALWAYS renders LIVE, whatever
             `loadLastPane()` restored — the persisted pane choice belongs to
             programmed sessions, and GRID cannot exist for a row with no

@@ -1405,13 +1405,22 @@ closed with zero Concept2 contact.
       reported incident. Needs a fake control holding a NAMED characteristic
       undecodable, shaped like `failSubscribe`. **M**
 
-- [ ] **(superseded by the row above)** The follow-on the
-      spec above names: hundreds of `frame-error` entries reached the ring
-      and NOTHING reached the rower, who kept rowing against an app that
-      had already stopped listening. Recurring failure 25's shape — a lower
-      layer reports a durability failure and the caller proceeds. Needs a
-      rower-facing state, so it carries a Gate 0. **M**
-
+- [ ] **We never check WHICH Concept2 machine is attached, and record
+      everything as a row.** James, 2026-09-08. The PM5 fits the RowErg,
+      SkiErg and BikeErg, and `ergMachineType` — the field that says which —
+      has NO consumer anywhere in `app/src` or `app/domain`. So a SkiErg
+      connects, gets programmed, and its piece is stored as a row: every
+      number internally consistent and quietly wrong about what was done.
+      **The codebase already knows these differ, in exactly one corner:**
+      `domain/concept2/verificationEligibility.ts` keeps a separate rankable
+      list for the BikeErg and says outright that we ship no BikeErg and that
+      guessing its behaviour from the RowErg's would be wrong. Two things
+      make this harder than a lookup. `ergMachineType` is ABSENT on the
+      pre-2018 firmware #350 just started supporting, so any check must
+      handle not knowing; and the right response to a SkiErg is a product
+      decision (refuse, warn, or support) rather than a warning to bolt on.
+      NOT covered by #361, which fires on bytes that fail to parse — a
+      SkiErg's parse perfectly, they just describe skiing. **M**
 - [ ] **The frame-error flood evicts its own diagnosis.** The ring holds 500
       entries (`eventLog.ts:51`). A monitor we cannot decode produces a
       `frame-error` per arrival, roughly eight a second, so the buffer fills

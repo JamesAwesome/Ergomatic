@@ -865,7 +865,8 @@ export interface FakeControls {
    * `disconnectCb` fires.
    */
   suppressFrames(fromTick: number, toTick: number): void;
-  /** Hold `characteristicId` PERSISTENTLY undecodable: every notification on
+  /** Hold `characteristicUuid` PERSISTENTLY undecodable — the FULL BLE UUID
+   *  `notify()` keys on, not the short `0x0032` label `MonitorEvent` carries: every notification on
    *  it from now on arrives as two bytes, which is under every status
    *  characteristic's length floor, so the real parser rejects it. The link
    *  stays up and the subscription stays live — this reproduces a monitor
@@ -875,9 +876,9 @@ export interface FakeControls {
    *  Neither existing control can do this. `injectGarbledFrame` is one-shot
    *  and targets 0x0031, which decoded perfectly in the incident;
    *  `preV126Firmware` emits the short 0x0032 that we now DECODE by design. */
-  corruptCharacteristic(characteristicId: string): void;
+  corruptCharacteristic(characteristicUuid: string): void;
   /** Undo `corruptCharacteristic`, so a test can prove recovery. */
-  healCharacteristic(characteristicId: string): void;
+  healCharacteristic(characteristicUuid: string): void;
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -2934,11 +2935,11 @@ export function createFakeTransport(script: FakeScript): Transport &
     suppressFrames(fromTick: number, toTick: number): void {
       suppressWindow = { fromTick, toTick };
     },
-    corruptCharacteristic(characteristicId: string): void {
-      corrupted.add(characteristicId);
+    corruptCharacteristic(characteristicUuid: string): void {
+      corrupted.add(characteristicUuid);
     },
-    healCharacteristic(characteristicId: string): void {
-      corrupted.delete(characteristicId);
+    healCharacteristic(characteristicUuid: string): void {
+      corrupted.delete(characteristicUuid);
     },
     /**
      * The END-OF-WORKOUT SUMMARY (0x0039) the PM5 sends once a workout has
