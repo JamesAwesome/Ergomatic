@@ -307,7 +307,11 @@ optionClassName?: string;  // defaults to "onb-option"
 
 ### Task 6: The settings screen, the door, the route, and the boot apply
 
-**Files:** Create `app/src/you/SettingsScreen.tsx` + test; modify `app/src/You.tsx`, `app/src/shell/AppRoutes.tsx`, `app/src/index.css`, `app/src/main.tsx`.
+**Files:** Create `app/src/you/SettingsScreen.tsx` + test; modify `app/src/You.tsx`, `app/src/You.test.tsx`, `app/src/shell/AppRoutes.tsx`, `app/src/index.css`, `app/src/main.tsx`, **`app/e2e/design.spec.ts`**, **`app/e2e/screenshots.spec.ts`**, **`app/src/theme/judgeTokens.test.ts`**.
+
+**The e2e files are NOT optional, and one goes red on contact** (found during execution, by the first `pnpm e2e` rather than by review). `design.spec.ts`'s R7 doors chain measures BASELINES → CONCEPT2 → DIAGNOSTICS adjacency; putting SETTINGS between the last two fails it immediately. **Grow the chain to four rather than loosening it** — it is what pins Gate 0 ruling 3 in a real browser. A new screen also owes a design-sweep entry (`docs/TESTING.md`: a new screen with no entry there is a screen the a11y, tap-target and token rules are not actually checking) and a capture.
+
+**And the new preview specimen is a judged cell**, so add its class to `judgeTokens.test.ts`'s `JUDGED_CELL_CLASSES` sweep and declare no `color` on it — it wears the real verdict classes on an element whose own rule sits thousands of lines lower in `index.css`, which is exactly the shape that made every judged summary row plain ink in Task 3.
 
 **Consumes:** Task 1's store, Task 5's `OptionGroup`. **Invariant:** I-6.
 
@@ -321,7 +325,9 @@ optionClassName?: string;  // defaults to "onb-option"
 
 - [ ] **Step 1: Failing tests.** Four radiogroups of three options reflecting the stored value; tapping calls `applyJudgeColors` with the new set; **I-6** — `saveJudgeColors` stubbed `false`, assert the message AND that `applyJudgeColors` still ran; the door renders third of four and links to `/you/settings` with the origin state; `AppRoutes` mounts the screen. Reset root style and the storage key per test.
 - [ ] **Step 2: Fail. Step 3: Implement. Step 4: Green. Step 5: Commit.**
-- [ ] **Step 6: Mutation.** Make the save-failure branch a no-op (drop the message, keep the apply). **I-6 goes red on the message assertion and stays green on the apply assertion** — the two halves are tested separately, which is recurring failure 25's whole point.
+- [ ] **Step 6: Mutation.** Make the save-failure branch a no-op (drop the message, keep the apply). **I-6 goes red on the message assertion and stays green on the apply assertion.**
+
+  **I-6 must therefore be TWO `it`s, not one** (corrected during execution — revision 2's Step 1 and Step 6 contradicted each other). In a single test the failing message assertion aborts before the apply assertion ever runs, so "stays green" is unobservable and the mutation proves only half of what it claims. Two tests; the mutation reddens exactly one.
 
 **Gates:** `pnpm typecheck`, `pnpm lint`, new suites, `You.test.tsx`, `pnpm e2e`, `pnpm screenshots`, per-file coverage. **Open the captures and look at them** (recurring failure 7).
 
@@ -368,6 +374,8 @@ $ grep -rn "timer-card-actual-faster\|timer-card-actual-slower\|timer-card-actua
 The second reaches `src/session/TimerTargets.tsx` and `src/workout/connected/surfaceModel.ts`, which are in no other task's file list. `TimerTargets.tsx:120` is a stale-rationale tripwire of exactly the kind the briefing's comment rule exists for.
 
 - [ ] **Step 2: Recompute the contrast numbers rather than carrying them.** `index.css` records `--ink-3` at **7.44:1** on `--surface` at three sites (`:4832`, `:4852`, `:6344`) and at **7.43:1** at `:644` — the file contradicts itself and 7.43 is correct. Recompute all of them once (`node -e` with the WCAG relative-luminance formula) and write the right number; carrying the existing text forward would propagate the error.
+
+- [ ] **Step 2b: Does the settings screen owe a DEVIATIONS row?** Task 6 raised it and could not answer it: row 79 already records the decorative `--rule-3` border idiom at 1.56:1, and the screen has no handoff to deviate FROM — only the Gate 0 artifact, which it matches. Decide and say which.
 
 - [ ] **Step 3: DEVIATIONS row 103** (added during Task 3, which found it and could not own it). It says the LOST banner's ground is `--judge-slower`. That token no longer exists: Task 2 repointed the banner to the raw `--judge-red`, and Task 3 deleted the alias. Reconcile.
 
