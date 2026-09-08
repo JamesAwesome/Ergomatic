@@ -15706,9 +15706,17 @@ describe("useMonitorSession: an unsupported erg machine", () => {
     // armed with the workout we just refused — and it must happen BEFORE the
     // hang-up, because CoreBluetooth's `cancelPeripheralConnection(_:)` is
     // nonblocking and can abort a write still in flight (DEVIATIONS row 63).
-    expect(order).toContain("terminate");
+    // TWO terminates, and the count is the assertion. `program()`'s own
+    // prepare step sends a best-effort `buildTerminate()` before anything
+    // else, so the frame is on the wire whatever `fail()` does — a matcher
+    // that only asked "did a terminate happen" stayed green with the argument
+    // deleted, which is the second time this one assertion read as evidence
+    // without being any. The refusal's own terminate is the SECOND, and it
+    // must land before the hang-up.
+    const terminates = order.filter((step) => step === "terminate").length;
+    expect(terminates).toBe(2);
     expect(order).toContain("disconnect");
-    expect(order.indexOf("terminate")).toBeLessThan(
+    expect(order.lastIndexOf("terminate")).toBeLessThan(
       order.indexOf("disconnect"),
     );
   });

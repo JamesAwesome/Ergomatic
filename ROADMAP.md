@@ -210,6 +210,21 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       not clearly wrong, since the likeliest cause of that screen is picking
       the wrong monitor from a list and that rower does have a RowErg. Filed
       at the design gate rather than found later. **S**
+- [ ] **Two design gates the refusal screen owes.** Both named with a mutation
+      that bites, neither built. (a) `assertTapTargets` has never measured
+      `.connected-support-link`: `e2e/design.spec.ts`'s failed-interstitial
+      case drives a `link-failed` failure, and the link renders only for
+      `unsupported-machine`. Add `ergMachineType` to `injectConnectedFake` —
+      the fake already consumes `__pm5FakeScript__.ergMachineType` — plus a
+      third case driving the refusal through `sweep(page)`. Mutation: drop
+      `min-height: var(--tap)`; the link measures ~18px and the sweep fails.
+      (b) The gate that would have caught the landscape bug: at 844x390 with
+      `scrollTop === 0`, assert `.connected-serif-line`'s box lies inside
+      `.connected-interstitial-body`'s client rect. Mutation: restore
+      `justify-content: center`; the serif sits at y −73..−37, entirely above
+      the window. Companion: set `scrollTop = -9999` and assert the first
+      child's top is not above the client top, which pins the unreachable
+      region rather than only its symptom. **S**
 - [ ] **The refusal-survives-its-own-consequences guard is UNGATED.** `fail()`
       refuses to let a standing `unsupported-machine` error be overwritten by
       the `program()` rejection the refusal itself caused — without it the

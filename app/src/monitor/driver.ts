@@ -2408,14 +2408,19 @@ export function createPm5Driver(
    * existing: BLE PDUs are CRC'd and retransmitted, and a short or garbled
    * frame returns a typed `Pm5ParseError` and never reaches this function.
    *
-   * The property test is `in` rather than a truthiness check because ABSENCE
-   * IS NOT A REFUSAL: pre-V1.26/V1.27 firmware omits the field entirely, and
+   * ABSENCE IS NOT A REFUSAL: pre-V1.26/V1.27 firmware omits the field
+   * entirely, the `typeof` guard below returns on it, and
    * `unsupportedErgMachine` takes `number | null` so absence is stated rather
    * than implied (RF33).
    */
   function classifyErgMachine(decoded: object): void {
     if (unsupportedMachineFired) return;
-    if (!("ergMachineType" in decoded)) return;
+    // ONE guard, not two. This used to test `"ergMachineType" in decoded`
+    // first, which reads as the absence check and is fully SHADOWED by the
+    // `typeof` below: an omitted property yields `undefined`, and
+    // `typeof undefined !== "number"` already returns. Deleting it changed no
+    // behaviour and no test could go red on it — a line that reads as a gate
+    // and is not one (whole-branch review, finding 5).
     const value = (decoded as { ergMachineType?: unknown }).ergMachineType;
     if (typeof value !== "number") return;
     const machine = unsupportedErgMachine(value);

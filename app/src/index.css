@@ -6169,10 +6169,16 @@ section:not(.news-pinned) .news-row:last-of-type {
 
      - A FIFTH BUTTON is fatal in landscape. The column is 338px; four buttons
        leave 78px of body, five leave 14px — less than one 11px mono line.
-     - AN INLINE ANCHOR in 13px mono measures ~18px tall and fails
+     - AN INLINE ANCHOR in 13px mono measures ~18px tall and WOULD fail
        `e2e/design.spec.ts`'s `assertTapTargets`, which sweeps every
        a/button/[role=button]/input/select for 44px in BOTH dimensions with one
-       carve-out and already runs on the failed interstitial.
+       carve-out. CORRECTED (whole-branch review, finding 4): an earlier
+       version of this comment said that sweep "already runs on the failed
+       interstitial", which is true and irrelevant — that test drives a
+       `link-failed` failure, and this link renders only for
+       `unsupported-machine`, so the sweep has never measured it. The floor is
+       met by construction (350x44 portrait, 440x44 landscape, measured) and
+       NOT yet gated; the gate is a ROADMAP row under Phase MT.
      - THIS shape measures 350x44 portrait and 440x44 landscape, clearing the
        floor in both dimensions with no carve-out.
 
