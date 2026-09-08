@@ -1225,9 +1225,12 @@ export function createConcept2Router({
         // Failures are swallowed deliberately: this is a side effect of a
         // read taken for another purpose, and a send must not fail because a
         // verdict could not be refreshed.
-        const nowVerified = ourRows
-          .filter((row) => row.verified === true && row.id !== null)
-          .map((row) => row.id as number);
+        // `ourRows` already filtered on `id !== null`, so re-testing it here
+        // was dead — and it was what forced the `as number` cast below. One
+        // narrowing, at the place that does the work.
+        const nowVerified = ourRows.flatMap((row) =>
+          row.verified === true && row.id !== null ? [row.id] : [],
+        );
         if (nowVerified.length > 0) {
           try {
             const upgraded = await logs.markC2Verified(

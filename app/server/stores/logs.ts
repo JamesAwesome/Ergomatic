@@ -1039,6 +1039,24 @@ export function createLogsStore(db: Db) {
     // suite green; see task-3-fix-1-report.md). The `filter` below is what
     // the type genuinely requires and costs no claim, and it also removes
     // the `as number` cast the predicate version needed.
+    async sentC2ResultIds(
+      userId: string,
+      c2UserId: number,
+    ): Promise<Set<number>> {
+      const rows = await db
+        .select({ c2ResultId: sessionLogs.c2ResultId })
+        .from(sessionLogs)
+        .where(
+          and(
+            eq(sessionLogs.userId, userId),
+            eq(sessionLogs.c2UserId, c2UserId),
+          ),
+        );
+      return new Set(
+        rows.map((r) => r.c2ResultId).filter((id): id is number => id !== null),
+      );
+    },
+
     /** Phase AV's reconciliation: mark OUR rows verified for the given
      *  Concept2 account, from ids Concept2 itself reported as verified on
      *  the results list. Returns how many rows actually moved.
@@ -1055,9 +1073,14 @@ export function createLogsStore(db: Db) {
      *  account must not select a row here (same rule `sentC2ResultIds`
      *  below is written to).
      *
-     *  An empty id set writes nothing — `inArray` with `[]` is a SQL error
-     *  in some drivers and a full-table predicate in others, and neither is
-     *  what "nothing to reconcile" means. */
+     *  An empty id set returns early. The REASON, corrected after review:
+     *  an earlier version of this comment claimed `inArray` with `[]` is "a
+     *  SQL error in some drivers and a full-table predicate in others",
+     *  which is invented and false for ours — drizzle-orm's `inArray`
+     *  returns `sql\`false\`` for an empty array
+     *  (`sql/expressions/conditions.cjs`), so the query would be harmless
+     *  and simply match nothing. The real reason is the round trip: there is
+     *  no point asking Postgres a question whose answer we already know. */
     async markC2Verified(
       userId: string,
       c2UserId: number,
@@ -1082,24 +1105,6 @@ export function createLogsStore(db: Db) {
         )
         .returning({ id: sessionLogs.id });
       return rows.length;
-    },
-
-    async sentC2ResultIds(
-      userId: string,
-      c2UserId: number,
-    ): Promise<Set<number>> {
-      const rows = await db
-        .select({ c2ResultId: sessionLogs.c2ResultId })
-        .from(sessionLogs)
-        .where(
-          and(
-            eq(sessionLogs.userId, userId),
-            eq(sessionLogs.c2UserId, c2UserId),
-          ),
-        );
-      return new Set(
-        rows.map((r) => r.c2ResultId).filter((id): id is number => id !== null),
-      );
     },
 
     // Wave E PR1 Task 6, plan deviation 2: legacy-row upload persist-on-

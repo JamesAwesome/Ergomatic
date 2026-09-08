@@ -2141,7 +2141,6 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     async function sendWithList(
       rows: { id: number; verified: boolean | null }[],
       seed: { c2ResultId: number; c2UserId: number; verified: boolean | null },
-      breakReconcile = false,
     ) {
       const store = makeFakeConcept2Store();
       await store.upsertLink(userA.id, freshLink());
@@ -2183,10 +2182,6 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
         seed.verified,
       );
       const freshId = await seedEligibleLog(logs, userA.id);
-      if (breakReconcile) {
-        logs.markC2Verified = () =>
-          Promise.reject(new Error("reconcile exploded"));
-      }
       const res = await asA(
         request(app)
           .post(`/api/concept2/results/${freshId}`)
@@ -2195,27 +2190,28 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
       return { logs, id: olderId, res };
     }
 
-    // NOT GATED, and said plainly rather than left as a green test that
-    // proves nothing (round-2 review S1, half-addressed).
+    // "A FAILING RECONCILIATION DOES NOT FAIL THE SEND" IS UNGATED, and
+    // that is stated here rather than papered over with a green test
+    // (round-2 review S1, half-addressed).
     //
-    // WHAT SHIPPED: the catch now WARNS instead of swallowing silently.
-    // That was the defect — the catch was empty and the success log is
-    // gated on `upgraded > 0`, so a permanently broken reconciliation
-    // emitted nothing at all, forever, which is RF24's shape.
+    // SHIPPED: the catch WARNS now instead of swallowing silently. That was
+    // the defect — the catch was empty and the success log is gated on
+    // `upgraded > 0`, so a permanently broken reconciliation emitted nothing
+    // at all, forever (RF24's shape).
     //
-    // WHAT IS STILL UNGATED: the claim that a failing reconciliation does
-    // not fail the SEND. Four attempts to write that test all produced a
-    // 500 from the fixture rather than from the code under test, including
-    // one that 500s with NO override at all — so the setup, not the catch,
-    // is what I could not get right. `makeFakeStores()` returns interlinked
-    // stores and the reconciliation sits inside `resolveWeightClass`, which
-    // this file's helpers reach through several layers; a shape that
-    // isolates the throw without disturbing the rest has not been found.
+    // WHAT COULD NOT BE WRITTEN, and what was learned trying: a forced
+    // `throw` placed inside the route's own try proves the CATCH WORKS — the
+    // request returns 200 and only the row assertion fails. But every
+    // attempt to express that from a test 500s in the fixture, and the
+    // minimal case shows why it is not about the throw at all: calling this
+    // describe's own helper with a fresh id set, no store override and no
+    // spy ALSO 500s, while the five tests beside it pass. Something in the
+    // fixture is order- or id-dependent and was not found.
     //
-    // Deliberately NOT shipping a passing test here: one that green-lit the
-    // wrong thing would be worse than the gap, and this repo has a rule
-    // about assertions that cannot fail. Filed in ROADMAP with what was
-    // tried.
+    // Deliberately not shipping a passing test here: one that green-lit the
+    // wrong thing would be worse than the gap. Filed in ROADMAP with the
+    // route most likely to work — an integration test where the store is
+    // real and can be made to fail at the database.
 
     it("upgrades OUR row when Concept2 now says verified — the rower's own act, finally seen", async () => {
       const { logs, id } = await sendWithList([{ id: 501, verified: true }], {

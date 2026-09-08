@@ -377,8 +377,11 @@ export const sessionLogs = pgTable(
     c2ResultId: integer("c2_result_id"),
     c2UserId: integer("c2_user_id"),
     // Phase AV (spec 2026-09-07-optional-auto-verify): Concept2's own
-    // `verified`, off the 201 body, written by the SAME call that writes the
-    // two ids above.
+    // `verified`. Written first off the 201 body, by the same call that
+    // writes the two ids above — and SINCE PR 3 also by the reconciliation
+    // (`markC2Verified`), which upgrades it from a later send's declaration
+    // read. Two writers, not one; the "written once per send" phrasing this
+    // comment used to carry is gone.
     //
     // THIS IS NOT A MIRROR OF CONCEPT2'S CURRENT STATE, and reading it as
     // one is the mistake to avoid. **Its meaning WIDENED when the

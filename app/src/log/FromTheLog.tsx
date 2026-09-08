@@ -63,8 +63,9 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
   const { link } = useConcept2Link();
   if (row.machineWorkSeconds === null) return null;
   const bytes = row.machineSummary?.verificationBytes;
-  // Phase AV (Gate 0 approved 2026-09-07): Concept2 accepted this row as
-  // verified when we sent it.
+  // Phase AV (Gate 0 approved 2026-09-07): Concept2 has accepted this row
+  // as verified — when we sent it, or by the time of a later send's
+  // reconciliation.
   //
   // GATED ON THE ACCOUNT, not on the stored flag alone. Nothing ever clears
   // `verified`, exactly as nothing clears the two ids beside it, so the mark

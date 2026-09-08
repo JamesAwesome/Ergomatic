@@ -43,8 +43,9 @@ The full key set on a list row, verbatim:
     user_id, verified, weight_class, workout, workout_type
 
 `verified` sits beside `weight_class`, which our mapper already parses off
-this exact endpoint (`server/concept2/client.ts` projects four fields and
-drops the rest).
+this exact endpoint. `server/concept2/client.ts` projected FOUR fields and
+dropped the rest; with `verified` it keeps five, and drops the rest still —
+the rower's other logbook data is not ours to hold.
 
 ## What this settles, and what it does not
 

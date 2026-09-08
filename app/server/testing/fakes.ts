@@ -818,7 +818,10 @@ function makeFakeLogsStore(
           resultIds.includes(row.c2ResultId) &&
           row.verified !== true
         ) {
-          row.verified = true;
+          // REPLACED, not mutated in place — its neighbour `recordC2Result`
+          // replaces, and a fake handing out live references can make a
+          // read-back assertion pass without the write path having run.
+          rows[rows.indexOf(row)] = { ...row, verified: true };
           upgraded += 1;
         }
       }

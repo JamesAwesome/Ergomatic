@@ -1235,9 +1235,14 @@ closed with zero Concept2 contact.
       withdrawn once there is nothing left to type it into. What does NOT:
       the ask this row was written for — *"a verification the ROWER
       performed, never one we caused"* — is exactly what a receipt-time
-      verdict cannot see. Only the reconciliation (PR 2, blocked on one
-      authenticated GET) can, and it can only ever UPGRADE. **The reversal
-      reversal narrative above is written as history for the same reason.**
+      verdict cannot see. **The reconciliation (#365, 2026-09-08) is what
+      can, and it shipped**, so the ask is now MET for any row still inside
+      the declaration read's reach: it upgrades only, never downgrades, and
+      it sees a hand-verification the next time the rower sends anything.
+      **What is still not met, and closes this row only when it is:** a row
+      that falls out of that one page of 50, or a rower who verifies by hand
+      and never sends again, is never seen. The reversal narrative above is
+      written as history for the same reason.
 - [ ] **`pnpm screenshots` rewrites ~61 PNGs per run with no content change.**
       Measured twice on 2026-09-07 (PR #341): two consecutive runs on an
       unchanged tree each rewrote the same 61 captures, differing only in the
@@ -1277,11 +1282,14 @@ closed with zero Concept2 contact.
       CODE line is withdrawn when it appears. Both antagonist passes folded.
       **Ships as THREE PRs** (was two): PR 1 (setting + send + mark) MERGED
       #360; #363 carries the fallback work, the 409 exclusion and `codeSent`,
-      which PR 1's spec withdrew; and the reconciliation James approved is
-      BLOCKED on one authenticated GET
-      confirming Concept2's results list carries `verified` — the log-dev
-      token expired 2026-09-07 20:04 UTC and `C2_CLIENT_ID`/`C2_CLIENT_SECRET`
-      are not in the environment.
+      which PR 1's spec withdrew; and the reconciliation James approved shipped
+      as #365 (2026-09-08). **The GET that blocked it is PAID:**
+      `docs/superpowers/research/2026-09-08-c2-results-list-verified.md` —
+      the live results list carries `verified` on every row, measured against
+      log-dev. Two things it cost to learn: the credentials in the repo-root
+      `.env` are `LOGBOOK_CLIENT_ID_DEV`/`LOGBOOK_CLIENT_SECRET_DEV`, not the
+      `C2_*` names `c2-crossconnect.ts` reads; and a token refresh with scope
+      `results:read` is REJECTED, it needs `user:read,results:write`.
 - [ ] **Why does Concept2 show no Verify button on a row carrying interval
       data?** **ANSWERED 2026-09-07 and CLOSED — it was never about interval
       data.** Concept2 offers the Verification Code field only when the row's
