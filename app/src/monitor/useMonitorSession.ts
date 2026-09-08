@@ -4780,6 +4780,33 @@ export function useMonitorSession(
 
   const fail = useCallback(
     (error: ConnectedError, pendingTerminate?: Promise<void>): void => {
+      // PHASE MT: A REFUSAL SURVIVES ITS OWN CONSEQUENCES (whole-branch
+      // review, finding 1).
+      //
+      // Refusing an unsupported machine terminates the erg and hangs up, and
+      // BOTH of those break whatever `program()` call was still in flight —
+      // `verifyArmed` loses its arm, or the send is cut off mid-frame. That
+      // rejection reaches `program()`'s catch, which calls `fail()` again,
+      // and `update()` below is a blind write. Without this guard the rower
+      // watches "Erg type not supported" turn into a generic failure screen
+      // with no mention of the machine and no support-matrix link — the whole
+      // user-visible half of the feature, lost a beat after it appeared.
+      //
+      // Guarded HERE rather than at `program()`'s catch, because the catch is
+      // not the only caller that can land after a refusal, and a guard at one
+      // call site would be this repo's recurring half-applied invariant
+      // (RF34). The refusal is terminal for the attempt: the link is already
+      // down and `driverRef` already null by the time any later failure
+      // arrives, so there is nothing a second error could usefully add.
+      //
+      // It does NOT outlive the attempt: `connect()` clears `error` before
+      // anything can fail again, so a later sitting on a RowErg is unaffected.
+      if (
+        stateRef.current.error?.reason === "unsupported-machine" &&
+        error.reason !== "unsupported-machine"
+      ) {
+        return;
+      }
       // Phase LL Task 1, exit criterion 7: the ring gains the liveness
       // snapshot on FAILURE — the 2026-08-20 walk lost F-1's evidence
       // precisely because the ring's only door was downstream of the

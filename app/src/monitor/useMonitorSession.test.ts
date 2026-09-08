@@ -15699,3 +15699,53 @@ describe("useMonitorSession: an unsupported erg machine", () => {
     expect(result.current.runOpen).toBe(false);
   });
 });
+
+/**
+ * PHASE MT, review finding 1 — THE REFUSAL MUST SURVIVE ITS OWN CONSEQUENCES.
+ *
+ * On the programmed door the refusal fires from the first 0x0032 while
+ * `program()` is still awaiting `verifyArmed`, which needs a 0x0031. The
+ * refusal's own `terminate()` un-arms the erg and its chained `disconnect()`
+ * rejects that pending verify — so `program()` throws, its catch runs
+ * `fail()` a second time, and `update()` is a blind overwrite. The rower
+ * would watch "Erg type not supported" become a link-failure screen with no
+ * mention of the machine and no support link.
+ *
+ * EVERY OTHER TEST IN THIS FILE COLLAPSES THIS WINDOW. `deliverArmedBundle`
+ * notifies 0x0033, 0x0032 and 0x0031 in ONE synchronous tick, so `verifyArmed`
+ * resolves before the refusal's disconnect can reject it — the 544 ms the spec
+ * measured on hardware is zero in the fake. `deaf` is what reopens it: it
+ * drops general-status notifications on the floor, so 0x0032 still classifies
+ * and 0x0031 never arrives.
+ */
+describe("useMonitorSession: a refusal is not overwritten by the program it cancelled", () => {
+  it("keeps unsupported-machine when the in-flight program() then fails because of it", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 128,
+      // THE WINDOW, reopened. `verifyArmed` needs a 0x0031 whose structure
+      // matches; this holds that structure back one tick while 0x0032 — the
+      // frame that classifies — has already been delivered. That is the
+      // hardware ordering in miniature: on a real erg the gap is 544 ms.
+      lagStructureOneTick: true,
+    });
+
+    await connect(result);
+    await act(async () => {
+      void result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .catch(() => undefined);
+      for (let i = 0; i < 60; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+    });
+
+    expect(result.current.phase).toBe("failed");
+    // Independent literal. Without the guard in `fail()` this reads the
+    // program rejection's own reason and the rower never learns what machine
+    // they are on.
+    expect(result.current.error?.reason).toBe("unsupported-machine");
+    expect(result.current.error?.detail).toContain("on a SkiErg");
+  });
+});
