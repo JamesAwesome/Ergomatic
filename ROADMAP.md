@@ -548,11 +548,19 @@ nobody can sign up (deny by default)."_ PROD's old exit promised "a real
 sign-in path for a rower with no Google account" — that is Apple sign-in, and
 it lands the stranger on this same denial.
 
-- [ ] **Audit AUD-014 — native sign-out always attempts the Keychain wipe.**
-      A rejected revocation request currently leaves the bearer available for
-      later reuse. Server revocation remains best-effort, but local deletion is
-      independently required and deletion failure remains visible. AUTH triad;
-      full antagonist spec pass and PM final-PR gate. **P2, Confirmed. S**
+- [x] **DONE — Audit AUD-014, native sign-out always attempts the Keychain
+      wipe.** Delivered in two halves, and the row's own framing was half
+      wrong. **Ordering, #353:** `clearToken()` now runs FIRST and
+      unconditionally; the server call and the Google logout follow, swallowed
+      and logged. **Visibility, this PR:** a failed wipe now says so on You,
+      in the sign-in screen's own `.notice` voice. **The row's premise that a
+      rejection "leaves the bearer available for later reuse" while the app
+      proceeds was never reachable** — `onSignedOut` has always run AFTER the
+      await, so a failure left the app SIGNED IN rather than showing a
+      signed-out screen over a live token. What was actually missing was that
+      nothing was said. Gate 0 approved by James 2026-09-07 from a rendered
+      mockup. Corrected here rather than ticked silently, because the wrong
+      premise is what made the row read as more dangerous than it was.
 
 - [ ] **Establish what external TestFlight actually binds, with verbatim
       quotes, BEFORE anything else in this wave is specced.** The rebalance
@@ -1324,7 +1332,7 @@ closed with zero Concept2 contact.
       inside a row whose whole purpose was to carry evidence. Tag an
       unreproduced mechanism INFERENCE, or leave the row at the symptom.
 
-- [ ] **SHIPPED on native (#353), web half in flight — "Sign out" leaves Google signed in.** `nativeSignOut`
+- [x] **DONE and CONFIRMED on both platforms — "Sign out" left Google signed in.** `nativeSignOut`
       (`src/native/signin.ts`) posts to `/api/auth/signout` and clears our
       token, and has NEVER called the plugin's `logout` — verified over the
       whole history, not just the current file
@@ -1338,7 +1346,9 @@ closed with zero Concept2 contact.
       confirms on a device that sign-in no longer reuses silently** — the fix
       ends the session, but Google's flow shares Safari's cookies, so it may
       present a one-tap "Continue as X" rather than a full chooser (SUSPECTED,
-      untested). Same convention as the pre-2018-monitor row below. **The WEB
+      untested). **CONFIRMED by James 2026-09-07 on both:** native on the
+      Kaito build ("works on mobile"), web after #356 deployed ("confirmed").
+      That was this row's stated closing condition, so it is ticked. **The WEB
       half is a separate fix with the OPPOSITE shape** (2026-09-07, James:
       "Works on mobile not on web"): there is no session of ours to end in a
       browser, only Google's own cookie which is not ours to clear, so the

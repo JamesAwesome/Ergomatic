@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
@@ -21,6 +22,12 @@ export default function You({
   user: Me;
   onSignedOut: () => void;
 }) {
+  // AUD-014's unmet half. The DANGEROUS state was never reachable — the
+  // transition below runs AFTER the await, so a failed sign-out leaves the
+  // app signed in rather than showing a signed-out screen over a live
+  // token. What was missing is any sign it happened: the rower tapped, the
+  // keychain wipe failed, and nothing moved. The button read as broken.
+  const [signOutFailed, setSignOutFailed] = useState(false);
   return (
     // M-3 (final whole-branch review): `you-screen` pairs with the
     // `.you-screen` CSS rule (index.css, Task 3's own comment block) that
@@ -40,6 +47,12 @@ export default function You({
           <p className="you-name">{user.name}</p>
           <p className="you-email">{user.email}</p>
         </div>
+        {signOutFailed && (
+          <p className="notice" role="alert">
+            That sign-out didn&apos;t work. You&apos;re still signed in. Give it
+            another try.
+          </p>
+        )}
         <button
           className="button-outline"
           onClick={async () => {
@@ -53,7 +66,19 @@ export default function You({
             // BEFORE the adapter's sign-out so a failed sign-out on THIS
             // path cannot leave it behind either.
             clearConcept2Seen(user.id);
-            await authSignOut();
+            try {
+              setSignOutFailed(false);
+              await authSignOut();
+            } catch {
+              // NOT rethrown and `onSignedOut` NOT called: staying signed in
+              // is the correct outcome when the token is still on the
+              // device, and it is what already happened — this only makes it
+              // legible. No error detail is surfaced; a rower can act on
+              // "try again" and on nothing else, and the detail would be a
+              // place for a token to leak into a screenshot.
+              setSignOutFailed(true);
+              return;
+            }
             onSignedOut();
           }}
         >

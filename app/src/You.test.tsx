@@ -122,6 +122,65 @@ describe("You", () => {
     await vi.waitFor(() => expect(onSignedOut).toHaveBeenCalledOnce());
   });
 
+  // AUD-014. The DANGEROUS state was never reachable — `onSignedOut` runs
+  // after the await, so a rejection already left the app signed in. These
+  // pin the half that WAS missing: that the rower is told.
+  it("says the sign-out failed, and does NOT sign the rower out, when the adapter rejects", async () => {
+    const onSignedOut = vi.fn();
+    const authSignOut = vi.fn(() => Promise.reject(new Error("keychain")));
+    vi.doMock("./adapters/auth", () => ({ signOut: authSignOut }));
+    const { default: AdapterYou } = await import("./You");
+    render(
+      <MemoryRouter>
+        <AdapterYou user={user} onSignedOut={onSignedOut} />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /sign out/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/that sign-out didn't work/i);
+    expect(alert).toHaveTextContent(/still signed in/i);
+    // The whole point: a failure must not look like a success.
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+
+  it("says nothing on a sign-out that works, and still signs the rower out", async () => {
+    const onSignedOut = vi.fn();
+    const authSignOut = vi.fn(() => Promise.resolve());
+    vi.doMock("./adapters/auth", () => ({ signOut: authSignOut }));
+    const { default: AdapterYou } = await import("./You");
+    render(
+      <MemoryRouter>
+        <AdapterYou user={user} onSignedOut={onSignedOut} />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /sign out/i }));
+    await vi.waitFor(() => expect(onSignedOut).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("clears a previous failure when the rower tries again and it works", async () => {
+    const onSignedOut = vi.fn();
+    const authSignOut = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("keychain"))
+      .mockResolvedValueOnce(undefined);
+    vi.doMock("./adapters/auth", () => ({ signOut: authSignOut }));
+    const { default: AdapterYou } = await import("./You");
+    render(
+      <MemoryRouter>
+        <AdapterYou user={user} onSignedOut={onSignedOut} />
+      </MemoryRouter>,
+    );
+    const btn = screen.getByRole("button", { name: /sign out/i });
+    await userEvent.click(btn);
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await userEvent.click(btn);
+    await vi.waitFor(() => expect(onSignedOut).toHaveBeenCalledOnce());
+    // A stale failure left standing after a success would be its own lie.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   // The baseline editor, the re-test shortcut and Reset baseline setup all
   // left You for `/you/baselines` (Gate 0, 2026-09-05). Their wiring — the
   // reset's remount of the editor included — is pinned in
