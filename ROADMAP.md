@@ -1216,8 +1216,17 @@ closed with zero Concept2 contact.
       facts stand (research file: the code verifies at the monitor's
       distance, fails at a control, with and without the interval array);
       what changed is the product decision.
-      **This row is now UNBLOCKED but unstarted**, and means reflecting a
-      verification the ROWER performed, never one we caused.
+      **PARTLY DELIVERED by Phase AV PR 1 (#360), and the rest is still
+      open — read both halves.** What ships: a row Concept2 accepted as
+      verified when we sent it now reads `VERIFIED ✓`, and the raw code is
+      withdrawn once there is nothing left to type it into. What does NOT:
+      the ask this row was written for — *"a verification the ROWER
+      performed, never one we caused"* — is exactly what a receipt-time
+      verdict cannot see. Only the reconciliation (PR 2, blocked on one
+      authenticated GET) can, and it can only ever UPGRADE. **The reversal
+      language above stands as history and no longer describes the code:**
+      since #360 the mapper DOES send the code, when and only when the rower
+      has turned AUTO VERIFY on.
 - [ ] **`pnpm screenshots` rewrites ~61 PNGs per run with no content change.**
       Measured twice on 2026-09-07 (PR #341): two consecutive runs on an
       unchanged tree each rewrote the same 61 captures, differing only in the
@@ -2187,7 +2196,8 @@ Each needs erg time or a deliberate recording session.
       fake than either. Unblocks with the same work that would let this stack
       photograph a sent row at all.
 
-- [ ] **The log detail issues TWO `GET /api/concept2/link` per view.** Phase AV
+- [ ] **The log detail issues TWO `GET /api/concept2/link` on EVERY view,
+      including rows with no machine block at all.** Phase AV
       added the verified mark to `MachineConfirmedBlock`, which needs the live
       link for its account gate, and `Concept2SendBlock` on the same screen
       already calls `useConcept2Link()`. The hook has no shared cache — it is
@@ -2196,7 +2206,13 @@ Each needs erg time or a deliberate recording session.
       it rather than discovered later (RF29's shape).** The fix is to lift the
       read to `FromTheLog` and pass `link` to both blocks, which changes
       `Concept2SendBlock`'s props and its tests; not carried in Phase AV
-      because it is a refactor that PR did not need.
+      because it is a refactor that PR did not need. **Scope corrected after
+      the branch review (N9): the hook is called at the top of
+      `MachineConfirmedBlock`, BEFORE its `machineWorkSeconds === null` early
+      return, and the block is rendered unconditionally — so the second
+      request fires on manual and timer rows too, where the block draws
+      nothing. The first wording said "per view", which is true and reads as
+      "per machine row".**
 
 - [ ] **No committed capture shows the free-row summary's machine tiles.**
       They ship in #351 gated from upstream of the producer — the
@@ -2316,15 +2332,26 @@ Each needs erg time or a deliberate recording session.
   other and none of them can see this — RF11 exactly, and the same
   "an oracle that shares your definition is a mirror" shape that retired
   `recordTwdVerdict`.
-  **Consequence, unhedged:** the verification code is ROADMAP's own "whole point
-  of the phase", and it cannot succeed today for an interval row whose totals
-  differ. Unknown and worth measuring: whether a single-interval or JustRow row
+  **Consequence as filed (superseded — see the resolution below rather than
+  reading this as current):** the verification code is ROADMAP's own "whole
+  point of the phase", and at the time of filing it could not succeed for an
+  interval row whose totals differ. Unknown and worth measuring: whether a single-interval or JustRow row
   verifies fine (the two numbers coincide there), which would explain why
   nothing caught it.
   **Owed before any fix:** decide which number is authoritative and say why —
   the monitor's own summary total, or our sum — then send that one, and gate it
   with a replay whose expected value comes from the CAPTURE's summary frame
-  rather than from our own accumulator. **M/L**
+  rather than from our own accumulator.
+  **THE OWED HALF IS DONE (PR #307, 2026-09-05): the monitor's own total is
+  authoritative and `buildC2Payload` posts `machineWorkMeters`/
+  `machineWorkSeconds` when present.** So the headline above — "a
+  verification code cannot validate" — no longer describes the code, and
+  Phase AV (#360) now sends that code on request. **What survives is the
+  question this row asked and nobody answered:** whether a SINGLE-INTERVAL
+  row verifies fine, where our sum and the monitor's total coincide. The
+  JustRow half of that question is closed by a different route — a free row
+  cannot be uploaded at all (`eligibilityFailure` refuses `endedBy !==
+  "finished"`), so it never reaches a verification. **S**
 
 - **FILED (PR2 PM gate, 2026-09-04): three PR2 items whose only home was a plan
   or a PR body.** A plan is a record of intent, not a live register (RF14).

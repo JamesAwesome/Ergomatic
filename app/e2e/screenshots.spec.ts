@@ -6995,6 +6995,34 @@ test("concept2-screen-automatic", async ({ page }) => {
   });
 });
 
+test("concept2-screen-auto-verify-on", async ({ page }) => {
+  // Phase AV (Gate 0 approved 2026-09-07): the ON state. Every other
+  // committed frame shows AUTO VERIFY off, because off is the default, so
+  // "Rows arrive verified." had no visual record at all until the branch
+  // review said so (N4). Unlike the `VERIFIED ✓` mark — which this stack
+  // genuinely cannot photograph, since the only writer of `verified` is a
+  // route that 403s here — the ON state needs one routed field.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: { ...C2_SHOT_LINKED, autoVerify: true } },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await openC2Screen(page, "screenshots-c2-screen-auto-verify@e2e.test");
+  // Prove the state, then shoot (RF7).
+  await expect(
+    page.getByRole("button", { name: "Auto verify on", pressed: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Rows arrive verified.")).toBeVisible();
+  // And the sending mode is untouched beside it — the two controls are
+  // independent, and a capture showing both states at once says so.
+  await expect(
+    page.getByRole("button", { name: "MANUAL", pressed: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "concept2-screen-auto-verify-on.png"),
+  });
+});
+
 test("concept2-screen-send-failed", async ({ page }) => {
   // Gate 0 amendment 2026-09-05 §4: the pill, the reason line in warn
   // weight, the profile remedy — the card's half of the sticky flag.

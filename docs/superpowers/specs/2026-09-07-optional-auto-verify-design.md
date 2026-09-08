@@ -237,6 +237,17 @@ rule at the second call site — *"Same class, deliberately: resolved ONCE per
 request (ruling R13), reused across this retry so one send can never carry two
 classes."* The same sentence now covers this flag.
 
+**WITHDRAWN FROM PR 1 (branch review, 2026-09-07).** The three paragraphs
+below describe the fallback work, the false-clause fix and `codeSent`'s
+return. **None of them shipped**, and the review found the spec still
+asserting them — a binding document describing a branch that does not exist
+(RF10/RF14). They are not abandoned; they move to PR 2, where the
+reconciliation already forces this file to be reopened. The reasoning is
+unchanged and is kept below as the design PR 2 implements. **PR 1 changes
+none of the fallback behaviour**, so the entrance is still gated on
+`payload.workout !== undefined`, no strip of `verification_code` exists, and
+the `c2_send` line carries `verified`/`intervalsSent`/`fallback` only.
+
 **The 4xx fallback: the ENTRANCE widens, the STRIP stays conditional.** `#336`
 had it strip `workout` AND `verification_code` together (label
 `without_workout_and_code`); `#337` narrowed it to `workout` alone. Restoring

@@ -246,8 +246,14 @@ describe("concept2 store against real Postgres", () => {
       await store.upsertLink(userA, link({ c2UserId: 16 }));
       await store.setAutoSend(userA, true);
       await store.setAutoVerify(userA, false);
-      // Opposed again, and the other way round, so neither test can pass by
-      // a CASE that happens to read the wrong column in this direction.
+      // Opposed the other way round. STATED PRECISELY, because an earlier
+      // version of this comment claimed more than the test delivers: in the
+      // DIFFERENT-account case the CASE takes its ELSE branch, so the THEN
+      // expression is unobservable and this test structurally CANNOT catch
+      // the read-the-wrong-column mutant — only its same-account sibling
+      // above does (measured: that mutant reddens 1 of 34, and it is the
+      // sibling). What this test does catch is the ELSE branch itself:
+      // `ELSE false` -> `ELSE ${autoVerify}` reddens here, 1 of 34.
       await store.setAutoVerify(userA, true);
       await store.setAutoSend(userA, false);
       await store.upsertLink(userA, link({ c2UserId: 17 }));

@@ -2742,9 +2742,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     });
     const { app, logs } = buildApp({ store, client });
     // A divergent row: our sum 5708, the machine's own total 5706.
-    // Phase LP: the store also holds the PM5's 0x003F bytes. They are
-    // deliberately NOT forwarded as Concept2's `verification_code` (James,
-    // 2026-09-07) — the rower verifies by hand, as with ErgData.
+    // Phase LP: the store also holds the PM5's 0x003F bytes. Phase AV made
+    // that conditional — they ride Concept2's `verification_code` only when
+    // the rower has turned AUTO VERIFY on. This link has not (`freshLink()`
+    // defaults it false), so this is an OFF-arm assertion, and the comment
+    // says so rather than restating an absolute the code no longer holds.
     const id = await seedEligibleLog(logs, userA.id, {
       workMeters: 5708,
       machineWorkMeters: 5706,
@@ -2771,8 +2773,10 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     // dropping the field in toMappingRow, posts 5708 and reddens this.
     expect(posted.distance).toBe(5706);
     expect(posted.distance).not.toBe(5708);
-    // The code is deliberately never sent (James, 2026-09-07): Concept2's
-    // own app leaves verification to the rower.
+    // NOT SENT because this link's AUTO VERIFY is off, which is the default
+    // every rower starts on — not because the code is never sent. Phase AV
+    // added the ON arm; it lives beside the two `the STORED setting …` tests
+    // above, which drive the same seam with the flag set.
     expect(posted).not.toHaveProperty("verification_code");
   });
 

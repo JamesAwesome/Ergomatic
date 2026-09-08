@@ -692,7 +692,9 @@ describe("Concept2Card panel lines no type protects (Task 1 review F9)", () => {
 // PATCH, then RE-READ — so the pressed segment is always the server's answer
 // and never the tap's optimism.
 describe("the AUTO VERIFY control (Phase AV)", () => {
-  function mountFollowingVerify(initial: typeof LINKED) {
+  function mountFollowingVerify(
+    initial: typeof LINKED & { autoVerify?: boolean },
+  ) {
     let current: Record<string, unknown> = { ...initial };
     const api = vi.fn(async (_path: string, init?: RequestInit) => {
       if (init?.method === "PATCH") {
@@ -762,6 +764,93 @@ describe("the AUTO VERIFY control (Phase AV)", () => {
         name: "Auto verify on",
         pressed: true,
       }),
+    ).toBeInTheDocument();
+  });
+
+  it("arrows move focus only — no PATCH", async () => {
+    // RF8 by name: this repo has shipped three roving-tabindex groups
+    // untested and each needed a follow-up. `moveFocus` had never executed
+    // (coverage 183-191) until the branch review said so.
+    const { api } = mountFollowingVerify(LINKED);
+    await renderCard();
+    const off = await screen.findByRole("button", { name: "Auto verify off" });
+    off.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(
+      screen.getByRole("button", { name: "Auto verify on" }),
+    ).toHaveFocus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(off).toHaveFocus();
+    // Moving is not committing — the whole reason this is a labelled group
+    // and not a radiogroup.
+    expect(
+      api.mock.calls.filter(
+        (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("returns focus to the tapped segment after the write, not to the body", async () => {
+    // Both segments are disabled while the PATCH is in flight; without the
+    // restore a keyboard user lands on `<body>` mid-control.
+    mountFollowingVerify(LINKED);
+    await renderCard();
+    const on = await screen.findByRole("button", { name: "Auto verify on" });
+    on.focus();
+    await userEvent.click(on);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Auto verify on", pressed: true }),
+      ).toHaveFocus();
+    });
+  });
+
+  it("a THROWN write says so too, not only a refused one", async () => {
+    const api = vi.fn(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") throw new Error("offline");
+      return new Response(JSON.stringify(LINKED), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.doMock("../api", () => ({ api }));
+    vi.doMock("../adapters/linkFlow", () => ({ startLink: vi.fn() }));
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Auto verify on" }),
+    );
+    expect(
+      await screen.findByText("Couldn't change this. Try again."),
+    ).toBeInTheDocument();
+  });
+
+  it("tapping the segment that is already pressed writes nothing", async () => {
+    const { api } = mountFollowingVerify(LINKED);
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Auto verify off" }),
+    );
+    expect(
+      api.mock.calls.filter(
+        (c) => (c[1] as RequestInit | undefined)?.method === "PATCH",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("turns back OFF again, which is the segment nothing had exercised", async () => {
+    mountFollowingVerify({ ...LINKED, autoVerify: true });
+    await renderCard();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Auto verify off" }),
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: "Auto verify off",
+        pressed: true,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Concept2 leaves verifying to you."),
     ).toBeInTheDocument();
   });
 

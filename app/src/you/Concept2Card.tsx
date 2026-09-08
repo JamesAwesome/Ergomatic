@@ -157,10 +157,27 @@ function AutoVerifyControl({
   const [writeBusy, setWriteBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const groupRef = useRef<HTMLDivElement | null>(null);
+  // Both segments are `disabled` while the write is in flight, which drops
+  // focus to `<body>` and strands a keyboard user mid-control. Same problem
+  // and same remedy as `SendingModeControl` one function down; the branch
+  // review found this missing here (N2).
+  const refocusRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (writeBusy || refocusRef.current === null) return;
+    refocusRef.current.focus();
+    refocusRef.current = null;
+  }, [writeBusy]);
 
   async function set(autoVerify: boolean): Promise<void> {
     setFailed(false);
     if (link.autoVerify === autoVerify) return;
+    const active = document.activeElement;
+    refocusRef.current =
+      active instanceof HTMLButtonElement &&
+      groupRef.current !== null &&
+      groupRef.current.contains(active)
+        ? active
+        : null;
     setWriteBusy(true);
     try {
       const res = await api("/api/concept2/link", {

@@ -1075,6 +1075,63 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
+  // Phase AV: the same seam for AUTO VERIFY, at the browser layer, because
+  // the branch review found it had none (N3). The point is the same one the
+  // sibling above makes and one more besides — the two controls are
+  // INDEPENDENT, so a verify tap must send only its own key.
+  test("AUTO VERIFY PATCHes { autoVerify: true } alone, then follows the RE-READ", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "verify-on");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    const verify = page.getByRole("group", { name: "Auto verify" });
+    await expect(
+      verify.getByRole("button", { name: "Auto verify off" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    const readsBefore = fake.linkReads;
+    fake.linked({ autoVerify: true });
+    await verify.getByRole("button", { name: "Auto verify on" }).click();
+    await expect.poll(() => fake.patches.length).toBe(1);
+    // ONLY its own key: a control that sent the whole link would rewrite the
+    // sending mode as a side effect of a verify tap.
+    expect(fake.patches[0]).toEqual({ autoVerify: true });
+    expect(fake.patchHeaders[0]).toMatch(/^application\/json/);
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    await expect(
+      verify.getByRole("button", { name: "Auto verify on" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("Rows arrive verified.")).toBeVisible();
+
+    // The sending mode did not move.
+    await expect(
+      control(page).getByRole("button", { name: "MANUAL" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("a refused AUTO VERIFY PATCH leaves the pressed state on the server's value", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "verify-refused");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    fake.patch = { status: 500, body: { error: "boom" } };
+    await page
+      .getByRole("group", { name: "Auto verify" })
+      .getByRole("button", { name: "Auto verify on" })
+      .click();
+    await expect(
+      page.getByText("Couldn't change this. Try again."),
+    ).toBeVisible();
+    // Still OFF, drawn from the link and never from the tap.
+    await expect(
+      page
+        .getByRole("group", { name: "Auto verify" })
+        .getByRole("button", { name: "Auto verify off" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("a refused PATCH shows the A7 line and leaves the pressed state on the server's value", async ({
     page,
   }) => {
