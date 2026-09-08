@@ -3900,7 +3900,8 @@ test("log-detail", async ({ page }) => {
   // averages this fixture's own trace over WORKING strokes only. Check it
   // rather than trust it: the trace is `hr = 130 + round(t/244 × 28)`, so
   // work 1 (t 0..67) averages ~133.5 over 34 samples and work 2 (t 128..183)
-  // ~148 over 28, giving (133.5×34 + 148×28)/62 = 140.0. Its collision with
+  // ~148 over 28. Estimated that way it is 140.0; computed exactly over all
+  // 62 non-resting samples, time-weighted, it is 140.129. Its collision with
   // this row's `machineWatts: 140` is coincidence, and was checked as one.
   // RATE 26
   // with NO target half (this walk's program authored no display SPM, so

@@ -10,6 +10,7 @@ import BackLink from "../shell/BackLink";
 import { DASH } from "../workout/connected/surfaceModel";
 import MachineSummaryTable from "./MachineSummaryTable";
 import type {
+  MachineTier,
   MeasuredRow,
   SummaryHeroes,
   SummaryMeta,
@@ -340,6 +341,44 @@ function MachineTile({
   );
 }
 
+/** Phase LP §3 (Gate 0 approved 2026-09-07, artboard
+ *  `docs/design/logbook-parity/03-chosen-composed.html`): the six machine
+ *  tiles, machine rows only. Watts and cal/hr are the LOGBOOK's arithmetic
+ *  (§3.1, James: "logbook formula"); RATE / TARGET is one tile, the target
+ *  shown only when every interval agreed on one.
+ *
+ *  EXTRACTED so the free-row summary renders this markup rather than a copy
+ *  (Just Row parity, Gate 0 approved 2026-09-07). A free row reaches it with
+ *  `targetRate` undefined — its program is the empty interval list, so
+ *  `agreedTargetSpm([])` returns undefined and the label is plain `RATE`,
+ *  which is the behaviour the review already argued for below. */
+export function MachineTierBlock({ machine }: { machine: MachineTier }) {
+  return (
+    <div className="summary-machine-tier" data-testid="summary-machine-tier">
+      <MachineTile label="AVG WATTS" value={machine.avgWatts} />
+      <MachineTile label="CALORIES" value={machine.calories} />
+      <MachineTile label="CAL / HOUR" value={machine.calPerHour} />
+      {/* The Gate 0 artboard's own label, `RATE · TARGET`; with no agreed
+          target the label promises one number and shows one (whole-branch
+          review M5 — a two-number label over a lone `26` was never drawn). */}
+      <MachineTile
+        label={machine.targetRate !== undefined ? "RATE · TARGET" : "RATE"}
+        value={machine.rate}
+        suffix={
+          machine.targetRate !== undefined
+            ? ` / ${machine.targetRate}`
+            : undefined
+        }
+      />
+      <MachineTile label="DRAG" value={machine.drag} />
+      {/* James, 2026-09-07 (review M3, on artboard 04): AVG HR in the sixth
+          cell, not REST — rest metres already live on the total line and a
+          second source four lines apart said nothing a rower could act on. */}
+      <MachineTile label="AVG HR" value={machine.avgHr} />
+    </div>
+  );
+}
+
 export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
   const hasHero =
     heroes.avgSplit !== undefined ||
@@ -386,35 +425,7 @@ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
           LOGBOOK's arithmetic (§3.1, James: "logbook formula"); RATE /
           TARGET is one tile, the target shown only when every interval
           agreed on one. */}
-      {machine !== undefined && (
-        <div
-          className="summary-machine-tier"
-          data-testid="summary-machine-tier"
-        >
-          <MachineTile label="AVG WATTS" value={machine.avgWatts} />
-          <MachineTile label="CALORIES" value={machine.calories} />
-          <MachineTile label="CAL / HOUR" value={machine.calPerHour} />
-          {/* The Gate 0 artboard's own label, `RATE · TARGET`; with no
-              agreed target the label promises one number and shows one
-              (whole-branch review M5 — a two-number label over a lone
-              `26` was never drawn). */}
-          <MachineTile
-            label={machine.targetRate !== undefined ? "RATE · TARGET" : "RATE"}
-            value={machine.rate}
-            suffix={
-              machine.targetRate !== undefined
-                ? ` / ${machine.targetRate}`
-                : undefined
-            }
-          />
-          <MachineTile label="DRAG" value={machine.drag} />
-          {/* James, 2026-09-07 (review M3, on artboard 04): AVG HR in the
-              sixth cell, not REST — rest metres already live on the total
-              line and a second source four lines apart said nothing a
-              rower could act on. */}
-          <MachineTile label="AVG HR" value={machine.avgHr} />
-        </div>
-      )}
+      {machine !== undefined && <MachineTierBlock machine={machine} />}
     </div>
   );
 }

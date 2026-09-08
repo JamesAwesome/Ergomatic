@@ -2150,6 +2150,37 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **No committed capture shows the free-row summary's machine tiles.**
+      They ship in #351 gated from upstream of the producer — the
+      2026-08-31 walk's own bytes replayed through the real driver, hook and
+      store, then the door mounted over what it wrote
+      (`justRowReplay.test.ts`) — but `docs/screenshots/justrow-log.png`
+      cannot show them:
+      `injectJustRowShotFake` sends no burst, and `fake.test.ts` pins that a
+      burst-less script emits no 0x0039/0x003A. **Attempted and reverted in
+      #351**, so the next attempt starts here rather than from scratch. A
+      `FakeBurst` rides a `FakeBoundaryEvent`, whose `actual` needs
+      `index`, `elapsedSeconds`, `distanceMeters`, `avgSpm`,
+      `avgHeartRateBpm` and `restDistanceMeters` (`restSeconds` is
+      optional), plus
+      sibling `cumulativeElapsedSeconds`/`cumulativeDistanceMeters`.
+      Calories live on 0x003A, which `FakeBurst` takes only as raw bytes, so
+      `summaryOverrides` cannot reach them. Appending such a boundary to the
+      free-row script left Connect permanently disabled and broke four
+      justrow captures — that is the thing to solve. **The cheap route was
+      tried and does not work as-is (measured 2026-09-07, four orderings,
+      each a full run of the live free-row flow):** `FakeControls`
+      `deliverSummary` is boundary-free and already Playwright-driven
+      (`connected.spec.ts` uses it on the programmed arm), but on the
+      free-row END path it produced no summary ring event and no
+      `summaryTotals` — delivered immediately after the second END tap,
+      with and without `deliverVerification`, and again after asserting the
+      hand-off hold visibly open ("Wrapping up", that file's own idiom).
+      Whether the free-row arm declines it or the fake needs 0x003A (which
+      `deliverSummary` never writes) is UNRESOLVED and is the next thing to
+      find out. This is a FAKE-side gap only: the same fold works on real
+      wire bytes, which is what `justRowReplay.test.ts` gates.
+
 - **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
   one and offered the other at the 7 s offset.** James's ruling ("If a user
   sets a 2k or a 6k they should be asked to set both with a suggestion of the

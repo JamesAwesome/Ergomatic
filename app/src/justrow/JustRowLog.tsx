@@ -14,6 +14,8 @@ import { useLogForm } from "../session/LogSession";
 import { recordLogDoorEntry } from "../session/logDoorDiagnostics";
 import { clearRun, loadRun, type SessionRun } from "../session/run";
 import { freeRowTotals } from "./totals";
+import { MachineTierBlock } from "../session/PostWorkoutSummary";
+import { machineTierFromRun } from "../session/summaryModel";
 
 /**
  * `/justrow/log` — the workout-less log door (Phase JR PR 2, Gate 0
@@ -348,27 +350,55 @@ export function JustRowSummary({
       </p>
 
       {totals !== null ? (
-        <div className="justrow-log-numbers">
-          <div>
-            <p className="justrow-log-numlabel">TIME</p>
-            <p className="justrow-log-numvalue">
-              {fmtDuration(totals.seconds / 60)}
-            </p>
+        <>
+          <div className="justrow-log-numbers">
+            <div>
+              <p className="justrow-log-numlabel">TIME</p>
+              <p className="justrow-log-numvalue">
+                {fmtDuration(totals.seconds / 60)}
+              </p>
+            </div>
+            <div>
+              <p className="justrow-log-numlabel">DISTANCE</p>
+              <p className="justrow-log-numvalue">
+                {new Intl.NumberFormat("en-US").format(
+                  Math.round(totals.meters),
+                )}{" "}
+                m
+              </p>
+            </div>
+            <div>
+              <p className="justrow-log-numlabel">AVG SPLIT</p>
+              <p className="justrow-log-numvalue">
+                {avgSplitSeconds !== null ? fmtSplit(avgSplitSeconds) : "—"}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="justrow-log-numlabel">DISTANCE</p>
-            <p className="justrow-log-numvalue">
-              {new Intl.NumberFormat("en-US").format(Math.round(totals.meters))}{" "}
-              m
-            </p>
-          </div>
-          <div>
-            <p className="justrow-log-numlabel">AVG SPLIT</p>
-            <p className="justrow-log-numvalue">
-              {avgSplitSeconds !== null ? fmtSplit(avgSplitSeconds) : "—"}
-            </p>
-          </div>
-        </div>
+          {/* Just Row parity (Gate 0 approved by James 2026-09-07): the same
+              six machine tiles a programmed piece shows, from the same
+              builder and the same markup. The monitor sends a free row the
+              full end-of-workout burst — the 2026-08-31 capture carries
+              rate 25, drag 101, 80 calories and 125 W — and this screen was
+              already holding all of it while showing three numbers. The
+              saved row has shown the tiles all along; only this screen, the
+              one where the rower decides whether to keep the row, was short.
+
+              NOT gated on the workout-type byte: a free row reports 1 where
+              a programmed piece reports 8, and reading that byte is the
+              likeliest reason this was never filled in.
+
+              No MACHINE SUMMARY strip: that table is per interval and a free
+              row saves none, so it yields nothing structurally rather than
+              by a special case. */}
+          {/* The programmed door's own gate (`summaryModel.ts`'s `hasTotals`):
+              nothing is fabricated from a 0/0 burst, so a tier never renders
+              over totals that are not there. */}
+          {entry.run.summaryTotals !== undefined &&
+            Math.round(entry.run.summaryTotals.workDistanceMeters) > 0 &&
+            entry.run.summaryTotals.workElapsedSeconds > 0 && (
+              <MachineTierBlock machine={machineTierFromRun(entry.run)} />
+            )}
+        </>
       ) : (
         // A recovered record whose burst never landed AND whose trace is
         // empty: nothing numeric to show, and fabricating a zero would be a

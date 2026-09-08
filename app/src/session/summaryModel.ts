@@ -1215,7 +1215,18 @@ function monitorAvgSplit(run: MonitorRun): WorkingAverage {
  *  `hasTotals` gate), so watts always derive; everything from 0x003A is
  *  `undefined` on a record that never stored it (pre-LP rows, a burst
  *  that lost 0x003A) and renders as a dash. */
-function machineTierFromRun(run: MonitorRun): MachineTier {
+/** EXPORTED for the free-row summary (Just Row parity, Gate 0 approved
+ *  2026-09-07). A free row reaches this unchanged: its program is the empty
+ *  interval list, so `agreedTargetSpm([])` is undefined and the tile reads
+ *  plain `RATE`; its `actuals` are empty, so the rate comes from the
+ *  monitor's own `avgStrokeRate` — see the `finished` argument passed to
+ *  `sessionStrokeRate` below for why a free row takes that branch even
+ *  though it ALWAYS terminates. An earlier version of this comment said a
+ *  terminated row reads a dash; that argument had already stopped it.
+ *  Deliberately ONE function for both
+ *  doors — the alternative is two that drift, which is how the tile and the
+ *  wire came to disagree once already this phase. */
+export function machineTierFromRun(run: MonitorRun): MachineTier {
   const t = run.summaryTotals!.workElapsedSeconds;
   const d = run.summaryTotals!.workDistanceMeters;
   const detail = run.summaryDetail;
@@ -1226,7 +1237,19 @@ function machineTierFromRun(run: MonitorRun): MachineTier {
     calPerHour:
       calories === undefined ? undefined : logbookCalPerHour(calories, t),
     rate: sessionStrokeRate({
-      finished: run.endedBy === "finished",
+      // A FREE ROW COUNTS AS FINISHED HERE (James, 2026-09-07: "trust").
+      // The terminated branch exists because the monitor doubles its own
+      // 0x0039 average when a DEFINED piece is cut short, and it falls back
+      // to a time-weighted mean of the splits. A free row has no defined end
+      // to fall short of — the machine goes straight to TERMINATE, so
+      // `endedBy` is always `"rower"` — and it records no splits at all
+      // (`useMonitorSession.ts`'s free-row refusal), so the fallback returns
+      // undefined and the tile would read a dash on EVERY free row.
+      // MEASURED on the 2026-08-31 capture: the summary reports 25 spm while
+      // its own live 0x0032 frames, time-weighted across the rowing state,
+      // give 26.8 — a 1.8 spm delta, not the ~2x a doubled figure shows. The
+      // monitor's own average is honest on a free row.
+      finished: run.endedBy === "finished" || run.mode === "justrow",
       avgStrokeRate: detail?.avgStrokeRate,
       splits: run.actuals
         .filter((a) => a.index !== null && a.avgSpm !== null)
