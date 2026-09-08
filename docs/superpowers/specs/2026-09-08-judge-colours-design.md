@@ -406,6 +406,33 @@ keep their ruling-7 relationship (CONCEPT2 above DIAGNOSTICS, DIAGNOSTICS
 still You's last child), and BASELINES stays on top as the one door a rower
 reads FOR its value.
 
+**The group stays FLAT — no container** (James, 2026-09-08, taking the PM
+verdict on his own follow-up question: should the doors collapse behind an
+"Advanced" or "Settings" menu holding Concept2, colours and Diagnostics?).
+Three reasons, all recorded in `pm-ledger.md`:
+
+- **CONCEPT2 is a status surface, not a door.** `Concept2Row` renders
+  `RECONNECT NEEDED` / `SEND FAILED` beside its label, from an account-level
+  flag that `useConcept2Link.ts` says surfaces in exactly three places — *"the
+  You row (`SEND FAILED`), the card's pill, and the screen's mode line; never
+  by the send block"* — two of which already live behind `/you/concept2`.
+  Nesting the row deletes the only ambient warning that a shipped feature
+  broke.
+- **Neither word survives the drawer.** "Advanced" is a warning and the
+  colours preference is one this spec exists to encourage; "Settings" is
+  dishonest about DIAGNOSTICS, where nothing is adjustable. The app also
+  already ruled on the word at a Gate 0 — `Diagnostics.tsx`: *"Named
+  DIAGNOSTICS (not 'advanced'/'debug') because that is the word the app
+  already uses for this class of thing."*
+- **The container would be built for work that may not happen**, and its
+  membership would then be wrong.
+
+**The day-two shape, recorded so it is not re-derived:** if the parked
+countdown-length and pace-tolerance settings land, the flat group reaches six
+rows and a container earns itself — but it holds **preferences only**, with
+CONCEPT2 and DIAGNOSTICS still flat siblings. That is a different container
+from the one asked about, and building this one first means unbuilding it.
+
 **One consequence to note rather than design around:** `Concept2Row` renders
 NOTHING unless a successful read has said `available: true` for the account,
 so on an account without it SETTINGS sits directly beneath BASELINES. That is

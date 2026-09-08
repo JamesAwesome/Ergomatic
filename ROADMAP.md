@@ -3231,8 +3231,21 @@ trigger is the whole entry.
   the same phone inherits the first rower's colours, and there is no clear
   path at all, not even sign-out. That is where this bullet gets re-litigated,
   so it belongs with the device account switcher below rather than here.
+- **A preferences container on the You tab.** James asked at JC's Gate 0
+  whether the doors should collapse behind an "Advanced" or "Settings" menu
+  holding Concept2, colours and Diagnostics; the PM said neither and he took
+  it (2026-09-08), so the group stays flat at four rows. **Trigger:** a SECOND
+  preference row lands — the parked countdown-length and pace-tolerance
+  settings two bullets above are the likely pair, at which point the group
+  reaches six rows. **The shape is already decided:** the container holds
+  PREFERENCES ONLY; CONCEPT2 and DIAGNOSTICS stay flat siblings, because the
+  CONCEPT2 row carries a `RECONNECT NEEDED` / `SEND FAILED` state line that is
+  the only ambient warning a rower gets, and DIAGNOSTICS is a log dump rather
+  than anything adjustable. Full reasoning in `pm-ledger.md`, 2026-09-08. **S**
 - **The device account switcher** (the design's SWITCH flow). **Trigger:** a
-  second rower actually shares your phone at the erg.
+  second rower actually shares your phone at the erg. **Note (2026-09-08):**
+  it is an identity ACTION and belongs beside Sign out, not inside any
+  preferences container.
 - **A rower-authored reservation** (was Phase 8C). The `kind` discriminant seam
   8A built stays in place for it. **Trigger:** James asks, or a second rower asks.
 - **The workout rating system.** **Trigger:** a tester says the suggestions are
