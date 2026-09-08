@@ -212,6 +212,16 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       leaves ALL SEVEN failure-frame assertions in `design.spec.ts` green, so
       `-n + 4` is approved on the Gate 0 captures and pinned by nothing. Either
       a seam on that adapter or an accepted gap; not decided. **S**
+- [ ] **`pnpm screenshots` rewrites 64 of its 201 captures on every run, with
+      no code change at all.** Measured 2026-09-08: run it, `git checkout --
+      docs/screenshots/`, run it again on the identical tree — the same 64
+      files come back modified. So a capture PR's `git status` cannot tell the
+      frames a change actually altered from the ones that merely re-rendered,
+      and the committed captures are the visual record every design gate and
+      RF7 leans on. This PR worked around it by adding only the two frames its
+      rule can touch and discarding the rest. Cause unknown; the churn spans
+      concept2, justrow, diagnostics and log captures, so it smells like seeded
+      data or a date rather than antialiasing. **M**
 - [ ] **The permission screen says "your PM5" where it means "your monitor".**
       `useMonitorSession.ts`'s `BluetoothPermissionError` detail reads
       "Ergomatic can't reach your PM5 without Bluetooth." The rower is not being
