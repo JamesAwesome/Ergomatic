@@ -9235,3 +9235,55 @@ antagonist should start with them.
 - The past tense in "Concept2 accepted this row as verified when we sent it" survives
   four drifts (row deleted, un-verified, edited, relinked) because it is a claim
   about a past moment. It stops being the whole truth only if a reconciliation lands.
+
+## Code review, rounds 1-2, 2026-09-08 — Phase AV PR 1 (#360, TRIAD, two stored shapes)
+
+Not antagonist dispatches; two whole-branch code reviews. Landed here because
+three findings are technique that generalises past this branch.
+
+- **"Every assertion has a biting mutation."** True of every assertion that
+  EXISTED, and the sentence hid the one that did not. Nothing tied the STORED
+  setting to the wire: the only ON-path assertion called the payload builder
+  with a literal `true`, so hard-wiring the route to never forward the rower's
+  flag left 7708 unit tests and 543 e2e green. The feature could have shipped
+  dead — card reading ON, line reading "Rows arrive verified.", no row ever
+  verified. **Technique: for any user-visible SETTING, the mutation to try is
+  not "break the mechanism" but "ignore the stored value". If nothing reddens,
+  every test is downstream of the seam the rower actually operates.**
+
+- **A predicate whose AND could not be told from an OR.** The deciding guard
+  was `usedMachineMeters && usedMachineSeconds`; mutating it to `||` passed all
+  249 tests, because the only negative arm nulled BOTH. The two columns are
+  independently nullable and the codebase says so in its own comment.
+  **Technique: for every N-clause guard, count the negative tests. You need N
+  of them, each falsifying exactly one clause — a single all-false case gates
+  the conjunction as a unit and nothing inside it.**
+
+- **A guard that was genuinely redundant, and the right answer was to DELETE
+  it.** A per-byte `Number.isInteger` check in the mapper duplicated what
+  `verificationWords` already does and returns `null` for, which the next line
+  already catches. Its presence and absence were indistinguishable — 249 green
+  either way. **Technique: when a mutation survives, ask whether the clause is
+  UNTESTED or UNREACHABLE-AS-A-DIFFERENCE. The first wants a test; the second
+  wants deletion, and keeping it puts an unfalsifiable clause in a TRIAD
+  predicate.** Byte validity now has one owner.
+
+- **An undefined custom property ships silently and reaches captures.**
+  `var(--mono)` against a token named `--font-mono`: one reference, zero
+  definitions, so the declaration was invalid at computed-value time and the
+  label inherited the body sans while every neighbour stayed mono. No error,
+  no warning, no failing test; it took a human reading the committed PNGs.
+  **Technique: a census that every `var(--x)` names something declared. On its
+  first run it found a SECOND orphan already in main** — one whose own comment
+  called it "the single source of that inset" while the real source was `24px`
+  written twice in two fallbacks.
+
+### Attacked and NOT broken (vetted ground)
+
+The account gate on the rendered mark, the 409-writes-null rule at both
+layers, the PATCH's validate-all-before-write ordering across all five body
+shapes, the upsert's per-column `CASE` (including the honest correction that
+only the same-account sibling can catch the wrong-column mutant), the
+`=== true` client normalisation, and the producer→consumer seam: the
+integration test starts upstream of the write with a real router, real
+Postgres and a real 201 body, and asserts the verdict off the GET.
