@@ -1425,7 +1425,12 @@ closed with zero Concept2 contact.
       four plan tasks are complete and merged as #350 and released in v0.42.0 (build 902, 2026-09-07)
       (`as1-short-frame`); the checkbox stays open until the reporter confirms it fixed THEIR monitor — see the two open items below. **M**
 
-- [ ] **IN FLIGHT — A monitor we cannot decode says nothing at all.**
+- [ ] **MERGED #361 (2026-09-08), UNRELEASED — a monitor we cannot decode
+      says nothing at all.** The connected screen now reads `NO READINGS`
+      instead of `READY` when a characteristic's bytes fail to decode
+      12 times across 5 seconds and no frame has ever been emitted this
+      sitting, so the app stops promising a piece it cannot start. The
+      checkbox stays open until it ships in a tag.
       Spec: `docs/superpowers/specs/2026-09-07-undecodable-monitor-design.md`.
       Gate 0 APPROVED 2026-09-07 (Option 1: the warning REPLACES the READY
       state rather than sitting above it — a banner over a screen still
