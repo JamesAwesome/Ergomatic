@@ -5985,3 +5985,27 @@ test the same branch had just filed as "an annoyance". **A flake that skips a
 deploy is not an annoyance; a ROADMAP row's severity is a factual claim too.**
 `gh run list --branch main --limit 3` belongs in every final gate, not only the
 release gate.
+
+### 2026-09-07 — PR #353, signout-ends-google (TRIAD auth)
+
+- **Presentation gate, applied mechanically, caught a real case.** A
+  well-evidenced body (byte-identical plugin proof, four mutation probes,
+  honest SUSPECTED labelling) still failed the 120-word / 25-per-bullet count:
+  177 words above the fold, bullets averaging 31.8. **Good content is not a
+  reason to skip the count.** The gate working as intended, not a false
+  positive to relax next time.
+- **A fix's own body is the right place to pre-empt an expectation mismatch,
+  and that line must survive any trim.** This fix ends the Google session but
+  does not guarantee an account CHOOSER — Safari-cookie SSO can produce a
+  one-tap "Continue as X" instead. If James got that and nothing had told him
+  it was expected, a WORKING fix would read as a failed one. When trimming for
+  length, this class of caveat is one of the two lines that cannot be cut; the
+  other is the outcome line.
+- **Same-night second release for a low-severity single-tester bug: don't cut
+  it.** v0.42.0 shipped ~1hr before. A silently reused identity, no data loss,
+  allowlisted cohort, on a build that just went out, does not warrant a second
+  TestFlight cut. Merge, batch the tag into the next natural release.
+  **James independently reached the same call before seeing this verdict.**
+- **An unconfirmed-on-device fix's ROADMAP row states its own confirmation
+  condition**, mirroring the sibling pre-2018-monitor row on the same page
+  ("checkbox stays open until the reporter confirms"). Flagged here, landed.

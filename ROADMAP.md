@@ -1334,8 +1334,13 @@ closed with zero Concept2 contact.
       chooser. Reported by James on the v0.42.0 TestFlight build, 2026-09-07.
       The chooser is how you NOTICE; the defect is a button that says Sign out
       and does not. NOT attributable to that build's plugin bump — the gap
-      predates it entirely. TRIAD (auth). Spec:
-      `docs/superpowers/specs/2026-09-07-signout-ends-google-design.md`. **S**
+      predates it entirely. TRIAD (auth). **The checkbox ticks only when James
+      confirms on a device that sign-in no longer reuses silently** — the fix
+      ends the session, but Google's flow shares Safari's cookies, so it may
+      present a one-tap "Continue as X" rather than a full chooser (SUSPECTED,
+      untested). Same convention as the pre-2018-monitor row below. Merged but
+      NOT released on its own (James, 2026-09-07: rides his next batch).
+      Spec: `docs/superpowers/specs/2026-09-07-signout-ends-google-design.md`. **S**
 
 - [ ] **SHIPPED v0.42.0 (902) — a monitor older than 2018 is silently unusable.**
       Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26
