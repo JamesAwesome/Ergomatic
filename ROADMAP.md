@@ -192,21 +192,53 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       do not subscribe. The two we read (footnotes 7 and 11) say only "the
       Machine Type of the current interval". No capture and no vendor sentence
       settles what a real MultiErg reports on 0x0032. Unowned, accepted. **S**
-- [ ] **`permission-denied` already ships a five-button action stack, and it
-      leaves a 10px body in landscape.** Measured in Playwright against both
-      engines during Phase MT's design pass, with the harness validated against
-      the committed landscape capture (predicted action-stack top 96px, capture
-      ~97px). `ConnectedInterstitial.tsx` renders `Open Settings` above
-      `Try again` whenever the reason is `permission-denied` and
-      `canOpenAppSettings()`: actions 316px of a 338px column. Pre-existing and
-      unrelated to Phase MT, found only because MT priced a fifth button.
-      MEASURED on the shipped frame while probing the gate below: without the
-      refusal frame's landscape pairing rule, four buttons leave 78px —
-      confirming the design pass's replica — and five leave 10px, with the
-      headline 48px below the fold, so the replica's 14px is superseded and
-      this row's own headline figure stands. WITH the pairing, five leave 74px
-      and the headline is on screen: it is what keeps a five-button stack
-      survivable, and `permission-denied` does not get it. **S**
+- [x] **`permission-denied` already ships a five-button action stack, and it
+      leaves a 10px body in landscape.** CLOSED by the landscape budget fix
+      (Gate 0 approved 2026-09-08): the failure frames' action stack now pairs
+      its last FOUR buttons, taking this frame 10px -> 138px, `link-failed`
+      78px -> 206px and `unsupported-machine` 142px -> 206px, all measured on
+      the real frames at 844x390. The scope widened at the gate because the
+      capture showed `link-failed` — the failure a rower actually hits — was
+      cutting its headline too.
+      CORRECTION TO THIS ROW'S OWN CLAIM: it said the last-two pairing left
+      five buttons at "74px and the headline is on screen". The headline runs
+      to y94 on any frame whose title wraps, so 74px CUT it — the reason the
+      approved fix pairs four rather than two. **S**
+- [ ] **Nothing can gate the five-button failure frame.** `canOpenAppSettings()`
+      is `isNative()`, so the web build renders `permission-denied` with four
+      buttons and every e2e assertion stands on that shape. The deciding case —
+      five buttons, a 74px window under the old pairing count — exists only on
+      iOS, where the frame's own message would be cut.
+      NARROWED IN REVIEW ROUND 1: the PAIRING COUNT itself is now caught, one
+      frame over — reverting to `nth-last-child(-n + 2)` fails the refusal
+      test's `contentHeight` precondition at 157px against a 142px window,
+      because that frame's content sits between the two windows. What stays
+      ungateable is the five-button SHAPE: no web assertion can stand on it, so
+      nothing would catch a regression that only reached the iOS stack. Either
+      a seam on that adapter or an accepted gap; not decided. **S**
+- [ ] **`pnpm screenshots` rewrites 64 of its 201 captures on every run, with
+      no code change at all.** Measured 2026-09-08: run it, `git checkout --
+      docs/screenshots/`, run it again on the identical tree — the same 64
+      files come back modified. So a capture PR's `git status` cannot tell the
+      frames a change actually altered from the ones that merely re-rendered,
+      and the committed captures are the visual record every design gate and
+      RF7 leans on. This PR worked around it by adding only the two frames its
+      rule can touch and discarding the rest. Cause unknown; the churn spans
+      concept2, justrow, diagnostics and log captures, so it smells like seeded
+      data or a date rather than antialiasing. **M**
+- [ ] **The permission screen says "your PM5" where it means "your monitor".**
+      `useMonitorSession.ts`'s `BluetoothPermissionError` detail reads
+      "Ergomatic can't reach your PM5 without Bluetooth." The rower is not being
+      told WHICH monitor, so by the 2026-09-07 anonymise-the-PM5 rule (RF32)
+      that is the wrong word. Found while measuring the landscape gate; left out
+      of that PR because it is a second product file and the fast path allows
+      one. **S**
+- [ ] **The permission frame's DETAIL panel repeats its own remedy sentence.**
+      `error.detail` renders as the body line AND again inside the panel — 125px
+      of the frame's 308px, verbatim duplication. This is the same argument
+      #366 used to drop the panel from the refusal frame ("the top half saying
+      exactly what the bottom half already says"); nobody has applied it here.
+      Changes what the screen contains, so it needs its own design ruling. **S**
 - [x] **On the web build, the top of an overflowing interstitial body cannot be
       scrolled to at all.** CLOSED by #366's landscape fix: the body is
       `flex-start` plus auto margins on its first and last child, so overflow

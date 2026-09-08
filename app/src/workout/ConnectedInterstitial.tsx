@@ -657,13 +657,16 @@ export default function ConnectedInterstitial({
             </>
           )}
         </div>
-        <div
-          className={
-            error?.reason === "unsupported-machine"
-              ? "action-stack connected-interstitial-actions connected-interstitial-actions--refusal"
-              : "action-stack connected-interstitial-actions"
-          }
-        >
+        {/* `--failure` on EVERY failure frame, not only the machine refusal
+            (Phase MT follow-on rev 2). The landscape pairing rule it carries
+            is what puts the headline on screen, and `link-failed` and
+            `permission-denied` were cutting theirs harder than the refusal
+            ever did — see the rule's own table in `index.css`. It stays a
+            MODIFIER rather than moving onto the base class because the base
+            class is worn by eleven stacks that are not failure frames, and
+            measured on a base-class version the READY interstitial repaints
+            to two 214px buttons side by side. */}
+        <div className="action-stack connected-interstitial-actions connected-interstitial-actions--failure">
           {error !== null &&
             error.reason === "permission-denied" &&
             canOpenAppSettings() && (

@@ -5,6 +5,7 @@ import AxeBuilder from "@axe-core/playwright";
 import {
   signInViaBackdoor,
   stableBoundingBox,
+  stubBluetoothPermissionDenied,
   stubBluetoothScanFailure,
 } from "./helpers";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
@@ -7209,8 +7210,10 @@ async function walkToSurface(page: Page): Promise<void> {
  *  a webkit project is added. What bites today is the first child's top. */
 async function measureFailureFrame(page: Page): Promise<{
   clientHeight: number;
+  contentHeight: number;
   serifTop: number;
   serifBottom: number;
+  remedyTop: number | null;
   minScrollTop: number;
   firstChildTopAtMinScroll: number;
 }> {
@@ -7229,16 +7232,45 @@ async function measureFailureFrame(page: Page): Promise<{
     const serifRect = serif.getBoundingClientRect();
     const atRest = {
       clientHeight: body.clientHeight,
+      contentHeight: body.scrollHeight,
       serifTop: serifRect.top - restTop,
       serifBottom: serifRect.bottom - restTop,
     };
+    const remedy = body.querySelector<HTMLElement>(".connected-body-line");
+    const remedyTop =
+      remedy === null ? null : remedy.getBoundingClientRect().top - restTop;
     body.scrollTop = -9999;
     const minScrollTop = body.scrollTop;
     const firstChildTopAtMinScroll =
       first.getBoundingClientRect().top - clientTopOf(body);
     body.scrollTop = 0;
-    return { ...atRest, minScrollTop, firstChildTopAtMinScroll };
+    return {
+      ...atRest,
+      remedyTop,
+      minScrollTop,
+      firstChildTopAtMinScroll,
+    };
   });
+}
+
+/** The headline is ON the frame at rest — inside `.connected-interstitial-
+ *  body`'s client box, top and bottom. Held by every failure frame since the
+ *  landscape action stack learned to pair its buttons (Phase MT follow-on):
+ *  before that, four full-width buttons left a 78px window against a headline
+ *  that runs to y94 on any frame whose title wraps to two lines, which is
+ *  `link-failed` (470px at 36px serif) and `permission-denied` (457px) in a
+ *  440px column. */
+function assertHeadlineOnFrame(
+  m: Awaited<ReturnType<typeof measureFailureFrame>>,
+): void {
+  expect(
+    m.serifTop,
+    `the headline starts ${-m.serifTop}px above the body's visible top`,
+  ).toBeGreaterThanOrEqual(-0.5);
+  expect(
+    m.serifBottom,
+    `the headline ends ${m.serifBottom - m.clientHeight}px below the body's visible bottom`,
+  ).toBeLessThanOrEqual(m.clientHeight + 0.5);
 }
 
 /** The half of gate (b) that holds on EVERY failure frame: nothing may sit
@@ -7326,20 +7358,92 @@ test.describe("connected screens (fake-driven)", () => {
     await sweep(page);
     await expect(failed).toBeVisible({ timeout: 1000 });
 
-    // Gate (b)'s universal half, on the OTHER failure frame, and free here:
-    // this test already stands on a failure screen, so it costs a resize
-    // rather than a second minutes-long connected setup. Only the
-    // reachability half is asserted — this frame carries a DETAIL panel and
-    // four full-width buttons, so its landscape column genuinely does not
-    // fit and its headline is legitimately clipped at the BOTTOM. What is
-    // never legitimate is content above the scroll origin. Under the same
-    // `justify-content: center` mutation this frame fails hardest of the two
-    // — "the frame's first child sits 70.5px above the minimum reachable
-    // scroll position" — which is the defect the committed
-    // `connected-interstitial-failed-landscape.png` shows.
+    // Gate (b) IN FULL on the other failure frame, and free here: this test
+    // already stands on a failure screen, so it costs a resize rather than a
+    // second minutes-long connected setup.
+    //
+    // SUPERSEDED CLAIM (Phase MT follow-on): this comment used to assert only
+    // the reachability half, on the ground that four full-width buttons left a
+    // window this frame's headline "legitimately" overran. That is no longer
+    // true — the landscape stack now pairs its last four buttons, taking the
+    // window 78px -> 206px against a 94px headline, so the headline clears the
+    // fold and the containment half is a real gate here. The frame as a whole
+    // still overflows, by 13px (content 219px), which is what keeps the
+    // reachability half falsifiable on this frame: under the
+    // `justify-content: center` mutation it fails at 6.5px, half of that
+    // overflow. TWO FIGURES CORRECTED FROM REVIEW ROUND 0: that number was
+    // written as 70.5px, which was measured against the OLD 78px window, and
+    // this frame was called the one that "fails hardest of the three" — it is
+    // now the mildest, since `permission-denied` carries 308px of content into
+    // the same 206px window and fails at 29px on the headline.
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(failed).toBeVisible();
-    assertNothingAboveTheScrollOrigin(await measureFailureFrame(page));
+    const lf = await measureFailureFrame(page);
+    assertHeadlineOnFrame(lf);
+    assertNothingAboveTheScrollOrigin(lf);
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // THE FRAME THE LANDSCAPE BUDGET WAS FIXED FOR (Phase MT follow-on, Gate 0
+  // approved 2026-09-08). `permission-denied` carries more than any other
+  // failure screen — a headline that wraps to two lines at 36px in a 440px
+  // column (457px), the remedy sentence, the reassurance and a DETAIL panel,
+  // 219px of content — and it is the one screen whose message IS the fix
+  // ("Allow Bluetooth for Ergomatic in Settings"). Before the pairing rule its
+  // landscape window was 78px against a headline running to y94.
+  test("the interstitial's PERMISSION-DENIED frame reads in landscape, headline and all", async ({
+    page,
+  }) => {
+    const title = "Design Connected Permission Workout";
+    await stubBluetoothPermissionDenied(page);
+    await openConnected(page, title, "design-connected-permission@e2e.test");
+    const denied = page.locator(".connected-serif-line", {
+      hasText: "Bluetooth permission needed",
+    });
+    await expect(denied).toBeVisible({ timeout: 10_000 });
+    await sweep(page);
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(denied).toBeVisible();
+    await assertTapTargets(page);
+    const m = await measureFailureFrame(page);
+    assertHeadlineOnFrame(m);
+    assertNothingAboveTheScrollOrigin(m);
+
+    // The remedy must at least BEGIN on screen. This is the only failure
+    // screen whose body line tells the rower what to DO — "Allow Bluetooth for
+    // Ergomatic in Settings" — rather than restating the headline, so a rower
+    // who cannot see it start has been told something is wrong and not how to
+    // fix it. It bites when this frame loses its `--failure` modifier.
+    //
+    // WHAT IT CANNOT DO IS PIN THE PAIRING COUNT, and the comment that shipped
+    // here in review round 0 claimed it did — a claim this PR's own probe
+    // table and ROADMAP row both contradicted while it sat here (it survived a
+    // `git checkout --` that reverted an unrelated probe, RF22 exactly).
+    // MEASURED: reverting the rule to `nth-last-child(-n + 2)` leaves every
+    // assertion on THIS frame green. At four buttons `-n + 2` still gives a
+    // 142px window and the remedy at 102 clears it; the shape that falls to
+    // 74px is the FIVE-button iOS stack, and `canOpenAppSettings()` is
+    // `isNative()`, so the web build is four buttons by construction and that
+    // shape is unreachable from here.
+    //
+    // The count is caught, but ONE FRAME OVER: the refusal test's
+    // `contentHeight` precondition fails at 157px against a 142px window
+    // ("overflows its window by 15px"), because that frame is the one whose
+    // content sits between the two windows. Round 0 of this PR claimed the
+    // count was pinned by nothing in the suite, which was true when written
+    // and stopped being true when that precondition landed in round 1.
+    expect(
+      m.remedyTop,
+      "the frame has no body line to read as the remedy",
+    ).not.toBeNull();
+    expect(
+      m.remedyTop,
+      `the remedy sentence starts ${(m.remedyTop ?? 0) - m.clientHeight}px below the fold, so the rower is told something is wrong and not what to do`,
+    ).toBeLessThan(m.clientHeight);
+
     await page.setViewportSize({ width: 390, height: 844 });
 
     await cleanupAllConnected(page, title);
@@ -7409,11 +7513,26 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  // GATE (b), on the frame whose landscape budget is tightest — the gate
-  // that would have caught the landscape bug in the first place. At 844x390
-  // the refusal's four buttons leave a body window of 142px (measured here,
-  // matching `index.css`'s own figure) for a taller column, so the frame
-  // overflows BY DESIGN; what must never happen
+  // GATE (b) on the refusal frame. WHAT THIS TEST STILL PROVES, AND WHAT IT NO
+  // LONGER CAN (Phase MT follow-on rev 2, review round 0 finding 3): the
+  // landscape budget fix took this frame's window 142px -> 206px against 157px
+  // of content, so it is the one failure frame that now FITS. With no overflow
+  // there is no free space to split, which makes `justify-content: center` and
+  // the auto margins indistinguishable here — the -7.5px mutation this
+  // comment's own option table names can no longer redden either geometry
+  // assertion below, and the containment half needs a window under 58px, which
+  // nothing reaches on this frame. Both are kept deliberately, as tripwires
+  // for a future line added to this frame, and the `contentHeight` assertion
+  // pins the precondition that makes them dormant, so a frame that starts
+  // overflowing again reddens HERE rather than silently re-arming them.
+  // THE FALSIFIABLE COPIES LIVE ON THE OTHER TWO FRAMES, which still overflow:
+  // measured under that mutation, `link-failed` fails at 6.5px and
+  // `permission-denied` at 29px. What this test uniquely still gates is the
+  // 44px sweep with the support link in the DOM, which reddens at 15px.
+  //
+  // The historical text: at 844x390 four full-width buttons left a 142px
+  // window for a taller column, so the frame overflowed BY DESIGN; what must
+  // never happen
   // is the overflow being split above and below the window, which is what
   // `justify-content: center` did and what the auto margins now prevent.
   //
@@ -7433,8 +7552,11 @@ test.describe("connected screens (fake-driven)", () => {
   //     from this frame: those historical figures are not reachable by a
   //     CSS-only mutation any more.
   //   - The CONTAINMENT assertion needs the landscape body window below 58px
-  //     to bite, so removing the `--refusal` pairing alone does NOT make it
-  //     fail — measured: window 78px, headline at 22..58, test green. It goes red on the shape the
+  //     to bite, so removing the pairing alone did NOT make it fail —
+  //     measured: window 78px, headline at 22..58, test green. (That table was
+  //     written against `--refusal`, the modifier this rule carried when it
+  //     applied to the refusal alone; it is `--failure` now, on every failure
+  //     frame.) It goes red on the shape the
   //     ROADMAP already files as a real defect — the FIVE-button stack, with
   //     the pairing gone: window 10px, "the headline ends 48px below the
   //     body's visible bottom", `Received: 58`. That is its whole job: it
@@ -7458,14 +7580,14 @@ test.describe("connected screens (fake-driven)", () => {
     await assertTapTargets(page);
 
     const m = await measureFailureFrame(page);
+    // The precondition for the two assertions below being dormant rather than
+    // broken (see this test's own header). If a line is ever added to this
+    // frame this is what goes red first.
     expect(
-      m.serifTop,
-      `the headline starts ${-m.serifTop}px above the body's visible top`,
-    ).toBeGreaterThanOrEqual(-0.5);
-    expect(
-      m.serifBottom,
-      `the headline ends ${m.serifBottom - m.clientHeight}px below the body's visible bottom`,
-    ).toBeLessThanOrEqual(m.clientHeight + 0.5);
+      m.contentHeight,
+      `this frame overflows its window by ${m.contentHeight - m.clientHeight}px, so the two geometry assertions below are live again and their comment is stale`,
+    ).toBeLessThanOrEqual(m.clientHeight);
+    assertHeadlineOnFrame(m);
     assertNothingAboveTheScrollOrigin(m);
 
     await page.setViewportSize({ width: 390, height: 844 });

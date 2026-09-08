@@ -6080,41 +6080,77 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin: 0;
 }
 
-/* THE REFUSAL FRAME'S LANDSCAPE BUDGET (Phase MT follow-on). At 844x390 the
-   column is 338px and four full-width buttons take 248 of it, leaving a 78px
-   body — less than the 91px the message alone needs (label 14 + serif 36 +
-   body line 17 + two gaps), so NO DOM ORDER can put the reason on screen. That
-   is why moving the support link below the reassurance line was measured to
-   change nothing at all.
+/* EVERY FAILURE FRAME'S LANDSCAPE BUDGET (Phase MT follow-on rev 2, Gate 0
+   approved by James 2026-09-08: "C is the heavenly option"). At 844x390 the
+   action stack was taking 248px of 390 on a four-button frame and 316px on the
+   five-button one, and a failure headline that wraps to two lines runs to y94.
+   Every failure frame was therefore cutting its own message. Three are measured
+   below; the modifier reaches ALL of them, because `renderFailureScreen` wears
+   it unconditionally — so it also covers the reasons not tabled here and the
+   DISCONNECTED frame (`LINK_LOST_NO_RUN_ERROR`), which carries the same 470px
+   headline and has neither a capture nor an assertion. What it does not reach
+   is any non-failure interstitial, which is the whole point of it being a
+   modifier:
 
-   `Try again` and `Row on the phone timer instead` stay full width: they are
-   the two ways forward. `View connection log` and `Cancel` pair on one row at
-   214x52 (text measured at 148px and 51.5px — one line each, both engines).
-   Stack 248 -> 184px; with the 8px body gap the window is 142px and the label,
-   headline, reason sentence and support link are ALL fully visible at rest,
-   the fold landing in a gap rather than through a line.
+     frame                  buttons   window before -> after   content
+     permission-denied (iOS)   5         10px -> 138px          308px
+     link-failed               4         78px -> 206px          219px
+     unsupported-machine       4        142px -> 206px          157px
 
-   `nth-last-child(-n + 2)` rather than `nth-child(3)`/`(4)` so the five-button
-   `permission-denied` variant pairs its last two as well — its landscape body
-   window goes 10px -> 74px — instead of stranding a half-width Cancel.
+   All six figures measured in Playwright on the real frames, chromium at
+   844x390; portrait is byte-identical before and after in all three (the gate
+   captures hash the same). Two of the three frames wrap their headline, and
+   the arithmetic says which: the column is 440px, `The link to the monitor
+   failed.` measures 470px at 36px serif and `Bluetooth permission needed`
+   457px, while `Erg type not supported` is 363px and never wrapped — which is
+   why the refusal alone looked survivable when this rule shipped pairing only
+   its last TWO.
 
-   NO NEW COLOUR PAIRING: layout only. */
+   `-n + 4`, so the last four buttons pair into two rows. On the five-button
+   `permission-denied` frame that leaves `Open Settings` — the button that
+   actually fixes the error — full width above two pairs.
+
+   THIS REVERSES A DELIBERATE CHOICE, and the reversal is the change's most
+   consequential effect rather than a side effect: on every FOUR-button frame,
+   which is every failure frame except `permission-denied` on iOS, nothing
+   stays full width any more, `Try again` included. The rule this replaces
+   protected it explicitly ("`Try again` and `Row on the phone timer instead`
+   stay full width: they are the two ways forward"). Gate 0 put both layouts in
+   front of James as rendered captures and he took this one; the primary action
+   keeps its accent fill and its first position in the pair.
+
+   SCOPED TO `--failure`, NOT TO `.connected-interstitial-actions`, and that is
+   load-bearing rather than tidy. ELEVEN stacks carry the base class — JustRow's
+   four, JustRowObserver's, and this file's pairing / programming / ready /
+   handoff screens — none of which is a failure frame or was in the approved
+   design. Measured on the base-class version: the READY interstitial's stack
+   goes from full-width buttons to two 214px buttons side by side in a 440px
+   row. So the modifier is what keeps this rule inside the three frames it was
+   approved for; it replaces `--refusal`, which keyed the same rule to
+   `unsupported-machine` alone.
+
+   NO NEW COLOUR PAIRING: layout only. Measured on the four-button frame, a
+   paired button is 214 wide and the two rows are 56px and 52px tall — the
+   first is the taller because `Row on the phone timer instead` wraps to two
+   lines at 214px and grid row-stretch takes `Try again` with it. Both clear
+   the 44px floor (a wrap grows the box, never shrinks it), and
+   `e2e/design.spec.ts` sweeps all three frames for it at this viewport. */
 @media (orientation: landscape) {
   .connected-interstitial-body {
     gap: 8px;
   }
 
-  .connected-interstitial-actions--refusal {
+  .connected-interstitial-actions--failure {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
   }
 
-  .connected-interstitial-actions--refusal > button {
+  .connected-interstitial-actions--failure > button {
     grid-column: 1 / -1;
   }
 
-  .connected-interstitial-actions--refusal > button:nth-last-child(-n + 2) {
+  .connected-interstitial-actions--failure > button:nth-last-child(-n + 4) {
     grid-column: auto;
   }
 }
