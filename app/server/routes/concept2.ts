@@ -755,6 +755,9 @@ export function createConcept2Router({
         // verbatim (`no_weight` | `unreadable_weight` | `implausible_weight`
         // | `no_gender`), the key the rower-facing sentence is chosen by.
         autoSend: link.autoSend,
+        // Phase AV: emitted alongside the sending mode, so the card can draw
+        // the pressed segment from the SERVER's value rather than the tap's.
+        autoVerify: link.autoVerify,
         sendFailedAt: link.sendFailedAt?.toISOString() ?? null,
         sendFailedReason: link.sendFailedReason,
       });
@@ -777,16 +780,53 @@ export function createConcept2Router({
         return;
       }
       const body = isRec(req.body) ? req.body : {};
-      if (typeof body.autoSend !== "boolean") {
+      // Phase AV: two INDEPENDENT settings on one PATCH — the sending mode
+      // and AUTO VERIFY. Either may arrive alone; a patch naming one must
+      // never write the other. Each present-but-wrong-typed field 400s under
+      // its OWN name, and a body naming neither keeps autoSend's wording,
+      // because `PATCH {}` was already a 400 and its message is pinned.
+      const wantsAutoSend = body.autoSend !== undefined;
+      const wantsAutoVerify = body.autoVerify !== undefined;
+      if (wantsAutoVerify && typeof body.autoVerify !== "boolean") {
+        res
+          .status(400)
+          .json({ error: "autoVerify must be a boolean", field: "autoVerify" });
+        return;
+      }
+      if (!wantsAutoVerify && typeof body.autoSend !== "boolean") {
         res
           .status(400)
           .json({ error: "autoSend must be a boolean", field: "autoSend" });
         return;
       }
-      const updated = await store.setAutoSend(req.user!.id, body.autoSend);
-      if (!updated) {
-        res.status(409).json({ error: "unlinked" });
+      if (wantsAutoSend && typeof body.autoSend !== "boolean") {
+        res
+          .status(400)
+          .json({ error: "autoSend must be a boolean", field: "autoSend" });
         return;
+      }
+      // FAIL-CLOSED ORDER: every field is validated before ANY is written, so
+      // a mixed patch with one bad field changes nothing at all (A2). Writing
+      // as we validate would leave the good half applied under a 400.
+      if (wantsAutoSend) {
+        const updated = await store.setAutoSend(
+          req.user!.id,
+          body.autoSend as boolean,
+        );
+        if (!updated) {
+          res.status(409).json({ error: "unlinked" });
+          return;
+        }
+      }
+      if (wantsAutoVerify) {
+        const updated = await store.setAutoVerify(
+          req.user!.id,
+          body.autoVerify as boolean,
+        );
+        if (!updated) {
+          res.status(409).json({ error: "unlinked" });
+          return;
+        }
       }
       res.status(204).end();
     },
@@ -950,7 +990,13 @@ export function createConcept2Router({
       // Ruling (i) narrowed this to ONE field: `weightClass` used to ride
       // here too, read off the stored link row. There is no stored class
       // any more (migration 0023) — it is resolved from Concept2 below.
-      type LinkIdentity = { c2UserId: number };
+      // Phase AV widened this from `{ c2UserId }`. AUTO VERIFY is read from
+      // the LOCKED re-read, beside the access token and for the same reason:
+      // it is the authoritative value at the moment this request sends, and
+      // a concurrent PATCH from another request is visible here or not at
+      // all. Reading it from an earlier unlocked fetch would let one send
+      // carry a policy the rower had already changed.
+      type LinkIdentity = { c2UserId: number; autoVerify: boolean };
       type TokenOutcome =
         | { ok: true; accessToken: string; link: LinkIdentity }
         | { ok: false; status: number; body: Record<string, unknown> };
@@ -995,7 +1041,10 @@ export function createConcept2Router({
               },
             };
           }
-          const identity: LinkIdentity = { c2UserId: locked.c2UserId };
+          const identity: LinkIdentity = {
+            c2UserId: locked.c2UserId,
+            autoVerify: locked.autoVerify,
+          };
           if (
             retry !== undefined &&
             locked.accessToken !== retry.staleAccessToken
@@ -1305,10 +1354,16 @@ export function createConcept2Router({
         return;
       }
 
+      // Phase AV: resolved ONCE, here, from the link this request locked —
+      // and deliberately NOT re-read below, where `lockedLink` is reassigned
+      // by the refresh retry. Same discipline as the weight class (R13): one
+      // send carries one policy.
+      const autoVerify = lockedLink.autoVerify;
       let payload = buildC2Payload(
         mappingRow,
         resolved.weightClass,
         effectiveTz,
+        autoVerify,
       );
       let postResult = await client.postResult(accessToken, payload);
 
@@ -1330,7 +1385,16 @@ export function createConcept2Router({
         lockedLink = retryOutcome.link;
         // Same class, deliberately: resolved ONCE per request (ruling R13),
         // reused across this retry so one send can never carry two classes.
-        payload = buildC2Payload(mappingRow, resolved.weightClass, effectiveTz);
+        // Same class AND same AUTO VERIFY, deliberately: both resolved ONCE
+        // per request (ruling R13; Phase AV), reused across this retry so one
+        // send can never carry two policies. `lockedLink` was reassigned on
+        // the line above, which is exactly why this reads the captured value.
+        payload = buildC2Payload(
+          mappingRow,
+          resolved.weightClass,
+          effectiveTz,
+          autoVerify,
+        );
         postResult = await client.postResult(accessToken, payload);
 
         // I2: a REPEAT 401 immediately after a GENUINE refresh (or after
@@ -1428,6 +1492,12 @@ export function createConcept2Router({
           logId,
           postResult.resultId,
           lockedLink.c2UserId,
+          // Phase AV: Concept2's own verdict, from THIS response — the
+          // fallback reassigns `postResult` in place, so on a thinned retry
+          // this is attempt 2's, which is correct: attempt 1 4xx'd and
+          // created nothing, and the row that exists is attempt 2's.
+          // `null` when the 201 body carried no boolean.
+          postResult.verified,
         );
         if (!recorded) {
           // Auto-send §3.4: the flag is NOT cleared on this exit although
@@ -1479,6 +1549,13 @@ export function createConcept2Router({
           logId,
           postResult.resultId,
           lockedLink.c2UserId,
+          // Phase AV: NULL, deliberately. A 409 tells us Concept2 already
+          // HAS this row and tells us nothing about whether it is verified —
+          // `C2PostResult`'s duplicate arm carries no verdict at all. Left
+          // untouched instead, a row verified on one account and re-sent
+          // after relinking to another would keep rendering VERIFIED against
+          // a row the new account never verified.
+          null,
         );
         // Wave E auto-send §3.4: a duplicate means Concept2 HAS the row —
         // the delta pass's F3, the exit "on success" enumeration missed.

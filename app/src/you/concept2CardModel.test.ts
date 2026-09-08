@@ -63,6 +63,7 @@ const LINKED: Concept2Link = {
   needsReauth: false,
   logbookBaseUrl: "https://log-dev.concept2.com",
   autoSend: false,
+  autoVerify: false,
   sendFailedAt: null,
   sendFailedReason: null,
 };
@@ -397,12 +398,14 @@ describe("modeLine / linkedPill (Wave E auto-send)", () => {
     needsReauth: false,
     logbookBaseUrl: "https://log-dev.concept2.com",
     autoSend: false,
+    autoVerify: false,
     sendFailedAt: null,
     sendFailedReason: null,
   };
   const flagged = (reason: string | null): Concept2Link => ({
     ...linked,
     autoSend: true,
+    autoVerify: false,
     sendFailedAt: "2026-09-05T12:00:00.000Z",
     sendFailedReason: reason,
   });

@@ -17,6 +17,7 @@ const LINKED_AUTO = {
   needsReauth: false,
   logbookBaseUrl: "https://log-dev.concept2.com",
   autoSend: true,
+  autoVerify: false,
 };
 
 function mockApi(

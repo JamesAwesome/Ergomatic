@@ -39,7 +39,7 @@ afterEach(() => {
 });
 
 describe("LINK_UNAVAILABLE (the flag-off answer, amendment 1h)", () => {
-  it("is all nine fields spelled out, so a corrupted one cannot pass silently", () => {
+  it("is all ten fields spelled out, so a corrupted one cannot pass silently", () => {
     // Review F2: `available` could be flipped to `true` with 27 tests green,
     // because every assertion about it was written as
     // `toStrictEqual(LINK_UNAVAILABLE)` — the symbol comparing to itself. A
@@ -54,6 +54,7 @@ describe("LINK_UNAVAILABLE (the flag-off answer, amendment 1h)", () => {
       needsReauth: false,
       logbookBaseUrl: null,
       autoSend: false,
+      autoVerify: false,
       sendFailedAt: null,
       sendFailedReason: null,
     });
@@ -79,6 +80,7 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       needsReauth: false,
       logbookBaseUrl: null,
       autoSend: false,
+      autoVerify: false,
       sendFailedAt: null,
       sendFailedReason: null,
     });
@@ -93,6 +95,7 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       needsReauth: false,
       logbookBaseUrl: null,
       autoSend: false,
+      autoVerify: false,
       sendFailedAt: null,
       sendFailedReason: null,
     });
@@ -116,6 +119,7 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       needsReauth: true,
       logbookBaseUrl: "https://log-dev.concept2.com",
       autoSend: false,
+      autoVerify: false,
       sendFailedAt: null,
       sendFailedReason: null,
     });
@@ -142,6 +146,7 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       needsReauth: false,
       logbookBaseUrl: null,
       autoSend: false,
+      autoVerify: false,
       sendFailedAt: null,
       sendFailedReason: null,
     });
@@ -199,6 +204,7 @@ describe("normalizeLink (GET /api/concept2/link's three response shapes)", () =>
       needsReauth: false,
       logbookBaseUrl: null,
       autoSend: false,
+      autoVerify: false,
       sendFailedAt: null,
       sendFailedReason: null,
     };
@@ -696,6 +702,26 @@ describe("normalizeLink — autoSend and the send-failed flag (Wave E auto-send)
       expect(normalizeLink({ ...linked, ...extra }).autoSend).toBe(false);
     },
   );
+
+  // Phase AV: AUTO VERIFY gets the SAME fail-closed treatment, and for a
+  // sharper reason than auto-send's. A server that predates the column sends
+  // no key; reading that as ON would verify rows on behalf of a rower who
+  // never asked, which is the exact regression #337 reverted.
+  it("reads a literal true as ON", () => {
+    expect(normalizeLink({ ...linked, autoVerify: true }).autoVerify).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    ["absent (a server that predates the column)", {}],
+    ['the string "true"', { autoVerify: "true" }],
+    ["the number 1", { autoVerify: 1 }],
+    ["false", { autoVerify: false }],
+    ["null", { autoVerify: null }],
+  ])("reads autoVerify %s as OFF — only a literal true is on", (_l, extra) => {
+    expect(normalizeLink({ ...linked, ...extra }).autoVerify).toBe(false);
+  });
 
   it("carries a valued send-failed instant and sub-reason verbatim", () => {
     const link = normalizeLink({

@@ -543,12 +543,18 @@ export function describeStoreContracts(
         const neverSent = await stores.logs.create(mine, logInput());
         const someoneElses = await stores.logs.create(theirs, logInput());
 
-        await stores.logs.recordC2Result(mine, sentToA.id, 111, 2211);
+        await stores.logs.recordC2Result(mine, sentToA.id, 111, 2211, true);
         // The SAME user, a DIFFERENT Concept2 account: a row written while
         // account B was linked says nothing about account A, and excluding
         // it would silently drop a real declaration out of A's page.
-        await stores.logs.recordC2Result(mine, sentToB.id, 222, 9999);
-        await stores.logs.recordC2Result(theirs, someoneElses.id, 333, 2211);
+        await stores.logs.recordC2Result(mine, sentToB.id, 222, 9999, false);
+        await stores.logs.recordC2Result(
+          theirs,
+          someoneElses.id,
+          333,
+          2211,
+          null,
+        );
 
         expect([
           ...(await stores.logs.sentC2ResultIds(mine, 2211)),

@@ -1907,6 +1907,7 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
       needsReauth: false,
       // Wave E auto-send §3.1: a fresh link is MANUAL with no failure flag.
       autoSend: false,
+      autoVerify: false,
       sendFailedAt: null,
       sendFailedReason: null,
     });
@@ -1981,6 +1982,305 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
       (await asA(request(app).get("/api/concept2/link"))).body.autoSend,
     ).toBe(false);
   });
+
+  // Phase AV (spec 2026-09-07-optional-auto-verify): AUTO VERIFY rides the
+  // same PATCH. The two fields are INDEPENDENT — either may arrive alone, and
+  // a patch naming one must not disturb the other. The `{}` case above still
+  // answers with autoSend's message, deliberately: an empty body was already
+  // a 400 and its wording is pinned, so nothing about that path changes.
+  it("PATCH { autoVerify: true } -> 204, and the next GET reads it back", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store });
+    const res = await asA(
+      request(app).patch("/api/concept2/link").send({ autoVerify: true }),
+    );
+    expect(res.status).toBe(204);
+    expect((await store.getLink(userA.id))?.autoVerify).toBe(true);
+    await asA(
+      request(app).patch("/api/concept2/link").send({ autoVerify: false }),
+    );
+    expect((await store.getLink(userA.id))?.autoVerify).toBe(false);
+  });
+
+  it("PATCH { autoVerify } leaves autoSend alone, and the reverse", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store });
+    await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    await asA(
+      request(app).patch("/api/concept2/link").send({ autoVerify: true }),
+    );
+    let row = await store.getLink(userA.id);
+    expect(row?.autoSend).toBe(true);
+    expect(row?.autoVerify).toBe(true);
+    // Now turn ONE off and assert the other survived. Opposed values again,
+    // for the same reason the store test uses them: a route that wrote both
+    // from one field would pass if they always matched.
+    await asA(
+      request(app).patch("/api/concept2/link").send({ autoVerify: false }),
+    );
+    row = await store.getLink(userA.id);
+    expect(row?.autoSend).toBe(true);
+    expect(row?.autoVerify).toBe(false);
+  });
+
+  // THE VERDICT LANDS, and the seam is walked from the SEND, not from a
+  // hand-built row (RF24): the route writes and the store is read after.
+  it("a 2xx stores Concept2's own verified verdict", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 88,
+      verified: true,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect((await logs.get(userA.id, id))?.verified).toBe(true);
+  });
+
+  // THE FEATURE ITSELF, gated at the ROUTE (RF24). Written because the
+  // branch review proved its absence: hard-wiring the route to never forward
+  // the rower's setting (`autoVerify: locked.autoVerify` -> `false`) left
+  // 7708 tests and 543 e2e green. The only ON-path assertion this branch had
+  // called `buildC2Payload(..., true)` with a LITERAL, so nothing tied the
+  // STORED flag to the wire.
+  //
+  // The failure that would have shipped: AUTO VERIFY switched on, the
+  // setting stored, the card reading ON and "Rows arrive verified.", and no
+  // row ever verified. Every gate green.
+  it("the STORED setting reaches the wire: auto_verify on -> the code is posted", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 91,
+      verified: true,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const posted = vi.mocked(client.postResult).mock.calls[0]![1] as Record<
+      string,
+      unknown
+    >;
+    // Derived by hand from the bytes, not read off the implementation: two
+    // LE u32 words from the first EIGHT bytes. 06 47 99 AF -> 0xAF994706;
+    // 54 B0 21 C0 -> 0xC021B054.
+    expect(posted.verification_code).toBe("AF99-4706-C021-B054");
+  });
+
+  it("the STORED setting is obeyed when OFF: the same row posts no code", async () => {
+    // The other arm, on the SAME row, so the only difference is the flag.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 92,
+      verified: false,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const posted = vi.mocked(client.postResult).mock.calls[0]![1] as Record<
+      string,
+      unknown
+    >;
+    expect(posted).not.toHaveProperty("verification_code");
+  });
+
+  // THE STALE-TRUE BUG, gated. Found by the delta antagonist pass before it
+  // could ship: a row verified on ONE Concept2 account, re-sent after
+  // relinking to ANOTHER (which the already-sent short-circuit deliberately
+  // allows), must not keep rendering VERIFIED against a row the new account
+  // never verified. A 409 tells us Concept2 HAS the row and nothing about
+  // its state, so the verdict is NULL — not "leave the column alone".
+  it("a 409 duplicate clears a previous verdict to null rather than leaving it", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+    // The row arrives already carrying a TRUE verdict from an earlier send.
+    await logs.recordC2Result(userA.id, id, 500, 9999, true);
+    expect((await logs.get(userA.id, id))?.verified).toBe(true);
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: false,
+      kind: "duplicate",
+      resultId: 501,
+    });
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect((await logs.get(userA.id, id))?.verified).toBeNull();
+  });
+
+  // RESOLVED ONCE PER SEND, gated. Written because the claim shipped UNGATED
+  // first: a probe swapping the retry's captured `autoVerify` for a fresh
+  // read of the REASSIGNED `lockedLink` passed 179/179 (2026-09-07).
+  //
+  // Arranged, never raced (the concurrency lesson from PR #269): the refresh
+  // runs BETWEEN the two posts, so flipping the stored flag inside the
+  // refresh mock puts the change at exactly the interleaving that matters,
+  // deterministically. A rower toggling AUTO VERIFY mid-send must not have
+  // one send carry two policies.
+  it("a mid-send toggle does not reach the retry: one send, one policy", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(
+      userA.id,
+      freshLink({ accessToken: "stale-at", refreshToken: "rt-1" }),
+    );
+    // Starts OFF, and the row is the one that WOULD verify, so the only
+    // reason no code appears is the captured flag.
+    expect((await store.getLink(userA.id))?.autoVerify).toBe(false);
+    const client = makeStubClient();
+    // THE TOGGLE LANDS DURING THE FIRST POST — which is the only
+    // interleaving where the retry's own locked re-read can see a NEWER
+    // value than the one this send started with. An earlier draft flipped it
+    // inside `refreshTokens` and could not bite: `acquireAccessToken` takes
+    // its locked read BEFORE refreshing, so the reassigned identity still
+    // carried the old flag and the mutant was behaviourally identical.
+    vi.mocked(client.postResult)
+      .mockImplementationOnce(async () => {
+        await store.setAutoVerify(userA.id, true);
+        return { ok: false as const, kind: "auth" as const };
+      })
+      .mockResolvedValueOnce({ ok: true, resultId: 77, verified: false });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "rotated-at",
+        refreshToken: "rotated-rt",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    // The store really did change mid-request — otherwise this test proves
+    // nothing about the capture.
+    expect((await store.getLink(userA.id))?.autoVerify).toBe(true);
+    // Both attempts carry the policy this send STARTED with.
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]![1]).not.toHaveProperty("verification_code");
+    expect(calls[1]![1]).not.toHaveProperty("verification_code");
+  });
+
+  // THE FAIL-CLOSED ORDER, gated. Written because the claim shipped
+  // UNGATED first: a probe that moved autoSend's write above autoVerify's
+  // validation passed 178/178 (2026-09-07). A mixed patch with one bad field
+  // must change NOTHING, and only a test that sends a good field alongside a
+  // bad one can say so.
+  it("a mixed patch with one bad field writes NEITHER (fail-closed order)", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store });
+    // Both start false, so a write of either is visible.
+    const before = await store.getLink(userA.id);
+    expect(before?.autoSend).toBe(false);
+    expect(before?.autoVerify).toBe(false);
+    const res = await asA(
+      request(app)
+        .patch("/api/concept2/link")
+        .send({ autoSend: true, autoVerify: "nope" }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({
+      error: "autoVerify must be a boolean",
+      field: "autoVerify",
+    });
+    const after = await store.getLink(userA.id);
+    expect(after?.autoSend).toBe(false);
+    expect(after?.autoVerify).toBe(false);
+  });
+
+  it.each([
+    ["a string", { autoVerify: "true" }],
+    ["a number", { autoVerify: 1 }],
+    ["null", { autoVerify: null }],
+  ])(
+    "PATCH with autoVerify %s -> 400 field-named; the setting is unchanged",
+    async (_label, body) => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const { app } = buildApp({ store });
+      await asA(
+        request(app).patch("/api/concept2/link").send({ autoVerify: true }),
+      );
+      const res = await asA(
+        request(app).patch("/api/concept2/link").send(body),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body).toStrictEqual({
+        error: "autoVerify must be a boolean",
+        field: "autoVerify",
+      });
+      expect((await store.getLink(userA.id))?.autoVerify).toBe(true);
+    },
+  );
 
   it.each([
     ["a string", { autoSend: "true" }],
@@ -2442,9 +2742,11 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     });
     const { app, logs } = buildApp({ store, client });
     // A divergent row: our sum 5708, the machine's own total 5706.
-    // Phase LP: the store also holds the PM5's 0x003F bytes. They are
-    // deliberately NOT forwarded as Concept2's `verification_code` (James,
-    // 2026-09-07) — the rower verifies by hand, as with ErgData.
+    // Phase LP: the store also holds the PM5's 0x003F bytes. Phase AV made
+    // that conditional — they ride Concept2's `verification_code` only when
+    // the rower has turned AUTO VERIFY on. This link has not (`freshLink()`
+    // defaults it false), so this is an OFF-arm assertion, and the comment
+    // says so rather than restating an absolute the code no longer holds.
     const id = await seedEligibleLog(logs, userA.id, {
       workMeters: 5708,
       machineWorkMeters: 5706,
@@ -2471,8 +2773,10 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     // dropping the field in toMappingRow, posts 5708 and reddens this.
     expect(posted.distance).toBe(5706);
     expect(posted.distance).not.toBe(5708);
-    // The code is deliberately never sent (James, 2026-09-07): Concept2's
-    // own app leaves verification to the rower.
+    // NOT SENT because this link's AUTO VERIFY is off, which is the default
+    // every rower starts on — not because the code is never sent. Phase AV
+    // added the ON arm; it lives beside the two `the STORED setting …` tests
+    // above, which drive the same seam with the flag set.
     expect(posted).not.toHaveProperty("verification_code");
   });
 
@@ -3171,7 +3475,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     const client = makeStubClient();
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
-    await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId);
+    await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId, null);
 
     const res = await asA(
       request(app)
@@ -3255,7 +3559,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       const client = makeStubClient();
       const { app, logs } = buildApp({ store, client });
       const id = await seedEligibleLog(logs, userA.id);
-      await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId);
+      await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId, null);
       const res = await asA(
         request(app)
           .post(`/api/concept2/results/${id}`)
@@ -3519,7 +3823,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     const client = makeStubClient();
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
-    await logs.recordC2Result(userA.id, id, 999, 111);
+    await logs.recordC2Result(userA.id, id, 999, 111, true);
 
     await store.upsertLink(userA.id, freshLink({ c2UserId: 222 }));
     vi.mocked(client.postResult).mockResolvedValue({

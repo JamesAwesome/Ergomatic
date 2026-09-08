@@ -376,6 +376,27 @@ export const sessionLogs = pgTable(
     // at upload, never client input.
     c2ResultId: integer("c2_result_id"),
     c2UserId: integer("c2_user_id"),
+    // Phase AV (spec 2026-09-07-optional-auto-verify): Concept2's own
+    // `verified`, off the 201 body, written by the SAME call that writes the
+    // two ids above.
+    //
+    // THIS IS NOT A MIRROR OF CONCEPT2'S CURRENT STATE, and reading it as
+    // one is the mistake to avoid. It records what Concept2 said AT RECEIPT.
+    // `true` can only become more true, so it is safe to render. `false` and
+    // `null` are NOT distinguishable to the reader and must never be — both
+    // render as no mark. `null` means we did not learn (the 409-duplicate
+    // branch, which tells us Concept2 HAS the row and nothing about its
+    // state); `false` means Concept2 said no at receipt, and the rower may
+    // have verified by hand since, which nothing here would see.
+    //
+    // So the surface may state the POSITIVE and may never state the
+    // negative. There is no "not verified" anywhere in the design.
+    //
+    // NOTHING CLEARS THIS, exactly as nothing clears the two ids above. The
+    // mark is kept honest by a RENDER GATE instead — it shows only while the
+    // row's `c2UserId` still matches the live link (`sentResultId`), so it
+    // cannot outlive the account that earned it.
+    verified: boolean("verified"),
     // completedAt: the client's MonitorRun.completedAt — C2's `date` is
     // the END of the workout and logged_at is save-time, minutes-to-hours
     // later (anchor K3). tz: the client's IANA zone.
@@ -587,6 +608,29 @@ export const concept2Links = pgTable("concept2_links", {
   // account switch must not carry AUTOMATIC onto another Concept2 account);
   // a reconnect of the same account keeps it.
   autoSend: boolean("auto_send").notNull().default(false),
+  // Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
+  // 2026-09-07). OPT-IN, and `DEFAULT false` is the whole product ruling
+  // rather than a convention: PR #336 sent the monitor's verification code
+  // unconditionally, Concept2 marked the row verified at receipt, and James
+  // ruled that a parity REGRESSION — Concept2's own app leaves verifying to
+  // the rower, so doing it for them removes the act this phase exists to
+  // respect. On means the rower asked for it.
+  //
+  // WHY IT LIVES HERE AND NOT IN `preferences`: it inherits `auto_send`'s
+  // account-switch reset in the same `CASE` (`stores/concept2.ts`), because
+  // verifying rows on a Concept2 account the rower did not choose is worse
+  // than merely sending them there — a verified row cannot be un-verified
+  // through any path this app offers (the code is honoured at CREATE and
+  // ignored on update, measured). A `preferences` column has no account to
+  // reset against. The cost, named rather than waved off: a rower who moves
+  // to a new Concept2 account and expects the setting to follow is overridden
+  // silently.
+  //
+  // The reset is SILENT here in a way `auto_send`'s is not — when auto-send
+  // resets, the You screen shows MANUAL and rows stop uploading within a
+  // session; when this resets, nothing the rower looks at changes and rows
+  // quietly stop being verified. That is why the phase ships the mark too.
+  autoVerify: boolean("auto_verify").notNull().default(false),
   // The sticky "sends are failing" flag (rulings 6, 7). Set by the send
   // route ONLY when an eligible send fails with `no_weight_class`; the reason
   // column carries the route's SUB-reason — `no_weight` | `unreadable_weight`

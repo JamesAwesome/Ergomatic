@@ -413,6 +413,14 @@ const LOG_LIST_COLUMNS = {
   // here).
   c2ResultId: sessionLogs.c2ResultId,
   c2UserId: sessionLogs.c2UserId,
+  // Phase AV: the verdict rides the list too, same reasoning as the pair
+  // above — a small scalar with no blob to exclude. Added here because the
+  // census pin below CAUGHT its absence: `verified` reached the schema and
+  // not this hand-maintained mirror, and only the REAL store failed, because
+  // `testing/fakes.ts` projects the list with a rest-spread and so carried
+  // the column the production query dropped. A fake that mirrors by spread
+  // cannot see a projection that mirrors by hand.
+  verified: sessionLogs.verified,
   completedAt: sessionLogs.completedAt,
   tz: sessionLogs.tz,
   // Door spec (2026-09-02) §1.3: the list cannot evaluate clause 3 —
@@ -997,10 +1005,15 @@ export function createLogsStore(db: Db) {
       id: string,
       c2ResultId: number,
       c2UserId: number,
+      // Phase AV: REQUIRED, and `null` is a real value meaning "we did not
+      // learn". Required rather than optional so the compiler makes every
+      // call site say which it is — the 409-duplicate branch has no verdict
+      // to write and must pass `null` deliberately, not by omission.
+      verified: boolean | null,
     ): Promise<boolean> {
       const rows = await db
         .update(sessionLogs)
-        .set({ c2ResultId, c2UserId })
+        .set({ c2ResultId, c2UserId, verified })
         .where(and(eq(sessionLogs.userId, userId), eq(sessionLogs.id, id)))
         .returning({ id: sessionLogs.id });
       return rows.length === 1;

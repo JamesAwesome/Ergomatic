@@ -170,6 +170,12 @@
   --font-serif: "Newsreader", Georgia, serif;
   --font-sans: "Archivo", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  /* The baselines label column. Both readers live in index.css and both
+     said `var(--baseline-label-col, 24px)` against a name nothing declared,
+     so the "single source" their comment claims was 24px written twice in
+     two fallbacks. Declared here so the claim is true; the value is the one
+     the fallbacks already supplied, so nothing moves. */
+  --baseline-label-col: 24px;
 
   /* THE FIRST SIZE SCALE IN THIS CODEBASE (connected-revamp Task 2, design
      spec §8 / revision's own §3/§5/§6 tables). Before this, `tokens.css`
