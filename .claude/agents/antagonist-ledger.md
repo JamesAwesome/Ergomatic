@@ -9054,3 +9054,47 @@ antagonist should start with them.
   between them. It also checked the un-ignored span was genuinely exercised via
   the HTML coverage report, noting the terminal text reporter omits the file
   entirely — the briefing's own warning, hit live.
+
+### 2026-09-07 — "no frame ever emitted this session" is false across connect()'s own reconnect boundary
+
+**Claim:** the undecodable-monitor warning is safe against false positives
+because `maybeEmitFrame`'s `seen` flags are a one-way latch, so its trigger's
+condition ("no frame has EVER been emitted this session") can only be true on
+a monitor never yet read.
+
+**Why it looked true:** `seen` genuinely never resets IN PLACE — grepping
+`driver.ts` for a zero-value write to it returns nothing. Within one driver
+instance the claim holds, and a shallow check stops there satisfied.
+
+**Why it was false:** "session" in the spec's prose (the rower's continuous
+sitting at the erg) and "session" as implemented (one `createPm5Driver`
+closure) are different things. The factory has exactly ONE production call
+site, inside `connect()`, which also mints a fresh `LogicalSession` — and
+`connect()` runs again from the rower's own Try again button after any real
+BLE drop, a path this repo ships, tests and hardware-walked under its own
+name (F1, 2026-08-23). A monitor proven readable before the drop resets to
+`{false,false,false}` on the next connect, so the safety condition can go
+true again with the rower still at the same erg.
+
+**TECHNIQUE — two greps that answer different questions, and the second is
+the one everyone skips.** When a safety argument rests on a variable being a
+one-way latch: (1) grep every zero-value WRITE to it, which proves it never
+un-latches in place; (2) separately, find every call site of its OWNING
+FACTORY, which proves whether "in place" was ever the only way it could
+reset. This spec's confidence rested entirely on the first grep. Only the
+second finds a closure that is simply rebuilt.
+
+**SECOND TECHNIQUE, cheaper, and it would have found this in one command:**
+`git grep -n "mid-session" -- '*.test.tsx' '*.test.ts'`. The codebase's own
+tests already named the scenario. **A UX path this app broke and fixed once
+is exactly where its next design will make the same lifetime assumption
+again** — the fix left behind a well-tested reconnect flow that later specs
+then reason as if it did not exist.
+
+**Corollary found in the same pass, same root:** the trigger's streak had no
+data structure named, and BOTH readings of a single shared counter are wrong
+in opposite directions — incremented on any failure it combines unrelated
+characteristics into a false trigger; reset on any success it can never
+accumulate in the reported incident's own shape, where one broken
+characteristic sits behind two healthy ones. Naming the key is not a detail;
+here it decides whether the mechanism detects the bug it was written for.

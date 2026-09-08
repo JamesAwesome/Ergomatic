@@ -26,17 +26,18 @@ still reads `READY` annotates the lie rather than correcting it.
 
 ## Research
 
-**RF18 checks, run first.** `ls docs/superpowers/research/` — thirteen
-documents, none about decode failure or monitor health. `grep` of ROADMAP for
-the symptom returns only this item's own row and its sibling about the ring.
-No prior work to re-derive.
+**RF18 checks, run first.** `ls docs/superpowers/research/` — none about
+decode failure or monitor health. `grep -n "cannot decode\|can't decode\|decode
+failure" ROADMAP.md` returns only this item's own row and its sibling about the
+ring. No prior work to re-derive. (Counts deliberately not transcribed: they go
+stale, the commands do not.)
 
 ### Does the system already have this concept? Nearly, and reusing it would be wrong
 
 `onCharacteristicDegraded` exists on the transport (`capacitorBle.ts`, mirrored
 on the fake) and looks like the answer. It is not. It reports a characteristic
 that could not be SUBSCRIBED, not one that cannot be DECODED, and
-`useMonitorSession.ts:5139` consumes it by writing one ring line. Its own
+`useMonitorSession.ts` consumes it in its `hasCharacteristicDegraded` branch by writing one ring line. Its own
 comment says the rest out loud:
 
 > *"The ring names the dead characteristic; the session and its driver never
@@ -48,7 +49,7 @@ existing carrier for it.
 
 ### What escapes the driver today: nothing
 
-`driver.ts:2306-2314`, the `mergeStatus` decode path, on a typed parse error:
+`driver.ts`'s `mergeStatus` decode path, on a typed parse error:
 records a `frame-error` ring line and `return`s. **No event is emitted, no
 state changes, and `maybeEmitFrame` is never reached.** The hook cannot know,
 so the surface cannot either. The signal has to be built.
@@ -59,7 +60,7 @@ The trigger is a new mechanism, which the brainstorming rule says must be
 researched rather than invented. The best prior art is our own, and it has
 already survived an adversarial pass:
 
-- **`armedWatch` / `structure-left`** (`driver.ts:5406-5490`) fires only when
+- **`armedWatch` / `structure-left`** (`driver.ts`, the armed-watch branch of the `GENERAL_STATUS` merge) fires only when
   BOTH a consecutive-tick count AND an elapsed-window threshold are met, on a
   STABLE repeated observation. CLAUDE.md records why both halves exist:
   *"BOTH halves, never one alone — the false economy an antagonist pass already
@@ -84,16 +85,80 @@ Fire when ALL of:
 2. **at least `W` milliseconds have passed** since the first of that run, AND
 3. **no `frame` has EVER been emitted this session.**
 
-Condition 3 is what makes this safe and is the one worth defending. It is
-exactly the latch the incident turned on: `maybeEmitFrame` requires
-`seen.general && seen.as1 && seen.as2`, all one-way. If a frame has ever been
-published, the app is working; a later parse hiccup is a hiccup, and the
-lost-monitor and stale paths already cover its consequences. **This warning is
-therefore only ever reachable on a monitor we have never once read**, which is
-precisely the reported case and cannot be triggered mid-row.
+### Condition 3 was WRONG as first written. Corrected after the hardening pass
 
-Recovery: if a frame is ever emitted, the state clears. It cannot re-arm,
-because condition 3 can never be true again in that session.
+The first draft justified condition 3 by saying `maybeEmitFrame`'s
+`seen.general && seen.as1 && seen.as2` flags are one-way, so the warning is
+"only ever reachable on a monitor we have never once read" and "cannot be
+triggered mid-row". **The second half is true. The first half was false, and
+the pass proved it rather than suspecting it.**
+
+`seen` never resets *in place* — grepping `driver.ts` for a zero-value write
+returns nothing, which is what made the claim look safe. But it lives in the
+`createPm5Driver` closure, and that factory has exactly one production call
+site: inside `connect()` in `useMonitorSession.ts`, in the same block that
+mints a fresh `LogicalSession`. **`connect()` runs again from the rower's own
+"Try again" button** after a real BLE drop — a path this repo already ships,
+tests and hardware-walked under its own name (F1, 2026-08-23, "a rower with a
+mid-session Bluetooth drop finding Try again dead exactly where they needed
+it").
+
+So a monitor proven fully readable at 10:00 gets `seen = {false,false,false}`
+at 10:02 after a drop and a retry, and all three conditions can go true again
+while the rower is still sitting at the same erg. The word "session" in the
+prose meant the rower's sitting; the word "session" in the code means one
+driver closure. They diverge exactly at Try again.
+
+**The mid-ROW half survives:** no retry control is offered while a run is
+open, and `ConnectedSurface.tsx` states that no transport this app ships can
+reconnect mid-piece. The live gap is the pre-row window after a drop.
+
+**THE FIX, and it is not a new mechanism.** Move the fact one layer up, to
+where its lifetime is already correct. The hook outlives the driver — it holds
+around forty refs across `connect()` calls — so "has this rower's sitting ever
+produced a readable frame" belongs in a hook-level ref, minted at mount and
+cleared at teardown, not in the driver's per-connect closure. Condition 3 then
+reads against the sitting rather than the attempt, which is what the prose
+always meant.
+
+**Its lifetime table, owed by RF27 and written before implementation:**
+
+| | |
+| --- | --- |
+| Mint | Hook mount, once |
+| Set | The first `frame` event the hook receives, ever |
+| Cleared | Hook teardown only. NOT on disconnect, NOT on `connect()`, NOT on re-arm |
+| Survives | A Try again reconnect, a background/resume cycle, a re-program |
+| Does not survive | Leaving the connected surface, which is correct: a new sitting |
+
+Recovery within an attempt is unchanged: if a frame is emitted, the warning
+clears and cannot re-arm.
+
+### Per-characteristic keying, which the first draft left unspecified
+
+The pass caught that condition 1 has no data structure named, and that both
+obvious readings of a single shared counter are wrong. A counter incremented
+on ANY decode failure lets two interleaved failures on different
+characteristics reach the threshold faster than either one's real streak. A
+counter reset on ANY decode success can never accumulate at all in the
+reported incident's own shape, where a broken `0x0032` sits behind healthy
+`0x0031`/`0x0033` ticks. **The streak and its window are therefore keyed PER
+CHARACTERISTIC.** `mergeStatus` is called once per characteristic and already
+carries the id, so the key is in hand; `driver.ts` has no existing per-
+characteristic streak map to copy, so this one is new and gets its own entry
+in the table above.
+
+### The precedent transfers less cleanly than the first draft claimed
+
+`armedWatch` runs only inside the decode-SUCCESS branch of `mergeStatus`, and
+only once a program has armed. Our trigger must run in the FAILURE branch, on
+a stream where nothing may ever have armed or decoded. **Its two-threshold
+SHAPE is the thing being borrowed; its constants are not.** Adopting
+`STRUCTURE_MISMATCH_TICKS`/`_WINDOW_MS` would import numbers tuned for a
+settle story that does not apply here. Nothing in this repo measures how long
+a healthy monitor can legitimately produce undecodable bytes after a fresh
+resubscribe, so whatever values are chosen are a guess until something
+measures them, and the spec says so rather than dressing them as derived.
 
 **Values are NOT set here.** The antagonist pass should attack them, and
 `armedWatch`'s own constants are the reference point rather than a default to
@@ -133,8 +198,11 @@ walk. The condition is reproducible entirely in the fake once it can hold a
 characteristic broken.
 
 **What we still cannot do, stated plainly:** we hold no capture of a real
-undecodable monitor (measured 2026-09-07: 0x0032 is 17 bytes in 8248 of 8248
-notifications across all committed recordings). So every test here drives
+undecodable monitor. Re-runnable rather than transcribed — over
+`docs/monitor/sessions/**/*.jsonl{,.gz}`, tally the byte length of every `rx`
+notification per characteristic; every committed recording is post-V1.26 and
+no short or malformed status frame appears in any of them. So every test here
+drives
 synthetic corruption, and this spec claims only that the app behaves correctly
 when decoding fails — never that it has been seen doing so against real
 hardware.
@@ -156,16 +224,22 @@ Failing test first, and the seam test starts upstream of the parse
    healthy, the driver emits the new event once both thresholds are met, and
    NOT before either one alone.
 2. **It cannot fire once the app is working.** Emit frames normally first, THEN
-   hold a characteristic broken: no event, because condition 3 is false. This
-   is the assertion that stops a mid-row false alarm.
-3. **The surface.** The phase word reads `CAN'T READ THIS MONITOR`, the warning
+   hold a characteristic broken: no event, because condition 3 is false.
+3. **It cannot fire after a Try again either — the test the first draft was
+   missing.** Emit frames, force a disconnect, reconnect through the same path
+   the retry button uses so a FRESH driver is built, then hold a characteristic
+   broken. Still no event, because the fact now lives in the hook. Without this
+   the suite cannot go red on the defect the hardening pass found: every
+   prescribed test lived inside one driver instance and never crossed the seam
+   where the state resets (recurring failure 24, one layer up).
+4. **The surface.** The phase word reads `CAN'T READ THIS MONITOR`, the warning
    renders with its `role="alert"`, and the plan greys.
-4. **Mutation probes**, each recorded verbatim: drop condition 3 (test 2 goes
+5. **Mutation probes**, each recorded verbatim: drop condition 3 (test 2 goes
    red); drop the elapsed threshold (a burst inside one tick fires it); drop
    the consecutive requirement (an interleaved success no longer breaks the
    run); render the warning without changing the phase word (test 3 goes red on
    the word, proving Option 1 rather than Option 2 shipped).
-5. **Contrast, measured on the BUILT thing.** Gate 0 flagged one estimate: the
+6. **Contrast, measured on the BUILT thing.** Gate 0 flagged one estimate: the
    greyed plan at 42% puts `--ink` at roughly 6.5:1 on `--page`, computed from
    a composite rather than a token pairing. Measure it before merge.
 
