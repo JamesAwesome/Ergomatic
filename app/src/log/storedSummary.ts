@@ -312,6 +312,12 @@ export interface StoredLog {
   // `c2UserId` matches the LIVE link's (spec anchor F8).
   c2ResultId: number | null;
   c2UserId: number | null;
+  /** Phase AV: Concept2's own verdict AT RECEIPT, from the 201 body. NOT a
+   *  mirror of their current state — `true` can only become more true and is
+   *  safe to render; `false` (they said no) and `null` (we did not hear, the
+   *  409 branch) are NOT distinguishable to the reader and both render as no
+   *  mark. Same required-and-nullable convention as the two ids above. */
+  verified: boolean | null;
 }
 
 /** §5D: the read-back's own three pieces. `empty` is the "all four null"

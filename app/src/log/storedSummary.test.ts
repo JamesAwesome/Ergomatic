@@ -72,6 +72,7 @@ function baseRow(overrides: Partial<StoredLog> = {}): StoredLog {
     source: "manual",
     c2ResultId: null,
     c2UserId: null,
+    verified: null,
     steps: [],
     avgSplitSeconds: null,
     timeSeconds: null,

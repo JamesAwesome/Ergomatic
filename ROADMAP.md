@@ -2170,6 +2170,17 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **The log detail issues TWO `GET /api/concept2/link` per view.** Phase AV
+      added the verified mark to `MachineConfirmedBlock`, which needs the live
+      link for its account gate, and `Concept2SendBlock` on the same screen
+      already calls `useConcept2Link()`. The hook has no shared cache — it is
+      a per-call fetch with its own generation ref — so the second caller is a
+      second request, not a second read of one. **Named in the PR that created
+      it rather than discovered later (RF29's shape).** The fix is to lift the
+      read to `FromTheLog` and pass `link` to both blocks, which changes
+      `Concept2SendBlock`'s props and its tests; not carried in Phase AV
+      because it is a refactor that PR did not need.
+
 - [ ] **No committed capture shows the free-row summary's machine tiles.**
       They ship in #351 gated from upstream of the producer — the
       2026-08-31 walk's own bytes replayed through the real driver, hook and

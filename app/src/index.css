@@ -2819,12 +2819,27 @@ button.back-link:disabled,
   margin: 20px 0 0;
 }
 
+/* Phase AV: the title line now carries the mark opposite it, so it becomes a
+   row. Baseline-aligned, and the mark never wraps under the label. */
 .log-machine-confirmed-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   margin: 0 0 4px;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+/* VERIFIED ✓ — --ink #1b1a17 on --page #f4f1e8 = 15.41:1, computed. The same
+   pairing the title beside it already uses, so no new colour and no new
+   check. `white-space: nowrap` because the mark is two tokens and a broken
+   one reads as two separate labels. */
+.log-machine-verified {
+  white-space: nowrap;
   color: var(--ink);
 }
 
