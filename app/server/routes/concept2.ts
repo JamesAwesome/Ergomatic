@@ -777,16 +777,53 @@ export function createConcept2Router({
         return;
       }
       const body = isRec(req.body) ? req.body : {};
-      if (typeof body.autoSend !== "boolean") {
+      // Phase AV: two INDEPENDENT settings on one PATCH — the sending mode
+      // and AUTO VERIFY. Either may arrive alone; a patch naming one must
+      // never write the other. Each present-but-wrong-typed field 400s under
+      // its OWN name, and a body naming neither keeps autoSend's wording,
+      // because `PATCH {}` was already a 400 and its message is pinned.
+      const wantsAutoSend = body.autoSend !== undefined;
+      const wantsAutoVerify = body.autoVerify !== undefined;
+      if (wantsAutoVerify && typeof body.autoVerify !== "boolean") {
+        res
+          .status(400)
+          .json({ error: "autoVerify must be a boolean", field: "autoVerify" });
+        return;
+      }
+      if (!wantsAutoVerify && typeof body.autoSend !== "boolean") {
         res
           .status(400)
           .json({ error: "autoSend must be a boolean", field: "autoSend" });
         return;
       }
-      const updated = await store.setAutoSend(req.user!.id, body.autoSend);
-      if (!updated) {
-        res.status(409).json({ error: "unlinked" });
+      if (wantsAutoSend && typeof body.autoSend !== "boolean") {
+        res
+          .status(400)
+          .json({ error: "autoSend must be a boolean", field: "autoSend" });
         return;
+      }
+      // FAIL-CLOSED ORDER: every field is validated before ANY is written, so
+      // a mixed patch with one bad field changes nothing at all (A2). Writing
+      // as we validate would leave the good half applied under a 400.
+      if (wantsAutoSend) {
+        const updated = await store.setAutoSend(
+          req.user!.id,
+          body.autoSend as boolean,
+        );
+        if (!updated) {
+          res.status(409).json({ error: "unlinked" });
+          return;
+        }
+      }
+      if (wantsAutoVerify) {
+        const updated = await store.setAutoVerify(
+          req.user!.id,
+          body.autoVerify as boolean,
+        );
+        if (!updated) {
+          res.status(409).json({ error: "unlinked" });
+          return;
+        }
       }
       res.status(204).end();
     },

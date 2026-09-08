@@ -1982,6 +1982,75 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     ).toBe(false);
   });
 
+  // Phase AV (spec 2026-09-07-optional-auto-verify): AUTO VERIFY rides the
+  // same PATCH. The two fields are INDEPENDENT — either may arrive alone, and
+  // a patch naming one must not disturb the other. The `{}` case above still
+  // answers with autoSend's message, deliberately: an empty body was already
+  // a 400 and its wording is pinned, so nothing about that path changes.
+  it("PATCH { autoVerify: true } -> 204, and the next GET reads it back", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store });
+    const res = await asA(
+      request(app).patch("/api/concept2/link").send({ autoVerify: true }),
+    );
+    expect(res.status).toBe(204);
+    expect((await store.getLink(userA.id))?.autoVerify).toBe(true);
+    await asA(
+      request(app).patch("/api/concept2/link").send({ autoVerify: false }),
+    );
+    expect((await store.getLink(userA.id))?.autoVerify).toBe(false);
+  });
+
+  it("PATCH { autoVerify } leaves autoSend alone, and the reverse", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store });
+    await asA(
+      request(app).patch("/api/concept2/link").send({ autoSend: true }),
+    );
+    await asA(
+      request(app).patch("/api/concept2/link").send({ autoVerify: true }),
+    );
+    let row = await store.getLink(userA.id);
+    expect(row?.autoSend).toBe(true);
+    expect(row?.autoVerify).toBe(true);
+    // Now turn ONE off and assert the other survived. Opposed values again,
+    // for the same reason the store test uses them: a route that wrote both
+    // from one field would pass if they always matched.
+    await asA(
+      request(app).patch("/api/concept2/link").send({ autoVerify: false }),
+    );
+    row = await store.getLink(userA.id);
+    expect(row?.autoSend).toBe(true);
+    expect(row?.autoVerify).toBe(false);
+  });
+
+  it.each([
+    ["a string", { autoVerify: "true" }],
+    ["a number", { autoVerify: 1 }],
+    ["null", { autoVerify: null }],
+  ])(
+    "PATCH with autoVerify %s -> 400 field-named; the setting is unchanged",
+    async (_label, body) => {
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const { app } = buildApp({ store });
+      await asA(
+        request(app).patch("/api/concept2/link").send({ autoVerify: true }),
+      );
+      const res = await asA(
+        request(app).patch("/api/concept2/link").send(body),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body).toStrictEqual({
+        error: "autoVerify must be a boolean",
+        field: "autoVerify",
+      });
+      expect((await store.getLink(userA.id))?.autoVerify).toBe(true);
+    },
+  );
+
   it.each([
     ["a string", { autoSend: "true" }],
     ["a number", { autoSend: 1 }],
