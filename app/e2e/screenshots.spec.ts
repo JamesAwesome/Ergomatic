@@ -7035,7 +7035,7 @@ test("concept2-screen-armed", async ({ page }) => {
   await routeC2(page, fake);
   await openC2Screen(page, "screenshots-c2-screen-armed@e2e.test");
   // Wave E auto-send: OFF is the unlink (Gate 0 amendment 2026-09-05 §2).
-  await page.getByRole("button", { name: "OFF" }).click();
+  await page.getByRole("button", { name: "OFF", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Tap again to unlink" }),
   ).toBeVisible();

@@ -455,7 +455,7 @@ test.describe("Concept2 link and send, in a real browser", () => {
 
     // Wave E auto-send: Unlink is the control's OFF segment now (spec §3.2,
     // RF23 — one affordance for one destructive act).
-    const unlink = page.getByRole("button", { name: "OFF" });
+    const unlink = page.getByRole("button", { name: "OFF", exact: true });
     await unlink.click();
     // ONE tap arms and fires nothing. The DELETE count is the assertion,
     // not the button's label: a card that changed its words while also
@@ -735,7 +735,7 @@ test.describe("Concept2 link and send, in a real browser", () => {
     fake.unlink = { status: 500, body: { error: "boom" } };
     await openConcept2Screen(page, fake);
 
-    await page.getByRole("button", { name: "OFF" }).click();
+    await page.getByRole("button", { name: "OFF", exact: true }).click();
     await page.getByRole("button", { name: "Tap again to unlink" }).click();
     await expect.poll(() => fake.deletes).toBe(1);
 
@@ -755,7 +755,9 @@ test.describe("Concept2 link and send, in a real browser", () => {
     // The arm is SPENT on every exit, not only the happy one (invariant
     // I2): a live "Tap again to unlink" sitting under a REASON line is one
     // stray tap away from a DELETE the rower has not decided to repeat.
-    await expect(page.getByRole("button", { name: "OFF" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "OFF", exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Tap again to unlink" }),
     ).toHaveCount(0);
@@ -1104,7 +1106,7 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     await openConcept2Screen(page, fake);
     const group = control(page);
     const groupBox = await group.boundingBox();
-    await group.getByRole("button", { name: "OFF" }).click();
+    await group.getByRole("button", { name: "OFF", exact: true }).click();
     const armed = page.getByRole("button", { name: "Tap again to unlink" });
     await expect(armed).toBeVisible();
     // A pending confirmation, not a toggle that is on: no pressed state.
@@ -1135,7 +1137,9 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     expect(fake.patches).toHaveLength(0);
 
     // A tap on a sibling that is hidden cannot happen; the timer disarms.
-    await expect(group.getByRole("button", { name: "OFF" })).toBeVisible({
+    await expect(
+      group.getByRole("button", { name: "OFF", exact: true }),
+    ).toBeVisible({
       timeout: 6000,
     });
     await expect(
@@ -1160,7 +1164,9 @@ test.describe("Concept2 auto-send, in a real browser", () => {
       if (route.request().method() === "DELETE") return; // never answers
       await route.fallback();
     });
-    await control(page).getByRole("button", { name: "OFF" }).click();
+    await control(page)
+      .getByRole("button", { name: "OFF", exact: true })
+      .click();
     const armed = page.getByRole("button", { name: "Tap again to unlink" });
     await armed.click();
     await expect(armed).toBeDisabled();
