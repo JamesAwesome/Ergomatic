@@ -860,7 +860,13 @@ describe("domain stores against real Postgres", () => {
         });
         const { id } = await logs.create(fresh.id, logInput());
 
-        const wrote = await logs.recordC2Result(fresh.id, id, 85557, 2211);
+        const wrote = await logs.recordC2Result(
+          fresh.id,
+          id,
+          85557,
+          2211,
+          true,
+        );
         expect(wrote).toBe(true);
 
         const row = await logs.get(fresh.id, id);
@@ -883,7 +889,7 @@ describe("domain stores against real Postgres", () => {
         });
         const { id } = await logs.create(owner.id, logInput());
 
-        const wrote = await logs.recordC2Result(stranger.id, id, 1, 1);
+        const wrote = await logs.recordC2Result(stranger.id, id, 1, 1, true);
         expect(wrote).toBe(false);
 
         const row = await logs.get(owner.id, id);

@@ -2026,6 +2026,56 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(row?.autoVerify).toBe(false);
   });
 
+  // THE VERDICT LANDS, and the seam is walked from the SEND, not from a
+  // hand-built row (RF24): the route writes and the store is read after.
+  it("a 2xx stores Concept2's own verified verdict", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 88,
+      verified: true,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect((await logs.get(userA.id, id))?.verified).toBe(true);
+  });
+
+  // THE STALE-TRUE BUG, gated. Found by the delta antagonist pass before it
+  // could ship: a row verified on ONE Concept2 account, re-sent after
+  // relinking to ANOTHER (which the already-sent short-circuit deliberately
+  // allows), must not keep rendering VERIFIED against a row the new account
+  // never verified. A 409 tells us Concept2 HAS the row and nothing about
+  // its state, so the verdict is NULL — not "leave the column alone".
+  it("a 409 duplicate clears a previous verdict to null rather than leaving it", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+    // The row arrives already carrying a TRUE verdict from an earlier send.
+    await logs.recordC2Result(userA.id, id, 500, 9999, true);
+    expect((await logs.get(userA.id, id))?.verified).toBe(true);
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: false,
+      kind: "duplicate",
+      resultId: 501,
+    });
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect((await logs.get(userA.id, id))?.verified).toBeNull();
+  });
+
   // RESOLVED ONCE PER SEND, gated. Written because the claim shipped UNGATED
   // first: a probe swapping the retry's captured `autoVerify` for a fresh
   // read of the REASSIGNED `lockedLink` passed 179/179 (2026-09-07).
@@ -3337,7 +3387,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     const client = makeStubClient();
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
-    await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId);
+    await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId, null);
 
     const res = await asA(
       request(app)
@@ -3421,7 +3471,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       const client = makeStubClient();
       const { app, logs } = buildApp({ store, client });
       const id = await seedEligibleLog(logs, userA.id);
-      await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId);
+      await logs.recordC2Result(userA.id, id, 999, LINK_INPUT.c2UserId, null);
       const res = await asA(
         request(app)
           .post(`/api/concept2/results/${id}`)
@@ -3685,7 +3735,7 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     const client = makeStubClient();
     const { app, logs } = buildApp({ store, client });
     const id = await seedEligibleLog(logs, userA.id);
-    await logs.recordC2Result(userA.id, id, 999, 111);
+    await logs.recordC2Result(userA.id, id, 999, 111, true);
 
     await store.upsertLink(userA.id, freshLink({ c2UserId: 222 }));
     vi.mocked(client.postResult).mockResolvedValue({

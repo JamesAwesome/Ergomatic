@@ -376,6 +376,27 @@ export const sessionLogs = pgTable(
     // at upload, never client input.
     c2ResultId: integer("c2_result_id"),
     c2UserId: integer("c2_user_id"),
+    // Phase AV (spec 2026-09-07-optional-auto-verify): Concept2's own
+    // `verified`, off the 201 body, written by the SAME call that writes the
+    // two ids above.
+    //
+    // THIS IS NOT A MIRROR OF CONCEPT2'S CURRENT STATE, and reading it as
+    // one is the mistake to avoid. It records what Concept2 said AT RECEIPT.
+    // `true` can only become more true, so it is safe to render. `false` and
+    // `null` are NOT distinguishable to the reader and must never be — both
+    // render as no mark. `null` means we did not learn (the 409-duplicate
+    // branch, which tells us Concept2 HAS the row and nothing about its
+    // state); `false` means Concept2 said no at receipt, and the rower may
+    // have verified by hand since, which nothing here would see.
+    //
+    // So the surface may state the POSITIVE and may never state the
+    // negative. There is no "not verified" anywhere in the design.
+    //
+    // NOTHING CLEARS THIS, exactly as nothing clears the two ids above. The
+    // mark is kept honest by a RENDER GATE instead — it shows only while the
+    // row's `c2UserId` still matches the live link (`sentResultId`), so it
+    // cannot outlive the account that earned it.
+    verified: boolean("verified"),
     // completedAt: the client's MonitorRun.completedAt — C2's `date` is
     // the END of the workout and logged_at is save-time, minutes-to-hours
     // later (anchor K3). tz: the client's IANA zone.

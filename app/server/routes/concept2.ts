@@ -1489,6 +1489,12 @@ export function createConcept2Router({
           logId,
           postResult.resultId,
           lockedLink.c2UserId,
+          // Phase AV: Concept2's own verdict, from THIS response — the
+          // fallback reassigns `postResult` in place, so on a thinned retry
+          // this is attempt 2's, which is correct: attempt 1 4xx'd and
+          // created nothing, and the row that exists is attempt 2's.
+          // `null` when the 201 body carried no boolean.
+          postResult.verified,
         );
         if (!recorded) {
           // Auto-send §3.4: the flag is NOT cleared on this exit although
@@ -1540,6 +1546,13 @@ export function createConcept2Router({
           logId,
           postResult.resultId,
           lockedLink.c2UserId,
+          // Phase AV: NULL, deliberately. A 409 tells us Concept2 already
+          // HAS this row and tells us nothing about whether it is verified —
+          // `C2PostResult`'s duplicate arm carries no verdict at all. Left
+          // untouched instead, a row verified on one account and re-sent
+          // after relinking to another would keep rendering VERIFIED against
+          // a row the new account never verified.
+          null,
         );
         // Wave E auto-send §3.4: a duplicate means Concept2 HAS the row —
         // the delta pass's F3, the exit "on success" enumeration missed.

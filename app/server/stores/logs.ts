@@ -997,10 +997,15 @@ export function createLogsStore(db: Db) {
       id: string,
       c2ResultId: number,
       c2UserId: number,
+      // Phase AV: REQUIRED, and `null` is a real value meaning "we did not
+      // learn". Required rather than optional so the compiler makes every
+      // call site say which it is — the 409-duplicate branch has no verdict
+      // to write and must pass `null` deliberately, not by omission.
+      verified: boolean | null,
     ): Promise<boolean> {
       const rows = await db
         .update(sessionLogs)
-        .set({ c2ResultId, c2UserId })
+        .set({ c2ResultId, c2UserId, verified })
         .where(and(eq(sessionLogs.userId, userId), eq(sessionLogs.id, id)))
         .returning({ id: sessionLogs.id });
       return rows.length === 1;
