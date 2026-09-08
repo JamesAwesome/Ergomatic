@@ -319,11 +319,46 @@ we have never validated against the monitor, on a monitor measurably 1-3
 minutes off — the failure mode is: the rower turns it on, nothing visibly
 changes, and nothing ever tells them whether it worked.
 
-**This is James's call and it is the one thing Gate 0 cannot decide for him:**
-ship the setting with no in-app feedback and let the "hide it, say verified"
-row (`ROADMAP.md:1205-1220`) follow, or bundle that row's stored `verified` and
-its rendered state into this work so the switch has an observable. The spec
-does not choose.
+**DECIDED (James, 2026-09-07): bundle the observable.** The setting ships with
+Concept2's own verdict stored and rendered, not on its own. The reason it is
+worth the extra column: with an observable, M8/M9's date risk stops being
+silent — a monitor whose clock has drifted out of tolerance shows up as rows
+that do not say verified, instead of as nothing at all.
+
+### The observable, and the one thing it may never say
+
+Store the 201 body's `verified` on the session log beside `c2ResultId` — one
+writer, `recordC2Result` (`stores/logs.ts:995-1007`), which already takes the
+result id and the account id from the same response and is the only place a
+send's outcome lands.
+
+**The asymmetry that governs every word of the copy.** Our 201 tells us
+whether the row verified AT RECEIPT. That is the only moment we observe.
+
+- `verified: true` — true, and it stays true. Say so.
+- `verified: false` — means "not verified at receipt", and **nothing more**.
+  The rower can go and type the code into Concept2 afterwards, exactly as they
+  do today, and we would never learn it: nothing re-reads a row from Concept2
+  after the send.
+
+So the surface may state the positive and **may never state the negative**. "Not
+verified" would be a claim about the present tense that we cannot support, and
+it would be wrong precisely for the rower who did the thing this phase exists
+to respect. The absence of the mark is the only honest rendering of the
+`false` case, and the gate's copy is judged on that.
+
+**This also settles the row it inherits.** `ROADMAP.md:1205-1220` reads *"a
+verification the ROWER performed, never one we caused."* With the setting on we
+DO cause it, and the stored field cannot tell the two apart — both arrive as
+`verified: true` in a 201. The row is amended to what is actually observable:
+Concept2 accepted this row as verified when we sent it. That sentence is true
+under either cause, which is what makes it safe to render.
+
+**Second stored shape, second lifetime row.** `verified` is written once per
+successful send, alongside `c2ResultId`, and cleared by whatever clears those
+(the send-claim path is the only writer). It is NOT a mirror of Concept2's
+current state and the column's own comment must say so, or a future reader will
+treat a stale `false` as authority.
 
 ## Gate 0 — what James approves before anything is built
 
@@ -365,5 +400,9 @@ A rendered artifact, per the design-gate rule, showing:
 
 ## Gates this work carries
 
-**TRIAD — a stored shape.** Full antagonist pass on this spec, PM gate on the
-PR. Gate 0 before implementation. Said aloud rather than assumed.
+**TRIAD — two stored shapes.** `concept2_links.auto_verify` and the session
+log's `verified`. The full antagonist pass ran on the first and its findings
+are folded; **the observable is new ground the pass never saw, so it gets a
+DELTA pass before Gate 0** — RF27's own lesson is that waving a novel mechanism
+through on "inherits the spec's vetted ground" buys the churn back at about one
+invariant per review round. PM gate on the PR. Gate 0 before implementation.
