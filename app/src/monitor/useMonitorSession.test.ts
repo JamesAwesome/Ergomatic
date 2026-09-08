@@ -345,12 +345,26 @@ function spyTransport(inner: Transport & FakeControls): Transport &
   return spy;
 }
 
+/** The spy's own shape, named so `harness`'s `wrap` can preserve it. Typing
+ *  that parameter as a bare `Transport & FakeControls` widened `transport`
+ *  for EVERY test in this file and erased `scans`/`disconnects`/`wireWrites`
+ *  — 80 typecheck errors, none of them in the new tests, all caught by the
+ *  pre-commit hook rather than by vitest, which does not typecheck. */
+type SpiedTransport = ReturnType<typeof spyTransport>;
+
 function harness(
   script: FakeScript,
   deps: Omit<MonitorSessionDeps, "createTransport"> = {},
+  /** Phase MT: an optional extra layer around the spy, for the one test that
+   *  needs the ORDER of writes and the hang-up rather than their counts.
+   *  Threaded through here rather than hand-rolling a `renderHook` beside it,
+   *  because the driver options below are what make the fake's terminate
+   *  settle at all — a bare render leaves the chained disconnect waiting
+   *  forever on a promise that never resolves, which cost a debugging round. */
+  wrap: (t: SpiedTransport) => SpiedTransport = (t) => t,
 ) {
   const fake = createFakeTransport({ deviceName: DEVICE_NAME, ...script });
-  const transport = spyTransport(fake);
+  const transport = wrap(spyTransport(fake));
   const rendered = renderHook(() =>
     useMonitorSession({
       createTransport: () => transport,
@@ -15554,3 +15568,194 @@ describe("the app cannot read this monitor: the fact belongs to the SITTING", ()
     expect(result.current.undecodable).toBe(false);
   });
 });
+
+/**
+ * PHASE MT — the session refuses a machine it cannot record.
+ *
+ * Driven through the REAL fake transport with a script-level machine type, so
+ * these start upstream of the encoder and run the whole seam: fake writes the
+ * byte at its offset, `parseAdditionalStatus1` reads it back, the driver
+ * classifies, the hook refuses. A test that pushed a synthetic
+ * `unsupported-machine` event at the hook would prove only the last hop.
+ */
+/** The exact CSAFE frames `driver.terminate()` puts on the wire, built from
+ *  the same producer the driver uses so a change to the command cannot leave
+ *  this matcher quietly matching nothing. */
+const terminateFrames = buildTerminate().flat();
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+describe("useMonitorSession: an unsupported erg machine", () => {
+  it("a SkiErg sitting fails with the approved copy, and names the machine", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 128,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error).toStrictEqual({
+      reason: "unsupported-machine",
+      detail:
+        "Erg type not supported\nThis monitor is on a SkiErg. Nothing here will start.",
+    });
+  });
+
+  it("a BikeErg says BikeErg, and a Dyno says Dyno — the copy is not one string", async () => {
+    const bike = harness({ program: TWO_INTERVALS, ergMachineType: 192 });
+    await connect(bike.result);
+    await programAndArm(bike.result, bike.fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(bike.result.current.error?.detail).toContain("on a BikeErg");
+
+    const dyno = harness({ program: TWO_INTERVALS, ergMachineType: 64 });
+    await connect(dyno.result);
+    await programAndArm(dyno.result, dyno.fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(dyno.result.current.error?.detail).toContain("on a Dyno");
+  });
+
+  it("a RowErg sitting is untouched — this is the arm that must never fire", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 0,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    // Reached READY, which is the whole point: the arm that must never fire
+    // did not, and the sitting is usable. Asserting only "error is null"
+    // would pass from `pairing` too, before any status frame had arrived.
+    expect(result.current.error).toBeNull();
+    expect(result.current.phase).toBe("ready");
+  });
+
+  it("a monitor too old to carry the field is untouched", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 128,
+      // The frame is 16 bytes, so the machine-type byte is not on the wire at
+      // all — a SkiErg on pre-2018 firmware is indistinguishable from a
+      // RowErg, and refusing on ignorance would break a working erg.
+      preV126Firmware: true,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.phase).toBe("ready");
+  });
+
+  /**
+   * EXIT CRITERION 3, asserted by ORDERING rather than by both merely
+   * happening. `fail()` chains the disconnect behind the terminate promise
+   * because hanging up while a terminate write is in flight can abort it,
+   * leaving the erg ARMED with the workout we just refused (DEVIATIONS row
+   * 63). A test that only checked "terminate was called" and "disconnect was
+   * called" would pass with the chain removed.
+   */
+  it("terminates the erg BEFORE hanging up, never the other way round", async () => {
+    const order: string[] = [];
+    const { result, fake } = harness(
+      { program: TWO_INTERVALS, ergMachineType: 128 },
+      {},
+      (t) => ({
+        ...t,
+        write: (uuid: string, bytes: Uint8Array) => {
+          // THE TERMINATE IS IDENTIFIED BY ITS BYTES, not counted among
+          // "writes". An earlier version of this test recorded every write
+          // alike and asserted `lastIndexOf("write") < indexOf("disconnect")`
+          // — which passes with the `terminate()` argument to `fail()`
+          // DELETED, because the program's own writes still precede the
+          // hang-up. It proved the ordering of things that were never at
+          // risk. The probe found it, not review.
+          order.push(
+            terminateFrames.some((frame) => bytesEqual(frame, bytes))
+              ? "terminate"
+              : "write",
+          );
+          return t.write(uuid, bytes);
+        },
+        disconnect: () => {
+          order.push("disconnect");
+          return t.disconnect();
+        },
+      }),
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    // The hang-up is CHAINED behind the terminate promise, so it cannot land
+    // until that settles on the fake's own clock. The lag IS the behaviour
+    // under test: an unchained `disconnect()` would already sit in `order`,
+    // ahead of the terminate write this assertion requires it to follow.
+    await act(async () => {
+      for (let i = 0; i < 25; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+    });
+
+    expect(result.current.error?.reason).toBe("unsupported-machine");
+    // Both halves matter. The terminate must HAPPEN — deleting `fail()`'s
+    // `driver.terminate()` argument removes it entirely, and the erg is left
+    // armed with the workout we just refused — and it must happen BEFORE the
+    // hang-up, because CoreBluetooth's `cancelPeripheralConnection(_:)` is
+    // nonblocking and can abort a write still in flight (DEVIATIONS row 63).
+    // TWO terminates, and the count is the assertion. `program()`'s own
+    // prepare step sends a best-effort `buildTerminate()` before anything
+    // else, so the frame is on the wire whatever `fail()` does — a matcher
+    // that only asked "did a terminate happen" stayed green with the argument
+    // deleted, which is the second time this one assertion read as evidence
+    // without being any. The refusal's own terminate is the SECOND, and it
+    // must land before the hang-up.
+    const terminates = order.filter((step) => step === "terminate").length;
+    expect(terminates).toBe(2);
+    expect(order).toContain("disconnect");
+    expect(order.lastIndexOf("terminate")).toBeLessThan(
+      order.indexOf("disconnect"),
+    );
+  });
+
+  it("opens no run, so nothing can be stored or sent", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 128,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    expect(result.current.runOpen).toBe(false);
+  });
+});
+
+/**
+ * PHASE MT, review finding 1 — NO GATE HERE YET, AND THAT IS RECORDED RATHER
+ * THAN PAPERED OVER.
+ *
+ * `fail()` carries a guard stopping a standing `unsupported-machine` refusal
+ * from being overwritten by the `program()` rejection the refusal itself
+ * caused. The guard is correct on its face, and it is UNGATED: three attempts
+ * to reproduce the overwrite all went green for the wrong reason, and each
+ * failure says something about the fake worth keeping.
+ *
+ *   - `deaf` withholds 0x0031 so `verifyArmed` stays pending — but it also
+ *     starves the refusal's own `terminate()` settle, so the chained
+ *     `disconnect()` never runs and nothing ever rejects.
+ *   - `failNextProgramFrame: "reject"` rejects BEFORE
+ *     `releaseStatusSubscriptions("arm")`, so no 0x0032 is ever delivered, the
+ *     refusal never fires, and `nak` is the honest outcome.
+ *   - `lagStructureOneTick` holds the structure readback back while 0x0032 has
+ *     landed — the closest shape to hardware — and still produces no second
+ *     `fail()`, so a test written against it passes with the guard deleted.
+ *
+ * What the gate needs is a fake control that withholds 0x0031 for a bounded
+ * number of ticks WITHOUT starving the CSAFE ack path, which no control does
+ * today. Filed under Phase MT in ROADMAP.md. A test that cannot fail is worse
+ * than no test, so there is none here (RF21).
+ */

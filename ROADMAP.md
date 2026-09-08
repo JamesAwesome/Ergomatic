@@ -127,6 +127,149 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **C** | The submission surface      | L    | The most visible wave                       |
 | **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
+## Phase MT — the app refuses a machine it cannot record
+
+**Status: SPEC APPROVED 2026-09-08, in flight.** Shape approved by James the
+same day: **Option A (refuse the sitting) with a DENYLIST**. Spec:
+[docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md](docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md).
+
+The PM5 fits the RowErg, SkiErg and BikeErg, and `ergMachineType` — the field
+that says which — had no consumer from the day it was first decoded until
+this phase. A SkiErg
+therefore connects, gets programmed, and stores its piece as a row. Worse than
+the local wrongness: `server/concept2/mapping.ts` posts a hardcoded
+`type: "rower"`, so such a row is uploaded into the rower's Concept2 logbook as
+a rowing result, and its verification code is guaranteed rejected — Concept2's
+own documentation says the code is accepted only if "date, time, distance,
+workout_type and machine type match".
+
+TRIAD (it decides what a stored row may MEAN): full antagonist pass on the
+spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
+
+- [ ] **PR 1 — the refusal, the link, and the matrix.** A domain denylist
+      stating the RULE rather than a subset of it: refuse every value the vendor
+      NAMES as not rowing — 64 (Dyno), 128/143 (ski), 192-194/207 (bike),
+      225/226 (MultiErg ski/bike) — and allow everything else, named or not,
+      including 224 (MultiErg on a rowing interval). The driver classifies on
+      the FIRST decode; the hook routes it through the existing `fail()` path,
+      which chains a `terminate()` ahead of the disconnect so the workout we
+      just sent is withdrawn from the erg. Safety is an invariant, not a race:
+      `maybeEmitFrame` cannot emit before a 0x0032 has decoded and no record
+      opens without a frame, so nothing can be stored or sent on either connect
+      door. Plus one link, `WHICH ERGS WORK ›`, into `connect-the-monitor`, and
+      a three-tier support matrix published there. No stored-shape change and no
+      migration. **M**
+
+### Owed by this phase, filed here rather than in a PR body
+
+- [ ] **A refused sitting on the FREE-ROW door can still retire a record.**
+      `beginFreeRow()` emits `armed` on the CSAFE ack — the same ack that
+      releases the status subscriptions — so on that door `armed` precedes the
+      first classifiable frame structurally (449 ms, measured in
+      `docs/monitor/sessions/walk-2026-09-03-connect-sooner/ring-2-free-row.json`),
+      and the `armed` handler is where a staged handoff retire fires. James
+      ruled 2026-09-08: ACCEPT, because reaching a staged retire at all requires
+      the rower to have confirmed "connect anyway" over that record, and the
+      alternative (holding the free row's arm until classification) costs every
+      Just Row ~449 ms forever to protect against a machine nobody owns. The
+      handler's comment is corrected in the same PR; this row is the residual.
+      **S**
+- [ ] **The published matrix goes stale silently.** It is a claim in the app's
+      own voice, the same class as a shipped release note (RF9's drift class).
+      Changing `mapping.ts`'s hardcoded `type` or the denylist reconciles the
+      middle tier of `connect-the-monitor` and recounts the registry `minutes`.
+      The trigger is also recorded in the article's own source comment. **S**
+- [ ] **A MultiErg reporting a STATIC ski or bike value would be refused
+      outright.** The
+      vendor sentence that would exclude this — "this will be the one of the
+      MultiErg Machine Types" — is footnote 23, on `0x003C`, the one carrier we
+      do not subscribe. The two we read (footnotes 7 and 11) say only "the
+      Machine Type of the current interval". No capture and no vendor sentence
+      settles what a real MultiErg reports on 0x0032. Unowned, accepted. **S**
+- [ ] **`permission-denied` already ships a five-button action stack, and it
+      leaves a 10px body in landscape.** Measured in Playwright against both
+      engines during Phase MT's design pass, with the harness validated against
+      the committed landscape capture (predicted action-stack top 96px, capture
+      ~97px). `ConnectedInterstitial.tsx` renders `Open Settings` above
+      `Try again` whenever the reason is `permission-denied` and
+      `canOpenAppSettings()`: actions 316px of a 338px column. Pre-existing and
+      unrelated to Phase MT, found only because MT priced a fifth button
+      (4 buttons leave 78px, 5 leave 14px). **S**
+- [ ] **On the web build, the top of an overflowing interstitial body cannot be
+      scrolled to at all.** `.connected-interstitial-body` is
+      `justify-content: center`, which overflows in BOTH directions; chromium
+      clamps `scrollTop` at 0 while the first child sits at -30 to -100px, so
+      the headline is unreachable. WebKit permits negative `scrollTop`
+      (measured range [-101, 102]), so the iOS app can pull it into view and
+      the web build never can. This is why the committed landscape capture
+      shows a headline nobody can scroll to. Web-only, pre-existing. **S**
+- [ ] **"Row on the phone timer instead" is offered on the refusal screen.**
+      After a SkiErg refusal it routes the rower to store the ski piece as a
+      rowing log by hand. No Concept2 upload follows — `eligibilityFailure`
+      gates on `source !== "pm5"` — so only the local harm applies, and it is
+      not clearly wrong, since the likeliest cause of that screen is picking
+      the wrong monitor from a list and that rower does have a RowErg. Filed
+      at the design gate rather than found later. **S**
+- [ ] **Two design gates the refusal screen owes.** Both named with a mutation
+      that bites, neither built. (a) `assertTapTargets` has never measured
+      `.connected-support-link`: `e2e/design.spec.ts`'s failed-interstitial
+      case drives a `link-failed` failure, and the link renders only for
+      `unsupported-machine`. Add `ergMachineType` to `injectConnectedFake` —
+      the fake already consumes `__pm5FakeScript__.ergMachineType` — plus a
+      third case driving the refusal through `sweep(page)`. Mutation: drop
+      `min-height: var(--tap)`; the link measures ~18px and the sweep fails.
+      (b) The gate that would have caught the landscape bug: at 844x390 with
+      `scrollTop === 0`, assert `.connected-serif-line`'s box lies inside
+      `.connected-interstitial-body`'s client rect. Mutation: restore
+      `justify-content: center`; the serif sits at y −73..−37, entirely above
+      the window. Companion: set `scrollTop = -9999` and assert the first
+      child's top is not above the client top, which pins the unreachable
+      region rather than only its symptom. **S**
+- [ ] **The refusal-survives-its-own-consequences guard is UNGATED.** `fail()`
+      refuses to let a standing `unsupported-machine` error be overwritten by
+      the `program()` rejection the refusal itself caused — without it the
+      rower watches the machine message become a generic failure screen a beat
+      later. The guard is correct on its face and NO TEST CAN MAKE IT FAIL.
+      Three routes were tried and all three go green with the guard deleted:
+      `deaf` starves the terminate's own settle so nothing rejects;
+      `failNextProgramFrame` rejects before the status subscriptions release,
+      so the refusal never fires; `lagStructureOneTick` produces no second
+      `fail()` at all. **What it needs is a fake control that withholds 0x0031
+      for a bounded number of ticks without starving the CSAFE ack path.** On
+      hardware the window is the measured 544 ms between the first 0x0032 and
+      `armed`. Found by the whole-branch review, finding 1. **S**
+- [ ] **`connected.spec.ts:1703` poisons its own origin for a later run.** The
+      QuotaExceededError leg fills origin storage until `setItem` genuinely
+      throws; its own title says "junk cleaned up after", but a SECOND run
+      against the same already-booted stack fails at `signInViaBackdoor`,
+      before any assertion. Seen 2026-09-08 during Phase MT: full `pnpm e2e`
+      passed 545/545 on a fresh stack, and re-running that one test against the
+      surviving stack failed. Either the cleanup misses something or the
+      failure is in the harness's own storage use. Costs a debugging round to
+      whoever meets it next. **S**
+- [ ] **A refused machine is still remembered as `LAST USED`.**
+      `ConnectedInterstitial.tsx` calls `saveLastDevice` on every successful
+      pair, and a refusal happens after pairing. Cosmetic; fixing it inside the
+      refusal PR would widen it into the handoff-memory surface. **S**
+- [ ] **`type: "rower"` is still hardcoded for machines the denylist lets
+      through.** Concept2's results enum has separate `dynamic`, `slides` and
+      `multierg` members, and the PM5 enum names `STATIC_DYNAMIC` (8), the
+      `SLIDES_*` family (16-20, 32) and `MULTIERG_*` (224-226). All of them are
+      rowing, so a wrong `type` is a smaller wrong than a SkiErg's — but it is
+      still wrong, and Concept2 rejects the verification code on a machine-type
+      mismatch either way. Deliberate consequence of the approved denylist
+      direction, not an oversight. **S**
+- [ ] **A monitor on pre-2018 firmware cannot be classified at all.**
+      `ergMachineType` is ABSENT below interface revision V1.26/V1.27, and
+      Phase MT does nothing on absence — refusing on ignorance would break a
+      working erg. `0x0016` ("Connected Erg Machine Type", READ) would settle
+      it and needs a `Transport.read`, which is the existing firmware-version
+      register row's dependency too. Both are unblocked by the same work.
+      **But `0x0016` may not exist:** rev 1.30's revision history reads
+      "2/3/2017 ... Deleted Machine Type information in Device Info Service as
+      firmware unable to support it. V1.21." Establish that before costing it.
+      **S**
+
 ## Phase JR — Just Row
 
 **Status: CLOSED 2026-09-01 — released v0.32.0 (build 811), exit walk
@@ -1453,11 +1596,15 @@ closed with zero Concept2 contact.
       undecodable, shaped like `failSubscribe`. **M**
 
 - [ ] **We never check WHICH Concept2 machine is attached, and record
-      everything as a row.** James, 2026-09-08. The PM5 fits the RowErg,
-      SkiErg and BikeErg, and `ergMachineType` — the field that says which —
-      has NO consumer anywhere in `app/src` or `app/domain`. So a SkiErg
-      connects, gets programmed, and its piece is stored as a row: every
-      number internally consistent and quietly wrong about what was done.
+      everything as a row.** IN FLIGHT as Phase MT (spec approved 2026-09-08,
+      Option A + denylist) — see the phase section below. James, 2026-09-08.
+      **The box stays OPEN until it ships in a tag**, the convention the row
+      above states outright; an earlier revision ticked it at spec approval.
+      The PM5 fits the RowErg, SkiErg and BikeErg, and `ergMachineType` — the
+      field that says which — had NO consumer anywhere in `app/src` or
+      `app/domain` until this phase gave it one. So a SkiErg connects, gets
+      programmed, and its piece is stored as a row: every number internally
+      consistent and quietly wrong about what was done.
       **The codebase already knows these differ, in exactly one corner:**
       `domain/concept2/verificationEligibility.ts` keeps a separate rankable
       list for the BikeErg and says outright that we ship no BikeErg and that

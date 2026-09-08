@@ -14,6 +14,7 @@
 //
 // domain/monitor/** imports nothing from src/.
 
+import type { UnsupportedMachine } from "./pm5/ergMachine.js";
 import type { WorkoutProgram } from "./program.js";
 
 export interface MonitorCapabilities {
@@ -441,6 +442,17 @@ export type MonitorEvent =
   // have told the rower whose report produced this that their working erg
   // was the problem.
   | { kind: "undecodable"; characteristic: string }
+  // Phase MT: the monitor has told us it is mounted on a machine this app
+  // does not record — a SkiErg, a BikeErg or a Dyno. Distinct from
+  // `undecodable` in every way that matters: those bytes FAILED to decode and
+  // the verdict is ours about the wire, while these decoded perfectly and the
+  // verdict is the MACHINE'S about itself. That is why this one names the
+  // machine to the rower and `undecodable` deliberately names nothing.
+  //
+  // `machine` is what the rower is told ("This monitor is on a SkiErg");
+  // `value` is the raw enum byte, for the ring only, so a wrong classification
+  // is diagnosable from an exported log without a rebuild.
+  | { kind: "unsupported-machine"; machine: UnsupportedMachine; value: number }
   // Programming done, the PM waits for stroke one. `freeRow` names WHICH
   // arm answered, because the two have different acceptance semantics and a
   // consumer has to be able to tell them apart (spec 2026-09-03 Part 2):

@@ -556,6 +556,21 @@ export function buildC2Payload(
     : workSeconds;
 
   const post: Record<string, unknown> = {
+    // PHASE MT TRIGGER (2026-09-08). This literal is correct for every row the
+    // app can now open — `domain/monitor/pm5/ergMachine.ts` refuses every
+    // machine the PM5 names as not rowing before a record can exist. It stays
+    // WRONG for a Dynamic RowErg, a RowErg on slides, and a MultiErg on a
+    // rowing interval, which the denylist deliberately lets through and for
+    // which Concept2's own results enum has `dynamic`, `slides` and `multierg`
+    // members.
+    //
+    // THE APP SAYS SO OUT LOUD, so changing this line is not a local edit: the
+    // "Which ergs work" section of `src/news/content/bodies/connectTheMonitor.tsx`
+    // states this limitation in the app's own voice, and its `minutes` figure
+    // in `articles.tsx` is recounted whenever that prose changes. Reconcile
+    // both here, not later. The trigger lives at THIS line rather than only
+    // beside the claim, because a staleness note recorded at the reader never
+    // reaches the person editing the code that falsifies it.
     type: "rower",
     date: formatC2Date(instant, tz),
     timezone: tz,

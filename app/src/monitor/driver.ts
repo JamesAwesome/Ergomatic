@@ -91,6 +91,7 @@ import {
   type RawPm5Status,
   type WorkoutSummary,
 } from "../../domain/monitor/pm5/parse.js";
+import { unsupportedErgMachine } from "../../domain/monitor/pm5/ergMachine.js";
 import {
   parseCsafeResponse,
   type CsafeFrameStatus,
@@ -1841,6 +1842,16 @@ export function createPm5Driver(
   const UNDECODABLE_WINDOW_MS = 5000;
   const decodeFail = new Map<string, { streak: number; since: number }>();
   let undecodableFired = false;
+  /** Phase MT: at most ONE `unsupported-machine` per driver instance. The
+   *  latch is driver-local ON PURPOSE, and #361's hardening trap does not
+   *  apply. That feature's fact was "this sitting has NEVER produced a
+   *  readable frame" — a negative a fresh driver cannot re-derive, so it had
+   *  to move up a layer. Ours is a POSITIVE fact re-derived from the very
+   *  first 0x0032 of any reconnect, and since `maybeEmitFrame` cannot emit
+   *  before `seen.as1`, it is re-derived before anything downstream can act
+   *  on its absence. Reconnecting to the same SkiErg re-refuses; reconnecting
+   *  to a RowErg inherits no stale refusal. */
+  let unsupportedMachineFired = false;
   /**
    * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): the
    * Split/Interval Number each half of the pending boundary reported, or
@@ -2373,8 +2384,50 @@ export function createPm5Driver(
       // A clean decode breaks THIS characteristic's run and no other's.
       decodeFail.delete(characteristic);
       raw = { ...raw, ...decoded };
+      classifyErgMachine(decoded);
       after(decoded, bytes);
     });
+  }
+
+  /**
+   * WHICH MACHINE IS THIS MONITOR ON (Phase MT)?
+   *
+   * ONE site, deliberately, rather than a check inside each carrier's own
+   * `after` callback: `ergMachineType` rides 0x0032 (offset 16) and 0x0038
+   * (offset 18) today and 0x003C carries it too, so a property test here
+   * classifies whatever carrier delivers it first and cannot be forgotten
+   * when a fourth is subscribed.
+   *
+   * Fires on the FIRST classifying observation. An earlier revision of the
+   * spec required two consecutive agreeing readings, priced as "one sample
+   * interval of insurance". Measured, that was 94% of the design's only
+   * margin (544 ms, from
+   * `docs/monitor/sessions/walk-2026-09-03-connect-sooner/ring-3-programmed-workout.json`)
+   * and REVERSED the ordering on the two committed captures that tick at
+   * 1008 ms rather than 508 ms. It also guarded an event with no evidence of
+   * existing: BLE PDUs are CRC'd and retransmitted, and a short or garbled
+   * frame returns a typed `Pm5ParseError` and never reaches this function.
+   *
+   * ABSENCE IS NOT A REFUSAL: pre-V1.26/V1.27 firmware omits the field
+   * entirely, the `typeof` guard below returns on it, and
+   * `unsupportedErgMachine` takes `number | null` so absence is stated rather
+   * than implied (RF33).
+   */
+  function classifyErgMachine(decoded: object): void {
+    if (unsupportedMachineFired) return;
+    // ONE guard, not two. This used to test `"ergMachineType" in decoded`
+    // first, which reads as the absence check and is fully SHADOWED by the
+    // `typeof` below: an omitted property yields `undefined`, and
+    // `typeof undefined !== "number"` already returns. Deleting it changed no
+    // behaviour and no test could go red on it — a line that reads as a gate
+    // and is not one (whole-branch review, finding 5).
+    const value = (decoded as { ergMachineType?: unknown }).ergMachineType;
+    if (typeof value !== "number") return;
+    const machine = unsupportedErgMachine(value);
+    if (machine === null) return;
+    unsupportedMachineFired = true;
+    log.record("unsupported-machine", `${machine} (ergMachineType=${value})`);
+    emit({ kind: "unsupported-machine", machine, value });
   }
 
   function announceReconnectIfPending(): void {

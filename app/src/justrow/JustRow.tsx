@@ -26,6 +26,7 @@ import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import { deriveAxes } from "../monitor/connectedAxes";
 import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption";
 import { read as readHandoff } from "../monitor/handoffStore";
+import SupportMatrixLink from "../monitor/SupportMatrixLink";
 import { useMonitorSession } from "../monitor/useMonitorSession";
 import ChecklistLine from "../workout/ChecklistLine";
 import ConnectedSurface from "../workout/ConnectedSurface";
@@ -288,17 +289,37 @@ export default function JustRow() {
       <main className="screen connected-interstitial">
         <div className="connected-interstitial-body">
           <p className="connected-status-label">JUST ROW</p>
-          <h1 className="connected-serif-line">Could not connect</h1>
+          {/* Phase MT, Gate 0: the headline is HARD-CODED for every failure
+              this frame had before, and "Could not connect" is true for all of
+              them. It is a lie for an unsupported machine — we connected
+              perfectly, which is exactly how we know what the machine is. So
+              that one reason takes its headline from the message's own first
+              line, which is the rule `ConnectedInterstitial.tsx`'s
+              `failedSerifLine` already follows for every non-machine-refusal
+              reason. Every other failure keeps the fixed string. */}
+          <h1 className="connected-serif-line">
+            {session.error?.reason === "unsupported-machine"
+              ? session.error.detail.split("\n")[0]
+              : "Could not connect"}
+          </h1>
           {/* A detail carrying a line break (the not-advertising card,
               follow-on Gate 0 §3) renders as one body line per line — the
               same rule the workout interstitial applies (antagonist F2:
               a second renderer of the same field must keep the break). */}
           {session.error !== null &&
-            session.error.detail.split("\n").map((line) => (
-              <p key={line} className="connected-body-line">
-                {line}
-              </p>
-            ))}
+            session.error.detail
+              .split("\n")
+              // Phase MT: the first line is the headline above for an
+              // unsupported machine, so it must not also print as a body line.
+              .slice(session.error.reason === "unsupported-machine" ? 1 : 0)
+              .map((line) => (
+                <p key={line} className="connected-body-line">
+                  {line}
+                </p>
+              ))}
+          {session.error?.reason === "unsupported-machine" && (
+            <SupportMatrixLink />
+          )}
         </div>
         <div className="action-stack connected-interstitial-actions">
           <button

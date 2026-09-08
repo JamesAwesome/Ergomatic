@@ -60,6 +60,7 @@ import {
   type MonitorFrame,
   type Transport,
 } from "../../domain/monitor/types.js";
+import type { UnsupportedMachine } from "../../domain/monitor/pm5/ergMachine.js";
 import {
   createPm5Driver,
   ProgramBusyError,
@@ -190,6 +191,28 @@ export type ConnectedPhase =
  * `ProgramRejectionError`'s own hex trace, or a thrown error's message) for
  * state 6's DETAIL panel.
  */
+/**
+ * THE REFUSAL'S COPY, approved at Gate 0 (James, 2026-09-08).
+ *
+ * Two lines separated by `\n`, because both failure frames split `detail` on
+ * it: `ConnectedInterstitial.tsx` renders line 1 as the serif headline and the
+ * rest as body lines, and `JustRow.tsx` does the same since Phase MT.
+ *
+ * NAME THE MACHINE, NOT THE MONITOR. RF32 anonymises "PM5" in copy unless we
+ * are saying WHICH monitor — and this is the exception the rule itself names,
+ * because the entire sentence is about which machine it is. "SkiErg",
+ * "BikeErg" and "Dyno" are the machines' own names.
+ *
+ * The headline is a terse fragment because its neighbours are: "Could not
+ * connect", "Lost the monitor" and "Bluetooth permission needed" are the other
+ * hard-coded serif lines on these two screens, and none of them is a sentence.
+ */
+function unsupportedMachineDetail(machine: UnsupportedMachine): string {
+  const name =
+    machine === "ski" ? "SkiErg" : machine === "bike" ? "BikeErg" : "Dyno";
+  return `Erg type not supported\nThis monitor is on a ${name}. Nothing here will start.`;
+}
+
 export interface ConnectedError {
   reason:
     | ProgramRejectionReason
@@ -207,7 +230,16 @@ export interface ConnectedError {
     | "target-already-connected"
     | "target-ambiguous"
     | "target-interrupted"
-    | "scan-cleanup-failed";
+    | "scan-cleanup-failed"
+    // Phase MT: the monitor decoded perfectly and told us it is on a machine
+    // this app does not record. NOT a lookup or radio failure like the five
+    // above, and NOT the PM5 refusing our workout like the seven
+    // `ProgramRejectionReason` values — it is US refusing the machine, which
+    // is why `ConnectedInterstitial.tsx`'s `NOT_A_MACHINE_REFUSAL` marks it
+    // `true` and the "End whatever is showing on the monitor" line is
+    // suppressed. There is nothing on the monitor to end; we already
+    // terminated it.
+    | "unsupported-machine";
   detail: string;
   raw?: string;
 }
@@ -3766,6 +3798,34 @@ export function useMonitorSession(
         // any prior state, the failure-card's "Row on the phone timer
         // instead") has destroyed nothing.
         //
+        // CORRECTED, PHASE MT (2026-09-08) — the sentence above is no longer
+        // absolute, and saying so here rather than leaving it to read as a
+        // guarantee is the point (RF18: a comment that names its own
+        // precondition is a tripwire, and this design is exactly the caller
+        // that steps over it).
+        //
+        // `unsupported-machine` IS a failure that can reach past this event,
+        // and on the FREE-ROW door it always does: `beginFreeRow()` emits
+        // `armed` on the p.80 CSAFE ack, and that same ack is what releases
+        // the deferred status subscriptions — so the first classifiable
+        // 0x0032 lands AFTER `armed`, structurally, measured at 449 ms in
+        // `docs/monitor/sessions/walk-2026-09-03-connect-sooner/ring-2-free-row.json`.
+        // A refused sitting on that door therefore retires the staged record
+        // and then refuses.
+        //
+        // ACCEPTED, not overlooked (James, 2026-09-08). Reaching a staged
+        // retire at all requires the rower to have already confirmed "connect
+        // anyway" over that record, so it is a consented discard followed by a
+        // refused sitting rather than silent data loss; and the alternative —
+        // holding the free row's `armed` until classification — costs every
+        // Just Row ~449 ms forever to protect against a machine nobody owns.
+        // The residual has its own ROADMAP row under Phase MT.
+        //
+        // What is NOT at risk here is the record itself: no `MonitorRun` can
+        // have opened, because `maybeEmitFrame` cannot emit before `seen.as1`
+        // and a run only opens at the `ready` -> `live` transition a frame
+        // drives.
+        //
         // `takeStagedRetireHandoff()` consumes (returns AND clears) the
         // set unconditionally — a no-op array when `ConnectAction.tsx`
         // never had anything to stage. Key-bound to whatever was staged:
@@ -4720,6 +4780,33 @@ export function useMonitorSession(
 
   const fail = useCallback(
     (error: ConnectedError, pendingTerminate?: Promise<void>): void => {
+      // PHASE MT: A REFUSAL SURVIVES ITS OWN CONSEQUENCES (whole-branch
+      // review, finding 1).
+      //
+      // Refusing an unsupported machine terminates the erg and hangs up, and
+      // BOTH of those break whatever `program()` call was still in flight —
+      // `verifyArmed` loses its arm, or the send is cut off mid-frame. That
+      // rejection reaches `program()`'s catch, which calls `fail()` again,
+      // and `update()` below is a blind write. Without this guard the rower
+      // watches "Erg type not supported" turn into a generic failure screen
+      // with no mention of the machine and no support-matrix link — the whole
+      // user-visible half of the feature, lost a beat after it appeared.
+      //
+      // Guarded HERE rather than at `program()`'s catch, because the catch is
+      // not the only caller that can land after a refusal, and a guard at one
+      // call site would be this repo's recurring half-applied invariant
+      // (RF34). The refusal is terminal for the attempt: the link is already
+      // down and `driverRef` already null by the time any later failure
+      // arrives, so there is nothing a second error could usefully add.
+      //
+      // It does NOT outlive the attempt: `connect()` clears `error` before
+      // anything can fail again, so a later sitting on a RowErg is unaffected.
+      if (
+        stateRef.current.error?.reason === "unsupported-machine" &&
+        error.reason !== "unsupported-machine"
+      ) {
+        return;
+      }
       // Phase LL Task 1, exit criterion 7: the ring gains the liveness
       // snapshot on FAILURE — the 2026-08-20 walk lost F-1's evidence
       // precisely because the ring's only door was downstream of the
@@ -5162,9 +5249,43 @@ export function useMonitorSession(
           framesEverEmitted: () => framesEverEmittedRef.current,
         });
         driverRef.current = driver;
-        unsubscribeRef.current = driver.events((event) =>
-          handleEvent(event, driver),
-        );
+        unsubscribeRef.current = driver.events((event) => {
+          // PHASE MT: THE REFUSAL IS INTERCEPTED HERE, NOT IN `handleEvent`,
+          // and the reason is structural rather than stylistic. `handleEvent`
+          // is declared above `fail`, so calling it from there is a
+          // use-before-declaration the lint rule catches — and the rule is
+          // right, because `fail` is a `useCallback` whose identity changes.
+          // This closure is built inside the effect that already lists `fail`
+          // in its own dependency array, so the reference here is always the
+          // current one.
+          //
+          // OPTION A, THE WHOLE OF IT (design spec): withdraw the workout we
+          // just programmed, hang up, and say so. `fail()` already does every
+          // part of that, and `terminate()` is PASSED rather than fired
+          // fire-and-forget so the disconnect chains behind it — hanging up
+          // while a terminate write is in flight can abort it and leave the
+          // erg ARMED with the workout we just refused (DEVIATIONS row 63;
+          // `fail()`'s own comment carries the CoreBluetooth contract).
+          //
+          // NOTHING CAN HAVE BEEN STORED, and that is an invariant, not a
+          // race: `driver.ts`'s `maybeEmitFrame` returns early unless
+          // `seen.general && seen.as1 && seen.as2`, `seen.as1` is set by the
+          // very 0x0032 decode that classifies, and a record opens only at
+          // the `ready` -> `live` transition a frame drives. So no frame —
+          // and therefore no record — can precede the classification, on
+          // either connect door, whatever the sample rate does.
+          if (event.kind === "unsupported-machine") {
+            fail(
+              {
+                reason: "unsupported-machine",
+                detail: unsupportedMachineDetail(event.machine),
+              },
+              driver.terminate(),
+            );
+            return;
+          }
+          handleEvent(event, driver);
+        });
         // Phase LL Task 2 mechanism 3 (§2): a STATUS-characteristic
         // subscribe rejection degrades rather than ending the session — the
         // CSAFE control characteristic's own rejection stays FATAL exactly

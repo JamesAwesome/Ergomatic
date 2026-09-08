@@ -13637,3 +13637,184 @@ describe("createPm5Driver: a monitor whose bytes never decode", () => {
     expect(undecodables(events)).toHaveLength(1);
   });
 });
+
+/**
+ * PHASE MT — the driver notices a machine this app cannot record.
+ *
+ * PRODUCER-FIRST, DELIBERATELY (RF24). Every test here builds REAL wire bytes
+ * through `buildAdditionalStatus1Bytes` / `buildAdditionalSplitIntervalDataBytes`
+ * and pushes them at the transport; none hands the driver a decoded object.
+ * The defect this guards is a seam — the encoder writes the byte at offset 16,
+ * `parseAdditionalStatus1` reads it back, and the classifier judges it — and a
+ * test that started downstream of the encoder could not go red on a wrong
+ * offset.
+ */
+describe("Phase MT: unsupported erg machine", () => {
+  function subscribed() {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    return { transport, log, driver, events };
+  }
+
+  function as1(ergMachineType: number, form: "v126" | "pre-v126" = "v126") {
+    return buildAdditionalStatus1Bytes(
+      {
+        elapsedSeconds: 0,
+        speedMetersPerSecond: 0,
+        spm: 0,
+        heartRateBpm: null,
+        currentSplit: 0,
+        averageSplit: 0,
+        restDistanceMeters: 0,
+        restSeconds: 0,
+        ergMachineType,
+      },
+      form,
+    );
+  }
+
+  function unsupported(events: MonitorEvent[]) {
+    return events.filter((e) => e.kind === "unsupported-machine");
+  }
+
+  it("a SkiErg's 0x0032 emits unsupported-machine naming the ski, from real wire bytes", () => {
+    const { transport, events } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(128));
+    expect(unsupported(events)).toStrictEqual([
+      { kind: "unsupported-machine", machine: "ski", value: 128 },
+    ]);
+  });
+
+  it("a BikeErg's 0x0032 names the bike", () => {
+    const { transport, events } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(192));
+    expect(unsupported(events)).toStrictEqual([
+      { kind: "unsupported-machine", machine: "bike", value: 192 },
+    ]);
+  });
+
+  it("a Dyno's 0x0032 names the dyno — the third named non-rowing machine", () => {
+    const { transport, events } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(64));
+    expect(unsupported(events)).toStrictEqual([
+      { kind: "unsupported-machine", machine: "dyno", value: 64 },
+    ]);
+  });
+
+  it("a RowErg (0) says nothing at all", () => {
+    const { transport, events } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(0));
+    expect(unsupported(events)).toStrictEqual([]);
+  });
+
+  /**
+   * ABSENCE IS NOT A REFUSAL, tested against the SHORT FRAME rather than
+   * against a `null` handed to the domain: a pre-V1.26 monitor sends 16 bytes
+   * and `parse.ts` omits the property. This is the arm that would break a
+   * working erg if it ever classified, so it is gated on the bytes.
+   */
+  it("a pre-V1.26 monitor, whose frame carries no machine type at all, says nothing", () => {
+    const { transport, events } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(128, "pre-v126"));
+    expect(unsupported(events)).toStrictEqual([]);
+  });
+
+  it("0x0038 carries the field too, and classifies from it", () => {
+    const { transport, events } = subscribed();
+    transport.notify(
+      ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+      buildAdditionalSplitIntervalDataBytes({
+        elapsedSeconds: 0,
+        splitIntervalAvgStrokeRate: 0,
+        splitIntervalWorkHeartRateBpm: null,
+        splitIntervalRestHeartRateBpm: null,
+        splitIntervalAvgPace: 0,
+        splitIntervalTotalCalories: 0,
+        splitIntervalAvgCalories: 0,
+        splitIntervalSpeedMetersPerSecond: 0,
+        splitIntervalPowerWatts: 0,
+        splitAvgDragFactor: 0,
+        splitIntervalNumber: 0,
+        ergMachineType: 226,
+      }),
+    );
+    expect(unsupported(events)).toStrictEqual([
+      { kind: "unsupported-machine", machine: "bike", value: 226 },
+    ]);
+  });
+
+  it("fires ONCE however many refusing frames arrive", () => {
+    const { transport, events } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(128));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(128));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(128));
+    expect(unsupported(events)).toHaveLength(1);
+  });
+
+  /**
+   * THE INVARIANT THE WHOLE DESIGN RESTS ON, asserted as an ordering fact and
+   * never as a timing one.
+   *
+   * `maybeEmitFrame` returns early unless `seen.general && seen.as1 &&
+   * seen.as2`, and `seen.as1` is set by the same 0x0032 decode that
+   * classifies. A record opens only at the `ready` -> `live` transition a
+   * `frame` drives. So the refusal cannot arrive after a frame — on either
+   * connect door, whatever the sample rate does.
+   *
+   * The general-status frame is delivered LAST here on purpose: that is the
+   * only characteristic whose handler calls `maybeEmitFrame`, so this is the
+   * ordering most likely to let a frame slip out first if the classification
+   * were wired after the merge instead of before it.
+   */
+  it("the refusal precedes the first frame, because no frame can exist before 0x0032 has decoded", () => {
+    const { transport, events } = subscribed();
+    const generalStatus = buildGeneralStatusBytes({
+      elapsedSeconds: 30,
+      distanceMeters: 100,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      rowingState: 1,
+      strokeState: 1,
+      totalWorkDistanceMeters: 100,
+      workoutDurationRaw: 0,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+    // THE ORDER IS THE TEST. 0x0031 is the only characteristic whose handler
+    // calls `maybeEmitFrame`, so it arrives FIRST here — before the 0x0032
+    // that classifies. If `maybeEmitFrame`'s `seen.as1` conjunct were ever
+    // dropped, that first general-status tick would emit a frame while the
+    // machine type is still unknown, and this assertion inverts.
+    //
+    // An earlier version of this test delivered 0x0031 LAST and was
+    // decoration: deleting the `seen.as1` conjunct left it green, because
+    // 0x0032 had already arrived by the time a frame could be emitted either
+    // way. The probe found that, not review.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(GENERAL_STATUS_UUID, generalStatus);
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(0);
+
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(128));
+    transport.notify(GENERAL_STATUS_UUID, generalStatus);
+
+    const refusal = events.findIndex((e) => e.kind === "unsupported-machine");
+    const firstFrame = events.findIndex((e) => e.kind === "frame");
+    expect(refusal).toBeGreaterThanOrEqual(0);
+    expect(firstFrame).toBeGreaterThanOrEqual(0);
+    expect(refusal).toBeLessThan(firstFrame);
+  });
+
+  it("names the machine and the raw byte in the ring, so a wrong call is diagnosable from an export", () => {
+    const { transport, log } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(143));
+    expect(
+      log.entries().filter((e) => e.kind === "unsupported-machine"),
+    ).toStrictEqual([
+      expect.objectContaining({ detail: "ski (ergMachineType=143)" }),
+    ]);
+  });
+});

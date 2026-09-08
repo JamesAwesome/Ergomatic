@@ -35,6 +35,48 @@ export function ConnectTheMonitorBody() {
         switched on. Your first baseline row works either way; connect whenever
         you're ready.
       </p>
+
+      {/* THE SUPPORT MATRIX (Phase MT, James 2026-09-08: three tiers, "to help
+          with the honesty / transparency"). The refusal screen links straight
+          here, so this section is the answer to a question a rower has just
+          been asked at an erg.
+
+          h2-led sections, NOT a table: `.reader-body` styles p, h2,
+          `.reader-inset` and `.reader-figure` and carries no table rules at
+          all, so a table would be new CSS and a bad screen in a 320px column.
+
+          THIS IS A PUBLISHED CLAIM AND IT GOES STALE SILENTLY — the same class
+          as a shipped release note. Changing `server/concept2/mapping.ts`'s
+          hardcoded `type: "rower"`, or the denylist in
+          `domain/monitor/pm5/ergMachine.ts`, reconciles the middle tier below
+          AND recounts `minutes` in `articles.tsx`. Its ROADMAP row says so
+          too; this comment is here because the recount habit already lives at
+          the registry and a reader of this file needs the same trigger. */}
+      <h2>Which ergs work</h2>
+
+      <p>
+        <strong>Supported: confirmed.</strong> One machine: the RowErg this app
+        was built and tested against. Everything below this line is honest
+        guesswork until someone rows on one and tells us.
+      </p>
+
+      <p>
+        <strong>Supported: best effort.</strong> Dynamic RowErgs, RowErgs on
+        slides, MultiErgs on a rowing interval, and any monitor too old to tell
+        us what it is. The piece itself is right: it is rowing, and pace per
+        500m means what it says. But Ergomatic tells Concept2 it was a plain
+        RowErg, so the logbook entry names the wrong machine. If you have auto
+        verification on, that row's code will not be accepted either. Both are
+        on the list to fix.
+      </p>
+
+      <p>
+        <strong>Unsupported.</strong> SkiErg, BikeErg and Dyno. On a monitor new
+        enough to say what it is, Ergomatic refuses these rather than storing
+        them as rows: nothing is programmed, nothing is recorded, nothing is
+        sent. A monitor made before 2018 does not report its machine, so it is
+        treated as a RowErg.
+      </p>
     </>
   );
 }

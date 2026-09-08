@@ -6029,7 +6029,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 12px;
   /* So a genuinely long body (the failed state's DETAIL panel with a real
      raw trace) still scrolls internally rather than pushing the action
@@ -6045,12 +6045,75 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin-top: 12px;
 }
 
+/* SAFE CENTRING, not `justify-content: center` (Phase MT follow-on, James
+   2026-09-08). Auto margins absorb positive free space and resolve to zero
+   when the free space is negative, so this centres exactly as before when the
+   body fits and top-aligns the moment it overflows.
+
+   `justify-content: center` splits the overflow ABOVE and BELOW the window.
+   Measured at 844x390 on the unsupported-machine frame, 99px of content sat
+   above `scrollTop: 0` — chromium clamps there and reports `scrollHeight` 177
+   for a 276px column, so the headline was UNREACHABLE at any scroll position,
+   while webkit allowed `scrollTop: -99`. That is why the committed
+   `connected-interstitial-failed-landscape.png` shows a headline nobody on the
+   web build can scroll to. Both engines now report `minScrollTop: 0` with the
+   first child at y=0.
+
+   Portrait is unchanged in every state (measured, both engines). Do not
+   reintroduce `justify-content: center` here. */
+.connected-interstitial-body > :first-child {
+  margin-top: auto;
+}
+
+.connected-interstitial-body > :last-child {
+  margin-bottom: auto;
+}
+
 .connected-status-label {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.18em;
   color: var(--ink-3);
   margin: 0;
+}
+
+/* THE REFUSAL FRAME'S LANDSCAPE BUDGET (Phase MT follow-on). At 844x390 the
+   column is 338px and four full-width buttons take 248 of it, leaving a 78px
+   body — less than the 91px the message alone needs (label 14 + serif 36 +
+   body line 17 + two gaps), so NO DOM ORDER can put the reason on screen. That
+   is why moving the support link below the reassurance line was measured to
+   change nothing at all.
+
+   `Try again` and `Row on the phone timer instead` stay full width: they are
+   the two ways forward. `View connection log` and `Cancel` pair on one row at
+   214x52 (text measured at 148px and 51.5px — one line each, both engines).
+   Stack 248 -> 184px; with the 8px body gap the window is 142px and the label,
+   headline, reason sentence and support link are ALL fully visible at rest,
+   the fold landing in a gap rather than through a line.
+
+   `nth-last-child(-n + 2)` rather than `nth-child(3)`/`(4)` so the five-button
+   `permission-denied` variant pairs its last two as well — its landscape body
+   window goes 10px -> 74px — instead of stranding a half-width Cancel.
+
+   NO NEW COLOUR PAIRING: layout only. */
+@media (orientation: landscape) {
+  .connected-interstitial-body {
+    gap: 8px;
+  }
+
+  .connected-interstitial-actions--refusal {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .connected-interstitial-actions--refusal > button {
+    grid-column: 1 / -1;
+  }
+
+  .connected-interstitial-actions--refusal > button:nth-last-child(-n + 2) {
+    grid-column: auto;
+  }
 }
 
 .connected-serif-line {
@@ -6092,6 +6155,59 @@ section:not(.news-pinned) .news-row:last-of-type {
   border-left: 3px solid var(--marker);
   padding: 8px 10px;
   margin: 0;
+}
+
+/* THE SUPPORT-MATRIX LINK on a refusal screen (Phase MT, Gate 0 approved
+   2026-09-08). Both failure frames render it.
+
+   A BLOCK link in `.reader-next`'s idiom, NOT an inline anchor and NOT a fifth
+   button, and both exclusions are measured rather than felt (the design pass
+   replicated this CSS and the real faces in Playwright on chromium and webkit
+   at 390x844 and 844x390, validating the harness against
+   docs/screenshots/connected-interstitial-failed-landscape.png first —
+   predicted action-stack top 96px, capture ~97px):
+
+     - A FIFTH BUTTON is fatal in landscape. The column is 338px; four buttons
+       leave 78px of body, five leave 14px — less than one 11px mono line.
+     - AN INLINE ANCHOR in 13px mono measures ~18px tall and WOULD fail
+       `e2e/design.spec.ts`'s `assertTapTargets`, which sweeps every
+       a/button/[role=button]/input/select for 44px in BOTH dimensions with one
+       carve-out. CORRECTED (whole-branch review, finding 4): an earlier
+       version of this comment said that sweep "already runs on the failed
+       interstitial", which is true and irrelevant — that test drives a
+       `link-failed` failure, and this link renders only for
+       `unsupported-machine`, so the sweep has never measured it. The floor is
+       met by construction (350x44 portrait, 440x44 landscape, measured) and
+       NOT yet gated; the gate is a ROADMAP row under Phase MT.
+     - THIS shape measures 350x44 portrait and 440x44 landscape, clearing the
+       floor in both dimensions with no carve-out.
+
+   INK, NOT ACCENT. --ink #1b1a17 on --page #f4f1e8 = 15.41:1, the app's
+   most-used pairing, so this rule introduces NO new colour pairing. --accent
+   would have passed AA (5.35:1) and still been wrong: `Try again` is already
+   solid accent, `.button-connect` exists precisely because two reds compete
+   for the eye, and docs/design/README.md's "accent means exactly four things"
+   does not include a text link. The underline is therefore not decoration —
+   it is the affordance the colour cannot supply, since ink at 12px mono
+   otherwise reads exactly like `.connected-reassurance` below.
+
+   ITS POSITION IN THE DOM IS LOAD-BEARING, and lives in the two components
+   rather than here: `.connected-interstitial-body` is `justify-content:
+   center`, so DOM order decides what the 78px landscape window shows at rest.
+   After the body line and before the reassurance it is fully visible at rest
+   on both engines; moved below the DETAIL panel it needs a scroll to 99
+   (chromium) or 101 (webkit). Do not reorder it without re-measuring. */
+.connected-support-link {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .connected-reassurance {
