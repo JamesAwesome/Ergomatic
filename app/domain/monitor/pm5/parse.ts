@@ -151,7 +151,8 @@ export function parseGeneralStatus(
  *  real pre-2018 hardware (interface-notes.md §10's note under that table
  *  has the full account). Every field we CONSUME ends at byte 15
  *  (`restSeconds`, a u24 at offset 13), so rejecting those frames discarded
- *  a whole session's readings over a byte with no consumer — and because
+ *  a whole session's readings over a byte that had no consumer until Phase MT
+ *  — and because
  *  `driver.ts`'s `seen.as1` is a one-way latch set only on a successful
  *  parse, it cost every frame, not just this field. */
 const ADDITIONAL_STATUS_1_MIN_BYTES = 16;
@@ -173,7 +174,11 @@ export interface AdditionalStatus1 {
    *  `parse.test.ts`'s `Object.hasOwn` assertion pins: an unguarded
    *  `readU8(bytes, 16)` on a short frame also yields `undefined`, so absence
    *  is the only observable that tells a correct decode from that half-fix.
-   *  No consumer anywhere in `app/src` or `app/domain`. */
+   *  CONSUMED since Phase MT (2026-09-08): `domain/monitor/pm5/ergMachine.ts`
+   *  classifies it and the driver refuses a SkiErg, BikeErg or Dyno outright.
+   *  This comment said "no consumer anywhere" for as long as that was true;
+   *  leaving those words standing after the branch that falsified them is the
+   *  correct-it-where-argued-but-not-where-used failure. */
   ergMachineType?: number;
 }
 
@@ -307,8 +312,8 @@ export interface AdditionalSplitIntervalData {
   splitIntervalNumber: number;
   /** ABSENT on pre-V1.27 firmware — see `ADDITIONAL_SPLIT_INTERVAL_MIN_BYTES`.
    *  Omitted rather than `undefined`, same reasoning as
-   *  `AdditionalStatus1.ergMachineType`. No consumer anywhere in `app/src` or
-   *  `app/domain`. */
+   *  `AdditionalStatus1.ergMachineType`. Consumed since Phase MT — same
+   *  classifier, same refusal; see that field's own comment. */
   ergMachineType?: number;
 }
 

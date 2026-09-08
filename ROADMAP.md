@@ -134,7 +134,8 @@ same day: **Option A (refuse the sitting) with a DENYLIST**. Spec:
 [docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md](docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md).
 
 The PM5 fits the RowErg, SkiErg and BikeErg, and `ergMachineType` — the field
-that says which — has had no consumer since it was first decoded. A SkiErg
+that says which — had no consumer from the day it was first decoded until
+this phase. A SkiErg
 therefore connects, gets programmed, and stores its piece as a row. Worse than
 the local wrongness: `server/concept2/mapping.ts` posts a hardcoded
 `type: "rower"`, so such a row is uploaded into the rower's Concept2 logbook as
@@ -1579,13 +1580,16 @@ closed with zero Concept2 contact.
       reported incident. Needs a fake control holding a NAMED characteristic
       undecodable, shaped like `failSubscribe`. **M**
 
-- [x] **We never check WHICH Concept2 machine is attached, and record
+- [ ] **We never check WHICH Concept2 machine is attached, and record
       everything as a row.** IN FLIGHT as Phase MT (spec approved 2026-09-08,
-      Option A + denylist) — see the phase section below. James, 2026-09-08. The PM5 fits the RowErg,
-      SkiErg and BikeErg, and `ergMachineType` — the field that says which —
-      has NO consumer anywhere in `app/src` or `app/domain`. So a SkiErg
-      connects, gets programmed, and its piece is stored as a row: every
-      number internally consistent and quietly wrong about what was done.
+      Option A + denylist) — see the phase section below. James, 2026-09-08.
+      **The box stays OPEN until it ships in a tag**, the convention the row
+      above states outright; an earlier revision ticked it at spec approval.
+      The PM5 fits the RowErg, SkiErg and BikeErg, and `ergMachineType` — the
+      field that says which — had NO consumer anywhere in `app/src` or
+      `app/domain` until this phase gave it one. So a SkiErg connects, gets
+      programmed, and its piece is stored as a row: every number internally
+      consistent and quietly wrong about what was done.
       **The codebase already knows these differ, in exactly one corner:**
       `domain/concept2/verificationEligibility.ts` keeps a separate rankable
       list for the BikeErg and says outright that we ship no BikeErg and that

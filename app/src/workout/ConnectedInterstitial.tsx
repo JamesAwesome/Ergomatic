@@ -628,22 +628,42 @@ export default function ConnectedInterstitial({
               <p className="connected-reassurance">
                 YOUR WORKOUT AND NUDGES ARE KEPT
               </p>
-              <div className="connected-detail-panel">
-                <p className="connected-detail-title">DETAIL</p>
-                <p className="connected-detail-line">
-                  {error.reason.toUpperCase()}
-                </p>
-                <p className="connected-detail-line">{error.detail}</p>
-                {error.raw !== undefined && (
-                  <p className="connected-detail-line connected-detail-raw">
-                    {error.raw}
+              {/* NO DETAIL PANEL FOR A MACHINE REFUSAL (Phase MT follow-on).
+                  It would print `UNSUPPORTED-MACHINE`, then the headline and
+                  the body line VERBATIM — the top half of the screen saying
+                  exactly what the bottom half already says. This error is
+                  built with `{reason, detail}` and no `raw`, so the only
+                  non-duplicate token is the reason slug, legible from the
+                  headline; the connection-log door still carries the full
+                  record.
+
+                  Gated on the REASON, not on `NOT_A_MACHINE_REFUSAL` — that
+                  map is `true` for `disconnected` too, and the disconnected
+                  frame's DETAIL is the one that earns its place. */}
+              {error.reason !== "unsupported-machine" && (
+                <div className="connected-detail-panel">
+                  <p className="connected-detail-title">DETAIL</p>
+                  <p className="connected-detail-line">
+                    {error.reason.toUpperCase()}
                   </p>
-                )}
-              </div>
+                  <p className="connected-detail-line">{error.detail}</p>
+                  {error.raw !== undefined && (
+                    <p className="connected-detail-line connected-detail-raw">
+                      {error.raw}
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
-        <div className="action-stack connected-interstitial-actions">
+        <div
+          className={
+            error?.reason === "unsupported-machine"
+              ? "action-stack connected-interstitial-actions connected-interstitial-actions--refusal"
+              : "action-stack connected-interstitial-actions"
+          }
+        >
           {error !== null &&
             error.reason === "permission-denied" &&
             canOpenAppSettings() && (
