@@ -199,16 +199,22 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       ~97px). `ConnectedInterstitial.tsx` renders `Open Settings` above
       `Try again` whenever the reason is `permission-denied` and
       `canOpenAppSettings()`: actions 316px of a 338px column. Pre-existing and
-      unrelated to Phase MT, found only because MT priced a fifth button
-      (4 buttons leave 78px, 5 leave 14px). **S**
-- [ ] **On the web build, the top of an overflowing interstitial body cannot be
-      scrolled to at all.** `.connected-interstitial-body` is
-      `justify-content: center`, which overflows in BOTH directions; chromium
-      clamps `scrollTop` at 0 while the first child sits at -30 to -100px, so
-      the headline is unreachable. WebKit permits negative `scrollTop`
-      (measured range [-101, 102]), so the iOS app can pull it into view and
-      the web build never can. This is why the committed landscape capture
-      shows a headline nobody can scroll to. Web-only, pre-existing. **S**
+      unrelated to Phase MT, found only because MT priced a fifth button.
+      MEASURED on the shipped frame while probing the gate below: without the
+      refusal frame's landscape pairing rule, four buttons leave 78px —
+      confirming the design pass's replica — and five leave 10px, with the
+      headline 48px below the fold, so the replica's 14px is superseded and
+      this row's own headline figure stands. WITH the pairing, five leave 74px
+      and the headline is on screen: it is what keeps a five-button stack
+      survivable, and `permission-denied` does not get it. **S**
+- [x] **On the web build, the top of an overflowing interstitial body cannot be
+      scrolled to at all.** CLOSED by #366's landscape fix: the body is
+      `flex-start` plus auto margins on its first and last child, so overflow
+      now falls entirely BELOW the window. Was: `justify-content: center`
+      overflowed in BOTH directions; chromium clamps `scrollTop` at 0 while the
+      first child sat at -30 to -100px, so the headline was unreachable, while
+      WebKit permits negative `scrollTop` (measured range [-101, 102]) and the
+      iOS app could pull it into view. Now GATED, by the row below. **S**
 - [ ] **"Row on the phone timer instead" is offered on the refusal screen.**
       After a SkiErg refusal it routes the rower to store the ski piece as a
       rowing log by hand. No Concept2 upload follows — `eligibilityFailure`
@@ -216,21 +222,32 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       not clearly wrong, since the likeliest cause of that screen is picking
       the wrong monitor from a list and that rower does have a RowErg. Filed
       at the design gate rather than found later. **S**
-- [ ] **Two design gates the refusal screen owes.** Both named with a mutation
-      that bites, neither built. (a) `assertTapTargets` has never measured
-      `.connected-support-link`: `e2e/design.spec.ts`'s failed-interstitial
-      case drives a `link-failed` failure, and the link renders only for
-      `unsupported-machine`. Add `ergMachineType` to `injectConnectedFake` —
-      the fake already consumes `__pm5FakeScript__.ergMachineType` — plus a
-      third case driving the refusal through `sweep(page)`. Mutation: drop
-      `min-height: var(--tap)`; the link measures ~18px and the sweep fails.
-      (b) The gate that would have caught the landscape bug: at 844x390 with
-      `scrollTop === 0`, assert `.connected-serif-line`'s box lies inside
-      `.connected-interstitial-body`'s client rect. Mutation: restore
-      `justify-content: center`; the serif sits at y −73..−37, entirely above
-      the window. Companion: set `scrollTop = -9999` and assert the first
-      child's top is not above the client top, which pins the unreachable
-      region rather than only its symptom. **S**
+- [x] **Two design gates the refusal screen owes.** BUILT, in
+      `e2e/design.spec.ts`, each kept only because it went red on a stated
+      mutation. (a) A REFUSED interstitial case (`ergMachineType: 128`,
+      threaded through `injectConnectedFake` the way `screenshots.spec.ts`
+      threads it) puts `.connected-support-link` in the DOM while
+      `assertTapTargets` sweeps — the first time it ever has, since the
+      existing case drives a `link-failed` failure and the link renders only
+      for `unsupported-machine`. Dropping `min-height: var(--tap)` fails the
+      sweep at `Received: 15`. (b) At 844x390 the same frame asserts the
+      headline lies inside `.connected-interstitial-body`'s client box and
+      that nothing sits above the minimum reachable scroll position (on
+      chromium that position is always 0, so what the assertion reads is the
+      first child's top; the review pass deleted a `minScrollTop === 0`
+      companion that no CSS could fail); the FAILED case gets the second half
+      too, for the price of a resize.
+      Restoring `justify-content: center` fails it at -7.5px on the refusal
+      frame and -70.5px on the link-failed one. TWO CORRECTIONS TO THIS ROW'S
+      OWN PRESCRIPTION, both measured: the auto margins are not what saves the
+      frame (they resolve to zero exactly when the overflow is negative, so
+      flipping the one declaration is enough), and the design pass's -73..-37
+      figures are unreachable by a CSS-only mutation now, because #366 also
+      dropped the DETAIL panel from this frame. The containment half needs a
+      body window under 58px, which four buttons never produce — it goes red
+      only on the five-button stack with the pairing removed (window 10px,
+      headline 48px below the fold), so what it actually pins is the landscape
+      action-stack budget, not the centring. **S**
 - [ ] **The refusal-survives-its-own-consequences guard is UNGATED.** `fail()`
       refuses to let a standing `unsupported-machine` error be overwritten by
       the `program()` rejection the refusal itself caused — without it the
@@ -244,6 +261,13 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       for a bounded number of ticks without starving the CSAFE ack path.** On
       hardware the window is the measured 544 ms between the first 0x0032 and
       `armed`. Found by the whole-branch review, finding 1. **S**
+- [ ] **`design.spec.ts:3540` flakes under a full parallel run.** "picking a
+      effort level does not shift the chips below it" failed once in a
+      547-test run on 2026-09-08 (the run that added the two gates above),
+      passed in isolation immediately after, and passed on a full re-run of
+      the same tree. It compares a chip's `y` before and after a click through
+      `stableBoundingBox`, so the suspicion is load, not the assertion. CI
+      retries once, so it costs a red PR check at worst. Unowned. **S**
 - [ ] **`connected.spec.ts:1703` poisons its own origin for a later run.** The
       QuotaExceededError leg fills origin storage until `setItem` genuinely
       throws; its own title says "junk cleaned up after", but a SECOND run
