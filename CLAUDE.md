@@ -1136,6 +1136,32 @@ often they recur.
     _Both were found by review, neither by the author, and the author had
     already run four mutation probes that all bit._
 
+34. **Stating an invariant in a spec and then applying it to ONE of the places
+    it governs — and defending the gap as scope (James, 2026-09-07, PR #353).**
+    The spec said, in as many words, that our own teardown must complete even
+    if something that can fail is awaited: `nativeSignOut` was leaving the
+    device's Google session alive, so the plugin logout moved AFTER the local
+    token clear, swallowed. Shipped, reviewed, PM-gated. But the SAME function
+    still awaited `api("/api/auth/signout")` FIRST, so a rower offline tapped
+    Sign out and stayed signed in completely — token intact, Google session
+    intact, rejection unhandled at the click handler. The identical mistake,
+    one line higher, failing WORSE: a plugin failure costs a chooser, a network
+    failure costs the whole sign-out.
+    **It survived an antagonist pass on the spec, a code review, and a PM
+    gate.** The reviewer did see it and filed it as pre-existing and
+    out-of-scope; I accepted that and wrote it into the ROADMAP. It took James
+    asking "Is the offline fix not in this?" to move it, and the honest answer
+    was that my scope argument was a habit about small diffs applied to a
+    defect in the same function, of the same class, one line away.
+    **A change that half-applies its own stated principle is WORSE than one
+    that never stated it, because it reads as though the case was considered
+    and dismissed.** The check is mechanical, not attentional: **when a spec
+    states an invariant, enumerate every site in the function or module it
+    governs and say for each whether it holds — before calling the scope
+    settled.** And treat "pre-existing, out of scope" with suspicion when the
+    finding sits inside the very function under change: pre-existing is a fact
+    about history, not an argument about scope.
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;

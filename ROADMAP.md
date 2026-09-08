@@ -548,11 +548,19 @@ nobody can sign up (deny by default)."_ PROD's old exit promised "a real
 sign-in path for a rower with no Google account" — that is Apple sign-in, and
 it lands the stranger on this same denial.
 
-- [ ] **Audit AUD-014 — native sign-out always attempts the Keychain wipe.**
-      A rejected revocation request currently leaves the bearer available for
-      later reuse. Server revocation remains best-effort, but local deletion is
-      independently required and deletion failure remains visible. AUTH triad;
-      full antagonist spec pass and PM final-PR gate. **P2, Confirmed. S**
+- [x] **DONE — Audit AUD-014, native sign-out always attempts the Keychain
+      wipe.** Delivered in two halves, and the row's own framing was half
+      wrong. **Ordering, #353:** `clearToken()` now runs FIRST and
+      unconditionally; the server call and the Google logout follow, swallowed
+      and logged. **Visibility, this PR:** a failed wipe now says so on You,
+      in the sign-in screen's own `.notice` voice. **The row's premise that a
+      rejection "leaves the bearer available for later reuse" while the app
+      proceeds was never reachable** — `onSignedOut` has always run AFTER the
+      await, so a failure left the app SIGNED IN rather than showing a
+      signed-out screen over a live token. What was actually missing was that
+      nothing was said. Gate 0 approved by James 2026-09-07 from a rendered
+      mockup. Corrected here rather than ticked silently, because the wrong
+      premise is what made the row read as more dangerous than it was.
 
 - [ ] **Establish what external TestFlight actually binds, with verbatim
       quotes, BEFORE anything else in this wave is specced.** The rebalance
@@ -1356,7 +1364,53 @@ closed with zero Concept2 contact.
       inside a row whose whole purpose was to carry evidence. Tag an
       unreproduced mechanism INFERENCE, or leave the row at the symptom.
 
-- [ ] **DONE, PR OPEN — a monitor older than 2018 is silently unusable.**
+- [x] **DONE and CONFIRMED on both platforms — "Sign out" left Google signed in.** `nativeSignOut`
+      (`src/native/signin.ts`) posts to `/api/auth/signout` and clears our
+      token, and has NEVER called the plugin's `logout` — verified over the
+      whole history, not just the current file
+      (`git log -S"SocialLogin.logout" -- app/src` is empty). The device's
+      Google session therefore survives, the next `login()` finds it and
+      returns silently, and the rower is back in as the same account with no
+      chooser. Reported by James on the v0.42.0 TestFlight build, 2026-09-07.
+      The chooser is how you NOTICE; the defect is a button that says Sign out
+      and does not. NOT attributable to that build's plugin bump — the gap
+      predates it entirely. TRIAD (auth). **The checkbox ticks only when James
+      confirms on a device that sign-in no longer reuses silently** — the fix
+      ends the session, but Google's flow shares Safari's cookies, so it may
+      present a one-tap "Continue as X" rather than a full chooser (SUSPECTED,
+      untested). **CONFIRMED by James 2026-09-07 on both:** native on the
+      Kaito build ("works on mobile"), web after #356 deployed ("confirmed").
+      That was this row's stated closing condition, so it is ticked. **The WEB
+      half is a separate fix with the OPPOSITE shape** (2026-09-07, James:
+      "Works on mobile not on web"): there is no session of ours to end in a
+      browser, only Google's own cookie which is not ours to clear, so the
+      correct mechanism is `prompt: "select_account"` on the authorization
+      URL — the very option the native spec rejects, for reasons that do not
+      transfer. **Also fixes the offline case found at its own code review** — the local token
+      clear was gated on the server call, so Sign out did nothing at all with
+      no connection. When merged it is
+      NOT released on its own (James, 2026-09-07: rides his next batch).
+      Spec: `docs/superpowers/specs/2026-09-07-signout-ends-google-design.md`. **S**
+
+- [ ] **Two `v8 ignore`s that no longer earn themselves, same class.**
+      (a) `nativeSignIn` — see below. (b) `server/auth/google.ts`'s
+      `callbackClaims`, found at #356's antagonist pass: it sits under an
+      ignore labelled "thin openid-client wrapper" while containing
+      `c.email ?? ""` and `c.name ?? c.email ?? "Rower"` fallback chains that
+      feed the allowlist and identity decision. Not thin by the standard #356
+      itself just applied to the authorization parameters. Both are
+      pre-existing debt, neither introduced by the PR that found them. **S**
+
+- [ ] **`nativeSignIn` keeps a `v8 ignore` it no longer earns.** Found at
+      #353's code review. That PR narrowed the file-wide ignore on the
+      argument that it "stops being honest the moment it holds ordering logic
+      that can be wrong" — and `nativeSignIn`, still fully ignored, has a
+      `responseType` narrow, a null-token throw, a 403-with-body-parse branch
+      and a generic failure throw: materially more branching than the
+      four-line `nativeSignOut` that came out from under it. Pre-existing debt,
+      but the exact shape #353's own reasoning argues against (RF29). **S**
+
+- [ ] **SHIPPED v0.42.0 (902) — a monitor older than 2018 is silently unusable.**
       Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26
       (2018-11-02) and to `0x0038` in V1.27; our parsers demanded the longer
       form, so a pre-2018 monitor had every one of those frames rejected.
@@ -1366,8 +1420,8 @@ closed with zero Concept2 contact.
       full of `0x0032: expected 17 bytes, got 16` and
       `rowingActive=unseen`. Spec:
       `docs/superpowers/specs/2026-09-07-short-status-frames-design.md`. All
-      four plan tasks are complete and the full gate is green on PR #350
-      (`as1-short-frame`); the checkbox above ticks on merge, not before. **M**
+      four plan tasks are complete and merged as #350 and released in v0.42.0 (build 902, 2026-09-07)
+      (`as1-short-frame`); the checkbox stays open until the reporter confirms it fixed THEIR monitor — see the two open items below. **M**
 
 - [ ] **A monitor we cannot decode says nothing at all.** The follow-on the
       spec above names: hundreds of `frame-error` entries reached the ring
@@ -2752,6 +2806,30 @@ Each needs erg time or a deliberate recording session.
 
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
 an iceboxed item is not a phase-close requirement.
+
+- **Ask for the account picker only when the rower asked to switch — James,
+  2026-09-07.** **Trigger:** the extra tap actually annoys someone. #356 sends
+  `prompt=select_account` on EVERY web sign-in, which fixes signing out and
+  back in as a different account but also costs one mandatory tap on an
+  ordinary 60-day session expiry that used to bounce back silently. Judged
+  worth it at an allowlist of about five people, and the cost is stated in
+  that PR's spec rather than left as a silence.
+  **The narrower shape, if the trigger fires:** carry the prompt only on a
+  sign-in that follows an explicit sign-out — sign-out sets a short-lived
+  marker, `/api/auth/signin` reads it once and clears it. Small: our sign-out
+  already touches a cookie.
+  **Two alternatives considered and NOT chosen**, recorded so they are not
+  re-derived. `login_hint`, which Google documents as suppressing the account
+  chooser and either pre-filling the email box "or selects the proper
+  session" — the opposite lever, telling Google who we expect rather than
+  always asking; it suits an app that remembers the last account, which we do
+  not. And splitting the affordance into an ordinary sign-in plus a separate
+  "sign in as someone else", which suits products where switching is a real
+  workflow rather than a rare event.
+  **Google publishes no guidance on this trade-off** (checked, 2026-09-07:
+  its OpenID Connect page documents the three `prompt` values and
+  `login_hint`, and recommends nothing about when to use which). So every
+  option here is convention, not a documented recommendation.
 
 - **Correct Resume — deferred by James, 2026-09-03.** **Trigger:** a
   diagnostic-backed, naturally occurring authoritative mid-row link drop
