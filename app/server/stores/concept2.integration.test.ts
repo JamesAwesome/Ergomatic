@@ -218,11 +218,15 @@ describe("concept2 store against real Postgres", () => {
     // not `testing/fakes.ts`'s JavaScript re-implementation of the CASE —
     // that mirror would prove itself, not the SQL (RF11).
     //
-    // THE TWO FLAGS ARE SET TO DIFFERENT VALUES ON PURPOSE. The copy-paste
-    // failure this guards is a second CASE expression that still reads
-    // `auto_send` inside the `auto_verify` assignment; with both flags true
-    // before the reconnect, that mutant stays green. With them opposed, it
-    // cannot (delta antagonist pass, 2026-09-07).
+    // THE TWO FLAGS ARE SET TO DIFFERENT VALUES ON PURPOSE, and that choice
+    // was MEASURED rather than argued (2026-09-07). The copy-paste failure it
+    // guards is a second CASE expression that still reads `auto_send` inside
+    // the `auto_verify` assignment. Both arms run against real Postgres:
+    //   - mutant CASE + these opposed values  -> RED, "expected false to be
+    //     true" on the same-account reconnect.
+    //   - mutant CASE + the naive shape (both flags set true)  -> GREEN,
+    //     34/34. The bug ships.
+    // So the opposition is the gate, not the assertion count.
     it("a reconnect of the SAME account keeps auto_verify, independently of auto_send", async () => {
       const store = createConcept2Store(db);
       await store.upsertLink(userA, link({ c2UserId: 15 }));
