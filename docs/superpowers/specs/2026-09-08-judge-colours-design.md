@@ -1,7 +1,7 @@
 # The rower chooses what red and blue mean, or turns them off
 
-**Phase JC.** Status: spec, revision 2 (folded the anchor antagonist pass,
-2026-09-08). Shape approved by James 2026-09-07: per-slot, both surfaces,
+**Phase JC.** Status: **GATE 0 CLOSED 2026-09-08 — cleared to implement.**
+Revision 3 (folded the anchor antagonist pass, then Gate 0's nine rulings). Shape approved by James 2026-09-07: per-slot, both surfaces,
 device-local, SETTINGS subpage; FASTER/SLOWER wording; OFF renders plain
 ink. TRIAD — it adds a stored shape — so its PR takes a PM final gate. It
 changes user-visible copy and layout, so it takes a **Gate 0**: James
@@ -130,8 +130,9 @@ measured rather than asserted (recurring failure 30):
 - **(c) Leave it.** Cost: the app tells the rower something false on eight
   of nine settings. Named for completeness, not recommended.
 
-**Recommending (a)**, on the house precedent and the counted cost.
-Whichever James picks becomes invariant I-8.
+**RULED (a) — DELETE, James 2026-09-08.** Options (b) and (c) are closed and
+are kept above only so the reasoning is legible; neither is live work. The
+deletion is invariant I-8 and lands in task 6.
 
 ## Spelling, so nobody "fixes" it in review
 
@@ -524,9 +525,11 @@ Stated so the gate can accept them rather than discover them.
 7. **I-7** `stale` and `within` are untouched by every setting, and keep
    their `timer-card-actual-` prefix.
 8. **I-8** No copy on any surface names a colour the settings could
-   contradict. (Satisfied by deleting the summary legend, under Gate 0
-   option (a); if James picks (b), I-8 becomes "the legend names whatever
-   the two pace slots currently are".)
+   contradict. **Satisfied by DELETING the summary legend** (Gate 0 ruling 7,
+   option (a)): the `<p class="summary-legend">` element, its CSS rule, and
+   `design.spec.ts`'s `toHaveText` pin all go. `hasJudgedRow` loses its only
+   consumer and goes with them. A repo-wide grep for the withdrawn phrasing —
+   `FASTER (BLUE)`, `SLOWER (RED)` — is part of the task, not a follow-up.
 9. **I-9** A storage failure at boot yields defaults and never blocks
    `createRoot`.
 10. **I-10** What `saveJudgeColors` writes is what `loadJudgeColors` reads,
@@ -692,7 +695,11 @@ Task order, failing test first at each step:
    (after the rename their regex can never match, so they become
    decoration — recurring failure 21); the 12 `e2e/fixtures/*.html`
    snapshots regenerate via `ConnectedSurface.screens.test.tsx`.
-6. The legend, per Gate 0's ruling (I-8).
+6. **Delete the summary legend** (I-8): the JSX element, the
+   `.summary-legend` CSS rule, the now-unused `hasJudgedRow`, and
+   `design.spec.ts`'s `toHaveText` pin. Grep `FASTER (BLUE)` and
+   `SLOWER (RED)` repo-wide and reconcile every hit, including
+   `TraceChart.tsx`'s comment, which cites this legend as its idiom.
 7. `/you/settings` + the SETTINGS door row + `OptionGroup`'s `label:
    ReactNode` and class props + **the new CSS block for the three-way
    control**. Client tests (I-6) and the keyboard tests copied from
@@ -711,29 +718,22 @@ Task order, failing test first at each step:
    state contradicts; the rationale blocks in `index.css` and
    `tokens.css`'s token comment.
 
-## Gate 0 — what James approves before task 1
+## Gate 0 — RULED 2026-09-08
 
-Rendered, at real proportions, in both orientations, with every colour
-pairing's ratio stated as a number:
+Presented as a rendered artifact driving the app's own markup and stylesheet
+live over the four proposed custom properties. All nine settled; James
+approved the remainder in one word after the door order and the container
+question were taken separately, so each disposition is written out here
+rather than left to be inferred.
 
-1. The SETTINGS screen itself, with the four groups, the three-way control
-   in its **new** styling, its checked-state affordance, and the live
-   preview — plus contrast rows for all of it, which the table above does
-   not cover.
-2. ~~The ORDER question~~ — **RULED 2026-09-08**: BASELINES, CONCEPT2,
-   SETTINGS, DIAGNOSTICS. The four-row group still gets a capture against
-   today's three-row one.
-3. A connected `PaneLive`, landscape and portrait, at the default setting
-   and at `spmFaster: off`, side by side.
-4. A connected `PaneGrid` at the default and at all-red, side by side —
-   the surface where accepted consequence 1 actually bites.
-5. A post-workout summary with a slower row, default versus `paceSlower:
-   off`, showing that the bar and the `±` survive.
-6. **The legend ruling**: (a) delete, (b) derive from the slots, (c) leave.
-   Costs as stated in "The legend on the summary screen" — (a) counted,
-   (b) explicitly untested.
-7. **The copy itself** — section header, group headers, the three option
-   words — as rendered text.
-8. **The un-keyed storage question**: a second rower on the same phone
-   inherits the first rower's colours, and there is no clear path at all.
-9. Whether the comfort settings ride this PR (recommending: no).
+| # | Question | Ruling |
+| --- | --- | --- |
+| 1 | The screen as rendered | **APPROVED** — groups, three-way control, checked state, live preview |
+| 2 | The copy | **APPROVED as rendered**: `SETTINGS` row, `COLORS · PACE` / `COLORS · SPM` group headers, `FASTER` / `SLOWER` row names with their parentheticals, `RED` / `BLUE` / `OFF` options. "JUDGEMENT COLOURS" is dead. |
+| 3 | Door order | **BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS**, and the group stays FLAT — see "The screen" |
+| 4 | PaneLive, both orientations | **APPROVED** |
+| 5 | PaneGrid at all-red | **APPROVED** — accepted consequence 1 stands, on the grid's real column set |
+| 6 | The summary, OFF keeps bar and ± | **APPROVED** |
+| 7 | The legend | **OPTION (a) — DELETE IT.** See I-8 below. |
+| 8 | Un-keyed storage | **CONFIRMED** — device-scoped, inherited by a second rower on the same phone, and no clear path at all |
+| 9 | Do the comfort settings ride this PR? | **NO.** Pace tolerance changes what a number means; the ROADMAP trigger retargets to the second SETTINGS PR. |

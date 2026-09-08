@@ -272,8 +272,9 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
 
 ## Phase JC — the rower chooses what red and blue mean
 
-**Status: SPEC REVISION 2, 2026-09-08, awaiting Gate 0.** The anchor
-antagonist pass returned two blocking findings and four majors, all folded. Shape approved by James
+**Status: GATE 0 CLOSED 2026-09-08 — cleared to implement.** The anchor
+antagonist pass returned two blocking findings and four majors, all folded;
+Gate 0's nine rulings are tabled in the spec. Shape approved by James
 2026-09-07: four slots, each RED / BLUE / OFF; both the connected pane and the
 post-workout summary obey; device-local; a new SETTINGS door in You. Spec:
 [docs/superpowers/specs/2026-09-08-judge-colours-design.md](docs/superpowers/specs/2026-09-08-judge-colours-design.md).
@@ -288,10 +289,12 @@ takes a PM final gate. It changes user-visible copy and layout, so Gate 0 —
 the rendered screen, the door group, and before/after captures of a connected
 pane and a summary — is approved before task 1.
 
-- [ ] **Gate 0.** Nine artifacts, listed in the spec's own closing section.
-      **Ruled 2026-09-08:** the door order is BASELINES, CONCEPT2, SETTINGS,
-      DIAGNOSTICS (James: "put settings under concept 2 but above
-      diagnostics"). Eight rulings still open, the legend among them. **S**
+- [x] **Gate 0 — CLOSED 2026-09-08.** Nine rulings, tabled in the spec. The
+      three that change the build: door order is BASELINES, CONCEPT2,
+      SETTINGS, DIAGNOSTICS with the group staying FLAT; **the summary's
+      `← FASTER (BLUE) · SLOWER (RED) →` legend is DELETED** rather than
+      derived from the slots; and the parked comfort settings do NOT ride this
+      PR. **S**
 - [ ] **The PR.** Nine tasks, spec §"PR shape". The load-bearing one is the
       e2e seam test: Vitest mocks every `.css` import to an empty string here,
       so **no client test can prove a colour lands on a pixel** — only e2e can
