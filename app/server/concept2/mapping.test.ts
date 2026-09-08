@@ -921,6 +921,77 @@ describe("buildC2Payload — verification_code rides the AUTO VERIFY flag", () =
     expect(post.time).toBe(1240);
   });
 
+  // THE GUARD IS AN AND, AND ONLY THESE TWO TESTS CAN SAY SO. The round-2
+  // review mutated `usedMachineMeters && usedMachineSeconds` to `||` and all
+  // 249 tests passed: the only negative arm nulled BOTH totals, so nothing
+  // could tell the two operators apart.
+  //
+  // The divergent state is representable, not theoretical — the two columns
+  // are independently nullable and `FromTheLog.tsx` says so in its own
+  // comment. Under the mutant, a row with the machine's METRES and our
+  // interval-sum SECONDS would post a code minted over neither, which is the
+  // exact mismatch this block's comment promises to prevent.
+  it("ON with machine METRES but no machine seconds: no code", () => {
+    const post = buildC2Payload(
+      { ...VERIFIABLE_ROW, machineWorkSeconds: null },
+      LINK,
+      "UTC",
+      true,
+    );
+    expect(post).not.toHaveProperty("verification_code");
+    // And the posted time really is the fallback, so the row this test
+    // describes is the dangerous one rather than a hypothetical.
+    expect(post.distance).toBe(500);
+  });
+
+  it("ON with machine SECONDS but no machine metres: no code", () => {
+    const post = buildC2Payload(
+      { ...VERIFIABLE_ROW, machineWorkMeters: null },
+      LINK,
+      "UTC",
+      true,
+    );
+    expect(post).not.toHaveProperty("verification_code");
+  });
+
+  // The byte guard, and the null-code guard below it. Both are
+  // defence-in-depth over `verificationWords`'s own checks, and both
+  // survived round 2's mutations because nothing exercised a BAD blob.
+  it("ON with a non-integer in the bytes: no code, not a guess", () => {
+    const post = buildC2Payload(
+      {
+        ...VERIFIABLE_ROW,
+        machineSummary: {
+          ...VERIFIABLE_ROW.machineSummary,
+          verificationBytes: [0x06, 1.5, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0],
+        },
+      },
+      LINK,
+      "UTC",
+      true,
+    );
+    expect(post).not.toHaveProperty("verification_code");
+  });
+
+  it("ON with a SHORT blob: no code, and never the key set to null", () => {
+    // `wireVerificationCode` returns null under 8 bytes. Without the
+    // `code !== null` guard the key would post as `verification_code: null`
+    // — a field Concept2 never asked for, on a row that cannot verify.
+    const post = buildC2Payload(
+      {
+        ...VERIFIABLE_ROW,
+        machineSummary: {
+          ...VERIFIABLE_ROW.machineSummary,
+          verificationBytes: [0x06, 0x47, 0x99],
+        },
+      },
+      LINK,
+      "UTC",
+      true,
+    );
+    expect(post).not.toHaveProperty("verification_code");
+  });
+
   it("ON but no machine totals: still no code, because it could only mismatch", () => {
     // The guard that survives from #336 verbatim. The code is minted over the
     // MACHINE's own distance and time; a row falling back to our interval
