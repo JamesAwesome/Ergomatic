@@ -109,7 +109,8 @@ Defaults `{paceFaster:"blue", paceSlower:"red", spmFaster:"blue", spmSlower:"red
   **Isolation:** `src/test/setup.ts` is one line and clears nothing. Reset `document.documentElement.style` and remove the key in `beforeEach`.
 - [ ] **Step 2: Watch them fail. Step 3: Implement. Step 4: Green. Step 5: Commit.**
 - [ ] **Step 6: Mutation A.** Make any malformed field return `JUDGE_COLOR_DEFAULTS` wholesale. The one-field-only case must go red.
-- [ ] **Step 7: Mutation B.** Wrap the saved value as `{v:1, ...next}` without touching the reader. **I-10 goes red, every corruption case stays green** — the proof the round trip tests what the table cannot.
+- [x] **Step 7: Mutation B.** Wrap the saved value as **`{v:1, colors: next}`** without touching the reader. **I-10 goes red, every corruption case stays green** — the proof the round trip tests what the table cannot.
+  **Corrected during execution:** this step originally said `{v:1, ...next}`, which **cannot bite against any correct implementation of this contract** — the spread leaves all four fields at top level and a total-per-field reader ignores the extra key. Measured: the spread form left 57/57 green; `{v:1, colors: next}` fails exactly the three I-10 assertions with every corruption case still passing. The mutation I prescribed was itself an RF21 instance, inside a plan that cites RF21.
 
 **Gates:** `pnpm typecheck`, `pnpm lint`, the file's suite, per-file coverage for `judgeColors.ts` reported as four numbers. No browser gate.
 

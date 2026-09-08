@@ -607,9 +607,13 @@ what the failure said):
   must go red and the click leg must stay green.
 - Make `loadJudgeColors` return `JUDGE_COLOR_DEFAULTS` wholesale on any
   malformed field; the I-2 one-field-only case must go red.
-- Change `saveJudgeColors`'s serialisation (wrap in `{v:1, …}`) without
+- Change `saveJudgeColors`'s serialisation to **`{v:1, colors: next}`** without
   touching the reader; I-10 must go red and every I-2 case must stay green,
-  proving the round trip tests something I-2 cannot.
+  proving the round trip tests something I-2 cannot. **The nesting is
+  load-bearing and the original wording (`{v:1, …}`) was not:** a SPREAD
+  (`{v:1, ...next}`) leaves all four fields at top level, so a total-per-field
+  reader ignores the extra key and the probe stays green — measured 57/57 at
+  Task 1, 2026-09-08.
 
 **The e2e mutations must COMPILE** (recurring failure 12's corollary, PR
 #344): swap a call for another that keeps every import used, and confirm
