@@ -13771,24 +13771,36 @@ describe("Phase MT: unsupported erg machine", () => {
    */
   it("the refusal precedes the first frame, because no frame can exist before 0x0032 has decoded", () => {
     const { transport, events } = subscribed();
+    const generalStatus = buildGeneralStatusBytes({
+      elapsedSeconds: 30,
+      distanceMeters: 100,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      rowingState: 1,
+      strokeState: 1,
+      totalWorkDistanceMeters: 100,
+      workoutDurationRaw: 0,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+    // THE ORDER IS THE TEST. 0x0031 is the only characteristic whose handler
+    // calls `maybeEmitFrame`, so it arrives FIRST here — before the 0x0032
+    // that classifies. If `maybeEmitFrame`'s `seen.as1` conjunct were ever
+    // dropped, that first general-status tick would emit a frame while the
+    // machine type is still unknown, and this assertion inverts.
+    //
+    // An earlier version of this test delivered 0x0031 LAST and was
+    // decoration: deleting the `seen.as1` conjunct left it green, because
+    // 0x0032 had already arrived by the time a frame could be emitted either
+    // way. The probe found that, not review.
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(GENERAL_STATUS_UUID, generalStatus);
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(0);
+
     transport.notify(ADDITIONAL_STATUS_1_UUID, as1(128));
-    transport.notify(
-      GENERAL_STATUS_UUID,
-      buildGeneralStatusBytes({
-        elapsedSeconds: 30,
-        distanceMeters: 100,
-        workoutType: 8,
-        intervalType: 0,
-        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
-        rowingState: 1,
-        strokeState: 1,
-        totalWorkDistanceMeters: 100,
-        workoutDurationRaw: 0,
-        workoutDurationType: 0,
-        dragFactor: 130,
-      }),
-    );
+    transport.notify(GENERAL_STATUS_UUID, generalStatus);
+
     const refusal = events.findIndex((e) => e.kind === "unsupported-machine");
     const firstFrame = events.findIndex((e) => e.kind === "frame");
     expect(refusal).toBeGreaterThanOrEqual(0);
