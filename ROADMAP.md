@@ -127,6 +127,49 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **C** | The submission surface      | L    | The most visible wave                       |
 | **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
+## Phase MT — the app refuses a machine it cannot record
+
+**Status: SPEC APPROVED 2026-09-08, in flight.** Shape approved by James the
+same day: **Option A (refuse the sitting) with a DENYLIST**. Spec:
+[docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md](docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md).
+
+The PM5 fits the RowErg, SkiErg and BikeErg, and `ergMachineType` — the field
+that says which — has had no consumer since it was first decoded. A SkiErg
+therefore connects, gets programmed, and stores its piece as a row. Worse than
+the local wrongness: `server/concept2/mapping.ts` posts a hardcoded
+`type: "rower"`, so such a row is uploaded into the rower's Concept2 logbook as
+a rowing result, and its verification code is guaranteed rejected — Concept2's
+own documentation says the code is accepted only if "date, time, distance,
+workout_type and machine type match".
+
+TRIAD (it decides what a stored row may MEAN): full antagonist pass on the
+spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
+
+- [ ] **PR 1 — the refusal.** A domain denylist over the vendor enum's named
+      static ski (128, 143) and bike (192-194, 207) values; the driver emits on
+      two consecutive agreeing readings of one characteristic; the hook routes
+      it through the existing `fail()` path, which chains a `terminate()` ahead
+      of the disconnect so the workout we just sent is withdrawn from the erg.
+      No run opens, so no row can be stored and nothing reaches Concept2. No
+      stored-shape change and no migration. **M**
+
+### Owed by this phase, filed here rather than in a PR body
+
+- [ ] **`type: "rower"` is still hardcoded for machines the denylist lets
+      through.** Concept2's results enum has separate `dynamic`, `slides` and
+      `multierg` members, and the PM5 enum names `STATIC_DYNAMIC` (8), the
+      `SLIDES_*` family (16-20, 32) and `MULTIERG_*` (224-226). All of them are
+      rowing, so a wrong `type` is a smaller wrong than a SkiErg's — but it is
+      still wrong, and Concept2 rejects the verification code on a machine-type
+      mismatch either way. Deliberate consequence of the approved denylist
+      direction, not an oversight. **S**
+- [ ] **A monitor on pre-2018 firmware cannot be classified at all.**
+      `ergMachineType` is ABSENT below interface revision V1.26/V1.27, and
+      Phase MT does nothing on absence — refusing on ignorance would break a
+      working erg. `0x0016` ("Connected Erg Machine Type", READ) would settle
+      it and needs a `Transport.read`, which is the existing firmware-version
+      register row's dependency too. Both are unblocked by the same work. **S**
+
 ## Phase JR — Just Row
 
 **Status: CLOSED 2026-09-01 — released v0.32.0 (build 811), exit walk
@@ -1444,8 +1487,9 @@ closed with zero Concept2 contact.
       reported incident. Needs a fake control holding a NAMED characteristic
       undecodable, shaped like `failSubscribe`. **M**
 
-- [ ] **We never check WHICH Concept2 machine is attached, and record
-      everything as a row.** James, 2026-09-08. The PM5 fits the RowErg,
+- [x] **We never check WHICH Concept2 machine is attached, and record
+      everything as a row.** IN FLIGHT as Phase MT (spec approved 2026-09-08,
+      Option A + denylist) — see the phase section below. James, 2026-09-08. The PM5 fits the RowErg,
       SkiErg and BikeErg, and `ergMachineType` — the field that says which —
       has NO consumer anywhere in `app/src` or `app/domain`. So a SkiErg
       connects, gets programmed, and its piece is stored as a row: every
