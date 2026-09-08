@@ -40,6 +40,12 @@ only. The contract:
 Each wave gets its own design/plan cycle (spec in `docs/superpowers/specs/`,
 plan in `docs/superpowers/plans/`) when it starts.
 
+**Phase TD (below the live slate) is where DEBT goes** — gaps in evidence, a
+capture that cannot be taken, a test that could not be made to bite. It is
+deliberately not scheduled. The rule that put it there (James, 2026-09-08):
+a filed row needs either a TRIGGER, so it resurfaces when it starts to
+matter, or a PHASE, so it can be scheduled as one piece of work. "Small,
+queued" is neither once it passes a couple of hundred rows, and it had.
 ## Locked decisions
 
 | Area              | Decision                                                                                                                                                                                                                                                                                                  |
@@ -2440,7 +2446,12 @@ Each needs erg time or a deliberate recording session.
       `docs/superpowers/research/2026-09-08-c2-results-list-verified.md`.
       Needs James's browser; zero erg time. **Until it exists, the release
       note may not claim that rows you verify yourself pick up their tick** —
-      it covers the setting and the mark only. **S**
+      it covers the setting and the mark only.
+      **TRIGGER: before the release note claims that rows you verify yourself
+      pick up their tick.** That sentence may not ship until this is
+      measured. Owner: James — his browser, log-dev, no erg time, and
+      explicitly NOT walk work (PM gate 2026-09-08: do not bundle it into a
+      hardware runsheet where it waits on a calendar). **S**
 
 - [ ] **Count the victims once AUTO VERIFY has been on for a few sends.** The
       PM gate's standing test is "when a degradation path returns success, ask
@@ -2453,108 +2464,11 @@ Each needs erg time or a deliberate recording session.
       hypothesis is live — Concept2 checks `date`, we send the PHONE's clock,
       and the monitor's own stamp ran 1.29-3.23 minutes earlier across seven
       captures (spec M8/M9). Per the five-users ruling this is one query, not
-      a measurement gate or a dashboard. **XS**
+      a measurement gate or a dashboard.
+      **TRIGGER: after the first handful of sends with AUTO VERIFY actually
+      on** — not before, because on zero opted-in sends the count is
+      trivially zero and proves nothing. **XS**
 
-- [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
-      catch in `routes/concept2.ts`'s reconciliation now warns rather than
-      swallowing silently — that was the real defect (RF24's shape: a
-      permanently broken mechanism emitting nothing, forever). What has no
-      test is the other half: that the send still returns 200 when
-      `markC2Verified` throws. **Four attempts, all abandoned honestly
-      (2026-09-08):** every shape produced a 500 from the FIXTURE rather than
-      from the code under test, including one that 500s with no override at
-      all, so the setup is what could not be got right.
-      `makeFakeStores()` returns interlinked stores — handing the router a
-      `logs` from a second call breaks the sharing — and the reconciliation
-      sits inside `resolveWeightClass`, several layers below the file's
-      helpers. Deliberately shipped as a gap rather than as a green test
-      that proves the wrong thing. **The likely route:** an integration test
-      in `concept2Send.integration.test.ts`, where the store is real and can
-      be made to fail at the DB rather than by replacing a method.
-      **ALSO IN THE ICEBOX, with its trigger** (a send that 500s for no
-      visible reason, or anyone editing that `try`/`catch`), because what
-      would make this matter is an EVENT, not a date — this row is the
-      to-do, the icebox entry is the tripwire. Keep them in step. **S**
-
-- [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
-      Filed by #363's review (F7). `postResult` answers a 409 whose body
-      carries no numeric `id` as `{kind:"c2_error", status:409}`, and #363
-      excludes 409 from the retry band — correctly, because retrying would
-      re-POST a row Concept2 already holds. The consequence is that the route
-      answers 502, `recordC2Result` is never called, the UI shows the row
-      unsent forever, and every re-send repeats the same loop. RF25's shape:
-      a lower layer reports a fact the caller cannot act on. **Not observed** —
-      the one captured Concept2 409 carries its id
-      (`docs/monitor/c2-crossconnect-2026-09/raw-output.txt`), so this is
-      hardening debt, not a live bug. Closing it means either parsing the id
-      out of the message text or giving the rower a "Concept2 already has
-      this" state. **S**
-
-- [ ] **No committed capture shows `VERIFIED ✓`.** Phase AV ships the mark
-      with client tests and two biting mutations, but the screenshots stack
-      cannot photograph it, for a reason already written down at length in
-      `e2e/screenshots.spec.ts`'s Wave E PR2 header: this stack is
-      Concept2-DARK by construction (`compose.yml` passes
-      `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`, `screenshots.sh` exports
-      nothing, and `scripts/compose-env.test.sh` enforces it), so
-      `POST /api/concept2/results/:logId` 403s before it writes anything.
-      **That route is the only writer of `verified`, exactly as it is the
-      only writer of `c2_result_id`** — the note's own words: "a capture step
-      that says 'seed state X' must be able to name a WRITER of X reachable
-      in the environment the capture runs in; here there is none." The SENT
-      and NO-WEIGHT captures already drive a tap against a routed answer
-      instead; the mark needs the row READ routed too, which is a larger
-      fake than either. Unblocks with the same work that would let this stack
-      photograph a sent row at all.
-
-- [ ] **The log detail issues TWO `GET /api/concept2/link` on EVERY view,
-      including rows with no machine block at all.** Phase AV
-      added the verified mark to `MachineConfirmedBlock`, which needs the live
-      link for its account gate, and `Concept2SendBlock` on the same screen
-      already calls `useConcept2Link()`. The hook has no shared cache — it is
-      a per-call fetch with its own generation ref — so the second caller is a
-      second request, not a second read of one. **Named in the PR that created
-      it rather than discovered later (RF29's shape).** The fix is to lift the
-      read to `FromTheLog` and pass `link` to both blocks, which changes
-      `Concept2SendBlock`'s props and its tests; not carried in Phase AV
-      because it is a refactor that PR did not need. **Scope corrected after
-      the branch review (N9): the hook is called at the top of
-      `MachineConfirmedBlock`, BEFORE its `machineWorkSeconds === null` early
-      return, and the block is rendered unconditionally — so the second
-      request fires on manual and timer rows too, where the block draws
-      nothing. The first wording said "per view", which is true and reads as
-      "per machine row".**
-
-- [ ] **No committed capture shows the free-row summary's machine tiles.**
-      They ship in #351 gated from upstream of the producer — the
-      2026-08-31 walk's own bytes replayed through the real driver, hook and
-      store, then the door mounted over what it wrote
-      (`justRowReplay.test.ts`) — but `docs/screenshots/justrow-log.png`
-      cannot show them:
-      `injectJustRowShotFake` sends no burst, and `fake.test.ts` pins that a
-      burst-less script emits no 0x0039/0x003A. **Attempted and reverted in
-      #351**, so the next attempt starts here rather than from scratch. A
-      `FakeBurst` rides a `FakeBoundaryEvent`, whose `actual` needs
-      `index`, `elapsedSeconds`, `distanceMeters`, `avgSpm`,
-      `avgHeartRateBpm` and `restDistanceMeters` (`restSeconds` is
-      optional), plus
-      sibling `cumulativeElapsedSeconds`/`cumulativeDistanceMeters`.
-      Calories live on 0x003A, which `FakeBurst` takes only as raw bytes, so
-      `summaryOverrides` cannot reach them. Appending such a boundary to the
-      free-row script left Connect permanently disabled and broke four
-      justrow captures — that is the thing to solve. **The cheap route was
-      tried and does not work as-is (measured 2026-09-07, four orderings,
-      each a full run of the live free-row flow):** `FakeControls`
-      `deliverSummary` is boundary-free and already Playwright-driven
-      (`connected.spec.ts` uses it on the programmed arm), but on the
-      free-row END path it produced no summary ring event and no
-      `summaryTotals` — delivered immediately after the second END tap,
-      with and without `deliverVerification`, and again after asserting the
-      hand-off hold visibly open ("Wrapping up", that file's own idiom).
-      Whether the free-row arm declines it or the fake needs 0x003A (which
-      `deliverSummary` never writes) is UNRESOLVED and is the next thing to
-      find out. This is a FAKE-side gap only: the same fold works on real
-      wire bytes, which is what `justRowReplay.test.ts` gates.
 
 - **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
   one and offered the other at the 7 s offset.** James's ruling ("If a user
@@ -3056,6 +2970,136 @@ Each needs erg time or a deliberate recording session.
   `NfcSessionCoordinator.async(_:)` and `tagAttemptId`. Remove them at the
   next patch edit, which re-runs the Swift suite anyway. (`phase-nf.md`)
 
+## Phase TD — the debt Phases LP and AV left behind
+
+**NOT SCHEDULED, and grouped so it can be scheduled as ONE piece of work
+rather than rediscovered five times** (James, 2026-09-08: file things "either
+with triggers or in a tech debt phase"). Every row below was filed by the PR
+that created it — that rule worked. What it lacked was a home: "Small,
+queued" had grown past 240 rows, which is where things go to be forgotten
+rather than found.
+
+**TWO OF THESE SHARE ONE BLOCKER AND SHOULD BE DONE TOGETHER.** The fake
+monitor sends no end-of-workout summary burst, so neither the free-row machine
+tiles nor `VERIFIED ✓` can be photographed. Whoever unblocks that gets both
+captures from one piece of work; doing either alone is most of the cost for
+half the value.
+
+**None of these is a defect a rower can hit today.** Four are gaps in
+EVIDENCE — a capture that cannot be taken, a test that could not be made to
+bite — and one is a hardening case (the unparsable 409) that has never been
+observed. That is why they are grouped rather than queued, and why the entry
+condition for working on them is a quiet week, not an incident.
+
+**Sizes:** S each; M for the capture pair together.
+
+
+- [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
+      catch in `routes/concept2.ts`'s reconciliation now warns rather than
+      swallowing silently — that was the real defect (RF24's shape: a
+      permanently broken mechanism emitting nothing, forever). What has no
+      test is the other half: that the send still returns 200 when
+      `markC2Verified` throws. **Four attempts, all abandoned honestly
+      (2026-09-08):** every shape produced a 500 from the FIXTURE rather than
+      from the code under test, including one that 500s with no override at
+      all, so the setup is what could not be got right.
+      `makeFakeStores()` returns interlinked stores — handing the router a
+      `logs` from a second call breaks the sharing — and the reconciliation
+      sits inside `resolveWeightClass`, several layers below the file's
+      helpers. Deliberately shipped as a gap rather than as a green test
+      that proves the wrong thing. **The likely route:** an integration test
+      in `concept2Send.integration.test.ts`, where the store is real and can
+      be made to fail at the DB rather than by replacing a method.
+      **ALSO IN THE ICEBOX, with its trigger** (a send that 500s for no
+      visible reason, or anyone editing that `try`/`catch`), because what
+      would make this matter is an EVENT, not a date — this row is the
+      to-do, the icebox entry is the tripwire. Keep them in step.
+      **Grouped into Phase TD 2026-09-08** so it is scheduled with the rest
+      of the phase's debt rather than waiting for a PR that happens to touch
+      this file. **S**
+
+- [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
+      Filed by #363's review (F7). `postResult` answers a 409 whose body
+      carries no numeric `id` as `{kind:"c2_error", status:409}`, and #363
+      excludes 409 from the retry band — correctly, because retrying would
+      re-POST a row Concept2 already holds. The consequence is that the route
+      answers 502, `recordC2Result` is never called, the UI shows the row
+      unsent forever, and every re-send repeats the same loop. RF25's shape:
+      a lower layer reports a fact the caller cannot act on. **Not observed** —
+      the one captured Concept2 409 carries its id
+      (`docs/monitor/c2-crossconnect-2026-09/raw-output.txt`), so this is
+      hardening debt, not a live bug. Closing it means either parsing the id
+      out of the message text or giving the rower a "Concept2 already has
+      this" state. **S**
+
+- [ ] **No committed capture shows `VERIFIED ✓`.** Phase AV ships the mark
+      with client tests and two biting mutations, but the screenshots stack
+      cannot photograph it, for a reason already written down at length in
+      `e2e/screenshots.spec.ts`'s Wave E PR2 header: this stack is
+      Concept2-DARK by construction (`compose.yml` passes
+      `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`, `screenshots.sh` exports
+      nothing, and `scripts/compose-env.test.sh` enforces it), so
+      `POST /api/concept2/results/:logId` 403s before it writes anything.
+      **That route is the only writer of `verified`, exactly as it is the
+      only writer of `c2_result_id`** — the note's own words: "a capture step
+      that says 'seed state X' must be able to name a WRITER of X reachable
+      in the environment the capture runs in; here there is none." The SENT
+      and NO-WEIGHT captures already drive a tap against a routed answer
+      instead; the mark needs the row READ routed too, which is a larger
+      fake than either. Unblocks with the same work that would let this stack
+      photograph a sent row at all.
+
+- [ ] **The log detail issues TWO `GET /api/concept2/link` on EVERY view,
+      including rows with no machine block at all.** Phase AV
+      added the verified mark to `MachineConfirmedBlock`, which needs the live
+      link for its account gate, and `Concept2SendBlock` on the same screen
+      already calls `useConcept2Link()`. The hook has no shared cache — it is
+      a per-call fetch with its own generation ref — so the second caller is a
+      second request, not a second read of one. **Named in the PR that created
+      it rather than discovered later (RF29's shape).** The fix is to lift the
+      read to `FromTheLog` and pass `link` to both blocks, which changes
+      `Concept2SendBlock`'s props and its tests; not carried in Phase AV
+      because it is a refactor that PR did not need. **Scope corrected after
+      the branch review (N9): the hook is called at the top of
+      `MachineConfirmedBlock`, BEFORE its `machineWorkSeconds === null` early
+      return, and the block is rendered unconditionally — so the second
+      request fires on manual and timer rows too, where the block draws
+      nothing. The first wording said "per view", which is true and reads as
+      "per machine row".**
+
+- [ ] **No committed capture shows the free-row summary's machine tiles.**
+      They ship in #351 gated from upstream of the producer — the
+      2026-08-31 walk's own bytes replayed through the real driver, hook and
+      store, then the door mounted over what it wrote
+      (`justRowReplay.test.ts`) — but `docs/screenshots/justrow-log.png`
+      cannot show them:
+      `injectJustRowShotFake` sends no burst, and `fake.test.ts` pins that a
+      burst-less script emits no 0x0039/0x003A. **Attempted and reverted in
+      #351**, so the next attempt starts here rather than from scratch. A
+      `FakeBurst` rides a `FakeBoundaryEvent`, whose `actual` needs
+      `index`, `elapsedSeconds`, `distanceMeters`, `avgSpm`,
+      `avgHeartRateBpm` and `restDistanceMeters` (`restSeconds` is
+      optional), plus
+      sibling `cumulativeElapsedSeconds`/`cumulativeDistanceMeters`.
+      Calories live on 0x003A, which `FakeBurst` takes only as raw bytes, so
+      `summaryOverrides` cannot reach them. Appending such a boundary to the
+      free-row script left Connect permanently disabled and broke four
+      justrow captures — that is the thing to solve. **The cheap route was
+      tried and does not work as-is (measured 2026-09-07, four orderings,
+      each a full run of the live free-row flow):** `FakeControls`
+      `deliverSummary` is boundary-free and already Playwright-driven
+      (`connected.spec.ts` uses it on the programmed arm), but on the
+      free-row END path it produced no summary ring event and no
+      `summaryTotals` — delivered immediately after the second END tap,
+      with and without `deliverVerification`, and again after asserting the
+      hand-off hold visibly open ("Wrapping up", that file's own idiom).
+      Whether the free-row arm declines it or the fake needs 0x003A (which
+      `deliverSummary` never writes) is UNRESOLVED and is the next thing to
+      find out. This is a FAKE-side gap only: the same fold works on real
+      wire bytes, which is what `justRowReplay.test.ts` gates.
+
+
+
 # Icebox
 
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
@@ -3082,6 +3126,8 @@ an iceboxed item is not a phase-close requirement.
   in `concept2Send.integration.test.ts`, where the store is REAL and can be
   made to fail at the database rather than by replacing a method — which is
   the manoeuvre that produced every one of the four fixture 500s.
+  **Its to-do twin now lives in Phase TD**, not in "Small, queued" where it
+  was first filed. This entry stays the tripwire; that one is the work.
   **What DID ship, so this is a missing gate and not a missing fix:** the
   catch warns instead of swallowing silently. Before it, a permanently broken
   reconciliation emitted nothing at all, forever, because the success log is
