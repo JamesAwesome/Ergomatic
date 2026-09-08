@@ -6,8 +6,8 @@ lens 1; that pass falsified two of this spec's load-bearing premises and
 the revision is written through rather than appended.
 **Scope:** `app/vitest.config.ts`, `app/playwright.config.ts`,
 `app/package.json`, `app/scripts/`, `.husky/pre-push`,
-`.github/workflows/ci.yml`, `CLAUDE.md`, `.claude/agent-briefing.md`,
-`docs/TESTING.md`, `ROADMAP.md`
+`.github/workflows/ci.yml`, `.gitignore`, `CLAUDE.md`,
+`.claude/agent-briefing.md`, `docs/TESTING.md`, `README.md`, `ROADMAP.md`
 
 ## What and why
 
@@ -75,17 +75,41 @@ and each fork carries its own heap limit (measured: `heap_size_limit` =
 the output is shaped exactly like a flaky failure. **This, not the parent
 crash, is the case the design most needs to catch.**
 
-### Two V8 messages, not one
+### Three V8 messages, and picking the needle is the whole problem
 
-V8 has at least two fatal OOM strings and the Node 26.5.0 binary carries
-both (`strings $(which node)`): `Reached heap limit` and `Ineffective
-mark-compacts near heap limit`. A gradual object-growth loop — the shape
-a real test run has — printed `Ineffective mark-compacts` on **4 of 4**
-runs. The first draft keyed its classifier on `Reached heap limit`, which
-that probe never emits.
+V8 has at least three fatal OOM strings and the Node 26.5.0 binary
+carries all of them (`strings $(which node)`):
 
-Both share the substring **`JavaScript heap out of memory`**. That is the
-needle, and it is the only message needle this design uses.
+```
+Reached heap limit Allocation failed - JavaScript heap out of memory
+Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+Allocation failed - process out of memory
+```
+
+A gradual object-growth loop — the shape a real test run has — printed
+`Ineffective mark-compacts` on **4 of 4** runs. The first draft keyed on
+`Reached heap limit`, which that probe never emits. The second draft
+keyed on `JavaScript heap out of memory`, which the **third** message
+does not contain — and the third is reachable in exactly the fork case
+this design most needs to catch.
+
+**The needle is `Allocation failed`,** and the choice was measured rather
+than reasoned. Counting how many of the 23 out-of-memory strings in the
+binary each candidate matches:
+
+| Candidate | Matches | Verdict |
+| --- | --- | --- |
+| `JavaScript heap out of memory` | 1 of 23 | misses the third fatal message |
+| **`Allocation failed`** | **2 of 23** | **exactly the fatal pair** |
+| `out of memory` | 14 of 23 | over-matches badly |
+
+`out of memory` looks like the obvious generalisation and is the wrong
+answer: it also matches `ERR_HTTP2_NO_MEM`'s `'Out of memory'`, `Data
+cannot be cloned, out of memory.`, and several wasm messages — all
+**recoverable application errors**. A run that caught an HTTP/2 error
+would be promoted to `MEMORY KILL`, which is precisely the over-claim
+recurring failure 26 describes. Breadth is not the goal; matching the
+fatal set and nothing else is.
 
 ### `Killed: 9` is unreachable and is not used
 
@@ -118,13 +142,31 @@ worth doing; the causal story joining them is not established, and no
 amount of further desk argument will establish it.
 
 **Therefore A0, and it comes first.** Before B and C are tuned, the
-wrapper ships with a capture step: on any classified kill it writes
-`exit code, signal, the last 40 lines of stderr, vm_stat, sysctl
-vm.swapusage, and the output of
-`log show --last 5m --predicate 'eventMessage CONTAINS "memorystatus: killing"'`
-to `app/.test-kills/<timestamp>.txt` (git-ignored). The next real kill
-then answers the question this spec had to leave open, from the machine
-rather than from a reproduction.
+wrapper ships with a capture step: on any classified kill it writes the
+exit code, the signal, the last 40 lines of stderr, `vm_stat`, `sysctl
+vm.swapusage`, and the output of `/usr/bin/log show --last 5m --predicate
+'eventMessage CONTAINS "memorystatus: killing"'` to a timestamped file.
+The next real kill then answers the question this spec had to leave open,
+from the machine rather than from a reproduction. Measured cost of the
+`log` call: **1.53 s**, 182 rows — cheap enough to run on every kill.
+
+**Three mechanics, each a measured defect in the obvious version:**
+
+- **The path is anchored on the script's own location**
+  (`cd "$(dirname "$0")/.."`), not written relative to the caller.
+  `pnpm run` sets cwd to the package directory, so `pnpm test` and the
+  hook's `pnpm --dir app test` both run with cwd `app/` — where a
+  relative `app/.test-kills` resolves to `app/app/.test-kills`, while the
+  same string is correct from the repo root.
+- **`.gitignore` gains the directory, and that is why `.gitignore` is in
+  Scope.** It is not currently ignored (`git check-ignore` exits 1;
+  `app/.gitignore` is empty and the root file has no matching pattern),
+  and the SDLC phase-teardown gate checks `git status` on the main
+  checkout — so the first real memory kill would trip it.
+- **`log` must be called as `/usr/bin/log`.** It resolves to a shell
+  builtin in at least one shell on this machine, where the prescribed
+  invocation fails outright with `too many arguments`. Recurring failure
+  13's class: an instruction nobody had pasted.
 
 ## The design
 
@@ -138,12 +180,22 @@ and classifies:
 | # | Condition | Verdict | Class |
 | --- | --- | --- | --- |
 | 1 | exit ≥ 128 | killed by signal `exit-128`; 134 = SIGABRT (V8 fatal), 137 = SIGKILL | **deterministic** |
-| 2 | stderr contains `JavaScript heap out of memory` | heap OOM — **checked regardless of exit code or of whether a summary printed** | heuristic, covers the fork case |
+| 2 | stderr contains `Allocation failed` | heap OOM — **checked regardless of exit code or of whether a summary printed** | heuristic, covers the fork case |
 | 3 | non-zero exit and no `Test Files` line in stdout | suite did not complete, cause unknown | heuristic |
 
-Rule 2 is deliberately not gated on the others: the fork-worker OOM
-exits 1 *and* prints a summary, so any rule that requires a missing
-summary or a signal exit misses the case that matters most.
+**Evaluated in order 1 → 2 → 3, first match wins.** The order is part of
+the specification, not an implementation detail: exit 137 satisfies rules
+1 and 3, and exit 134 satisfies all three, with different banners. Left
+unstated, two of the eight fixtures below have two legal answers.
+
+Rule 2 is deliberately not gated on the others: the fork-worker OOM exits
+1 *and* prints a summary, so any rule requiring a missing summary or a
+signal exit misses the case that matters most.
+
+**Rules 2 and 3 read different streams** — the needle lands on stderr,
+the `Test Files` line on stdout (verified against a real vitest fork
+OOM). The wrapper captures them separately; a `2>&1` merge makes rule 3
+unable to distinguish them.
 
 Rules 1 and 2 print the memory banner; rule 3 prints the weaker one. A
 crash that is not a memory crash must not be promoted to a memory verdict
@@ -162,18 +214,36 @@ crash that is not a memory crash must not be promoted to a memory verdict
 The wrapper preserves the child's exit code; it adds a verdict, never
 swallows one. A clean pass prints nothing extra.
 
-**Two mechanical constraints on the wrapper**, both of which have bitten
-this repo already:
+**Four mechanical constraints on the wrapper.** Each is a measured
+defect in the obvious implementation, not a style note:
+
+- **The child's exit status comes from `PIPESTATUS[0]` or a `pipefail`
+  pipeline — never from a pipe's tail.** The wrapper must both stream
+  output to the terminal and capture it for grepping, and the natural
+  shape silently destroys rule 1, the deterministic one:
+  `( node -e 'process.kill(process.pid,"SIGKILL")' 2>&1 | tee /dev/null ); echo $?`
+  prints **0** — a SIGKILL reading as a pass. With `set -o pipefail` it
+  prints **137**. Both are available in `/bin/sh` here.
+- **It forwards `"$@"`** — the hook passes `--project unit --project
+  client`, and `pnpm test:coverage` and `pnpm test:watch` must route
+  through it too or they keep the old behaviour silently.
 
 - **It owns `NODE_OPTIONS`.** `package.json`'s `test` script currently
   hard-sets `NODE_OPTIONS=--no-experimental-webstorage`, and an inline
   assignment in a script **replaces** the caller's — measured: exporting
   a heap cap and running `pnpm --dir app test` left the cap unapplied and
   the suite passed. Dropping the flag costs 1582 false failures
-  (CLAUDE.md). The wrapper sets it itself and appends rather than
-  replaces anything a caller passes.
+  (CLAUDE.md). The wrapper sets the flag **first** and appends the
+  caller's `${NODE_OPTIONS:-}` **after** it, because duplicate
+  `--max-old-space-size` is **last-wins** (measured: `512` then `2048` →
+  2144 MB; reversed → 608 MB). Wrapper-first means a caller can still
+  impose a heap cap, which is what the A1 end-to-end test needs. The
+  `:-` is required: under `set -u` an unset `NODE_OPTIONS` aborts.
 - **Bash here is 3.2.57** (`/bin/bash`, the only bash on the machine).
-  No `mapfile`, no associative arrays, no `${var,,}`.
+  No `mapfile`, no associative arrays, no `${var,,}`. **Nothing enforces
+  this** — `ci.yml`'s `scripts` job is `ubuntu-latest`, so it cannot
+  exercise macOS bash, and the author is the only gate. Said aloud rather
+  than left implied.
 
 Gated by `app/scripts/test-run.test.sh`, one fixture per row:
 
@@ -182,15 +252,24 @@ Gated by `app/scripts/test-run.test.sh`, one fixture per row:
 | exit 134 (SIGABRT) | memory banner |
 | exit 137 (SIGKILL) | memory banner |
 | exit 1, `JavaScript heap out of memory` on stderr, **summary present** | memory banner (the fork case) |
-| exit 1, `Reached heap limit` variant | memory banner (both V8 strings) |
+| exit 1, `Allocation failed - process out of memory` on stderr | memory banner (the third V8 string, which carries no `heap` wording) |
 | exit 1, no `Test Files` line | **incomplete** banner, not the memory one |
 | a real test failure | no banner |
 | a clean pass | no banner |
 | `--changed` with an empty selection | no banner |
 
-Rows 3 and 5 are the ones that can go red in the interesting directions:
-row 3 fails if the classifier requires a missing summary, row 5 fails if
-it promotes an unexplained crash to a memory verdict.
+Rows 3, 4 and 5 are the ones that can go red in the interesting
+directions: row 3 fails if the classifier requires a missing summary, row
+4 fails if the needle is `JavaScript heap out of memory`, and row 5 fails
+if an unexplained crash is promoted to a memory verdict. A ninth fixture
+pins the over-match: **a run whose output contains `Out of memory` from a
+caught `ERR_HTTP2_NO_MEM` must print no banner.**
+
+An earlier draft of this table had a row reading "`Reached heap limit`
+variant → memory banner (both V8 strings)". It could not go red: both
+`heap limit` messages carry the needle on the **same line**, so the row
+was a duplicate of row 3 proving nothing about coverage. Replaced with
+the message that genuinely lacks the old needle.
 
 **A2. A CLAUDE.md recurring-failure entry (RF37)**, carrying three
 things an agent needs without the wrapper: that **exit ≥ 128 is a signal
@@ -206,8 +285,13 @@ it earns its place:
 
 ```
 NOTE: another Ergomatic test run is live (pid 1234, worktree av, started 14:02).
-      Free pages 66 MB, swap 6.6/7.2 GB. Consider a scoped run.
+      Free pages 66 MB, swap 6.6/7.2 GB, workers=4. Consider a scoped run.
 ```
+
+**`workers=` is not decoration.** It is the only place the cap actually
+in force becomes visible, and the failure that matters — the cap silently
+absent — is otherwise invisible. See B1 on why `CI` can remove it by
+accident.
 
 **Lifetime table** (recurring failure 27 — invariants, not mechanisms):
 
@@ -252,20 +336,27 @@ propagation claim rests on. Re-measured against a verified floor of 0:
 | Playwright accepts `workers: undefined` | Config loads; 703 tests in 18 files listed. Source-confirmed: `takeFirst` skips `void 0`, falling through to `"50%"`. |
 | Playwright's local default is 5 | PRIMARY, `playwright/lib/common/index.js`: `takeFirst(..., "50%")`, `resolveWorkers` = `max(1, floor(10 × 0.5))`. |
 
+**A shared helper, because `process.env.CI` is a string.** Truthiness is
+the wrong test: `CI=false` and `CI=0` are both truthy, so either silently
+removes both caps on the machine they exist to protect. Measured:
+`"false"` → uncapped, `"0"` → uncapped. Both configs use:
+
+```ts
+const isCI = (v = process.env.CI) => !!v && v !== "false" && v !== "0";
+const workerCap = (v: string | undefined, fallback: number) =>
+  Math.max(1, Math.min(16, Math.trunc(Number(v)) || fallback));
+```
+
 **B1.** In `vitest.config.ts`, top-level `test` block:
 
 ```ts
-maxWorkers: process.env.CI
-  ? undefined
-  : Math.max(1, Number(process.env.ERGOMATIC_TEST_WORKERS) || 4),
+maxWorkers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_TEST_WORKERS, 4),
 ```
 
 **B2.** In `playwright.config.ts`:
 
 ```ts
-workers: process.env.CI
-  ? undefined
-  : Math.max(1, Number(process.env.ERGOMATIC_E2E_WORKERS) || 2),
+workers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_E2E_WORKERS, 2),
 ```
 
 **Cost untested** for B2: no wall-clock or RSS measurement of the e2e
@@ -273,11 +364,22 @@ suite at either setting, because each run rebuilds and boots a compose
 stack. Flagged rather than guessed (recurring failure 30); the
 implementing PR measures it and records the number.
 
-**The clamp is not decoration.** Run through absent / empty / valued:
-`undefined`, `""`, `"0"`, `"abc"` all land on the default, but `"-2"`
-passes straight through unclamped, and Playwright's `resolveWorkers`
-*throws* below 1. `Math.max(1, …)` is what prevents a typo'd minus sign
-from breaking the runner. The upper end is deliberately unbounded.
+**Why `workerCap` is shaped the way it is**, run through absent / empty /
+valued (an earlier draft described this wrongly, claiming `"-2"` passed
+through unclamped when `Math.max(1, …)` already caught it — the real gaps
+were elsewhere):
+
+| Input | Result | Why the guard is there |
+| --- | --- | --- |
+| absent, `""`, `"0"`, `"abc"`, `"true"` | 4 | `\|\| fallback` |
+| `"8"`, `"0x8"` | 8 | ordinary |
+| `"-2"` | 1 | `Math.max(1, …)`; Playwright's `resolveWorkers` **throws** below 1 |
+| `"1.5"` | 1 | `Math.trunc` — a fractional worker count is not a setting |
+| `"999"`, `"Infinity"` | 16 | `Math.min(16, …)`. An unbounded upper end admits `Infinity` **on the machine this spec exists to protect**, which is the opposite of the goal. |
+
+The upper bound of 16 is a guard against typos, not a tuned value; a
+machine wanting more than 16 workers is outside what this default serves
+and should raise it in the same edit that raises the default.
 
 **B3. No change to Docker, container limits, or `E2E_KEEP` on memory
 grounds.** Measured: two live compose stacks cost **236 MB total**
@@ -292,29 +394,58 @@ out of scope so it can be argued on its own evidence.
 **C1. Pre-push runs the related tests, plus the gates `--changed` cannot
 reach.** Three constraints, each from a measured defect:
 
+- **The hook body runs under `sh -e`.** `.husky/_/h` invokes it as
+  `sh -e "$s" "$@"`, so a bare failing command **aborts the hook** rather
+  than falling through. Measured: a body running
+  `git rev-parse --verify --quiet <absent>` as a statement exits 1 at that
+  line — the fallback and the tests never run — and husky prints
+  `pre-push script failed (code 1)`, which reads exactly like the test
+  failure this design exists to stop mistaking. **Every fallible command
+  in the new hook body is wrapped in `if`/`||`, including command
+  substitutions.** Guarded, the same body reaches the fallback and exits 0.
 - **The ref is resolved first, and a missing ref fails loud.** Measured:
-  `vitest run --changed origin/nope --project unit --project client`
-  exits **0** with "No test files found" and **not one word** on either
-  stream — git exits 128, but the runner's git helper does not throw, so
-  the change set is empty and zero tests run. If `origin/main` is ever
-  absent (remote not named `origin`, ref pruned, a fresh clone, a fork)
-  the gate silently runs nothing, forever. The hook runs
-  `git rev-parse --verify --quiet origin/main` and falls back to the full
-  scoped suite when it fails.
+  `vitest run --changed origin/nope --project unit --project client` exits
+  **0** with `No test files found, exiting with code 0` on stdout (114
+  bytes) and a project glob dump on stderr (233 bytes) — git exits 128,
+  but the runner's git helper does not throw, so the change set is empty
+  and zero tests run. (An earlier draft said "not one word on either
+  stream", which was false and self-contradictory, since it quoted the
+  message.) If `origin/main` is ever absent — remote not named `origin`,
+  ref pruned, a fresh clone, a fork — the gate silently runs nothing,
+  forever.
+  The guard uses the **fully-qualified** ref,
+  `git rev-parse --verify --quiet refs/remotes/origin/main`: `--quiet`
+  suppresses the ambiguity warning as well as the error, so the short form
+  cannot detect a local branch literally named `origin/main` (git permits
+  one), which would silently win.
 - **`--project unit --project client` is kept.** The current hook is
   Docker-free by design and says so in its own comment; dropping the
   project flags re-admits the `integration` project (testcontainers,
   `testTimeout: 120_000`), so a server change would make the hook require
   Docker.
-- **The whole-tree gates always run.** `--changed` selects through vite's
-  module graph, so a test whose subject is a *file it reads* rather than a
-  *module it imports* is structurally unselectable. Measured selections:
-  `vitest.config.ts` → **0 tests**, `pnpm-lock.yaml` → **0**, a Swift
-  plugin file → **0**, `src/native/webAuth.ts` → 7, **without**
-  `scripts/webauth-contract.test.ts`, which exists to guard exactly that
-  file. The census and contract suites under `scripts/` are appended
-  unconditionally. Note that B1's own edit to `vitest.config.ts` selects
-  nothing, as does every Dependabot lockfile bump.
+- **The whole-tree gates always run — as a SECOND invocation.**
+  `--changed` selects through vite's module graph, so a test whose subject
+  is a *file it reads* rather than a *module it imports* is structurally
+  unselectable. Measured selections: `vitest.config.ts` → **0 tests**,
+  `pnpm-lock.yaml` → **0**, a Swift plugin file → **0**,
+  `src/native/webAuth.ts` → 7, **without**
+  `scripts/webauth-contract.test.ts`, which reads that file with
+  `readFileSync` and exists to guard it. B1's own edit to
+  `vitest.config.ts` selects nothing, as does every Dependabot lockfile
+  bump.
+  **`--changed` and a path filter INTERSECT, so "append the `scripts/`
+  gates" is not expressible in one command.** Measured:
+  `--changed origin/main … scripts/` → `No test files found`, while
+  `--project unit scripts/` alone → **7 files, 153 tests**. The hook
+  therefore runs two invocations — the changed set, then the `scripts/`
+  gates unconditionally — and **the wrapper classifies both and returns
+  the first non-zero status**, so a kill in either is reported rather than
+  masked by the other's success. Without this the Risk section's whole
+  mitigation is inoperative.
+- **An empty selection exits 0 because `passWithNoTests` defaults true**
+  (measured; nothing in the repo sets it). Under C1 an empty selection is
+  the everyday path, so that default is now load-bearing: flipping it
+  turns every no-op push into a false `SUITE DID NOT COMPLETE`.
 
 **C2. `pnpm test:full`** is the explicit full run, unchanged in meaning
 from today's `pnpm test`.
@@ -322,9 +453,14 @@ from today's `pnpm test`.
 **C3. CI is the only place the full suite is mandatory.** `ci.yml` already
 runs `pnpm test:coverage` and the full e2e job. What changes is that
 nothing local claims to be equivalent — **plus one addition**: the
-`scripts` job enumerates its seven test scripts by name and does not
-glob, so `test-run.test.sh` is added as a named step or it never runs
-anywhere.
+`scripts` job enumerates its **six** test scripts by name and does not
+glob (`compose-env.test.sh` appears twice, once to lint and once to run,
+which is where an earlier count of seven came from), so
+`test-run.test.sh` is added as a named step or it never runs anywhere.
+That job is `ubuntu-latest` with no `pnpm install` and no node setup, so
+it proves the classifier's **logic** only: every macOS-only call in the
+wrapper (`vm_stat`, `sysctl vm.swapusage`, `/usr/bin/log`) stays out of
+the tested path or behind a probe.
 
 **C4. A CLAUDE.md rule on what a local green now means** — evidence about
 the files it covered and nothing more, and any "the suite is green" claim
@@ -334,12 +470,21 @@ names its tier.
 already-booted stack. Recurring failure 1's point stands; only the source
 of the evidence moves.
 
-**C6. The amendment lands in all three places the instruction lives.**
-Recurring failure 34 is precisely the failure of stating an invariant and
-applying it to one site: besides CLAUDE.md's RF1, the same instruction
-lives in `.claude/agent-briefing.md`'s gate table (*any product code under
-`app/src/` → `pnpm e2e`*), which every subagent reads before its brief,
-and in `docs/TESTING.md`. All three change together or none do.
+**C6. The amendment lands in all FIVE places the instruction lives.**
+This clause invoked recurring failure 34 and then committed it: it said
+"all three places" and named three, and a repo-wide grep finds five.
+
+| Site | What it is |
+| --- | --- |
+| `CLAUDE.md` RF1 | the recurring-failure entry |
+| `CLAUDE.md` Commands bullet | a **second** CLAUDE.md site the "three" missed |
+| `.claude/agent-briefing.md` gate table | *any product code under `app/src/` → `pnpm e2e`* — every subagent reads this before its brief |
+| `docs/TESTING.md` | a checklist mention |
+| `README.md` | **not previously in Scope at all** |
+
+All five change together or none do, and the Testing row's grep is
+**repo-wide**, not scoped to a named list — a grep over the list you
+already thought of cannot find the site you forgot.
 
 ## What this does not do
 
@@ -366,8 +511,14 @@ and in `docs/TESTING.md`. All three change together or none do.
 | B2 | Measured during implementation; the number replaces the "untested" tag. Override and CI paths as for B1. |
 | C1 ref guard | `origin/main` made unresolvable; assert the hook falls back to the full scoped suite and says so, rather than passing on zero tests. |
 | C1 coverage | A branch changing only `vitest.config.ts` is pushed; assert the `scripts/` gates still run. |
+| A1 needle breadth | A fixture whose output carries `Out of memory` from a caught `ERR_HTTP2_NO_MEM` asserts **no** banner — the over-match guard. |
+| A1 pipeline status | The wrapper is run against a self-SIGKILLing child and asserted to return 137, not 0 — the `tee` defect. |
+| A0 path | The wrapper is invoked via `pnpm test` (cwd `app/`) and from the repo root; both must write to the same directory. |
+| A0 ignore | `git check-ignore` on the capture directory exits 0, and `git status --porcelain` is empty after a captured kill. |
+| C1 hook errexit | The hook body is run under `sh -e` with `origin/main` unresolvable; assert it reaches the fallback and exits 0, rather than aborting at the guard. |
+| C1 two invocations | A branch changing only `vitest.config.ts` is pushed; assert the `scripts/` gates ran, and that a failure in either invocation surfaces. |
 | C3 | The new CI step is named in `ci.yml` and observed running. |
-| C4/C5/C6 | Prose. Reviewed, not tested — but a grep asserts no un-amended `pnpm e2e` instruction survives in the three files. |
+| C4/C5/C6 | Prose. Reviewed, not tested — but a **repo-wide** grep asserts no un-amended `pnpm e2e` instruction survives anywhere, rather than checking a list of sites already thought of. |
 
 ## Risk
 
@@ -377,16 +528,31 @@ tier cannot silently drop this repo's strongest checks. If over-claiming
 shows up in review, strengthen C4 rather than reverting C1 — the full
 local suite was never the thing keeping main green.
 
-**A1's rule 2 is a heuristic on a vendor string.** It is now keyed on the
-substring common to both known V8 messages, but a third message would
-miss. Rule 1 is deterministic and unaffected, and A0's capture makes a
-miss diagnosable after the fact rather than invisible.
+**A1's rule 2 is a heuristic on a vendor string, and it has already been
+wrong twice.** Draft 1 keyed on `Reached heap limit` (never emitted by
+the growth shape); draft 2 keyed on `JavaScript heap out of memory`,
+whose hypothetical "third message would miss" turned out to be a real
+message shipped in the same binary. It is now `Allocation failed`,
+covering exactly the fatal pair and none of the 12 recoverable
+out-of-memory strings. A **fourth** message would still miss, so the
+mitigations are structural rather than lexical: rule 1 is deterministic
+and catches any parent crash regardless of wording, and A0's capture
+records the unmatched stderr so a miss is diagnosable from the next real
+kill instead of invisible. **The lesson is in the record because it
+recurred:** a needle chosen by reading one reproduction's output is a
+sample, not a set — the way to pick one is to enumerate the candidates
+in the binary and count what each matches.
 
 ## Appendix — the measurement scripts
 
 Both land in `app/scripts/` in the implementing PR; B1 and B2 prescribe
 re-running them, and a measurement nobody can repeat is a claim rather
-than a number.
+than a number. **Both have been pasted and run against the failure cases
+below**, not only the happy path — the first drafts printed
+`peak_node_rss=MB` for a command that finished inside one sample
+interval, and returned 0 for every one of: no arguments, a logfile with
+no command, an unwritable log directory, and a command that itself
+exited 7.
 
 `measure-test-memory.sh` — peak RSS of the node tree while a command runs:
 
@@ -394,17 +560,22 @@ than a number.
 #!/usr/bin/env bash
 # Usage: bash scripts/measure-test-memory.sh <logfile> <command...>
 set -uo pipefail
+if [ $# -lt 2 ]; then echo "usage: $0 <logfile> <command...>" >&2; exit 2; fi
 LOG="$1"; shift
-: > "$LOG"
+mkdir -p "$(dirname "$LOG")" 2>/dev/null || { echo "cannot create dir for $LOG" >&2; exit 2; }
+: > "$LOG" 2>/dev/null || { echo "cannot write $LOG" >&2; exit 2; }
 ( while true; do
     ps -Ao rss,comm | grep -E 'node|vitest' | awk '{s+=$1} END{print s/1024}' >> "$LOG"
     sleep 0.5
   done ) & SAMPLER=$!
-START=$(date +%s)
-"$@" >/dev/null 2>&1; RC=$?
-END=$(date +%s)
-kill "$SAMPLER" 2>/dev/null
-echo "exit=$RC wall=$((END-START))s peak_node_rss=$(sort -rn "$LOG" | head -1)MB"
+START=$(date +%s); "$@" >/dev/null 2>&1; RC=$?; END=$(date +%s)
+{ kill "$SAMPLER"; wait "$SAMPLER"; } 2>/dev/null   # 'wait' suppresses the job-control notice
+N=$(grep -c . "$LOG" || true)
+if [ "${N:-0}" -eq 0 ]; then
+  echo "MEASUREMENT INVALID: no samples (command finished inside one interval)" >&2; exit 3
+fi
+echo "exit=$RC wall=$((END-START))s samples=$N floor=$(sort -n "$LOG"|head -1)MB peak=$(sort -rn "$LOG"|head -1)MB log=$LOG"
+exit "$RC"
 ```
 
 `count-test-workers.sh` — max concurrent Vitest workers **belonging to
@@ -414,22 +585,53 @@ one app path**:
 #!/usr/bin/env bash
 # Usage: bash scripts/count-test-workers.sh <logfile> <app-abs-path> <command...>
 set -uo pipefail
+if [ $# -lt 3 ]; then echo "usage: $0 <logfile> <app-abs-path> <command...>" >&2; exit 2; fi
 LOG="$1"; APPPATH="$2"; shift 2
-: > "$LOG"
+mkdir -p "$(dirname "$LOG")" 2>/dev/null || { echo "cannot create dir for $LOG" >&2; exit 2; }
+: > "$LOG" 2>/dev/null || { echo "cannot write $LOG" >&2; exit 2; }
+FLOOR=$(ps -Ao args | grep '[v]itest/dist/worker' | grep -cF -- "$APPPATH" || true)
 ( while true; do
-    ps -Ao args | grep '[v]itest/dist/worker' | grep -c -- "$APPPATH" >> "$LOG"
+    ps -Ao args | grep '[v]itest/dist/worker' | grep -cF -- "$APPPATH" >> "$LOG" || true
     sleep 0.3
   done ) & SAMPLER=$!
 "$@" >/dev/null 2>&1; RC=$?
-kill "$SAMPLER" 2>/dev/null
-echo "exit=$RC max_own_workers=$(sort -rn "$LOG" | head -1)"
+{ kill "$SAMPLER"; wait "$SAMPLER"; } 2>/dev/null
+N=$(grep -c . "$LOG" || true)
+if [ "${N:-0}" -eq 0 ]; then echo "MEASUREMENT INVALID: no samples" >&2; exit 3; fi
+echo "exit=$RC samples=$N start_floor=$FLOOR peak=$(sort -rn "$LOG"|head -1) log=$LOG"
+if [ "$FLOOR" -ne 0 ]; then
+  echo "MEASUREMENT INVALID: $FLOOR foreign worker(s) already running for this path" >&2; exit 3
+fi
+exit "$RC"
 ```
 
-**Caveats, so neither is over-read.** The RSS sampler greps every `node`
-process on the machine, so its floor moves with whatever else is running;
-it discriminates between settings within one sitting and must not be
-compared across days. The worker counter is path-scoped for exactly this
-reason — its unscoped first version reported **9 foreign workers from
-another worktree with nothing of its own under test**, the same number
-the propagation claim rests on. **Read the floor before every use**, and
-treat a non-zero floor as an invalid measurement rather than a baseline.
+**Five properties, each earned by a defect in the first draft:**
+
+- **An arg-count guard.** Both scripts previously ran `"$@"` with no
+  command, took `RC=$?` from the preceding statement, and reported a
+  successful measurement of nothing.
+- **An empty log is an ERROR, not a blank field.** Any command finishing
+  inside one sample interval produced `peak_node_rss=MB` — a
+  complete-looking line with no number in it.
+- **The child's exit code is propagated** (`exit "$RC"`). Both previously
+  exited 0 regardless, so neither could be used in a gate.
+- **`grep -cF`, not `grep -c`.** The path is data, not a pattern, and
+  worktree paths here contain `.claude` — measured: the BRE form matches
+  `/a/xclaude/worktrees/mem/app` against `/a/.claude/worktrees/mem/app`,
+  the fixed-string form does not.
+- **The floor is read and enforced, not left to the operator.** The
+  caveat used to say "read the floor before every use" while the script
+  printed only the maximum, which is an operator instruction nobody could
+  follow (recurring failure 13). `count-test-workers.sh` now samples the
+  floor itself and **fails the measurement** when foreign workers are
+  present for that path.
+
+**One caveat stands and cannot be engineered away.** The RSS sampler is
+**machine-wide** — it greps every `node` process — so its floor moves
+with whatever else is running. Measured baseline with nothing of ours
+under test: **~850 MB across 56 processes, 54 of them another app's
+bundled node.** It therefore prints `floor=` alongside `peak=` so the
+reading can be judged, it discriminates between settings only within one
+sitting, and it must never be compared across days. The worker counter
+is the oracle to trust for anything structural; RSS is the one that
+chose `4`, and its numbers carry that caveat.

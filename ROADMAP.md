@@ -2077,11 +2077,30 @@ an OS memory kill of a terminal `node` on darwin is unobserved
 A's classifier may not be aimed at the same event. The spec's A0 ships a
 capture step for exactly this; the next real kill answers it.
 
+**A `/harden` lens 2 pass then found 24 more, 5 blocking**, all in the
+prescribed blocks: the pre-push hook body runs under `sh -e`, so the ref
+guard as written **aborts the hook** instead of falling back; `--changed`
+and a path filter INTERSECT, so "append the `scripts/` gates" needed two
+invocations rather than one; piping the child through `tee` makes a
+SIGKILL read as exit **0**, silently defeating the deterministic rule; a
+**third** V8 fatal OOM string exists (`Allocation failed - process out of
+memory`) that the chosen needle missed, and the replacement needle was
+picked by counting matches in the binary (`Allocation failed` → 2 of 23;
+the tempting `out of memory` → 14, including recoverable HTTP/2 and wasm
+errors); and `process.env.CI` being a string means `CI=false` silently
+removes both caps.
+
+**One of them is worth remembering on its own:** the clause invoking RF34
+committed RF34 — it said the e2e instruction lives in "all three places"
+and named three, where a repo-wide grep finds **five** (a second
+`CLAUDE.md` site and `README.md` were missed).
+
 **Owed at implementation:** Playwright's cost at 2 workers is
-**unmeasured** and tagged as such (recurring failure 30). Also owed:
+**unmeasured** and tagged as such (recurring failure 30).
 `test-run.test.sh` must be added to `ci.yml`'s `scripts` job **by name** —
-that job enumerates and does not glob, so a new script otherwise runs
-nowhere.
+that job enumerates six scripts and does not glob, so a new one otherwise
+runs nowhere; and that job is `ubuntu-latest`, so **nothing gates the
+bash-3.2.57 constraint** the wrapper is written under.
 
 ## Needs a decision from James
 
