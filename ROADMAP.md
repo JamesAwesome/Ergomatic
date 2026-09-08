@@ -272,7 +272,8 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
 
 ## Phase JC — the rower chooses what red and blue mean
 
-**Status: SPEC WRITTEN 2026-09-08, awaiting Gate 0.** Shape approved by James
+**Status: SPEC REVISION 2, 2026-09-08, awaiting Gate 0.** The anchor
+antagonist pass returned two blocking findings and four majors, all folded. Shape approved by James
 2026-09-07: four slots, each RED / BLUE / OFF; both the connected pane and the
 post-workout summary obey; device-local; a new SETTINGS door in You. Spec:
 [docs/superpowers/specs/2026-09-08-judge-colours-design.md](docs/superpowers/specs/2026-09-08-judge-colours-design.md).
@@ -290,16 +291,25 @@ pane and a summary — is approved before task 1.
 - [ ] **Gate 0.** Six artifacts, listed in the spec's own closing section,
       including the door-row ORDER question and whether the screen needs a
       word about the two SPM slots not reaching the summary. **S**
-- [ ] **The PR.** Seven tasks, spec §"PR shape". The load-bearing one is the
+- [ ] **The PR.** Nine tasks, spec §"PR shape". The load-bearing one is the
       e2e seam test: Vitest mocks every `.css` import to an empty string here,
       so **no client test can prove a colour lands on a pixel** — only e2e can
       start upstream of the producer (recurring failure 24). **M**
 
-**Two structural notes worth keeping even if the phase changes shape.**
+**Three structural notes worth keeping even if the phase changes shape.**
 `index.css` currently documents "ONE PAIR SERVES BOTH JUDGED METRICS ... There
 is no per-metric colour branch to keep in step"; per-slot control retires that
 sentence, and the six judged call sites each already know their own metric, so
-nothing new threads through `surfaceModel`. And `--judge-slower` is doing two
+nothing new threads through `surfaceModel`. **But there are TWO judged class
+pairs, not one** — `.summary-row-faster`/`-slower` is a second, independent
+pair on the summary screen, and the honest blast radius is 114 references
+across 29 files including 12 committed e2e HTML fixtures and `design.spec.ts`'s
+own judged-colour harness. **And the summary screen names both colours in
+hardcoded copy** (`← FASTER (BLUE) · SLOWER (RED) →`, pinned by an e2e
+`toHaveText`), which eight of the nine reachable pace configurations make
+false; the spec recommends deleting it on `TraceChart.tsx`'s own precedent
+("naming a colour here would just be a second thing to get wrong later"), and
+it is a Gate 0 ruling. And `--judge-slower` is doing two
 jobs — the judged tint AND `.connected-lost`'s red alarm background — which is
 why the spec splits raw inks (`--judge-red`/`--judge-blue`) from resolved
 slots rather than overriding the existing tokens in place. Overriding in place
@@ -3212,6 +3222,14 @@ trigger is the whole entry.
   every preference persisted per-user. **Trigger:** a tester says Today keeps
   suggesting workouts they do not have time for. The first item is the only one
   with a plausible complaint behind it; the other two are polish.
+  **"Every preference persisted per-user" now describes a road NOT taken
+  (2026-09-08).** Phase JC ships the app's first real preference and ships it
+  DEVICE-scoped and un-keyed, on James's design-gate ruling: a colour choice
+  is about the eyes looking at the screen, not about an account. The
+  consequence is written down rather than left implicit — a second rower on
+  the same phone inherits the first rower's colours, and there is no clear
+  path at all, not even sign-out. That is where this bullet gets re-litigated,
+  so it belongs with the device account switcher below rather than here.
 - **The device account switcher** (the design's SWITCH flow). **Trigger:** a
   second rower actually shares your phone at the erg.
 - **A rower-authored reservation** (was Phase 8C). The `kind` discriminant seam

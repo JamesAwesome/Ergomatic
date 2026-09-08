@@ -9422,3 +9422,91 @@ chaining; and the fake's need for a new `FakeScript` field. Also: the kinship
 with `verificationEligibility.ts` is earned and was UNDERSTATED — that module's
 "we ship no BikeErg" assertion is false today, and this design is what makes it
 true.
+
+## 2026-09-08 — Phase JC anchor pass (judge colours): the spec's own greps were right and its census was wrong
+
+**Context.** TRIAD spec (new localStorage shape) making the blue/red judged
+tint a four-slot preference. Full pass, phase open. Two blocking findings,
+four majors; the delivery mechanism survived intact.
+
+- **CLAIM (killed): "one class pair carries the tint for both metrics."** True
+  of the connected panes, false of the app: `.summary-row-faster`/`-slower`
+  (`index.css`, emitted by `PostWorkoutSummary.tsx`'s `judgedColorClass`) is a
+  second, independent pair with 29 references across 5 files. *Technique:*
+  don't grep the CALL SITES the spec names — grep the CSS for every rule whose
+  body consumes the token being retired. A "these tokens will have no
+  consumers" claim is settled by `grep -rn "var(--TOKEN)" src e2e`, and that
+  grep found a rule family the spec's call-site count structurally could not
+  see. Honest blast radius: 114 references, 29 files, incl. 12 committed HTML
+  fixtures.
+
+- **CLAIM (killed): "on the connected pane the target is on screen beside the
+  actual, so direction survives an all-red choice."** True of `PaneLive`, false
+  of `PaneGrid` — whose column set is fixed by the connected-redesign design
+  spec §2B at `# TIME METERS /500M SPM HR REST`, with no TARGET column in
+  either orientation. *Technique:* when a spec says "the pane", ask WHICH pane
+  and read the column table, not the hero. RF21's layer corollary in product
+  form: a justification true at one surface reads as true of the surface class.
+
+- **FOUND (kill-shot, invisible to every grep the spec ran): a hardcoded copy
+  string naming the two colours.** `PostWorkoutSummary.tsx` renders
+  `← FASTER (BLUE) · SLOWER (RED) →` on the exact surface the pace slots
+  repaint, pinned by an e2e `toHaveText`. *Technique:* **for any spec that
+  makes a VISUAL PROPERTY configurable, grep the user-facing string literals
+  for the property's own vocabulary** — colour words, direction words, unit
+  words — not just for the tokens and classes that implement it. Neither
+  `--judge-*` nor `timer-card-actual-*` appears anywhere near this line.
+
+- **CLAIM (held, and made stronger): "Vitest mocks every `.css` import to an
+  empty string, so no client test can prove a colour lands on a pixel."**
+  Verified: plain, `?raw` AND `?inline` all import as `""` (measured with a
+  scratch vitest config rooted at `app/`, never a file in the repo). But the
+  load-bearing reason is different and the spec did not have it: **jsdom 30
+  does not resolve `var()` at all** — with the stylesheet injected by hand,
+  `getComputedStyle(el).color` returns the literal `"var(--judge-pace-faster)"`
+  while a plain-hex rule returns `"rgb(29, 78, 137)"`. Consequence worth
+  keeping: a client assertion written as `toContain("var(--x)")` passes against
+  a totally broken cascade. Lifting the CSS mock would buy nothing.
+
+- **CLAIM (held): a custom property may hold a `var()` reference and resolve
+  through it.** PRIMARY, CSS Custom Properties L1 §2.3: *"Custom properties are
+  left almost entirely unevaluated, except that they allow and evaluate the
+  var() function in their value."* Probed in Playwright WebKit + Chromium
+  (identical). *The evidence that actually closes the WKWebView gap is neither:*
+  `theme/tokens.css`'s `--ink-1: var(--ink)` ships that indirection on James's
+  phone today. **Before probing a browser behaviour, grep the repo for a
+  shipped instance of it** — production is a stronger oracle than a headless
+  build.
+
+- **CLAIM (held, with the reason corrected): the contrast table covers every
+  combination.** `tokens.css` says a judged value sits on "both backgrounds";
+  `index.css`, about the same class family, records a THIRD
+  (`--surface-sunken`, 6.30:1). The resting active grid row sinks to
+  `--surface-sunken` and its SPM cell stays judged. Measured the third column
+  (blue 6.99, red 6.73, ink 14.50) — all pass, so the conclusion survived and
+  the evidence did not. *Technique:* **when a spec inherits a "measured against
+  N backgrounds" figure from a comment, grep the SAME file for the neighbouring
+  token's ground count.** Here two comments 30 lines apart said two and three
+  about cells in the same grid.
+
+- **RF16 second-corollary instance:** the spec cited `todayFilters.ts` as its
+  store pattern while requiring PER-FIELD corruption resilience. That file's own
+  comment reads *"a present-but-wrong-shaped value fails the SET"* — per-key
+  total, per-field strict. The citation is real; the attribute the argument
+  needed is the one attribute the source does not have.
+
+- **RF24 instance, pre-emptive:** the spec's I-2 table drives the reader from
+  hand-written strings and nothing drives it from `saveJudgeColors`. A
+  serialisation mismatch passes all twelve cases and resets the preference every
+  reload. **A store spec owes one round-trip test through its own writer**, over
+  a value non-default in every field.
+
+- **Un-instrumented boot read.** `applyJudgeColors` runs at module scope in
+  `main.tsx` before `createRoot`, which is the app's only top-level storage
+  read: a throw there is a white screen, not a lost preference. `vitest.config
+  .ts` excludes `src/main.tsx` from coverage entirely, so it has no client
+  instrument at all. The repo had already researched the reachability
+  (`docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md`,
+  including its binding *"write them as bare `catch`"* prescription) and the
+  spec neither cited nor inherited it — RF18's re-research trap, caught before
+  it cost anything.
