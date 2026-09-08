@@ -13537,3 +13537,82 @@ describe("beginFreeRow", () => {
     expect(events.some((e) => e.kind === "programDropped")).toBe(false);
   });
 });
+
+describe("createPm5Driver: a monitor whose bytes never decode", () => {
+  // The fake holds 0x0032 undecodable while 0x0031/0x0033 stay healthy —
+  // the reported incident's exact shape, and the one neither existing
+  // control could reproduce (`injectGarbledFrame` is one-shot and targets
+  // 0x0031, which decoded fine; `preV126Firmware` now decodes by design).
+  async function brokenAs1(framesEverEmitted?: () => boolean) {
+    const clock = manualClock();
+    const fake = createFakeTransport({ program: MINIMAL_PROGRAM });
+    const log = createEventLog();
+    const driver = createSubscribedDriver(fake, log, {
+      now: clock.now,
+      ...(framesEverEmitted ? { framesEverEmitted } : {}),
+    });
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    // Arm first: the fake only streams status once a program is armed, and
+    // arming reads 0x0031, which stays healthy. This IS the reported shape —
+    // connected, programmed, sitting at READY while 0x0032 never decodes.
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    fake.corruptCharacteristic(ADDITIONAL_STATUS_1_UUID);
+    events.length = 0;
+    return { clock, fake, driver, events };
+  }
+  const undecodables = (events: MonitorEvent[]) =>
+    events.filter((e) => e.kind === "undecodable");
+
+  it("says so once both thresholds are met, naming the characteristic for the ring only", async () => {
+    const { clock, fake, events } = await brokenAs1();
+    for (let i = 0; i < 20; i += 1) {
+      clock.advance(500);
+      fake.tick(500);
+    }
+    const fired = undecodables(events);
+    expect(fired).toHaveLength(1);
+    expect(fired[0]).toMatchObject({ characteristic: "0x0032" });
+  });
+
+  it("stays quiet when only the COUNT is met and the window is not", async () => {
+    const { clock, fake, events } = await brokenAs1();
+    // Many failures, almost no elapsed time: a burst, not a steady state.
+    for (let i = 0; i < 20; i += 1) {
+      clock.advance(1);
+      fake.tick(1);
+    }
+    expect(undecodables(events)).toHaveLength(0);
+  });
+
+  it("stays quiet when only the WINDOW is met and the count is not", async () => {
+    const { clock, fake, events } = await brokenAs1();
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(9000);
+      fake.tick(9000);
+    }
+    expect(undecodables(events)).toHaveLength(0);
+  });
+
+  it("NEVER fires once this sitting has read a frame — the condition the hardening pass corrected", async () => {
+    // The fact is injected because the driver cannot answer it: its own
+    // latches are reborn on every connect(), and Try again reconnects.
+    const { clock, fake, events } = await brokenAs1(() => true);
+    for (let i = 0; i < 40; i += 1) {
+      clock.advance(500);
+      fake.tick(500);
+    }
+    expect(undecodables(events)).toHaveLength(0);
+  });
+
+  it("keys the run per characteristic: healthy 0x0031 ticks alongside do NOT reset the broken one", async () => {
+    // This is the reported shape. A shared counter reset on any success
+    // could never accumulate here, and would never have fired at all.
+    const { clock, fake, events } = await brokenAs1();
+    for (let i = 0; i < 20; i += 1) {
+      clock.advance(500);
+      fake.tick(500); // delivers healthy 0x0031 and 0x0033 every tick
+    }
+    expect(undecodables(events)).toHaveLength(1);
+  });
+});

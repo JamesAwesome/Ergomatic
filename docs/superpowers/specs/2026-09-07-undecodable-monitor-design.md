@@ -19,10 +19,34 @@ We cannot fix an unreadable monitor from inside the app. So the only useful
 thing to say is the truth and the way out, which the app already has: row the
 piece on the machine and log it by hand.
 
-**Gate 0 chose Option 1**: the phase word becomes `CAN'T READ THIS MONITOR`,
-the warning sits under it, and the programmed plan greys to reference. James's
-reasoning, recorded because it decides the shape: a banner above a screen that
-still reads `READY` annotates the lie rather than correcting it.
+**Gate 0 chose Option 1**: the phase word is replaced, the warning sits under
+it, and the programmed plan greys to reference. James's reasoning, recorded
+because it decides the shape: a banner above a screen that still reads `READY`
+annotates the lie rather than correcting it.
+
+### The copy, amended after the hardening pass — James approved 2026-09-07
+
+The gate artifact showed the phase word as `CAN'T READ THIS MONITOR`. That
+blames the erg, and the evidence says the erg is not what is wrong: **every
+decode failure this project has ever had is our own parser's length guard**
+(`checkLength` is the sole producer of `Pm5ParseError` in `pm5/parse.ts`), and
+the incident that produced this work was our decoder being behind a 2018
+firmware revision. Under the original wording that rower would have been told
+their working machine was the problem.
+
+Amended, and the split is deliberate:
+
+- **Phase word: `NO READINGS`.** It states the fact and accuses nobody. The
+  app has no readings; that is true whoever is at fault, and it stays short
+  enough to sit where `1 OF 2 · READY` sat.
+- **Notice body: "Ergomatic can't read this monitor. Row your piece on the
+  machine, then log it by hand from Today. Nothing here will start."** The
+  subject is the app, which is where the evidence points.
+
+**Controller's call within James's approval**, flagged so he can veto: he
+approved moving the blame onto the app; putting the app's name in the NOTICE
+and leaving the phase word purely factual is my reading of how to do that
+without a phase word long enough to wrap.
 
 ## Research
 
@@ -232,7 +256,7 @@ Failing test first, and the seam test starts upstream of the parse
    the suite cannot go red on the defect the hardening pass found: every
    prescribed test lived inside one driver instance and never crossed the seam
    where the state resets (recurring failure 24, one layer up).
-4. **The surface.** The phase word reads `CAN'T READ THIS MONITOR`, the warning
+4. **The surface.** The phase word reads `NO READINGS`, the warning
    renders with its `role="alert"`, and the plan greys.
 5. **Mutation probes**, each recorded verbatim: drop condition 3 (test 2 goes
    red); drop the elapsed threshold (a burst inside one tick fires it); drop

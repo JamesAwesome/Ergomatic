@@ -865,6 +865,19 @@ export interface FakeControls {
    * `disconnectCb` fires.
    */
   suppressFrames(fromTick: number, toTick: number): void;
+  /** Hold `characteristicId` PERSISTENTLY undecodable: every notification on
+   *  it from now on arrives as two bytes, which is under every status
+   *  characteristic's length floor, so the real parser rejects it. The link
+   *  stays up and the subscription stays live — this reproduces a monitor
+   *  whose bytes we cannot parse, NOT one that has gone quiet, and those are
+   *  different failures with different handling.
+   *
+   *  Neither existing control can do this. `injectGarbledFrame` is one-shot
+   *  and targets 0x0031, which decoded perfectly in the incident;
+   *  `preV126Firmware` emits the short 0x0032 that we now DECODE by design. */
+  corruptCharacteristic(characteristicId: string): void;
+  /** Undo `corruptCharacteristic`, so a test can prove recovery. */
+  healCharacteristic(characteristicId: string): void;
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -1605,6 +1618,12 @@ export function createFakeTransport(script: FakeScript): Transport &
   // exact "our inbox, not the erg" distinction `liveness.ts`'s own header
   // states for what a silence declaration means).
   let suppressWindow: { fromTick: number; toTick: number } | null = null;
+  /** Characteristics held PERSISTENTLY undecodable (`corruptCharacteristic`).
+   *  Checked inside `notify` like `suppressWindow` above, because the thing
+   *  under test is a sustained condition across ticks — the existing
+   *  `injectGarbledFrame` is one-shot AND targets 0x0031, the characteristic
+   *  that DECODED FINE in the incident this exists to reproduce. */
+  const corrupted = new Set<string>();
   const notifyCbs = new Map<string, Set<(bytes: Uint8Array) => void>>();
   // `FakeControls.delayWrites`'s live value — `0` (instant, same-microtask
   // settlement) until a test opts in. Read by `settleWrite` below, the one
@@ -1745,7 +1764,13 @@ export function createFakeTransport(script: FakeScript): Transport &
     ) {
       return;
     }
-    for (const cb of notifyCbs.get(uuid) ?? []) cb(bytes);
+    // Two bytes: shorter than every status characteristic's floor, so the
+    // real `checkLength` rejects it whatever the characteristic is. The
+    // notification still ARRIVES — the link is healthy and the subscription
+    // live, which is exactly the shape of the reported failure and what
+    // makes it different from silence.
+    const out = corrupted.has(uuid) ? Uint8Array.from([0x00, 0x00]) : bytes;
+    for (const cb of notifyCbs.get(uuid) ?? []) cb(out);
   }
 
   /** The single place `latestStatus` (and with it the machine's own current
@@ -2908,6 +2933,12 @@ export function createFakeTransport(script: FakeScript): Transport &
     },
     suppressFrames(fromTick: number, toTick: number): void {
       suppressWindow = { fromTick, toTick };
+    },
+    corruptCharacteristic(characteristicId: string): void {
+      corrupted.add(characteristicId);
+    },
+    healCharacteristic(characteristicId: string): void {
+      corrupted.delete(characteristicId);
     },
     /**
      * The END-OF-WORKOUT SUMMARY (0x0039) the PM5 sends once a workout has
