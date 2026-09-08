@@ -9962,13 +9962,31 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-variant-numeric: tabular-nums;
 }
 
+/* NO `color` DECLARATION, and it is load-bearing rather than an omission
+   (Phase JC Task 3). `.summary-row-pace` is a JUDGED cell: it carries
+   `.judge-pace-faster`/`-slower` on a judged row, and those rules are
+   declared ~5000 lines above this one, with the same (0,1,0) specificity.
+   A `color: var(--ink)` here would win on source order and paint every
+   verdict on the summary plain ink — which is exactly what it did, caught
+   by `design.spec.ts`'s §2E computed-colour leg during the rename. Both
+   cells inherit `--ink` from `body`, byte-identical to what the
+   declaration produced, and an inherited value loses to any matching rule
+   at all — so the verdict class wins wherever it lands.
+
+   The connected panes' own grid block a few thousand lines above states
+   this same rule ("NO RULE THAT COULD MATCH A JUDGED CELL DECLARES
+   `color`"), learned from the identical bug on pane B's hero. It reaches
+   the summary now because the summary's verdicts moved onto the shared
+   `.judge-*` family; before that its own `.summary-row-faster`/`-slower`
+   sat 30 lines BELOW this rule and beat it by source order, which is why
+   nothing here ever had to know. `.summary-row-target` is not judged and
+   is only along for the shared geometry; it inherits the same ink. */
 .summary-row-pace,
 .summary-row-target {
   flex: 0 0 52px;
   font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 600;
-  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 

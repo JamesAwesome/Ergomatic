@@ -243,3 +243,83 @@ describe("I-4: the LOST THE MONITOR alarm never follows the preference", () => {
     expect(count(indexCss)).toBe(count(raw) - count(commentsOnly));
   });
 });
+
+// ---------------------------------------------------------------------------
+// I-3's cascade half: a verdict class must be able to WIN
+// ---------------------------------------------------------------------------
+
+// THIS SHIPPED BROKEN AND THE BROWSER GATE CAUGHT IT (Phase JC Task 3).
+// Moving the summary's verdicts onto the shared `.judge-*` family moved
+// them ~5000 lines UP `index.css`, and `.summary-row-pace` declared
+// `color: var(--ink)` at (0,1,0) below them — equal specificity, later
+// wins — so every judged row on the summary rendered plain ink. Nothing
+// at the class layer could see it: jsdom resolves no `var()` and every
+// client assertion here is a class name. `design.spec.ts`'s §2E computed-
+// colour leg went red, on the real cascade, in a real browser.
+//
+// The fix was to delete that declaration (both cells inherit the same
+// `--ink` from `body`), and this is the INVARIANT behind it rather than
+// the counterexample: a judged cell's neutral tone arrives by
+// INHERITANCE, which any matching rule beats, so no bare rule for one of
+// these classes may declare `color` at all. `index.css`'s own pane C block
+// already stated this in prose — "NO RULE THAT COULD MATCH A JUDGED CELL
+// DECLARES `color`" — learned from the identical bug on pane B's hero, and
+// prose is not a gate.
+//
+// SCOPED TO THE BARE (0,1,0) SELECTOR ON PURPOSE. A more specific rule
+// (`.summary-hero-lead .summary-hero-value`, say) beats a verdict class on
+// specificity regardless of source order, and such a rule is a deliberate
+// override rather than an accident. It is the single-class form — the one
+// that wins only by sitting lower in the file — this cannot allow.
+const JUDGED_CELL_CLASSES = [
+  // `PaneLive.tsx`'s `judgedClass`, all three sites.
+  "connected-hero-value",
+  "connected-hero-avg-value",
+  // `PaneGrid.tsx`'s `cellClass`, both columns.
+  "connected-grid-pace",
+  "connected-grid-spm",
+  // `PostWorkoutSummary.tsx`'s `judgedColorClass`, all three elements it
+  // lands on. `.summary-row-bar` paints `background: currentColor`, so it
+  // needs the verdict to reach its own `color` too.
+  "summary-row-pace",
+  "summary-row-dev",
+  "summary-row-bar",
+] as const;
+
+/** Every `selector { decl }` where a bare judged-cell class sets `color`. */
+function inheritanceBreakers(source: string): string[] {
+  return cssRules(source)
+    .flatMap((rule) => {
+      const bare = JUDGED_CELL_CLASSES.filter((c) =>
+        rule.selectors.includes(`.${c}`),
+      );
+      if (bare.length === 0) return [];
+      return rule.body
+        .split(";")
+        .map((decl) => decl.trim())
+        .filter((decl) => /^color\s*:/.test(decl))
+        .flatMap((decl) => bare.map((c) => `.${c} { ${decl} }`));
+    })
+    .sort();
+}
+
+describe("I-3's cascade half: nothing outranks a verdict by source order", () => {
+  it("no judged cell's own bare class declares color anywhere in index.css", () => {
+    expect(inheritanceBreakers(indexCss)).toStrictEqual([]);
+  });
+
+  // RF21: the assertion above is a negative sweep over 10,000 lines and
+  // reads as evidence whether or not it can fail. This is the exact
+  // declaration the rename shipped, replayed against a sample — plus the
+  // two shapes that must NOT trip it: a multi-class override (which wins
+  // on specificity, deliberately) and a non-color declaration.
+  it("the sweep finds the declaration that actually broke the summary", () => {
+    const sample =
+      ".summary-row-pace,\n.summary-row-target { color: var(--ink); }\n" +
+      ".summary-hero-lead .summary-row-pace { color: var(--ink-2); }\n" +
+      ".summary-row-dev { font-weight: 600; }";
+    expect(inheritanceBreakers(commentStrippedSource(sample))).toStrictEqual([
+      ".summary-row-pace { color: var(--ink) }",
+    ]);
+  });
+});
