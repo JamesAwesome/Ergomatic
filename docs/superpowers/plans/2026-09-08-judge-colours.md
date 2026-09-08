@@ -118,11 +118,13 @@ Defaults `{paceFaster:"blue", paceSlower:"red", spmFaster:"blue", spmSlower:"red
 
 ### Task 2: Tokens and the four rules — ADDITIVE ONLY
 
-**Files:** Modify `app/src/theme/tokens.css`, `app/src/index.css`; test via `app/src/theme/tokens.test.ts` or a new CSS-source test.
+**Files:** Modify `app/src/theme/tokens.css`, `app/src/index.css`, **`app/src/workout/ConnectedSurface.test.tsx`**; add `app/src/theme/judgeTokens.test.ts`.
+
+**`ConnectedSurface.test.tsx` belongs to THIS task, not Task 3** (corrected during execution). The `.connected-lost` repoint below breaks three of its assertions: the two `background: var(--judge-slower)` reads, and `"the two verdict tokens are declared, distinct, and actually blue and red"`, which regexes `--judge-faster:\s*(#[0-9a-f]{6})` out of `tokens.css` and finds a `var()` alias once the aliases exist. Repoint the hex probe at `--judge-blue`/`--judge-red`, where the literals now live; that preserves its intent exactly.
 
 **Invariant:** I-4, and the structural half of I-7.
 
-**This task adds and changes nothing that is already consumed.** Revision 1 had it delete `--judge-faster`/`--judge-slower` and the two `.timer-card-actual-faster/-slower` rules while Task 3 still emitted the old class names — which leaves judged colour **dark on both the connected panes and the summary** for a whole wave, with every gate green. Confirmed by experiment, not inference: those exact deletions were applied at their real paths and **`pnpm build` exited 0**, because an unresolvable `var()` is invalid at computed-value time, not a parse error, and the surviving e2e assertions check class *presence*.
+**Nothing RENDERED changes.** (Revision 2 said "adds and changes nothing that is already consumed", which is false and dangerous — `.connected-lost`'s background is consumed and is changed. The true claim is weaker and sufficient: `--judge-slower` and `--judge-red` are both `#962718`, so no pixel moves. The stronger phrasing is what leads an implementer to skip the existing suites, which is exactly the trap that made `ConnectedSurface.test.tsx` this task's file.) Revision 1 had it delete `--judge-faster`/`--judge-slower` and the two `.timer-card-actual-faster/-slower` rules while Task 3 still emitted the old class names — which leaves judged colour **dark on both the connected panes and the summary** for a whole wave, with every gate green. Confirmed by experiment, not inference: those exact deletions were applied at their real paths and **`pnpm build` exited 0**, because an unresolvable `var()` is invalid at computed-value time, not a parse error, and the surviving e2e assertions check class *presence*.
 
 **Prescribed** (paste-tested: applied at these paths, `pnpm build` exit 0, reverted, at `1f77211d`).
 
@@ -220,6 +222,8 @@ $ grep -rl "timer-card-actual-" e2e/fixtures | wc -l  # 12 (the glob connected-*
 | `slower` | `judge-{metric}-slower` |
 | `stale` | `timer-card-actual-stale` — **unchanged** |
 | `within` | `timer-card-actual-within` — **unchanged** (no CSS rule at all today, deliberately: `grep -c "^\.timer-card-actual-within" src/index.css` → `0`) |
+
+**Owed to this task by Task 2, which could not run the e2e gate:** `e2e/design.spec.ts` defines `JUDGE_SLOWER_RGB = "rgb(150, 39, 24)"` (`:7371`, used at `:7382` and `:9530`) for the LOST banner's fill, with comments at `:3179`, `:3192`, `:3198`, `:5083`, `:5805`, `:5816` and `:9521` naming `--judge-slower` as that ground. The assertions still pass — the rgb has not moved — but the constant and every one of those comments point at a token this task DELETES. Rename and reconcile; the banner's ground is `--judge-red`.
 
 **Retire in this task, now that nothing emits them:** `.timer-card-actual-faster`, `.timer-card-actual-slower`, `.summary-row-faster`, `.summary-row-slower`, and the `--judge-faster` / `--judge-slower` aliases Task 2 left. `grep -rn "var(--judge-faster)\|var(--judge-slower)" src e2e` must return zero.
 
