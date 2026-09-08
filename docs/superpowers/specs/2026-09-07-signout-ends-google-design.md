@@ -97,10 +97,85 @@ X" rather than a full account list. That is ordinary OAuth single-sign-on
 behaviour and materially different from the silent, no-UI reuse reported here.
 SUSPECTED, untested on device.
 
+## The web half — ADDED 2026-09-07 after James tested: "Works on mobile not on web"
+
+**This spec said the web path "is separate, is not affected, and is not
+touched". The first two words were wrong**, and this is the second time in one
+evening that a scope sentence in this document turned out to be a guess (the
+first was the offline case). The web path has the same symptom for a different
+reason, and — this is the important part — **the correct fix there is the one
+this spec REJECTS for native.**
+
+**Why it looks identical and is not.** On native, the app held a Google session
+of its OWN, in the device keychain, put there by our sign-in. Ending it is what
+"sign out" means, so `forcePrompt` would have painted over a state we control
+and should have repaired.
+
+On web there is no session of ours to end. Sign-out already clears our cookie
+correctly. What survives is the BROWSER's own cookie with Google, which is not
+ours, and clearing it would sign the rower out of Gmail and everything else
+along with us. **There is no state here for us to fix**, so asking Google to
+show the account picker is not a symptom mask — it is the only correct
+mechanism the platform offers.
+
+**The fix:** `prompt: "select_account"` on the authorization URL
+(`server/auth/google.ts`). PRIMARY, Google's OpenID Connect documentation:
+`select_account` is defined as *"The authorization server prompts the user to
+select a user account."* Omitted, which is what we sent, a rower who has
+already authorised us and is still signed into Google is returned with no
+screen at all. That is the observed behaviour exactly.
+
+**A reader taking the native "Rejected" section as general guidance would
+reject this too.** That is why the reasoning is repeated in the code comment
+rather than left to a cross-reference.
+
+**Proven, not reasoned (antagonist pass, 2026-09-07).** "There is nothing of
+ours to end on web" was the load-bearing premise and it is now sourced rather
+than argued: Google's live discovery document
+(`curl -s https://accounts.google.com/.well-known/openid-configuration`)
+publishes no `end_session_endpoint` at all. It does publish a
+`revocation_endpoint`, so the harder version of the attack was run too: we
+store no Google token anywhere (`accessToken`/`refreshToken` exist only on
+`concept2Links`; we never request `access_type: offline`, and the token object
+is used once for `.claims()` and dropped). And even with a token, revocation
+invalidates OUR grant and forces a future CONSENT screen — it does not touch
+the browser's Google cookie, which is what causes the silent reuse. There is
+no repair path we declined to take.
+
+**THE COST, stated rather than omitted (RF30).** `select_account` prompts on
+EVERY sign-in, not only after an explicit sign-out. So a rower whose 60-day
+session (`SESSION_TTL_MS`, `server/auth/sessions.ts`) simply expires — still
+signed into Google, still consented, previously bounced back silently and
+correctly — now pays one mandatory account-selection tap. That is a real
+regression for the common case, traded for fixing the switch-accounts case.
+Judged worth it at this app's scale (an invite allowlist of about five
+people), and named here so it is a decision rather than a silence. If it
+annoys anyone, the narrower alternative is to carry the prompt only on a
+sign-in that follows an explicit sign-out, which costs a round-trip flag we do
+not have today.
+
+**HEDGED to match the native half.** What Google renders for
+`select_account` when exactly ONE account is signed into the browser — a full
+picker, or a one-tap "Continue as X" — is not documented, and the antagonist
+pass could find no primary source either way. SUSPECTED, untested. Either
+outcome satisfies the reported complaint, since both require a deliberate tap
+where the bug produced no screen at all, but the native half of this document
+hedges its analogous claim and this half should not read more confident than
+its evidence.
+
+**Testing it required un-ignoring code.** `server/auth/google.ts` carried a
+file-wide `v8 ignore` as a "thin openid-client wrapper", and `routes.test.ts`
+mocks `authorizationUrl` wholesale, so nothing anywhere asserted which
+parameters we ask Google for. The ignore now covers discovery only; the
+parameter set is tested (`server/auth/google.test.ts`), including that adding
+the prompt did not displace the PKCE challenge, the state or the redirect.
+
 ## Scope
 
-- `app/src/native/signin.ts` only. The web sign-out path is separate, is not
-  affected, and is not touched.
+- `app/src/native/signin.ts` and `app/server/auth/google.ts`, plus their
+  tests. Both halves of the same defect, on the two platforms, with opposite
+  correct fixes. No change to the `/api/auth/signout` route on either side —
+  it already does its own job correctly.
 - No server change. `/api/auth/signout` already does its half.
 - No stored-shape change, no copy change.
 

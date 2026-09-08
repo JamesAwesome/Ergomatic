@@ -9016,3 +9016,41 @@ antagonist should start with them.
   asking. Now CLAUDE.md RF34. **Add to the standing method: when a spec states
   an invariant, enumerate every site in the function or module it governs, not
   only the one the spec is arguing about.**
+
+## TRIAD pass, 2026-09-07 (web-signin-select-account, PR #356)
+
+- **A discovery document settles "is there state left to end" faster than
+  reasoning about it.** The spec's load-bearing premise was that, unlike
+  native, web has no Google session of OURS to end — so asking for the account
+  picker is the correct mechanism rather than a mask. That is not obviously
+  true from prose, because Google DOES publish a `revocation_endpoint`.
+  **Technique:** `curl -s https://accounts.google.com/.well-known/openid-configuration`
+  — no `end_session_endpoint` at all — plus a grep of `db/schema.ts` showing
+  `accessToken`/`refreshToken` exist only on `concept2Links`, never for Google.
+  One curl and two greps settled a TRIAD premise that reasoning would have left
+  an inference. **Corollary, and the better half: the pass opened the harder
+  mechanism rather than only noting the easier one's absence.** Even granting a
+  stored token, revocation invalidates OUR grant and forces a future CONSENT
+  screen; it never touches the browser cookie causing the silent reuse. So
+  there was no repair path we declined — the asymmetry with native is real.
+- **HELD but UNDER-HEDGED, and the tell was internal.** The web half asserted
+  that `select_account` fixes the symptom without saying what Google renders
+  when exactly ONE account is signed in — full picker, or one-tap "Continue as
+  X". No primary source states it either way. **The native half of the SAME
+  document explicitly hedges its analogous claim as "SUSPECTED, untested on
+  device."** A confidence asymmetry between two halves of one spec is itself a
+  tell: when one half hedges a claim and the other asserts the same shape of
+  claim, the asserted one usually has no better evidence, only more enthusiasm.
+- **An omitted cost is the same failure as an invented one (RF30, applied in
+  the direction the rule is usually NOT read).** RF30 exists because a made-up
+  cost ruled an option out. Here a real cost was simply never stated:
+  `select_account` prompts on EVERY sign-in, so an ordinary 60-day session
+  expiry — previously a silent, correct re-auth — now costs a mandatory tap.
+  Probably negligible at this app's five-person scale, but the spec said
+  nothing, which makes it a silence rather than a decision. Landed in the spec.
+- **Probes independently reproduced rather than trusted.** The pass re-ran all
+  three mutations against the real file instead of reading the PR body's table,
+  confirmed each failure string, and confirmed the file was restored clean
+  between them. It also checked the un-ignored span was genuinely exercised via
+  the HTML coverage report, noting the terminal text reporter omits the file
+  entirely — the briefing's own warning, hit live.
