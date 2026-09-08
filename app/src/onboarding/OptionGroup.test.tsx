@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -234,5 +235,175 @@ describe("OptionGroup", () => {
       );
       expect(onChange).toHaveBeenCalledExactlyOnceWith("regularly");
     });
+  });
+});
+
+// Phase JC Task 5 — the control is generalised so a second caller (the
+// judge-colour settings screen) can reuse the keyboard contract above
+// with its own stylesheet and a swatch beside each word. Three additive
+// props: `label` widens to ReactNode, plus `className`/`optionClassName`.
+//
+// THE GATE THAT DID NOT EXIST. `grep -rn "onb-option" src e2e` returns
+// five lines — two emitters here, three rules in index.css, and ZERO
+// tests. Every suite that renders this control (only `Recommend.test.tsx`
+// does; KnowBaseline and RowToFind never mount it) reaches it through
+// `role="radiogroup"` / `role="radio"`, so nothing in the repo could go
+// red if the class defaults moved. These first two tests are what makes
+// "every onboarding render stays byte-identical" a claim with a probe
+// behind it.
+//
+// The fixture is Task 6's real shape (recurring failure 3): three colour
+// slots, each label a swatch element plus its word, under non-default
+// class names — never a hand-built minimum that happens to be a string.
+
+type JudgeColor = "red" | "blue" | "off";
+
+const COLOR_OPTIONS: readonly { value: JudgeColor; label: ReactNode }[] = [
+  {
+    value: "red",
+    label: (
+      <>
+        <span className="judge-swatch" data-color="red" aria-hidden="true" />
+        RED
+      </>
+    ),
+  },
+  {
+    value: "blue",
+    label: (
+      <>
+        <span className="judge-swatch" data-color="blue" aria-hidden="true" />
+        BLUE
+      </>
+    ),
+  },
+  {
+    value: "off",
+    label: (
+      <>
+        <span className="judge-swatch" data-color="off" aria-hidden="true" />
+        OFF
+      </>
+    ),
+  },
+];
+
+function renderColors(
+  value: JudgeColor = "red",
+  onChange = vi.fn(),
+): ReturnType<typeof vi.fn> {
+  render(
+    <OptionGroup
+      options={COLOR_OPTIONS}
+      value={value}
+      onChange={onChange}
+      ariaLabel="Pace faster"
+      className="judge-options"
+      optionClassName="judge-option"
+    />,
+  );
+  return onChange;
+}
+
+describe("OptionGroup styling hooks", () => {
+  it("defaults the group to onb-options and every option to onb-option", () => {
+    renderGroup();
+    expect(
+      screen.getByRole("radiogroup", { name: "How much have you rowed?" }),
+    ).toHaveClass("onb-options");
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(4);
+    for (const radio of radios) {
+      expect(radio).toHaveClass("onb-option");
+    }
+  });
+
+  it("supplied class names REPLACE the onboarding defaults on both levels", () => {
+    renderColors();
+    const group = screen.getByRole("radiogroup", { name: "Pace faster" });
+    expect(group).toHaveClass("judge-options");
+    expect(group).not.toHaveClass("onb-options");
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(3);
+    for (const radio of radios) {
+      expect(radio).toHaveClass("judge-option");
+      expect(radio).not.toHaveClass("onb-option");
+    }
+  });
+
+  it("renders a ReactNode label's own elements, and the option is still named by its words", () => {
+    renderColors();
+    const blue = screen.getByRole("radio", { name: "BLUE" });
+    const swatch = blue.querySelector(".judge-swatch");
+    expect(swatch).toBeInTheDocument();
+    expect(swatch).toHaveAttribute("data-color", "blue");
+    // The swatch is decoration; the word carries the meaning (WCAG 1.4.1),
+    // so it must not leak into the accessible name.
+    expect(swatch).toHaveAttribute("aria-hidden", "true");
+  });
+});
+
+// The assertion Task 6 actually relies on: the keyboard contract is a
+// property of the control, not of the stylesheet it happens to wear.
+// These are the roving-tabindex/arrow suites above, re-run against a
+// group whose classes are BOTH non-default.
+describe("OptionGroup keyboard contract under non-default class names", () => {
+  it("the selected option is the single tab stop", () => {
+    renderColors("blue");
+    const radios = screen.getAllByRole("radio");
+    expect(radios[1]).toHaveAttribute("tabIndex", "0");
+    expect(radios[0]).toHaveAttribute("tabIndex", "-1");
+    expect(radios[2]).toHaveAttribute("tabIndex", "-1");
+  });
+
+  it("ArrowRight moves focus and selection together", async () => {
+    const onChange = renderColors("red");
+    screen.getByRole("radio", { name: "RED" }).focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("blue");
+    expect(screen.getByRole("radio", { name: "BLUE" })).toHaveFocus();
+  });
+
+  it("ArrowUp moves backward", async () => {
+    const onChange = renderColors("off");
+    screen.getByRole("radio", { name: "OFF" }).focus();
+    await userEvent.keyboard("{ArrowUp}");
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("blue");
+    expect(screen.getByRole("radio", { name: "BLUE" })).toHaveFocus();
+  });
+
+  it("wraps forward from the last option to the first", async () => {
+    const onChange = renderColors("off");
+    screen.getByRole("radio", { name: "OFF" }).focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("red");
+    expect(screen.getByRole("radio", { name: "RED" })).toHaveFocus();
+  });
+
+  it("wraps backward from the first option to the last", async () => {
+    const onChange = renderColors("red");
+    screen.getByRole("radio", { name: "RED" }).focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("off");
+    expect(screen.getByRole("radio", { name: "OFF" })).toHaveFocus();
+  });
+
+  it("a click still selects and confirms", async () => {
+    const onChange = vi.fn();
+    const onConfirm = vi.fn();
+    render(
+      <OptionGroup
+        options={COLOR_OPTIONS}
+        value="red"
+        onChange={onChange}
+        onConfirm={onConfirm}
+        ariaLabel="Pace faster"
+        className="judge-options"
+        optionClassName="judge-option"
+      />,
+    );
+    await userEvent.click(screen.getByRole("radio", { name: "OFF" }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("off");
+    expect(onConfirm).toHaveBeenCalledExactlyOnceWith("off");
   });
 });
