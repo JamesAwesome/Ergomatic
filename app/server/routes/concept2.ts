@@ -1460,6 +1460,8 @@ export function createConcept2Router({
           ? postResult.status
           : null;
       const refused4xx = refusedStatus !== null;
+      // See the code arm below for why this one is 422-only.
+      const refusedForCode = refusedStatus === 422;
       if (refused4xx && payload.workout !== undefined) {
         const { workout: _dropped, ...thinned } = payload;
         console.warn(
@@ -1485,10 +1487,29 @@ export function createConcept2Router({
           }
           return;
         }
-      } else if (refused4xx && payload.verification_code !== undefined) {
-        // No array to blame, so the code is what is dropped. Reached only by
-        // a row whose workout type we do not map — before this it had no
-        // entrance and could not retry at all.
+      } else if (refusedForCode && payload.verification_code !== undefined) {
+        // No array to blame, so the code is what is dropped. Before this the
+        // row had no entrance and could not retry at all.
+        //
+        // WHO ACTUALLY REACHES HERE, corrected: an earlier comment said "a
+        // row whose workout type we do not map", which is one of SIX ways
+        // `buildC2Intervals` returns null (`concept2/intervals.ts`) and not
+        // the likeliest. The likeliest is a row saved BEFORE Phase LP PR 2,
+        // which carries no `machineRestSeconds` on its steps — that file's
+        // own doc comment says so. An unmapped type is the rare case; an old
+        // row is the common one, and that changes who is affected when this
+        // path misbehaves.
+        //
+        // NARROWER THAN THE ARRAY ARM ON PURPOSE (review F6). The array
+        // strip takes any 4xx; this one takes 422 only, the status Concept2
+        // actually uses for payload validation (`mapping.ts`'s own
+        // eligibility mapping). The asymmetry is deliberate because the
+        // consequences are: a dropped array can be re-sent, a dropped code
+        // CANNOT — Concept2 honours it at CREATE and ignores it on update,
+        // so a re-send 409s and the row is unverifiable forever. Under a
+        // 429 the old behaviour left the row unsent and re-sendable; under
+        // an any-4xx strip it would come back successfully sent, silently
+        // without the thing the rower opted in for.
         const { verification_code: _droppedCode, ...thinned } = payload;
         console.warn(
           `concept2 send: C2 refused the payload carrying verification_code (status ${String(refusedStatus)}); retrying once without it (user ${userId}, log ${logId})`,
@@ -1498,7 +1519,7 @@ export function createConcept2Router({
         postResult = await client.postResult(accessToken, payload);
         if (postResult.ok) {
           console.warn(
-            `concept2 send: accepted WITHOUT verification_code — the code was the rejected part (user ${userId}, log ${logId})`,
+            `concept2 send: accepted WITHOUT verification_code after a 422 with it (user ${userId}, log ${logId}) — CORRELATION, not cause: a transient refusal produces the same trace`,
           );
         }
         // Same repeat-401 handling as the other two posts.
@@ -1616,7 +1637,8 @@ export function createConcept2Router({
       }
       // Only "c2_error" can still reach here — every "auth" outcome is
       // handled above: a successful retry, the repeat-401 flagReauth
-      // branch, or the same branch after the without-`workout` fallback.
+      // branch, or the same branch after EITHER fallback — the
+      // without-`workout` one or the without-`verification_code` one.
       res.status(502).json({ error: "c2_error" });
     }),
   );

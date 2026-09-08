@@ -2307,6 +2307,91 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(JSON.parse(sent!)).toMatchObject({ codeSent: true, verified: true });
   });
 
+  it("the code-strip retry meeting a dead grant flags needs_reauth, with no third post", async () => {
+    // Review F2: the code arm's repeat-401 block was entirely ungated —
+    // deleting it left 188/188 green. Without it the rower falls through to
+    // a bare 502 and is told "try again" forever with no route back to
+    // consent. The array arm has had this test since PR 2 review M2.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: false, kind: "auth" });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [],
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
+    expect((await store.getLink(userA.id))?.needsReauthAt).not.toBeNull();
+    // Two posts: the original and the thinned retry. Never a third.
+    expect(vi.mocked(client.postResult).mock.calls).toHaveLength(2);
+  });
+
+  it("the c2_send line names WHICH thing was dropped", async () => {
+    // Review F5: `fallback` was asserted for "none" only, so mislabelling
+    // `without_code` as `without_workout` left 188/188 green. This line is
+    // the only record of which path fired.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: true, resultId: 96, verified: false });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [],
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const sent = log.mock.calls
+      .map((c) => String(c[0]))
+      .find((l) => l.includes('"event":"c2_send"'));
+    log.mockRestore();
+    // The WHOLE event, not a subset: a leaked or renamed field on this line
+    // would slip past `toMatchObject` (review F11).
+    expect(JSON.parse(sent!)).toStrictEqual({
+      event: "c2_send",
+      logId: id,
+      verified: false,
+      intervalsSent: false,
+      codeSent: false,
+      fallback: "without_code",
+    });
+  });
+
   // THE STALE-TRUE BUG, gated. Found by the delta antagonist pass before it
   // could ship: a row verified on ONE Concept2 account, re-sent after
   // relinking to ANOTHER (which the already-sent short-circuit deliberately
@@ -2799,8 +2884,19 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     machineRestSeconds: 60,
   };
 
-  it("Phase LP PR 2: a refusal on a payload WITHOUT workout is not retried (no second post)", async () => {
+  // RETITLED (PR 2 review F1). This read "a refusal on a payload WITHOUT
+  // workout is not retried", which became a FALSE ABSOLUTE the moment the
+  // code-strip arm landed: such a payload IS retried when it carries a
+  // verification code. It stayed green only because `freshLink()` defaults
+  // AUTO VERIFY off and this row has no `verificationBytes`, so there is
+  // nothing to strip — the assertion never reached the branch its old title
+  // claimed. Exactly the defect this branch's own 409 test was fixed for,
+  // one screen away and unswept (RF34's shape: the principle stated, then
+  // applied to one of the sites it governs).
+  it("Phase LP PR 2: a refusal on a payload with NOTHING to strip — no array and no code — is not retried", async () => {
     const store = makeFakeConcept2Store();
+    // AUTO VERIFY stays OFF and the row carries no bytes, so the payload has
+    // neither of the two droppable things. That is the condition under test.
     await store.upsertLink(userA.id, freshLink());
     const client = makeStubClient();
     vi.mocked(client.postResult).mockResolvedValue({

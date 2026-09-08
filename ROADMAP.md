@@ -1275,8 +1275,10 @@ closed with zero Concept2 contact.
       verified.", OFF = "Concept2 leaves verifying to you."; the saved row
       carries a bare `VERIFIED ✓` on the MACHINE CONFIRMED title line and the
       CODE line is withdrawn when it appears. Both antagonist passes folded.
-      **Ships as TWO PRs:** PR 1 (setting + send + mark) is unblocked; PR 2
-      (the reconciliation James approved) is BLOCKED on one authenticated GET
+      **Ships as THREE PRs** (was two): PR 1 (setting + send + mark) MERGED
+      #360; #363 carries the fallback work, the 409 exclusion and `codeSent`,
+      which PR 1's spec withdrew; and the reconciliation James approved is
+      BLOCKED on one authenticated GET
       confirming Concept2's results list carries `verified` — the log-dev
       token expired 2026-09-07 20:04 UTC and `C2_CLIENT_ID`/`C2_CLIENT_SECRET`
       are not in the environment.
@@ -2235,6 +2237,20 @@ Each needs erg time or a deliberate recording session.
   "off Connect Device". (`phase-nf.md`)
 
 ## Small, queued, rides the next PR in its area
+
+- [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
+      Filed by #363's review (F7). `postResult` answers a 409 whose body
+      carries no numeric `id` as `{kind:"c2_error", status:409}`, and #363
+      excludes 409 from the retry band — correctly, because retrying would
+      re-POST a row Concept2 already holds. The consequence is that the route
+      answers 502, `recordC2Result` is never called, the UI shows the row
+      unsent forever, and every re-send repeats the same loop. RF25's shape:
+      a lower layer reports a fact the caller cannot act on. **Not observed** —
+      the one captured Concept2 409 carries its id
+      (`docs/monitor/c2-crossconnect-2026-09/raw-output.txt`), so this is
+      hardening debt, not a live bug. Closing it means either parsing the id
+      out of the message text or giving the rower a "Concept2 already has
+      this" state. **S**
 
 - [ ] **No committed capture shows `VERIFIED ✓`.** Phase AV ships the mark
       with client tests and two biting mutations, but the screenshots stack
