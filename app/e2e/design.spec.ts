@@ -4446,6 +4446,15 @@ test.describe("settings screen (judged colours)", () => {
     });
   });
 
+  // AND THIS IS THE ONLY LAYER THAT CAN SEE ONE WHOLE CLASS OF BREAKAGE.
+  // `theme/judgeTokens.test.ts`'s cascade sweep is scoped to BARE (0,1,0)
+  // selectors on purpose, so a two-class override
+  // (`.judge-preview .judge-preview-value { color: var(--ink) }`) leaves it
+  // green — 18/18 — while the preview shows one ink whatever the rower
+  // picks. Probed exactly that way (RF21): this test failed with "Expected:
+  // rgb(150, 39, 24) / Received: rgb(27, 26, 23)" against a rebuilt image
+  // whose served CSS was confirmed to carry the override first (RF12's
+  // corollary — a stale image reads as a pass).
   test("a tap repaints this screen's preview specimen, and leaves the swatches saying what red and blue ARE", async ({
     page,
   }) => {
