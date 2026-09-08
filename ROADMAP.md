@@ -2267,6 +2267,23 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
+      catch in `routes/concept2.ts`'s reconciliation now warns rather than
+      swallowing silently — that was the real defect (RF24's shape: a
+      permanently broken mechanism emitting nothing, forever). What has no
+      test is the other half: that the send still returns 200 when
+      `markC2Verified` throws. **Four attempts, all abandoned honestly
+      (2026-09-08):** every shape produced a 500 from the FIXTURE rather than
+      from the code under test, including one that 500s with no override at
+      all, so the setup is what could not be got right.
+      `makeFakeStores()` returns interlinked stores — handing the router a
+      `logs` from a second call breaks the sharing — and the reconciliation
+      sits inside `resolveWeightClass`, several layers below the file's
+      helpers. Deliberately shipped as a gap rather than as a green test
+      that proves the wrong thing. **The likely route:** an integration test
+      in `concept2Send.integration.test.ts`, where the store is real and can
+      be made to fail at the DB rather than by replacing a method. **S**
+
 - [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
       Filed by #363's review (F7). `postResult` answers a 409 whose body
       carries no numeric `id` as `{kind:"c2_error", status:409}`, and #363

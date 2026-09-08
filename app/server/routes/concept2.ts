@@ -1244,8 +1244,17 @@ export function createConcept2Router({
                 }),
               );
             }
-          } catch {
-            // See above: never fail a send over this.
+          } catch (err) {
+            // Never fail a send over this — but never go SILENT either. The
+            // catch was empty and the success log is gated on `upgraded > 0`,
+            // so a permanently failing reconciliation emitted nothing at all,
+            // forever: no signal that the one mechanism which can see a
+            // rower's own verification had stopped working. That is RF24's
+            // shape (a headline feature all of whose gates stay green), and
+            // every sibling failure path here warns.
+            console.warn(
+              `concept2 reconcile: could not upgrade ${String(nowVerified.length)} verified row(s) (user ${userId}); the send is unaffected — ${err instanceof Error ? err.message : "unknown"}`,
+            );
           }
         }
         const declared = pickDeclaredWeightClass(list.rows, {

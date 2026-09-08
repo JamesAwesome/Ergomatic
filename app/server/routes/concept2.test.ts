@@ -2141,6 +2141,7 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     async function sendWithList(
       rows: { id: number; verified: boolean | null }[],
       seed: { c2ResultId: number; c2UserId: number; verified: boolean | null },
+      breakReconcile = false,
     ) {
       const store = makeFakeConcept2Store();
       await store.upsertLink(userA.id, freshLink());
@@ -2161,6 +2162,10 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
         resultId: 700,
         verified: false,
       });
+      // `makeFakeStores()` returns INTERLINKED stores, so handing the router
+      // a `logs` from a second call breaks the sharing and 500s. The
+      // override therefore goes on the router's OWN store, after
+      // construction and after seeding.
       const { app, logs } = buildApp({ store, client });
       // TWO rows, and the distinction is the whole point. `olderId` was sent
       // on a PREVIOUS send and is what the reconciliation acts on. `freshId`
@@ -2178,13 +2183,39 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
         seed.verified,
       );
       const freshId = await seedEligibleLog(logs, userA.id);
-      await asA(
+      if (breakReconcile) {
+        logs.markC2Verified = () =>
+          Promise.reject(new Error("reconcile exploded"));
+      }
+      const res = await asA(
         request(app)
           .post(`/api/concept2/results/${freshId}`)
           .send({ tz: "America/New_York" }),
       );
-      return { logs, id: olderId };
+      return { logs, id: olderId, res };
     }
+
+    // NOT GATED, and said plainly rather than left as a green test that
+    // proves nothing (round-2 review S1, half-addressed).
+    //
+    // WHAT SHIPPED: the catch now WARNS instead of swallowing silently.
+    // That was the defect — the catch was empty and the success log is
+    // gated on `upgraded > 0`, so a permanently broken reconciliation
+    // emitted nothing at all, forever, which is RF24's shape.
+    //
+    // WHAT IS STILL UNGATED: the claim that a failing reconciliation does
+    // not fail the SEND. Four attempts to write that test all produced a
+    // 500 from the fixture rather than from the code under test, including
+    // one that 500s with NO override at all — so the setup, not the catch,
+    // is what I could not get right. `makeFakeStores()` returns interlinked
+    // stores and the reconciliation sits inside `resolveWeightClass`, which
+    // this file's helpers reach through several layers; a shape that
+    // isolates the throw without disturbing the rest has not been found.
+    //
+    // Deliberately NOT shipping a passing test here: one that green-lit the
+    // wrong thing would be worse than the gap, and this repo has a rule
+    // about assertions that cannot fail. Filed in ROADMAP with what was
+    // tried.
 
     it("upgrades OUR row when Concept2 now says verified — the rower's own act, finally seen", async () => {
       const { logs, id } = await sendWithList([{ id: 501, verified: true }], {
@@ -2227,15 +2258,62 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
       expect((await logs.get(userA.id, id))?.verified).toBeNull();
     });
 
-    it("touches NOTHING for a verified row that is not ours", async () => {
-      // The page is the rower's whole logbook. A verified row we did not
-      // send must not select any row of ours.
-      const { logs, id } = await sendWithList([{ id: 999, verified: true }], {
-        c2ResultId: 505,
-        c2UserId: 2211,
-        verified: null,
+    it("touches NOTHING for a verified row that is not ours, and does not COUNT it either", async () => {
+      // Two assertions, and the second is the one that bites. The store's
+      // own `inArray` + account scope already exclude a foreign id, so
+      // dropping the route's `ourRows` intersection changes no row — the
+      // round-1 review proved the write assertion alone stays green with
+      // `nowVerified = list.rows`.
+      //
+      // What the intersection genuinely buys is the LOG LINE: without it,
+      // `seen` becomes "how many rows in the rower's whole logbook are
+      // verified", which the route's own comment forbids and which would
+      // put a stranger's row count in our logs. So the honest gate is the
+      // event, not the row.
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      const client = makeStubClient();
+      vi.mocked(client.fetchResults).mockResolvedValue({
+        ok: true,
+        rows: [
+          { id: 506, verified: true },
+          // Not ours.
+          { id: 999, verified: true },
+        ].map((r) => ({
+          id: r.id,
+          type: "rower",
+          weightClass: "H",
+          dateUtc: "2026-09-07 11:06:08",
+          date: "2026-09-07 11:06:08",
+          verified: r.verified,
+        })),
       });
-      expect((await logs.get(userA.id, id))?.verified).toBeNull();
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: true,
+        resultId: 700,
+        verified: false,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const olderId = await seedEligibleLog(logs, userA.id);
+      await logs.recordC2Result(userA.id, olderId, 506, 2211, null);
+      const freshId = await seedEligibleLog(logs, userA.id);
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      await asA(
+        request(app)
+          .post(`/api/concept2/results/${freshId}`)
+          .send({ tz: "America/New_York" }),
+      );
+      const event = log.mock.calls
+        .map((c) => String(c[0]))
+        .find((l) => l.includes('"event":"c2_reconcile"'));
+      log.mockRestore();
+      // ONE seen, not two. The stranger's verified row is not counted.
+      expect(JSON.parse(event!)).toStrictEqual({
+        event: "c2_reconcile",
+        seen: 1,
+        upgraded: 1,
+      });
+      expect((await logs.get(userA.id, olderId))?.verified).toBe(true);
     });
   });
 
