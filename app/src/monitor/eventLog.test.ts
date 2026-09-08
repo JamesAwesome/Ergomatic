@@ -124,3 +124,75 @@ describe("createEventLog: exportLog", () => {
     expect(createEventLog().exportLog()).toBe("[]");
   });
 });
+
+describe("a flood must not evict its own diagnosis", () => {
+  it("collapses a consecutive repeat instead of pushing it, keeping the count and the span", () => {
+    const ticks = [10, 20, 30];
+    let i = 0;
+    const log = createEventLog(500, () => ticks[i++] ?? 99);
+    log.record("frame-error", "0x0032: expected 17 bytes, got 16");
+    log.record("frame-error", "0x0032: expected 17 bytes, got 16");
+    log.record("frame-error", "0x0032: expected 17 bytes, got 16");
+
+    const e = log.entries();
+    expect(e).toHaveLength(1);
+    expect(e[0]!.repeated).toBe(3);
+    expect(e[0]!.atMs).toBe(10); // the FIRST
+    expect(e[0]!.lastAtMs).toBe(30); // the LAST
+  });
+
+  it("keeps the connect-time entries a flood used to evict — the whole point", () => {
+    // Two entries that identify the monitor, then a flood far longer than the
+    // ring. Before coalescing these three were entry 1 of 500 and gone.
+    const log = createEventLog(10);
+    log.record("notify-first", "0x0031 (19B)");
+    log.record("notify-first", "0x0032 (16B)");
+    log.record("notify-first", "0x0033 (20B)");
+    for (let i = 0; i < 5000; i += 1) {
+      log.record("frame-error", "0x0032: expected 17 bytes, got 16");
+    }
+
+    const kinds = log.entries().map((x) => x.kind);
+    expect(kinds).toStrictEqual([
+      "notify-first",
+      "notify-first",
+      "notify-first",
+      "frame-error",
+    ]);
+    expect(log.entries()[3]!.repeated).toBe(5000);
+  });
+
+  it("does NOT collapse across a different entry — an interleaved event breaks the run", () => {
+    const log = createEventLog();
+    log.record("frame-error", "same");
+    log.record("frame-error", "same");
+    log.record("structure", "something happened");
+    log.record("frame-error", "same");
+
+    const e = log.entries();
+    expect(e.map((x) => x.kind)).toStrictEqual([
+      "frame-error",
+      "structure",
+      "frame-error",
+    ]);
+    expect(e[0]!.repeated).toBe(2);
+    expect(e[2]!.repeated).toBeUndefined();
+  });
+
+  it("does not collapse two entries of the same KIND with different DETAIL", () => {
+    const log = createEventLog();
+    log.record("frame-error", "0x0032: expected 17 bytes, got 16");
+    log.record("frame-error", "0x0038: expected 19 bytes, got 18");
+    expect(log.entries()).toHaveLength(2);
+  });
+
+  it("does not rewrite an array a caller is already holding", () => {
+    const log = createEventLog();
+    log.record("frame-error", "same");
+    const held = log.entries();
+    log.record("frame-error", "same");
+    // The earlier snapshot must still read as it did when it was taken.
+    expect(held[0]!.repeated).toBeUndefined();
+    expect(log.entries()[0]!.repeated).toBe(2);
+  });
+});

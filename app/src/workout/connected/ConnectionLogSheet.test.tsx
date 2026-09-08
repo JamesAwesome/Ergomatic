@@ -623,3 +623,22 @@ describe("Download recording (dev-only capture control)", () => {
     expect(download).not.toHaveBeenCalled();
   });
 });
+
+describe("logLine: a collapsed run must not read as a single event", () => {
+  it("prints ×N when the ring folded consecutive identical entries", () => {
+    expect(
+      logLine({
+        seq: 12,
+        kind: "frame-error",
+        detail: "0x0032: expected 17 bytes, got 16",
+        repeated: 5000,
+      }),
+    ).toBe("0012 FRAME-ERROR 0x0032: expected 17 bytes, got 16 ×5000");
+  });
+
+  it("prints no marker for an ordinary single entry, so nothing changes for the common case", () => {
+    expect(logLine({ seq: 3, kind: "connect", detail: "ok" })).toBe(
+      "0003 CONNECT ok",
+    );
+  });
+});

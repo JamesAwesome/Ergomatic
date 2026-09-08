@@ -83,7 +83,14 @@ export function parseLogEntries(raw: string): MonitorLogEntry[] {
 // eslint-disable-next-line react-refresh/only-export-components
 export function logLine(entry: MonitorLogEntry): string {
   const seq = String(entry.seq).padStart(4, "0");
-  return `${seq} ${entry.kind.toUpperCase()} ${entry.detail}`;
+  // `×N` WHEN THE RING COLLAPSED A RUN. Without it this sheet UNDER-REPORTS:
+  // `record()` folds consecutive identical entries into one (so a decode
+  // flood stops evicting the connect-time lines that diagnose it), and a
+  // reader seeing a single `FRAME-ERROR` line would have no way to tell one
+  // occurrence from five thousand. The count is the whole reason the fold is
+  // safe, so it has to reach every surface the fold reaches.
+  const run = entry.repeated !== undefined ? ` ×${entry.repeated}` : "";
+  return `${seq} ${entry.kind.toUpperCase()} ${entry.detail}${run}`;
 }
 
 export default function ConnectionLogSheet({
