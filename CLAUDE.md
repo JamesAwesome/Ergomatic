@@ -1051,6 +1051,21 @@ often they recur.
     it. Corollary: the option you are about to recommend is the one you
     tested; the one you rule out in a clause is the one that needs the
     receipt.
+    **IT IS NOT ONLY DESIGN GATES, and PR #351 proved that within a day
+    (2026-09-07).** A queued ROADMAP item — "also owed: a `design.spec.ts`
+    assertion on the free-row tier" — was STRUCK on the stated ground that
+    such a test needs a fake summary burst nobody has built. The reviewer
+    asked for the receipt, and the receipt did not exist: the fake carries
+    a boundary-free `deliverSummary` control that Playwright already drives
+    on the programmed arm, so the strike's premise was never checked. Four
+    orderings were then run and, as it happens, none folded a summary on
+    the free-row End path — the conclusion survived, the REASON did not,
+    and the row now carries a measurement instead of an argument.
+    **Anything you remove from a queue, a slate or an option list on a
+    stated cost owes the same evidence a design gate's option owes.**
+    Striking an item is a decision James does not get to make again;
+    "blocked on X" is a claim about X, and the cheapest version is to spend
+    one probe rather than one sentence.
 
 31. **A fix is a new claim and gets the gate the original claim got — and
     a walk runsheet is a TIMED PROTOCOL between two machines (Phase NF,
