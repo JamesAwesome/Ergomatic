@@ -8974,3 +8974,45 @@ antagonist should start with them.
   concatenates it), and a tile rendering its label with no value fails the
   assertion, so an empty tile cannot pass. The four decoded literals reproduce
   under an independent raw-hex decode against `pm5/parse.ts`.
+
+## TRIAD pass, 2026-09-07 (signout-ends-google spec, PR #353)
+
+- **Attacked and HELD, with the receipt already sitting in node_modules.** The
+  spec hedged "not caused by the version bump" as INFERENCE, untested, needing
+  a build against 8.4.4 to check. It did not: `GoogleProvider.swift` md5s
+  identically across 8.4.4 and 8.5.5 (`ba0b4e057b4c38cfec9803a36206ab7b`), and
+  the only iOS-facing diff in the whole plugin is a new Telegram provider plus
+  three Android-only rejected cases. **Technique: before writing "this would
+  need a build to prove", check whether both versions are already vendored, or
+  obtainable with `npm pack`, and diff the source.** Cost under a minute
+  against a claim the spec had priced as not worth doing. The controller
+  reproduced it independently before promoting it into the spec.
+- **Attacked and HELD via the vendored NATIVE SDK, not the plugin wrapper.**
+  Xcode's DerivedData held a live SPM checkout of GoogleSignIn-iOS one layer
+  beneath the Capacitor plugin. Reading `GIDSignIn.m` directly settled two
+  questions no amount of reading the wrapper could: `restorePreviousSignIn`
+  is genuinely silent (`silentOptionsWithCompletion:`), and `signOut()` is
+  synchronous, local-keychain-only, with no path that skips its completion —
+  so "is there a second producer of the symptom" and "can the swallowed call
+  hang" were both answered without a device. **When a Capacitor/Cordova plugin
+  wraps a native SDK, read the SDK's own source before treating the plugin's
+  public surface as the ceiling of what is knowable.** The wrapper does not
+  even expose `disconnectWithCompletion:`, which the SDK beneath it has — so
+  "we cannot revoke" was a statement about the wrapper, not the platform.
+- **A real RF21 gap the author had missed, caught by tracing the WRONG fix.**
+  The spec's ordering test had no mutation that could isolate it: the listed
+  reorder-mutation also dropped the catch, so it could not discriminate strict
+  sequential await from a `Promise.all`-shaped concurrent kickoff with the
+  catch left intact — which passes the other two tests while violating the
+  ordering the design rests on. **Technique: write the plausible WRONG
+  implementation and check which assertions survive it.** The controller ran
+  the supplied mutant; it failed the ordering test alone, exactly as predicted.
+- **What the pass did NOT catch, recorded because it matters more than what it
+  did.** The same function awaited the SERVER call before the local token
+  clear, so sign-out did nothing at all offline — the identical invariant
+  violation the spec was written to fix, one line higher. The pass attacked
+  the spec's stated ordering claim and confirmed it; it never asked whether
+  the invariant had OTHER sites in the same function. James found it by
+  asking. Now CLAUDE.md RF34. **Add to the standing method: when a spec states
+  an invariant, enumerate every site in the function or module it governs, not
+  only the one the spec is arguing about.**
