@@ -2026,6 +2026,75 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(row?.autoVerify).toBe(false);
   });
 
+  // RESOLVED ONCE PER SEND, gated. Written because the claim shipped UNGATED
+  // first: a probe swapping the retry's captured `autoVerify` for a fresh
+  // read of the REASSIGNED `lockedLink` passed 179/179 (2026-09-07).
+  //
+  // Arranged, never raced (the concurrency lesson from PR #269): the refresh
+  // runs BETWEEN the two posts, so flipping the stored flag inside the
+  // refresh mock puts the change at exactly the interleaving that matters,
+  // deterministically. A rower toggling AUTO VERIFY mid-send must not have
+  // one send carry two policies.
+  it("a mid-send toggle does not reach the retry: one send, one policy", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(
+      userA.id,
+      freshLink({ accessToken: "stale-at", refreshToken: "rt-1" }),
+    );
+    // Starts OFF, and the row is the one that WOULD verify, so the only
+    // reason no code appears is the captured flag.
+    expect((await store.getLink(userA.id))?.autoVerify).toBe(false);
+    const client = makeStubClient();
+    // THE TOGGLE LANDS DURING THE FIRST POST — which is the only
+    // interleaving where the retry's own locked re-read can see a NEWER
+    // value than the one this send started with. An earlier draft flipped it
+    // inside `refreshTokens` and could not bite: `acquireAccessToken` takes
+    // its locked read BEFORE refreshing, so the reassigned identity still
+    // carried the old flag and the mutant was behaviourally identical.
+    vi.mocked(client.postResult)
+      .mockImplementationOnce(async () => {
+        await store.setAutoVerify(userA.id, true);
+        return { ok: false as const, kind: "auth" as const };
+      })
+      .mockResolvedValueOnce({ ok: true, resultId: 77, verified: false });
+    vi.mocked(client.refreshTokens).mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: "rotated-at",
+        refreshToken: "rotated-rt",
+        expiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    // The store really did change mid-request — otherwise this test proves
+    // nothing about the capture.
+    expect((await store.getLink(userA.id))?.autoVerify).toBe(true);
+    // Both attempts carry the policy this send STARTED with.
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]![1]).not.toHaveProperty("verification_code");
+    expect(calls[1]![1]).not.toHaveProperty("verification_code");
+  });
+
   // THE FAIL-CLOSED ORDER, gated. Written because the claim shipped
   // UNGATED first: a probe that moved autoSend's write above autoVerify's
   // validation passed 178/178 (2026-09-07). A mixed patch with one bad field
