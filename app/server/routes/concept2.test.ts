@@ -2026,6 +2026,34 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(row?.autoVerify).toBe(false);
   });
 
+  // THE FAIL-CLOSED ORDER, gated. Written because the claim shipped
+  // UNGATED first: a probe that moved autoSend's write above autoVerify's
+  // validation passed 178/178 (2026-09-07). A mixed patch with one bad field
+  // must change NOTHING, and only a test that sends a good field alongside a
+  // bad one can say so.
+  it("a mixed patch with one bad field writes NEITHER (fail-closed order)", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const { app } = buildApp({ store });
+    // Both start false, so a write of either is visible.
+    const before = await store.getLink(userA.id);
+    expect(before?.autoSend).toBe(false);
+    expect(before?.autoVerify).toBe(false);
+    const res = await asA(
+      request(app)
+        .patch("/api/concept2/link")
+        .send({ autoSend: true, autoVerify: "nope" }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body).toStrictEqual({
+      error: "autoVerify must be a boolean",
+      field: "autoVerify",
+    });
+    const after = await store.getLink(userA.id);
+    expect(after?.autoSend).toBe(false);
+    expect(after?.autoVerify).toBe(false);
+  });
+
   it.each([
     ["a string", { autoVerify: "true" }],
     ["a number", { autoVerify: 1 }],
