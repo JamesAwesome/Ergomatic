@@ -587,6 +587,29 @@ export const concept2Links = pgTable("concept2_links", {
   // account switch must not carry AUTOMATIC onto another Concept2 account);
   // a reconnect of the same account keeps it.
   autoSend: boolean("auto_send").notNull().default(false),
+  // Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
+  // 2026-09-07). OPT-IN, and `DEFAULT false` is the whole product ruling
+  // rather than a convention: PR #336 sent the monitor's verification code
+  // unconditionally, Concept2 marked the row verified at receipt, and James
+  // ruled that a parity REGRESSION — Concept2's own app leaves verifying to
+  // the rower, so doing it for them removes the act this phase exists to
+  // respect. On means the rower asked for it.
+  //
+  // WHY IT LIVES HERE AND NOT IN `preferences`: it inherits `auto_send`'s
+  // account-switch reset in the same `CASE` (`stores/concept2.ts`), because
+  // verifying rows on a Concept2 account the rower did not choose is worse
+  // than merely sending them there — a verified row cannot be un-verified
+  // through any path this app offers (the code is honoured at CREATE and
+  // ignored on update, measured). A `preferences` column has no account to
+  // reset against. The cost, named rather than waved off: a rower who moves
+  // to a new Concept2 account and expects the setting to follow is overridden
+  // silently.
+  //
+  // The reset is SILENT here in a way `auto_send`'s is not — when auto-send
+  // resets, the You screen shows MANUAL and rows stop uploading within a
+  // session; when this resets, nothing the rower looks at changes and rows
+  // quietly stop being verified. That is why the phase ships the mark too.
+  autoVerify: boolean("auto_verify").notNull().default(false),
   // The sticky "sends are failing" flag (rulings 6, 7). Set by the send
   // route ONLY when an eligible send fails with `no_weight_class`; the reason
   // column carries the route's SUB-reason — `no_weight` | `unreadable_weight`

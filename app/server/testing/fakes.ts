@@ -1003,6 +1003,14 @@ export function makeFakeConcept2Store(
           existing !== undefined && existing.c2UserId === link.c2UserId
             ? existing.autoSend
             : false,
+        // Phase AV: the same split, its own column. This is a MIRROR of the
+        // SQL and cannot prove it (RF11) — the gate that does lives in
+        // `stores/concept2.integration.test.ts`, against real Postgres, with
+        // the two flags opposed.
+        autoVerify:
+          existing !== undefined && existing.c2UserId === link.c2UserId
+            ? existing.autoVerify
+            : false,
         sendFailedAt: null,
         sendFailedReason: null,
         createdAt: existing?.createdAt ?? now,
@@ -1018,6 +1026,13 @@ export function makeFakeConcept2Store(
       const existing = links.get(userId);
       if (!existing) return false;
       links.set(userId, { ...existing, autoSend, updatedAt: clock() });
+      return true;
+    },
+
+    async setAutoVerify(userId: string, autoVerify: boolean) {
+      const existing = links.get(userId);
+      if (!existing) return false;
+      links.set(userId, { ...existing, autoVerify, updatedAt: clock() });
       return true;
     },
 
