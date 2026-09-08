@@ -2323,7 +2323,11 @@ Each needs erg time or a deliberate recording session.
       helpers. Deliberately shipped as a gap rather than as a green test
       that proves the wrong thing. **The likely route:** an integration test
       in `concept2Send.integration.test.ts`, where the store is real and can
-      be made to fail at the DB rather than by replacing a method. **S**
+      be made to fail at the DB rather than by replacing a method.
+      **ALSO IN THE ICEBOX, with its trigger** (a send that 500s for no
+      visible reason, or anyone editing that `try`/`catch`), because what
+      would make this matter is an EVENT, not a date — this row is the
+      to-do, the icebox entry is the tripwire. Keep them in step. **S**
 
 - [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
       Filed by #363's review (F7). `postResult` answers a 409 whose body
@@ -2909,6 +2913,32 @@ Each needs erg time or a deliberate recording session.
 
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
 an iceboxed item is not a phase-close requirement.
+
+- **"A failing reconciliation does not fail the send" has no test — Phase AV,
+  2026-09-08.** **Trigger:** a Concept2 send returns 500, or a rower reports a
+  send that failed for no visible reason, at a time when `markC2Verified`
+  could have been throwing. Also fires if anyone edits that `try`/`catch` or
+  moves the reconciliation out of `resolveWeightClass`.
+  **What is guarded and what is not.** The catch demonstrably WORKS: a forced
+  `throw` placed inside the route's own try returns 200 and only the row
+  assertion fails. What has no gate is that a store failure cannot fail the
+  SEND — so an edit that broke it would ship silently, and the symptom would
+  be a send failing because a verdict could not be refreshed, which is exactly
+  what the catch exists to prevent.
+  **Why it is iceboxed rather than queued.** Four attempts, all abandoned
+  honestly. Every shape 500s in the FIXTURE rather than in the code, including
+  a minimal case with no store override and no spy at all, while the five
+  tests beside it pass — so something in `concept2.test.ts`'s reconciliation
+  describe is order- or id-dependent and was not found. Shipping a green test
+  that proved the wrong thing would have been worse than the gap (RF21).
+  **The route most likely to work, if the trigger fires:** an integration test
+  in `concept2Send.integration.test.ts`, where the store is REAL and can be
+  made to fail at the database rather than by replacing a method — which is
+  the manoeuvre that produced every one of the four fixture 500s.
+  **What DID ship, so this is a missing gate and not a missing fix:** the
+  catch warns instead of swallowing silently. Before it, a permanently broken
+  reconciliation emitted nothing at all, forever, because the success log is
+  gated on `upgraded > 0` — RF24's shape.
 
 - **Ask for the account picker only when the rower asked to switch — James,
   2026-09-07.** **Trigger:** the extra tap actually annoys someone. #356 sends
