@@ -208,9 +208,13 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       is `isNative()`, so the web build renders `permission-denied` with four
       buttons and every e2e assertion stands on that shape. The deciding case —
       five buttons, a 74px window under the old pairing count — exists only on
-      iOS. Measured consequence: reverting the rule to `nth-last-child(-n + 2)`
-      leaves ALL SEVEN failure-frame assertions in `design.spec.ts` green, so
-      `-n + 4` is approved on the Gate 0 captures and pinned by nothing. Either
+      iOS, where the frame's own message would be cut.
+      NARROWED IN REVIEW ROUND 1: the PAIRING COUNT itself is now caught, one
+      frame over — reverting to `nth-last-child(-n + 2)` fails the refusal
+      test's `contentHeight` precondition at 157px against a 142px window,
+      because that frame's content sits between the two windows. What stays
+      ungateable is the five-button SHAPE: no web assertion can stand on it, so
+      nothing would catch a regression that only reached the iOS stack. Either
       a seam on that adapter or an accepted gap; not decided. **S**
 - [ ] **`pnpm screenshots` rewrites 64 of its 201 captures on every run, with
       no code change at all.** Measured 2026-09-08: run it, `git checkout --

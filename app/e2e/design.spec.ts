@@ -7422,15 +7422,19 @@ test.describe("connected screens (fake-driven)", () => {
     // here in review round 0 claimed it did — a claim this PR's own probe
     // table and ROADMAP row both contradicted while it sat here (it survived a
     // `git checkout --` that reverted an unrelated probe, RF22 exactly).
-    // MEASURED: reverting the rule to `nth-last-child(-n + 2)` leaves all
-    // seven failure-frame assertions in this file GREEN. The reason is
-    // platform. On iOS this frame also renders `Open Settings`, and it is the
-    // FIVE-button stack whose window falls to 74px against a headline running
-    // to y94; `canOpenAppSettings()` is `isNative()`, so the web build is four
-    // buttons by construction and the deciding shape is unreachable from here.
-    // At four buttons `-n + 2` still gives 142px and everything clears the
-    // fold. `-n + 4` is approved on the Gate 0 captures and pinned by nothing
-    // in this suite; the gap has its own ROADMAP row.
+    // MEASURED: reverting the rule to `nth-last-child(-n + 2)` leaves every
+    // assertion on THIS frame green. At four buttons `-n + 2` still gives a
+    // 142px window and the remedy at 102 clears it; the shape that falls to
+    // 74px is the FIVE-button iOS stack, and `canOpenAppSettings()` is
+    // `isNative()`, so the web build is four buttons by construction and that
+    // shape is unreachable from here.
+    //
+    // The count is caught, but ONE FRAME OVER: the refusal test's
+    // `contentHeight` precondition fails at 157px against a 142px window
+    // ("overflows its window by 15px"), because that frame is the one whose
+    // content sits between the two windows. Round 0 of this PR claimed the
+    // count was pinned by nothing in the suite, which was true when written
+    // and stopped being true when that precondition landed in round 1.
     expect(
       m.remedyTop,
       "the frame has no body line to read as the remedy",
