@@ -60,6 +60,21 @@ describe("nativeSignOut: signing out ends the GOOGLE session, not just ours", ()
     expect(order).toStrictEqual(["clearToken", "logout"]);
   });
 
+  it("SAYS SO when the plugin's logout fails, rather than swallowing silently — a soundless failure here is indistinguishable from the bug this fixes", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    logout.mockRejectedValue(new Error("no active session"));
+    await nativeSignOut();
+    expect(err).toHaveBeenCalledTimes(1);
+    err.mockRestore();
+  });
+
+  it("says nothing on the happy path", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    await nativeSignOut();
+    expect(err).not.toHaveBeenCalled();
+    err.mockRestore();
+  });
+
   it("posts our own signout to the server", async () => {
     await nativeSignOut();
     expect(apiCalls).toStrictEqual(["/api/auth/signout"]);

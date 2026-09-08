@@ -1324,7 +1324,7 @@ closed with zero Concept2 contact.
       inside a row whose whole purpose was to carry evidence. Tag an
       unreproduced mechanism INFERENCE, or leave the row at the symptom.
 
-- [ ] **IN FLIGHT — "Sign out" leaves Google signed in.** `nativeSignOut`
+- [ ] **IN REVIEW (PR #353) — "Sign out" leaves Google signed in.** `nativeSignOut`
       (`src/native/signin.ts`) posts to `/api/auth/signout` and clears our
       token, and has NEVER called the plugin's `logout` — verified over the
       whole history, not just the current file
@@ -1338,9 +1338,29 @@ closed with zero Concept2 contact.
       confirms on a device that sign-in no longer reuses silently** — the fix
       ends the session, but Google's flow shares Safari's cookies, so it may
       present a one-tap "Continue as X" rather than a full chooser (SUSPECTED,
-      untested). Same convention as the pre-2018-monitor row below. Merged but
+      untested). Same convention as the pre-2018-monitor row below. When merged it is
       NOT released on its own (James, 2026-09-07: rides his next batch).
       Spec: `docs/superpowers/specs/2026-09-07-signout-ends-google-design.md`. **S**
+
+- [ ] **Sign out does nothing at all when offline, and nobody hears it.**
+      Found at #353's code review, PRE-EXISTING and deliberately out of that
+      PR's scope. `nativeSignOut` awaits `api("/api/auth/signout")` FIRST, so
+      if that rejects — offline, server down — execution never reaches
+      `clearToken()` or the Google logout, both sessions survive exactly as
+      before, and the rejection is unhandled at the click handler in
+      `You.tsx`/`adapters/auth.tsx`, neither of which wraps the call. A rower
+      on a bad connection taps Sign out and stays signed in, silently. The fix
+      is an ordering question of the same family as #353's: our LOCAL teardown
+      should not be gated on a network call. **S**
+
+- [ ] **`nativeSignIn` keeps a `v8 ignore` it no longer earns.** Found at
+      #353's code review. That PR narrowed the file-wide ignore on the
+      argument that it "stops being honest the moment it holds ordering logic
+      that can be wrong" — and `nativeSignIn`, still fully ignored, has a
+      `responseType` narrow, a null-token throw, a 403-with-body-parse branch
+      and a generic failure throw: materially more branching than the
+      four-line `nativeSignOut` that came out from under it. Pre-existing debt,
+      but the exact shape #353's own reasoning argues against (RF29). **S**
 
 - [ ] **SHIPPED v0.42.0 (902) — a monitor older than 2018 is silently unusable.**
       Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26

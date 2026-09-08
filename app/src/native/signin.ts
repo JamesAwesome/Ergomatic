@@ -68,6 +68,18 @@ export async function nativeSignOut(): Promise<void> {
   try {
     await SocialLogin.logout({ provider: "google" });
   } catch {
-    // Deliberately swallowed — see the ordering note above.
+    // Swallowed, never rethrown — see the ordering note above. But NOT
+    // silent: a swallow with no signal is invisible telemetry on an auth
+    // path, and its failure mode is indistinguishable from the very bug
+    // this function exists to fix. If this call starts failing for every
+    // rower (a renamed provider string, an SDK change, a broken bridge)
+    // the only symptom is "the chooser never came back", which is exactly
+    // what we were reporting before. House convention for a deliberately
+    // swallowed auth error is `console.error` (`adapters/linkFlow.ts`).
+    // No error object is printed: nothing here is worth risking a token in
+    // the console for, and the fact of the failure is the whole signal.
+    console.error(
+      "[signin] Google logout failed; our session is cleared but the device's Google session may survive",
+    );
   }
 }
