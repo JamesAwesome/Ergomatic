@@ -1324,7 +1324,7 @@ closed with zero Concept2 contact.
       inside a row whose whole purpose was to carry evidence. Tag an
       unreproduced mechanism INFERENCE, or leave the row at the symptom.
 
-- [ ] **IN REVIEW (PR #353) — "Sign out" leaves Google signed in.** `nativeSignOut`
+- [ ] **SHIPPED on native (#353), web half in flight — "Sign out" leaves Google signed in.** `nativeSignOut`
       (`src/native/signin.ts`) posts to `/api/auth/signout` and clears our
       token, and has NEVER called the plugin's `logout` — verified over the
       whole history, not just the current file
@@ -1338,8 +1338,13 @@ closed with zero Concept2 contact.
       confirms on a device that sign-in no longer reuses silently** — the fix
       ends the session, but Google's flow shares Safari's cookies, so it may
       present a one-tap "Continue as X" rather than a full chooser (SUSPECTED,
-      untested). Same convention as the pre-2018-monitor row below. **Also
-      fixes the offline case found at its own code review** — the local token
+      untested). Same convention as the pre-2018-monitor row below. **The WEB
+      half is a separate fix with the OPPOSITE shape** (2026-09-07, James:
+      "Works on mobile not on web"): there is no session of ours to end in a
+      browser, only Google's own cookie which is not ours to clear, so the
+      correct mechanism is `prompt: "select_account"` on the authorization
+      URL — the very option the native spec rejects, for reasons that do not
+      transfer. **Also fixes the offline case found at its own code review** — the local token
       clear was gated on the server call, so Sign out did nothing at all with
       no connection. When merged it is
       NOT released on its own (James, 2026-09-07: rides his next batch).
