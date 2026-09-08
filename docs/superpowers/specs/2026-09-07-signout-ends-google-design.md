@@ -50,14 +50,26 @@ check as expensive is itself worth catching.
 
 `nativeSignOut` also calls `SocialLogin.logout({ provider: "google" })`.
 
-**Ordering is the part that matters.** Our own teardown must complete even if
-the plugin call fails, or a plugin error would leave the rower holding a valid
-Ergomatic token while believing they signed out — strictly worse than today.
-So: our signout and token clear happen first and unconditionally; the plugin
-logout follows inside a `try`/`catch` that swallows and does not rethrow.
+**Ordering is the part that matters, and it is broader than the plugin call.**
+The invariant is: *clearing the local token is the sign-out, and nothing that
+can fail may be awaited before it.* Two things can fail — the server call and
+the plugin call — and BOTH move after it, each swallowed but logged.
 
-A failed Google logout leaves the old behaviour (no chooser) and nothing worse.
-That is the correct trade: our session is the one that grants access to data.
+**REVISED after James asked why the offline case was not in scope, and he was
+right.** The first draft moved only the plugin call and left
+`api("/api/auth/signout")` awaited FIRST, which meant a rower offline or with
+the server down tapped Sign out and stayed signed in completely: token intact,
+Google session intact, rejection unhandled at the click handler. That is the
+same mistake this spec exists to correct, one line higher, and it fails worse —
+a plugin failure costs a chooser, a network failure costs the whole sign-out.
+A spec that half-applies its own invariant is worse than one that never stated
+it, because it reads as though the case were considered.
+
+Order: `clearToken()`, then the server call, then the plugin logout.
+
+A failed server call leaves an orphaned session row that cannot be used, since
+the token authorising it is already destroyed. A failed Google logout leaves
+the old behaviour, no chooser. Neither is worse than not signing out at all.
 
 ## Rejected: `forcePrompt: true` on login
 

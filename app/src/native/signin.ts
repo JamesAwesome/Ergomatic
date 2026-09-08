@@ -63,8 +63,28 @@ export async function nativeSignIn(): Promise<boolean> {
  * account settings action today.
  */
 export async function nativeSignOut(): Promise<void> {
-  await api("/api/auth/signout", { method: "POST" });
+  // THE LOCAL CLEAR GOES FIRST, AHEAD OF THE NETWORK CALL TOO. This used to
+  // await `/api/auth/signout` before touching anything local, which meant a
+  // rower offline — or with the server down — tapped Sign out and stayed
+  // signed in completely: the token survived, Google's session survived, and
+  // the rejection went unhandled at the click handler. That is a worse
+  // failure than the one this function was written to fix, and it is the
+  // same mistake: OUR teardown gated on something that can fail. Clearing
+  // the token is what actually signs the rower out on this device; the
+  // server row and the Google session are both best-effort cleanup after it.
   await clearToken();
+  try {
+    await api("/api/auth/signout", { method: "POST" });
+  } catch {
+    // Same reasoning as the Google logout below: swallowed so it cannot
+    // undo a sign-out that has already happened locally, but never silent.
+    // The rower IS signed out on this device; the server's own session row
+    // is what may survive, and it cannot be used without the token we just
+    // destroyed.
+    console.error(
+      "[signin] server signout failed; the local token is cleared, the server session row may survive",
+    );
+  }
   try {
     await SocialLogin.logout({ provider: "google" });
   } catch {

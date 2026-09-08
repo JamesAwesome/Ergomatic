@@ -1338,20 +1338,12 @@ closed with zero Concept2 contact.
       confirms on a device that sign-in no longer reuses silently** — the fix
       ends the session, but Google's flow shares Safari's cookies, so it may
       present a one-tap "Continue as X" rather than a full chooser (SUSPECTED,
-      untested). Same convention as the pre-2018-monitor row below. When merged it is
+      untested). Same convention as the pre-2018-monitor row below. **Also
+      fixes the offline case found at its own code review** — the local token
+      clear was gated on the server call, so Sign out did nothing at all with
+      no connection. When merged it is
       NOT released on its own (James, 2026-09-07: rides his next batch).
       Spec: `docs/superpowers/specs/2026-09-07-signout-ends-google-design.md`. **S**
-
-- [ ] **Sign out does nothing at all when offline, and nobody hears it.**
-      Found at #353's code review, PRE-EXISTING and deliberately out of that
-      PR's scope. `nativeSignOut` awaits `api("/api/auth/signout")` FIRST, so
-      if that rejects — offline, server down — execution never reaches
-      `clearToken()` or the Google logout, both sessions survive exactly as
-      before, and the rejection is unhandled at the click handler in
-      `You.tsx`/`adapters/auth.tsx`, neither of which wraps the call. A rower
-      on a bad connection taps Sign out and stays signed in, silently. The fix
-      is an ordering question of the same family as #353's: our LOCAL teardown
-      should not be gated on a network call. **S**
 
 - [ ] **`nativeSignIn` keeps a `v8 ignore` it no longer earns.** Found at
       #353's code review. That PR narrowed the file-wide ignore on the

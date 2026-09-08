@@ -13,10 +13,14 @@ vi.mock("@capgo/capacitor-social-login", () => ({
 }));
 
 const apiCalls: string[] = [];
+let apiRejects = false;
 vi.mock("../api", () => ({
   api: (path: string) => {
     apiCalls.push(path);
-    return Promise.resolve(new Response(null, { status: 204 }));
+    order.push("api");
+    return apiRejects
+      ? Promise.reject(new Error("offline"))
+      : Promise.resolve(new Response(null, { status: 204 }));
   },
 }));
 
@@ -36,6 +40,7 @@ describe("nativeSignOut: signing out ends the GOOGLE session, not just ours", ()
   beforeEach(() => {
     order.length = 0;
     apiCalls.length = 0;
+    apiRejects = false;
     clearToken.mockClear();
     logout.mockReset();
     logout.mockImplementation(async () => {
@@ -57,7 +62,7 @@ describe("nativeSignOut: signing out ends the GOOGLE session, not just ours", ()
   it("clears our token BEFORE the plugin call starts, so no interleaving can leave a live token behind", async () => {
     await nativeSignOut();
     // Independent literals, not indexes derived from the array under test.
-    expect(order).toStrictEqual(["clearToken", "logout"]);
+    expect(order).toStrictEqual(["clearToken", "api", "logout"]);
   });
 
   it("SAYS SO when the plugin's logout fails, rather than swallowing silently — a soundless failure here is indistinguishable from the bug this fixes", async () => {
@@ -72,6 +77,17 @@ describe("nativeSignOut: signing out ends the GOOGLE session, not just ours", ()
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     await nativeSignOut();
     expect(err).not.toHaveBeenCalled();
+    err.mockRestore();
+  });
+
+  it("signs the rower out on this device even when the SERVER call fails — offline, Sign out used to do nothing at all", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    apiRejects = true;
+    await expect(nativeSignOut()).resolves.toBeUndefined();
+    expect(clearToken).toHaveBeenCalledTimes(1);
+    // And the Google session is still ended: a failed server call must not
+    // skip the rest of the teardown either.
+    expect(logout).toHaveBeenCalledWith({ provider: "google" });
     err.mockRestore();
   });
 
