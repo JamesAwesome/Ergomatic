@@ -1,7 +1,12 @@
 # Optional auto-verification — design
 
-**Status:** DRAFT, revised after a full antagonist pass (TRIAD). Gate 0 not yet
-presented, and one question below is owed James before it can be.
+**Status:** Gate 0 PRESENTED 2026-09-07, artifact
+`99e95a96-9d8b-4818-9362-e20727763689`, awaiting James. Revised after a full
+antagonist pass and a delta pass, both folded (TRIAD).
+**The gate asks two things:** the shape (control placement and copy, mark
+placement), and the mark's wording — bare `VERIFIED ✓` or dated. It states the
+cost of the recommended option as UNMEASURED (n = 0 on whether Concept2 can
+un-verify a row) rather than as zero.
 **Lens 2 (prescribed code) SKIPPED and on the record:** this spec prescribes no
 executable blocks — one type-shape line and one SQL fragment described in
 prose. Nothing to paste-test.
@@ -504,6 +509,18 @@ A rendered artifact, per the design-gate rule, showing:
    hand) and, if M6 holds, that a verified row may no longer be editable on
    Concept2. **M6 is n=1 and is presented as untested unless measured first**
    — per RF30, an unmeasured cost does not get to shape the decision silently.
+
+**PRESENTED 2026-09-07** as artifact `99e95a96-9d8b-4818-9362-e20727763689`:
+both surfaces at 390×844 and 844×390, today against proposed, the OFF default
+shown as its own frame, all six contrast pairings recomputed (17.11, 17.11,
+10.81, 7.43, 9.74, 15.41 — every one already in `index.css` and re-derived
+rather than copied), and the two things this design does not fix stated on the
+gate itself. **One constraint came out of reading the code rather than the
+spec:** James's 2026-08-27 *"just no prose"* ruling is written into
+`FromTheLog.tsx`'s own source for this exact block, so the mark is two words on
+the existing title line and carries no caption. The code line is withdrawn when
+the mark appears — a code exists to be typed in, and a verified row has no
+edit form left to type it into (M6).
 
 ## Testing
 
