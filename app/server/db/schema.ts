@@ -392,8 +392,10 @@ export const sessionLogs = pgTable(
     // `null` are NOT distinguishable to the reader and must never be — both
     // render as no mark. `null` means we did not learn (the 409-duplicate
     // branch, which tells us Concept2 HAS the row and nothing about its
-    // state); `false` means Concept2 said no at receipt, and the rower may
-    // have verified by hand since, which nothing here would see.
+    // state); `false` means Concept2 had not verified it the last time we
+    // looked, and the rower may have verified by hand since. The
+    // reconciliation NARROWS that window on every send but never closes it —
+    // it reads one page of 50 and only when a send happens.
     //
     // So the surface may state the POSITIVE and may never state the
     // negative. There is no "not verified" anywhere in the design.
