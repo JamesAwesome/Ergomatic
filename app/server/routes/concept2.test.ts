@@ -2235,6 +2235,12 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     // carries no numeric id, and 409 is inside 400..499.
     const store = makeFakeConcept2Store();
     await store.upsertLink(userA.id, freshLink());
+    // AUTO VERIFY ON and a code-bearing row, so there IS something to strip.
+    // An earlier version of this test seeded a bare row and passed with the
+    // 409 exclusion REMOVED — the fallback had nothing to drop either way,
+    // so the assertion never reached the branch it names (RF35: a gate that
+    // passes on the wrong arm).
+    await store.setAutoVerify(userA.id, true);
     const client = makeStubClient();
     vi.mocked(client.postResult).mockResolvedValue({
       ok: false,
@@ -2242,7 +2248,18 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
       status: 409,
     });
     const { app, logs } = buildApp({ store, client });
-    const id = await seedEligibleLog(logs, userA.id);
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
     await asA(
       request(app)
         .post(`/api/concept2/results/${id}`)
