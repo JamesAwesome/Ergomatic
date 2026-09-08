@@ -456,7 +456,6 @@ export function SummaryIntervalsBlock({
   caption?: string;
 }) {
   if (rows.length === 0) return null;
-  const hasJudgedRow = rows.some((r) => r.measured && r.judged !== undefined);
   return (
     <div className="summary-intervals">
       <div className="summary-intervals-header">
@@ -470,9 +469,6 @@ export function SummaryIntervalsBlock({
           <IntervalRow key={i} row={row} />
         ))}
       </ul>
-      {hasJudgedRow && (
-        <p className="summary-legend">← FASTER (BLUE) · SLOWER (RED) →</p>
-      )}
       {caption !== undefined && (
         <p className="summary-targets-only-caption">{caption}</p>
       )}

@@ -5802,7 +5802,7 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   // Rows render in `[opening piece, interval 1, interval 2]` order — all
   // three come from the SAME `monitorWorkRows` index order now; there is no
   // separate warm-up-row branch to special-case any more (Phase WU).
-  test("§2E judged colors: the slower row paints --judge-red, the faster row paints --judge-blue, and the legend renders", async ({
+  test("§2E judged colors: the slower row paints --judge-red, the faster row paints --judge-blue, and no colour legend rides along", async ({
     page,
   }) => {
     const rows = page.locator(".summary-row");
@@ -5822,9 +5822,16 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
       .evaluate((el) => getComputedStyle(el).color);
     expect(fasterPaceColor).toBe("rgb(29, 78, 137)"); // --judge-blue
 
-    await expect(page.locator(".summary-legend")).toHaveText(
-      "← FASTER (BLUE) · SLOWER (RED) →",
-    );
+    // Phase JC, Gate 0 ruling 7 (James, 2026-09-08). This locator used to
+    // pin the copy `← FASTER (BLUE) · SLOWER (RED) →`; the legend is
+    // DELETED because a rower can now repoint or switch off either pace
+    // slot, which made it false on eight of nine reachable pace
+    // configurations. The pin becomes its negative rather than
+    // disappearing: I-8 ("no copy names a colour the settings could
+    // contradict") is gated at e2e, and this page is the one that renders
+    // judged summary rows, so re-adding the element reddens it here as
+    // well as in the client suite.
+    await expect(page.locator(".summary-legend")).toHaveCount(0);
   });
 
   // §1's own capped formula (`min(50, max(1.2, |dev|/1.6×50))`) — both

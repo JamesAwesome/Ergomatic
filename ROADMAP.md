@@ -313,19 +313,23 @@ pane and a summary — is approved before task 1.
       start upstream of the producer (recurring failure 24). **M**
 
 **Three structural notes worth keeping even if the phase changes shape.**
-`index.css` currently documents "ONE PAIR SERVES BOTH JUDGED METRICS ... There
-is no per-metric colour branch to keep in step"; per-slot control retires that
-sentence, and the six judged call sites each already know their own metric, so
-nothing new threads through `surfaceModel`. **But there are TWO judged class
-pairs, not one** — `.summary-row-faster`/`-slower` is a second, independent
-pair on the summary screen, and the honest blast radius is 114 references
-across 29 files including 12 committed e2e HTML fixtures and `design.spec.ts`'s
-own judged-colour harness. **And the summary screen names both colours in
-hardcoded copy** (`← FASTER (BLUE) · SLOWER (RED) →`, pinned by an e2e
-`toHaveText`), which eight of the nine reachable pace configurations make
-false; the spec recommends deleting it on `TraceChart.tsx`'s own precedent
-("naming a colour here would just be a second thing to get wrong later"), and
-it is a Gate 0 ruling. And `--judge-slower` is doing two
+`index.css` documented "ONE PAIR SERVES BOTH JUDGED METRICS ... There is no
+per-metric colour branch to keep in step"; per-slot control retired that
+sentence (Task 3 deleted it along with the pair), and the six judged call
+sites each already knew their own metric, so nothing new threads through
+`surfaceModel`. **But there were TWO judged class pairs, not one** —
+`.summary-row-faster`/`-slower` was a second, independent pair on the summary
+screen, and the honest blast radius (measured at phase open) was 114
+references across 29 files including 12 committed e2e HTML fixtures and
+`design.spec.ts`'s own judged-colour harness; Task 3 folded both pairs onto
+the shared `.judge-{pace,spm}-{faster,slower}` family and retired the old
+ones. **And the summary screen named both colours in hardcoded copy**
+(`← FASTER (BLUE) · SLOWER (RED) →`, pinned by an e2e `toHaveText`), which
+eight of the nine reachable pace configurations made false; Gate 0 ruled it
+DELETED on `TraceChart.tsx`'s own precedent ("naming a colour here would just
+be a second thing to get wrong later"), and Task 4 removed the element, its
+CSS rule, the `hasJudgedRow` guard that was its only consumer, and the e2e
+pin (now its negative). And `--judge-slower` was doing two
 jobs — the judged tint AND `.connected-lost`'s red alarm background — which is
 why the spec splits raw inks (`--judge-red`/`--judge-blue`) from resolved
 slots rather than overriding the existing tokens in place. Overriding in place

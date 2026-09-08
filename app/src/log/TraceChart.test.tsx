@@ -550,8 +550,11 @@ describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), 
 
   // F-2 (James's ruling, review round 2): a quiet key explaining the
   // band — spec §3 forbids copy claiming the rest PACE is meaningful;
-  // it says nothing about naming what the mark itself is, same idiom
-  // as `PostWorkoutSummary.tsx`'s own `.summary-legend`. "BAND = REST"
+  // it says nothing about naming what the mark itself is. (The idiom
+  // was cited from `PostWorkoutSummary.tsx`'s `.summary-legend` until
+  // Phase JC deleted that legend for naming colours a rower can now
+  // change; the no-colour-word rule below is why this one survived.)
+  // "BAND = REST"
   // (review round 4, C1): "SHADED = REST" named the round-1 treatment
   // (a full-height tint) that round 2 replaced with a short bar — the
   // word never moved with the geometry. No colour word either (`#97692a`

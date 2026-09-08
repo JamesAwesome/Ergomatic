@@ -511,13 +511,28 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
     expect(within(opener).queryByText(/^[+−]/)).not.toBeInTheDocument();
   });
 
-  it("renders a judged measured row's deviation label and shows the legend", () => {
-    renderSummary();
+  // Phase JC, Gate 0 ruling 7 (James, 2026-09-08): the legend is DELETED,
+  // not derived from the settings. It read
+  // "← FASTER (BLUE) · SLOWER (RED) →" and named two colours a rower can now
+  // repoint or switch off per slot, so eight of the nine reachable pace
+  // configurations made it false. The house had already ruled this way
+  // once on the neighbouring surface — `TraceChart.tsx`, verbatim:
+  // "naming a colour here would just be a second thing to get wrong
+  // later."
+  //
+  // The assertion lives HERE, on a judged model, because a judged row was
+  // the only thing that ever rendered the legend (`hasJudgedRow`); asserted
+  // against a model with nothing to judge it would be vacuous. Both the
+  // element and the withdrawn copy are pinned, so a re-add under any
+  // wording fails.
+  it("renders a judged measured row's deviation label and no colour legend", () => {
+    const { container } = renderSummary();
     expect(screen.getByText("−4.2")).toBeInTheDocument();
     expect(screen.getByText("+4.2")).toBeInTheDocument();
+    expect(container.querySelector(".summary-legend")).toBeNull();
     expect(
-      screen.getByText("← FASTER (BLUE) · SLOWER (RED) →"),
-    ).toBeInTheDocument();
+      screen.queryByText("← FASTER (BLUE) · SLOWER (RED) →"),
+    ).not.toBeInTheDocument();
   });
 
   // Review finding C3: nothing previously asserted `barWidthPercent` -> the
@@ -673,14 +688,17 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
     expect(screen.getAllByText("—")).toHaveLength(2);
   });
 
-  it("renders the TARGETS ONLY · NOTHING MEASURED caption only when the model supplies one, and omits the legend when nothing is judged", () => {
+  // This test also carried the legend's ABSENCE half until Phase JC. With
+  // the legend deleted outright, an absence assertion on a model with
+  // nothing to judge is strictly weaker than the one the judged test above
+  // now makes, and no mutation can redden it that does not redden that one
+  // first — decoration, so it is gone rather than kept for the count
+  // (recurring failure 21). The caption half still bites.
+  it("renders the TARGETS ONLY · NOTHING MEASURED caption only when the model supplies one", () => {
     renderSummary({ model: prescribedOnlyModel() });
     expect(
       screen.getByText("TARGETS ONLY · NOTHING MEASURED"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("← FASTER (BLUE) · SLOWER (RED) →"),
-    ).not.toBeInTheDocument();
   });
 
   it("renders the paces-off caption next to INTERVALS when present, and omits it when null", () => {

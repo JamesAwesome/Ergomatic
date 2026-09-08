@@ -10021,8 +10021,10 @@ section:not(.news-pinned) .news-row:last-of-type {
    cell can sit on, task-3-report.md's own numbers: 6.69:1 on --page,
    7.43:1 on --surface — both clear the house 4.5:1 AA floor with room to
    spare) is this app's own established "quiet label" token (matches
-   `.summary-row-offset`, `.summary-legend`, `.summary-targets-only-
-   caption` a few rules below — never a bespoke color for one cell). */
+   `.summary-row-offset` and `.summary-targets-only-caption` a few rules
+   below — never a bespoke color for one cell). Phase JC deleted a third
+   member of that family, `.summary-legend`, along with the copy it
+   carried; the token class is unchanged. */
 .summary-row-spm-target {
   font-weight: 400;
   color: var(--ink-3);
@@ -10124,15 +10126,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 13px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
-}
-
-.summary-legend {
-  margin: 10px 0 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--ink-3);
-  text-align: center;
 }
 
 .summary-targets-only-caption {
@@ -10376,9 +10369,11 @@ section:not(.news-pinned) .news-row:last-of-type {
   fill: var(--trace-rest);
 }
 
-/* F-2 (review round 2): same quiet-caption idiom as `.summary-legend`
-   (`PostWorkoutSummary.tsx`) — mono, small, quiet ink, centered under
-   the element it explains. --ink-3 on --surface: 7.43:1 (this file's own
+/* F-2 (review round 2): the quiet-caption idiom — mono, small, quiet
+   ink, centered under the element it explains. It cited the summary's
+   own `.summary-legend` as the precedent until Phase JC deleted that
+   rule; `.summary-targets-only-caption` is the surviving sibling, and
+   the shape here is unchanged. --ink-3 on --surface: 7.43:1 (this file's own
    trace-tick-label rule a few lines below computes the identical
    pairing; not re-measured here). */
 .trace-legend {
