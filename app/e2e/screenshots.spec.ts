@@ -5016,13 +5016,19 @@ const SCREENSHOT_DELAY_WRITES_MS = 200;
 async function injectFakeMonitorForScreenshots(
   page: Page,
   deviceName: string,
+  /** Phase MT: the `Erg Machine Type` this fake monitor reports. Omitted for
+   *  every existing capture, so they keep the fake's own default of `0`
+   *  (`ERGMACHINE_TYPE_STATIC_D`) and are untouched. `128` drives the SkiErg
+   *  refusal. */
+  ergMachineType?: number,
 ): Promise<void> {
   await page.addInitScript(
-    ({ program, deviceName: name, delayWritesMs }) => {
+    ({ program, deviceName: name, delayWritesMs, ergMachineType: erg }) => {
       window.__pm5FakeScript__ = {
         program,
         deviceName: name,
         delayWritesMs,
+        ...(erg === undefined ? {} : { ergMachineType: erg }),
       };
     },
     {
@@ -5042,6 +5048,7 @@ async function injectFakeMonitorForScreenshots(
       },
       deviceName,
       delayWritesMs: SCREENSHOT_DELAY_WRITES_MS,
+      ergMachineType,
     },
   );
 }
@@ -5051,8 +5058,9 @@ async function openConnectedInterstitial(
   title: string,
   email: string,
   deviceName: string,
+  ergMachineType?: number,
 ): Promise<void> {
-  await injectFakeMonitorForScreenshots(page, deviceName);
+  await injectFakeMonitorForScreenshots(page, deviceName, ergMachineType);
   await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
   await setBaselines(page);
   // Five "w 100m max" lines — MUST match `injectFakeMonitorForScreenshots`'s
@@ -5188,6 +5196,66 @@ test("connected-interstitial-ready-landscape", async ({ page }) => {
     path: path.join(
       SCREENSHOTS_DIR,
       "connected-interstitial-ready-landscape.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
+});
+
+// --- Phase MT: the refusal, on the door that programs a workout ---
+//
+// The REAL screen, not the Gate 0 mockup. Gate 0 was approved on hand-built
+// frames, and #361's own gate proved a mockup can be wrong about its own
+// contrast by more than double — so the capture exists to confirm the
+// approved thing is what actually renders, including the support-matrix link
+// whose POSITION was chosen by measurement (it must sit visible at rest in
+// landscape, above the reassurance line rather than below DETAIL).
+
+test("connected-interstitial-unsupported-machine", async ({ page }) => {
+  const title = "Screenshot Connected SkiErg Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-skierg@e2e.test",
+    "PM5 918273645",
+    // ERGMACHINE_TYPE_STATIC_SKI. The fake reports it on 0x0032, the real
+    // parser reads it back, and the real driver and hook refuse the sitting.
+    128,
+  );
+  await expect(
+    page.locator(".connected-serif-line", {
+      hasText: "Erg type not supported",
+    }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-unsupported-machine.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-unsupported-machine-landscape", async ({
+  page,
+}) => {
+  const title = "Screenshot Connected SkiErg Landscape Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-skierg-landscape@e2e.test",
+    "PM5 918273645",
+    128,
+  );
+  await expect(
+    page.locator(".connected-serif-line", {
+      hasText: "Erg type not supported",
+    }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-unsupported-machine-landscape.png",
     ),
   });
   await cleanupByTitle(page, title);
