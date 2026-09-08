@@ -43,19 +43,32 @@ its trap and no lock. Two subagents in **one** worktree therefore share one
 stack and will rebuild and tear down each other's image mid-run.
 
 **Rule: at most one task holding a `pnpm e2e` or `pnpm screenshots` gate runs at
-a time.** Tasks with no browser gate parallelise freely.
+a time.**
 
-| Wave | Tasks | Browser gate | Why grouped |
+**And a second singleton the delta pass did not reach: `.git/index`.** Every
+subagent in this worktree commits through one index; two concurrent `git add`
+/ `git commit` pairs collide on `.git/index.lock`. Tasks may touch disjoint
+files and still not run together, because committing is not a per-file
+operation. **So every task in this plan is dispatched one at a time.** The
+alternative — a sub-worktree per task, branched off `phase-jc-judge-colours`
+and merged back — costs two `pnpm install`s each and a merge per task, for
+three small tasks with no browser gate. Not worth it here; worth revisiting
+for a phase whose parallel tasks are large.
+
+| Order | Task | Browser gate | Depends on |
 | --- | --- | --- | --- |
-| 1 | T1, T2, T5 | none | Disjoint files, none needs a browser |
-| 2 | T3 | T3 | The rename; needs T2's tokens |
-| 3 | T4 | T4 | Legend; same file as T3, so after it |
-| 4 | T6 | T6 | Needs T1 and T5; also lands the boot apply |
-| 5 | T7 | T7 | Needs the whole feature standing |
-| 6 | T8 | T8 | The sweep closes over everything |
+| 1 | T1 store | no | — |
+| 2 | T2 tokens, additive | no | — |
+| 3 | T5 `OptionGroup` | no | — |
+| 4 | T3 the rename | yes | T2 |
+| 5 | T4 legend | yes | T3 (same file) |
+| 6 | T6 screen + door + boot | yes | T1, T5 |
+| 7 | T7 seam test | yes | T3, T6 |
+| 8 | T8 sweep | yes | all |
 
-Waves 2-6 are serial because each holds the browser gate, not because their
-files collide.
+T1, T2 and T5 are genuinely independent of each other and could run in
+parallel on files alone; they are ordered only by the index constraint above,
+so their order among themselves is free.
 
 ---
 
