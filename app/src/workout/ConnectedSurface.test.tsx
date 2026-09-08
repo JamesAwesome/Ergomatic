@@ -1017,12 +1017,19 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
     // tokens: a token never declared, or declared twice as the same colour,
     // would leave both verdicts identical and still pass. Read from
     // tokens.css because that is where they live.
+    //
+    // THE HEX MOVED DOWN A LAYER (Phase JC Task 2): `--judge-faster` and
+    // `--judge-slower` are now `var()` aliases, and the literal colours
+    // live on the raw inks `--judge-blue` / `--judge-red` that every judged
+    // slot resolves through. This reads the inks, which is where "actually
+    // blue and red" is now a fact about the file rather than about an
+    // indirection.
     const tokens = readFileSync(
       indexCssPath().replace(/index\.css$/, "theme/tokens.css"),
       "utf-8",
     );
-    const faster = /--judge-faster:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
-    const slower = /--judge-slower:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
+    const faster = /--judge-blue:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
+    const slower = /--judge-red:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
     expect(faster).toBeDefined();
     expect(slower).toBeDefined();
     expect(faster).not.toBe(slower);
@@ -1503,14 +1510,21 @@ describe("the lost banner says what survived", () => {
   // FILLED RED, not the sunken variant (Gate 0): unmissable at arm's
   // length, which is the whole complaint — "the LOST isn't easy to notice,
   // i think we need to highlight that more" (James, 2026-08-25). Contrast
-  // computed, never eyeballed: --surface #fffdf7 on --judge-slower #962718
+  // computed, never eyeballed: --surface #fffdf7 on --judge-red #962718
   // is 7.94:1, well clear of the 4.5:1 floor.
+  //
+  // THE RAW INK, NOT A JUDGED SLOT (Phase JC Task 2): this banner is an
+  // alarm, so it must stay red even for a rower who sets every judged slot
+  // to blue. `theme/judgeTokens.test.ts` owns that invariant in full — it
+  // sweeps every rule in `index.css` for a `--judge-{pace,spm}-*` token in
+  // a `background` declaration. This assertion keeps the banner's own half
+  // beside the rest of the banner's tests.
   it("index.css fills the banner red, with paper text on it", () => {
     // `rulesFor(...)[0]`, not `ruleBody`: this selector has a second rule
     // inside the landscape query (its own grid placement), and the fill
     // belongs to the base rule so BOTH orientations inherit it.
     expect(rulesFor(".connected-lost")[0]!.body).toContain(
-      "background: var(--judge-slower)",
+      "background: var(--judge-red)",
     );
     expect(ruleBody(".connected-lost-title")).toContain(
       "color: var(--surface)",
@@ -1524,7 +1538,7 @@ describe("the lost banner says what survived", () => {
   it("index.css gives nothing else on these panes a filled red ground", () => {
     const filled = cssRules(INDEX_CSS).filter(
       (rule) =>
-        rule.body.includes("background: var(--judge-slower)") &&
+        rule.body.includes("background: var(--judge-red)") &&
         rule.selectors.some((s) => s.startsWith(".connected")),
     );
     expect(filled.map((rule) => rule.selectors)).toStrictEqual([

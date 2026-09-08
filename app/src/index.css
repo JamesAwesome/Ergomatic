@@ -4821,12 +4821,18 @@ button.back-link:disabled,
    never `--accent`: on these panes the target is the neutral ink reference
    and accent appears nowhere (DEVIATIONS row 0).
 
-   ONE PAIR SERVES BOTH JUDGED METRICS. The testers also asked that the spm
-   colours match the split's; they already did, and this is why — the class
-   suffix IS the `Judgement` value, and `judgeActual` resolves both metrics
-   to the same union (a faster split and a higher rate are both `"faster"`,
-   which is exactly the direction rule that file exists to hold). There is
-   no per-metric colour branch to keep in step, here or in either pane.
+   ONE PAIR SERVED BOTH JUDGED METRICS, and Phase JC is retiring that. The
+   testers also asked that the spm colours match the split's; they already
+   did, and this is why — the class suffix IS the `Judgement` value, and
+   `judgeActual` resolves both metrics to the same union (a faster split
+   and a higher rate are both `"faster"`, which is exactly the direction
+   rule that file exists to hold). A rower can now choose a colour PER
+   SLOT, so pace and spm need separable hooks: the four `.judge-{pace,spm}-
+   {faster,slower}` rules below this pair are the successors, and Task 3
+   moves every emitter onto them and deletes this pair. Until it does, no
+   pane emits the new classes and nothing here has a per-metric branch to
+   keep in step; the defaults in `tokens.css` keep the two metrics
+   identical anyway.
 
    Measured against `--surface` (#fffdf7): `--judge-faster` 8.25:1,
    `--judge-slower` 7.94:1, `--ink-3` 7.44:1 (and 6.30:1 against
@@ -4866,6 +4872,45 @@ button.back-link:disabled,
 
 .timer-card-actual-stale {
   color: var(--ink-3);
+}
+
+/* THE PER-SLOT SUCCESSORS (Phase JC Task 2, spec `docs/superpowers/specs/
+   2026-09-08-judge-colours-design.md`). Four classes where the pair above
+   had two, because a rower now chooses a colour per SLOT and pace must be
+   able to differ from stroke rate.
+
+   Each names a RESOLVED slot, never a raw ink: `tokens.css` declares
+   `--judge-{pace,spm}-{faster,slower}` as `var(--judge-blue)` /
+   `var(--judge-red)`, and `you/judgeColors.ts` overrides them on
+   `document.documentElement` when the rower picks something else. That is
+   the whole mechanism — these rules never change, and nothing here learns
+   a preference exists.
+
+   `color` ONLY, never `background`: the alarm banner (`.connected-lost`,
+   below) must stay red at every setting, so it paints from the raw
+   `--judge-red` instead. `theme/judgeTokens.test.ts` sweeps every rule in
+   this file for a slot token in a `background` declaration and fails on
+   the first one.
+
+   NOTHING EMITS THESE YET. Task 3 renames the emitters in `PaneLive.tsx`,
+   `PaneGrid.tsx` and `PostWorkoutSummary.tsx` onto them and deletes the
+   pair above; adding them first is what keeps judged colour lit through
+   the change. Contrast is unchanged from that pair's, measured in
+   `tokens.css` against both backgrounds a judged value sits on. */
+.judge-pace-faster {
+  color: var(--judge-pace-faster);
+}
+
+.judge-pace-slower {
+  color: var(--judge-pace-slower);
+}
+
+.judge-spm-faster {
+  color: var(--judge-spm-faster);
+}
+
+.judge-spm-slower {
+  color: var(--judge-spm-slower);
 }
 
 .timer-upnext {
@@ -7823,8 +7868,15 @@ section:not(.news-pinned) .news-row:last-of-type {
    fill is what makes this land at arm's length, mid-stroke, out of the
    corner of an eye.
 
+   THE RAW INK, NOT A JUDGED SLOT (Phase JC Task 2). This fill is an ALARM,
+   not a judged number, so it reads `--judge-red` directly and never
+   follows the rower's per-slot colour preference — a rower who sets every
+   slot to blue still gets a red LOST banner. That is the whole reason
+   `tokens.css` splits raw inks from resolved slots rather than overriding
+   the inks in place. `theme/judgeTokens.test.ts` pins both halves.
+
    Contrast, computed rather than eyeballed: --surface #fffdf7 on
-   --judge-slower #962718 is 7.94:1, against the house 4.5:1 floor. The
+   --judge-red #962718 is 7.94:1, against the house 4.5:1 floor. The
    same pair the token's own comment already measures the other way round
    (a slower-than-target reading on paper) — a ratio is symmetric, so the
    fill inherits its headroom.
@@ -7839,7 +7891,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   flex-direction: column;
   gap: 5px;
   flex: none;
-  background: var(--judge-slower);
+  background: var(--judge-red);
   padding: 12px;
   /* Portrait's own share of `.connected-surface`'s margin-based gap
      scheme (see that rule's comment) — paid only when this banner is
