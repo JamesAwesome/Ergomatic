@@ -12,9 +12,9 @@
 // banner — is an ALARM, not a judged number, and must stay red at every
 // setting, including all-blue. It therefore paints from the RAW ink
 // `--judge-red`, never from a resolved slot. That split is the whole reason
-// the palette has two layers instead of one: overriding
-// `--judge-faster`/`--judge-slower` in place would have been fewer lines
-// and would have turned the alarm blue.
+// the palette has two layers instead of one: overriding the single
+// `--judge-faster`/`--judge-slower` pair in place (Task 3 retired it) would
+// have been fewer lines and would have turned the alarm blue.
 //
 // WHY CSS-SOURCE TESTS AND NOT COMPUTED COLOUR: Vitest mocks every `.css`
 // import to `""` for this project, and jsdom does not resolve `var()` —
@@ -92,8 +92,8 @@ const TINT_RULES = [
 
 describe("the judge palette: raw inks and resolved slots (tokens.css)", () => {
   // The two inks a rower may choose. Their hex values are the ones the
-  // retiring `--judge-faster`/`--judge-slower` pair carries today, so this
-  // change repaints nothing — contrast measured against both backgrounds a
+  // retired `--judge-faster`/`--judge-slower` pair carried, so the split
+  // repainted nothing — contrast measured against both backgrounds a
   // judged value sits on (--surface #fffdf7, --page #f4f1e8):
   // --judge-blue 8.25:1 / 7.43:1, --judge-red 7.94:1 / 7.15:1. Both clear
   // the house 4.5:1 floor.
@@ -112,20 +112,18 @@ describe("the judge palette: raw inks and resolved slots (tokens.css)", () => {
   // and evaluate the var() function in their value." It already ships here
   // (`--ink-1: var(--ink)`), on James's phone today.
   //
-  // The aliases are Task 3's to retire, once nothing emits the classes that
-  // consume them. Pinned here so this task cannot "tidy" them away early:
-  // deleting them while `PaneLive`/`PaneGrid`/`PostWorkoutSummary` still
-  // emit `.timer-card-actual-faster` and `.summary-row-*` leaves judged
-  // colour DARK app-wide with every gate green — `pnpm build` exits 0,
-  // because an unresolvable `var()` is invalid at computed-value time, not
-  // a parse error.
-  it("keeps --judge-faster/--judge-slower alive as aliases for Task 3 to retire", () => {
-    expect(declaredValue(TOKENS_ROOT, "--judge-faster")).toBe(
-      "var(--judge-blue)",
-    );
-    expect(declaredValue(TOKENS_ROOT, "--judge-slower")).toBe(
-      "var(--judge-red)",
-    );
+  // THE ALIASES ARE GONE (Task 3). They existed for exactly one commit
+  // boundary: deleting them while `PaneLive`/`PaneGrid`/
+  // `PostWorkoutSummary` still emitted `.timer-card-actual-faster` and
+  // `.summary-row-*` would have left judged colour DARK app-wide with
+  // every gate green — `pnpm build` exits 0, because an unresolvable
+  // `var()` is invalid at computed-value time, not a parse error. With
+  // every emitter moved onto the four slots they have no consumers, and
+  // leaving them would give the next author two plausible tokens to reach
+  // for, one of which nothing reads.
+  it("retired --judge-faster/--judge-slower once nothing emitted their classes", () => {
+    expect(declaredValue(TOKENS_ROOT, "--judge-faster")).toBeNull();
+    expect(declaredValue(TOKENS_ROOT, "--judge-slower")).toBeNull();
   });
 });
 
@@ -139,16 +137,23 @@ describe("the four judged tint rules (index.css)", () => {
     },
   );
 
-  // The old pair still stands and still resolves through the aliases —
-  // Task 3 removes them together with their emitters. If this goes red
-  // before Task 3, judged colour has gone dark on a shipped surface.
-  it("leaves the two rules Task 3 retires still resolving", () => {
-    expect(
-      scopedRuleBodies(indexCss, ".timer-card-actual-faster")[0],
-    ).toContain("color: var(--judge-faster);");
-    expect(
-      scopedRuleBodies(indexCss, ".timer-card-actual-slower")[0],
-    ).toContain("color: var(--judge-slower);");
+  // BOTH SUPERSEDED PAIRS ARE GONE (Task 3), and so is every reference to
+  // the tokens behind them. The four rules above are the only place a
+  // judged verdict gets its colour now, on either surface — a surviving
+  // `.timer-card-actual-faster` or `.summary-row-slower` would be a rule
+  // nothing can reach (recurring failure 5) and a second plausible hook
+  // for the next author to wire a new emitter to.
+  it("retired both pre-split pairs and every reference to their tokens", () => {
+    for (const selector of [
+      ".timer-card-actual-faster",
+      ".timer-card-actual-slower",
+      ".summary-row-faster",
+      ".summary-row-slower",
+    ]) {
+      expect(scopedRuleBodies(indexCss, selector)).toHaveLength(0);
+    }
+    expect(indexCss).not.toContain("var(--judge-faster)");
+    expect(indexCss).not.toContain("var(--judge-slower)");
   });
 
   // Unchanged by this task, and asserted so a careless edit to the block

@@ -473,7 +473,7 @@ describe("RC-27: the split hero counts a running rest (design spec option B)", (
     const value = document.querySelector(
       ".connected-hero-split .connected-hero-value",
     )!;
-    expect(value.className).not.toMatch(/timer-card-actual-/);
+    expect(value.className).not.toMatch(/timer-card-actual-|judge-(pace|spm)-/);
   });
 
   it("PaneLive's OWN rule holds independently of that finding: a genuinely judged pace, forced alongside a countdown, still renders no judgement class", () => {
@@ -500,7 +500,7 @@ describe("RC-27: the split hero counts a running rest (design spec option B)", (
     const value = document.querySelector(
       ".connected-hero-split .connected-hero-value",
     )!;
-    expect(value.className).not.toMatch(/timer-card-actual-/);
+    expect(value.className).not.toMatch(/timer-card-actual-|judge-(pace|spm)-/);
   });
 
   it("during work the hero is unchanged: no REST label, no gold, the ordinary judged split", () => {
@@ -516,7 +516,11 @@ describe("RC-27: the split hero counts a running rest (design spec option B)", (
       ".connected-hero-split .connected-hero-value",
     )!;
     expect(value.className).not.toContain("connected-hero-value-rest");
-    expect(value.className).toMatch(/timer-card-actual-/);
+    // 117.8 against interval 1's own 126s target is a faster boat, so the
+    // ordinary judged split is the PACE slot's faster class — named
+    // exactly rather than as "some judged prefix", which a metric handed
+    // to the wrong hero would also satisfy.
+    expect(value.className).toContain("judge-pace-faster");
   });
 
   it("a lost link beats a running rest: LAST SEEN on both heroes, the hero shows the held split, not a countdown", () => {
@@ -735,8 +739,8 @@ describe("the baseline row: AVG beside TGT (connected-metrics design spec)", () 
     // (surfaceModel.ts's own `avgJudgeTarget`, null everywhere but a rest
     // that folded onto a completed work interval).
     expect(value.className).toContain("timer-card-actual-within");
-    expect(value.className).not.toContain("timer-card-actual-slower");
-    expect(value.className).not.toContain("timer-card-actual-faster");
+    expect(value.className).not.toContain("judge-pace-slower");
+    expect(value.className).not.toContain("judge-pace-faster");
   });
 
   it("rest after a completed interval: AVG is judged — the colour class this cell only ever wears at rest", () => {
@@ -752,7 +756,7 @@ describe("the baseline row: AVG beside TGT (connected-metrics design spec)", () 
     expect(label.textContent).toBe("AVG");
     const value = document.querySelector(".connected-hero-avg-value")!;
     expect(value.textContent).toBe("2:10.0");
-    expect(value.className).toContain("timer-card-actual-slower");
+    expect(value.className).toContain("judge-pace-slower");
     expect(value.className).not.toContain("timer-card-actual-within");
     // TGT, on the same row, names the FINISHED interval it is a verdict on
     // (connected-metrics design spec States table) — not the rest word.
@@ -1027,5 +1031,127 @@ describe("the free-row pane", () => {
     )) {
       expect(el.className).not.toMatch(/faster|slower/);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase JC Task 3: the judged class carries its METRIC
+// ---------------------------------------------------------------------------
+
+// A rower now chooses a colour PER SLOT (pace faster, pace slower, spm
+// faster, spm slower), so the two preference-bearing verdicts must reach
+// CSS on classes that name their metric: `judge-pace-faster`,
+// `judge-pace-slower`, `judge-spm-faster`, `judge-spm-slower`. `within`
+// and `stale` are NOT preference-bearing — plain ink and grey — and keep
+// the `timer-card-actual-` prefix they have always had.
+//
+// The negative half of each assertion is the one that matters: this pane
+// has THREE judged sites and two of them are pace while the third is spm,
+// so a site handed the wrong metric would still light up in the default
+// palette (the two metrics resolve to the same blue and red out of the
+// box) and only a rower who had changed one slot would ever see it. Class
+// names only, never a colour — jsdom resolves no `var()`.
+describe("judged classes name their metric (Phase JC Task 3)", () => {
+  const split = () =>
+    document.querySelector(".connected-hero-split .connected-hero-value")!;
+  const rate = () =>
+    document.querySelector(".connected-hero-rate .connected-hero-value")!;
+
+  it("the split hero is PACE: faster and slower wear judge-pace-*, never judge-spm-*", () => {
+    // Interval 1's own resolved split target is 126s (2:06.0), the fixture
+    // fact the AVG block above reads the same way.
+    const fast = renderPane("live", {
+      intervalIndex: 1,
+      state: "rowing",
+      currentSplit: 100,
+    });
+    expect(split().className).toContain("judge-pace-faster");
+    expect(split().className).not.toContain("judge-spm-");
+    expect(split().className).not.toContain("timer-card-actual-");
+    fast.unmount();
+
+    renderPane("live", {
+      intervalIndex: 1,
+      state: "rowing",
+      currentSplit: 150,
+    });
+    expect(split().className).toContain("judge-pace-slower");
+    expect(split().className).not.toContain("judge-spm-");
+  });
+
+  it("the rate hero is SPM: faster and slower wear judge-spm-*, never judge-pace-*", () => {
+    // The programmed rate for interval 1 is what `spm` is judged against;
+    // 99 is far above it and 10 far below, so neither can land `within` by
+    // accident of the band.
+    const fast = renderPane("live", {
+      intervalIndex: 1,
+      state: "rowing",
+      spm: 99,
+    });
+    expect(rate().className).toContain("judge-spm-faster");
+    expect(rate().className).not.toContain("judge-pace-");
+    expect(rate().className).not.toContain("timer-card-actual-");
+    fast.unmount();
+
+    renderPane("live", { intervalIndex: 1, state: "rowing", spm: 10 });
+    expect(rate().className).toContain("judge-spm-slower");
+    expect(rate().className).not.toContain("judge-pace-");
+  });
+
+  it("AVG is PACE: its rest-only verdict wears judge-pace-slower, never judge-spm-*", () => {
+    // The same 130 s/500m rest reading the AVG block above judges "slower"
+    // against interval 1's 126s target.
+    renderPane("live", {
+      intervalIndex: 1,
+      state: "resting",
+      splitAvgPace: 130,
+    });
+    const avg = document.querySelector(".connected-hero-avg-value")!;
+    expect(avg.className).toContain("judge-pace-slower");
+    expect(avg.className).not.toContain("judge-spm-");
+  });
+
+  it("within and stale are NOT preference-bearing: both heroes keep timer-card-actual-, on both metrics", () => {
+    // `within` is plain ink and `stale` is grey; neither is a colour a
+    // rower may choose, so neither may migrate onto a slot class — a
+    // `judge-pace-within` would silently make on-target repaintable.
+    const on = renderPane("live", {
+      intervalIndex: 1,
+      state: "rowing",
+      currentSplit: 126,
+      spm: 22,
+    });
+    expect(split().className).toContain("timer-card-actual-within");
+    expect(rate().className).toContain("timer-card-actual-within");
+    for (const el of [split(), rate()]) {
+      expect(el.className).not.toMatch(/judge-(pace|spm)-/);
+    }
+    on.unmount();
+
+    renderPane("stale", { intervalIndex: 1 });
+    expect(split().className).toContain("timer-card-actual-stale");
+    expect(rate().className).toContain("timer-card-actual-stale");
+    for (const el of [split(), rate()]) {
+      expect(el.className).not.toMatch(/judge-(pace|spm)-/);
+    }
+  });
+
+  it("index.css declares all four slot classes and NO surviving pre-split pair", () => {
+    // The four successors each read their OWN resolved slot, so a rower's
+    // pace choice cannot reach the rate hero. Retired here with their last
+    // emitter: `.timer-card-actual-faster`/`-slower` and the
+    // `--judge-faster`/`--judge-slower` tokens behind them.
+    expect(ruleBody(".judge-pace-faster")).toContain(
+      "var(--judge-pace-faster)",
+    );
+    expect(ruleBody(".judge-pace-slower")).toContain(
+      "var(--judge-pace-slower)",
+    );
+    expect(ruleBody(".judge-spm-faster")).toContain("var(--judge-spm-faster)");
+    expect(ruleBody(".judge-spm-slower")).toContain("var(--judge-spm-slower)");
+    expect(rulesFor(".timer-card-actual-faster")).toHaveLength(0);
+    expect(rulesFor(".timer-card-actual-slower")).toHaveLength(0);
+    expect(INDEX_CSS).not.toContain("var(--judge-faster)");
+    expect(INDEX_CSS).not.toContain("var(--judge-slower)");
   });
 });

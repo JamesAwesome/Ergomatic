@@ -80,6 +80,15 @@
      exist rather than one pair. Their defaults above keep pace and SPM
      identical out of the box.
 
+     ONLY TWO OF THE FOUR `Judgement` MEMBERS GET A SLOT. `within` is
+     plain `--ink` and `stale` is `--ink-3` grey, and neither is a colour
+     a rower may choose — on-target has nothing to say and a held reading
+     is grey precisely because we cannot vouch for it. Their rules stay on
+     the `.timer-card-actual-` prefix in `index.css`, outside the
+     preference. `--judge-faster`/`--judge-slower`, the single pair that
+     served both metrics until Phase JC Task 3, were deleted there with
+     their last emitter.
+
      THEIR OWN TOKENS, not a third borrowing of --type-o2/--type-at (the
      teal/ochre the handoff specified, sanctioned for this second meaning by
      DEVIATIONS row 3). A workout's TYPE and a live reading's verdict are
@@ -106,14 +115,6 @@
   --judge-pace-slower: var(--judge-red);
   --judge-spm-faster: var(--judge-blue);
   --judge-spm-slower: var(--judge-red);
-  /* ALIASES, retired by Phase JC Task 3 once nothing emits the two class
-     pairs that consume them (`.timer-card-actual-faster/-slower`,
-     `.summary-row-faster/-slower`). Deleting them before their emitters
-     migrate leaves judged colour DARK app-wide with every gate green: an
-     unresolvable var() is invalid at computed-value time, not a parse
-     error, so `pnpm build` still exits 0. */
-  --judge-faster: var(--judge-blue);
-  --judge-slower: var(--judge-red);
   /* GOLD MEANS "LOOK HERE", NEVER "YOU ARE BEHIND" (James, 2026-08-13:
      "use gold for 'not a judgement' since we switched to red"). The
      connected panes mark the one cell that is counting down

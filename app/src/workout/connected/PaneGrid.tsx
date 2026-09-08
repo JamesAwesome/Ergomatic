@@ -131,11 +131,29 @@ import type { GridRow, GridValue, SurfaceModel } from "./surfaceModel";
  *  it on cards and a hero, this pane puts it on a table cell. A
  *  PROGRAMMED value has `judged: null` and gets no such class, which is how
  *  "programmed values are never tinted" is enforced by the data rather than
- *  by each cell remembering. */
-function cellClass(base: string, value: GridValue): string {
-  return value.judged === null
-    ? base
-    : `${base} timer-card-actual-${value.judged.judgement}`;
+ *  by each cell remembering.
+ *
+ *  TWO PREFIXES since Phase JC, and `PaneLive.tsx`'s `judgedClass` carries
+ *  the identical rule: `faster`/`slower` are the verdicts a rower may
+ *  recolour or silence per metric, so they name their metric
+ *  (`judge-pace-slower`); `within`/`stale` are plain ink and grey by
+ *  design, not a rower's to choose, and keep `timer-card-actual-`.
+ *
+ *  `metric` is REQUIRED with no default. This pane puts a pace verdict and
+ *  a rate verdict in the SAME ROW, and in the shipped palette both metrics
+ *  resolve to the same blue and red — so a defaulted argument would be
+ *  invisible everywhere except on the phone of the one rower who had
+ *  changed a slot. */
+function cellClass(
+  base: string,
+  value: GridValue,
+  metric: "pace" | "spm",
+): string {
+  if (value.judged === null) return base;
+  const judgement = value.judged.judgement;
+  return judgement === "faster" || judgement === "slower"
+    ? `${base} judge-${metric}-${judgement}`
+    : `${base} timer-card-actual-${judgement}`;
 }
 
 export default function PaneGrid({ model }: { model: SurfaceModel }) {
@@ -244,11 +262,11 @@ function Row({ row, ref }: { row: GridRow; ref?: React.Ref<HTMLDivElement> }) {
           <span className="connected-grid-pace-coast">{row.pace.display}</span>
         </span>
       ) : (
-        <span className={cellClass("connected-grid-pace", row.pace)}>
+        <span className={cellClass("connected-grid-pace", row.pace, "pace")}>
           {row.pace.display}
         </span>
       )}
-      <span className={cellClass("connected-grid-spm", row.spm)}>
+      <span className={cellClass("connected-grid-spm", row.spm, "spm")}>
         {row.spm.display}
       </span>
       <span className="connected-grid-hr">{row.hr}</span>

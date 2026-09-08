@@ -3173,10 +3173,10 @@ test.describe("from-the-log detail (Phase LT spec 1, Task 4: computed styles on 
 
   // §1's on-target row (index 2, dev 118−118=0.0 — inside the ±0.5s
   // band): `screenshots.spec.ts`'s own capture already proves the CLASS
-  // is absent (`not.toHaveClass(/summary-row-faster|summary-row-slower/)`)
+  // is absent (`not.toHaveClass(/judge-(pace|spm)-(faster|slower)/)`)
   // — this proves the CONSEQUENCE, live: with neither class present, the
   // cascade resolves `.summary-row-pace`/`.summary-row-dev` to plain
-  // `--ink`, never a `--judge-faster`/`--judge-slower` token surviving
+  // `--ink`, never a judged ink surviving
   // through some other selector (a class-name check alone cannot tell
   // "no color rule fired" apart from "a DIFFERENT rule fired the same
   // token by coincidence" — computed style can).
@@ -3188,14 +3188,14 @@ test.describe("from-the-log detail (Phase LT spec 1, Task 4: computed styles on 
       .locator(".summary-row-pace")
       .evaluate((el) => getComputedStyle(el).color);
     expect(paceColor).toBe("rgb(27, 26, 23)"); // --ink
-    expect(paceColor).not.toBe("rgb(29, 78, 137)"); // --judge-faster
-    expect(paceColor).not.toBe("rgb(150, 39, 24)"); // --judge-slower
+    expect(paceColor).not.toBe("rgb(29, 78, 137)"); // --judge-blue
+    expect(paceColor).not.toBe("rgb(150, 39, 24)"); // --judge-red
 
     const devColor = await onTargetRow
       .locator(".summary-row-dev")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(devColor).not.toBe("rgb(29, 78, 137)"); // --judge-faster
-    expect(devColor).not.toBe("rgb(150, 39, 24)"); // --judge-slower
+    expect(devColor).not.toBe("rgb(29, 78, 137)"); // --judge-blue
+    expect(devColor).not.toBe("rgb(150, 39, 24)"); // --judge-red
   });
 
   // §2's own ruling ("the authored target after the slash in quiet ink"),
@@ -5080,7 +5080,7 @@ test.describe("post-workout summary (session door, just finished)", () => {
     // PM final-PR gate, condition round, 2026-08-17: the rust `--accent`
     // fill (5.35:1) is GONE — James's ruling ("neutral is best, prefer
     // black") after the PM gate flagged it colliding with the
-    // --judge-slower red family on this same screen. Inherits `--ink`
+    // --judge-red family on this same screen. Inherits `--ink`
     // from `.summary-hero-value` like every sibling hero; 15.41:1 on
     // --page (the house text default, so it clears the 4.5:1 floor
     // trivially — computed here rather than judged by eye).
@@ -5802,7 +5802,7 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   // Rows render in `[opening piece, interval 1, interval 2]` order — all
   // three come from the SAME `monitorWorkRows` index order now; there is no
   // separate warm-up-row branch to special-case any more (Phase WU).
-  test("§2E judged colors: the slower row paints --judge-slower, the faster row paints --judge-faster, and the legend renders", async ({
+  test("§2E judged colors: the slower row paints --judge-red, the faster row paints --judge-blue, and the legend renders", async ({
     page,
   }) => {
     const rows = page.locator(".summary-row");
@@ -5813,12 +5813,14 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     const slowerPaceColor = await slowerRow
       .locator(".summary-row-pace")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(slowerPaceColor).toBe("rgb(150, 39, 24)"); // --judge-slower
+    // The raw ink `--judge-pace-slower` resolves to at the defaults these
+    // specs run under (Phase JC): a rower may repoint that slot.
+    expect(slowerPaceColor).toBe("rgb(150, 39, 24)"); // --judge-red
 
     const fasterPaceColor = await fasterRow
       .locator(".summary-row-pace")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(fasterPaceColor).toBe("rgb(29, 78, 137)"); // --judge-faster
+    expect(fasterPaceColor).toBe("rgb(29, 78, 137)"); // --judge-blue
 
     await expect(page.locator(".summary-legend")).toHaveText(
       "← FASTER (BLUE) · SLOWER (RED) →",
@@ -7367,38 +7369,69 @@ test.describe("connected screens (fake-driven)", () => {
   const INK_3_RGB = "rgb(87, 84, 76)";
   const RULE_2_RGB = "rgb(222, 216, 201)";
   const RULE_3_RGB = "rgb(201, 195, 178)";
-  const JUDGE_FASTER_RGB = "rgb(29, 78, 137)";
-  const JUDGE_SLOWER_RGB = "rgb(150, 39, 24)";
+  // THE RAW INKS, and the names matter (Phase JC). `--judge-blue` /
+  // `--judge-red` are the two colours a rower may choose; the four
+  // `--judge-{pace,spm}-{faster,slower}` SLOTS resolve to them by default
+  // and to whatever the rower picks after that. Written as independent
+  // literals rather than read from the stylesheet, so retuning a token
+  // cannot retune the test with it.
+  const JUDGE_BLUE_RGB = "rgb(29, 78, 137)";
+  const JUDGE_RED_RGB = "rgb(150, 39, 24)";
   const MARKER_RGB = "rgb(125, 85, 16)";
   const PROGRESS_ACTIVE_RGB = "rgb(138, 132, 120)";
   const SURFACE_RGB = "rgb(255, 253, 247)";
 
-  /** The colour a judged element SHOULD resolve to, read off whichever
-   *  `timer-card-actual-{judgement}` class is actually present — the same
-   *  mapping `index.css`'s own judgement-keyed rules encode. `"within"`
-   *  declares no colour of its own (plain ink by inheritance). */
+  /** The colour a judged element SHOULD resolve to at the DEFAULT
+   *  settings, read off whichever judgement class is actually present —
+   *  the same mapping `index.css`'s own rules encode. `"within"` declares
+   *  no colour of its own (plain ink by inheritance).
+   *
+   *  Blue-faster/red-slower is now a default rather than a rule (Phase
+   *  JC): a rower may recolour or silence either verdict per metric. These
+   *  specs never open the SETTINGS screen, so they run at the defaults and
+   *  this mapping holds. The one test that proves a rower's own CHOICE
+   *  reaches a pixel is Task 7's, and it sets the slot itself. */
   function expectedJudgedRgb(judgement: string): string {
-    if (judgement === "faster") return JUDGE_FASTER_RGB;
-    if (judgement === "slower") return JUDGE_SLOWER_RGB;
+    if (judgement === "faster") return JUDGE_BLUE_RGB;
+    if (judgement === "slower") return JUDGE_RED_RGB;
     if (judgement === "stale") return INK_3_RGB;
     return INK_RGB; // "within"
   }
 
-  /** Reads a judged element's own `timer-card-actual-*` class and its
-   *  resolved `color`, in one round trip. */
+  /** Reads a judged element's own judgement class and its resolved
+   *  `color`, in one round trip.
+   *
+   *  TWO PREFIXES since Phase JC, and the METRIC is an argument rather
+   *  than something read back: `faster`/`slower` wear
+   *  `judge-{pace,spm}-{judgement}` and `within`/`stale` keep
+   *  `timer-card-actual-{judgement}`. Passing the metric IN is what keeps
+   *  this harness discriminating — an element wearing the OTHER metric's
+   *  class matches nothing, reports `"(none)"`, and its caller's
+   *  `expectedJudgedRgb` then demands plain ink from a cell painted blue
+   *  or red. Reading whichever slot class happened to be present would
+   *  have made a pace class on the rate hero indistinguishable from a
+   *  correct one, since both metrics resolve to the same two inks by
+   *  default. */
   async function judgedColor(
     page: Page,
     selector: string,
+    metric: "pace" | "spm",
   ): Promise<{ judgement: string; color: string }> {
-    return page.locator(selector).evaluate((el) => {
-      const cls = Array.from(el.classList).find((c) =>
+    return page.locator(selector).evaluate((el, m) => {
+      const slot = Array.from(el.classList).find(
+        (c) => c === `judge-${m}-faster` || c === `judge-${m}-slower`,
+      );
+      const legacy = Array.from(el.classList).find((c) =>
         c.startsWith("timer-card-actual-"),
       );
+      const cls = slot ?? legacy;
       return {
-        judgement: cls ? cls.replace("timer-card-actual-", "") : "(none)",
+        judgement: cls
+          ? cls.replace(`judge-${m}-`, "").replace("timer-card-actual-", "")
+          : "(none)",
         color: getComputedStyle(el).color,
       };
-    });
+    }, metric);
   }
 
   test.describe("navigation and diagnostics (design spec §3 structure)", () => {
@@ -7784,14 +7817,17 @@ test.describe("connected screens (fake-driven)", () => {
         .evaluate((el) => getComputedStyle(el).fontSize);
       expect(tenths).toBe("58px");
 
-      // Split's own actual reads FASTER in this fixture (verified against
-      // the committed file: `grep timer-card-actual- connected-pane-
-      // live.html` — 1 faster, 1 within) — read dynamically anyway so the
-      // assertion states the mechanism, not a fact this fixture happens to
-      // hold today.
+      // Split's own actual reads FASTER in this fixture, on the PACE slot
+      // since Phase JC. Verified against the committed file:
+      // `grep -o "judge-[a-z]*-[a-z]*" connected-pane-live.html` → one
+      // `judge-pace-faster`, and `grep -o "timer-card-actual-[a-z]*"` →
+      // two `-within` (the rate hero and AVG). Read dynamically anyway so
+      // the assertion states the mechanism, not a fact this fixture
+      // happens to hold today.
       const split = await judgedColor(
         page,
         ".connected-hero-split .connected-hero-value",
+        "pace",
       );
       expect(split.color).toBe(expectedJudgedRgb(split.judgement));
 
@@ -7842,7 +7878,11 @@ test.describe("connected screens (fake-driven)", () => {
       expect(label.color).toBe(INK_3_RGB);
       expect(label.text).toBe("AVG");
 
-      const value = await judgedColor(page, ".connected-hero-avg-value");
+      const value = await judgedColor(
+        page,
+        ".connected-hero-avg-value",
+        "pace",
+      );
       const valueFontSize = await page
         .locator(".connected-hero-avg-value")
         .evaluate((el) => getComputedStyle(el).fontSize);
@@ -7890,6 +7930,7 @@ test.describe("connected screens (fake-driven)", () => {
       const rate = await judgedColor(
         page,
         ".connected-hero-rate .connected-hero-value",
+        "spm",
       );
       expect(rate.color).toBe(expectedJudgedRgb(rate.judgement));
 
@@ -8302,7 +8343,13 @@ test.describe("connected screens (fake-driven)", () => {
       // an already-dashing zero reading.
       expect(measured.coastText).toBe("—");
       expect(measured.paceCellRenderedText).toBe("—");
-      expect(measured.paceCellClasses).not.toMatch(/timer-card-actual-/);
+      // NOT DEAD AFTER PHASE JC, WIDENED: `within` and `stale` keep the
+      // `timer-card-actual-` prefix, so this still bites a stray verdict on
+      // a resting cell — and it now also catches the two per-metric slot
+      // classes, which is what a re-tinted rest would actually wear.
+      expect(measured.paceCellClasses).not.toMatch(
+        /timer-card-actual-|judge-(pace|spm)-/,
+      );
       // The CSS orientation swap itself, computed — not assumed from the
       // class list alone: the coast form is genuinely painted, the
       // rest-countdown form genuinely is not.
@@ -8872,11 +8919,13 @@ test.describe("connected screens (fake-driven)", () => {
       const pace = await judgedColor(
         page,
         ".connected-grid-active .connected-grid-pace",
+        "pace",
       );
       expect(pace.color).toBe(expectedJudgedRgb(pace.judgement));
       const spm = await judgedColor(
         page,
         ".connected-grid-active .connected-grid-spm",
+        "spm",
       );
       expect(spm.color).toBe(expectedJudgedRgb(spm.judgement));
 
@@ -9334,7 +9383,11 @@ test.describe("connected screens (fake-driven)", () => {
           className: el.className,
         }));
       expect(value.color).toBe(MARKER_RGB);
-      expect(value.className).not.toMatch(/timer-card-actual-/);
+      // Widened at Phase JC for the same reason as the portrait leg above:
+      // both class families have to be denied, not just the older one.
+      expect(value.className).not.toMatch(
+        /timer-card-actual-|judge-(pace|spm)-/,
+      );
     });
   });
 
@@ -9367,6 +9420,7 @@ test.describe("connected screens (fake-driven)", () => {
       const split = await judgedColor(
         page,
         ".connected-hero-split .connected-hero-value",
+        "pace",
       );
       // Forced "within" by the model (armedMirror), so ink-4 must come
       // from the `.connected-hero-ghost` class layered on top, not from a
@@ -9384,6 +9438,7 @@ test.describe("connected screens (fake-driven)", () => {
       const rate = await judgedColor(
         page,
         ".connected-hero-rate .connected-hero-value",
+        "spm",
       );
       expect(rate.judgement).toBe("within");
       expect(rate.color).toBe(INK_RGB);
@@ -9477,12 +9532,14 @@ test.describe("connected screens (fake-driven)", () => {
       const split = await judgedColor(
         page,
         ".connected-hero-split .connected-hero-value",
+        "pace",
       );
       expect(split.judgement).toBe("stale");
       expect(split.color).toBe(INK_3_RGB);
       const rate = await judgedColor(
         page,
         ".connected-hero-rate .connected-hero-value",
+        "spm",
       );
       expect(rate.judgement).toBe("stale");
       expect(rate.color).toBe(INK_3_RGB);
@@ -9518,8 +9575,11 @@ test.describe("connected screens (fake-driven)", () => {
         "1 interval kept.",
       );
       // FILLED RED (Gate 0), resolved through the real cascade rather than
-      // read off the stylesheet: `--judge-slower` ground with `--surface`
-      // text measures 7.94:1, against the house 4.5:1 floor. The banner
+      // read off the stylesheet: `--judge-red` ground with `--surface`
+      // text measures 7.94:1, against the house 4.5:1 floor. THE RAW INK,
+      // never a judged slot (Phase JC): this is an alarm, not a verdict,
+      // so it stays red at every setting — a rower who paints every slot
+      // blue must not get a blue LOST banner. The banner
       // has to land at arm's length mid-stroke — "the LOST isn't easy to
       // notice, i think we need to highlight that more" (James,
       // 2026-08-25).
@@ -9527,7 +9587,7 @@ test.describe("connected screens (fake-driven)", () => {
         const cs = getComputedStyle(el);
         return { bg: cs.backgroundColor };
       });
-      expect(fill.bg).toBe(JUDGE_SLOWER_RGB);
+      expect(fill.bg).toBe(JUDGE_RED_RGB);
       for (const child of [".connected-lost-title", ".connected-lost-body"]) {
         const color = await page
           .locator(child)
@@ -9588,12 +9648,13 @@ test.describe("connected screens (fake-driven)", () => {
         "1 OF 4 · READY",
       );
       // Same filled-red banner as the kept >= 1 arm above: dropping the
-      // body must not have dropped the emphasis with it. `--judge-slower`
-      // ground with `--surface` text is 7.94:1, computed at that leg.
+      // body must not have dropped the emphasis with it. `--judge-red`
+      // ground (the raw ink, outside the preference) with `--surface` text
+      // is 7.94:1, computed at that leg.
       const fill = await banner.evaluate(
         (el) => getComputedStyle(el).backgroundColor,
       );
-      expect(fill).toBe(JUDGE_SLOWER_RGB);
+      expect(fill).toBe(JUDGE_RED_RGB);
       const titleColor = await page
         .locator(".connected-lost-title")
         .evaluate((el) => getComputedStyle(el).color);

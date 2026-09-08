@@ -859,7 +859,7 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
     });
     const active = row(2);
     expect(active.querySelector(".connected-grid-pace")!.className).not.toMatch(
-      /timer-card-actual-/,
+      /timer-card-actual-|judge-(pace|spm)-/,
     );
     // Unjudged in BOTH forms — `cellClass` is never called on the coast
     // span either, so its class is the bare literal, nothing appended —
@@ -877,7 +877,7 @@ describe("RC-24: the /500M cell counts down a running rest", () => {
     expect(active.className).not.toContain("connected-grid-resting");
     expect(active.querySelector(".connected-grid-rest-word")).toBeNull();
     expect(active.querySelector(".connected-grid-pace")!.className).toContain(
-      "timer-card-actual-faster",
+      "judge-pace-faster",
     );
   });
 
@@ -1404,16 +1404,32 @@ function cleanupRender(): void {
 // The one judgement path — pane C joins the count
 // ---------------------------------------------------------------------------
 
-/** Every judged cell on whatever is on screen. Pane B puts
- *  `timer-card-actual-{judgement}` on cards and a hero; pane C puts it on
- *  its actual `/500M` and `SPM` cells, and NOWHERE else. */
-function judgedCells(): { text: string; judgement: string }[] {
+/** Every judged cell on whatever is on screen. Pane B puts the class on
+ *  cards and a hero; pane C puts it on its actual `/500M` and `SPM` cells,
+ *  and NOWHERE else. TWO PREFIXES since Phase JC Task 3: `faster`/`slower`
+ *  are preference-bearing and wear `judge-{pace,spm}-{judgement}`;
+ *  `within`/`stale` are not and keep `timer-card-actual-{judgement}`. The
+ *  sweep has to see both or it stops counting the repainted cells. */
+function judgedCells(): {
+  text: string;
+  judgement: string;
+  metric: string | null;
+}[] {
   return Array.from(
-    document.querySelectorAll<HTMLElement>('[class*="timer-card-actual-"]'),
-  ).map((el) => ({
-    text: el.textContent ?? "",
-    judgement: /timer-card-actual-(\w+)/.exec(el.className)?.[1] ?? "none",
-  }));
+    document.querySelectorAll<HTMLElement>(
+      '[class*="timer-card-actual-"], [class*="judge-pace-"], [class*="judge-spm-"]',
+    ),
+  ).map((el) => {
+    const slot = /judge-(pace|spm)-(\w+)/.exec(el.className);
+    return {
+      text: el.textContent ?? "",
+      judgement:
+        slot?.[2] ??
+        /timer-card-actual-(\w+)/.exec(el.className)?.[1] ??
+        "none",
+      metric: slot?.[1] ?? null,
+    };
+  });
 }
 
 describe("judged cells: pane C goes through the ONE helper", () => {
@@ -1430,17 +1446,19 @@ describe("judged cells: pane C goes through the ONE helper", () => {
     // actual and structurally cannot carry a verdict.
     expect(judgedCells()).toHaveLength(6);
     expect(
-      row(4).querySelectorAll('[class*="timer-card-actual-"]'),
+      row(4).querySelectorAll(
+        '[class*="timer-card-actual-"], [class*="judge-pace-"], [class*="judge-spm-"]',
+      ),
     ).toHaveLength(0);
 
     // Row 2's actual was rowed 6 s/500m faster than asked -> blue "faster"
     // (the rower's direction, `domain/judge.ts`'s rule), and one stroke
     // under the programmed rate -> red "slower".
     expect(row(2).querySelector(".connected-grid-pace")!.className).toContain(
-      "timer-card-actual-faster",
+      "judge-pace-faster",
     );
     expect(row(2).querySelector(".connected-grid-spm")!.className).toContain(
-      "timer-card-actual-slower",
+      "judge-spm-slower",
     );
   });
 
@@ -1510,10 +1528,10 @@ describe("judged cells: pane C goes through the ONE helper", () => {
     // the rate: blue and red, and they stay blue and red.
     expect(row(2).className).toContain("connected-grid-completed");
     expect(row(2).querySelector(".connected-grid-pace")!.className).toContain(
-      "timer-card-actual-faster",
+      "judge-pace-faster",
     );
     expect(row(2).querySelector(".connected-grid-spm")!.className).toContain(
-      "timer-card-actual-slower",
+      "judge-spm-slower",
     );
     // Row 1 is the warm-up — no programmed target, so `within` either way.
     // What matters is that it is not GREY: it has nothing to be stale about.
@@ -2027,4 +2045,68 @@ describe("the grid never grows a control of its own", () => {
   // `SegmentedControl` is the only navigation left, and its own click
   // tests (`SegmentedControl.test.tsx`, `ConnectedSurface.test.tsx`) cover
   // it reaching every pane.
+});
+
+// ---------------------------------------------------------------------------
+// Phase JC Task 3: the judged class carries its METRIC
+// ---------------------------------------------------------------------------
+
+// Pane C is the one surface where a pace verdict and a rate verdict sit
+// side by side in the same row, so it is where a metric handed to the
+// wrong cell is least visible: in the default palette both metrics resolve
+// to the same blue and red, and only a rower who had changed one slot on
+// the SETTINGS screen would ever see the difference. Each assertion below
+// therefore names the metric it expects AND denies the other.
+//
+// `within` and `stale` keep the `timer-card-actual-` prefix: neither is a
+// colour a rower may choose (plain ink and grey), so neither may migrate
+// onto a per-slot class.
+describe("grid cells name their metric (Phase JC Task 3)", () => {
+  function renderJudgedRows() {
+    renderGrid({
+      frame: frame({ intervalIndex: 2 }),
+      actuals: [
+        actualFor(0, FILLING_LOW.program),
+        actualFor(1, FILLING_LOW.program),
+      ],
+    });
+  }
+
+  it("the /500M cell is PACE and the SPM cell is SPM, in the same completed row", () => {
+    renderJudgedRows();
+    // Row 2's actual was rowed 6 s/500m faster than asked and one stroke
+    // under the programmed rate — the two verdicts differ, so a cell
+    // wearing the other metric's class cannot pass by coincidence.
+    const pace = row(2).querySelector(".connected-grid-pace")!;
+    const spm = row(2).querySelector(".connected-grid-spm")!;
+    expect(pace.className).toContain("judge-pace-faster");
+    expect(pace.className).not.toContain("judge-spm-");
+    expect(spm.className).toContain("judge-spm-slower");
+    expect(spm.className).not.toContain("judge-pace-");
+  });
+
+  it("the ACTIVE row's live cells keep the un-preferenced stale grey on both metrics", () => {
+    renderGrid({
+      phase: "disconnected",
+      frame: frame({ intervalIndex: 2, currentSplit: 60, spm: 60 }),
+      actuals: [
+        actualFor(0, FILLING_LOW.program),
+        actualFor(1, FILLING_LOW.program),
+      ],
+    });
+    for (const cls of ["pace", "spm"]) {
+      const cell = row(3).querySelector(`.connected-grid-${cls}`)!;
+      expect(cell.className).toContain("timer-card-actual-stale");
+      expect(cell.className).not.toMatch(/judge-(pace|spm)-/);
+    }
+  });
+
+  it("a programmed row carries no metric class at all — neither prefix", () => {
+    renderJudgedRows();
+    expect(
+      row(4).querySelectorAll(
+        '[class*="timer-card-actual-"], [class*="judge-pace-"], [class*="judge-spm-"]',
+      ),
+    ).toHaveLength(0);
+  });
 });
