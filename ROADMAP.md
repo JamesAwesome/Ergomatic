@@ -1324,7 +1324,37 @@ closed with zero Concept2 contact.
       inside a row whose whole purpose was to carry evidence. Tag an
       unreproduced mechanism INFERENCE, or leave the row at the symptom.
 
-- [ ] **DONE, PR OPEN — a monitor older than 2018 is silently unusable.**
+- [ ] **IN REVIEW (PR #353) — "Sign out" leaves Google signed in.** `nativeSignOut`
+      (`src/native/signin.ts`) posts to `/api/auth/signout` and clears our
+      token, and has NEVER called the plugin's `logout` — verified over the
+      whole history, not just the current file
+      (`git log -S"SocialLogin.logout" -- app/src` is empty). The device's
+      Google session therefore survives, the next `login()` finds it and
+      returns silently, and the rower is back in as the same account with no
+      chooser. Reported by James on the v0.42.0 TestFlight build, 2026-09-07.
+      The chooser is how you NOTICE; the defect is a button that says Sign out
+      and does not. NOT attributable to that build's plugin bump — the gap
+      predates it entirely. TRIAD (auth). **The checkbox ticks only when James
+      confirms on a device that sign-in no longer reuses silently** — the fix
+      ends the session, but Google's flow shares Safari's cookies, so it may
+      present a one-tap "Continue as X" rather than a full chooser (SUSPECTED,
+      untested). Same convention as the pre-2018-monitor row below. **Also
+      fixes the offline case found at its own code review** — the local token
+      clear was gated on the server call, so Sign out did nothing at all with
+      no connection. When merged it is
+      NOT released on its own (James, 2026-09-07: rides his next batch).
+      Spec: `docs/superpowers/specs/2026-09-07-signout-ends-google-design.md`. **S**
+
+- [ ] **`nativeSignIn` keeps a `v8 ignore` it no longer earns.** Found at
+      #353's code review. That PR narrowed the file-wide ignore on the
+      argument that it "stops being honest the moment it holds ordering logic
+      that can be wrong" — and `nativeSignIn`, still fully ignored, has a
+      `responseType` narrow, a null-token throw, a 403-with-body-parse branch
+      and a generic failure throw: materially more branching than the
+      four-line `nativeSignOut` that came out from under it. Pre-existing debt,
+      but the exact shape #353's own reasoning argues against (RF29). **S**
+
+- [ ] **SHIPPED v0.42.0 (902) — a monitor older than 2018 is silently unusable.**
       Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26
       (2018-11-02) and to `0x0038` in V1.27; our parsers demanded the longer
       form, so a pre-2018 monitor had every one of those frames rejected.
@@ -1334,8 +1364,8 @@ closed with zero Concept2 contact.
       full of `0x0032: expected 17 bytes, got 16` and
       `rowingActive=unseen`. Spec:
       `docs/superpowers/specs/2026-09-07-short-status-frames-design.md`. All
-      four plan tasks are complete and the full gate is green on PR #350
-      (`as1-short-frame`); the checkbox above ticks on merge, not before. **M**
+      four plan tasks are complete and merged as #350 and released in v0.42.0 (build 902, 2026-09-07)
+      (`as1-short-frame`); the checkbox stays open until the reporter confirms it fixed THEIR monitor — see the two open items below. **M**
 
 - [ ] **A monitor we cannot decode says nothing at all.** The follow-on the
       spec above names: hundreds of `frame-error` entries reached the ring
