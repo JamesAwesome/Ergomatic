@@ -2030,47 +2030,58 @@ closed with zero Concept2 contact.
 ## Phase MEM — local test runs stop OOMing, and stop reading as flake
 
 Opened 2026-09-08. Spec:
-`docs/superpowers/specs/2026-09-08-local-test-memory-design.md`.
+`docs/superpowers/specs/2026-09-08-local-test-memory-design.md`
+(revised after a `/harden` lens 1 pass that falsified two of its
+load-bearing premises).
 
-**The problem, measured on James's machine 2026-09-08:** a V8 heap OOM
-exits **1** — the same code as a test failure — prints **no test
-summary at all**, and buries its one diagnostic line under a 15-frame
-native stack trace. An agent reads a non-zero exit with no named
-failing test, calls it flake, and re-runs into a machine that just
-proved it has no room. Baseline at rest is 8.8 GB of 16 GB RSS with
-swap at 6.6 of 7.2 GB and 66 MB of free pages, across 3 live agent
-sessions and 6 worktrees; the client suite peaks at **2.76 GB** at
-Vitest's default 10 workers and **1.84 GB** at 4 (38 s vs 25 s).
-Six workers is strictly dominated by four — 41 s *and* 2.63 GB — the
-chip has 4 performance cores.
+**The problem.** Test runs are killed for want of memory and the kill is
+read as flake, so it gets retried into a machine with no room. Baseline
+at rest is 8.8 GB of 16 GB with swap at 6.6 of 7.2 GB and 66 MB of free
+pages, across 3 live agent sessions and 6 worktrees. The client suite
+peaks at **2.76 GB** at Vitest's default 9 workers and **1.84 GB** at 4
+(38 s vs 25 s); six workers is strictly dominated by four — 41 s *and*
+2.63 GB.
 
-**Two premises were falsified in the same pass and are recorded so
-nobody re-derives them:** idle per-worktree compose stacks cost
-**236 MB across two** (not a memory lever — force `E2E_KEEP=0` for
-staleness if at all, not for RAM), and `--coverage` adds **50 MB**
-(2.81 vs 2.76 GB), so the v8 provider is not a factor either.
+**The first framing was wrong and is corrected here, not appended to.**
+The spec originally said a memory kill exits 1 and is indistinguishable
+from a test failure. Measured: `pnpm run` and a raw binary both preserve
+the signal (**134** for a V8 fatal, **137** for SIGKILL); only
+`pnpm exec` collapses it to 1. The original measurement was taken through
+`pnpm exec`. **CLAUDE.md itself prescribes that shape** as the workaround
+for pnpm swallowing scoped flags, so the repo's own advice routes agents
+onto the one path where the signal dies. The genuinely ambiguous case is
+different: a **fork-worker** OOM leaves the parent alive, exiting 1 with
+a full `Test Files` summary.
 
-**Three parts, James-approved 2026-09-08:** (A) a wrapper that
-classifies a killed run and prints `MEMORY KILL — not a flaky test`,
-plus a CLAUDE.md recurring failure making "non-zero exit, no
-`Test Files` line" un-retryable; a preflight advisory that **warns and
-does not block** (his call). (B) `maxWorkers` default 4 and Playwright
-`workers` default 2, both env-var overridable
-(`ERGOMATIC_TEST_WORKERS`, `ERGOMATIC_E2E_WORKERS`) and both
-**disabled under CI**, so a more powerful machine pays nothing (his
-call). (C) pre-push runs `--changed origin/main` only, `pnpm test:full`
-becomes the explicit full run, and CI is the only place the full suite
-is mandatory — which amends recurring failure 1 from "run `pnpm e2e`"
-to "push and read the e2e job".
+**Three premises falsified while measuring, recorded so nobody
+re-derives them:** idle per-worktree compose stacks cost **236 MB across
+two** (not a memory lever); `--coverage` adds **50 MB**; and a V8 OOM
+prints `Ineffective mark-compacts near heap limit`, not `Reached heap
+limit`, on 4 of 4 runs of the growth shape a real suite has — the common
+needle is `JavaScript heap out of memory`.
 
-**Out of scope, deliberately:** the standing baseline (Chrome at
-2.3 GB, three concurrent sessions, six worktrees) is a working-style
-question, not a code one. If the levers above prove insufficient,
-that is the next place to look.
+**Three parts, James-approved 2026-09-08:** (A) a wrapper reading the
+exit code first and the message second, plus a preflight advisory that
+**warns and does not block** (his call); (B) `maxWorkers` 4 and
+Playwright `workers` 2, both env-overridable and both **disabled under
+CI**, so a bigger machine pays nothing (his call); (C) pre-push runs
+`--changed` plus, unconditionally, the whole-tree gates that `--changed`
+structurally cannot select.
+
+**The open question the desk cannot settle.** No capture of the real
+failure exists — everything measured so far is a reproduction. A V8 OOM
+is a per-process 4192 MB limit while the whole tree peaks at 2.76 GB, and
+an OS memory kill of a terminal `node` on darwin is unobserved
+(`memorystatus`, not the Linux OOM killer;
+`kill_on_sustained_pressure_count` is 0 here). So Part B's lever and Part
+A's classifier may not be aimed at the same event. The spec's A0 ships a
+capture step for exactly this; the next real kill answers it.
 
 **Owed at implementation:** Playwright's cost at 2 workers is
-**unmeasured** and tagged as such in the spec (recurring failure 30);
-the implementing PR measures it and replaces the tag with a number.
+**unmeasured** and tagged as such (recurring failure 30). Also owed:
+`test-run.test.sh` must be added to `ci.yml`'s `scripts` job **by name** —
+that job enumerates and does not glob, so a new script otherwise runs
+nowhere.
 
 ## Needs a decision from James
 
