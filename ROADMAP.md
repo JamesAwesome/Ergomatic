@@ -1239,7 +1239,16 @@ closed with zero Concept2 contact.
       setting, its storage, and a design gate on where it lives and how it
       reads. Worth more than it looks: a code is only typeable on a ranking
       distance, so for most pieces this is the ONLY route to a verified row.
-      **PRIORITY: after Just Row parity** (James, 2026-09-07).
+      **PRIORITY: after Just Row parity** (James, 2026-09-07) — which merged
+      as #351, so this is OPEN as of 2026-09-07. Spec:
+      `docs/superpowers/specs/2026-09-07-optional-auto-verify-design.md`.
+      Not its own phase: one setting, one assignment behind one predicate.
+      **The flag lands on `concept2_links`, not `preferences`** — the link
+      row already resets `autoSend` when a relink lands a different
+      `c2_user_id`, and verifying rows on an account the rower did not choose
+      is worse than sending them there, since a verified row cannot be
+      un-verified through our upload path. TRIAD (stored shape): Gate 0,
+      then a full antagonist pass, then a PM gate on the PR.
 - [ ] **Why does Concept2 show no Verify button on a row carrying interval
       data?** **ANSWERED 2026-09-07 and CLOSED — it was never about interval
       data.** Concept2 offers the Verification Code field only when the row's
