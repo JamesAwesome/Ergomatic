@@ -42,6 +42,7 @@ function storedRow(overrides: Partial<StoredLog> = {}): StoredLog {
     source: "pm5",
     c2ResultId: null,
     c2UserId: null,
+    verified: null,
     steps: [
       {
         label: "6:00 @ 6k",
@@ -1400,6 +1401,113 @@ describe("FromTheLog — the trace chart (Phase LT spec 3)", () => {
 // `machineSummary.verificationBytes` are the only three fields this
 // block ever touches; the other nine decoded `machineSummary` fields
 // have no display surface this wave and are never asserted here.
+// Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
+// 2026-09-07). The mark, and the two things that must never happen: it must
+// not outlive the account that earned it, and it must never turn into a
+// NEGATIVE claim about a row the rower may have verified by hand.
+describe("FromTheLog — VERIFIED ✓ (Phase AV)", () => {
+  /** The row + link pair the mark needs, served from one handler: the log
+   *  detail reads both. */
+  function mockRowAndLink(
+    row: Partial<StoredLog>,
+    link: Record<string, unknown>,
+  ) {
+    return mockApi((path) =>
+      path.includes("/api/concept2/link")
+        ? new Response(JSON.stringify(link), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        : new Response(JSON.stringify(storedRow(row)), { status: 200 }),
+    );
+  }
+
+  const LINK_2211 = {
+    available: true,
+    linked: true,
+    c2UserId: 2211,
+    c2Username: "jamesawesome",
+    needsReauth: false,
+    logbookBaseUrl: "https://log-dev.concept2.com",
+    autoSend: false,
+    autoVerify: true,
+    sendFailedAt: null,
+    sendFailedReason: null,
+  };
+
+  const VERIFIED_ROW = {
+    machineWorkSeconds: 124,
+    machineWorkMeters: 500,
+    machineSummary: { verificationBytes: WALK_VERIFICATION_BYTES },
+    c2ResultId: 9001,
+    c2UserId: 2211,
+    verified: true,
+  };
+
+  it("shows the mark, and WITHDRAWS the code — a verified row has nothing left to type it into", async () => {
+    mockRowAndLink(VERIFIED_ROW, LINK_2211);
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    expect(await screen.findByText("VERIFIED ✓")).toBeVisible();
+    expect(screen.queryByText(WALK_VERIFICATION_CODE)).toBeNull();
+  });
+
+  it("does NOT show it for a row verified on a DIFFERENT Concept2 account", async () => {
+    // The account gate. Nothing clears `verified`, so without this the tick
+    // survives a relink and points at a row the live account never saw.
+    mockRowAndLink({ ...VERIFIED_ROW, c2UserId: 9999 }, LINK_2211);
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    // Positive readiness first (the block is present), THEN the negative —
+    // otherwise this passes on a screen that simply had not rendered yet.
+    expect(
+      await screen.findByText("MACHINE CONFIRMED · WORK ONLY"),
+    ).toBeVisible();
+    expect(screen.queryByText("VERIFIED ✓")).toBeNull();
+  });
+
+  it("shows NO mark when the link read FAILED — an unread link is not a matching account", async () => {
+    // Round-2 N14a: reachable and unpinned. `useConcept2Link` hands back
+    // `null` on a failed read, and the gate treats that as "no account to
+    // compare against" rather than as a match.
+    mockApi((path) =>
+      path.includes("/api/concept2/link")
+        ? new Response("<html>502</html>", { status: 502 })
+        : new Response(JSON.stringify(storedRow(VERIFIED_ROW)), {
+            status: 200,
+          }),
+    );
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    expect(
+      await screen.findByText("MACHINE CONFIRMED · WORK ONLY"),
+    ).toBeVisible();
+    expect(screen.queryByText("VERIFIED ✓")).toBeNull();
+  });
+
+  it.each([
+    ["false — Concept2 said no AT RECEIPT", false],
+    ["null — we never heard (the 409 branch)", null],
+  ])(
+    "renders NO mark and NO negative claim when verified is %s",
+    async (_label, verified) => {
+      mockRowAndLink({ ...VERIFIED_ROW, verified }, LINK_2211);
+      await renderFromTheLog();
+      await screen.findByRole("heading", { name: "Sea Fret" });
+      expect(
+        await screen.findByText("MACHINE CONFIRMED · WORK ONLY"),
+      ).toBeVisible();
+      expect(screen.queryByText("VERIFIED ✓")).toBeNull();
+      // The rower may have verified this by hand and we would never learn
+      // it, so the surface says nothing rather than saying no.
+      expect(screen.queryByText(/NOT VERIFIED/i)).toBeNull();
+      // And the code comes BACK, because there is still something to type
+      // it into.
+      expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
+    },
+  );
+});
+
 describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
   it("renders the label, the value line, the verification code, and the caption for the walk's real values", async () => {
     mockApi(

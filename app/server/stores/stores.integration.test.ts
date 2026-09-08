@@ -860,12 +860,49 @@ describe("domain stores against real Postgres", () => {
         });
         const { id } = await logs.create(fresh.id, logInput());
 
-        const wrote = await logs.recordC2Result(fresh.id, id, 85557, 2211);
+        const wrote = await logs.recordC2Result(
+          fresh.id,
+          id,
+          85557,
+          2211,
+          true,
+        );
         expect(wrote).toBe(true);
 
         const row = await logs.get(fresh.id, id);
         expect(row?.c2ResultId).toBe(85557);
         expect(row?.c2UserId).toBe(2211);
+        expect(row?.verified).toBe(true);
+      });
+
+      // Phase AV, against REAL Postgres. The 409-duplicate branch writes
+      // `null`, and it must OVERWRITE a previous verdict rather than leave
+      // the column alone — a row verified on one Concept2 account and
+      // re-sent after relinking to another would otherwise keep rendering
+      // VERIFIED against a row the new account never verified.
+      //
+      // HERE rather than only at the route, because the route's tests run
+      // against `testing/fakes.ts`, which stores whatever it is handed. The
+      // branch review committed the real bug — a `.set()` that omits the
+      // column when the verdict is null — and every one of those tests
+      // stayed green. This is the layer that can see it.
+      it("a null verdict OVERWRITES a previous true, it does not leave it", async () => {
+        const logs = createLogsStore(db);
+        const users = createUserStore(db);
+        const fresh = await users.createUser({
+          googleSub: "log-c2-verdict-null",
+          email: "c2verdictnull@x.com",
+          name: "LCVN",
+        });
+        const { id } = await logs.create(fresh.id, logInput());
+
+        await logs.recordC2Result(fresh.id, id, 85557, 2211, true);
+        expect((await logs.get(fresh.id, id))?.verified).toBe(true);
+
+        // The 409 branch's own call shape: a new result id, the same
+        // account, and no verdict to report.
+        await logs.recordC2Result(fresh.id, id, 85558, 2211, null);
+        expect((await logs.get(fresh.id, id))?.verified).toBeNull();
       });
 
       it("returns false and writes nothing for a foreign user's id (no existence leak)", async () => {
@@ -883,7 +920,7 @@ describe("domain stores against real Postgres", () => {
         });
         const { id } = await logs.create(owner.id, logInput());
 
-        const wrote = await logs.recordC2Result(stranger.id, id, 1, 1);
+        const wrote = await logs.recordC2Result(stranger.id, id, 1, 1, true);
         expect(wrote).toBe(false);
 
         const row = await logs.get(owner.id, id);

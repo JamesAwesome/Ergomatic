@@ -42,6 +42,12 @@ export interface Concept2Link {
   /** Wave E auto-send §3.1: the sending mode. false = MANUAL, true =
    *  AUTOMATIC. Required on the row (NOT NULL DEFAULT false). */
   autoSend: boolean;
+  /** Phase AV: whether the monitor's verification code rides along with the
+   *  upload, so Concept2 marks the row verified at receipt. OPT-IN, required
+   *  on the row (NOT NULL DEFAULT false) — see the column's own comment in
+   *  `db/schema.ts` for why the default is a product ruling and why this
+   *  lives on the LINK rather than in `preferences`. */
+  autoVerify: boolean;
   /** The sticky "sends are failing" flag (rulings 6, 7): when the last
    *  eligible send failed with `no_weight_class`, and its SUB-reason. Both
    *  null when the last send landed (or Concept2 already had the row). */
@@ -184,6 +190,12 @@ export function createConcept2Store(db: Db) {
               // row that would have been inserted; the CASE compares the
               // stored account to the incoming one.
               autoSend: sql`CASE WHEN ${concept2Links.c2UserId} = excluded.c2_user_id THEN ${concept2Links.autoSend} ELSE false END`,
+              // Phase AV: the same rule for AUTO VERIFY, and deliberately its
+              // OWN expression reading its OWN column. The copy-paste failure
+              // here is an expression that still names `autoSend` in the THEN
+              // branch; `concept2.integration.test.ts` sets the two flags to
+              // OPPOSED values in both directions so that mutant cannot pass.
+              autoVerify: sql`CASE WHEN ${concept2Links.c2UserId} = excluded.c2_user_id THEN ${concept2Links.autoVerify} ELSE false END`,
               // ...while the FAILURE flag clears on EVERY relink, same-account
               // or not, because a relink replaces the grant the failure was
               // evidence about — this same statement already clears
@@ -208,6 +220,15 @@ export function createConcept2Store(db: Db) {
      *  false when there is no link row to update — the route answers 409
      *  `unlinked` for that, because the setting has no meaning without a link
      *  (ruling 1). */
+    async setAutoVerify(userId: string, autoVerify: boolean): Promise<boolean> {
+      const rows = await db
+        .update(concept2Links)
+        .set({ autoVerify, updatedAt: sql`now()` })
+        .where(eq(concept2Links.userId, userId))
+        .returning({ userId: concept2Links.userId });
+      return rows.length === 1;
+    },
+
     async setAutoSend(userId: string, autoSend: boolean): Promise<boolean> {
       const rows = await db
         .update(concept2Links)

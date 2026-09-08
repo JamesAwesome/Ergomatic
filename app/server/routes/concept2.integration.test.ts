@@ -476,6 +476,15 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
     expect(stored.status).toBe(200);
     expect(stored.body.c2ResultId).toBe(85557);
     expect(stored.body.c2UserId).toBe(2211);
+    // Phase AV: the verdict, through REAL Postgres. `RAW_201_BODY` already
+    // carries `verified: false`, so this line costs nothing and closes the
+    // one gap the branch review named: every other test of the 409-writes-
+    // null and 2xx-writes-the-verdict rules runs against
+    // `testing/fakes.ts`, which stores whatever it is handed. A real store
+    // that quietly dropped the column from its UPDATE — the stale-true bug
+    // the required 5th argument exists to kill — was invisible to all of
+    // them, and is visible here.
+    expect(stored.body.verified).toBe(false);
 
     const resultsCall = fetchMock.mock.calls.find((call) =>
       String(call[0]).endsWith("/api/users/me/results"),

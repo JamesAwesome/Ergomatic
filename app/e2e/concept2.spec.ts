@@ -57,6 +57,9 @@ interface LinkBody {
   logbookBaseUrl?: string | null;
   // Wave E auto-send §3.1.
   autoSend?: boolean;
+  // Phase AV. Optional here on purpose: an absent key is what a server
+  // predating the column sends, and the card must read that as OFF.
+  autoVerify?: boolean;
   sendFailedAt?: string | null;
   sendFailedReason?: string | null;
 }
@@ -452,7 +455,7 @@ test.describe("Concept2 link and send, in a real browser", () => {
 
     // Wave E auto-send: Unlink is the control's OFF segment now (spec §3.2,
     // RF23 — one affordance for one destructive act).
-    const unlink = page.getByRole("button", { name: "OFF" });
+    const unlink = page.getByRole("button", { name: "OFF", exact: true });
     await unlink.click();
     // ONE tap arms and fires nothing. The DELETE count is the assertion,
     // not the button's label: a card that changed its words while also
@@ -732,7 +735,7 @@ test.describe("Concept2 link and send, in a real browser", () => {
     fake.unlink = { status: 500, body: { error: "boom" } };
     await openConcept2Screen(page, fake);
 
-    await page.getByRole("button", { name: "OFF" }).click();
+    await page.getByRole("button", { name: "OFF", exact: true }).click();
     await page.getByRole("button", { name: "Tap again to unlink" }).click();
     await expect.poll(() => fake.deletes).toBe(1);
 
@@ -752,7 +755,9 @@ test.describe("Concept2 link and send, in a real browser", () => {
     // The arm is SPENT on every exit, not only the happy one (invariant
     // I2): a live "Tap again to unlink" sitting under a REASON line is one
     // stray tap away from a DELETE the rower has not decided to repeat.
-    await expect(page.getByRole("button", { name: "OFF" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "OFF", exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Tap again to unlink" }),
     ).toHaveCount(0);
@@ -1070,6 +1075,63 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
+  // Phase AV: the same seam for AUTO VERIFY, at the browser layer, because
+  // the branch review found it had none (N3). The point is the same one the
+  // sibling above makes and one more besides — the two controls are
+  // INDEPENDENT, so a verify tap must send only its own key.
+  test("AUTO VERIFY PATCHes { autoVerify: true } alone, then follows the RE-READ", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "verify-on");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    const verify = page.getByRole("group", { name: "Auto verify" });
+    await expect(
+      verify.getByRole("button", { name: "Auto verify off" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    const readsBefore = fake.linkReads;
+    fake.linked({ autoVerify: true });
+    await verify.getByRole("button", { name: "Auto verify on" }).click();
+    await expect.poll(() => fake.patches.length).toBe(1);
+    // ONLY its own key: a control that sent the whole link would rewrite the
+    // sending mode as a side effect of a verify tap.
+    expect(fake.patches[0]).toEqual({ autoVerify: true });
+    expect(fake.patchHeaders[0]).toMatch(/^application\/json/);
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    await expect(
+      verify.getByRole("button", { name: "Auto verify on" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("Rows arrive verified.")).toBeVisible();
+
+    // The sending mode did not move.
+    await expect(
+      control(page).getByRole("button", { name: "MANUAL" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("a refused AUTO VERIFY PATCH leaves the pressed state on the server's value", async ({
+    page,
+  }) => {
+    const fake = await signIn(page, "verify-refused");
+    fake.linked();
+    await openConcept2Screen(page, fake);
+    fake.patch = { status: 500, body: { error: "boom" } };
+    await page
+      .getByRole("group", { name: "Auto verify" })
+      .getByRole("button", { name: "Auto verify on" })
+      .click();
+    await expect(
+      page.getByText("Couldn't change this. Try again."),
+    ).toBeVisible();
+    // Still OFF, drawn from the link and never from the tap.
+    await expect(
+      page
+        .getByRole("group", { name: "Auto verify" })
+        .getByRole("button", { name: "Auto verify off" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   test("a refused PATCH shows the A7 line and leaves the pressed state on the server's value", async ({
     page,
   }) => {
@@ -1101,7 +1163,7 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     await openConcept2Screen(page, fake);
     const group = control(page);
     const groupBox = await group.boundingBox();
-    await group.getByRole("button", { name: "OFF" }).click();
+    await group.getByRole("button", { name: "OFF", exact: true }).click();
     const armed = page.getByRole("button", { name: "Tap again to unlink" });
     await expect(armed).toBeVisible();
     // A pending confirmation, not a toggle that is on: no pressed state.
@@ -1132,7 +1194,9 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     expect(fake.patches).toHaveLength(0);
 
     // A tap on a sibling that is hidden cannot happen; the timer disarms.
-    await expect(group.getByRole("button", { name: "OFF" })).toBeVisible({
+    await expect(
+      group.getByRole("button", { name: "OFF", exact: true }),
+    ).toBeVisible({
       timeout: 6000,
     });
     await expect(
@@ -1157,7 +1221,9 @@ test.describe("Concept2 auto-send, in a real browser", () => {
       if (route.request().method() === "DELETE") return; // never answers
       await route.fallback();
     });
-    await control(page).getByRole("button", { name: "OFF" }).click();
+    await control(page)
+      .getByRole("button", { name: "OFF", exact: true })
+      .click();
     const armed = page.getByRole("button", { name: "Tap again to unlink" });
     await armed.click();
     await expect(armed).toBeDisabled();
@@ -1175,6 +1241,7 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     const fake = await signIn(page, "send-failed");
     fake.linked({
       autoSend: true,
+      autoVerify: false,
       sendFailedAt: "2026-09-05T12:00:00.000Z",
       sendFailedReason: "no_weight",
     });

@@ -1214,18 +1214,30 @@ closed with zero Concept2 contact.
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that
       row, show "verified"; a debug reveal shows the raw code when needed.
-      **REVERSED, 2026-09-07 (James): we do NOT send the code, and a row is
-      NOT auto-verified.** PR #336 sent it; the first real rowed row came
-      back `Verified: Yes` with nothing for the rower to do, and James ruled
-      that a parity REGRESSION — Concept2's own app uploads the row and
-      leaves verification to the rower, so removing that act is the opposite
-      of parity, however well the mechanism worked. The send is gone and a
-      test pins the withholding on the exact row that would verify. The wire
-      facts stand (research file: the code verifies at the monitor's
-      distance, fails at a control, with and without the interval array);
-      what changed is the product decision.
-      **This row is now UNBLOCKED but unstarted**, and means reflecting a
-      verification the ROWER performed, never one we caused.
+      **REVERSED 2026-09-07 (James), THEN MADE OPTIONAL the same day —
+      the reversal below is history, and the sentences are in the past tense
+      because none of them describes the code at HEAD.** PR #336 sent the
+      code unconditionally; the first real rowed row came back
+      `Verified: Yes` with nothing for the rower to do, and James ruled that
+      a parity REGRESSION — Concept2's own app uploads the row and leaves
+      verification to the rower, so removing that act was the opposite of
+      parity, however well the mechanism worked. #337 removed the send and a
+      test pinned the withholding. **Since #360 the send exists again behind
+      `concept2_links.auto_verify`, DEFAULTED OFF**, and that pinning test is
+      now the OFF arm of a two-armed pair — so "we do NOT send the code" is
+      true only of a rower who has not turned it on, which is everyone until
+      they do. The wire facts were never in question (research file: the code
+      verifies at the monitor's distance, fails at a control, with and
+      without the interval array); what moved twice was the product
+      decision.
+      **PARTLY DELIVERED by Phase AV PR 1 (#360).** What ships: a row Concept2 accepted as
+      verified when we sent it now reads `VERIFIED ✓`, and the raw code is
+      withdrawn once there is nothing left to type it into. What does NOT:
+      the ask this row was written for — *"a verification the ROWER
+      performed, never one we caused"* — is exactly what a receipt-time
+      verdict cannot see. Only the reconciliation (PR 2, blocked on one
+      authenticated GET) can, and it can only ever UPGRADE. **The reversal
+      reversal narrative above is written as history for the same reason.**
 - [ ] **`pnpm screenshots` rewrites ~61 PNGs per run with no content change.**
       Measured twice on 2026-09-07 (PR #341): two consecutive runs on an
       unchanged tree each rewrote the same 61 captures, differing only in the
@@ -1247,7 +1259,27 @@ closed with zero Concept2 contact.
       setting, its storage, and a design gate on where it lives and how it
       reads. Worth more than it looks: a code is only typeable on a ranking
       distance, so for most pieces this is the ONLY route to a verified row.
-      **PRIORITY: after Just Row parity** (James, 2026-09-07).
+      **PRIORITY: after Just Row parity** (James, 2026-09-07) — which merged
+      as #351, so this is OPEN as of 2026-09-07. Spec:
+      `docs/superpowers/specs/2026-09-07-optional-auto-verify-design.md`.
+      Not its own phase: one setting, one assignment behind one predicate.
+      **The flag lands on `concept2_links`, not `preferences`** — the link
+      row already resets `autoSend` when a relink lands a different
+      `c2_user_id`, and verifying rows on an account the rower did not choose
+      is worse than sending them there, since a verified row cannot be
+      un-verified through our upload path. TRIAD (stored shape): Gate 0,
+      then a full antagonist pass, then a PM gate on the PR.
+      **Gate 0 APPROVED 2026-09-07** (artifact
+      `99e95a96-9d8b-4818-9362-e20727763689`, copy rev 3): control labelled
+      `AUTO VERIFY` on the Concept2 card under SENDING MODE, ON = "Rows arrive
+      verified.", OFF = "Concept2 leaves verifying to you."; the saved row
+      carries a bare `VERIFIED ✓` on the MACHINE CONFIRMED title line and the
+      CODE line is withdrawn when it appears. Both antagonist passes folded.
+      **Ships as TWO PRs:** PR 1 (setting + send + mark) is unblocked; PR 2
+      (the reconciliation James approved) is BLOCKED on one authenticated GET
+      confirming Concept2's results list carries `verified` — the log-dev
+      token expired 2026-09-07 20:04 UTC and `C2_CLIENT_ID`/`C2_CLIENT_SECRET`
+      are not in the environment.
 - [ ] **Why does Concept2 show no Verify button on a row carrying interval
       data?** **ANSWERED 2026-09-07 and CLOSED — it was never about interval
       data.** Concept2 offers the Verification Code field only when the row's
@@ -2204,6 +2236,41 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **No committed capture shows `VERIFIED ✓`.** Phase AV ships the mark
+      with client tests and two biting mutations, but the screenshots stack
+      cannot photograph it, for a reason already written down at length in
+      `e2e/screenshots.spec.ts`'s Wave E PR2 header: this stack is
+      Concept2-DARK by construction (`compose.yml` passes
+      `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`, `screenshots.sh` exports
+      nothing, and `scripts/compose-env.test.sh` enforces it), so
+      `POST /api/concept2/results/:logId` 403s before it writes anything.
+      **That route is the only writer of `verified`, exactly as it is the
+      only writer of `c2_result_id`** — the note's own words: "a capture step
+      that says 'seed state X' must be able to name a WRITER of X reachable
+      in the environment the capture runs in; here there is none." The SENT
+      and NO-WEIGHT captures already drive a tap against a routed answer
+      instead; the mark needs the row READ routed too, which is a larger
+      fake than either. Unblocks with the same work that would let this stack
+      photograph a sent row at all.
+
+- [ ] **The log detail issues TWO `GET /api/concept2/link` on EVERY view,
+      including rows with no machine block at all.** Phase AV
+      added the verified mark to `MachineConfirmedBlock`, which needs the live
+      link for its account gate, and `Concept2SendBlock` on the same screen
+      already calls `useConcept2Link()`. The hook has no shared cache — it is
+      a per-call fetch with its own generation ref — so the second caller is a
+      second request, not a second read of one. **Named in the PR that created
+      it rather than discovered later (RF29's shape).** The fix is to lift the
+      read to `FromTheLog` and pass `link` to both blocks, which changes
+      `Concept2SendBlock`'s props and its tests; not carried in Phase AV
+      because it is a refactor that PR did not need. **Scope corrected after
+      the branch review (N9): the hook is called at the top of
+      `MachineConfirmedBlock`, BEFORE its `machineWorkSeconds === null` early
+      return, and the block is rendered unconditionally — so the second
+      request fires on manual and timer rows too, where the block draws
+      nothing. The first wording said "per view", which is true and reads as
+      "per machine row".**
+
 - [ ] **No committed capture shows the free-row summary's machine tiles.**
       They ship in #351 gated from upstream of the producer — the
       2026-08-31 walk's own bytes replayed through the real driver, hook and
@@ -2322,15 +2389,26 @@ Each needs erg time or a deliberate recording session.
   other and none of them can see this — RF11 exactly, and the same
   "an oracle that shares your definition is a mirror" shape that retired
   `recordTwdVerdict`.
-  **Consequence, unhedged:** the verification code is ROADMAP's own "whole point
-  of the phase", and it cannot succeed today for an interval row whose totals
-  differ. Unknown and worth measuring: whether a single-interval or JustRow row
+  **Consequence as filed (superseded — see the resolution below rather than
+  reading this as current):** the verification code is ROADMAP's own "whole
+  point of the phase", and at the time of filing it could not succeed for an
+  interval row whose totals differ. Unknown and worth measuring: whether a single-interval or JustRow row
   verifies fine (the two numbers coincide there), which would explain why
   nothing caught it.
   **Owed before any fix:** decide which number is authoritative and say why —
   the monitor's own summary total, or our sum — then send that one, and gate it
   with a replay whose expected value comes from the CAPTURE's summary frame
-  rather than from our own accumulator. **M/L**
+  rather than from our own accumulator.
+  **THE OWED HALF IS DONE (PR #307, 2026-09-05): the monitor's own total is
+  authoritative and `buildC2Payload` posts `machineWorkMeters`/
+  `machineWorkSeconds` when present.** So the headline above — "a
+  verification code cannot validate" — no longer describes the code, and
+  Phase AV (#360) now sends that code on request. **What survives is the
+  question this row asked and nobody answered:** whether a SINGLE-INTERVAL
+  row verifies fine, where our sum and the monitor's total coincide. The
+  JustRow half of that question is closed by a different route — a free row
+  cannot be uploaded at all (`eligibilityFailure` refuses `endedBy !==
+  "finished"`), so it never reaches a verification. **S**
 
 - **FILED (PR2 PM gate, 2026-09-04): three PR2 items whose only home was a plan
   or a PR body.** A plan is a record of intent, not a live register (RF14).

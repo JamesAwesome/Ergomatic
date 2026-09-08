@@ -37,6 +37,12 @@ export interface Concept2Link {
    *  `"true"`, `1` all read false (A2): the only way to be automatic is a
    *  literal `true` from the server. */
   autoSend: boolean;
+  /** Phase AV: whether the monitor's verification code rides along, so
+   *  Concept2 marks the row verified at receipt. Same `=== true` reading as
+   *  `autoSend` above and for a sharper reason: a server that predates the
+   *  column sends no key, and reading that as ON would verify rows for a
+   *  rower who never asked — the regression #337 reverted. */
+  autoVerify: boolean;
   /** The sticky "sends are failing" flag (rulings 6, 7): the ISO instant of
    *  the last eligible send refused for want of a weight class, and its
    *  SUB-reason (`no_weight` | `unreadable_weight` | `implausible_weight` |
@@ -63,6 +69,7 @@ export const LINK_UNAVAILABLE: Concept2Link = {
   needsReauth: false,
   logbookBaseUrl: null,
   autoSend: false,
+  autoVerify: false,
   sendFailedAt: null,
   sendFailedReason: null,
 };
@@ -106,6 +113,8 @@ export function normalizeLink(body: unknown): Concept2Link {
     // the column sends no key and must read MANUAL, and a stray `"true"` or
     // `1` must not put a rower on AUTOMATIC (A2, fail-closed by construction).
     autoSend: raw.autoSend === true,
+    // Phase AV: `=== true` for the same fail-closed reason.
+    autoVerify: raw.autoVerify === true,
     // ABSENT, EMPTY, VALUED — the same three-case treatment as the two
     // strings above; an empty instant or reason is not a flag.
     sendFailedAt:
