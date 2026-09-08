@@ -197,8 +197,16 @@ describe("SettingsScreen — the four judged-colour slots", () => {
   });
 });
 
+// I-6 IS TWO CLAIMS AND THEY ARE ASSERTED IN TWO TESTS ON PURPOSE. The
+// invariant is that a refused write costs the rower persistence and NOTHING
+// ELSE — so one test owns "the rower is told" and another owns "the colours
+// are live anyway". Together in one `it`, the first failing expectation
+// would abort the second, and the named mutation (make the failure branch a
+// no-op: drop the message, keep the apply) could not be shown to redden one
+// half while leaving the other green — which is the whole content of RF25
+// here.
 describe("SettingsScreen — I-6, a refused write", () => {
-  it("applies the colours ANYWAY and says the choice will not survive a reload", async () => {
+  async function pickBlueWithAFailingWrite() {
     seed(STORED);
     vi.mocked(saveJudgeColors).mockReturnValue(false);
     renderScreen();
@@ -207,17 +215,19 @@ describe("SettingsScreen — I-6, a refused write", () => {
         screen.getByRole("radiogroup", { name: "Pace slower color" }),
       ).getByRole("radio", { name: "BLUE" }),
     );
+  }
 
-    // HALF ONE — the rower is told. A failed write is a different outcome
-    // from a successful one (RF25), so the screen says so rather than
-    // swallowing it.
+  it("HALF ONE: tells the rower the choice will not survive a reload", async () => {
+    await pickBlueWithAFailingWrite();
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent(/won't stick/i);
     expect(alert).toHaveTextContent(/reload/i);
+  });
 
-    // HALF TWO — and the colours are live regardless. Asserted separately
-    // and on the root property itself: a storage failure must not also make
-    // the screen look inert.
+  it("HALF TWO: applies the colours ANYWAY, so a dead store never makes the screen look inert", async () => {
+    await pickBlueWithAFailingWrite();
+    // The root property itself, not the call: this is what the cascade
+    // reads. A value this module wrote, never a computed colour.
     expect(rootProperty("--judge-pace-slower")).toBe("var(--judge-blue)");
     expect(checkedIn("Pace slower color")).toBe("BLUE");
   });
