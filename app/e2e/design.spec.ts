@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import {
   signInViaBackdoor,
@@ -7061,17 +7061,27 @@ async function injectConnectedFake(
   events: unknown[],
   delayWritesMs = CONNECTED_DELAY_WRITES_MS,
   program: unknown = CONNECTED_PROGRAM,
+  /** Phase MT: the `Erg Machine Type` this fake monitor reports on 0x0032
+   *  and 0x0038. Omitted by every other caller here, so they keep the
+   *  fake's own default of `0` (`ERGMACHINE_TYPE_STATIC_D`) and are
+   *  untouched; `128` (`ERGMACHINE_TYPE_STATIC_SKI`) drives the refusal.
+   *  Threaded exactly as `screenshots.spec.ts`'s
+   *  `injectFakeMonitorForScreenshots` threads it — the supported producer
+   *  — including its omit-the-key-entirely spelling, so an undefined value
+   *  never reaches the fake as an explicit `undefined`. */
+  ergMachineType?: number,
 ): Promise<void> {
   await page.addInitScript(
-    ({ program: p, events: e, delayWritesMs: delay }) => {
+    ({ program: p, events: e, delayWritesMs: delay, ergMachineType: erg }) => {
       window.__pm5FakeScript__ = {
         program: p,
         events: e,
         deviceName: "PM5 918273645",
         delayWritesMs: delay,
+        ...(erg === undefined ? {} : { ergMachineType: erg }),
       } as typeof window.__pm5FakeScript__;
     },
-    { program, events, delayWritesMs },
+    { program, events, delayWritesMs, ergMachineType },
   );
 }
 
@@ -7174,6 +7184,69 @@ async function walkToSurface(page: Page): Promise<void> {
   ).toBeVisible();
 }
 
+/** Phase MT gate (b): the geometry that decides whether a failure frame's
+ *  message is actually ON the frame. Every read happens in ONE
+ *  `page.evaluate` so no React re-render can land between them, and the
+ *  numbers come back RELATIVE to `.connected-interstitial-body`'s own client
+ *  box — the box the rower can actually see.
+ *
+ *  `minScrollTop` is the second half, and it pins the nastier one. Assigning
+ *  a negative `scrollTop` asks the engine for the region ABOVE the scroll
+ *  origin: chromium clamps that at 0 and reports a `scrollHeight` that does
+ *  not know the overflowing region exists, so content placed above the origin
+ *  is UNREACHABLE rather than merely scrolled past, while webkit allowed
+ *  `scrollTop: -99` on the same frame (both measurements are recorded in
+ *  `src/index.css`'s own `.connected-interstitial-body` comment). This suite
+ *  runs chromium only, so what bites here is the first child's top at the
+ *  minimum reachable scroll position. */
+async function measureFailureFrame(page: Page): Promise<{
+  clientHeight: number;
+  serifTop: number;
+  serifBottom: number;
+  minScrollTop: number;
+  firstChildTopAtMinScroll: number;
+}> {
+  return page.evaluate(() => {
+    const body = document.querySelector<HTMLElement>(
+      ".connected-interstitial-body",
+    );
+    const serif = document.querySelector<HTMLElement>(".connected-serif-line");
+    const first = (body?.firstElementChild ?? null) as HTMLElement | null;
+    if (body === null || serif === null || first === null)
+      throw new Error("no failure frame on screen to measure");
+    const clientTopOf = (el: HTMLElement): number =>
+      el.getBoundingClientRect().top + el.clientTop;
+    body.scrollTop = 0;
+    const restTop = clientTopOf(body);
+    const serifRect = serif.getBoundingClientRect();
+    const atRest = {
+      clientHeight: body.clientHeight,
+      serifTop: serifRect.top - restTop,
+      serifBottom: serifRect.bottom - restTop,
+    };
+    body.scrollTop = -9999;
+    const minScrollTop = body.scrollTop;
+    const firstChildTopAtMinScroll =
+      first.getBoundingClientRect().top - clientTopOf(body);
+    body.scrollTop = 0;
+    return { ...atRest, minScrollTop, firstChildTopAtMinScroll };
+  });
+}
+
+/** The half of gate (b) that holds on EVERY failure frame: nothing may sit
+ *  above the minimum reachable scroll position, because no scroll can bring
+ *  it back. */
+function assertNothingAboveTheScrollOrigin(
+  m: Awaited<ReturnType<typeof measureFailureFrame>>,
+): void {
+  expect(m.minScrollTop).toBe(0);
+  expect(
+    m.firstChildTopAtMinScroll,
+    `the frame's first child sits ${-m.firstChildTopAtMinScroll}px above the ` +
+      `minimum reachable scroll position, where no scroll can reach it`,
+  ).toBeGreaterThanOrEqual(-0.5);
+}
+
 // The connected walk is minutes of real setup per test (sign-in, import,
 // a 200ms-per-chunk five-interval program, a pumped session), well past
 // Playwright's 30s default.
@@ -7245,6 +7318,117 @@ test.describe("connected screens (fake-driven)", () => {
     await expect(failed).toBeVisible({ timeout: 10_000 });
     await sweep(page);
     await expect(failed).toBeVisible({ timeout: 1000 });
+
+    // Gate (b)'s universal half, on the OTHER failure frame, and free here:
+    // this test already stands on a failure screen, so it costs a resize
+    // rather than a second minutes-long connected setup. Only the
+    // reachability half is asserted — this frame carries a DETAIL panel and
+    // four full-width buttons, so its landscape column genuinely does not
+    // fit and its headline is legitimately clipped at the BOTTOM. What is
+    // never legitimate is content above the scroll origin.
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(failed).toBeVisible();
+    assertNothingAboveTheScrollOrigin(await measureFailureFrame(page));
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // --- Phase MT: the two gates the refusal screen owed (ROADMAP register,
+  // "Two design gates the refusal screen owes") ---
+  //
+  // Both exist because coverage was CLAIMED where there was none, so each is
+  // kept only because it went red on the mutation its own comment names; the
+  // measured failures are in the PR that added them.
+
+  /** The refusal frame, reached for real: `128` is
+   *  `ERGMACHINE_TYPE_STATIC_SKI`, the fake reports it on 0x0032, and the
+   *  real parser, driver and hook refuse the sitting.
+   *
+   *  `INTERSTITIAL_DELAY_WRITES_MS` is deliberately NOT used. That budget
+   *  exists to hold a TRANSIENT state still long enough to sweep it; this
+   *  screen is terminal — it holds until the rower acts — so the default
+   *  200ms/write only reaches it sooner. */
+  async function openRefused(
+    page: Page,
+    title: string,
+    email: string,
+  ): Promise<Locator> {
+    await injectConnectedFake(
+      page,
+      [],
+      CONNECTED_DELAY_WRITES_MS,
+      CONNECTED_PROGRAM,
+      128,
+    );
+    await openConnected(page, title, email);
+    const refused = page.locator(".connected-serif-line", {
+      hasText: "Erg type not supported",
+    });
+    await expect(refused).toBeVisible({ timeout: 30_000 });
+    return refused;
+  }
+
+  // GATE (a). `assertTapTargets` sweeps every a/button/[role=button]/input/
+  // select for 44px in both dimensions, and it does run on the FAILED case
+  // above — but that one drives a `link-failed` failure, and
+  // `SupportMatrixLink` renders only for `unsupported-machine`, so the link
+  // has never once been in the DOM while the sweep ran. This case puts it
+  // there. The link's own visibility is asserted BEFORE the sweep for the
+  // reason recurring failure 21 exists: without it, a refusal that rendered
+  // no link at all would sail through the sweep and read as coverage.
+  //
+  // MUTATION THAT MUST BITE: drop `min-height: var(--tap)` from
+  // `.connected-support-link` in `src/index.css`.
+  test("the interstitial's REFUSED state (unsupported machine): axe, the 44px floor over the support link, and the ink-4 rule", async ({
+    page,
+  }) => {
+    const title = "Design Connected Refused Workout";
+    const refused = await openRefused(
+      page,
+      title,
+      "design-connected-refused@e2e.test",
+    );
+    await expect(page.locator(".connected-support-link")).toBeVisible();
+    await sweep(page);
+    await expect(refused).toBeVisible({ timeout: 1000 });
+    await cleanupAllConnected(page, title);
+  });
+
+  // GATE (b), on the frame whose landscape budget is tightest — the gate
+  // that would have caught the landscape bug in the first place. At 844x390
+  // the refusal's four buttons leave a body window of roughly 142px for a
+  // taller column, so the frame overflows BY DESIGN; what must never happen
+  // is the overflow being split above and below the window, which is what
+  // `justify-content: center` did and what the auto margins now prevent.
+  //
+  // MUTATION THAT MUST BITE: restore `justify-content: center` on
+  // `.connected-interstitial-body` (it is `flex-start` plus auto margins on
+  // the first and last child).
+  test("the REFUSED frame's headline is on screen at rest in landscape, and nothing sits above the scroll origin", async ({
+    page,
+  }) => {
+    const title = "Design Connected Refused Landscape Workout";
+    const refused = await openRefused(
+      page,
+      title,
+      "design-connected-refused-landscape@e2e.test",
+    );
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(refused).toBeVisible();
+
+    const m = await measureFailureFrame(page);
+    expect(
+      m.serifTop,
+      `the headline starts ${-m.serifTop}px above the body's visible top`,
+    ).toBeGreaterThanOrEqual(-0.5);
+    expect(
+      m.serifBottom,
+      `the headline ends ${m.serifBottom - m.clientHeight}px below the body's visible bottom`,
+    ).toBeLessThanOrEqual(m.clientHeight + 0.5);
+    assertNothingAboveTheScrollOrigin(m);
+
+    await page.setViewportSize({ width: 390, height: 844 });
     await cleanupAllConnected(page, title);
   });
 

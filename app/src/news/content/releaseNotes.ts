@@ -5,9 +5,9 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    // v0.43.0: git log v0.42.0..main --oneline at a476cbc6 — FIFTEEN merges,
-    // each accounted for (RF15; no --merges, which returns empty on this
-    // squash-merged repo):
+    // v0.43.0: git log v0.42.0..v0.43.0 --oneline — SIXTEEN merges besides
+    // this notes PR itself, each accounted for (RF15; no --merges, which
+    // returns empty on this squash-merged repo):
     //   #351 the free row's summary carries the machine's own tiles — item 7.
     //   #353 sign out ends the Google session and works offline, and #359
     //     makes a failed sign-out say so instead of looking like it worked.
@@ -35,6 +35,11 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     //     Phase MT's own: `justify-content: center` had been putting the top
     //     of any overflowing failure screen above the scroll origin, where
     //     the web build could never reach it.
+    //   #368 files the AV/LP debt into a phase and gives the two owed
+    //     measurements their triggers. ROADMAP only, no note owed. It landed
+    //     from a parallel session between these notes being written and
+    //     merged, which is why this comment read FIFTEEN against a range
+    //     stopped at a476cbc6 — recounted against the tag itself.
     // Item 8 is the one nobody in the household can trigger: no tester owns
     // a SkiErg, BikeErg or Dyno. It is noted anyway because the article
     // section it links to is visible to everyone.
