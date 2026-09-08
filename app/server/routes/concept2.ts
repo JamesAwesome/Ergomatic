@@ -1430,21 +1430,40 @@ export function createConcept2Router({
       // Only a 4xx REFUSAL retries (review M1): `c2_error` also covers a
       // network failure, a timeout, a 5xx and an unparsable 201/409 body —
       // transient, and nothing to do with the array — and a thinned
-      // logbook row is permanent (no PATCH). 401 and 409 never reach here
-      // as `c2_error` with those statuses (they are `auth`/`duplicate`),
-      // so the band is 400..499 with a status present.
-      let fallback: "none" | "without_workout" = "none";
-      if (
+      // logbook row is permanent (no PATCH).
+      //
+      // 401 really cannot reach here — `postResult` answers it as `auth`
+      // with no status. **409 CAN, and the comment here used to deny it:**
+      // `client.ts`'s `postResult` returns `{kind:"c2_error", status:409}`
+      // when a 409 body carries no numeric `id`, and 409 is inside 400..499.
+      // Retrying that would re-POST a row Concept2 already holds, so 409 is
+      // excluded explicitly rather than by a claim that it never arrives.
+      //
+      // TWO THINGS CAN NOW BE BLAMED, and only one is dropped per attempt.
+      // The array is blamed first when it is present: dropping the code
+      // alongside it would be permanent, because Concept2 honours a
+      // verification code at CREATE and ignores it on update — a thinned
+      // row that still verified beats one that can never verify again. A
+      // code-carrying row with NO array had no entrance at all before this,
+      // so it could not retry.
+      let fallback: "none" | "without_workout" | "without_code" = "none";
+      // Captured as a NUMBER, not just a boolean: extracting the predicate
+      // costs the narrowing that let the warn strings below read
+      // `postResult.status` directly.
+      const refusedStatus =
         !postResult.ok &&
         postResult.kind === "c2_error" &&
         postResult.status !== undefined &&
         postResult.status >= 400 &&
         postResult.status < 500 &&
-        payload.workout !== undefined
-      ) {
+        postResult.status !== 409
+          ? postResult.status
+          : null;
+      const refused4xx = refusedStatus !== null;
+      if (refused4xx && payload.workout !== undefined) {
         const { workout: _dropped, ...thinned } = payload;
         console.warn(
-          `concept2 send: C2 refused the payload with workout.intervals (status ${postResult.status ?? "none"}); retrying once without the array (user ${userId}, log ${logId})`,
+          `concept2 send: C2 refused the payload with workout.intervals (status ${String(refusedStatus)}); retrying once without the array (user ${userId}, log ${logId})`,
         );
         payload = thinned;
         fallback = "without_workout";
@@ -1457,6 +1476,32 @@ export function createConcept2Router({
         // The fallback post can meet a rotated or revoked grant too (review
         // M2): the same repeat-401 handling as the first post, never a bare
         // 502 for an outcome that has its own answer.
+        if (!postResult.ok && postResult.kind === "auth") {
+          const stillSameGrant = await flagIfSameGrant(accessToken);
+          if (stillSameGrant) {
+            res.status(409).json({ error: "needs_reauth" });
+          } else {
+            res.status(502).json({ error: "c2_error" });
+          }
+          return;
+        }
+      } else if (refused4xx && payload.verification_code !== undefined) {
+        // No array to blame, so the code is what is dropped. Reached only by
+        // a row whose workout type we do not map — before this it had no
+        // entrance and could not retry at all.
+        const { verification_code: _droppedCode, ...thinned } = payload;
+        console.warn(
+          `concept2 send: C2 refused the payload carrying verification_code (status ${String(refusedStatus)}); retrying once without it (user ${userId}, log ${logId})`,
+        );
+        payload = thinned;
+        fallback = "without_code";
+        postResult = await client.postResult(accessToken, payload);
+        if (postResult.ok) {
+          console.warn(
+            `concept2 send: accepted WITHOUT verification_code — the code was the rejected part (user ${userId}, log ${logId})`,
+          );
+        }
+        // Same repeat-401 handling as the other two posts.
         if (!postResult.ok && postResult.kind === "auth") {
           const stillSameGrant = await flagIfSameGrant(accessToken);
           if (stillSameGrant) {
@@ -1479,6 +1524,10 @@ export function createConcept2Router({
             logId,
             verified: postResult.verified,
             intervalsSent: payload.workout !== undefined,
+            // Phase AV: the only evidence a send leaves about whether the
+            // rower's code went out. #336 had this, #337 deleted it with the
+            // send, and PR 1 restored the send without it.
+            codeSent: payload.verification_code !== undefined,
             fallback,
           }),
         );

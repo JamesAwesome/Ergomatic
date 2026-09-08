@@ -2132,6 +2132,164 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(posted).not.toHaveProperty("verification_code");
   });
 
+  // PR 2's three withdrawn Mechanism items, gated. All three were specced in
+  // PR 1, none shipped, and the round-1 review caught the spec still
+  // asserting them.
+
+  it("a code-carrying row with NO array can enter the fallback, and the code is what gets stripped", async () => {
+    // The entrance used to require `payload.workout !== undefined`, so this
+    // row could not retry at all. Nothing else about it is unusual: AUTO
+    // VERIFY on, machine totals present, and no interval array because the
+    // workout type is one we do not map.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: true, resultId: 93, verified: false });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [],
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls).toHaveLength(2);
+    const first = calls[0]![1] as Record<string, unknown>;
+    const retry = calls[1]![1] as Record<string, unknown>;
+    expect(first).toHaveProperty("verification_code");
+    expect(first).not.toHaveProperty("workout");
+    // The code is the only thing there was to blame.
+    expect(retry).not.toHaveProperty("verification_code");
+  });
+
+  it("an ARRAY-carrying row keeps its code through the thinning — the array is what is blamed", async () => {
+    // The regression this shape exists to prevent: dropping both would make
+    // the row permanently unverifiable, because the code is honoured at
+    // CREATE only. Thinned-but-verified beats thinned-and-never-verifiable.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: true, resultId: 94, verified: true });
+    const { app, logs } = buildApp({ store, client });
+    // A step shaped so `buildC2Intervals` can fill the API's required keys —
+    // the same one the existing array-fallback test uses. Without it the row
+    // carries no array and this test silently becomes the other branch.
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [
+        {
+          label: "250m @ 2:07.0",
+          actualSeconds: 67.9,
+          actualSource: "pm5" as const,
+          meters: 250,
+          actualMeters: 250,
+          machineRestSeconds: 60,
+        },
+      ],
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls).toHaveLength(2);
+    const first = calls[0]![1] as Record<string, unknown>;
+    const retry = calls[1]![1] as Record<string, unknown>;
+    expect(first).toHaveProperty("workout");
+    expect(retry).not.toHaveProperty("workout");
+    expect(retry).toHaveProperty("verification_code");
+  });
+
+  it("a 409 that reached c2_error does NOT enter the fallback — it would re-post a row Concept2 has", async () => {
+    // The comment above the band claimed 409 can never arrive here. False:
+    // `postResult` returns `{kind:"c2_error", status:409}` when a 409 body
+    // carries no numeric id, and 409 is inside 400..499.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: false,
+      kind: "c2_error",
+      status: 409,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id);
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    // ONE post. A retry here would create a duplicate of a row Concept2
+    // already holds and could not tell us about.
+    expect(vi.mocked(client.postResult).mock.calls).toHaveLength(1);
+  });
+
+  it("the c2_send line reports whether the code went out", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 95,
+      verified: true,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const sent = log.mock.calls
+      .map((c) => String(c[0]))
+      .find((l) => l.includes('"event":"c2_send"'));
+    log.mockRestore();
+    expect(sent).toBeDefined();
+    expect(JSON.parse(sent!)).toMatchObject({ codeSent: true, verified: true });
+  });
+
   // THE STALE-TRUE BUG, gated. Found by the delta antagonist pass before it
   // could ship: a row verified on ONE Concept2 account, re-sent after
   // relinking to ANOTHER (which the already-sent short-circuit deliberately
@@ -2855,6 +3013,9 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
           logId: id,
           verified: true,
           intervalsSent: false,
+          // Phase AV restored `codeSent`, which #337 deleted alongside the
+          // send. False here: this link's AUTO VERIFY is off, the default.
+          codeSent: false,
           fallback: "none",
         },
       ]);
