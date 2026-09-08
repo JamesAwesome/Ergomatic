@@ -2132,6 +2132,316 @@ describe("link (GET/DELETE /api/concept2/link)", () => {
     expect(posted).not.toHaveProperty("verification_code");
   });
 
+  // PR 2's three withdrawn Mechanism items, gated. All three were specced in
+  // PR 1, none shipped, and the round-1 review caught the spec still
+  // asserting them.
+
+  it("a code-carrying row with NO array can enter the fallback, and the code is what gets stripped", async () => {
+    // The entrance used to require `payload.workout !== undefined`, so this
+    // row could not retry at all. Nothing else about it is unusual: AUTO
+    // VERIFY on, machine totals present, and no interval array because the
+    // workout type is one we do not map.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: true, resultId: 93, verified: false });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [],
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(200);
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls).toHaveLength(2);
+    const first = calls[0]![1] as Record<string, unknown>;
+    const retry = calls[1]![1] as Record<string, unknown>;
+    expect(first).toHaveProperty("verification_code");
+    expect(first).not.toHaveProperty("workout");
+    // The code is the only thing there was to blame.
+    expect(retry).not.toHaveProperty("verification_code");
+  });
+
+  it("an ARRAY-carrying row keeps its code through the thinning — the array is what is blamed", async () => {
+    // The regression this shape exists to prevent: dropping both would make
+    // the row permanently unverifiable, because the code is honoured at
+    // CREATE only. Thinned-but-verified beats thinned-and-never-verifiable.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: true, resultId: 94, verified: true });
+    const { app, logs } = buildApp({ store, client });
+    // A step shaped so `buildC2Intervals` can fill the API's required keys —
+    // the same one the existing array-fallback test uses. Without it the row
+    // carries no array and this test silently becomes the other branch.
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [
+        {
+          label: "250m @ 2:07.0",
+          actualSeconds: 67.9,
+          actualSource: "pm5" as const,
+          meters: 250,
+          actualMeters: 250,
+          machineRestSeconds: 60,
+        },
+      ],
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const calls = vi.mocked(client.postResult).mock.calls;
+    expect(calls).toHaveLength(2);
+    const first = calls[0]![1] as Record<string, unknown>;
+    const retry = calls[1]![1] as Record<string, unknown>;
+    expect(first).toHaveProperty("workout");
+    expect(retry).not.toHaveProperty("workout");
+    expect(retry).toHaveProperty("verification_code");
+  });
+
+  it("a 409 that reached c2_error does NOT enter the fallback — it would re-post a row Concept2 has", async () => {
+    // The comment above the band claimed 409 can never arrive here. False:
+    // `postResult` returns `{kind:"c2_error", status:409}` when a 409 body
+    // carries no numeric id, and 409 is inside 400..499.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    // AUTO VERIFY ON and a code-bearing row, so there IS something to strip.
+    // An earlier version of this test seeded a bare row and passed with the
+    // 409 exclusion REMOVED — the fallback had nothing to drop either way,
+    // so the assertion never reached the branch it names (RF35: a gate that
+    // passes on the wrong arm).
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: false,
+      kind: "c2_error",
+      status: 409,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    // ONE post. A retry here would create a duplicate of a row Concept2
+    // already holds and could not tell us about.
+    expect(vi.mocked(client.postResult).mock.calls).toHaveLength(1);
+  });
+
+  it("the c2_send line reports whether the code went out", async () => {
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult).mockResolvedValue({
+      ok: true,
+      resultId: 95,
+      verified: true,
+    });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const sent = log.mock.calls
+      .map((c) => String(c[0]))
+      .find((l) => l.includes('"event":"c2_send"'));
+    log.mockRestore();
+    expect(sent).toBeDefined();
+    expect(JSON.parse(sent!)).toMatchObject({ codeSent: true, verified: true });
+  });
+
+  it.each([
+    ["429, a rate limit", 429],
+    ["400, a bad request", 400],
+  ])(
+    "a %s does NOT strip the code — only 422, the status Concept2 uses for payload validation",
+    async (_label, status) => {
+      // Gating the narrowing itself. Widening `refusedForCode` back to any
+      // 4xx left 190/190 green, so the decision to be narrower than the
+      // array arm had no test behind it.
+      //
+      // The stake: a dropped code is PERMANENT (honoured at CREATE, ignored
+      // on update), so under any-4xx a rate limit would strip it, the retry
+      // would succeed, and the rower would get a successfully-sent row
+      // silently missing the thing they opted in for. Left unsent instead,
+      // the row is still re-sendable WITH its code.
+      const store = makeFakeConcept2Store();
+      await store.upsertLink(userA.id, freshLink());
+      await store.setAutoVerify(userA.id, true);
+      const client = makeStubClient();
+      vi.mocked(client.postResult).mockResolvedValue({
+        ok: false,
+        kind: "c2_error",
+        status,
+      });
+      const { app, logs } = buildApp({ store, client });
+      const id = await seedEligibleLog(logs, userA.id, {
+        steps: [],
+        machineWorkMeters: 500,
+        machineWorkSeconds: 124.0,
+        machineSummary: {
+          avgStrokeRate: 26,
+          workoutType: 8,
+          verificationBytes: [
+            0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+            0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          ],
+        },
+      });
+      await asA(
+        request(app)
+          .post(`/api/concept2/results/${id}`)
+          .send({ tz: "America/New_York" }),
+      );
+      // ONE post. The row stays unsent and re-sendable, code intact.
+      const calls = vi.mocked(client.postResult).mock.calls;
+      expect(calls).toHaveLength(1);
+      expect(calls[0]![1]).toHaveProperty("verification_code");
+    },
+  );
+
+  it("the code-strip retry meeting a dead grant flags needs_reauth, with no third post", async () => {
+    // Review F2: the code arm's repeat-401 block was entirely ungated —
+    // deleting it left 188/188 green. Without it the rower falls through to
+    // a bare 502 and is told "try again" forever with no route back to
+    // consent. The array arm has had this test since PR 2 review M2.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: false, kind: "auth" });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [],
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const res = await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: "needs_reauth" });
+    expect((await store.getLink(userA.id))?.needsReauthAt).not.toBeNull();
+    // Two posts: the original and the thinned retry. Never a third.
+    expect(vi.mocked(client.postResult).mock.calls).toHaveLength(2);
+  });
+
+  it("the c2_send line names WHICH thing was dropped", async () => {
+    // Review F5: `fallback` was asserted for "none" only, so mislabelling
+    // `without_code` as `without_workout` left 188/188 green. This line is
+    // the only record of which path fired.
+    const store = makeFakeConcept2Store();
+    await store.upsertLink(userA.id, freshLink());
+    await store.setAutoVerify(userA.id, true);
+    const client = makeStubClient();
+    vi.mocked(client.postResult)
+      .mockResolvedValueOnce({ ok: false, kind: "c2_error", status: 422 })
+      .mockResolvedValueOnce({ ok: true, resultId: 96, verified: false });
+    const { app, logs } = buildApp({ store, client });
+    const id = await seedEligibleLog(logs, userA.id, {
+      steps: [],
+      machineWorkMeters: 500,
+      machineWorkSeconds: 124.0,
+      machineSummary: {
+        avgStrokeRate: 26,
+        workoutType: 8,
+        verificationBytes: [
+          0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01,
+          0x00, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ],
+      },
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    await asA(
+      request(app)
+        .post(`/api/concept2/results/${id}`)
+        .send({ tz: "America/New_York" }),
+    );
+    const sent = log.mock.calls
+      .map((c) => String(c[0]))
+      .find((l) => l.includes('"event":"c2_send"'));
+    log.mockRestore();
+    // The WHOLE event, not a subset: a leaked or renamed field on this line
+    // would slip past `toMatchObject` (review F11).
+    expect(JSON.parse(sent!)).toStrictEqual({
+      event: "c2_send",
+      logId: id,
+      verified: false,
+      intervalsSent: false,
+      codeSent: false,
+      fallback: "without_code",
+    });
+  });
+
   // THE STALE-TRUE BUG, gated. Found by the delta antagonist pass before it
   // could ship: a row verified on ONE Concept2 account, re-sent after
   // relinking to ANOTHER (which the already-sent short-circuit deliberately
@@ -2624,8 +2934,19 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
     machineRestSeconds: 60,
   };
 
-  it("Phase LP PR 2: a refusal on a payload WITHOUT workout is not retried (no second post)", async () => {
+  // RETITLED (PR 2 review F1). This read "a refusal on a payload WITHOUT
+  // workout is not retried", which became a FALSE ABSOLUTE the moment the
+  // code-strip arm landed: such a payload IS retried when it carries a
+  // verification code. It stayed green only because `freshLink()` defaults
+  // AUTO VERIFY off and this row has no `verificationBytes`, so there is
+  // nothing to strip — the assertion never reached the branch its old title
+  // claimed. Exactly the defect this branch's own 409 test was fixed for,
+  // one screen away and unswept (RF34's shape: the principle stated, then
+  // applied to one of the sites it governs).
+  it("Phase LP PR 2: a refusal on a payload with NOTHING to strip — no array and no code — is not retried", async () => {
     const store = makeFakeConcept2Store();
+    // AUTO VERIFY stays OFF and the row carries no bytes, so the payload has
+    // neither of the two droppable things. That is the condition under test.
     await store.upsertLink(userA.id, freshLink());
     const client = makeStubClient();
     vi.mocked(client.postResult).mockResolvedValue({
@@ -2855,6 +3176,9 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
           logId: id,
           verified: true,
           intervalsSent: false,
+          // Phase AV restored `codeSent`, which #337 deleted alongside the
+          // send. False here: this link's AUTO VERIFY is off, the default.
+          codeSent: false,
           fallback: "none",
         },
       ]);

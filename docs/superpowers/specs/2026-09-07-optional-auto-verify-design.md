@@ -237,16 +237,28 @@ rule at the second call site — *"Same class, deliberately: resolved ONCE per
 request (ruling R13), reused across this retry so one send can never carry two
 classes."* The same sentence now covers this flag.
 
-**WITHDRAWN FROM PR 1 (branch review, 2026-09-07).** The three paragraphs
-below describe the fallback work, the false-clause fix and `codeSent`'s
-return. **None of them shipped**, and the review found the spec still
-asserting them — a binding document describing a branch that does not exist
-(RF10/RF14). They are not abandoned; they move to PR 2, where the
-reconciliation already forces this file to be reopened. The reasoning is
-unchanged and is kept below as the design PR 2 implements. **PR 1 changes
-none of the fallback behaviour**, so the entrance is still gated on
-`payload.workout !== undefined`, no strip of `verification_code` exists, and
-the `c2_send` line carries `verified`/`intervalsSent`/`fallback` only.
+**WITHDRAWN FROM PR 1, THEN SHIPPED IN #363 (2026-09-08).** The three
+paragraphs below describe the fallback work, the false-clause fix and
+`codeSent`'s return. They did not ship in PR 1, and #360's review caught this
+spec still asserting them. **They are now IMPLEMENTED** — #363 carries all
+three — so this note is the second correction of the same sentence, in the
+opposite direction: leaving the withdrawal standing would have the binding
+document asserting the ABSENCE of behaviour that exists, which is #360's
+round-1 finding with the sign flipped.
+
+**One thing shipped NARROWER than the paragraphs below argue for**, and the
+paragraphs are left as written with this said in front of them rather than
+edited underneath: the code strip takes **422 only**, not any 4xx. The
+argument below is against the COMBINED strip and never asked whether entering
+at all is right for a code-carrying row (review F6). Under any-4xx a 429
+would strip the code, the retry would succeed, and the row would come back
+successfully sent and permanently unverifiable — silently missing the thing
+the rower opted in for. The array strip keeps its any-4xx band, because a
+dropped array can be re-sent and a dropped code cannot.
+
+**Phase AV therefore ships as THREE PRs, not two:** #360 (the setting, the
+send, the mark), #363 (the fallback, the 409 exclusion, `codeSent`), and the
+reconciliation, still blocked on one authenticated GET.
 
 **The 4xx fallback: the ENTRANCE widens, the STRIP stays conditional.** `#336`
 had it strip `workout` AND `verification_code` together (label
