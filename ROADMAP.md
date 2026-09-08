@@ -2275,6 +2275,39 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **NOBODY HAS MEASURED THAT A HAND VERIFICATION ON concept2.com SETS THE
+      LIST'S `verified` — and #365's headline rests on it.** Filed by the PM
+      gate (2026-09-08, C3). The chain is: rower taps Verify on the website →
+      their list row's `verified` flips → our declaration read sees it → we
+      upgrade. **Hop 3 is measured** (2026-09-08 research: the field is on the
+      list and varies). **Hop 2 is measured nowhere.** Every `true` on that
+      account is a receipt-time verification WE caused by posting a code, and
+      every test seeds `verified: true` into our own fake or straight into
+      Postgres — so the producer, a human tapping Verify, is upstream of all
+      of them. RF24's shape, with the producer outside the repo.
+      **If hop 2 is wrong the feature does nothing, silently, forever**, and
+      that is indistinguishable from "nobody has hand-verified anything yet".
+      **The fix is a desk round trip, not a walk:** hand-verify one eligible
+      log-dev row on the website, re-read `GET /api/users/me/results`, confirm
+      that row's `verified` flipped, append it to
+      `docs/superpowers/research/2026-09-08-c2-results-list-verified.md`.
+      Needs James's browser; zero erg time. **Until it exists, the release
+      note may not claim that rows you verify yourself pick up their tick** —
+      it covers the setting and the mark only. **S**
+
+- [ ] **Count the victims once AUTO VERIFY has been on for a few sends.** The
+      PM gate's standing test is "when a degradation path returns success, ask
+      what query would find its victims; if the answer is none, that is the
+      finding." Here the answer is not none, because the phase STORED the
+      verdict instead of logging it:
+      `SELECT count(*) FROM session_logs WHERE c2_result_id IS NOT NULL AND
+      verified IS NOT TRUE;`
+      Run it ONCE after the first opted-in sends. If it is not zero, the date
+      hypothesis is live — Concept2 checks `date`, we send the PHONE's clock,
+      and the monitor's own stamp ran 1.29-3.23 minutes earlier across seven
+      captures (spec M8/M9). Per the five-users ruling this is one query, not
+      a measurement gate or a dashboard. **XS**
+
 - [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
       catch in `routes/concept2.ts`'s reconciliation now warns rather than
       swallowing silently — that was the real defect (RF24's shape: a
