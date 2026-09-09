@@ -1469,10 +1469,14 @@ export function createPm5Driver(
   } | null = null;
   /** The live reconcile deadline's canceller, or `null` when none is armed
    *  — one at a time, because a run finishes once (`armSummaryReconcile`).
-   *  Cancelled when a new `program()` replaces the run it belongs to and
-   *  when the caller hangs up: a deadline whose run is gone has nothing
-   *  left to decide, and firing it anyway would be the timer talking about
-   *  someone else's workout. */
+   *  SETTLED, never merely cancelled, whenever the run it belongs to stops
+   *  being this driver's concern: both replacement doors (`program()` and
+   *  `beginFreeRow()`, RC-13 V2) and every teardown path
+   *  (`disconnect()`, `reconcile()`, `t.onDisconnect`) run
+   *  `drainSummaryReconcile`, which answers from the evidence already in
+   *  hand and then empties this slot. A deadline whose run is gone can no
+   *  longer WAIT for more wire evidence; that is not the same as having
+   *  nothing left to decide, and this comment used to say it was. */
   let pendingSummaryReconcile: (() => void) | null = null;
   /** The terminate path's own one-at-a-time pending emit (summary-record
    *  design spec §1), or `null` when none is armed — its timer's
@@ -4281,10 +4285,11 @@ export function createPm5Driver(
     pendingSummaryReconcile = schedule(() => {
       pendingSummaryReconcile = null;
       // The run this deadline was armed FOR, captured — never `activeRun`
-      // as it stands when the timer fires. A `program()` that landed in
-      // between cancels this timer outright (see its call site), and this
-      // guard is the belt to that braces: a deadline may only ever speak
-      // about its own workout.
+      // as it stands when the timer fires. A door that landed in between
+      // has already SETTLED this deadline and emptied the slot (RC-13 V2,
+      // `program()` and `beginFreeRow()` both), so this guard is the belt
+      // to that braces: a deadline may only ever speak about its own
+      // workout.
       if (activeRun !== run) return;
       reconcileSummary(run, release);
       // RC-9a: called HERE, not at the terminal transition — by the time
@@ -4340,12 +4345,29 @@ export function createPm5Driver(
     if (pendingSummaryReconcile !== null) {
       pendingSummaryReconcile();
       pendingSummaryReconcile = null;
-      // `armSummaryReconcile` is armed from exactly one call site (the
-      // `finished` branch in `maybeEmitFrame`, immediately after
-      // `activeRun!.closed = true`), and `program()`'s own replacement
-      // path cancels this same field before a new run ever opens — so a
-      // deadline still pending here can only name the CURRENT `activeRun`,
-      // closed and non-null.
+      // A deadline still pending here can only name the CURRENT
+      // `activeRun`, closed and non-null — and RC-13 corrected the support
+      // this sentence used to carry, which was false twice.
+      //
+      // IT USED TO SAY: "`armSummaryReconcile` is armed from exactly one
+      // call site" (it has THREE — the `finished` branch in
+      // `maybeEmitFrame` plus two `HASH_SUBWINDOW_MS` re-arms inside
+      // `maybeReconcileImmediately`), "and `program()`'s own replacement
+      // path cancels this same field before a new run ever opens" (which
+      // said nothing about `beginFreeRow`, which cancelled nothing at all).
+      //
+      // WHICH LAYER HOLDS IT, and there are now TWO independent holders,
+      // exactly as at `noteTerminateObservations`'s identity branch — see
+      // that comment for both, and for why the hook's holder is weighed by
+      // the DATE it landed (#259, 2026-09-01). The driver's own holder is
+      // structural: BOTH doors empty this slot before the new run exists,
+      // whichever call site armed it and however many there are.
+      //
+      // THIS FUNCTION STILL HAS NO IDENTITY GUARD OF ITS OWN — it
+      // reconciles whatever `activeRun` reads, not the run the deadline was
+      // armed for, unlike both scheduled callbacks. That is filed as a
+      // register row rather than argued here: binding the run into the slot
+      // would make the precondition structural instead of stated.
       if (activeRun !== null) {
         reconcileSummary(activeRun, release);
         // RC-9a: the same pairing `armSummaryReconcile`'s own scheduled
@@ -4404,7 +4426,9 @@ export function createPm5Driver(
    * duplicate of its logic: it is already idempotent (Task 7's own F7
    * rule — a no-op once `pendingSummaryReconcile` is `null`) and already
    * cancels the real timer before calling `reconcileSummary`, so calling
-   * this from more than one of ITS four production call sites below costs
+   * this from more than one of ITS production call sites (six since RC-13:
+   * `t.onDisconnect`, this function, `reconcile()`, `disconnect()`, and
+   * both replacement doors) costs
    * nothing on a run that settles the other way, and guarantees
    * `reconcileSummary` still runs AT MOST ONCE per run whichever site
    * fires it.
@@ -4741,14 +4765,34 @@ export function createPm5Driver(
       return;
     }
     const cancel = schedule(() => {
-      // A `program()` in between replaced the run this emit belongs to.
-      // Same identity guard, and the same belt-to-`program()`'s-braces
-      // reasoning, as `armSummaryReconcile`'s own: `program()` already
-      // cancels this timer before it swaps `activeRun`, and nothing else in
-      // this driver ever reassigns that variable, so this branch is
-      // UNREACHABLE today and is uncovered on purpose (the same trade
-      // `reconcileSummary`'s `lastIndex < 0` guard states: one branch
-      // against a timer speaking about someone else's workout).
+      // A door replaced the run this emit belongs to. This branch is still
+      // UNREACHABLE and still uncovered on purpose — but RC-13 corrected
+      // WHY, because the reason this comment used to give was false.
+      //
+      // IT USED TO SAY: "`program()` already cancels this timer before it
+      // swaps `activeRun`, and nothing else in this driver ever reassigns
+      // that variable". The second clause was never true — `beginFreeRow`
+      // assigns `activeRun` too — and the first is no longer what happens:
+      // both doors now SETTLE the outgoing run (V2), which empties this
+      // slot rather than cancelling into it.
+      //
+      // WHICH LAYER HOLDS IT, and there are now TWO independent holders:
+      //  1. THIS DRIVER. Every door that replaces `activeRun` drains both
+      //     pending slots first (`drainSummaryReconcile` at `program()` and
+      //     `beginFreeRow()`), so nothing can still be sitting here to fire
+      //     against a run it does not belong to.
+      //  2. THE HOOK, one layer up. `useMonitorSession`'s `beginFreeRow`
+      //     returns on `phase === "ended"`, `JustRow.tsx` latches
+      //     `armedThisStart`, and `session.program()`'s one caller is gated
+      //     on `phase === "pairing"`, written only inside `connect()`,
+      //     which refuses when a driver already exists.
+      //
+      // WEIGH HOLDER 2 BY ITS DATE: the `ended` clause landed 2026-09-01 in
+      // #259, and its own comment says it "was NOT here at first, and the
+      // e2e flow found the consequence". A guard added reactively last week
+      // is not an invariant that has held for a year, which is exactly why
+      // holder 1 now exists. Holder 1 is what makes this branch uncovered;
+      // do not delete it on holder 2's word.
       if (activeRun !== run) {
         pendingTerminateObservations = null;
         return;
@@ -6694,6 +6738,19 @@ export function createPm5Driver(
      * Idempotent against an open run: a second call while one is live is
      * ignored rather than replacing it, so a stray re-entry cannot silently
      * discard a row in progress.
+     *
+     * AND AGAINST A CLOSED ONE THAT STILL OWES AN ANSWER (RC-13 V2): this
+     * door replaces `activeRun`, so it SETTLES the outgoing run first —
+     * `drainSummaryReconcile`, the same call `program()` and every teardown
+     * path make. It used to do nothing at all with either pending slot, so
+     * a run replaced here lost its reconcile and its terminate-observations
+     * emit in silence. No product path reaches that ordering today (the
+     * hook returns on `phase === "ended"`, a guard added 2026-09-01 in
+     * #259), which is why this is hardening rather than a defect fix.
+     *
+     * Re-entrant calls arriving from a subscriber while EITHER door is
+     * mid-replacement are refused before the `runIsOpen()` check, which
+     * cannot see them (`replacingRun`'s own declaration, V3).
      */
     beginFreeRow(): void {
       // V3, checked BEFORE `runIsOpen()` because that guard cannot see this
