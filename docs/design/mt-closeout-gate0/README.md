@@ -54,6 +54,17 @@ REPO_ROOT=<worktree> bash -c 'source scripts/stack-env.sh >/dev/null; \
   invariant for all seven refusals is gated at the React layer by the
   exhaustive client tests; what rests on an unchecked reconstruction is only
   `nak`'s geometry number.
+**THREE LANDSCAPE PAIRS ARE BYTE-IDENTICAL BEFORE AND AFTER, AND THAT IS
+CORRECT.** `scan-cleanup-failed`, `permission-denied` and
+`permission-denied-ios5` have the same sha256 in both directions, because on
+those frames the suppressed line sits BELOW the fold: they overflow (30, 53
+and 121 px respectively), so removing content that was never visible changes
+no pixel. Do not read those three pairs as "the fix did nothing" — the
+portrait pair for `permission-denied` does show it, and the measured
+`content`/`overflow` columns show it on all three. Named here because a
+reader flipping through the landscape set would otherwise draw exactly the
+wrong conclusion.
+
 - **`before`** — the same reconstruction of the PRE-PR render: the panel's
   duplicate `detail` line restored, and (on the refusal) the phone-timer
   button back in the stack.

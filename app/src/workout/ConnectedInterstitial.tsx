@@ -315,9 +315,13 @@ export default function ConnectedInterstitial({
   // recorded about a connect/program failure was unreachable the instant
   // it mattered most. A plain button rather than the triple-tap gesture
   // `ConnectedSurface` uses — this screen already has explicit buttons
-  // for everything else (Try again, Row on the phone timer instead,
-  // Cancel), and a failure screen is exactly the moment a rower is
-  // looking for a way to see more, not a gesture to discover.
+  // for everything else, and a failure screen is exactly the moment a
+  // rower is looking for a way to see more, not a gesture to discover.
+  // (This used to enumerate them as "Try again, Row on the phone timer
+  // instead, Cancel". The refusal frame withholds the phone-timer offer
+  // as of the Phase MT close-out, so the list was true of three shapes
+  // and is now true of none; the ARGUMENT is unaffected, which is why
+  // the list went rather than the reasoning.)
   const [logOpen, setLogOpen] = useState(false);
   const logOpener = useRef<HTMLElement | null>(null);
 

@@ -2463,11 +2463,17 @@ to lose the row has no move except to walk away.
   `device === undefined` arm). **This is the ruling working as James approved
   it, not a defect** — the alternative was printing the same sentence twice —
   and the slug is still real diagnostic content the connection log lacks in
-  that position. Filed because it is a product observation James has NOT seen
-  a capture of: the gate 0 evidence shows it
-  (`docs/design/mt-closeout-gate0/measure-transport-missing.json` carries
-  `panelLines: ["TRANSPORT-MISSING"]`) but no committed screenshot does.
-  Revisit only if a rower reports the panel reading as empty. **S**
+  that position. Filed because it is a product observation James has not been
+  walked through, NOT because no picture of it exists — one does, committed in
+  the same PR: `docs/design/mt-closeout-gate0/transport-missing-landscape.png`
+  shows the panel reading `DETAIL` over `TRANSPORT-MISSING` and nothing else,
+  and `measure-transport-missing.json` carries
+  `panelLines: ["TRANSPORT-MISSING"]`. **This row first said "no committed
+  screenshot does", which was false when written** — a record claim that reads
+  as evidence is worse than none (RF16). What is true: no capture under
+  `docs/screenshots/` shows it, because that set has no `transport-missing`
+  frame at all. Revisit only if a rower reports the panel reading as empty.
+  **S**
 
 - **Suggestion helpers are pure over the id arrays they are handed (Phase SF
   PR1, lifted at close 2026-09-05).** James: the library may lazy-load one
