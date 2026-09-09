@@ -730,7 +730,7 @@ Record both wall-clock figures in the PR body and in the spec's B2 paragraph. If
 ```bash
 cd app && pnpm typecheck && pnpm lint && pnpm test --project unit --project client
 git rev-parse --show-toplevel
-git add app/testEnv.ts app/testEnv.test.ts app/vitest.config.ts app/playwright.config.ts app/scripts/measure-test-memory.sh app/scripts/count-test-workers.sh
+git add app/scripts/testEnv.ts app/scripts/testEnv.test.ts app/vitest.config.ts app/playwright.config.ts app/scripts/measure-test-memory.sh app/scripts/count-test-workers.sh
 git commit -m "Phase MEM: cap local workers at a measured 4, overridable, inert in CI"
 ```
 
