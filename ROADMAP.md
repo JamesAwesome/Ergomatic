@@ -307,6 +307,18 @@ pane and a summary — is approved before task 1.
       after the identical bug on a connected pane's hero — prose is not a gate.
       Shape: *moving a rule in a stylesheet silently changes which of two
       equal-specificity rules wins, and only a real browser can see it.*
+- **SECOND LESSON, same phase, 2026-09-08 — also for the merge-time
+      agent-config check.** Phase JC's seam test rests on navigating by CLICK
+      rather than `page.goto`, because the settings screen's inline root
+      properties survive a client-side nav and die on a reload — that asymmetry
+      is what makes its two legs test different things. The plan defended that
+      in PROSE and gated nothing. Measured: swap the click for a `goto` and
+      **every colour assertion still passes** (the boot apply repaints from
+      storage, so the cell is the right colour either way) while the two-legs
+      claim is silently false. A same-document sentinel, asserted present in one
+      leg and absent in the other, is what closes it. Shape: *a test whose value
+      depends on HOW it navigated needs an assertion about the navigation, or
+      the requirement is a comment.*
 - [ ] **The PR.** Nine tasks, spec §"PR shape". The load-bearing one is the
       e2e seam test: Vitest mocks every `.css` import to an empty string here,
       so **no client test can prove a colour lands on a pixel** — only e2e can

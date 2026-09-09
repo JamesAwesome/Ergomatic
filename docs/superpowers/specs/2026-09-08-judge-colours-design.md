@@ -584,8 +584,10 @@ properties; only e2e asserts a colour.
   value non-default in **all four** slots. Without it, a serialisation
   mismatch passes every I-2 case and silently resets the preference on
   every reload.
-- **THE SEAM (I-1 + I-3 end to end)** — **e2e, one test, starting upstream
-  of the producer**: open `/you/settings`, set PACE SLOWER to BLUE, then
+- **THE SEAM (I-1 + I-3 end to end)** — **e2e, TWO tests, starting upstream
+  of the producer** (this said "one test" through revision 2; two is forced,
+  because inside one test leg A's assertion aborts before leg B's runs and the
+  "leg B red, leg A green" mutation becomes unobservable): open `/you/settings`, set PACE SLOWER to BLUE, then
   reach a seeded summary with a slower-than-target row **by clicking
   through the app, never by `page.goto`**, and read
   `getComputedStyle(...).color` on the pace cell — asserting the literal

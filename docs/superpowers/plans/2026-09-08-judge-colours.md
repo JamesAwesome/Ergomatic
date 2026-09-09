@@ -341,6 +341,8 @@ optionClassName?: string;  // defaults to "onb-option"
 
 **Its claim, stated at the strength it earns** (recurring failure 26): `design.spec.ts` already proves *a* judged colour reaches a pixel — `expectedJudgedRgb`/`judgedColor` at 7 call sites, `JUDGE_FASTER_RGB = "rgb(29, 78, 137)"` as an independent literal, plus two computed-colour blocks on the from-the-log door. **This test's own claim is narrower and is the one nothing else covers: that the ROWER'S PREFERENCE reaches a pixel, and that the boot apply works.**
 
+**Two legs, and they are TWO `test`s, not one** — forced, not stylistic, and for the same reason Task 6's I-6 had to split: inside one test leg A's assertion aborts before leg B's ever runs, so mutation 1's required "leg B red, leg A green" would be unobservable. The spec's "one test" wording is loose; this is the correct shape.
+
 **Two legs, and they must test different things:**
 
 - **Leg A, live:** open `/you/settings`, set PACE SLOWER to BLUE, then reach a seeded judged summary **by clicking**. Read `getComputedStyle(...).color` on the pace cell and assert the literal `"rgb(29, 78, 137)"` — independent of the token, so retuning the token cannot retune the test.
@@ -350,7 +352,9 @@ optionClassName?: string;  // defaults to "onb-option"
 
 **`page.goto` instead of a click kills leg A's independence** — with `goto`, removing the `main.tsx` call reddens both legs and the "two legs test different things" claim is false. The settings screen's own `applyJudgeColors` writes inline properties on `documentElement` that survive a client-side nav and die on a reload; that asymmetry IS the test.
 
-- [ ] **Step 1: Write both legs. Step 2: Fail. Step 3: Green. Step 4: Commit.**
+- [ ] **Step 1: Write both legs. Step 2: Green on arrival — there is no honest red-first run here, and the plan was wrong to prescribe one** (corrected during execution). Tasks 1-6 already landed the feature, so a correctly written seam test passes the moment it exists; the only way to produce a red is to write the test wrong. **The failing evidence for this task is the mutations, not a red-first run.** Step 3: Commit.
+
+- [ ] **Step 3b: Gate the click itself.** Revision 2 defended "click, never `goto`" in prose and gated nothing, and the gap is real, not theoretical: with a `goto`, **every colour assertion still passes** — the boot apply repaints from localStorage, so the cell is blue either way — and the two-legs claim is silently false. Set a same-document sentinel on the settings screen and assert it PRESENT at the end of leg A and ABSENT at the end of leg B. That assertion is the only thing standing between this gate and decoration.
 - [ ] **Step 5: Mutation A.** Remove `applyJudgeColors` from `main.tsx`. **Leg B red, leg A green.** If both go red, leg A is using `goto` somewhere.
 - [ ] **Step 6: Mutation B.** Point `.judge-pace-slower` at `--judge-red` unconditionally. Both legs red.
 
