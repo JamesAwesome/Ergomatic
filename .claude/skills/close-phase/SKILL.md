@@ -41,8 +41,17 @@ SPAN=$(awk -v P="^## Phase <X>( |$)" '
   f && /^#{1,2} / {print s, NR; x=1; exit}
   END {if (f && !x) print s, NR}' ROADMAP.md)
 START=${SPAN% *}; END=${SPAN#* }
+[ -n "$START" ] && [ -n "$END" ] || { echo "REFUSE: no span for <X>"; exit 1; }
 echo "span: $START..$END"; sed -n "${END}p" ROADMAP.md
 ```
+
+**Run 0b through 0e in ONE shell invocation.** `$START` and `$END` do not
+persist between tool calls, and an unset one is the worst possible failure
+here: `awk -v a="" '$1+0 < a+0'` makes `a+0` evaluate to **0**, so the
+in-span filters in passes 2 and 3 pass EVERY hit. Measured on MT: pass 2
+returns 136, 326 and 1661 instead of the single out-of-span 1661, destroying
+the pass's whole premise. Every block below therefore opens with
+`: "${START:?run 0b first, in this same shell}"`, which fails loudly instead.
 
 **It emits bare numbers on purpose.** An earlier draft printed `136 START`
 and left the controller to substitute it by hand — and a two-field string
@@ -64,7 +73,8 @@ tally.**
 ### 0c. Pass 1 — every bullet in the span, not every checkbox
 
 ```bash
-sed -n "${START},${END}p" ROADMAP.md | grep -nE "^ *- "
+: "${START:?run 0b first, in this same shell}"
+awk -v a="$START" -v b="$END" 'NR>=a && NR<=b && /^ *- /{print NR": "$0}' ROADMAP.md
 ```
 
 **Do not enumerate `- [ ]`.** File-wide the checkbox is the MINORITY form:
@@ -76,6 +86,11 @@ grep -cE "^- \*\*" ROADMAP.md     # 177  plain bold bullets
 ```
 
 (measured on `main` at `d7319040`, 2026-09-08.)
+
+**`awk`, not `sed -n | grep -n`.** The `sed` slice renumbers from 1 inside the
+slice, so MT's first row prints as `20:` when it is file line 155 — while
+passes 2 and 3 print absolute numbers. One freeze report carrying two
+coordinate systems, with nothing marking which is which.
 
 **Enumerate at ANY indent — `^ *- `, not `^- `.** Censused across all five
 live phase spans (MT, JR, DE, PROTO, TD): every one carries zero indented
@@ -112,14 +127,23 @@ a `DONE`.
 ### 0d. Pass 2 — named hits outside the span
 
 ```bash
+: "${START:?run 0b first, in this same shell}"
 [ -n "$X" ] || { echo "REFUSE: empty phase code"; exit 1; }
-grep -nEi "Phase $X( |,|\.|\$)" ROADMAP.md | awk -F: -v a="$START" -v b="$END" '$1+0 < a+0 || $1+0 > b+0'
+grep -nEi "Phase $X([^A-Za-z0-9]|$)" ROADMAP.md | awk -F: -v a="$START" -v b="$END" '$1+0 < a+0 || $1+0 > b+0'
 ```
 
 **Guard the code before running, and force numeric comparison with `+0`.** An
-empty `$X` makes the pattern `Phase ( |,|\.|$)`, which returns zero hits and
-exit 1 — reading exactly like "nothing found outside the span" on the one
-pass whose whole job is finding the phase's real entry point.
+empty `$X` makes the pattern match nothing and exit 1 — reading exactly like
+"nothing found outside the span", on the one pass whose whole job is finding
+the phase's real entry point.
+
+**The separator class is `[^A-Za-z0-9]`, not `( |,|\.|$)`.** ROADMAP writes
+possessives and colons, and the narrower class drops them silently: it finds
+3 of MT's 4 mentions (missing `during Phase MT: full \`pnpm e2e\``), 6 of LP's
+8 (`Phase LP's …`), 3 of TD's 4 and 2 of JR's 3. A phase whose entry point is
+written `Phase X's` outside the span would be silently unfrozen. The wider
+class recovers all of them and still refuses a prefix collision — `Phase D`
+returns 0 against `## Phase DE`.
 
 **This is where the phase's real entry point lives.** On MT the file-wide
 grep returns 4 hits and exactly ONE falls outside the span — the Wave E row
@@ -134,13 +158,18 @@ the phase's subject vocabulary. A phase freezes rows about tooling it tripped
 over, whose words are disjoint from the phase's subject:
 
 ```bash
-[ -n "$NOUN" ] || { echo "SKIP: no noun for this row"; }
+: "${START:?run 0b first, in this same shell}"
+[ -n "$NOUN" ] || { echo "SKIP: no noun for this row"; exit 0; }
 grep -nFi "$NOUN" ROADMAP.md | awk -F: -v a="$START" -v b="$END" '$1+0 < a+0 || $1+0 > b+0'
 ```
 
 `grep -F`, not `-E`: a real distinctive noun contains regex metacharacters
-routinely (`completed_at IS NULL`, `44x44 px`, anything parenthesised), and an
-empty `$NOUN` under `-E` matches all 3423 lines.
+routinely (`completed_at IS NULL`, `44x44 px`, anything parenthesised).
+
+**The empty-noun guard needs its `exit 0`.** A guard that echoes SKIP and
+falls through to `grep -F ""` dumps every line of ROADMAP into the
+controller — 3223 of them, measured — which is precisely the
+context-flooding failure this whole skill is shaped to avoid.
 
 **Measured, and it is why the per-row form is mandatory:** MT freezes a row
 about `pnpm screenshots` rewriting captures on every run. The same defect is
@@ -181,7 +210,17 @@ whole job is lifting it.
 
 ### 0g. Anchor the freeze, and land it
 
-Record `git rev-parse HEAD` and a `sha256` of the span text. **Without the
+Record `git rev-parse HEAD`, and save the span's TEXT:
+
+```bash
+sed -n "${START},${END}p" ROADMAP.md > docs/closeouts/close-<X>.span.txt
+```
+
+**The text, not a `sha256` of it.** The process mutates the span by design —
+every checkbox tick and register filing lands inside it — so a digest is red
+on every run and cannot separate our own edits from a parallel session
+rewording a row, which is the only thing the anchor exists to catch. A stored
+copy lets the lift gate `diff` and report per row. **Without the
 anchor the freeze is not a freeze:** parallel sessions are the normal case
 here, and one of them can add or reword a span row with nothing noticing.
 
@@ -279,18 +318,20 @@ is not a test — after a merge, every bug found during a phase would ship.
 `(pulled in, close-<X> #N)`, so:
 
 ```bash
-cat ROADMAP.md docs/closeouts/close-<X>.md | grep -c "pulled in, close-<X>"
+grep -c "pulled in, close-<X>" ROADMAP.md
 ```
 
-**`cat`-then-count, not `grep -c` over two files** — two file arguments print
+**Count ONE file, and count the ROADMAP register rows.** Two traps sit here,
+and an earlier draft fell into both. `grep -c` over two file arguments prints
 one `file:count` line EACH and never a sum, so there is no number to compare
-against the cap; a shell comparison against `file:2` throws
-`integer expression expected`, which in an `if` resolves FALSE, i.e. "do not
-stop" on the one gate that hands control back to James. **And the worklist
-line must repeat the tag string literally**, or only the ROADMAP side ever
-counts.
+against the cap — and a shell comparison against `file:2` throws
+`integer expression expected`, which in an `if` resolves FALSE: "do not stop"
+on the one gate that hands control back to James. Then counting BOTH the
+register row and the worklist line double-counts every pull-in, tripping a
+cap of three on the SECOND one. The register row is the durable, greppable
+home; the worklist line is the human record and is not counted.
 
-re-derives the counter after any compaction. **A cap whose counter lives only
+That single command re-derives the counter after any compaction. **A cap whose counter lives only
 in the controller's context is a heuristic wearing a number** — and pull-ins
 are filed OUTSIDE the phase span, where no enumeration pass would ever find
 them again.
@@ -320,9 +361,10 @@ server frozen a version back.
    RF15), and every merge in the range gets a note or a stated reason it
    needs none. **This is a hand-back to James** — only he tags and runs
    `ios:release` — and the stop rule names it as one.
-5. **Re-check the freeze anchor, then lift.** Re-extract the span, diff it
-   against the Phase 0 `sha256`, and report any row that appeared, vanished
-   or changed text since the freeze. Then lift every `CARRY` row into the
+5. **Re-check the freeze anchor, then lift.** Re-extract the span and
+   `diff docs/closeouts/close-<X>.span.txt -` against it. Expect our own
+   ticks and filings; report any row that APPEARED, vanished, or was reworded
+   by someone else since the freeze. Then lift every `CARRY` row into the
    live slate or the register, WITH its evidence and what unblocks it.
    Archiving without lifting deletes them.
 6. **Archive the body** verbatim to `docs/history/phase-<x>.md`.
