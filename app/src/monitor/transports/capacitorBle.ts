@@ -155,6 +155,22 @@ class ScanTimeoutError extends Error {
 export const TARGET_SCAN_DEADLINE_MS = 10_000;
 export const TARGET_COLLISION_WINDOW_MS = 1_000;
 
+// RF32 CENSUS, SETTLED — THESE THREE SAY "PM5" AND A ROWER READS THEM.
+// Recorded here rather than in a PR body (RF14) so the next anonymise-the-PM5
+// sweep does not have to re-litigate it.
+//
+// They are NOT diagnostics that stop at a log. `useMonitorSession.ts`'s
+// `mapTargetedFailure` copies each into `ConnectedError.raw`, and the failure
+// screen renders `raw` for every reason except `unsupported-machine`
+// (`ConnectedInterstitial.tsx`'s detail panel) — so an NFC scan that finds
+// nothing advertising prints the first of these to a rower today.
+//
+// They KEEP the name anyway, under RF32's own disambiguation exemption: each
+// is about the monitor targeted BY NAME, which is the case where the rower
+// has to be told WHICH monitor. "The named monitor was not advertising"
+// loses the only fact the sentence exists to carry. `TargetScanInterrupted`
+// and `ScanCleanupFailed` below target nothing by name and correctly say
+// neither.
 export class TargetMonitorNotAdvertisingError extends Error {
   constructor() {
     super("The named PM5 was not advertising within the targeted deadline.");

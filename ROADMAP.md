@@ -2007,11 +2007,19 @@ closed with zero Concept2 contact.
 
 ## Tooling
 
-- **`pnpm screenshots` rewrites captures no code change touched.** Filed FOUR
-  separate times with four different counts; reconciled into this one row on
-  2026-09-08 (Phase MT close-out, ruled DOC-only by James — the FIX CARRIES).
-  The count moves with the corpus and with the day, so the history is the
-  useful part, not any single figure:
+- **`pnpm screenshots` rewrites captures no code change touched.** Filed FIVE
+  separate times over three weeks; reconciled into this one row on 2026-09-08
+  (Phase MT close-out, ruled DOC-only by James — the FIX CARRIES). The count
+  moves with the corpus and with the day, so the history is the useful part,
+  not any single figure — and the EARLIEST sighting is the one that says how
+  long this has been visible:
+  - **2026-08-18 — one file, and it was reverted rather than explained**:
+    filed as `today.png`'s "unexplained onboarding read-marker diff",
+    reverted where it surfaced and never explained. It rode inside the
+    2026-08-28 row below and was LOST when the rows were first merged into
+    this one; the merge's own review put it back, because on a row whose
+    entire stated value is the history, dropping the first entry while
+    counting the rest is that row's own failure mode.
   - **2026-08-28 — 19 of 90 no longer reproduced**: `today*.png` (5), `log-*`
     (4), `post-workout-*` (3), `you*.png` (6), `releases.png`. **Run as a
     control on a second worktree whose branch touched none of those screens,
@@ -2061,7 +2069,9 @@ closed with zero Concept2 contact.
   first run's PNGs, and diff run against run. **The 2026-08-30 measurement is
   written out here rather than cited**, because that round's report lives
   under git-excluded `.superpowers/` and a citation into it is unreachable to
-  anyone but the session that wrote it (RF16's corollary). **M**
+  anyone but the session that wrote it (RF16's corollary). **M** — the
+  largest of the folded rows' own sizings; the 2026-08-28 filing carried
+  **S/M** and the 2026-09-07 and 2026-09-08 filings **M**.
 - **`src/monitor/useMonitorSession.test.ts` — a pre-existing flake**
   (`listSessionLogs()` expected length 1, got 2: an extra session-log ring
   entry, RF27's own territory) fired once during PR1.75b's coverage runs,
