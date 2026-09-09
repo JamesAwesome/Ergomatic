@@ -339,18 +339,33 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       five buttons at "74px and the headline is on screen". The headline runs
       to y94 on any frame whose title wraps, so 74px CUT it — the reason the
       approved fix pairs four rather than two. **S**
-- [ ] **Nothing can gate the five-button failure frame.** `canOpenAppSettings()`
-      is `isNative()`, so the web build renders `permission-denied` with four
-      buttons and every e2e assertion stands on that shape. The deciding case —
-      five buttons, a 74px window under the old pairing count — exists only on
-      iOS, where the frame's own message would be cut.
-      NARROWED IN REVIEW ROUND 1: the PAIRING COUNT itself is now caught, one
-      frame over — reverting to `nth-last-child(-n + 2)` fails the refusal
-      test's `contentHeight` precondition at 157px against a 142px window,
-      because that frame's content sits between the two windows. What stays
-      ungateable is the five-button SHAPE: no web assertion can stand on it, so
-      nothing would catch a regression that only reached the iOS stack. Either
-      a seam on that adapter or an accepted gap; not decided. **S**
+- [x] **Nothing can gate the five-button failure frame.** CLOSED by a SEAM
+      (James ruled BUILD, 2026-09-08), at the Phase MT close-out.
+      `canOpenAppSettings()` now also returns true when
+      `window.__appSettingsDoor__` holds the literal `app-settings door (dev
+      override)`, inside the same `DEV || VITE_ENABLE_FAKE_MONITOR` build-time
+      fold every other dev seam here uses; `e2e/helpers.ts`'s
+      `forceAppSettingsDoor` writes it and `e2e/design.spec.ts` drives the
+      real five-button React tree — the shape, `Open Settings` first, the
+      44px/axe/ink-4 sweep, and the landscape geometry at 844x390.
+      The override moves ONE boolean: `openAppSettings()` is untouched, so a
+      forced-open button on the web calls no plugin. A global `isNative()`
+      stub was ruled out with a receipt — `adapters/monitorTransport.ts` takes
+      the Capacitor BLE arm on `isNative()`, which would kill the fake every
+      connected walk runs on (RF13).
+      MEASURED on the real frame, which is also the check that the seam
+      renders the shipped screen rather than a reconstruction: window 138px,
+      content 259px, overflow 121px — the same 121 the DETAIL-panel row above
+      recorded for the five-button shape after #378. Reverting the pairing to
+      `nth-last-child(-n + 2)` now fails HERE ("the headline ends 20px below
+      the body's visible bottom", expected <= 74.5, received 94), where it
+      used to be catchable only one frame over; dropping the fifth button, or
+      the override itself, fails the count at 4.
+      `scripts/dist-grep.sh` gains the token as its tenth needle, proven both
+      directions (RF12): a plain `pnpm build` leaves `dist/client` clean, and
+      `VITE_ENABLE_FAKE_MONITOR=1 pnpm build` makes it exit 1 naming
+      `dist/client/assets/index-*.js`, where the literal survives minification
+      verbatim beside a `canOpenAppSettings` renamed to two characters. **S**
 - [x] **The permission screen says "your PM5" where it means "your monitor".**
       CLOSED in the Phase MT close-out PR, together with the Bluetooth scan
       sheet's own instance of the same rule (both were RF32, both copy-only,
@@ -416,7 +431,11 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       body window under 58px, which four buttons never produce — it goes red
       only on the five-button stack with the pairing removed (window 10px,
       headline 48px below the fold), so what it actually pins is the landscape
-      action-stack budget, not the centring. **S**
+      action-stack budget, not the centring. THAT SHAPE IS NO LONGER
+      HYPOTHETICAL: the Phase MT close-out's door override makes it reachable
+      from a browser, and `design.spec.ts`'s five-button case gates it
+      directly, so this frame's copy stays a dormant tripwire rather than the
+      only home of the claim. **S**
 - [ ] **The refusal-survives-its-own-consequences guard is UNGATED.** `fail()`
       refuses to let a standing `unsupported-machine` error be overwritten by
       the `program()` rejection the refusal itself caused — without it the
@@ -2290,6 +2309,17 @@ closed with zero Concept2 contact.
   next PR touching `server/stores/logs.ts`. Found same review.
 
 ## Tooling
+
+- **A `scripts/dist-grep.sh` needle is a fourth retyping of a literal, tied to
+  nothing mechanical.** Each needle restates a string that also lives in
+  product source, its unit test, and sometimes an e2e helper. A rename that
+  updates the other three and misses the `NEEDLES` array leaves that needle
+  hunting a string that no longer exists — green forever, proving nothing,
+  which is RF21's shape on the gate the production bundle depends on.
+  **Measured at the Phase MT close-out seam review (2026-09-09): true of all
+  ten needles**, each literal confirmed present in source with nothing binding
+  it to the bash array. Filed under Tooling rather than the connected surface,
+  because nothing about it is connected-surface work. **S**
 
 - **`pnpm screenshots` rewrites captures no code change touched.** SIGHTED
   five times over three weeks, in FOUR filings — the 2026-08-18 sighting never

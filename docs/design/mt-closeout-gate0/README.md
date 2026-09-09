@@ -6,7 +6,10 @@ The design gate's evidence for the two rulings James made on 2026-09-08
 1. `Row on the phone timer instead` is withheld on `unsupported-machine`.
 2. The DETAIL panel no longer repeats `error.detail`.
 
-The follow-on Gate 0 (`close-phase-mt-gate0`) measured **two** frames. Both
+The follow-on Gate 0 — the artifact James actually ruled on, now committed at
+`docs/design/mt-followon-gate0/` (it was only ever on the
+`close-phase-mt-gate0` branch when this line was written) — measured **two**
+frames. Both
 changes reach thirteen of the twenty `ConnectedError` reasons, so this is the
 same measurement over all of them, in both orientations, before and after.
 
@@ -58,10 +61,15 @@ REPO_ROOT=<worktree> bash -c 'source scripts/stack-env.sh >/dev/null; \
   duplicate `detail` line restored, and (on the refusal) the phone-timer
   button back in the stack.
 - **`*-ios5`** — the five-button `permission-denied` stack. `Open Settings`
-  renders only when `canOpenAppSettings()` is true, and that is `isNative()`,
-  which also flips `adapters/monitorTransport.ts` onto the Capacitor arm — so
-  no web render can reach this shape. The harness inserts the identical button
-  node the native render emits and re-measures.
+  renders only when `canOpenAppSettings()` is true, and at the time these
+  captures were taken that was `isNative()`, which also flips
+  `adapters/monitorTransport.ts` onto the Capacitor arm — so no web render
+  could reach this shape. The harness inserts the identical button node the
+  native render emits and re-measures.
+  **SUPERSEDED, and only for future readers:** the Phase MT close-out gave
+  `canOpenAppSettings()` a dev-only door, and `design.spec.ts` now drives the
+  real five-button frame in a browser. These captures still came from the
+  insertion described above, which is why the description stands.
 
 **The reconstruction is checked, not trusted.** Every one of the six real
 frames is measured twice in each orientation — once as React rendered it, once

@@ -1,0 +1,162 @@
+{
+  "permission-ios5-optionB-reconstructed-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 5,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 202,
+        "y": 156,
+        "width": 440,
+        "height": 56,
+        "gridColumn": "1 / -1",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 188,
+    "actionStackHeightWithMargin": 200,
+    "messageWindow": 138,
+    "contentHeight": 259,
+    "overflow": 121,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "remedyTop": 102,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 76,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  }
+}

@@ -21,11 +21,14 @@ export async function stubBluetoothScanFailure(page: Page): Promise<void> {
  *  sentence, the reassurance AND a DETAIL panel — so it is the one that
  *  proves the landscape budget.
  *
- *  WHAT THIS CANNOT REACH: on iOS the same frame also renders `Open Settings`,
- *  a fifth button, because `canOpenAppSettings()` is `isNative()`. The web
- *  build is four buttons by construction, so no e2e here can stand on the
- *  five-button shape; its 10px -> 138px measurement came from the design gate
- *  with that adapter forced, which is not a gate anything can run. */
+ *  ON ITS OWN this reaches the FOUR-button web shape only. The fifth button,
+ *  `Open Settings`, renders when `canOpenAppSettings()` is true, which on the
+ *  web needs `forceAppSettingsDoor` below — pair the two to reach the shape a
+ *  rower on iOS actually gets. (SUPERSEDED CLAIM: this comment used to say no
+ *  e2e here could ever stand on the five-button shape, and that its 10px ->
+ *  138px measurement "came from a gate nothing can run". Both halves stopped
+ *  being true when the door override landed; `design.spec.ts`'s five-button
+ *  case runs exactly that gate.) */
 export async function stubBluetoothPermissionDenied(page: Page): Promise<void> {
   await page.addInitScript(() => {
     Object.defineProperty(window.navigator, "bluetooth", {
@@ -38,6 +41,29 @@ export async function stubBluetoothPermissionDenied(page: Page): Promise<void> {
       },
       configurable: true,
     });
+  });
+}
+
+/** THE FIVE-BUTTON FAILURE STACK, reached from a browser (Phase MT
+ *  close-out; ROADMAP register, "Nothing can gate the five-button failure
+ *  frame"). `canOpenAppSettings()` is `isNative()` plus a dev-only door
+ *  override, and this writes the override's token — see
+ *  `src/adapters/appSettings.ts`'s own header for why the override gates that
+ *  one boolean and nothing else, and why a global `isNative()` stub was ruled
+ *  out (it would take `defaultTransport`'s Capacitor arm and kill the fake
+ *  every connected walk runs on).
+ *
+ *  THE TOKEN IS RETYPED HERE, never imported from `src/` — the same reason
+ *  `appSettings.test.ts` retypes it (CLAUDE.md RF21's first smell). It is
+ *  also `scripts/dist-grep.sh`'s needle, so the three must move together.
+ *
+ *  Register BEFORE navigation, like every other init script here: the
+ *  interstitial reads the adapter at render time. On a build with the
+ *  fold closed — any production deploy — this write lands and is simply never
+ *  read, which is the property `dist-grep` exists to keep true. */
+export async function forceAppSettingsDoor(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.__appSettingsDoor__ = "app-settings door (dev override)";
   });
 }
 

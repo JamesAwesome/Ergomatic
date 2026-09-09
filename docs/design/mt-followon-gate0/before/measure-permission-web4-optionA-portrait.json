@@ -1,0 +1,124 @@
+{
+  "permission-web4-optionA-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 248,
+    "actionStackHeightWithMargin": 260,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 198.5,
+    "serifBottom": 270.5,
+    "headlineOnFrame": true,
+    "remedyTop": 282.5,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  }
+}

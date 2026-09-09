@@ -3,6 +3,7 @@ import path from "node:path";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import {
+  forceAppSettingsDoor,
   signInViaBackdoor,
   stableBoundingBox,
   stubBluetoothPermissionDenied,
@@ -7728,16 +7729,33 @@ test.describe("connected screens (fake-driven)", () => {
     // MEASURED: reverting the rule to `nth-last-child(-n + 2)` leaves every
     // assertion on THIS frame green. At four buttons `-n + 2` still gives a
     // 142px window and the remedy at 102 clears it; the shape that falls to
-    // 74px is the FIVE-button iOS stack, and `canOpenAppSettings()` is
-    // `isNative()`, so the web build is four buttons by construction and that
-    // shape is unreachable from here.
+    // 74px is the FIVE-button iOS stack.
     //
-    // The count is caught, but ONE FRAME OVER: the refusal test's
-    // `contentHeight` precondition fails at 157px against a 142px window
-    // ("overflows its window by 15px"), because that frame is the one whose
-    // content sits between the two windows. Round 0 of this PR claimed the
-    // count was pinned by nothing in the suite, which was true when written
-    // and stopped being true when that precondition landed in round 1.
+    // SUPERSEDED (Phase MT close-out): this comment used to close with "and
+    // `canOpenAppSettings()` is `isNative()`, so the web build is four buttons
+    // by construction and that shape is unreachable from here." That adapter
+    // now carries a dev-only door override, and the FIVE-BUTTON case directly
+    // below reaches the shape and reddens on exactly this mutation. What
+    // remains true is only the narrow half: this FOUR-button test cannot pin
+    // the count, which is why the case below exists.
+    //
+    // THE FIVE-BUTTON CASE BELOW IS THE ONLY GATE ON THE PAIRING COUNT.
+    // Do not delete it believing another test backstops it.
+    //
+    // This comment used to claim the count was "also caught ONE FRAME OVER"
+    // by the refusal test's `contentHeight` precondition, at 157px against a
+    // 142px window. MEASURED FALSE at the close-out seam review (2026-09-09):
+    // under `nth-last-child(-n + 4)` -> `(-n + 2)` all four pre-existing
+    // failure-frame cases stay GREEN, and an instrumented probe on that
+    // precondition reads `window=206 content=206` both mutated and
+    // unmutated — identical. The reason is this PR's own sibling change:
+    // the refusal frame is now the app's only THREE-button stack, and
+    // `index.css`'s `> button:first-child:nth-last-child(3)` at (0,3,1)
+    // forces `Try again` to span whatever the pairing rule says, so the two
+    // mutations produce the same layout there. The 142/157 figures are from
+    // the four-button era, before the close-out withheld the phone-timer
+    // offer. The claim was true when first written and was falsified by a
+    // change in the same phase.
     expect(
       m.remedyTop,
       "the frame has no body line to read as the remedy",
@@ -7746,6 +7764,87 @@ test.describe("connected screens (fake-driven)", () => {
       m.remedyTop,
       `the remedy sentence starts ${(m.remedyTop ?? 0) - m.clientHeight}px below the fold, so the rower is told something is wrong and not what to do`,
     ).toBeLessThan(m.clientHeight);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // THE FIVE-BUTTON SHAPE — the frame a rower on iOS actually gets (Phase MT
+  // close-out; ROADMAP register, "Nothing can gate the five-button failure
+  // frame"). `permission-denied` is the only screen in the app that renders
+  // `Open Settings`, and it renders it only where `canOpenAppSettings()` is
+  // true, which was `isNative()` alone. So every assertion above stands on
+  // the FOUR-button web shape, and a landscape regression that reached only
+  // the five-button stack — the tightest window of any frame in the app,
+  // measured here at 138px against 259px of content — had no gate at all.
+  // (259, not the 308 in `index.css`'s own table: that table predates #378's
+  // DETAIL-panel dedupe. Its ROADMAP row records the same 121px of overflow
+  // this test measures, which is the check that the seam renders the shipped
+  // frame and not something reconstructed.)
+  // `forceAppSettingsDoor` writes the adapter's dev-only override token so a
+  // browser can reach it; `src/adapters/appSettings.ts`'s own header carries
+  // why that override gates one boolean and nothing else, and
+  // `scripts/dist-grep.sh` carries the proof it never ships.
+  //
+  // TWO MUTATIONS, BOTH RUN, and neither reddens the four-button case above:
+  //   - `-n + 4` -> `-n + 2` on `.connected-interstitial-actions--failure`
+  //     in `src/index.css` (the pairing count). The five-button window falls
+  //     138px -> 74px and `assertHeadlineOnFrame` fails: "the headline ends
+  //     20px below the body's visible bottom", `Expected: <= 74.5`,
+  //     `Received: 94`. This is the regression class the row was filed for:
+  //     it is invisible on every four-button frame, where `-n + 2` still
+  //     leaves 142px.
+  //   - `error.reason === "permission-denied"` -> `"link-failed"` on the
+  //     `Open Settings` guard in `ConnectedInterstitial.tsx` (chosen over
+  //     deleting the button so every import stays used and `pnpm build`
+  //     still succeeds — RF12's corollary: a mutation that breaks the build
+  //     leaves compose serving the previous image and reads as a pass; here
+  //     the served image demonstrably changed, since the count changed). The
+  //     count assertion fails, `Received: 4`.
+  //   - AND the seam itself: `canOpenAppSettings()` reverted to `isNative()`
+  //     alone. Same failure, `Received: 4` — which is what proves this case
+  //     depends on the override and not on some other route to the button.
+  //
+  // The overflow precondition below is what keeps `assertHeadlineOnFrame`
+  // falsifiable here, the same role the refusal frame's `contentHeight`
+  // assertion plays: a future edit that shrinks this frame under its own
+  // window would disarm the geometry assertions silently, and this reddens
+  // instead.
+  test("the interstitial's PERMISSION-DENIED frame is FIVE buttons with the settings door open, and still reads in landscape", async ({
+    page,
+  }) => {
+    const title = "Design Connected Five Button Workout";
+    await forceAppSettingsDoor(page);
+    await stubBluetoothPermissionDenied(page);
+    await openConnected(page, title, "design-connected-fivebutton@e2e.test");
+    const denied = page.locator(".connected-serif-line", {
+      hasText: "Bluetooth permission needed",
+    });
+    await expect(denied).toBeVisible({ timeout: 10_000 });
+
+    // The shape itself, asserted BEFORE anything geometric: without this a
+    // frame that quietly lost its fifth button would sail through every
+    // measurement below and read as coverage of a stack it never rendered
+    // (recurring failure 21).
+    const actions = page.locator(".connected-interstitial-actions--failure");
+    await expect(actions.locator("button")).toHaveCount(5);
+    await expect(actions.locator("button").first()).toHaveText("Open Settings");
+
+    await sweep(page);
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(denied).toBeVisible();
+    await assertTapTargets(page);
+    const m = await measureFailureFrame(page);
+    expect(
+      m.contentHeight,
+      `the five-button frame no longer overflows its landscape window ` +
+        `(content ${m.contentHeight}px in ${m.clientHeight}px), so the two ` +
+        `geometry assertions below have no free space to get wrong`,
+    ).toBeGreaterThan(m.clientHeight);
+    assertHeadlineOnFrame(m);
+    assertNothingAboveTheScrollOrigin(m);
 
     await page.setViewportSize({ width: 390, height: 844 });
 
@@ -7859,11 +7958,15 @@ test.describe("connected screens (fake-driven)", () => {
   //     measured: window 78px, headline at 22..58, test green. (That table was
   //     written against `--refusal`, the modifier this rule carried when it
   //     applied to the refusal alone; it is `--failure` now, on every failure
-  //     frame.) It goes red on the shape the
-  //     ROADMAP already files as a real defect — the FIVE-button stack, with
+  //     frame.) It goes red on the FIVE-button stack with
   //     the pairing gone: window 10px, "the headline ends 48px below the
   //     body's visible bottom", `Received: 58`. That is its whole job: it
   //     pins the landscape ACTION-STACK BUDGET, not the centring.
+  //     SUPERSEDED (Phase MT close-out): that shape was described here as one
+  //     "the ROADMAP already files as a real defect" — i.e. unreachable from
+  //     any browser. The door override reaches it and the five-button case
+  //     above gates it directly, so this copy is now a dormant tripwire for
+  //     THIS frame rather than the only home of the claim.
   test("the REFUSED frame's headline is on screen at rest in landscape, and nothing sits above the scroll origin", async ({
     page,
   }) => {
