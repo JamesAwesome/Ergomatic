@@ -1,3 +1,68 @@
 . "$(dirname "$0")/common.sh"
-# Unit + client only: fast (~1s) and Docker-free. CI runs integration + e2e.
-pnpm --dir app test --project unit --project client
+# Tiered gate. This body runs under `sh -e` (.husky/_/h), so EVERY fallible
+# command is wrapped -- a bare failing statement aborts the hook, and husky
+# then prints "script failed", which reads like a test failure.
+#
+# THREE invocations, not one: `--changed` selects through vite's module
+# graph, so a test whose subject is a file it READS (rather than a module it
+# imports) is structurally unselectable, and `--changed X <path>` INTERSECTS
+# to nothing. Both projects have that class of test -- everything under
+# `scripts/`, and 46 files under `src/` -- so each gets its own
+# unconditional invocation.
+#
+# --project flags are kept so the hook stays Docker-free; dropping them
+# re-admits the integration project (testcontainers, 120s timeouts).
+BASE="${PREPUSH_BASE:-refs/remotes/origin/main}"
+SCOPE="--project unit --project client"
+
+# PREPUSH_DRY_RUN, not DRY_RUN: this is a test seam in a PRODUCTION hook, and
+# an unnamespaced DRY_RUN is common enough in an ambient environment that
+# exporting one would silently turn every push into two echoed lines and a
+# zero exit -- no tests, push proceeds. Namespaced to match PREPUSH_BASE.
+run() {
+  if [ -n "${PREPUSH_DRY_RUN:-}" ]; then echo "would run: $*"; else "$@"; fi
+}
+
+if git rev-parse --verify --quiet "$BASE" >/dev/null 2>&1; then
+  run pnpm --dir app exec bash scripts/test-run.sh --changed "$BASE" $SCOPE || exit 1
+else
+  echo "pre-push: FALLBACK -- '$BASE' does not resolve, running the full scoped suite." >&2
+  run pnpm --dir app exec bash scripts/test-run.sh $SCOPE || exit 1
+fi
+
+# The whole-tree gates, always. Two invocations because a `--project` flag
+# and a path filter cannot express "unit's scripts/ suites AND client's
+# file-reading suites" in one command.
+run pnpm --dir app exec bash scripts/test-run.sh --project unit scripts/ || exit 1
+
+# The client half of the same class, ENUMERATED rather than listed: a
+# hardcoded list goes stale the first time someone adds a census suite, and
+# scripts/pre-push.test.sh pins this selection against an independent needle
+# (the tests that read `index.css`) for exactly that reason.
+#
+# Measured 2026-09-08 on this branch: appending
+# `.zz-probe { color: var(--totally-undefined-probe); }` to app/src/index.css
+# and running `vitest run --changed HEAD --project client` finds NO test
+# files and exits 0, while `--project client customPropertyCensus` FAILS.
+# index.css is imported only by main.tsx, which no test imports, so it sits
+# in no test's module graph.
+#
+# The needle is the `node:fs` import, because reading the filesystem IS the
+# property that makes a suite unselectable. Measured: it picks 46 files /
+# 1941 tests in 10.3s, against 57s for the whole client project, and the
+# same 46 files come back from `grep -lE 'readFileSync|readdirSync|statSync'`.
+CLIENT_TREE=""
+if [ -d app/src ]; then
+  CLIENT_TREE="$( cd app && grep -rlE '"node:fs|from "fs"' src \
+    --include='*.test.ts' --include='*.test.tsx' 2>/dev/null | sort | tr '\n' ' ' )" \
+    || CLIENT_TREE=""
+fi
+if [ -n "$CLIENT_TREE" ]; then
+  run pnpm --dir app exec bash scripts/test-run.sh --project client $CLIENT_TREE || exit 1
+else
+  # Fail SAFE, and loudly: an enumeration that comes back empty means the
+  # needle stopped matching, not that the suites stopped existing. Running
+  # the whole client project costs wall-clock; skipping it costs the gate.
+  echo "pre-push: FALLBACK -- no client whole-tree suites enumerated, running the whole client project." >&2
+  run pnpm --dir app exec bash scripts/test-run.sh --project client || exit 1
+fi

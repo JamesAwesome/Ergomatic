@@ -1,8 +1,16 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { isCI, workerCap } from "./scripts/testEnv.js";
 
 export default defineConfig({
   test: {
+    // Phase MEM: caps how many workers a local run can spawn, so a laptop
+    // never spins up as many as vitest's CPU-derived default (measured 9 on
+    // the machine this exists to protect). Inert in CI, overridable with
+    // ERGOMATIC_TEST_WORKERS (docs/superpowers/specs/2026-09-08-local-test-memory-design.md Part B).
+    maxWorkers: isCI()
+      ? undefined
+      : workerCap(process.env.ERGOMATIC_TEST_WORKERS, 4),
     projects: [
       {
         test: {

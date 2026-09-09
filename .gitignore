@@ -22,3 +22,8 @@ app/ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 # absolute paths"; the rule was written and then broken by its own author the
 # next day. This line is the mechanical version of it.
 .claude/worktrees/
+
+# Forensics written by app/scripts/test-run.sh on a killed run. Local only --
+# the SDLC teardown gate checks `git status` on the main checkout, so an
+# un-ignored capture directory would trip it on the first real memory kill.
+app/.test-kills/

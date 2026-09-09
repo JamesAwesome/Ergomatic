@@ -150,6 +150,10 @@ jobs:
         run: |
           bash -n .husky/pre-commit
           bash scripts/pre-commit.test.sh
+      - name: Lint + test the pre-push tier
+        run: |
+          bash -n .husky/pre-push
+          bash scripts/pre-push.test.sh
       - name: Lint + test the deploy script
         run: |
           bash -n scripts/deploy.sh
@@ -171,6 +175,14 @@ jobs:
           bash -n app/scripts/ios-release.sh
           bash -n app/scripts/ios-google-client-id.sh
           bash app/scripts/ios-release.test.sh
+      - name: Lint + test the test-run classifier
+        run: |
+          bash -n app/scripts/test-run.sh
+          bash app/scripts/test-run.test.sh
+      - name: Lint + test the test-run advisory
+        run: |
+          bash -n app/scripts/test-run-advisory.sh
+          bash app/scripts/test-run-advisory.test.sh
 
   deploy:
     needs: [changes, root-hooks, app, docker, e2e, scripts]
