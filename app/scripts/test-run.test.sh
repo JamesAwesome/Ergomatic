@@ -47,5 +47,22 @@ check "caught ERR_HTTP2_NO_MEM not promoted" "EMPTY"               "$(classify 1
 # does NOT bite; with this row it does.
 check "lowercase 'out of memory' not promoted" "EMPTY"              "$(classify 1 " Test Files  1 failed (1)" "MEMALLOC: Error allocating memory, we are most likely out of memory")"
 
+# --- capture (Task 2) ---
+CAPDIR="$(cd "$HERE/.." && pwd)/.test-kills"
+rm -rf "$CAPDIR"
+classify 137 "" "" >/dev/null
+n=$(ls -1 "$CAPDIR" 2>/dev/null | wc -l | tr -d ' ')
+check "a kill writes exactly one capture file" "1" "$n"
+body="$(cat "$CAPDIR"/* 2>/dev/null)"
+check "the capture names the exit code"        "exit=137"  "$body"
+check "the capture names the signal"           "signal=9"  "$body"
+rm -rf "$CAPDIR"
+
+# A capture failure must never change the command's exit code.
+mkdir -p "$CAPDIR" && chmod 500 "$CAPDIR"
+FAKE_RC=137 bash "$HERE/test-run.sh" --self-test >/dev/null 2>&1
+check "an unwritable capture dir still exits 137" "137" "$?"
+chmod 700 "$CAPDIR"; rm -rf "$CAPDIR"
+
 if [ "$fails" -ne 0 ]; then echo "$fails failure(s)"; exit 1; fi
 echo "all classifier cases pass"
