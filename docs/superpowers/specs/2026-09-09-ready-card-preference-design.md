@@ -1,6 +1,7 @@
 # Straight to the numbers, if that is how you row
 
-**Phase RN.** Status: HARDENED (lens 1 folded), awaiting lens 2 and Gate 0.
+**Phase RN.** Status: **GATE 0 CLOSED 2026-09-09 — cleared to implement.**
+Both hardening lenses run and folded; three rulings tabled below.
 
 TRIAD (a stored shape), so this spec takes a full antagonist pass and the PR
 takes a PM final gate. It changes user-visible copy and layout on
@@ -622,21 +623,35 @@ and to the gate table. The table is the half worth the dispatch: I-5's
 "transport writes are equal" gate asserts a recording seam this spec has not
 proven exists, which is the shape of a gate that cannot go red (RF21).
 
-## Gate 0 — what James approves before task 1
+## Gate 0 — CLOSED 2026-09-09
 
-Rendered, at real proportions, in both orientations, with every colour
-pairing's contrast ratio computed and stated as a number:
+Presented as rendered screens (every image a real render off this branch, not
+a mockup) and approved by James. Three rulings:
 
-1. `/you/settings` with the new section, against today's screen.
-2. The programmed-workout path at `ready` with the card OFF — the screen the
-   rower now lands on — beside the card it replaces.
-3. The Just Row path at `armed` with the card OFF, likewise.
-4. The pre-pull link-lost pair, at both entry points — the screen today and
-   the screen under each of A / B / C — because that table's choice is about
-   what a rower sees.
-5. Where **End** lands under `skip`, at both entry points: the log door for a
-   workout that was never rowed, and `/justrow/log`, each against the screen
-   Cancel reaches today.
-6. The copy table above, resolved: heading, slot name, hint, option words,
-   and the ready card's own save-failure notice.
-7. The comfort-settings question, answered.
+1. **Copy: candidate A.** `READY SCREEN` / `WHEN THE MONITOR IS READY`
+   *(before your first pull)* / `SHOW` · `SKIP`. B was rejected on the ground
+   the gate itself named: it would put a third `OFF` on a screen where `OFF`
+   already means "leave this number uncoloured" — three OFFs, two meanings.
+2. **The pre-pull link loss: option C, guard both arms.** Just Row's hand-off
+   arm additionally requires the link to be up, for a tapped hand-off as well
+   as a skipped one. `axes.session !== "none"` is untouched, so a mid-row loss
+   still reaches the surface's own treatment.
+3. **The parked comfort settings do NOT ride this PR.** Both recommendations
+   accepted. The ROADMAP row records the answer and keeps its trigger.
+
+### Where ruling 2 applies, enumerated (RF34)
+
+An invariant stated once and applied to one of the sites it governs is worse
+than one never stated, so both sites are named and each gets a verdict:
+
+- **`JustRow.tsx` — CHANGES.** Its ladder tests the hand-off arm above its
+  pre-row link-lost branch, so the guard goes here. This is the whole of
+  ruling 2.
+- **`ConnectedInterstitial.tsx` — DOES NOT CHANGE, deliberately.** Its ready
+  branch carries no link check today and gains none, because the programmed
+  path has no pre-row lost screen to be bypassed: frame silence at `ready` is
+  not phase `disconnected`, so the branch ruling 2 protects does not exist
+  here. Under `skip` a frame-silent ready lands on the surface's LOST banner
+  instead of a ready card that says "Ready when you pull" and mentions nothing
+  — strictly more informative than today. Stated rather than left implicit, so
+  the asymmetry reads as a decision.

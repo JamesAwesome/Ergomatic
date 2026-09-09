@@ -135,8 +135,8 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 ## Phase RN — straight to the numbers, if that is how you row
 
-**Status: SPEC DRAFTED 2026-09-09 — the anchor antagonist pass and Gate 0 are
-both owed before task 1.** Spec:
+**Status: GATE 0 CLOSED 2026-09-09 — cleared to implement.** Both hardening
+lenses run and folded; three rulings tabled in the spec. Spec:
 [docs/superpowers/specs/2026-09-09-ready-card-preference-design.md](docs/superpowers/specs/2026-09-09-ready-card-preference-design.md).
 
 James asked for the `Ready when you pull` card to become a choice (2026-09-09):
@@ -151,12 +151,15 @@ takes a PM final gate. It changes user-visible copy and layout, so Gate 0 —
 the rendered settings screen, plus both skipped paths beside the cards they
 replace — is approved before task 1.
 
-- [ ] **The anchor antagonist pass — OWED.** Attacks the spec's stored shape,
-      its read-once-per-mount lifetime claim, and the argument that skipping
-      the card cannot reach the wire. **S**
-- [ ] **Gate 0 — OWED.** Five items, listed in the spec: the settings screen
-      against today's, both skipped paths against what they replace, the copy
-      table resolved, and the comfort-settings question answered. **S**
+- [x] **Hardening — RUN 2026-09-09, both lenses, closed.** The mechanism lens
+      returned one BLOCKING (the store's read precedence made both of its own
+      persistence gates unfailable) and three MAJOR; the prescribed-code lens
+      returned one (I-5's two consumers need different test seams, and the
+      harder one had no name). All folded; one ledger entry landed. **S**
+- [x] **Gate 0 — CLOSED 2026-09-09.** Three rulings, tabled in the spec.
+      Copy candidate A; the pre-pull link loss takes option C (Just Row's
+      hand-off arm requires the link to be up, for a tapped hand-off as well
+      as a skipped one); the parked comfort settings do NOT ride. **S**
 - [ ] **The PR.** Seven tasks, spec §"PR shape". The load-bearing gate is the
       seam test that starts at the settings screen and ends at a mounted
       interstitial with nothing written to storage by hand (recurring failure
@@ -171,10 +174,22 @@ surface and declined: the default is on, and a rower who turned it off asked
 for less copy, not more. This row is where that is re-opened if the
 phone-sleep work ever needs the warning back.
 
-**This is the SECOND SETTINGS PR** that the parked comfort settings (countdown
-length, pace tolerance) retargeted to at Phase JC's Gate 0. The spec puts the
-question with a recommendation of NO for both and a flagged-untested cost;
-Gate 0 answers it and this row records the answer.
+**This was the SECOND SETTINGS PR** that the parked comfort settings (countdown
+length, pace tolerance) retargeted to at Phase JC's Gate 0. **ANSWERED at RN's
+Gate 0 (James, 2026-09-09): NO, neither rides.** Pace tolerance changes what a
+judged number means, which is the triad's first clause and a second risk model
+in one review; countdown length is genuinely cheap and was held on review shape
+rather than difficulty. **The trigger is not struck — it retargets again, to
+the THIRD settings PR.** The one thing that would change the countdown answer
+is still untested: nobody has measured how `/you/settings` reads at four
+sections on a 375px viewport.
+
+**ACCEPTED DIVERGENCE, ruled at the same gate.** Ruling 2 changes `JustRow.tsx`
+and deliberately does not change `ConnectedInterstitial.tsx`: the programmed
+path has no pre-row lost screen to bypass, so under `skip` a frame-silent ready
+lands on the surface's LOST banner rather than on a ready card that says
+"Ready when you pull" and mentions nothing. That is more informative than
+today, and it is the one place the two entry points behave differently.
 
 ## Phase MT — the app refuses a machine it cannot record
 

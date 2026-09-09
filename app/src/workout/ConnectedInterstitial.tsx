@@ -42,7 +42,6 @@ import type { EnginePhase } from "../session/engine";
 import ConnectedSurface from "./ConnectedSurface";
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import { saveLastDevice } from "../monitor/lastDevice";
-import { loadReadyCard } from "../you/readyCard";
 
 /** Every reason that is NOT the machine actively refusing a workout — the
  *  six that are OURS (about the phone/radio side, never the PM5's own
@@ -217,9 +216,7 @@ export default function ConnectedInterstitial({
   // `live` (the machine's side of the same promise). With the timer gone,
   // NOTHING in the connected flow runs on a wall clock. DEVIATIONS row
   // records the ruling.
-  const [numbersRequested, setNumbersRequested] = useState(
-    () => loadReadyCard() === "skip",
-  );
+  const [numbersRequested, setNumbersRequested] = useState(false);
   // Guards a double-press race on Try Again: two pointer events landing in
   // the same tick both read the SAME pre-update `session.phase` (React
   // batches the state write `connect()`'s synchronous phase flip makes),
