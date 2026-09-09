@@ -497,15 +497,23 @@ Stated so the gate can accept them rather than discover them.
 
    Still accepted — it is the rower's choice, and the grid is a review
    surface rather than a mid-stroke one — but accepted on what is true.
-2. **Red may come to mean something good.** A rower who sets `spmFaster:
+2. **On `PaneGrid`, an OFF slot erases the JUDGEMENT, not just the direction**
+   (PM final gate, 2026-09-08 — consequence 1 covers all-red and all-blue
+   erasing direction there; this is a distinct statement that was living in a
+   reviewer's head). `within` declares no rule and inherits `--ink`; OFF
+   resolves to `--ink` too. So on the grid, which has no TARGET column, a
+   faster or slower cell with its slot OFF is visually identical to an
+   on-target one. Defensible — OFF means off — and accepted, but written down
+   rather than discovered later.
+3. **Red may come to mean something good.** A rower who sets `spmFaster:
    red` gets red for a rate that is beating target, on the same surface
    where the LOST THE MONITOR banner is red. The banner is a filled ground
    and every judged tint is text, so they do not collide visually, but the
    association weakens. Accepted: that is what choosing means.
-3. **The two SPM slots do not reach the post-workout summary**, because the
+4. **The two SPM slots do not reach the post-workout summary**, because the
    summary has never tinted its SPM cell. Gate 0 decides whether this needs
    a word on the screen. Tinting it is explicitly out of scope.
-4. **No dark theme interaction.**
+5. **No dark theme interaction.**
    `grep -rn "prefers-color-scheme\|data-theme\|color-scheme\|prefers-contrast\|forced-colors" src/index.css src/theme/tokens.css`
    returns nothing — one palette to measure.
 
@@ -524,8 +532,19 @@ Stated so the gate can accept them rather than discover them.
    the rower is told the choice will not survive a reload.
 7. **I-7** `stale` and `within` are untouched by every setting, and keep
    their `timer-card-actual-` prefix.
-8. **I-8** No copy on any surface names a colour the settings could
-   contradict. **Satisfied by DELETING the summary legend** (Gate 0 ruling 7,
+8. **I-8** No **live** copy on any surface names a colour the settings could
+   contradict. **"Live" is load-bearing and is scoped here rather than left to
+   a reader** (PM final gate, 2026-09-08): `app/src/news/content/releaseNotes.ts`
+   carries FIVE present-tense sentences asserting the mapping — *"Faster is
+   blue, slower is red"*, *"Those rows are blue now"*, *"it turns blue or
+   red"*, *"blue bar faster, red slower"*, *"Faster than your target reads
+   blue, slower reads red"*. **Dated release notes are a record of what
+   shipped, not live copy:** each sits under a version-and-date heading and
+   reads as history, and the timeless article prose in `news/content/bodies`
+   names no colour at all (checked). They stand. What I-8 forbids is UNDATED
+   copy on a rendering surface. **The JC release note owes one line saying the
+   mapping is now a choice**, which contextualises the older entries for
+   anyone scrolling; that rides the notes PR at tag time, not this one. **Satisfied by DELETING the summary legend** (Gate 0 ruling 7,
    option (a)): the `<p class="summary-legend">` element, its CSS rule, and
    `design.spec.ts`'s `toHaveText` pin all go. `hasJudgedRow` loses its only
    consumer and goes with them. A repo-wide grep for the withdrawn phrasing —

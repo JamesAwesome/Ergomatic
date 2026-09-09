@@ -381,6 +381,15 @@ pane and a summary — is approved before task 1.
       leg and absent in the other, is what closes it. Shape: *a test whose value
       depends on HOW it navigated needs an assertion about the navigation, or
       the requirement is a comment.*
+- **THIRD, from the PM final gate — an amendment to an EXISTING CLAUDE.md rule
+      rather than a new one.** The "after withdrawing a claim, grep its
+      PHRASING across every file that repeated it" bullet caught the deleted
+      legend's literal words and missed five present-tense sentences in
+      `app/src/news/content/releaseNotes.ts` asserting the same fact in
+      different words. Proposed addition: *"and grep the PROPOSITION, not only
+      the string: a shipped release note asserting the same fact in different
+      words is the copy most likely to survive the sweep."* Decide at the
+      merge-time agent-config check.
 - **`/you/settings` gets NO `DEVIATIONS.md` row, decided at the Task 8 sweep
       (2026-09-08) — recorded so the next author does not re-open it.** Three
       reasons. The handoff has no settings screen, so there is nothing to
@@ -400,7 +409,10 @@ pane and a summary — is approved before task 1.
       already moved once.) The
       screen's full computed-contrast table, including the one figure under
       3:1 and why it is decoration, lives in its own `index.css` block instead.
-- [x] **The PR — BUILT 2026-09-08; review and the PM final gate still owed.**
+- [ ] **The PR — #371, OPEN 2026-09-08.** Built and PM-gated (PASS WITH
+      CONDITIONS); the whole-branch review and James's merge approval are owed.
+      Unticked deliberately: a ticked box whose text says it is not done has
+      been wrong on main for weeks at a time here.
       Eight tasks, spec §"PR shape". The load-bearing one is the
       e2e seam test: Vitest mocks every `.css` import to an empty string here,
       so **no client test can prove a colour lands on a pixel** — only e2e can
@@ -3391,6 +3403,19 @@ trigger is the whole entry.
   the same phone inherits the first rower's colours, and there is no clear
   path at all, not even sign-out. That is where this bullet gets re-litigated,
   so it belongs with the device account switcher below rather than here.
+- **Where the colours explain themselves, now that the summary legend is gone.**
+  Filed at the PM final gate, 2026-09-08, because nobody in Phase JC made this
+  argument: the app used to carry `← FASTER (BLUE) · SLOWER (RED) →` on the
+  screen where the colours appear, and deleting it was right (eight of nine
+  pace settings falsify it) but nothing replaced it. **A rower on defaults now
+  sees the colours, no key, and no hint that a control exists** — and the rower
+  this feature is FOR, the one who reads red as an alarm, is exactly the one
+  who will not find `You → SETTINGS`, a row that looks like DIAGNOSTICS and
+  names no colour. **A hint back on the summary is explicitly NOT the answer:**
+  James's 2026-08-23 ruling forbids unsolicited teaching pushed at a rower
+  doing something else, and a post-workout summary is that. The release note
+  points once; this row carries the rest. **Trigger:** a tester asks what the
+  colours mean, or says they cannot find where to change them. **S**
 - **A preferences container on the You tab.** James asked at JC's Gate 0
   whether the doors should collapse behind an "Advanced" or "Settings" menu
   holding Concept2, colours and Diagnostics; the PM said neither and he took
