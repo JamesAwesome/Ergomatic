@@ -20,6 +20,7 @@ import {
 import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
 import JustRow from "./JustRow";
 import { ProgramRejectionError } from "../monitor/driver";
+import { renderedCopy } from "../test/renderedCopy";
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 
@@ -622,7 +623,10 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
     expect(
       screen.getByText("The monitor rejected frame 0"),
     ).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("PM5");
+    // Attributes too, on the same terms as the interstitial's sweep: an
+    // `aria-label` is read aloud exactly like a paragraph, and `textContent`
+    // cannot see one.
+    expect(renderedCopy()).not.toContain("PM5");
   });
 
   /**

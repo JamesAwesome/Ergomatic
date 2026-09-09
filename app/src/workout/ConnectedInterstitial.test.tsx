@@ -63,6 +63,7 @@ import {
   type RunIdentity,
 } from "../monitor/useMonitorSession";
 import { commentStrippedSource, cssRules } from "../test/cssView";
+import { renderedCopy } from "../test/renderedCopy";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import ConnectedInterstitial from "./ConnectedInterstitial";
@@ -640,6 +641,16 @@ describe("state 6: failed — every ConnectedError rendered", () => {
   // Built from the REAL producer (a `ProgramRejectionError`), not from a
   // string typed here: a hand-copied fixture pins this test's own idea of
   // the copy, not production's.
+  //
+  // SCOPE, stated rather than left to be assumed (RF26). This sweep covers
+  // the text AND the attributes of ONE door, the interstitial. `JustRow`
+  // carries its own single pinned case for the second door. There is no
+  // third: `JustRowObserver` renders `session.error.detail` too, but it only
+  // ever calls `session.connect()`, and `mapProgramFailure` — the sole
+  // producer of a rejection `detail` — has exactly one call site, inside
+  // `program()`'s catch (`useMonitorSession.ts`). No `ProgramRejectionError`
+  // message can reach that screen, so a gate there could not go red for the
+  // reason it claimed (RF21) and is deliberately not written.
   // -------------------------------------------------------------------------
   describe("RF32: no rejection copy names the PM5", () => {
     // DERIVED, not hand-listed (RF37): `REJECTION_VERBS` is
@@ -682,7 +693,12 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       expect(label.textContent).toBe(DEVICE_NAME);
       label.remove();
 
-      expect(document.body.textContent).not.toContain("PM5");
+      // `renderedCopy`, not `textContent`: RF32 governs an `aria-label` the
+      // same as a paragraph, and the first version of this sweep read text
+      // only — so a frame whose every visible word was right and whose label
+      // still said "PM5" passed it. The attribute list is walked, never
+      // typed out (that helper's own header says why).
+      expect(renderedCopy()).not.toContain("PM5");
     });
   });
 
