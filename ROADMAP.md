@@ -160,10 +160,45 @@ replace — is approved before task 1.
       Copy candidate A; the pre-pull link loss takes option C (Just Row's
       hand-off arm requires the link to be up, for a tapped hand-off as well
       as a skipped one); the parked comfort settings do NOT ride. **S**
-- [ ] **The PR.** Seven tasks, spec §"PR shape". The load-bearing gate is the
-      seam test that starts at the settings screen and ends at a mounted
-      interstitial with nothing written to storage by hand (recurring failure
-      24), plus its e2e leg through a real browser and a real store. **M**
+- [ ] **The PR — BUILT, awaiting review and James's merge approval.** Seven
+      tasks, spec §"PR shape". Shipped: the `you/readyCard.ts` store; the
+      READY SCREEN section on `/you/settings` with its own save-failure
+      notice; both consumers reading the setting; Gate 0 ruling 2's link
+      guard in `JustRow.tsx`; the upstream-of-the-producer seam test; a
+      wire-equality test proving the byte sequence is identical under both
+      settings; six e2e legs across `connected.spec.ts` and
+      `justrow.spec.ts`; a `design.spec.ts` assertion for the new group; and
+      the recaptured settings screen. Unticked deliberately until it merges.
+      **M**
+
+**THREE LESSONS FOUND WHILE BUILDING IT, for the merge-time agent-config
+check.** All three are the same shape — a gate that was green and could not
+have been red — and all three were caught by running a mutation rather than
+by reading.
+
+1. **A fixture that streams frames makes any assertion about this feature
+   decoration.** A rowing frame opens the run, and an open run renders the
+   connected surface regardless of the ready-screen setting. Measured: with
+   the store's `setItem` deleted, all three of the phase's first e2e legs
+   passed. On a motionless fixture the same mutation fails two of them. The
+   identical trap appeared twice in one day — first in the Gate 0 capture
+   harness for Just Row, then in `connected.spec.ts` — so it is a property of
+   the fake, not of one test.
+2. **An in-memory fallback beside a store disarms every persistence gate,
+   and the read order is not the half that matters.** Setting it on a
+   SUCCESSFUL write is what lets a deleted `setItem` read back as a working
+   save; four probes established that reversing the read order alone fails
+   nothing.
+3. **A same-document navigation is RF38's mirror.** Phase JC's lesson was
+   that a reload made both legs pass; here a CLICK makes both legs blind,
+   because the store module survives it. Two legs, and the reload one is the
+   gate.
+
+**DEVIATIONS checked, no row owed (2026-09-09):** the new section introduces
+no colour pairing `index.css`'s own computed table does not already carry —
+its options are the colour options' rules with `.setting-*` appended to the
+selector lists in place — so Phase JC's "`/you/settings` gets NO row" ruling
+still holds for the same three reasons it gave.
 
 **ACCEPTED CONSEQUENCE, ruled by James 2026-09-09.** A rower who turns the
 card off stops seeing `KEEP YOUR PHONE SCREEN ON` — Phase LM's Gate 0 called

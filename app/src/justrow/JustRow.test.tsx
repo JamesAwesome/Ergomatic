@@ -596,6 +596,42 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
       expect(screen.queryByRole("button", { name: "End session" })).toBeNull();
     });
 
+    /**
+     * I-5's Just Row half. The byte-level proof lives in
+     * `ConnectedInterstitial.test.tsx`, which walks the real driver over the
+     * real fake through a recording tap and compares every transmitted frame
+     * under both settings. That covers what the two consumers SHARE: the same
+     * `ConnectedSurface`, handed the same session value, mounting earlier.
+     *
+     * What it cannot cover is this screen's own arming effect, the only Just
+     * Row-specific thing between Connect and the numbers. So this pair
+     * asserts the narrower claim at the layer that can see it: the setting
+     * does not change whether, or how often, this screen asks the erg to
+     * start a free row.
+     *
+     * Stated at the strength it earns (RF26): this proves the call, not the
+     * bytes. The bytes are the interstitial's test.
+     */
+    it("arms the free row exactly once under SHOW", async () => {
+      // `pairing` with a real device name is the state the arm effect fires
+      // in — the same one this file's own "arms once the driver carries the
+      // picked device's real name" uses. At `ready` the program is already
+      // away and nothing arms, so that phase cannot see this claim at all.
+      mockSession({ phase: "pairing", deviceName: "PM5 432331249" });
+      await connectAndArm();
+      expect(beginFreeRow).toHaveBeenCalledTimes(1);
+    });
+
+    it("arms the free row exactly once under SKIP, with the same call", async () => {
+      localStorage.setItem(READY_CARD_KEY, "skip");
+      mockSession({ phase: "pairing", deviceName: "PM5 432331249" });
+      await connectAndArm();
+      expect(beginFreeRow).toHaveBeenCalledTimes(1);
+      // The independent literal: the arm takes no arguments today, so one
+      // appearing under either setting is a difference this notices.
+      expect(vi.mocked(beginFreeRow).mock.calls[0]).toStrictEqual([]);
+    });
+
     it("does NOT yield once a run is open — a mid-row loss keeps the surface", async () => {
       localStorage.setItem(READY_CARD_KEY, "skip");
       mockSession({
