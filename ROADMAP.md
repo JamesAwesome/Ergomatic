@@ -2139,6 +2139,22 @@ question, not a re-raised one.
 | **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by THREE FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window; and, since 2026-09-04, the per-user `C2_ALLOWED_EMAILS` gate — the VICTIM must be on that list for the callback to complete at all, because the hop re-checks `availableFor(user.email)` at step 3b after resolving its principal, so on a one-account rollout the population that can be victimised is one) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**; and since 2026-09-04 "a real cohort" is itself gated on `C2_ALLOWED_EMAILS`, so the flag flip alone no longer admits one) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 | **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
 
+- **The `PM5` / `Timer` provenance label is the one place RF32 was not
+  swept.** `UnsavedWorkouts.tsx:66,170`, `ReviewSession.tsx:75,111` and
+  `ReadOnlyRecording.tsx:13` render `PM5 · Sep 8 · Not saved` and
+  `Discard PM5 workout X`. Phase MT's RF32 census (2026-09-08) LEFT these
+  deliberately: the label's whole job is telling the reader a MACHINE recorded
+  the row rather than the phone timer, which is RF32's own
+  naming-the-source-of-a-stored-number exemption. But it is the last
+  user-facing `PM5` vocabulary outside disambiguation, it reads against
+  `Timer` as its opposite, and swapping it to `Monitor` would change one word
+  across three screens at once. **A design decision, not a mechanical one** —
+  hence here rather than in the sweep. Related: the NFC connecting card's copy
+  WAS changed in the same census, on a screen whose shape was Gate 0 approved
+  2026-09-06, one day before the RF32 rule existed; the change is wording-only
+  (no captures owed, James 2026-08-23) and the review judged it correct, but
+  it is the precedent this row would follow.
+
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
 James, 2026-08-27: _"im also interested into a deep dive to ensure we arent
@@ -2332,6 +2348,8 @@ to lose the row has no move except to walk away.
 | **LL-F4**                                  | The `disconnected` handler records no liveness snapshot where `fail()` does, so a retry's ring has one fewer data point                                                                                                                                                                                                                                                                                                                                        | `phase-ll.md`                |
 | **Connection-log text is unselectable**    | `user-select: none` inherits into the sheet (`index.css:85`, `:5799`); COPY LOG is the only route out                                                                                                                                                                                                                                                                                                                                                          | `phase-cs.md`                |
 | **The bar's two axes**                     | The connected bar's fill and its notches are two axes on DISTANCE work; EST LEFT holds still 6.6 s and 20.8 s at handovers. **The obvious repair was replayed and does not work.** Accepted and documented. **TRIAD** when it is taken                                                                                                                                                                                                                         | `phase-cr2.md`               |
+| **The `--failure` comment misstates why row one is 56px** | `index.css`'s `--failure` block says `Row on the phone timer instead` wrapping is what makes the first row taller. Measured at Phase MT's Gate 0 (2026-09-08): with that button gone the row is STILL 56px, because `.button-l1{min-height:56px}` and `.button-l2{min-height:52px}`. The comment names the wrong cause, so the next person tuning that stack tunes the wrong thing | Phase MT Gate 0, `docs/design/mt-followon-gate0/` |
+| **Just Row's refusal stack never gets #370's pairing** | `JustRow.tsx`'s free-row refusal wears `.connected-interstitial-actions` WITHOUT the `--failure` modifier, so the landscape pairing rule #370 shipped does not reach it. Harmless TODAY at two buttons — it becomes a cut headline the moment that stack grows a third. Found at Phase MT's Gate 0, 2026-09-08 | Phase MT Gate 0 |
 
 ## Accepted, pinned, and not being fixed
 
@@ -2514,6 +2532,13 @@ Each needs erg time or a deliberate recording session.
   "off Connect Device". (`phase-nf.md`)
 
 ## Small, queued, rides the next PR in its area
+
+- **Nine `PM5` mentions sit in already-shipped release notes**
+  (`src/news/content/releaseNotes.ts`). Phase MT's RF32 census (2026-09-08)
+  left them on purpose: editing them rewrites what testers have already read,
+  and the release-notes tests carry POSITIONAL pins that shift when the text
+  moves. Sweep only if James wants the archive consistent; the rule itself is
+  about what a rower reads NOW.
 
 - [ ] **NOBODY HAS MEASURED THAT A HAND VERIFICATION ON concept2.com SETS THE
       LIST'S `verified` — and #365's headline rests on it.** Filed by the PM

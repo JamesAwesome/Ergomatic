@@ -17,7 +17,7 @@ Key is the SLUG. Line numbers are "as of dffd5a8c" convenience only.
 
 ```
 SLUG                          | DISP   | title (first clause)                                              | status  | receipt
-pr1-refusal-denylist          | DONE   | PR 1 — the refusal, the link, and the matrix                      | closed  | #366 a476cbc6, tagged v0.43.0
+pr1-refusal-denylist          | DONE   | PR 1 — the refusal, the link, and the matrix                      | closed  | #366 a476cbc6 in v0.43.0; matrix VERIFIED in tree: bodies/connectTheMonitor.tsx:55 (3 tiers), articles.tsx:132 minutes 2->3, SupportMatrixLink.tsx:55
 freerow-armed-retire          | DONE   | A refused sitting on the FREE-ROW door can still retire a record  | closed  | James ruled ACCEPT 2026-09-08; comment landed useMonitorSession.ts:3811-3821
 matrix-goes-stale             | CARRY  | The published matrix goes stale silently                          | open    | standing trigger, not work; lift to register
 multierg-static-refused       | CARRY  | A MultiErg reporting a STATIC ski or bike value would be refused  | open    | unowned/accepted; no capture or vendor sentence settles it
@@ -25,9 +25,9 @@ permission-denied-landscape   | DONE   | permission-denied ships a five-button s
 five-button-shape-ungateable  | BUILD  | Nothing can gate the five-button failure frame                    | ruled   | James 2026-09-08: dev-only seam on canOpenAppSettings + dist-grep needle + e2e case
 screenshots-churn             | DOC    | pnpm screenshots rewrites 64 of 201 captures on every run         | closed  | PR A: 4 filings -> 1 row under ## Tooling; fix CARRIES
 permission-copy-your-pm5      | BUILD  | The permission screen says "your PM5" where it means "monitor"    | closed  | PR A, with the scan-sheet row and the NFC card's body line
-detail-panel-duplication      | DECIDE | The permission frame's DETAIL panel repeats its own remedy        | gate 0  | rendered artifact owed before any build
+detail-panel-duplication      | BUILD  | The permission frame's DETAIL panel repeats its own remedy        | in PR B | Gate 0 rendered; ruling = condition line 649, covers ~10 frames, keeps slug + raw
 web-overflow-scroll           | DONE   | Top of an overflowing interstitial body cannot be scrolled to     | closed  | #366; index.css:6035 justify-content: flex-start
-phone-timer-offer-on-refusal  | BUILD  | "Row on the phone timer instead" is offered on the refusal screen | gate 0  | James 2026-09-08: REMOVE it; 4->3 buttons re-opens #370 landscape math
+phone-timer-offer-on-refusal  | BUILD  | "Row on the phone timer instead" is offered on the refusal screen | in PR B | REMOVE from unsupported-machine ONLY (it is unconditional today); layout: Try again spans full width
 two-design-gates              | DONE   | Two design gates the refusal screen owes                          | closed  | #369 3eed9f29, both proven red
 refusal-guard-ungated         | CARRY  | The refusal-survives-its-own-consequences guard is UNGATED        | open    | needs a bounded-withhold fake control — see P3-G
 design-3540-flake             | DOC    | design.spec.ts:3541 flakes under a full parallel run              | closed  | PR A: folded into "Hunt the e2e flakes" as a datapoint
@@ -79,6 +79,27 @@ waveE-entry-row               | DOC    | We never check WHICH Concept2 machine i
 Still owed to James: **one Gate 0 covering both screen changes** — the refusal
 frame losing a button and the permission frame losing its duplicated DETAIL panel.
 Rendered together because both perturb the same landscape action-stack budget.
+
+## OWED, and easy to lose — the five-button seam
+
+`five-button-shape-ungateable` is ruled **BUILD** (James, 2026-09-08) and **is
+not in PR A or PR B**. I dropped it from PR B's brief. It is still needed: PR B
+KEEPS the phone-timer button, so iOS `permission-denied` still renders five
+buttons and the shape still has no web gate.
+
+Dispatch it after PR B merges (it touches the same file). Scope: a dev-only
+override on `canOpenAppSettings()` alone, an e2e case driving the five-button
+frame, and a `dist-grep.sh` needle proving it absent from production. A global
+`isNative()` stub is RULED OUT with a receipt — `adapters/monitorTransport.ts`
+takes the Capacitor BLE arm whenever `isNative()`, killing the fake monitor the
+design tests run on (CLAUDE.md RF13).
+
+## Register rows filed during the close-out (NOT pull-ins — filed, not worked)
+
+- `--failure` comment misstates why row one is 56px (Gate 0 measurement).
+- Just Row's refusal stack never gets #370's pairing (`--failure` absent).
+- The `PM5` / `Timer` provenance label, the last unswept RF32 vocabulary.
+- Nine `PM5` mentions in shipped release notes (positional test pins).
 
 ## Pull-ins
 
