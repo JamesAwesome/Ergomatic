@@ -1,0 +1,200 @@
+## Phase MT — the app refuses a machine it cannot record
+
+**Status: SPEC APPROVED 2026-09-08, in flight.** Shape approved by James the
+same day: **Option A (refuse the sitting) with a DENYLIST**. Spec:
+[docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md](docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md).
+
+The PM5 fits the RowErg, SkiErg and BikeErg, and `ergMachineType` — the field
+that says which — had no consumer from the day it was first decoded until
+this phase. A SkiErg
+therefore connects, gets programmed, and stores its piece as a row. Worse than
+the local wrongness: `server/concept2/mapping.ts` posts a hardcoded
+`type: "rower"`, so such a row is uploaded into the rower's Concept2 logbook as
+a rowing result, and its verification code is guaranteed rejected — Concept2's
+own documentation says the code is accepted only if "date, time, distance,
+workout_type and machine type match".
+
+TRIAD (it decides what a stored row may MEAN): full antagonist pass on the
+spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
+
+- [ ] **PR 1 — the refusal, the link, and the matrix.** A domain denylist
+      stating the RULE rather than a subset of it: refuse every value the vendor
+      NAMES as not rowing — 64 (Dyno), 128/143 (ski), 192-194/207 (bike),
+      225/226 (MultiErg ski/bike) — and allow everything else, named or not,
+      including 224 (MultiErg on a rowing interval). The driver classifies on
+      the FIRST decode; the hook routes it through the existing `fail()` path,
+      which chains a `terminate()` ahead of the disconnect so the workout we
+      just sent is withdrawn from the erg. Safety is an invariant, not a race:
+      `maybeEmitFrame` cannot emit before a 0x0032 has decoded and no record
+      opens without a frame, so nothing can be stored or sent on either connect
+      door. Plus one link, `WHICH ERGS WORK ›`, into `connect-the-monitor`, and
+      a three-tier support matrix published there. No stored-shape change and no
+      migration. **M**
+
+### Owed by this phase, filed here rather than in a PR body
+
+- [ ] **A refused sitting on the FREE-ROW door can still retire a record.**
+      `beginFreeRow()` emits `armed` on the CSAFE ack — the same ack that
+      releases the status subscriptions — so on that door `armed` precedes the
+      first classifiable frame structurally (449 ms, measured in
+      `docs/monitor/sessions/walk-2026-09-03-connect-sooner/ring-2-free-row.json`),
+      and the `armed` handler is where a staged handoff retire fires. James
+      ruled 2026-09-08: ACCEPT, because reaching a staged retire at all requires
+      the rower to have confirmed "connect anyway" over that record, and the
+      alternative (holding the free row's arm until classification) costs every
+      Just Row ~449 ms forever to protect against a machine nobody owns. The
+      handler's comment is corrected in the same PR; this row is the residual.
+      **S**
+- [ ] **The published matrix goes stale silently.** It is a claim in the app's
+      own voice, the same class as a shipped release note (RF9's drift class).
+      Changing `mapping.ts`'s hardcoded `type` or the denylist reconciles the
+      middle tier of `connect-the-monitor` and recounts the registry `minutes`.
+      The trigger is also recorded in the article's own source comment. **S**
+- [ ] **A MultiErg reporting a STATIC ski or bike value would be refused
+      outright.** The
+      vendor sentence that would exclude this — "this will be the one of the
+      MultiErg Machine Types" — is footnote 23, on `0x003C`, the one carrier we
+      do not subscribe. The two we read (footnotes 7 and 11) say only "the
+      Machine Type of the current interval". No capture and no vendor sentence
+      settles what a real MultiErg reports on 0x0032. Unowned, accepted. **S**
+- [x] **`permission-denied` already ships a five-button action stack, and it
+      leaves a 10px body in landscape.** CLOSED by the landscape budget fix
+      (Gate 0 approved 2026-09-08): the failure frames' action stack now pairs
+      its last FOUR buttons, taking this frame 10px -> 138px, `link-failed`
+      78px -> 206px and `unsupported-machine` 142px -> 206px, all measured on
+      the real frames at 844x390. The scope widened at the gate because the
+      capture showed `link-failed` — the failure a rower actually hits — was
+      cutting its headline too.
+      CORRECTION TO THIS ROW'S OWN CLAIM: it said the last-two pairing left
+      five buttons at "74px and the headline is on screen". The headline runs
+      to y94 on any frame whose title wraps, so 74px CUT it — the reason the
+      approved fix pairs four rather than two. **S**
+- [ ] **Nothing can gate the five-button failure frame.** `canOpenAppSettings()`
+      is `isNative()`, so the web build renders `permission-denied` with four
+      buttons and every e2e assertion stands on that shape. The deciding case —
+      five buttons, a 74px window under the old pairing count — exists only on
+      iOS, where the frame's own message would be cut.
+      NARROWED IN REVIEW ROUND 1: the PAIRING COUNT itself is now caught, one
+      frame over — reverting to `nth-last-child(-n + 2)` fails the refusal
+      test's `contentHeight` precondition at 157px against a 142px window,
+      because that frame's content sits between the two windows. What stays
+      ungateable is the five-button SHAPE: no web assertion can stand on it, so
+      nothing would catch a regression that only reached the iOS stack. Either
+      a seam on that adapter or an accepted gap; not decided. **S**
+- [ ] **`pnpm screenshots` rewrites 64 of its 201 captures on every run, with
+      no code change at all.** Measured 2026-09-08: run it, `git checkout --
+      docs/screenshots/`, run it again on the identical tree — the same 64
+      files come back modified. So a capture PR's `git status` cannot tell the
+      frames a change actually altered from the ones that merely re-rendered,
+      and the committed captures are the visual record every design gate and
+      RF7 leans on. This PR worked around it by adding only the two frames its
+      rule can touch and discarding the rest. Cause unknown; the churn spans
+      concept2, justrow, diagnostics and log captures, so it smells like seeded
+      data or a date rather than antialiasing. **M**
+- [ ] **The permission screen says "your PM5" where it means "your monitor".**
+      `useMonitorSession.ts`'s `BluetoothPermissionError` detail reads
+      "Ergomatic can't reach your PM5 without Bluetooth." The rower is not being
+      told WHICH monitor, so by the 2026-09-07 anonymise-the-PM5 rule (RF32)
+      that is the wrong word. Found while measuring the landscape gate; left out
+      of that PR because it is a second product file and the fast path allows
+      one. **S**
+- [ ] **The permission frame's DETAIL panel repeats its own remedy sentence.**
+      `error.detail` renders as the body line AND again inside the panel — 125px
+      of the frame's 308px, verbatim duplication. This is the same argument
+      #366 used to drop the panel from the refusal frame ("the top half saying
+      exactly what the bottom half already says"); nobody has applied it here.
+      Changes what the screen contains, so it needs its own design ruling. **S**
+- [x] **On the web build, the top of an overflowing interstitial body cannot be
+      scrolled to at all.** CLOSED by #366's landscape fix: the body is
+      `flex-start` plus auto margins on its first and last child, so overflow
+      now falls entirely BELOW the window. Was: `justify-content: center`
+      overflowed in BOTH directions; chromium clamps `scrollTop` at 0 while the
+      first child sat at -30 to -100px, so the headline was unreachable, while
+      WebKit permits negative `scrollTop` (measured range [-101, 102]) and the
+      iOS app could pull it into view. Now GATED, by the row below. **S**
+- [ ] **"Row on the phone timer instead" is offered on the refusal screen.**
+      After a SkiErg refusal it routes the rower to store the ski piece as a
+      rowing log by hand. No Concept2 upload follows — `eligibilityFailure`
+      gates on `source !== "pm5"` — so only the local harm applies, and it is
+      not clearly wrong, since the likeliest cause of that screen is picking
+      the wrong monitor from a list and that rower does have a RowErg. Filed
+      at the design gate rather than found later. **S**
+- [x] **Two design gates the refusal screen owes.** BUILT, in
+      `e2e/design.spec.ts`, each kept only because it went red on a stated
+      mutation. (a) A REFUSED interstitial case (`ergMachineType: 128`,
+      threaded through `injectConnectedFake` the way `screenshots.spec.ts`
+      threads it) puts `.connected-support-link` in the DOM while
+      `assertTapTargets` sweeps — the first time it ever has, since the
+      existing case drives a `link-failed` failure and the link renders only
+      for `unsupported-machine`. Dropping `min-height: var(--tap)` fails the
+      sweep at `Received: 15`. (b) At 844x390 the same frame asserts the
+      headline lies inside `.connected-interstitial-body`'s client box and
+      that nothing sits above the minimum reachable scroll position (on
+      chromium that position is always 0, so what the assertion reads is the
+      first child's top; the review pass deleted a `minScrollTop === 0`
+      companion that no CSS could fail); the FAILED case gets the second half
+      too, for the price of a resize.
+      Restoring `justify-content: center` fails it at -7.5px on the refusal
+      frame and -70.5px on the link-failed one. TWO CORRECTIONS TO THIS ROW'S
+      OWN PRESCRIPTION, both measured: the auto margins are not what saves the
+      frame (they resolve to zero exactly when the overflow is negative, so
+      flipping the one declaration is enough), and the design pass's -73..-37
+      figures are unreachable by a CSS-only mutation now, because #366 also
+      dropped the DETAIL panel from this frame. The containment half needs a
+      body window under 58px, which four buttons never produce — it goes red
+      only on the five-button stack with the pairing removed (window 10px,
+      headline 48px below the fold), so what it actually pins is the landscape
+      action-stack budget, not the centring. **S**
+- [ ] **The refusal-survives-its-own-consequences guard is UNGATED.** `fail()`
+      refuses to let a standing `unsupported-machine` error be overwritten by
+      the `program()` rejection the refusal itself caused — without it the
+      rower watches the machine message become a generic failure screen a beat
+      later. The guard is correct on its face and NO TEST CAN MAKE IT FAIL.
+      Three routes were tried and all three go green with the guard deleted:
+      `deaf` starves the terminate's own settle so nothing rejects;
+      `failNextProgramFrame` rejects before the status subscriptions release,
+      so the refusal never fires; `lagStructureOneTick` produces no second
+      `fail()` at all. **What it needs is a fake control that withholds 0x0031
+      for a bounded number of ticks without starving the CSAFE ack path.** On
+      hardware the window is the measured 544 ms between the first 0x0032 and
+      `armed`. Found by the whole-branch review, finding 1. **S**
+- [ ] **`design.spec.ts:3540` flakes under a full parallel run.** "picking a
+      effort level does not shift the chips below it" failed once in a
+      547-test run on 2026-09-08 (the run that added the two gates above),
+      passed in isolation immediately after, and passed on a full re-run of
+      the same tree. It compares a chip's `y` before and after a click through
+      `stableBoundingBox`, so the suspicion is load, not the assertion. CI
+      retries once, so it costs a red PR check at worst. Unowned. **S**
+- [ ] **`connected.spec.ts:1703` poisons its own origin for a later run.** The
+      QuotaExceededError leg fills origin storage until `setItem` genuinely
+      throws; its own title says "junk cleaned up after", but a SECOND run
+      against the same already-booted stack fails at `signInViaBackdoor`,
+      before any assertion. Seen 2026-09-08 during Phase MT: full `pnpm e2e`
+      passed 545/545 on a fresh stack, and re-running that one test against the
+      surviving stack failed. Either the cleanup misses something or the
+      failure is in the harness's own storage use. Costs a debugging round to
+      whoever meets it next. **S**
+- [ ] **A refused machine is still remembered as `LAST USED`.**
+      `ConnectedInterstitial.tsx` calls `saveLastDevice` on every successful
+      pair, and a refusal happens after pairing. Cosmetic; fixing it inside the
+      refusal PR would widen it into the handoff-memory surface. **S**
+- [ ] **`type: "rower"` is still hardcoded for machines the denylist lets
+      through.** Concept2's results enum has separate `dynamic`, `slides` and
+      `multierg` members, and the PM5 enum names `STATIC_DYNAMIC` (8), the
+      `SLIDES_*` family (16-20, 32) and `MULTIERG_*` (224-226). All of them are
+      rowing, so a wrong `type` is a smaller wrong than a SkiErg's — but it is
+      still wrong, and Concept2 rejects the verification code on a machine-type
+      mismatch either way. Deliberate consequence of the approved denylist
+      direction, not an oversight. **S**
+- [ ] **A monitor on pre-2018 firmware cannot be classified at all.**
+      `ergMachineType` is ABSENT below interface revision V1.26/V1.27, and
+      Phase MT does nothing on absence — refusing on ignorance would break a
+      working erg. `0x0016` ("Connected Erg Machine Type", READ) would settle
+      it and needs a `Transport.read`, which is the existing firmware-version
+      register row's dependency too. Both are unblocked by the same work.
+      **But `0x0016` may not exist:** rev 1.30's revision history reads
+      "2/3/2017 ... Deleted Machine Type information in Device Info Service as
+      firmware unable to support it. V1.21." Establish that before costing it.
+      **S**
+
+## Phase JR — Just Row
