@@ -2175,6 +2175,17 @@ closed with zero Concept2 contact.
 
 ## Tooling
 
+- **A `scripts/dist-grep.sh` needle is a fourth retyping of a literal, tied to
+  nothing mechanical.** Each needle restates a string that also lives in
+  product source, its unit test, and sometimes an e2e helper. A rename that
+  updates the other three and misses the `NEEDLES` array leaves that needle
+  hunting a string that no longer exists — green forever, proving nothing,
+  which is RF21's shape on the gate the production bundle depends on.
+  **Measured at the Phase MT close-out seam review (2026-09-09): true of all
+  ten needles**, each literal confirmed present in source with nothing binding
+  it to the bash array. Filed under Tooling rather than the connected surface,
+  because nothing about it is connected-surface work. **S**
+
 - **`pnpm screenshots` rewrites captures no code change touched.** SIGHTED
   five times over three weeks, in FOUR filings — the 2026-08-18 sighting never
   got a row of its own; it rode inside the 2026-08-28 one. Those four rows were
@@ -2662,7 +2673,6 @@ to lose the row has no move except to walk away.
 | **The bar's two axes**                     | The connected bar's fill and its notches are two axes on DISTANCE work; EST LEFT holds still 6.6 s and 20.8 s at handovers. **The obvious repair was replayed and does not work.** Accepted and documented. **TRIAD** when it is taken                                                                                                                                                                                                                         | `phase-cr2.md`               |
 | **The `--failure` comment misstates why row one is 56px** | `index.css`'s `--failure` block says `Row on the phone timer instead` wrapping is what makes the first row taller. Measured at Phase MT's Gate 0 (2026-09-08): with that button gone the row is STILL 56px, because `.button-l1{min-height:56px}` and `.button-l2{min-height:52px}`. The comment names the wrong cause, so the next person tuning that stack tunes the wrong thing | Phase MT Gate 0, `docs/design/mt-followon-gate0/` |
 | **Just Row's refusal stack never gets #370's pairing** | `JustRow.tsx`'s free-row refusal wears `.connected-interstitial-actions` WITHOUT the `--failure` modifier, so the landscape pairing rule #370 shipped does not reach it. Harmless TODAY at two buttons — it becomes a cut headline the moment that stack grows a third. Found at Phase MT's Gate 0, 2026-09-08 | Phase MT Gate 0 |
-| **A dist-grep needle is a fourth retyping, tied to nothing** | Each `scripts/dist-grep.sh` needle restates a literal that also lives in product source, its unit test, and sometimes an e2e helper. Nothing mechanically ties the four. A rename that updates the other three and not the NEEDLES list leaves that needle hunting a string that no longer exists — green forever, proving nothing, which is RF21's shape on the gate the production bundle depends on. True of all ten needles. Found at the Phase MT close-out seam review, 2026-09-09 | `scripts/dist-grep.sh` header |
 
 ## Accepted, pinned, and not being fixed
 

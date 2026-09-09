@@ -363,7 +363,8 @@ async function renderBody(
   );
 }
 
-/** Two button-count shapes no web render can produce.
+/** Two button-count shapes no web render could produce when these captures
+ *  were taken (the `openSettings` half is reachable now — see below).
  *
  *  `phoneTimer` puts `Row on the phone timer instead` back where the refusal
  *  frame carried it before this PR (after `Try again`, before the log door),

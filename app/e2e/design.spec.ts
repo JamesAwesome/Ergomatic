@@ -7702,12 +7702,23 @@ test.describe("connected screens (fake-driven)", () => {
     // remains true is only the narrow half: this FOUR-button test cannot pin
     // the count, which is why the case below exists.
     //
-    // The count is also caught ONE FRAME OVER: the refusal test's
-    // `contentHeight` precondition fails at 157px against a 142px window
-    // ("overflows its window by 15px"), because that frame is the one whose
-    // content sits between the two windows. Round 0 of this PR claimed the
-    // count was pinned by nothing in the suite, which was true when written
-    // and stopped being true when that precondition landed in round 1.
+    // THE FIVE-BUTTON CASE BELOW IS THE ONLY GATE ON THE PAIRING COUNT.
+    // Do not delete it believing another test backstops it.
+    //
+    // This comment used to claim the count was "also caught ONE FRAME OVER"
+    // by the refusal test's `contentHeight` precondition, at 157px against a
+    // 142px window. MEASURED FALSE at the close-out seam review (2026-09-09):
+    // under `nth-last-child(-n + 4)` -> `(-n + 2)` all four pre-existing
+    // failure-frame cases stay GREEN, and an instrumented probe on that
+    // precondition reads `window=206 content=206` both mutated and
+    // unmutated — identical. The reason is this PR's own sibling change:
+    // the refusal frame is now the app's only THREE-button stack, and
+    // `index.css`'s `> button:first-child:nth-last-child(3)` at (0,3,1)
+    // forces `Try again` to span whatever the pairing rule says, so the two
+    // mutations produce the same layout there. The 142/157 figures are from
+    // the four-button era, before the close-out withheld the phone-timer
+    // offer. The claim was true when first written and was falsified by a
+    // change in the same phase.
     expect(
       m.remedyTop,
       "the frame has no body line to read as the remedy",
