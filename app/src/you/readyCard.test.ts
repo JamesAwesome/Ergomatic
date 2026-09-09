@@ -95,6 +95,26 @@ describe("the write (I-6: a refused write costs the reload, not the session)", (
     expect(saveReadyCard("skip")).toBe(false);
   });
 
+  /**
+   * THE ORDERING THE FIRST VERSION MISSED, and it is the one a real rower is
+   * most likely to hit: they have used the setting before, so storage already
+   * holds a valid word when a later write is refused. With storage consulted
+   * first, `lastSet` was unreachable in exactly this case — the screen showed
+   * the new choice and said "set for now" while the next connect obeyed the
+   * OLD one. The notice was not incomplete, it was false.
+   */
+  it("still governs the next connect when storage already holds the OTHER choice", async () => {
+    const { loadReadyCard, saveReadyCard } = await freshModule();
+    expect(saveReadyCard("skip")).toBe(true);
+    expect(loadReadyCard()).toBe("skip");
+
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+    expect(saveReadyCard("show")).toBe(false);
+    expect(loadReadyCard()).toBe("show");
+  });
+
   it("still governs this session's next connect after a refused write", async () => {
     const { loadReadyCard, saveReadyCard } = await freshModule();
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
@@ -106,13 +126,16 @@ describe("the write (I-6: a refused write costs the reload, not the session)", (
 });
 
 /**
- * THE PRECEDENCE GATE. This describe block exists because the first draft of
- * the module read `lastSet` before storage, which made every persistence
- * gate in the phase structurally incapable of failing: with the in-memory
- * value winning, a completely broken `setItem` still looked like a working
- * save. Both cases below go red under that draft and green under this one.
+ * A LANDED WRITE IS ANSWERED FROM THE STORE, NOT FROM MEMORY. This block is
+ * what stops the fallback from growing back into a cache: after a successful
+ * save `lastSet` is null, so both cases below go through `localStorage`, and
+ * a `setItem` that never ran cannot read back as one that did.
+ *
+ * The complementary claim — that a REFUSED write is answered from memory even
+ * when the store holds the other word — is in the I-6 block above. Neither
+ * block is sound alone; the module has shipped each half wrong in review.
  */
-describe("storage outranks the in-memory fallback", () => {
+describe("a landed write is answered from the store", () => {
   it("re-reads the store rather than trusting what it last wrote", async () => {
     const { READY_CARD_KEY, loadReadyCard, saveReadyCard } =
       await freshModule();

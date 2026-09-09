@@ -73,33 +73,41 @@ function isReadyCardChoice(value: unknown): value is ReadyCardChoice {
  * mis-cased, whitespace-padded, JSON, a value from an older build, or a
  * getter that throws: all resolve to `show`.
  *
- * STORAGE IS CONSULTED FIRST, and the honest account of why is narrower than
- * the one this comment first carried. The first draft returned `lastSet`
- * before touching storage AND set it on every write, which together made
- * every persistence gate in the phase structurally incapable of failing — the
- * anchor antagonist pass proved it by running the module with `setItem`
- * replaced by a no-op: the save reported `true`, storage held nothing, and
- * this function still said `skip`.
+ * THE ORDER AND THE ASSIGNMENT ARE ONE DESIGN, AND THIS FILE HAS HAD BOTH
+ * HALVES WRONG IN TURN. Read them together:
  *
- * WHICH HALF WAS LOAD-BEARING, MEASURED (RF26 — a gate gets the claim it
- * earns, not the strongest one available). Four probes against this suite:
- * restoring the old read order ALONE leaves all 17 green, because `lastSet`
- * is now null except on the refused path, so there is no reachable state
- * where the two disagree. Restoring the old ASSIGNMENT alone fails 2;
- * restoring both fails 2; the old read order combined with a deleted
- * `setItem` fails 3. So `saveReadyCard`'s assignment discipline is what makes
- * the gates bite, and this ordering is defence-in-depth: it costs nothing and
- * it means a future writer of `lastSet` cannot quietly re-open the hole. Do
- * not read it as the thing under test.
+ * `saveReadyCard` sets `lastSet` ONLY when the write was refused, and clears
+ * it the moment one lands. So `lastSet` is non-null exactly when the store is
+ * KNOWN to be stale — which is why it is consulted FIRST here. The two rules
+ * are a pair; either alone is a bug this module has actually shipped in
+ * review:
+ *
+ *   - Assign on EVERY write and read `lastSet` first (the original draft) and
+ *     a completely broken `setItem` still reads back the chosen value, so
+ *     every persistence gate in the phase goes green regardless. The anchor
+ *     antagonist pass proved that by running this module with `setItem`
+ *     replaced by a no-op.
+ *   - Assign only on refusal but read STORAGE first (the first fix) and the
+ *     fallback becomes unreachable the moment storage holds anything valid —
+ *     so a rower who has used the setting before, and whose device then
+ *     refuses a write, sees the new choice on screen, is told it is "set for
+ *     now", and gets the OLD one at the erg. The whole-branch review proved
+ *     that one the same way.
+ *
+ * With the pair as written: a landed write is answered from the store, a
+ * refused one from `lastSet`, and deleting the `setItem` call above leaves
+ * `lastSet` null with nothing in the store — so the seam test and the e2e
+ * reload leg both go red, which is the property they exist for.
  */
 export function loadReadyCard(): ReadyCardChoice {
+  if (lastSet !== null) return lastSet;
   try {
     const raw = localStorage.getItem(READY_CARD_KEY);
     if (isReadyCardChoice(raw)) return raw;
   } catch {
-    /* fall through: the in-memory value, then the default */
+    /* fall through to the default */
   }
-  return lastSet ?? READY_CARD_DEFAULT;
+  return READY_CARD_DEFAULT;
 }
 
 /**
