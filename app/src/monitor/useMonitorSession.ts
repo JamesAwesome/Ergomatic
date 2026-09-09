@@ -99,6 +99,7 @@ import {
 import { check as checkContinuity } from "./continuity";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
 import { upsertSessionLog } from "./sessionLogHistory";
+import { forgetLastDevice } from "./lastDevice";
 import { defaultTransport } from "../adapters/monitorTransport";
 import { registerAppLifecycleListener } from "../adapters/appLifecycle";
 import {
@@ -161,8 +162,8 @@ export type ConnectedPhase =
  *
  * - `"busy"` — `ProgramBusyError`, thrown before a second `program()` ever
  *   reaches the wire. Deliberately NOT a `ProgramRejectionReason` (spec's
- *   I6 ruling): the PM5 never saw the call, so rendering "PM5 rejected"
- *   copy for it would be a lie about the machine.
+ *   I6 ruling): the machine never saw the call, so rendering "The monitor
+ *   rejected" copy for it would be a lie about it.
  * - `"transport-missing"` — no radio at all on this platform/build.
  * - `"scan-dismissed"` — the rower closed the monitor chooser (or it
  *   returned nothing). Not an error in any moral sense; it renders on state 6's
@@ -1607,8 +1608,9 @@ function mapProgramFailure(err: unknown): ConnectedError {
   if (err instanceof ProgramBusyError) {
     return {
       reason: "busy",
-      // Never "PM5 ..." phrasing: nothing was sent, so the machine has no
-      // opinion about this call (the error class's own doc comment).
+      // Never machine-attributing phrasing (the "The monitor ..." shape
+      // `ProgramRejectionError` uses): nothing was sent, so the machine has
+      // no opinion about this call (the error class's own doc comment).
       detail: "A programming attempt is already in flight.",
       raw: err.message,
     };
@@ -1667,7 +1669,7 @@ function mapRadioFailure(err: unknown): ConnectedError {
     return {
       reason: "permission-denied",
       detail:
-        "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+        "Ergomatic can't reach your monitor without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
       raw: message,
     };
   }
@@ -5275,6 +5277,39 @@ export function useMonitorSession(
           // and therefore no record — can precede the classification, on
           // either connect door, whatever the sample rate does.
           if (event.kind === "unsupported-machine") {
+            // INVARIANT (Phase MT close-out, whole-branch review finding 2):
+            // a machine this app refuses is never left standing as
+            // `LAST USED · <name>` on the workout detail screen — that
+            // caption is an offer to reconnect, and offering the monitor we
+            // have just said we cannot record is the worst version of it.
+            //
+            // HERE, at the refusal, rather than on the screen that WRITES
+            // the caption. The first version of this fix lived in
+            // `ConnectedInterstitial.tsx` and rested on "the interstitial is
+            // the only writer, so a refused machine can never reach storage
+            // by any route". The vendor falsifies that: on a MultiErg,
+            // `ergMachineType` names what the CURRENT interval is on
+            // (`domain/monitor/pm5/ergMachine.ts` quotes rev 1.30's footnote
+            // 23), and the same file's header records that the field reports
+            // which machine the detachable PM5 head is mounted on — while
+            // the advertised name is the head's own serial. So one head
+            // pairs as `PM5 X` on a RowErg at the workout door (written),
+            // moves to the SkiErg, and is refused at the JUST ROW door,
+            // which neither writes nor forgets. The caption then offers the
+            // machine the app just refused. All three doors
+            // (`ConnectedInterstitial`, `JustRow`, `JustRowObserver`) reach
+            // THIS line, which is why the clear belongs on it.
+            //
+            // `device.name` rather than any remembered value: it is the
+            // exact string `update({ deviceName: device.name })` publishes
+            // and the interstitial's save effect stores, and it is still in
+            // scope here — `fail()` below nulls the published field in the
+            // same `update()` as the phase flip. `forgetLastDevice` removes
+            // the key only when it still holds THIS name, so refusing one
+            // monitor can never un-remember a different, good one, and a
+            // name stored by an EARLIER sitting is cleared too (the
+            // moved-head case above, where nothing was written this attempt).
+            forgetLastDevice(device.name);
             fail(
               {
                 reason: "unsupported-machine",

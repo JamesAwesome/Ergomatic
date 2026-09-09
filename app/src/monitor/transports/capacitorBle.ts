@@ -96,14 +96,18 @@ function serviceFor(characteristicId: string): string {
 // sheet ever drawn.
 const SCAN_TIMEOUT_MS = 35_000;
 
-// Spec §7, verbatim. House copy: no em-dash. `noDeviceFound` names Cancel
-// because Cancel is the sheet's only control once the plugin's own 30s
-// scan has stopped (REVIEW M4).
+// Spec §7, with the PM5 anonymised (CLAUDE.md RF32, James 2026-09-07): the
+// spec wrote `scanning`/`noDeviceFound` as "your PM5" / "Wake the PM5", and
+// neither line tells the rower WHICH monitor — the sheet below them is the
+// thing that names devices. `availableDevices` already said "monitor", so the
+// old pair also said two words for one thing three lines apart.
+// House copy: no em-dash. `noDeviceFound` names Cancel because Cancel is the
+// sheet's only control once the plugin's own 30s scan has stopped (REVIEW M4).
 const DISPLAY_STRINGS = {
-  scanning: "Looking for your PM5",
+  scanning: "Looking for your monitor",
   availableDevices: "Choose your monitor",
   noDeviceFound:
-    "No monitor found. Wake the PM5, then tap Cancel and try again.",
+    "No monitor found. Wake the monitor, then tap Cancel and try again.",
   cancel: "Cancel",
 } as const;
 
@@ -151,6 +155,38 @@ class ScanTimeoutError extends Error {
 export const TARGET_SCAN_DEADLINE_MS = 10_000;
 export const TARGET_COLLISION_WINDOW_MS = 1_000;
 
+// RF32 CENSUS — THESE THREE SAY "PM5" AND A ROWER CAN READ THEM.
+// Recorded here rather than in a PR body (RF14) so the next anonymise-the-PM5
+// sweep does not have to re-litigate it.
+//
+// They are NOT diagnostics that stop at a log. `useMonitorSession.ts`'s
+// `mapTargetedFailure` copies each into `ConnectedError.raw`, and the failure
+// screen renders `raw` for every reason except `unsupported-machine`
+// (`ConnectedInterstitial.tsx`'s detail panel) — so an NFC scan that finds
+// nothing advertising prints the first of these to a rower today.
+//
+// WHY THEY KEEP THE NAME — REASON CORRECTED 2026-09-09, the ruling unchanged.
+// This block used to argue that "The named monitor was not advertising" loses
+// the only fact the sentence carries. That was invented and it is wrong: the
+// word "named" carries it, and the exact name is already on the same frame two
+// lines up (`notAdvertisingDetail`: "Couldn't reach PM5 432331249."). An
+// invented receipt behind a "SETTLED" label is worse than none (RF30), so here
+// is the true one, which is about the SLOT rather than the sentence.
+//
+// These are Error `message`s and they reach the screen only through `raw`,
+// documented as "the un-prettified evidence ... for state 6's DETAIL panel"
+// (`ConnectedError`'s own doc comment) — the same line that prints hex traces.
+// The COPY for these reasons is `detail`, and it is already RF32-clean without
+// them: "End the monitor's current connection, then try again.", "More than
+// one PM5 has this name. Use Connect." (an example RF32's own text names as
+// allowed) and `notAdvertisingDetail`'s two lines. What each message names is
+// the advertised NAME the targeted lookup matched on, whose format is literally
+// `PM5 <serial>` — the string both device pickers filter by prefix
+// (`webBluetooth.ts`'s `requestDevice` filters, and `requestDevice` below).
+//
+// NOT settled forever: if the DETAIL panel is ever promoted from evidence to
+// copy, these three come back into scope. `TargetScanInterrupted` and
+// `ScanCleanupFailed` below target nothing by name and correctly say neither.
 export class TargetMonitorNotAdvertisingError extends Error {
   constructor() {
     super("The named PM5 was not advertising within the targeted deadline.");

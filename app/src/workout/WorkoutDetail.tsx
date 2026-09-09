@@ -46,7 +46,8 @@ import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
-import ConnectedInterstitial, { loadLastDevice } from "./ConnectedInterstitial";
+import ConnectedInterstitial from "./ConnectedInterstitial";
+import { loadLastDevice } from "../monitor/lastDevice";
 
 /** The Connect button's own three states (handoff §1): a real, available
  *  radio; the adapter present but switched off (Chromium can tell us this

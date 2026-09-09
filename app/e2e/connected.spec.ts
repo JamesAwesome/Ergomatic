@@ -2312,7 +2312,9 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
         hasText: `Looking for ${NAME}`,
       }),
     ).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText("Keep the PM5 on and close by.")).toBeVisible();
+    await expect(
+      page.getByText("Keep the monitor on and close by."),
+    ).toBeVisible();
     await expect(page.getByText("Choosing your monitor")).toHaveCount(0);
     const cancel = page.locator(".connected-interstitial-actions .button-l2", {
       hasText: "Cancel",

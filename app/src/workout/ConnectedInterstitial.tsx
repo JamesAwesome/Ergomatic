@@ -41,32 +41,7 @@ import {
 import type { EnginePhase } from "../session/engine";
 import ConnectedSurface from "./ConnectedSurface";
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
-
-/** localStorage key for the `LAST USED · <name>` caption (handoff §1) — a
- *  plain string, not a versioned record: there is nothing here to migrate,
- *  and a missing/garbage value reads identically to "never paired"
- *  (`loadLastDevice` returning `null`), matching every other best-effort
- *  read in this codebase (`session/run.ts`'s own Resilience #5 idiom,
- *  applied to the simplest possible shape). */
-export const LAST_DEVICE_KEY = "ergomatic.lastMonitorDevice";
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function saveLastDevice(name: string): void {
-  try {
-    localStorage.setItem(LAST_DEVICE_KEY, name);
-  } catch {
-    // best-effort: a failed persist never interrupts the caller
-  }
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function loadLastDevice(): string | null {
-  try {
-    return localStorage.getItem(LAST_DEVICE_KEY);
-  } catch {
-    return null;
-  }
-}
+import { saveLastDevice } from "../monitor/lastDevice";
 
 /** Every reason that is NOT the machine actively refusing a workout — the
  *  six that are OURS (about the phone/radio side, never the PM5's own
@@ -350,6 +325,25 @@ export default function ConnectedInterstitial({
   // Handoff §1: "After a first successful pair" — the picker's own result
   // already named the device before this fires; this just remembers it for
   // the NEXT visit to the button.
+  //
+  // THE ONLY WRITER of `LAST_DEVICE_KEY`. The matching FORGET does NOT live
+  // here: Phase MT's close-out review found that a head moved from a RowErg
+  // to a SkiErg keeps its advertised name, so `PM5 X` can be written at this
+  // door on Monday and refused at the JUST ROW door on Tuesday — a door that
+  // never writes the caption and so could never have cleared it from here.
+  // The clear now sits at the refusal itself, in `useMonitorSession.ts`,
+  // which all three doors share (`monitor/lastDevice.ts`'s own header).
+  //
+  // WHY THE SPLIT IS SAFE, since the invariant rests on it (F5, 2026-09-09):
+  // this save is a PASSIVE effect on `session.deviceName`, while the forget is
+  // SYNCHRONOUS inside the driver-event callback — so on paper a refusal could
+  // land before the name is published and this effect could write it back. It
+  // cannot: `connect()` has no `await` between subscribing to `driver.events()`
+  // and `update({ deviceName: device.name })` (`useMonitorSession.ts`; verified
+  // by reading the whole span), so no event can interleave there, and by the
+  // time a refusal callback can run the name is already published and this
+  // effect has already saved it. Add an `await` in that span and the ordering
+  // is gone.
   useEffect(() => {
     if (session.deviceName !== null) saveLastDevice(session.deviceName);
   }, [session.deviceName]);
@@ -470,7 +464,9 @@ export default function ConnectedInterstitial({
             <p className="connected-serif-line">
               Looking for {request.exactName}
             </p>
-            <p className="connected-body-line">Keep the PM5 on and close by.</p>
+            <p className="connected-body-line">
+              Keep the monitor on and close by.
+            </p>
           </div>
           <div className="action-stack connected-interstitial-actions">
             <button type="button" className="button-l2" onClick={handleCancel}>
