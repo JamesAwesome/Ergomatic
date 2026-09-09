@@ -2738,7 +2738,7 @@ describe("createPm5Driver: ProgramBusyError — program() is single-flight (ROAD
     await expect(third).resolves.toBeUndefined();
   });
 
-  it("the busy error's own message never attributes the refusal to the PM5 (NOT a ProgramRejectionReason — that union stays machine-statements-only)", async () => {
+  it("the busy error's own message never attributes the refusal to the machine (NOT a ProgramRejectionReason — that union stays machine-statements-only)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
     const driver = createSubscribedDriver(transport, log);
@@ -2750,7 +2750,12 @@ describe("createPm5Driver: ProgramBusyError — program() is single-flight (ROAD
     await expect(driver.program(MINIMAL_PROGRAM)).rejects.toSatisfy(
       (err: unknown) => {
         expect(err).toBeInstanceOf(ProgramBusyError);
+        // Both vocabularies: "PM5" (the phrasing `ProgramRejectionError`
+        // used before RF32 anonymised it, 2026-09-09) and "The monitor"
+        // (the phrasing it uses now). The invariant is that this message
+        // attributes NOTHING to the machine.
         expect((err as Error).message).not.toContain("PM5");
+        expect((err as Error).message).not.toContain("The monitor");
         expect((err as Error).name).toBe("ProgramBusyError");
         return true;
       },

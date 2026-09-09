@@ -170,7 +170,7 @@ describe("the connecting card on the NFC route (Gate 0, James 2026-09-06)", () =
         name: "Looking for PM5 432331249 Row",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Keep the PM5 on and close by.")).toHaveClass(
+    expect(screen.getByText("Keep the monitor on and close by.")).toHaveClass(
       "connected-body-line",
     );
     expect(screen.queryByText("Connecting to monitor")).toBeNull();

@@ -52,18 +52,26 @@ import { buildRun, type EnginePhase } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { createFakeTransport } from "../monitor/transports/fake";
 import {
+  ProgramRejectionError,
+  REJECTION_VERBS,
+  type ProgramRejectionReason,
+} from "../monitor/driver";
+import {
   useMonitorSession,
   type ConnectedError,
   type MonitorSession,
   type RunIdentity,
 } from "../monitor/useMonitorSession";
 import { commentStrippedSource, cssRules } from "../test/cssView";
+import { renderedCopy } from "../test/renderedCopy";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
-import ConnectedInterstitial, {
+import ConnectedInterstitial from "./ConnectedInterstitial";
+import {
+  forgetLastDevice,
   loadLastDevice,
   saveLastDevice,
-} from "./ConnectedInterstitial";
+} from "../monitor/lastDevice";
 
 /** `index.css` with every comment stripped — the same view
  *  `ConnectedSurface.test.tsx` takes of the stylesheet, and for its reason:
@@ -259,6 +267,89 @@ describe("saveLastDevice / loadLastDevice — the LAST USED caption's own storag
       });
     expect(() => saveLastDevice("PM5 430123456")).not.toThrow();
     spy.mockRestore();
+  });
+
+  it("forgetLastDevice un-remembers only the name it is given", () => {
+    saveLastDevice("PM5 430123456");
+    forgetLastDevice("PM5 999999999");
+    expect(loadLastDevice()).toBe("PM5 430123456");
+    forgetLastDevice("PM5 430123456");
+    expect(loadLastDevice()).toBeNull();
+  });
+
+  it("a removeItem failure is swallowed too — symmetric with saveLastDevice", () => {
+    saveLastDevice("PM5 430123456");
+    const spy = vi
+      .spyOn(Storage.prototype, "removeItem")
+      .mockImplementation(() => {
+        throw new DOMException("storage disabled", "SecurityError");
+      });
+    expect(() => forgetLastDevice("PM5 430123456")).not.toThrow();
+    spy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A REGRESSION PIN AGAINST A COMPONENT-LEVEL CLEAR — not a gate on a live
+// guard, and it is labelled that way because the docblock that stood here
+// described code this branch had already deleted.
+//
+// It was written for this component's OWN refusal effect and its
+// `if (refused !== null)` guard (`e306f19f`). `dea06847` moved the forget
+// into `useMonitorSession.ts`, where all three doors reach it, and deleted
+// both — the component imports `saveLastDevice` alone now and its only
+// storage code is the save effect below. So there is no guard here for this
+// to bite, and no mutation of production could make it fail today.
+//
+// It is kept because the state it drives is still reachable (a refusal frame
+// with `deviceName: null`) and because the change it would catch is a real
+// one someone would think harmless: re-adding a clear at this door. That
+// clear costs a rower the one-tap route back after a refusal of a DIFFERENT
+// monitor — the exact defect `dea06847` was fixing.
+// ---------------------------------------------------------------------------
+
+describe("the refusal frame and an unrelated LAST USED", () => {
+  it("a refusal on a session that never named a device leaves an existing LAST USED alone", () => {
+    // A different monitor, remembered from an earlier sitting that this
+    // component never saw.
+    saveLastDevice("PM5 430123456");
+
+    mockUseMonitorSession.mockReturnValue(
+      session({
+        phase: "failed",
+        deviceName: null,
+        error: connectedError({
+          reason: "unsupported-machine",
+          detail:
+            "Erg type not supported\nThis monitor is on a SkiErg. Nothing here will start.",
+        }),
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <ConnectedInterstitial
+          request={{
+            kind: "picker",
+            attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+          }}
+          program={FIXTURE.program}
+          phases={FIXTURE.phases}
+          identity={FIXTURE.identity}
+          baselines={baselines}
+          nudgedCount={0}
+          onExit={vi.fn()}
+          onRowInstead={vi.fn()}
+          onEnded={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // The refusal frame really rendered, so the survival below is a statement
+    // about a screen this component actually drew — not about a render that
+    // silently never happened.
+    expect(screen.getByText("Erg type not supported")).toBeInTheDocument();
+    expect(loadLastDevice()).toBe("PM5 430123456");
   });
 });
 
@@ -497,7 +588,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       error: connectedError({
         reason: "structure-mismatch",
         detail:
-          'PM5 reported "armed" while holding a different workout than the one just sent',
+          'The monitor reported "armed" while holding a different workout than the one just sent',
         raw: triple,
       }),
     });
@@ -519,12 +610,15 @@ describe("state 6: failed — every ConnectedError rendered", () => {
   });
 
   it.each([
-    ["nak", "PM5 rejected frame 3"],
-    ["bad", "PM5 reported the frame as malformed (bad)"],
-    ["not-ready", "PM5 reported not ready"],
-    ["garbled", "PM5 returned a frame this driver could not even parse"],
-    ["timeout", "PM5 never acked (ack-timeout policy)"],
-    ["not-observed", 'PM5 never reported "armed"'],
+    ["nak", "The monitor rejected frame 3"],
+    ["bad", "The monitor reported the frame as malformed (bad)"],
+    ["not-ready", "The monitor reported not ready"],
+    [
+      "garbled",
+      "The monitor returned a frame this driver could not even parse",
+    ],
+    ["timeout", "The monitor never acked (ack-timeout policy)"],
+    ["not-observed", 'The monitor never reported "armed"'],
   ] as const)(
     "machine reason '%s' also gets the generic serif line, never its own detail as the headline",
     (reason, detail) => {
@@ -541,6 +635,79 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       ).toBeNull();
     },
   );
+
+  // -------------------------------------------------------------------------
+  // RF32 GATE: no rejection a rower reads says "PM5".
+  //
+  // The class this exists to stop: `ProgramRejectionError`'s message is
+  // `ConnectedError.detail` verbatim (`mapProgramFailure`), and `detail` is
+  // rendered copy on every failure door — so a driver-side message change
+  // reaches a rower without passing any copy review. It shipped that way for
+  // all eight reasons and the branch's own record said it had not.
+  //
+  // Built from the REAL producer (a `ProgramRejectionError`), not from a
+  // string typed here: a hand-copied fixture pins this test's own idea of
+  // the copy, not production's.
+  //
+  // SCOPE, stated rather than left to be assumed (RF26). This sweep covers
+  // the text AND the attributes of ONE door, the interstitial. `JustRow`
+  // carries its own single pinned case for the second door. There is no
+  // third: `JustRowObserver` renders `session.error.detail` too, but it only
+  // ever calls `session.connect()`, and `mapProgramFailure` — the sole
+  // producer of a rejection `detail` — has exactly one call site, inside
+  // `program()`'s catch (`useMonitorSession.ts`). No `ProgramRejectionError`
+  // message can reach that screen, so a gate there could not go red for the
+  // reason it claimed (RF21) and is deliberately not written.
+  // -------------------------------------------------------------------------
+  describe("RF32: no rejection copy names the PM5", () => {
+    // DERIVED, not hand-listed (RF37): `REJECTION_VERBS` is
+    // `Record<ProgramRejectionReason, string>`, so a ninth reason cannot
+    // reach the driver without appearing in this loop. A typed-out list of
+    // eight would keep passing while the ninth shipped "PM5 ...".
+    const reasons = Object.keys(REJECTION_VERBS) as ProgramRejectionReason[];
+
+    it("enumerates every reason the driver has", () => {
+      expect(reasons).toHaveLength(8);
+    });
+
+    // BOTH message branches: a send-phase rejection (`atFrame >= 0`, which
+    // prints the frame index) and a verify-phase one (the `-1` sentinel).
+    it.each(
+      reasons.flatMap((reason) =>
+        [0, -1].map((atFrame) => [reason, atFrame] as const),
+      ),
+    )("'%s' at frame %i", (reason, atFrame) => {
+      const err = new ProgramRejectionError({
+        reason,
+        atFrame,
+        hexTrace: "write 76 04 1a | ack 76 04 1b",
+      });
+      renderInterstitial({
+        phase: "failed",
+        deviceName: DEVICE_NAME,
+        error: { reason, detail: err.message, raw: err.hexTrace },
+      });
+
+      // The frame really rendered the rejection — asserted BEFORE the
+      // negative, so an empty frame cannot pass this by saying nothing.
+      expect(document.body.textContent).toContain(REJECTION_VERBS[reason]);
+
+      // The one exemption RF32 allows here: the status label is the
+      // monitor's own advertised name, which is the app saying WHICH
+      // monitor. Removed rather than excused, so the sweep below covers
+      // every other node in the frame including any added later.
+      const label = document.querySelector(".connected-status-label")!;
+      expect(label.textContent).toBe(DEVICE_NAME);
+      label.remove();
+
+      // `renderedCopy`, not `textContent`: RF32 governs an `aria-label` the
+      // same as a paragraph, and the first version of this sweep read text
+      // only — so a frame whose every visible word was right and whose label
+      // still said "PM5" passed it. The attribute list is walked, never
+      // typed out (that helper's own header says why).
+      expect(renderedCopy()).not.toContain("PM5");
+    });
+  });
 
   function serifText(): string {
     return document.querySelector(".connected-serif-line")!.textContent ?? "";
@@ -590,10 +757,10 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "disconnected",
-        detail: "PM5 disconnected before completing",
+        detail: "The monitor disconnected before completing",
       }),
     });
-    expect(serifText()).toBe("PM5 disconnected before completing");
+    expect(serifText()).toBe("The monitor disconnected before completing");
     expect(
       screen.queryByText(
         "End whatever is showing on the monitor, then try again.",
@@ -639,7 +806,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       error: connectedError({
         reason: "permission-denied",
         detail:
-          "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+          "Ergomatic can't reach your monitor without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
         raw: "BLE permission denied",
       }),
     });
@@ -647,7 +814,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
     expect(screen.getByText("Bluetooth permission needed")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+        "Ergomatic can't reach your monitor without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
         { selector: ".connected-body-line" },
       ),
     ).toBeInTheDocument();
@@ -669,7 +836,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -685,7 +852,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -706,7 +873,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -726,7 +893,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -744,7 +911,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -1206,7 +1373,10 @@ describe("Try again — inert unless phase is 'failed' or 'disconnected'", () =>
     const { session: s } = renderInterstitial({
       phase: "failed",
       deviceName: DEVICE_NAME,
-      error: connectedError({ reason: "nak", detail: "PM5 rejected frame 3" }),
+      error: connectedError({
+        reason: "nak",
+        detail: "The monitor rejected frame 3",
+      }),
     });
     vi.mocked(s.connect).mockClear();
 
@@ -1223,7 +1393,10 @@ describe("Try again — inert unless phase is 'failed' or 'disconnected'", () =>
     const { session: s } = renderInterstitial({
       phase: "failed",
       deviceName: null,
-      error: connectedError({ reason: "nak", detail: "PM5 rejected frame 3" }),
+      error: connectedError({
+        reason: "nak",
+        detail: "The monitor rejected frame 3",
+      }),
     });
     vi.mocked(s.connect).mockClear();
     const button = screen.getByRole("button", { name: "Try again" });
@@ -2094,6 +2267,181 @@ describe("the interstitial walk, fake-driven", () => {
       }),
     ).toBeInTheDocument();
   });
+
+  /**
+   * THE INVARIANT: a machine the denylist refuses is never remembered as
+   * LAST USED.
+   *
+   * It has to be gated on the whole seam rather than on the guard, because
+   * the write and the refusal are two different events and the ORDER is the
+   * defect: the refusal cannot fire until the monitor has been paired and
+   * subscribed (`driver.ts`'s `classifyErgMachine` runs on a decoded 0x0032),
+   * and the save fires the instant `session.deviceName` lands, which is the
+   * pair. So the name is on disk before anything can refuse it, and the
+   * previous test in this file proves that write really happens on this exact
+   * harness ("... `expect(loadLastDevice()).toBe(DEVICE_NAME)`").
+   *
+   * The CLEAR itself lives in `useMonitorSession.ts`, at the refusal, not on
+   * this screen — the close-out review found a door that refuses without ever
+   * writing (`useMonitorSession.test.ts`'s moved-head trio carries the case).
+   * This test is still the one that owns the SEAM, because this is the only
+   * door where a real write precedes a real refusal.
+   *
+   * Starting UPSTREAM of the producer (RF24): this test mounts before
+   * anything is written and asserts after the refusal, so it can see the
+   * write-then-refuse seam that a test seeding `LAST_DEVICE_KEY` by hand
+   * would step over.
+   */
+  it("a machine the denylist refuses is never remembered as LAST USED", async () => {
+    vi.doUnmock("../monitor/useMonitorSession");
+    const real = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    mockUseMonitorSession.mockImplementation(real.useMonitorSession);
+
+    // 128 is a SkiErg (`domain/monitor/pm5/ergMachine.ts`'s
+    // `unsupportedErgMachine`), the same value `useMonitorSession.test.ts`'s
+    // "a SkiErg sitting fails with the approved copy" drives — a real
+    // refusal through the real driver, not a hand-built `ConnectedError`.
+    const fake = createFakeTransport({
+      program: FIXTURE.program,
+      deviceName: DEVICE_NAME,
+      ergMachineType: 128,
+    });
+
+    expect(loadLastDevice()).toBeNull();
+
+    // The refusal frame renders `SupportMatrixLink`, which is a real
+    // `<Link>` — the only test in this file that needs a router.
+    render(
+      <MemoryRouter>
+        <ConnectedInterstitial
+          request={{
+            kind: "picker",
+            attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+          }}
+          program={FIXTURE.program}
+          phases={FIXTURE.phases}
+          identity={FIXTURE.identity}
+          baselines={baselines}
+          nudgedCount={0}
+          onExit={vi.fn()}
+          onRowInstead={vi.fn()}
+          onEnded={vi.fn()}
+          deps={{
+            createTransport: () => fake,
+            now: () => t0,
+            driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Connecting");
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("Erg type not supported")) break;
+    }
+
+    // The refusal really rendered — the positive readiness this negative
+    // assertion waits on, so "no name stored" can never pass because the
+    // walk stalled before the machine was ever classified.
+    expect(screen.getByText("Erg type not supported")).toBeInTheDocument();
+    expect(
+      screen.getByText("This monitor is on a SkiErg. Nothing here will start."),
+    ).toBeInTheDocument();
+
+    expect(loadLastDevice()).toBeNull();
+  });
+
+  /**
+   * THE OTHER HALF OF THE SAME INVARIANT: ONLY the machine refusal
+   * un-remembers. Every other failure — the link dying, a scan finding
+   * nothing, permission withdrawn, the monitor rejecting the workout — must
+   * leave LAST USED standing, because that caption is the whole one-tap
+   * route back after a drop.
+   *
+   * Gated because the guard is one comparison and the wrong side of it is
+   * silent: widening it to "any failure" reads as harmless tidying and
+   * costs the rower the reconnect button in exactly the situation the
+   * button exists for.
+   *
+   * The failure driven here is a real one — `injectNak(0)` rejects the
+   * FIRST programming frame, so the driver raises a real
+   * `ProgramRejectionError` and the hook's own `mapProgramFailure` types it
+   * `nak`. The monitor is a perfectly good RowErg that said no to this one
+   * program; the rower must still be one tap from it.
+   *
+   * Positive readiness before the negative (the same rule the refusal test
+   * above follows, in mirror): this asserts the name IS on disk after the
+   * pair, then asserts it is STILL on disk after the failure renders — so a
+   * walk that stalled before ever pairing cannot pass this by writing
+   * nothing at all.
+   */
+  it("only the machine refusal un-remembers: a rejected program leaves LAST USED intact", async () => {
+    vi.doUnmock("../monitor/useMonitorSession");
+    const real = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    mockUseMonitorSession.mockImplementation(real.useMonitorSession);
+
+    const fake = createFakeTransport({
+      program: FIXTURE.program,
+      deviceName: DEVICE_NAME,
+    });
+    fake.injectNak(0);
+
+    expect(loadLastDevice()).toBeNull();
+
+    render(
+      <MemoryRouter>
+        <ConnectedInterstitial
+          request={{
+            kind: "picker",
+            attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+          }}
+          program={FIXTURE.program}
+          phases={FIXTURE.phases}
+          identity={FIXTURE.identity}
+          baselines={baselines}
+          nudgedCount={0}
+          onExit={vi.fn()}
+          onRowInstead={vi.fn()}
+          onEnded={vi.fn()}
+          deps={{
+            createTransport: () => fake,
+            now: () => t0,
+            driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Connecting");
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("The monitor wouldn't take it")) break;
+    }
+
+    // The pair really happened and really wrote the caption's name — the
+    // positive half, without which "still remembered" would be vacuous.
+    expect(loadLastDevice()).toBe(DEVICE_NAME);
+    // ...and a real, rendered, NON-refusal failure really happened over it.
+    expect(
+      screen.getByText("The monitor wouldn't take it"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Erg type not supported"),
+    ).not.toBeInTheDocument();
+
+    expect(loadLastDevice()).toBe(DEVICE_NAME);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2221,7 +2569,7 @@ describe("targeted failures (Phase NF)", () => {
     expect(screen.getByText("Looking for PM5 432331249 Row")).toHaveClass(
       "connected-serif-line",
     );
-    expect(screen.getByText("Keep the PM5 on and close by.")).toHaveClass(
+    expect(screen.getByText("Keep the monitor on and close by.")).toHaveClass(
       "connected-body-line",
     );
     expect(screen.queryByText("Choosing your monitor")).toBeNull();

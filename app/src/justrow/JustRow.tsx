@@ -485,7 +485,7 @@ export default function JustRow() {
           {ready
             ? "The clock starts on your first stroke."
             : lookingFor !== null
-              ? "Keep the PM5 on and close by."
+              ? "Keep the monitor on and close by."
               : "Wake the monitor if its screen is dark."}
         </p>
         {ready && (
