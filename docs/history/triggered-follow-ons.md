@@ -270,7 +270,7 @@
   in `library.test.ts` moves a 100%-held invariant out of prose and into a
   gate. **Trigger:** next PR touching the seed library or `plans.ts`. **S**
 - **Rename trap, recorded so a future grep does not eat it:**
-  `surfaceModel.ts:1573` is `if (digits.startsWith("8")) return "AN";` —
+  `surfaceModel.ts`'s `digits.startsWith("8")` predicate (**was cited `:1573`; it is at `:1881` as of 2026-09-09 — grep the predicate, not the number**) is `if (digits.startsWith("8")) return "AN";` —
   the English article in "AN 800 M PIECE", not the workout type. Any rename
   of a short uppercase token greps for homographs FIRST.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
@@ -293,7 +293,7 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   producer of `WorkoutProgram`, and `MonitorCapabilities` has no channel
   for programming limits today, so a second monitor would silently inherit
   PM5 limits and PM5-branded rejection copy instead of its own. Disclosed
-  and accepted as correct for now at `program.ts:112` (single-monitor app,
+  and accepted as correct for now (**cited by SYMBOL 2026-09-09: this said `program.ts:112`, which is now an unrelated field doc — grep `Table 19` in `domain/monitor/program.ts`**) (single-monitor app,
   cheap to fix later) — not a defect to fix today. Trigger: a second
   monitor integration becomes real. Then: add a programming-limits channel
   to `MonitorCapabilities`, move the four constants there per-monitor, and
@@ -310,6 +310,12 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   is the way it gets settled — copy the connection log immediately if it
   recurs during a walk. The removal this entry wants remains separate and
   is strengthened by the report regardless of cause.
+  **DISPOSITION 2026-09-09 (annotation, not a rewrite — this file is kept
+  verbatim): James WITHDREW the removal order.** Asked directly when the
+  Phase OD order sweep surfaced it at 23 days old, he ruled the row struck
+  and the screen kept. The removal described below is NO LONGER OWED WORK.
+  The flash residual above is unaffected and stays open. Live record:
+  `ROADMAP.md`'s connected-surface table. Do not work from this file.
   Original entry: **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
   rid of the pull to resume screen"): the stale-state band on
   `ConnectedSurface.tsx` (~line 584) still renders its inverted ink field

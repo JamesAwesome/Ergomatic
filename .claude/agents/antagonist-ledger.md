@@ -3298,7 +3298,7 @@ code.jpeg`, 6EF3-D827 5B55-52E1, LE-u32 of `27 d8 f3 6e | e1 52 55 5b`, exact.
   closes around it.**
 
 - **A grep-driven rename would corrupt an English article.**
-  `surfaceModel.ts:1573`, `if (digits.startsWith("8")) return "AN";` -- "AN 800
+  `surfaceModel.ts`'s `digits.startsWith("8")` predicate (cited `:1573` when written; `:1881` as of 2026-09-09 — grep the predicate), `if (digits.startsWith("8")) return "AN";` -- "AN 800
   M PIECE". **Technique: before scoping any rename of a short uppercase token,
   grep the literal and read every hit for HOMOGRAPHS. Two-letter domain codes
   collide with ordinary words, CSS values, and article words.**
