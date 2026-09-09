@@ -2280,10 +2280,52 @@ closed with zero Concept2 contact.
   compiler's own fold** rather than repairing their second, divergent
   computation — the bug exists because two things compute the same summary, and
   a one-surface patch leaves the drift class alive. Reachable only from
-  self-authored shapes (the seeded 300 carry no adjacent rests), so it rides the
-  next Today/Library PR rather than shipping alone. **Still a displayed-number
-  Gate 0** — the before/after card is what James approves. Note the compiler
-  already REJECTS leading rest, so only the consecutive case is live. Evidence:
+  self-authored shapes (the seeded 300 carry no adjacent rests).
+  **RULED 2026-09-09 (James): the card shows the SUM** — `1' w · 1' r · 2' r`
+  renders `1' w · 3' r`, agreeing with the compiler's fold, with Timer's 240 s,
+  and with what detail already says.
+  **THE LITERAL READING OF THE FIX SHAPE IS BLOCKED BY FACT, not by cost, and
+  the next reader needs this before re-deriving it.** "Point display at
+  `compileProgram`" cannot work: `program.ts:412-422` REJECTS open-ended/test
+  pieces that `stepDetail.ts` must render, and `program.ts:392-397` rejects a
+  combined rest over `MAX_REST_SECONDS` (9:55) that display has no business
+  refusing to draw. Display renders what a rower AUTHORED; the compiler answers
+  what a PM5 can RUN, and it is entitled to say no. A SHARED HELPER holding one
+  definition of the fold is the only reading that executes the order — and it
+  kills the drift class the same way, which was the order's stated reason.
+  **The fold has a THIRD consumer:** `news/content/bodies/notationExamples.ts`,
+  the published article teaching the notation. **RULED 2026-09-09 (James): let
+  its worked examples shift, and show the copy diff at the Gate 0** beside the
+  card — the article should teach what the app actually does.
+  **CORRECTION 2026-09-09 — this row used to end "the compiler already REJECTS
+  leading rest, so only the consecutive case is live". That narrowing is
+  FALSE**, and it is RF30's shape: a clause that closes a case nobody
+  re-checked. A leading rest gets FIVE answers, not two. `validate.ts` has no
+  positional rule for rests at all (the `r` case checks only that `minutes` is a
+  whole second; the sole post-loop rules are "at most one reps marker" and
+  "needs at least one work or test step"), `builderState.ts`'s `addRow`/reorder
+  carry no guard, and `bulk.ts` parses a rest line wherever it appears — so
+  `[r 2', w 1']` VALIDATES AND SAVES. `intervalBoundaries.ts:86-103` then
+  SUPPORTS it deliberately on the phone timer, returning its seconds as
+  `leadInSeconds` to seed the first boundary; a version that dropped them put
+  every notch `leadIn/total` too far left, measured at 20.8% against 41.7% on
+  `[5:00 rest, 4 × (4:00 + 1:00)]`, and that comment records a first draft which
+  DENIED the shape was reachable until a review corrected it. `program.ts:353`
+  rejects it with `leading-rest`, correctly and in words. `stepDetail.ts:58-62`
+  SILENTLY DROPS it. **Display is the only one that is wrong.**
+  **RULED 2026-09-09 (James): display RENDERS the leading rest, matching
+  Timer.** He first ruled "reject at authoring" and REVERSED on the Timer
+  evidence — rejecting would strand `leadInSeconds` as dead code (RF29) and make
+  existing stored workouts un-re-saveable, to satisfy a constraint that binds
+  only connected mode. (`validateWorkoutInput` is called only from the three
+  write paths in `server/routes/data.ts` — `:1283`, `:1329`, `:1379` — so reads
+  were never at risk; an edit-then-save of an existing leading-rest workout is
+  what would have started failing.)
+  **OPEN QUESTION: none left in the fix shape — it was the blocker and it is
+  answered above.** What remains is a decision only James can give: **the
+  displayed-number Gate 0**, before/after card plus the article copy diff.
+  **NEXT (≤0.25):** build that Gate 0 artifact. Do NOT start the code first;
+  the gate is the approval, not the presentation. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`
   (§AUD-006, §V4).
 - **RESOLVED (James, 2026-08-31: "Gold approved" on the rendered
@@ -2815,8 +2857,8 @@ to lose the row has no move except to walk away.
 | Item                                       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Evidence                     |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | **RC-8**                                   | Correct the fake's contradictions of the real wire. **3 of 5 corrected** in #182 T1 (`ergMachineType`, `intervalRestTimeSeconds`, `splitIntervalType`); the other two read as already conditional and want verification. Residual: `fake.ts`'s `toMachineIndex` is resting-conditional while `intervalIndex.ts`'s `toActualIndex` is unconditional. **Merged with LL's reconnect precondition — one piece of fake work, and specced apart it gets done twice** | `phase-rc.md`, `phase-ll.md`, `docs/testing/2026-09-04-unlogged-session-evidence.md` |
-| **RC-13**                                  | The avg-pace verdict zero-fires on a rapid re-arm: `program()` inside `FINISH_GRACE_MS` cancels the pending deadline instead of draining it. **James, 2026-08-31: FIX IT here** — drain the deadline rather than cancel. Not covered by the close-out corpus (no committed capture re-arms inside 3 s; closest pieces are 148.1 s apart), so the gate is a synthetic replay with a stated mutation                                                             | `phase-rc.md`                |
-| **RC-14**                                  | The avg-pace verdict zero-fires on an ORDINARY finish (walk 2026-08-25, W-2). **Distinct from RC-13; do not fold.** Replay through the walk's own commit `c219ee0` DOES produce the verdict, eliminating the wire, the driver's response and ring eviction; **two survivors — it threw, or something outside the driver dropped the entry.** **James, 2026-08-31: do NOT hunt it; INSTRUMENT it** so the next occurrence names which survivor it was, instead of another silent zero. Per RF19, the instrument ships in the same change | `phase-rc.md`                |
+| **RC-13**                                  | The avg-pace verdict zero-fires on a rapid re-arm: `program()` inside `FINISH_GRACE_MS` cancels the pending deadline instead of draining it. **James, 2026-08-31: FIX IT here** — drain the deadline rather than cancel. Not covered by the close-out corpus (no committed capture re-arms inside 3 s; closest pieces are 148.1 s apart), so the gate is a synthetic replay with a stated mutation. **STILL LIVE, re-verified 2026-09-09 — and TWO agents misread it as already fixed in one session, which is why the mechanism is written out here.** `driver.ts:1180-1185` defines `schedule` as returning a CANCELLER (`return () => clearTimeout(id)`), so `pendingSummaryReconcile` holds a cancel function, not the callback. The real drain is `drainSummaryReconcile()` (`:4246-4276`): it cancels, nulls, **and then does the work** — `reconcileSummary(activeRun)`. `program()`'s replacement path (`:6859-6860`) does `pendingSummaryReconcile?.(); pendingSummaryReconcile = null;` and stops — cancel only, no reconcile, no verdict — and because it NULLS the slot, the later `drainSummaryReconcile()` calls hit their own non-null guard at `:4259` and skip too. The comment above it argues cancelling is correct so the outgoing run's deadline cannot speak about the new run; that concern is real and a DRAIN satisfies it anyway (reconcile the outgoing run, then open the new one), which is why the comment reads as a settled decision and is not one. **OPEN QUESTION, and it is the whole cost — not the line change:** does draining produce a WRONG verdict? It computes at the moment a NEW piece starts instead of 3 s after the last ended, and those 3 s exist to catch a late split or summary. A wrong verdict is worse than a missing one, because a wrong one gets believed. RF34 also sits two lines below: `pendingTerminateObservations?.cancel()` is cancelled "for the identical reason", so draining one slot and leaving its stated twin is the half-applied invariant again. **NEXT (≤0.25):** read `reconcileSummary` and say whether a drain at re-arm time can see less evidence than the deadline would have. That answer sizes the row; until it exists the row cannot be specced | `phase-rc.md`                |
+| **RC-14**                                  | The avg-pace verdict zero-fires on an ORDINARY finish (walk 2026-08-25, W-2). **Distinct from RC-13; do not fold.** Replay through the walk's own commit `c219ee0` DOES produce the verdict, eliminating the wire, the driver's response and ring eviction; **two survivors — it threw, or something outside the driver dropped the entry.** **James, 2026-08-31: do NOT hunt it; INSTRUMENT it** so the next occurrence names which survivor it was, instead of another silent zero. Per RF19, the instrument ships in the same change. **HELD 2026-09-09 — the obvious instrument CANNOT catch the failure it exists for, and shipping it would discharge this order while printing nothing.** `emit` is a bare `for (const cb of listeners) cb(e)` with NO error isolation, running the hook's subscribers synchronously on the caller's stack IMMEDIATELY BEFORE the verdict call. So a try/catch around `recordAvgPaceVerdict` cannot catch a throw that happens before the call is reached — a THIRD survivor this row's two-survivor enumeration does not contain. The walked ring's `seq 71` (`split-won ... (a 0x0039 was held...)`) is emitted only by the branch that then runs `emit(summaryObservationsEvent(...))`, so that path demonstrably ran on the losing run. The replay missed it because it drives a TEST subscriber set. Also: `eventLog.record()` coalesces identical consecutive entries WITHOUT advancing `seq`, so a constant-string marker is RF21-vulnerable, and `avgPaceVerdict.replay.test.ts` holds only the success state. **OPEN QUESTION: ANSWERED 2026-09-09** — the survivor set is three, not two, and the third is a throw inside a subscriber. **NEXT (≤0.25):** none owed before the work; the blocker is gone. When it is taken it must BRACKET THE PAIR — a record at the call site BEFORE `reconcileSummary(...)`, the try/catch around BOTH calls, and a discriminator in every constant detail string. Anything narrower is a green gate over a silent zero | `phase-rc.md`                |
 | **RC-38**                                  | Transcribe `OBJ_WORKOUTTYPE_T` — see Phase PROTO above. Pulled forward alone by James on 2026-08-31 while the rest of the sweep is held                                                                                                                                                                                                                                                                                                                       | `phase-rc.md`                |
 | **RC-11**                                  | The stroke-data reframe: three-way, not two. Owns RC-6's deferred `p: 0` half. Our series clock is a third quantity, and none of the three is C2's `time`                                                                                                                                                                                                                                                                                                      | `phase-rc.md`                |
 | **Session calories** — CLOSED by Phase LP 2026-09-06 (0x003A Total Calories is the honest total; per-split sum equals it on 9/9 committed captures) | 0x0033's `totalCalories` is INTERVAL-scoped (it resets at every boundary) and the 0x0039 summary carries no calorie field, so an honest session CAL needs the register-fold discipline CR2 spec 1 built for distance, plus an honest ramping fake (today's emits a constant 0, so **nothing can go red**), plus a walk photo. **ZONE rides behind it** — it needs a strap and a max-HR source the app lacks. **Ownerless since 2026-08-15**                    | `phase-cr2.md`               |
