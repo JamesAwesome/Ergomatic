@@ -1192,16 +1192,47 @@ while we are in here.
       says so itself. This is the order that falsified "passive triggers are
       the problem": it had an ACTIVE trigger, the trigger FIRED, and nothing
       happened, because the question underneath it had no owner.
-      **OPEN QUESTION: is this one defect or four?** The population has GROWN
-      since the order — Wave D files two more (2026-09-08/09) and a third
-      class (integration under container contention), and Phase JC files a
-      fourth (`connected.spec.ts:1703` poisons its own origin) — and a fifth was
-      dropped from Phase OD's own slate when its stated mechanism was falsified
-      (`e2e/helpers.ts:117` mints `RUN_ID` per run; `postTestOffer.ts:53-66`
-      reads no baseline, so a surviving `pgdata` cannot suppress that prompt).
-      Hunting four separately is four times the work if they share a producer.
-      **NEXT (≤0.25): read the four filed rows together and say whether any two
-      share a producer.** That answer decides whether this is one row or four.
+      **ANSWERED 2026-09-09 — it is THREE live producers, not four, and one of
+      the four was already fixed.** The shared-producer read that this row's own
+      NEXT called for has run; findings, each with the evidence that settled it:
+      - **The manual-door tap-target flake is DONE, and has been since
+        2026-08-22.** Both halves landed in `1602248e` ("The warm-up leaves
+        (Phase WU)", #150): the `h1.summary-title` waits in `design.spec.ts` and
+        the atomic `$$eval` in `assertTapTargets`. Measured 114/120 early gates
+        before, 0/120 after (`git log -S`). **It was fixed two days after this
+        order was given and this row has claimed it open for the eighteen days
+        since** — which is the row's own lesson about itself.
+      - **Phase JC's `connected.spec.ts` origin-poisoning row is the SAME TEST
+        as Wave D's (a)** — both are the S3 genuine-`QuotaExceededError` leg and
+        its `fillOriginStorage` halving fill. Merge them; nobody would hunt them
+        as two. **And its stated mechanism is FALSE:**
+        `grep -rn "storageState\|launchPersistentContext\|userDataDir" e2e/
+        playwright.config.ts` returns NOTHING, so every test gets a fresh
+        context and origin partition and browser storage cannot survive into a
+        later run. Whatever fails a warm-stack sign-in, it is not this test's
+        leftover `localStorage`. Same RF16 shape as SR-13's falsified premise.
+      - **`stableBoundingBox` stands alone.** It polls the real box and throws
+        after 20 rAF, so it has no proxy-signal defect; what fails is its settle
+        budget against genuine layout work. Load is an amplifier, not a
+        producer — the research doc's §4 measured the same unchanged build at
+        73% then 95%, moving the metric the WRONG way.
+      - **The integration/container-contention class stands alone.** Different
+        runner, different pool: `vitest.config.ts`'s `maxWorkers` sits on the
+        ROOT `test` block, so unit and client files share one pool with the
+        integration files that each start their own `PostgreSqlContainer`.
+      **A candidate for SR-13, tagged INFERENCE and NOT acted on:**
+      `LogSession.tsx` reads `workoutIsGlobal` from React state, and that file's
+      own comment describes the reported symptom — while the library is still
+      loading at save time it "honestly reads 'not the designated test' and the
+      save navigates exactly as before", i.e. straight to Today. A network
+      response resolving in Playwright is not the instant a fetch callback's
+      `setState` commits. **What this does NOT explain is SR-13's `down -v`
+      correlation** — a colder stack should make a race worse, not better — so
+      either that correlation is an n=2 artifact or there is a second mechanism.
+      Do not fix on this until the correlation is explained.
+      **NEXT (≤0.25): strike the manual-door half against `1602248e`, and fold
+      Phase JC's row into Wave D's (a).** Then this row is two producers, not
+      four, and `stableBoundingBox` is the only one with no diagnosis.
 - [ ] **A THIRD flake class: integration, under container contention.**
       `server/routes/isolation.integration.test.ts` failed once with
       `expected 401 to be 400` on 2026-09-01, and a second run of the same
