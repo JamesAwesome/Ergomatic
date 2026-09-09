@@ -1050,12 +1050,14 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
     // would leave both verdicts identical and still pass. Read from
     // tokens.css because that is where they live.
     //
-    // THE HEX MOVED DOWN A LAYER (Phase JC Task 2): `--judge-faster` and
-    // `--judge-slower` are now `var()` aliases, and the literal colours
-    // live on the raw inks `--judge-blue` / `--judge-red` that every judged
-    // slot resolves through. This reads the inks, which is where "actually
-    // blue and red" is now a fact about the file rather than about an
-    // indirection.
+    // THE HEX MOVED DOWN A LAYER (Phase JC). `--judge-faster` and
+    // `--judge-slower` are GONE — Task 2 made them `var()` aliases for one
+    // commit boundary and Task 3 deleted them once every emitter had moved
+    // onto the four resolved slots (`theme/judgeTokens.test.ts` asserts
+    // both read `null`). The literal colours live on the raw inks
+    // `--judge-blue` / `--judge-red` that each slot resolves through, so
+    // this reads the INKS: "actually blue and red" is a fact about the
+    // file again rather than about an indirection.
     const tokens = readFileSync(
       indexCssPath().replace(/index\.css$/, "theme/tokens.css"),
       "utf-8",

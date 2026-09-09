@@ -742,6 +742,36 @@ describe("row states (handoff §3's three treatments)", () => {
     }
   });
 
+  it("no upcoming cell carries a judge class — the row's own --ink-3 never meets a verdict", () => {
+    // WHY THIS IS PINNED, AND IT IS NOT ABOUT TINT (Phase JC whole-branch
+    // review, 2026-09-08). The judge-colours spec accepts that an OFF slot
+    // renders `--ink` and is therefore indistinguishable from a `within`
+    // cell on this pane, which has no TARGET column. That identity holds
+    // only where the ambient ink IS `--ink`: `.connected-grid-upcoming`
+    // declares `color: var(--ink-3)`, so an OFF cell on an upcoming row
+    // would be BLACK beside a grey `within` one, and the accepted
+    // consequence would be false there.
+    //
+    // It is unreachable — `surfaceModel.ts`'s upcoming branch hardcodes
+    // `judged: null` for both metrics and `cellClass` returns the bare base
+    // class for a `null` — and nothing said so. This is that sentence,
+    // as an assertion. A `judged` value handed to an upcoming row (a
+    // "helpful" programmed-vs-programmed verdict, say) reddens here.
+    renderGrid({ actuals: [actualFor(0, FILLING_LOW.program)] });
+    const upcoming = rows().filter((el) =>
+      el.className.includes("connected-grid-upcoming"),
+    );
+    // Bug-independent: the fixture really does render upcoming rows, or
+    // the loop below would be vacuously green (recurring failure 21).
+    expect(upcoming).toHaveLength(3);
+    for (const el of upcoming) {
+      for (const cls of ["connected-grid-pace", "connected-grid-spm"]) {
+        const cell = el.querySelector(`.${cls}`);
+        expect([cls, cell?.className]).toStrictEqual([cls, cls]);
+      }
+    }
+  });
+
   it("the ACTIVE row is the machine's interval, and it moves with it", () => {
     const first = renderGrid();
     // Row 2 (program index 1) is the first 2000 m rep. Phase WU: ordinal

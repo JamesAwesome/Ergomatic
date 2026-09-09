@@ -10539,11 +10539,13 @@ section:not(.news-pinned) .news-row:last-of-type {
    above the group ever exceeds that height, the group simply follows it in
    flow (no `margin-top: auto` room left to absorb) and the page scrolls.
    That overflow case was BASELINES content when this rule was written and
-   is unreachable today — Gate 0 (2026-09-05) moved the editor to
-   `/you/baselines` and left You holding an identity card and three rows,
-   which no phone viewport comes close to filling. The rule stays because
-   it is what puts the group at the foot at all, not because the overflow
-   still happens. */
+   is out of reach at today's row count — Gate 0 (2026-09-05) moved the
+   editor to `/you/baselines`, leaving You an identity card above the doors
+   group, which no phone viewport comes close to filling at the handful of
+   rows `You.tsx` renders. The rule stays because it is what puts the group
+   at the foot at all, not because the overflow is impossible: rows keep
+   being added to that group (Phase JC added SETTINGS), so `You.tsx`'s own
+   JSX is the count, not this comment. */
 .you-screen {
   display: flex;
   flex-direction: column;
@@ -10566,21 +10568,26 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* THE DOORS GROUP (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1
-   R7; Gate 0 amendment §8.2/8.4). Two `.diag-row`s — CONCEPT2 above
-   DIAGNOSTICS — sit at the foot of You inside ONE wrapper, and the wrapper
-   carries the ONE `margin-top: auto` that pins the group to the bottom of
-   `.you-screen`'s flex column. This used to live on `.diag-row` itself
+   R7; Gate 0 amendment §8.2/8.4). A STACK of `.diag-row`s sits at the foot
+   of You inside ONE wrapper, and the wrapper carries the ONE
+   `margin-top: auto` that pins the group to the bottom of `.you-screen`'s
+   flex column. THE COUNT IS NOT THIS FILE'S TO STATE — `You.tsx`'s
+   `.you-doors` nav is the enumeration, it has grown twice since this rule
+   was written (BASELINES on 2026-09-05, SETTINGS on 2026-09-08), and this
+   comment named "two" through both. Nothing here depends on how many there
+   are; what it depends on is that there is MORE THAN ONE and that the auto
+   margin lives on the wrapper. That used to live on `.diag-row` itself
    (`.you-screen .diag-row { margin-top: auto }`, "single JSX site, grep
-   confirmed"); with two rows that rule would have given EACH row an auto
-   margin, and CSS Flexbox §8.1 splits positive free space equally between
-   auto margins on the main axis — two rows floating apart, not a second row
-   under the first. `auto` resolves to 0 when BASELINES content already fills
-   the column, exactly as before; each row's own `border-top` is then the
-   only separation, on purpose (the rows carry no `margin-top` of their own
-   any more — the 12px `.diag-row` used to declare was overridden to `auto`
-   at its only site, so it never painted). The CONCEPT2 row is absent on any
-   deployment or account without Concept2, and the group is then one row,
-   drawn exactly as the lone DIAGNOSTICS row was. */
+   confirmed"); with a second row that rule would have given EACH row an
+   auto margin, and CSS Flexbox §8.1 splits positive free space equally
+   between auto margins on the main axis — rows floating apart, not a stack.
+   `auto` resolves to 0 when content above already fills the column, exactly
+   as before; each row's own `border-top` is then the only separation, on
+   purpose (the rows carry no `margin-top` of their own any more — the 12px
+   `.diag-row` used to declare was overridden to `auto` at its only site, so
+   it never painted). CONCEPT2 is the one CONDITIONAL row — absent on any
+   deployment or account without Concept2 — so the group is one row shorter
+   there, drawn the same way. */
 .you-doors {
   margin-top: auto;
   display: flex;

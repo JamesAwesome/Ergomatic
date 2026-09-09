@@ -145,9 +145,11 @@ export default function You({
           rare "something went wrong" moment. Opens the menu screen
           (`you/Diagnostics.tsx`), not Monitor logs directly — the menu is
           the extensible home for whatever diagnostic tools follow.
-          `state={{ from: "/you" }}`: the same origin idiom the two rows
-          above use, so the menu's own BackLink returns HERE. Stays the
-          LAST child of You. */}
+          `state={{ from: "/you" }}`: the same origin idiom every other row
+          in this group uses (a count, not a list — the group has grown
+          twice and prose naming "the two rows above" went stale both
+          times), so the menu's own BackLink returns HERE. Stays the LAST
+          child of You. */}
       <nav className="you-doors" aria-label="More">
         <BaselinesRow />
         <Concept2Row accountId={user.id} />

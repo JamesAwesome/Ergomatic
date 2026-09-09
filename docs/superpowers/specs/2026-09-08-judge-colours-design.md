@@ -505,6 +505,24 @@ Stated so the gate can accept them rather than discover them.
    faster or slower cell with its slot OFF is visually identical to an
    on-target one. Defensible — OFF means off — and accepted, but written down
    rather than discovered later.
+
+   **The identity is CONDITIONAL on the ambient ink being `--ink`, and this
+   is where it holds** (whole-branch review, 2026-09-08 — the sentence above
+   read as unconditional). OFF is `--ink`; `within` inherits whatever the row
+   inherits. The two agree on a COMPLETED row (no `color` of its own, so
+   `body`'s `--ink`) and on the ACTIVE row (`.connected-grid-active` declares
+   `background` and borders, no `color`). They would DISAGREE on an UPCOMING
+   row: `.connected-grid-upcoming` declares `color: var(--ink-3)`, so an OFF
+   cell there would be black beside a grey `within` one. That row cannot
+   carry either verdict — `surfaceModel.ts`'s upcoming branch hardcodes
+   `judged: null` for both `pace` and `spm`, and `PaneGrid.tsx`'s `cellClass`
+   returns the bare base class for a `null`, so no `judge-*` class reaches an
+   upcoming cell at all. Pinned rather than left to inspection, since nothing
+   else stated it: `PaneGrid.test.tsx`, "no upcoming cell carries a judge
+   class". **The rule this leaves for the next judged surface:** a verdict
+   class only reads as an absence-of-verdict where the element's inherited
+   `color` is `--ink`, so a container that overrides `color` must not also
+   hold judged cells.
 3. **Red may come to mean something good.** A rower who sets `spmFaster:
    red` gets red for a rate that is beating target, on the same surface
    where the LOST THE MONITOR banner is red. The banner is a filled ground

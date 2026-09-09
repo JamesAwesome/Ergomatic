@@ -4614,6 +4614,17 @@ test.describe("the rower's own judged colour reaches a judged row (Phase JC seam
     // The reload really replaced the document, so the settings screen's
     // inline properties went with it: anything blue below came from
     // `main.tsx` reading localStorage before the first render.
+    //
+    // THIS ASSERTION IS ONLY HALF A PROOF, AND LEG A IS THE OTHER HALF —
+    // do not delete leg A as a duplicate of this one. An absent sentinel
+    // says SOME document replacement happened between the settings screen
+    // and here; it does not say `reload()` caused it, because
+    // `clickThroughToTheSeededLog` runs first and a tab link that silently
+    // did a full load would produce exactly this reading. Leg A supplies
+    // the missing half: it runs the same click-through and asserts the
+    // sentinel is STILL PRESENT, so the hops are proven client-side there
+    // and the only replacement left to explain here is the `reload()`. The
+    // pair is sound; either leg standing alone is not.
     expect(await stillTheSameDocument(page)).toBe(false);
 
     const slowerRow = page.locator(".summary-row").nth(1);
