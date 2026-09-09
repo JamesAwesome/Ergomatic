@@ -475,7 +475,7 @@ named here so the implementer runs *these*, not ones chosen after the fix
 | I-2 | Unit tests over `loadReadyCard`, one per falsification, plus a `localStorage.getItem` stub that throws | narrow the bare `catch` to `catch (e) { if (e.name === "SecurityError") … }`; the throwing-getter case escapes |
 | I-3 | **The seam test, upstream of the producer (RF24):** render `SettingsScreen`, click skip, unmount, mount `ConnectedInterstitial`, drive to `ready`. Nothing writes storage by hand. Plus **two** e2e legs: a click leg and a `reload()` leg | **the reviewer's own mutant, not one of mine (RF35): delete the `setItem` call from `saveReadyCard`.** With storage-first precedence the reload leg and the seam test both go red; under the first draft's precedence every one of them stayed green. Second mutation: revert the initializer to `useState(false)` |
 | I-4 | Client tests at both entry points with `skip` stored, asserting each earlier phase screen still renders — **and one test per entry point at `phase: "ready"` with `frameSilence: true`**, asserting whichever screen Gate 0's A/B/C answer names | widen the initializer to force the flag regardless of phase; the pairing/programming assertions go red. For the lost case, flip `frameSilence` and assert the other screen — the pair is what pins the ladder order |
-| I-5 | A test that records the transport's writes across a full connect under both settings and asserts the two logs are equal | add one extra write on the skip path; the equality fails |
+| I-5 | A test that records the transport's writes across a full connect under both settings and asserts the two logs are equal. **The two consumers need DIFFERENT injection, and the plan names both so the harder one cannot be quietly dropped** — see below | add one extra write on the skip path; the equality fails |
 | I-6 | Unit test: `saveReadyCard` returns `false` when `setItem` throws, and `loadReadyCard` still returns the chosen value afterwards. Client test: the ready card's **own** notice renders, and a colour-save failure and a ready-card failure do not clear each other | make `saveReadyCard` swallow and return `true`; the notice test goes red. Remove the `lastSet` fallback; the load-after-failure test goes red. Point both controls at one `saveFailed` boolean; the independence test goes red |
 | I-7 | The existing `design.spec.ts` settings block and the `you-settings-colors` screenshot, recaptured | **its sweeps extend, its assertions do not** — `assertTapTargets` and `assertNoA11yViolations` run over the whole page and so already cover the new control (measured: all four tests in that block pass against the Gate 0 render), but its third test keys on the "Pace slower color" radiogroup and would not notice the new group's absence. The new group needs its own assertion; "for free" was over-stated |
 
@@ -489,6 +489,31 @@ comment. Both walk a workout to the point `walkToReady` would find the ready
 line, assert the surface's own positive observable first, and only then assert
 the ready line never appeared: a negative async assertion waits for positive
 readiness.
+
+**I-5's two halves are not symmetrical, and the asymmetry is written down
+because it is exactly the shape of an off-ramp (RF34).** The prescribed-code
+lens traced both seams:
+
+- **`ConnectedInterstitial`** — buildable today with no product change.
+  `useMonitorSession` takes `deps.createTransport`, and
+  `ConnectedInterstitial.test.tsx` already drives a real-hook, real-fake walk
+  through it. Wrap that same fake in `transports/recording.ts`'s
+  `createRecordingTransport`, which returns `{ transport, events }` and records
+  every `write()` as a `dir: "tx"` entry; run the walk twice and diff the tx
+  entries.
+- **`JustRow`** — calls `useMonitorSession()` with no arguments and has no
+  `deps` prop, and its test file mocks the whole hook module, so no existing
+  test drives a real transport there at all. The seam that works without
+  touching `JustRow.tsx`: `useMonitorSession` imports `defaultTransport` from
+  `adapters/monitorTransport` and falls back to it when `deps.createTransport`
+  is absent, so a `vi.doMock` of that adapter hands the recording tap to a
+  real, unmocked hook inside a real `<JustRow />`. **This technique is used
+  nowhere else in the repo yet; treat its cost as traced-by-source, not
+  measured.**
+
+**Do NOT "solve" the Just Row half by adding a `deps` prop to `JustRow.tsx`.**
+That is product surface this feature has no reason to grow, and it would put
+a test seam in a component the spec describes as a one-line change.
 
 **The Just Row leg carries a trap that already caught this spec's own capture
 run.** `injectJustRowShotFake` starts sending frames 8 s after injection, and
