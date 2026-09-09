@@ -9,6 +9,17 @@
  * writes four RESOLVED custom properties onto `document.documentElement` and
  * the cascade does the rest.
  *
+ * LIFETIME, QUALIFIED (PM final gate, 2026-09-08). The value survives reload,
+ * relaunch and sign-out, and there is deliberately no clear path at all — not
+ * a Reset, not an account switch. But "survives relaunch" is not absolute:
+ * `docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md`
+ * records that eviction and low disk LOSE origin storage, and a rower then
+ * silently gets the defaults back. The harm is cosmetic and self-healing —
+ * the read below is total, so a vanished key is indistinguishable from a
+ * fresh install — which is why this is a clause rather than a mechanism. It
+ * lives here rather than in the spec's lifetime table because the code
+ * outlives the plan.
+ *
  * TOTAL PER FIELD, WHICH IS A DEPARTURE FROM `today/todayFilters.ts`. That
  * file's `parseFilterSet` comment reads "Strict per-set check … a
  * present-but-wrong-shaped value fails the SET" — it is total per KEY and
