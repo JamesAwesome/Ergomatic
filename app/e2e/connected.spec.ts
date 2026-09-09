@@ -2528,9 +2528,14 @@ test.describe("the ready screen is a preference (Phase RN)", () => {
     await expect(readyLine(page)).toHaveCount(0);
   });
 
-  test("SHOW across the same reload keeps the ready card, so the skip is the setting and not the reload", async ({
-    page,
-  }) => {
+  /**
+   * A CONTROL, and its title claims only what it proves: that a reload does
+   * not by itself remove the ready card. SHOW is also the default and nothing
+   * was ever stored under it, so this leg passes with the whole feature
+   * absent — which is the point of a control, but it is not evidence that
+   * SHOW round-trips. That claim belongs to the settings screen's own tests.
+   */
+  test("a reload alone does not remove the ready card", async ({ page }) => {
     const title = "RN Show Across Reload";
     await injectFakeMonitor(page, "PM5 918273645", NO_MOTION, FIXTURE_PROGRAM);
     await signInViaBackdoor(page, {

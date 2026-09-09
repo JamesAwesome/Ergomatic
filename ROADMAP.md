@@ -166,7 +166,11 @@ replace — is approved before task 1.
       notice; both consumers reading the setting; Gate 0 ruling 2's link
       guard in `JustRow.tsx`; the upstream-of-the-producer seam test; a
       wire-equality test proving the byte sequence is identical under both
-      settings; six e2e legs across `connected.spec.ts` and
+      settings **on the programmed door only** — Just Row's half of I-5 is
+      gated one layer up, as a `beginFreeRow` call-count pair, because that
+      screen takes no transport injection; the spec's prescribed `vi.doMock`
+      seam was not built, and the downgrade is stated in the test rather than
+      silent; six e2e legs across `connected.spec.ts` and
       `justrow.spec.ts`; a `design.spec.ts` assertion for the new group; and
       the recaptured settings screen. Unticked deliberately until it merges.
       **M**
@@ -199,7 +203,11 @@ by reading.
    because the store module survives it. Two legs, and the reload one is the
    gate.
 
-**DEVIATIONS checked, no row owed (2026-09-09):** the new section introduces
+**DEVIATIONS: one row RECONCILED, no new row owed (2026-09-09).** The
+ready-dwell row said "Ready holds until the rower presses Show me the numbers
+or the first real pull" — this phase adds a third exit, and that row now says
+so. The first version of this check reasoned only about colour pairings and
+missed it (RF9, caught at the whole-branch review). No NEW row is owed: the new section introduces
 no colour pairing `index.css`'s own computed table does not already carry —
 its options are the colour options' rules with `.setting-*` appended to the
 selector lists in place — so Phase JC's "`/you/settings` gets NO row" ruling

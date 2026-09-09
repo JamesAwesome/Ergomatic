@@ -1911,9 +1911,13 @@ export function splitHero(display: string): [string, string] {
  *  (`:625`), and BOTH of ConnectedSurface's own callers gate its render
  *  behind a phase where `deviceName` is never null:
  *  `ConnectedInterstitial.tsx`'s phase gate renders it from `"ready"`
- *  onward (`:773`), and `JustRow.tsx`'s own gate is
- *  `axes.session !== "none" || (showNumbers && axes.program === "armed")`
- *  (`:183`). `deriveSession`/`deriveProgram` (`connectedAxes.ts:215-253`)
+ *  onward, and `JustRow.tsx`'s own gate is
+ *  `axes.session !== "none" ||
+ *   (showNumbers && axes.program === "armed" && axes.link !== "lost")`.
+ *  (Both quoted without line numbers on purpose: the numbers this comment
+ *  used to carry had rotted by the time Phase RN read it, and the predicate
+ *  had gained a clause — the conclusion below survived both, the citations
+ *  did not.) `deriveSession`/`deriveProgram` (`connectedAxes.ts:215-253`)
  *  return `"none"`/not-`"armed"` for every phase that nulls `deviceName`
  *  (`idle` in `INITIAL_STATE`, `picking`, `failed` —
  *  `useMonitorSession.ts:1496`/`:4312`/`:4394`); `disconnected` retains

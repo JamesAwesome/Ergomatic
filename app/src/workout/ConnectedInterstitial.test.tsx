@@ -2446,6 +2446,19 @@ describe("the ready card is a preference (Phase RN)", () => {
    * I-4: SKIP removes the ready card and reaches no other screen. Each case
    * is a phase this screen renders its own treatment for, asserted with the
    * preference set to SKIP — the value that could bypass them.
+   *
+   * THESE THREE CANNOT GO RED ON ANY MUTATION OF THIS FEATURE, and that is
+   * worth saying rather than letting them read as gates. `pairing`,
+   * `programming` and `failed` all early-return ABOVE the
+   * `ready && !numbersRequested` branch, so the initializer cannot reach
+   * them — the spec's named mutation for I-4 ("widen the initializer to force
+   * the flag regardless of phase") is not constructible in this file. They
+   * are regression cover for a future reordering of the ladder, not proof
+   * about the setting.
+   *
+   * Just Row's equivalent case is NOT in the same position: its hand-off arm
+   * sits at the TOP of its ladder, so the same mutation there does bite. The
+   * asymmetry is a property of the two ladders, not of the two test files.
    */
   describe("SKIP reaches no screen but the ready card (I-4)", () => {
     beforeEach(() => {

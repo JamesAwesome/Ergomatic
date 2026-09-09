@@ -126,7 +126,7 @@ describe("SettingsScreen — the four judged-colour slots", () => {
     // A WHOLE-SCREEN census, not a scoped one, so a group appearing here
     // without a test is a failure rather than a silence. Phase RN made it
     // five: the four colour slots plus READY SCREEN, which has its own
-    // describe block below and its own three options.
+    // describe block below and its own two options.
     const groups = screen.getAllByRole("radiogroup");
     expect(groups.map((g) => g.getAttribute("aria-label"))).toStrictEqual([
       "Pace faster color",
@@ -378,8 +378,11 @@ describe("SettingsScreen — a refused write belongs to the control that made it
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent(/reload/i);
     expect(alert).not.toHaveTextContent(/colors/i);
-    // The choice is still live for this session — the whole promise of the
-    // store's in-memory fallback.
+    // The CONTROL still shows the new choice, which is this screen's half of
+    // the promise. `saveReadyCard` is mocked to `false` here, so the store's
+    // real in-memory fallback never runs — that half is `readyCard.test.ts`'s
+    // "still governs the next connect..." pair, and saying so keeps this
+    // assertion from being read as covering it.
     expect(checkedIn("Ready screen")).toBe("SKIP");
   });
 
