@@ -19,6 +19,7 @@ import {
 } from "../../domain/monitor/pm5/uuids.js";
 import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
 import JustRow from "./JustRow";
+import { ProgramRejectionError } from "../monitor/driver";
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 
@@ -597,6 +598,31 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     // The retry goes back through the real connect, not a private path.
     expect(connect).toHaveBeenCalledTimes(2);
+  });
+
+  // RF32, the SECOND door. `ConnectedInterstitial.test.tsx` owns the derived
+  // enumeration over every `ProgramRejectionReason` (the string is what
+  // varies, and it is produced once, by `ProgramRejectionError`); this pins
+  // that THIS door renders that same producer's message rather than a
+  // prettified copy of its own — the failure mode being a future door that
+  // re-derives the sentence and reintroduces the brand name.
+  it("a machine rejection reads 'The monitor ...' here too, never 'PM5'", async () => {
+    const err = new ProgramRejectionError({
+      reason: "nak",
+      atFrame: 0,
+      hexTrace: "write 76 04 1a | ack 76 04 1b",
+    });
+    mockSession({
+      phase: "failed",
+      error: { reason: "nak", detail: err.message, raw: err.hexTrace },
+    });
+    await renderMocked();
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      screen.getByText("The monitor rejected frame 0"),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("PM5");
   });
 
   /**

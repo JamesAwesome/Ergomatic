@@ -162,8 +162,8 @@ export type ConnectedPhase =
  *
  * - `"busy"` — `ProgramBusyError`, thrown before a second `program()` ever
  *   reaches the wire. Deliberately NOT a `ProgramRejectionReason` (spec's
- *   I6 ruling): the PM5 never saw the call, so rendering "PM5 rejected"
- *   copy for it would be a lie about the machine.
+ *   I6 ruling): the machine never saw the call, so rendering "The monitor
+ *   rejected" copy for it would be a lie about it.
  * - `"transport-missing"` — no radio at all on this platform/build.
  * - `"scan-dismissed"` — the rower closed the monitor chooser (or it
  *   returned nothing). Not an error in any moral sense; it renders on state 6's
@@ -1608,8 +1608,9 @@ function mapProgramFailure(err: unknown): ConnectedError {
   if (err instanceof ProgramBusyError) {
     return {
       reason: "busy",
-      // Never "PM5 ..." phrasing: nothing was sent, so the machine has no
-      // opinion about this call (the error class's own doc comment).
+      // Never machine-attributing phrasing (the "The monitor ..." shape
+      // `ProgramRejectionError` uses): nothing was sent, so the machine has
+      // no opinion about this call (the error class's own doc comment).
       detail: "A programming attempt is already in flight.",
       raw: err.message,
     };

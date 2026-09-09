@@ -227,7 +227,12 @@ export type ProgramRejectionReason =
   | "not-observed"
   | "structure-mismatch";
 
-const REJECTION_VERBS: Record<ProgramRejectionReason, string> = {
+/** The rower-facing verb for each rejection reason, exhaustive by type.
+ *  EXPORTED so the copy gate can enumerate every reason from production
+ *  rather than from a hand-typed list that silently narrows when a ninth
+ *  reason appears (`ConnectedInterstitial.test.tsx`, "no rendered failure
+ *  frame says PM5"). */
+export const REJECTION_VERBS: Record<ProgramRejectionReason, string> = {
   nak: "rejected",
   bad: "reported the frame as malformed (bad)",
   "not-ready": "reported not ready",
@@ -261,10 +266,23 @@ export class ProgramRejectionError extends Error implements ProgramRejection {
   constructor(rejection: ProgramRejection) {
     // Verify-phase failures (`atFrame: -1`) have no frame index worth
     // printing — "frame -1" would read as a bug, not a deliberate sentinel.
+    //
+    // "The monitor", never "PM5" (RF32, corrected 2026-09-09). This message
+    // has exactly ONE consumer and it is rower-facing: `mapProgramFailure`
+    // (`useMonitorSession.ts`) maps it to `ConnectedError.detail`, which
+    // every failure door renders — the interstitial's DETAIL panel and, for
+    // `disconnected`, its serif headline; Just Row's body line; the Just Row
+    // observer's. The diagnostic path never reads it: both throw sites log
+    // `${reason} at frame ${n}: ${hexTrace}` to the ring, and `raw` carries
+    // `hexTrace`. So there is nothing to split off into a "what the PM5 said"
+    // string — a second vocabulary would have no reader. The ATTRIBUTION is
+    // unchanged and is the part that matters (contrast `ProgramBusyError`):
+    // these are still statements about what the machine said or failed to
+    // say; only the machine's brand name is gone.
     super(
       rejection.atFrame >= 0
-        ? `PM5 ${REJECTION_VERBS[rejection.reason]} frame ${rejection.atFrame}`
-        : `PM5 ${REJECTION_VERBS[rejection.reason]}`,
+        ? `The monitor ${REJECTION_VERBS[rejection.reason]} frame ${rejection.atFrame}`
+        : `The monitor ${REJECTION_VERBS[rejection.reason]}`,
     );
     this.name = "ProgramRejectionError";
     this.reason = rejection.reason;
@@ -291,7 +309,8 @@ export class ProgramRejectionError extends Error implements ProgramRejection {
  * say over the wire. This is neither: no frame was ever sent for the
  * rejected call, so there is nothing the machine could have said about
  * it. The message is worded to match — it never attributes this to the
- * PM5 (contrast `ProgramRejectionError`'s own `"PM5 <verb>"` phrasing).
+ * machine at all (contrast `ProgramRejectionError`'s own
+ * `"The monitor <verb>"` phrasing, which does).
  */
 export class ProgramBusyError extends Error {
   override readonly name = "ProgramBusyError";

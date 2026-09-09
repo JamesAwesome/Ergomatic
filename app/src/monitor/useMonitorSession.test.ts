@@ -6456,8 +6456,14 @@ describe("useMonitorSession: failures", () => {
     });
 
     expect(result.current.error?.reason).toBe("busy");
-    // Never "PM5 rejected"-class copy: the machine never saw this call...
+    // Never machine-refusal copy: the machine never saw this call. Both
+    // vocabularies are excluded — "PM5" (the phrasing
+    // `ProgramRejectionError` used until RF32 anonymised it, 2026-09-09)
+    // and "The monitor" (the phrasing it uses now) — because the invariant
+    // is that busy attributes NOTHING to the machine, not that it avoids
+    // one particular noun.
     expect(result.current.error?.detail).not.toContain("PM5");
+    expect(result.current.error?.detail).not.toContain("The monitor");
     // ...and no byte went out for it either.
     expect(transport.wireWrites).toBe(writesAtRetry);
   });

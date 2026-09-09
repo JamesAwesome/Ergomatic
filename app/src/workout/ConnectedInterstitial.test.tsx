@@ -52,6 +52,11 @@ import { buildRun, type EnginePhase } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { createFakeTransport } from "../monitor/transports/fake";
 import {
+  ProgramRejectionError,
+  REJECTION_VERBS,
+  type ProgramRejectionReason,
+} from "../monitor/driver";
+import {
   useMonitorSession,
   type ConnectedError,
   type MonitorSession,
@@ -563,7 +568,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       error: connectedError({
         reason: "structure-mismatch",
         detail:
-          'PM5 reported "armed" while holding a different workout than the one just sent',
+          'The monitor reported "armed" while holding a different workout than the one just sent',
         raw: triple,
       }),
     });
@@ -585,12 +590,15 @@ describe("state 6: failed — every ConnectedError rendered", () => {
   });
 
   it.each([
-    ["nak", "PM5 rejected frame 3"],
-    ["bad", "PM5 reported the frame as malformed (bad)"],
-    ["not-ready", "PM5 reported not ready"],
-    ["garbled", "PM5 returned a frame this driver could not even parse"],
-    ["timeout", "PM5 never acked (ack-timeout policy)"],
-    ["not-observed", 'PM5 never reported "armed"'],
+    ["nak", "The monitor rejected frame 3"],
+    ["bad", "The monitor reported the frame as malformed (bad)"],
+    ["not-ready", "The monitor reported not ready"],
+    [
+      "garbled",
+      "The monitor returned a frame this driver could not even parse",
+    ],
+    ["timeout", "The monitor never acked (ack-timeout policy)"],
+    ["not-observed", 'The monitor never reported "armed"'],
   ] as const)(
     "machine reason '%s' also gets the generic serif line, never its own detail as the headline",
     (reason, detail) => {
@@ -607,6 +615,64 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       ).toBeNull();
     },
   );
+
+  // -------------------------------------------------------------------------
+  // RF32 GATE: no rejection a rower reads says "PM5".
+  //
+  // The class this exists to stop: `ProgramRejectionError`'s message is
+  // `ConnectedError.detail` verbatim (`mapProgramFailure`), and `detail` is
+  // rendered copy on every failure door — so a driver-side message change
+  // reaches a rower without passing any copy review. It shipped that way for
+  // all eight reasons and the branch's own record said it had not.
+  //
+  // Built from the REAL producer (a `ProgramRejectionError`), not from a
+  // string typed here: a hand-copied fixture pins this test's own idea of
+  // the copy, not production's.
+  // -------------------------------------------------------------------------
+  describe("RF32: no rejection copy names the PM5", () => {
+    // DERIVED, not hand-listed (RF37): `REJECTION_VERBS` is
+    // `Record<ProgramRejectionReason, string>`, so a ninth reason cannot
+    // reach the driver without appearing in this loop. A typed-out list of
+    // eight would keep passing while the ninth shipped "PM5 ...".
+    const reasons = Object.keys(REJECTION_VERBS) as ProgramRejectionReason[];
+
+    it("enumerates every reason the driver has", () => {
+      expect(reasons).toHaveLength(8);
+    });
+
+    // BOTH message branches: a send-phase rejection (`atFrame >= 0`, which
+    // prints the frame index) and a verify-phase one (the `-1` sentinel).
+    it.each(
+      reasons.flatMap((reason) =>
+        [0, -1].map((atFrame) => [reason, atFrame] as const),
+      ),
+    )("'%s' at frame %i", (reason, atFrame) => {
+      const err = new ProgramRejectionError({
+        reason,
+        atFrame,
+        hexTrace: "write 76 04 1a | ack 76 04 1b",
+      });
+      renderInterstitial({
+        phase: "failed",
+        deviceName: DEVICE_NAME,
+        error: { reason, detail: err.message, raw: err.hexTrace },
+      });
+
+      // The frame really rendered the rejection — asserted BEFORE the
+      // negative, so an empty frame cannot pass this by saying nothing.
+      expect(document.body.textContent).toContain(REJECTION_VERBS[reason]);
+
+      // The one exemption RF32 allows here: the status label is the
+      // monitor's own advertised name, which is the app saying WHICH
+      // monitor. Removed rather than excused, so the sweep below covers
+      // every other node in the frame including any added later.
+      const label = document.querySelector(".connected-status-label")!;
+      expect(label.textContent).toBe(DEVICE_NAME);
+      label.remove();
+
+      expect(document.body.textContent).not.toContain("PM5");
+    });
+  });
 
   function serifText(): string {
     return document.querySelector(".connected-serif-line")!.textContent ?? "";
@@ -656,10 +722,10 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "disconnected",
-        detail: "PM5 disconnected before completing",
+        detail: "The monitor disconnected before completing",
       }),
     });
-    expect(serifText()).toBe("PM5 disconnected before completing");
+    expect(serifText()).toBe("The monitor disconnected before completing");
     expect(
       screen.queryByText(
         "End whatever is showing on the monitor, then try again.",
@@ -1016,7 +1082,10 @@ describe("Try again — inert unless phase is 'failed' or 'disconnected'", () =>
     const { session: s } = renderInterstitial({
       phase: "failed",
       deviceName: DEVICE_NAME,
-      error: connectedError({ reason: "nak", detail: "PM5 rejected frame 3" }),
+      error: connectedError({
+        reason: "nak",
+        detail: "The monitor rejected frame 3",
+      }),
     });
     vi.mocked(s.connect).mockClear();
 
@@ -1033,7 +1102,10 @@ describe("Try again — inert unless phase is 'failed' or 'disconnected'", () =>
     const { session: s } = renderInterstitial({
       phase: "failed",
       deviceName: null,
-      error: connectedError({ reason: "nak", detail: "PM5 rejected frame 3" }),
+      error: connectedError({
+        reason: "nak",
+        detail: "The monitor rejected frame 3",
+      }),
     });
     vi.mocked(s.connect).mockClear();
     const button = screen.getByRole("button", { name: "Try again" });
