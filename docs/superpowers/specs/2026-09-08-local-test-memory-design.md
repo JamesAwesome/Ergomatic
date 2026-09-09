@@ -356,13 +356,23 @@ maxWorkers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_TEST_WORKERS, 4
 **B2.** In `playwright.config.ts`:
 
 ```ts
-workers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_E2E_WORKERS, 2),
+workers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_E2E_WORKERS, 3),
 ```
 
-**Cost untested** for B2: no wall-clock or RSS measurement of the e2e
-suite at either setting, because each run rebuilds and boots a compose
-stack. Flagged rather than guessed (recurring failure 30); the
-implementing PR measures it and records the number.
+**Cost measured (Task 4, 2026-09-08), replacing the "untested" tag above.**
+`pnpm e2e` rebuilds and boots the compose stack every invocation, so each
+figure below includes that fixed cost, not only the 547-test run:
+
+| `--workers` | Test-phase time | Total wall (`time pnpm e2e`) |
+| --- | --- | --- |
+| 2 | 5.5 m | 6:12 |
+| 3 | 3.6 m | 3:58 |
+| 5 (old default) | 2.3 m | 2:39 |
+
+2 workers costs 2.34-2.39x the old default of 5, over this spec's ~2x
+threshold, so the implementing PR raised the default from the proposed 2
+to **3**, which costs only ~1.5x (test phase 3.6/2.3, total wall
+237.57s/159.13s). All three runs passed the full 547-test suite.
 
 **Why `workerCap` is shaped the way it is**, run through absent / empty /
 valued (an earlier draft described this wrongly, claiming `"-2"` passed
