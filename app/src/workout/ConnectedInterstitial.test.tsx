@@ -61,6 +61,7 @@ import { commentStrippedSource, cssRules } from "../test/cssView";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import ConnectedInterstitial, {
+  forgetLastDevice,
   loadLastDevice,
   saveLastDevice,
 } from "./ConnectedInterstitial";
@@ -252,6 +253,77 @@ describe("saveLastDevice / loadLastDevice — the LAST USED caption's own storag
       });
     expect(() => saveLastDevice("PM5 430123456")).not.toThrow();
     spy.mockRestore();
+  });
+
+  it("forgetLastDevice un-remembers only the name it is given", () => {
+    saveLastDevice("PM5 430123456");
+    forgetLastDevice("PM5 999999999");
+    expect(loadLastDevice()).toBe("PM5 430123456");
+    forgetLastDevice("PM5 430123456");
+    expect(loadLastDevice()).toBeNull();
+  });
+
+  it("a removeItem failure is swallowed too — symmetric with saveLastDevice", () => {
+    saveLastDevice("PM5 430123456");
+    const spy = vi
+      .spyOn(Storage.prototype, "removeItem")
+      .mockImplementation(() => {
+        throw new DOMException("storage disabled", "SecurityError");
+      });
+    expect(() => forgetLastDevice("PM5 430123456")).not.toThrow();
+    spy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The other half of the LAST USED invariant, at the layer that can reach it:
+// the refusal effect's own guard. A refusal frame that never named a device
+// is unreachable through the real hook (the refusal rides a decoded 0x0032,
+// so the pair always precedes it), but it IS a state this component can be
+// handed, and what it must NOT do is clear a caption it never wrote.
+// ---------------------------------------------------------------------------
+
+describe("the refusal frame and an unrelated LAST USED", () => {
+  it("a refusal on a session that never named a device leaves an existing LAST USED alone", () => {
+    // A different monitor, remembered from an earlier sitting that this
+    // component never saw.
+    saveLastDevice("PM5 430123456");
+
+    mockUseMonitorSession.mockReturnValue(
+      session({
+        phase: "failed",
+        deviceName: null,
+        error: connectedError({
+          reason: "unsupported-machine",
+          detail:
+            "Erg type not supported\nThis monitor is on a SkiErg. Nothing here will start.",
+        }),
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <ConnectedInterstitial
+          request={{
+            kind: "picker",
+            attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+          }}
+          program={FIXTURE.program}
+          phases={FIXTURE.phases}
+          identity={FIXTURE.identity}
+          baselines={baselines}
+          nudgedCount={0}
+          onExit={vi.fn()}
+          onRowInstead={vi.fn()}
+          onEnded={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // The refusal really rendered, so the survival below is a statement about
+    // the effect having run and declined, not about it never firing.
+    expect(screen.getByText("Erg type not supported")).toBeInTheDocument();
+    expect(loadLastDevice()).toBe("PM5 430123456");
   });
 });
 
