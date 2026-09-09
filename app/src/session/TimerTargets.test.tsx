@@ -293,7 +293,9 @@ describe("TimerTargets (component)", () => {
 // Task-3 review, HIGH-1: `.timer-card-actual-stale` shipped this task
 // pointing at `--ink-5` (2.76:1 against `--surface` — FAILS the house's
 // binding >=4.5:1 AA rule), against the connected-mode handoff's explicit
-// "every stale value greys to --ink-3" (7.44:1, passes). jsdom never loads
+// "every stale value greys to --ink-3" (7.43:1, passes; this comment said
+// 7.44 until Phase JC Task 8 recomputed it — the true figure is 7.432 and
+// `index.css`'s own copies already read 7.43). jsdom never loads
 // `index.css` as real stylesheet rules (no browser layout engine backs
 // `getComputedStyle` here), so a rendered-element assertion can't catch a
 // wrong token the way `e2e/design.spec.ts` does for routes that actually
@@ -306,10 +308,13 @@ describe("TimerTargets (component)", () => {
 // class hooks the removed describe block above used to exercise through
 // it) is RETIRED — Task 7 built pane C/A's judged cells as rows in
 // `PaneTimer.tsx`/`PaneGrid.tsx` directly, never through this component —
-// but `.timer-card-actual-{judgement}` itself is very much live, rendered
-// today by `PaneLive.tsx`'s hero and `PaneGrid.tsx`'s judged cells on the
-// real `/library/:id` connected surface (connected-revamp Task 2 retired
-// `PaneTimer.tsx`, pane A, an earlier renderer of the same hook); this
+// but the judgement-keyed hooks are very much live, rendered today by
+// `PaneLive.tsx`'s hero and `PaneGrid.tsx`'s judged cells on the real
+// `/library/:id` connected surface (connected-revamp Task 2 retired
+// `PaneTimer.tsx`, pane A, an earlier renderer of the same hook). Phase JC
+// split that family: `faster`/`slower` are a rower's to recolour and moved
+// to `judge-{pace,spm}-{judgement}`, so `timer-card-actual-` now covers
+// `within` and `stale` alone — including `-stale`, the rule below. This
 // test's own CSS-source-reading approach remains the honest ceiling for a
 // token jsdom cannot compute.
 describe("index.css: .timer-card-actual-stale resolves to the AA-passing token (review HIGH-1)", () => {

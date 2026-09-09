@@ -21,8 +21,35 @@ invisible on device.
 release notes** (James, 2026-08-09) — the News tab's Releases screen,
 written in the app's own voice, covering what testers actually get rather
 than what merged. The notes PR merges BEFORE the tag: the screen names the
-version they are about to receive, and three e2e pins force a deliberate
-touch when it changes.
+version they are about to receive, and e2e pins force a deliberate touch
+when it changes.
+
+### The three edits a notes PR makes, and the one that hides
+
+Written down after v0.44.0, where the third was got wrong twice before the
+count caught it.
+
+1. **`app/e2e/releasePin.ts`** — one literal, `NEWEST_RELEASE_VERSION`. Four
+   assertion sites consume it (`news.spec.ts` ×2, `screenshots.spec.ts` ×2),
+   which is why it is one literal and not four: that file's own header
+   records the two releases broken by a second copy drifting.
+2. **`news.spec.ts`'s `toHaveCount(N)`** on `.news-release-version` — N+1.
+3. **`news.spec.ts`'s `nth()` ladder** — every rung shifts down by one, AND
+   **the oldest entry needs a NEW assertion of its own**. This is the one
+   that hides: a shift that rewrites `nth(1)..nth(45)` and stops there
+   silently drops the last version's assertion, because there is nothing to
+   rewrite it INTO. The ladder still reads correctly top to bottom and every
+   line in it passes. **The count in step 2 is what catches it** — 47 rows
+   against 46 assertions — so do step 2 and step 3 in the same edit and let
+   them check each other.
+
+**`src/news/Releases.test.tsx` is NOT a fourth pin and must not be "bumped".**
+It asserts `toHaveLength(RELEASE_NOTES.length)` and maps the array, so it
+derives from the notes and self-adjusts; it has not been edited since #58,
+across every release since. It failed once during v0.44.0's own release and
+that was an unrelated order-dependent flake (filed in ROADMAP), not a stale
+pin — a distinction worth keeping, because "the suite told me to edit it" was
+the wrong reading and it nearly went into this document as fact.
 
 The usual shape is a separate notes PR merged just before the tag (v0.8.0 and
 v0.9.0 both went out that way). **It is not the only shape:** v0.26.0's tag

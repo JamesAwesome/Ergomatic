@@ -94,9 +94,19 @@ export function singleTargetHint(
   return `TARGET ${fmtSplit(only!)}`;
 }
 
+/** THREE STATES, NOT FOUR (Phase JC): this parameter cannot take `within`
+ *  or `stale` — the `Judgement` members the connected panes also render —
+ *  so the only classes reachable here are the two preference-bearing ones.
+ *
+ *  PACE, HARDCODED. A rower chooses a colour per SLOT, and this surface's
+ *  SPM cell is not tinted at all, so both verdicts here belong to the pace
+ *  pair. The connected panes share these exact class names (`PaneLive.tsx`,
+ *  `PaneGrid.tsx`) rather than the `summary-row-*` pair this replaced:
+ *  four rules in `index.css` now serve every judged number in the app, so
+ *  a rower's pace choice reaches both surfaces from one place. */
 function judgedColorClass(direction: "faster" | "slower" | undefined): string {
-  if (direction === "faster") return "summary-row-faster";
-  if (direction === "slower") return "summary-row-slower";
+  if (direction === "faster") return "judge-pace-faster";
+  if (direction === "slower") return "judge-pace-slower";
   return "";
 }
 
@@ -446,7 +456,6 @@ export function SummaryIntervalsBlock({
   caption?: string;
 }) {
   if (rows.length === 0) return null;
-  const hasJudgedRow = rows.some((r) => r.measured && r.judged !== undefined);
   return (
     <div className="summary-intervals">
       <div className="summary-intervals-header">
@@ -460,9 +469,6 @@ export function SummaryIntervalsBlock({
           <IntervalRow key={i} row={row} />
         ))}
       </ul>
-      {hasJudgedRow && (
-        <p className="summary-legend">← FASTER (BLUE) · SLOWER (RED) →</p>
-      )}
       {caption !== undefined && (
         <p className="summary-targets-only-caption">{caption}</p>
       )}

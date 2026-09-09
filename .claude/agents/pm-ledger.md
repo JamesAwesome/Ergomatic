@@ -6180,3 +6180,63 @@ routes the rower to store the ski piece as a rowing log. Checked —
 follows; the local harm does. Not clearly wrong (the likeliest cause of this
 screen is picking the wrong monitor, and that rower has a RowErg), so: a
 ROADMAP row and one Gate 0 sentence, not a blocker.
+
+## 2026-09-08 — Phase JC, the You-tab IA question (asked at Gate 0)
+
+James asked whether the You doors should collapse into an "Advanced" menu
+(Concept2 / Pace Colors / Diagnostics) or a "Settings" menu holding the same
+three, leaving BASELINES + one door. **Both options were the same shape
+differing only in the word; the real choice was container-or-not, and the PM
+recommendation was NEITHER — keep the group flat as his own hour-old ruling had
+it (BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS) and revisit when a SECOND
+preference exists.**
+
+**A DOOR THAT CARRIES A STATE LINE IS A NOTIFICATION SURFACE, AND NESTING IT
+DELETES THE NOTIFICATION.** `Concept2Row` renders `RECONNECT NEEDED` and
+`SEND FAILED` on the row itself, and `api/useConcept2Link.ts` says where that
+sticky account-level flag surfaces verbatim: *"Read by the You row
+(`SEND FAILED`), the card's pill, and the screen's mode line; never by the send
+block."* Two of the three are already behind `/you/concept2`; the row is the
+only ambient one. The per-log-row `Concept2SendBlock` shows that row's send
+state and explicitly does NOT carry the account flag. **Before moving any row
+behind a new door, grep what the row DISPLAYS, not just where it goes — a row
+with a state line is the last cheap place a rower learns a shipped feature
+broke.**
+
+**THE APP HAS ALREADY RULED ON THE WORD "ADVANCED", AT A GATE 0.**
+`you/Diagnostics.tsx`'s first comment (Gate 0 rev 2/3, 2026-09-01): *"Named
+DIAGNOSTICS (not "advanced"/"debug") because that is the word the app already
+uses for this class of thing."* `grep -rn -i "advanced" app/src docs/design
+ROADMAP.md` returns only unrelated prose. A naming question that a Gate 0 has
+settled is re-opened deliberately or not at all.
+
+**"ADVANCED" IS A WARNING AND "SETTINGS" IS AN INVITATION, AND NEITHER SURVIVES
+A MIXED DRAWER.** Behind the proposed door sat a preference the spec exists to
+ENCOURAGE, an account link, and a log dump. An invitation behind a warning is
+suppressed; a log dump behind "Settings" is dishonest (nothing there is
+adjustable). **When no word fits a proposed container's contents, that is
+evidence about the CONTAINER, not about the vocabulary.**
+
+**COUNT THE PIPELINE BEFORE BUILDING FOR IT.** Nine candidate rows were named:
+one live, two parked with a fired trigger and no owner, four trigger-gated (one
+the ROADMAP itself calls "polish"), one with no ROADMAP row at all, and two
+(Concept2, Diagnostics) that are not settings. Filing-as-deferral one level up.
+Corollary: **the device account switcher is an identity ACTION and belongs
+beside Sign out, and Today's difficulty/time filters belong near Today** — the
+app already puts Library's filters on Library.
+
+**The grouping rule cut AGAINST the bundle, and saying which way it cuts is
+part of the verdict.** JC is TRIAD (a stored shape). An IA restructure is a
+second, unrelated risk model (navigation/discoverability). CLAUDE.md's own
+tie-break splits it, and the triad exception says triad work lands alone when
+bundling makes its gate harder to run.
+
+**Naming: "Pace Colors" under-names a feature that also colours SPM.** Four
+slots — pace faster/slower AND SPM faster/slower. Row stays `SETTINGS`; `COLORS`
+is the section heading the spec already draws. A row named COLORS needs renaming
+the moment the countdown setting lands.
+
+**The cheapest way to settle a crowding question is the capture the gate already
+owes.** JC's Gate 0 item 2 requires a four-row group captured against today's
+three-row one. An IA decision taken from a list of rows that do not exist yet is
+taken without the one artifact that would answer it.

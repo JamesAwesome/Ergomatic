@@ -49,14 +49,45 @@
   --type-o2: #2a6275;
   --type-at: #8a5f18;
   --type-an: #5c4382;
-  /* THE LIVE JUDGEMENT PAIR (tester feedback via James, 2026-08-13: "faster
-     than target split should be blue, slower should be red, make sure the
-     spm colors are the same"). Read by `.timer-card-actual-faster/-slower`
-     in index.css, whose suffixes come straight from `domain/judge.ts`'s
-     `Judgement` union — so both judged metrics, split and rate, are tinted
-     by this one pair with no per-metric branch anywhere. That is what makes
-     the testers' "same colors" request structural rather than a convention
-     someone has to remember.
+  /* THE LIVE JUDGEMENT PALETTE (tester feedback via James, 2026-08-13:
+     "faster than target split should be blue, slower should be red, make
+     sure the spm colors are the same"), in TWO LAYERS since Phase JC.
+
+     --judge-blue and --judge-red are the RAW INKS: the only two colours a
+     rower may choose, and the only ones anything that is not a judged
+     number may paint from. The four --judge-{pace,spm}-{faster,slower}
+     below are the RESOLVED SLOTS: what each judged number currently
+     resolves TO, overridden at runtime by inline style on
+     `document.documentElement` (`you/judgeColors.ts`) when a rower picks a
+     different colour for a slot. Every consumer is plain CSS reading a
+     slot; nothing learns that a preference exists.
+
+     WHY THE TWO LAYERS EXIST AT ALL: `.connected-lost` — the red LOST THE
+     MONITOR banner in index.css — is an ALARM, not a judged number, and
+     must stay red at every setting, including all-blue. It paints from the
+     raw --judge-red. Overriding the inks in place would have been fewer
+     lines and would have turned the alarm blue.
+
+     That a custom property may hold a var() reference and resolve through
+     it is PRIMARY — CSS Custom Properties Level 1 §2.3: "Custom properties
+     are left almost entirely unevaluated, except that they allow and
+     evaluate the var() function in their value." --ink-1 below already
+     ships this indirection.
+
+     The slot suffixes still come straight from `domain/judge.ts`'s
+     `Judgement` union; the {pace,spm} half is what the testers' "same
+     colors" request no longer gets for free, and is why the four names
+     exist rather than one pair. Their defaults above keep pace and SPM
+     identical out of the box.
+
+     ONLY TWO OF THE FOUR `Judgement` MEMBERS GET A SLOT. `within` is
+     plain `--ink` and `stale` is `--ink-3` grey, and neither is a colour
+     a rower may choose — on-target has nothing to say and a held reading
+     is grey precisely because we cannot vouch for it. Their rules stay on
+     the `.timer-card-actual-` prefix in `index.css`, outside the
+     preference. `--judge-faster`/`--judge-slower`, the single pair that
+     served both metrics until Phase JC Task 3, were deleted there with
+     their last emitter.
 
      THEIR OWN TOKENS, not a third borrowing of --type-o2/--type-at (the
      teal/ochre the handoff specified, sanctioned for this second meaning by
@@ -68,18 +99,34 @@
 
      Deliberately NOT --accent (#b5341f) for the red: accent means exactly
      four things and a live verdict is not one of them — DEVIATIONS row 0
-     keeps accent off these panes entirely. --judge-slower is a deeper,
+     keeps accent off these panes entirely. --judge-red is a deeper,
      browner red so the two never read as the same ink.
 
-     Contrast, measured against both backgrounds a judged value sits on
-     (--surface #fffdf7, --page #f4f1e8): --judge-faster 8.25:1 / 7.43:1,
-     --judge-slower 7.94:1 / 7.15:1. Both clear the house 4.5:1 floor with
-     more headroom than the teal/ochre they replace (6.65 / 5.53 against
-     --surface), which matters more here than anywhere else in the app:
-     this is the one tint a rower reads mid-piece, at arm's length, out of
-     the corner of an eye. */
-  --judge-faster: #1d4e89;
-  --judge-slower: #962718;
+     Contrast, recomputed 2026-09-08 rather than carried forward (the WCAG
+     relative-luminance formula over these hexes), against the THREE
+     backgrounds a judged value sits on:
+
+                        --surface   --page    --surface-sunken
+                        #fffdf7     #f4f1e8   #efeade
+       --judge-blue     8.25:1      7.43:1    6.99:1
+       --judge-red      7.94:1      7.15:1    6.73:1
+
+     THREE, not two. This comment said "both backgrounds" until Phase JC
+     Task 8, and the third one is reachable today: a resting active grid
+     row sinks to --surface-sunken (`.connected-grid-active.connected-grid-
+     resting` in index.css) while `surfaceModel.ts` nulls only the PACE
+     judgement there and keeps the SPM one, so a judged rate genuinely
+     paints on sunken paper. Every figure clears the house 4.5:1 floor,
+     with more headroom than the teal/ochre they replace (--type-o2 6.65:1
+     and --type-at 5.53:1 against --surface), which matters more here than
+     anywhere else in the app: this is the one tint a rower reads
+     mid-piece, at arm's length, out of the corner of an eye. */
+  --judge-blue: #1d4e89;
+  --judge-red: #962718;
+  --judge-pace-faster: var(--judge-blue);
+  --judge-pace-slower: var(--judge-red);
+  --judge-spm-faster: var(--judge-blue);
+  --judge-spm-slower: var(--judge-red);
   /* GOLD MEANS "LOOK HERE", NEVER "YOU ARE BEHIND" (James, 2026-08-13:
      "use gold for 'not a judgement' since we switched to red"). The
      connected panes mark the one cell that is counting down

@@ -87,11 +87,34 @@ import { type SurfaceModel } from "./surfaceModel";
 // `Judgement`, not `string` (tail review M-7, carried forward): the class
 // suffix IS the union member, so a member renamed without its CSS rule
 // following stops compiling here rather than sitting silent.
+//
+// TWO PREFIXES, AND THE SPLIT IS ABOUT WHO OWNS THE COLOUR (Phase JC).
+// `faster` and `slower` are the two verdicts a rower may recolour or
+// silence per metric on the SETTINGS screen, so they reach CSS on a class
+// that names the metric — pace and spm resolve separate tokens.
+// `within` and `stale` are NOT a rower's to choose (on-target is plain ink
+// by design and a held reading is grey because we cannot vouch for it), so
+// they keep the `timer-card-actual-` prefix and stay outside the
+// preference entirely.
+//
+// `metric` is REQUIRED and has no default: this pane judges pace at two
+// sites and spm at a third, and a default would make a forgotten argument
+// silently right for one of them — invisible in the shipped palette, where
+// both metrics resolve to the same blue and red, and wrong only for the
+// rower who has changed a slot. `PaneGrid.tsx`'s `cellClass` carries the
+// same pair of rules for the same reason.
+function judgementClass(judgement: Judgement, metric: "pace" | "spm"): string {
+  return judgement === "faster" || judgement === "slower"
+    ? `judge-${metric}-${judgement}`
+    : `timer-card-actual-${judgement}`;
+}
+
 function judgedClass(
   base: string,
   value: { judgement: Judgement; absent: boolean },
+  metric: "pace" | "spm",
 ): string {
-  return `${base} timer-card-actual-${value.judgement}${
+  return `${base} ${judgementClass(value.judgement, metric)}${
     value.absent ? " connected-value-absent" : ""
   }`;
 }
@@ -151,7 +174,7 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
   const resting = model.restCountdown !== null;
   const paceValueClass = resting
     ? "connected-hero-value connected-hero-value-rest"
-    : `${judgedClass("connected-hero-value", model.pace)}${
+    : `${judgedClass("connected-hero-value", model.pace, "pace")}${
         model.status === "armed" ? " connected-hero-ghost" : ""
       }`;
 
@@ -299,7 +322,11 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
               <>
                 <span className="connected-hero-avg-label">AVG</span>
                 <span
-                  className={judgedClass("connected-hero-avg-value", model.avg)}
+                  className={judgedClass(
+                    "connected-hero-avg-value",
+                    model.avg,
+                    "pace",
+                  )}
                 >
                   {model.avg.display}
                 </span>
@@ -312,7 +339,9 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           {heroLabel !== "" && (
             <span className="connected-hero-label">{heroLabel}</span>
           )}
-          <span className={judgedClass("connected-hero-value", model.rate)}>
+          <span
+            className={judgedClass("connected-hero-value", model.rate, "spm")}
+          >
             {model.rate.display}
           </span>
           <div className="connected-hero-target">

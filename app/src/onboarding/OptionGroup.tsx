@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 
 /** Phase BL PR C — the questionnaire's single-select control (canvas
  *  Question1/Question2). Roving tabindex (WAI-ARIA radiogroup pattern),
@@ -22,19 +22,32 @@ import { useRef, type KeyboardEvent } from "react";
  *  Arrow keys move selection and NEVER confirm: wiring advance into
  *  `onChange` instead would yank a keyboard user forward on every
  *  arrow press, which is exactly the roving-tabindex contract this
- *  control exists to keep. */
+ *  control exists to keep.
+ *
+ *  Phase JC Task 5 generalised the control for its second caller, the
+ *  judge-colour settings screen, which needs the keyboard contract and
+ *  none of the questionnaire's styling. `label` is a `ReactNode` so an
+ *  option can carry a colour swatch beside its word (a `string` label
+ *  and a button with no `data-value` left no hook to paint one), and
+ *  `className`/`optionClassName` default to the onboarding names so
+ *  every onboarding render is unchanged. The `value === null` tab stop
+ *  below stays onboarding-only: a colour slot always holds a value. */
 export default function OptionGroup<V extends string>({
   options,
   value,
   onChange,
   onConfirm,
   ariaLabel,
+  className = "onb-options",
+  optionClassName = "onb-option",
 }: {
-  options: readonly { value: V; label: string }[];
+  options: readonly { value: V; label: ReactNode }[];
   value: V | null;
   onChange: (next: V) => void;
   onConfirm?: (next: V) => void;
   ariaLabel: string;
+  className?: string;
+  optionClassName?: string;
 }) {
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -65,7 +78,7 @@ export default function OptionGroup<V extends string>({
   }
 
   return (
-    <div className="onb-options" role="radiogroup" aria-label={ariaLabel}>
+    <div className={className} role="radiogroup" aria-label={ariaLabel}>
       {options.map((option, index) => {
         const checked = value === option.value;
         // The single tab stop: the checked option, or — uniquely to this
@@ -80,7 +93,7 @@ export default function OptionGroup<V extends string>({
             type="button"
             role="radio"
             aria-checked={checked}
-            className="onb-option"
+            className={optionClassName}
             tabIndex={tabStop ? 0 : -1}
             onClick={() => {
               // Click is the ACTIVATION path: a pointer tap, or Enter/

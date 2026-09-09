@@ -763,16 +763,32 @@ describe("the control is LABELLED (handoff §3, DEVIATIONS row 4)", () => {
 // ---------------------------------------------------------------------------
 
 /** Every judged value on whichever pane is showing, as
- *  `[label, text, judgement class]`. The panes' cards and pane B's hero all
- *  wear `timer-card-actual-{judgement}`, which is what makes this one query
- *  able to sweep them. */
-function judgedCells(): { text: string; judgement: string }[] {
+ *  `[label, text, judgement class]`. TWO PREFIXES since Phase JC Task 3:
+ *  `faster`/`slower` are preference-bearing and wear
+ *  `judge-{pace,spm}-{judgement}` so a rower can colour the two metrics
+ *  differently; `within`/`stale` are not (plain ink, grey) and keep
+ *  `timer-card-actual-{judgement}`. The sweep has to see BOTH or it stops
+ *  counting the very cells this feature repaints. */
+function judgedCells(): {
+  text: string;
+  judgement: string;
+  metric: string | null;
+}[] {
   return Array.from(
-    document.querySelectorAll<HTMLElement>('[class*="timer-card-actual-"]'),
-  ).map((el) => ({
-    text: el.textContent ?? "",
-    judgement: /timer-card-actual-(\w+)/.exec(el.className)?.[1] ?? "none",
-  }));
+    document.querySelectorAll<HTMLElement>(
+      '[class*="timer-card-actual-"], [class*="judge-pace-"], [class*="judge-spm-"]',
+    ),
+  ).map((el) => {
+    const slot = /judge-(pace|spm)-(\w+)/.exec(el.className);
+    return {
+      text: el.textContent ?? "",
+      judgement:
+        slot?.[2] ??
+        /timer-card-actual-(\w+)/.exec(el.className)?.[1] ??
+        "none",
+      metric: slot?.[1] ?? null,
+    };
+  });
 }
 
 describe("pane B — live (connected-revamp Task 3: two heroes; CR2 spec 3 Task 4 rebuilt the pane — see PaneLive.test.tsx for the tables' own checklist)", () => {
@@ -964,21 +980,21 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
     const heroClass = document.querySelector(
       ".connected-hero-value",
     )!.className;
-    expect(heroClass).toContain("timer-card-actual-faster");
+    expect(heroClass).toContain("judge-pace-faster");
     fast.unmount();
 
     renderSurface({ frame: frame({ currentSplit: target + 10 }) });
     expect(
       document.querySelector(".connected-hero-value")!.className,
-    ).toContain("timer-card-actual-slower");
+    ).toContain("judge-pace-slower");
   });
 
   it("judges within tolerance as plain ink, no tint class beyond -within", () => {
     renderSurface({ frame: frame({ currentSplit: target }) });
     const hero = document.querySelector(".connected-hero-value")!;
     expect(hero.className).toContain("timer-card-actual-within");
-    expect(hero.className).not.toContain("timer-card-actual-faster");
-    expect(hero.className).not.toContain("timer-card-actual-slower");
+    expect(hero.className).not.toContain("judge-pace-faster");
+    expect(hero.className).not.toContain("judge-pace-slower");
   });
 
   it("EVERY judged cell on pane B goes through the helper — none opts out", () => {
@@ -992,18 +1008,34 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
       expect(["slower", "within", "faster", "stale"]).toContain(cell.judgement);
     }
     expect(cells.some((c) => c.judgement === "faster")).toBe(true);
+    // Phase JC Task 3: the split hero is the PACE slot and the rate hero
+    // is the SPM slot, on the same frame. `spm: 99` is far above the
+    // programmed rate and the split is 10s slow, so the two verdicts
+    // differ — a hero handed the other metric's class could not pass here
+    // by coincidence of both slots resolving to the same default ink.
+    expect(cells.map((c) => `${c.metric}/${c.judgement}`)).toStrictEqual([
+      "pace/slower",
+      "spm/faster",
+    ]);
   });
 
-  it("index.css paints faster BLUE and slower RED, from the judgement's own tokens", () => {
-    const slower = ruleBody(".timer-card-actual-slower");
-    const faster = ruleBody(".timer-card-actual-faster");
+  it("index.css paints faster BLUE and slower RED, from each SLOT's own token", () => {
+    // ONE PAIR NO LONGER SERVES BOTH METRICS (Phase JC Task 3): pace and
+    // spm read separate resolved slots, so this reads the pace pair and
+    // the spm pair and requires all four to be distinct token names — a
+    // rule pointing two slots at one token would silently re-couple the
+    // metrics a rower has just been given the power to separate.
+    const slower = ruleBody(".judge-pace-slower");
+    const faster = ruleBody(".judge-pace-faster");
+    expect(faster).toContain("var(--judge-pace-faster)");
+    expect(slower).toContain("var(--judge-pace-slower)");
+    expect(ruleBody(".judge-spm-faster")).toContain("var(--judge-spm-faster)");
+    expect(ruleBody(".judge-spm-slower")).toContain("var(--judge-spm-slower)");
     // Tester feedback via James, 2026-08-13. `--judge-*` now, NOT the
     // handoff's `--type-o2`/`--type-at`: a workout's TYPE and a live verdict
     // are unrelated facts that happened to share a swatch. The negative
     // assertion pins the separation, so a palette move on the type side
     // cannot quietly repaint a verdict.
-    expect(faster).toContain("var(--judge-faster)");
-    expect(slower).toContain("var(--judge-slower)");
     expect(faster).not.toContain("--type-");
     expect(slower).not.toContain("--type-");
     // Accent is never a judgement colour: it is the target's, everywhere
@@ -1017,12 +1049,21 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
     // tokens: a token never declared, or declared twice as the same colour,
     // would leave both verdicts identical and still pass. Read from
     // tokens.css because that is where they live.
+    //
+    // THE HEX MOVED DOWN A LAYER (Phase JC). `--judge-faster` and
+    // `--judge-slower` are GONE — Task 2 made them `var()` aliases for one
+    // commit boundary and Task 3 deleted them once every emitter had moved
+    // onto the four resolved slots (`theme/judgeTokens.test.tsx` asserts
+    // both read `null`). The literal colours live on the raw inks
+    // `--judge-blue` / `--judge-red` that each slot resolves through, so
+    // this reads the INKS: "actually blue and red" is a fact about the
+    // file again rather than about an indirection.
     const tokens = readFileSync(
       indexCssPath().replace(/index\.css$/, "theme/tokens.css"),
       "utf-8",
     );
-    const faster = /--judge-faster:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
-    const slower = /--judge-slower:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
+    const faster = /--judge-blue:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
+    const slower = /--judge-red:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
     expect(faster).toBeDefined();
     expect(slower).toBeDefined();
     expect(faster).not.toBe(slower);
@@ -1503,14 +1544,21 @@ describe("the lost banner says what survived", () => {
   // FILLED RED, not the sunken variant (Gate 0): unmissable at arm's
   // length, which is the whole complaint — "the LOST isn't easy to notice,
   // i think we need to highlight that more" (James, 2026-08-25). Contrast
-  // computed, never eyeballed: --surface #fffdf7 on --judge-slower #962718
+  // computed, never eyeballed: --surface #fffdf7 on --judge-red #962718
   // is 7.94:1, well clear of the 4.5:1 floor.
+  //
+  // THE RAW INK, NOT A JUDGED SLOT (Phase JC Task 2): this banner is an
+  // alarm, so it must stay red even for a rower who sets every judged slot
+  // to blue. `theme/judgeTokens.test.tsx` owns that invariant in full — it
+  // sweeps every rule in `index.css` for a `--judge-{pace,spm}-*` token in
+  // a `background` declaration. This assertion keeps the banner's own half
+  // beside the rest of the banner's tests.
   it("index.css fills the banner red, with paper text on it", () => {
     // `rulesFor(...)[0]`, not `ruleBody`: this selector has a second rule
     // inside the landscape query (its own grid placement), and the fill
     // belongs to the base rule so BOTH orientations inherit it.
     expect(rulesFor(".connected-lost")[0]!.body).toContain(
-      "background: var(--judge-slower)",
+      "background: var(--judge-red)",
     );
     expect(ruleBody(".connected-lost-title")).toContain(
       "color: var(--surface)",
@@ -1524,7 +1572,7 @@ describe("the lost banner says what survived", () => {
   it("index.css gives nothing else on these panes a filled red ground", () => {
     const filled = cssRules(INDEX_CSS).filter(
       (rule) =>
-        rule.body.includes("background: var(--judge-slower)") &&
+        rule.body.includes("background: var(--judge-red)") &&
         rule.selectors.some((s) => s.startsWith(".connected")),
     );
     expect(filled.map((rule) => rule.selectors)).toStrictEqual([

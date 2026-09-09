@@ -357,6 +357,17 @@ requirements).
     themselves ("never", "only", "indefinitely", "all seven") — and reconcile
     each hit or state why it stands. Correcting where the claim was ARGUED
     and leaving it where it was USED is the failure.
+    **And grep the PROPOSITION, not only the string (Phase JC, 2026-09-08).**
+    JC's own invariant said "no copy on any surface names a colour the
+    settings could contradict"; the sweep it ran was for the deleted legend's
+    literal words. Five present-tense sentences in
+    `app/src/news/content/releaseNotes.ts` still asserted the same mapping in
+    different words — "Faster is blue, slower is red", "Those rows are blue
+    now", "it turns blue or red" — and neither the spec, the plan nor the
+    ROADMAP mentioned News. A shipped release note is where a retired fact
+    hides longest, because it is correct about the past and reads as present
+    tense. (Ruled: dated notes stand as history; what the invariant forbids is
+    UNDATED copy on a rendering surface, and the word "live" is now in it.)
     A push is scope-changing when it adds or removes files, changes
     behavior, risk class, or test surface, or changes a finding's
     disposition. Copy-only corrections do not trigger another census.
@@ -1202,6 +1213,57 @@ often they recur.
     matters more than a PR body (RF14) because a PR body is a presentation
     that someone reads once; a commit message is what `git log` hands the
     next person forever.
+
+37. **MOVING A RULE IN A STYLESHEET SILENTLY CHANGES WHICH OF TWO
+    EQUAL-SPECIFICITY RULES WINS, AND ONLY A REAL BROWSER CAN SEE IT (Phase
+    JC, 2026-09-08).** The judged-colour rename moved the summary's verdict
+    classes onto a shared family ~5000 lines UP `index.css`, above
+    `.summary-row-pace { color: var(--ink) }` at identical (0,1,0)
+    specificity. Later won, and **every judged row on the post-workout summary
+    rendered plain ink.** The old `.summary-row-faster` had sat 30 lines BELOW
+    that rule and beaten it, which is why nothing ever had to know.
+    **No class-name assertion could catch it by construction:** Vitest imports
+    every `.css` as `""` here AND jsdom does not resolve `var()` at all, so
+    `getComputedStyle(el).color` returns the literal `"var(--judge-pace-
+    slower)"`. An assertion written as `toContain("var(--x)")` **passes
+    against a totally broken cascade.** `pnpm e2e` caught it. `index.css`
+    already stated the rule in prose after the identical bug on a connected
+    pane's hero — **prose is not a gate.**
+    Two checks: **any change that MOVES a colour rule rather than editing it
+    needs a browser gate**, and a repo whose client tests cannot see colour
+    owes a sweep asserting that no bare class declares `color` on a
+    verdict-bearing element. **Make that sweep's element list DERIVED, not
+    typed out** — JC's shipped as a hand-list of eight, and a ninth judged
+    cell would have narrowed it silently; it is now two censuses, one over
+    source files and one that mounts every screen and forces every verdict,
+    each proven red by adding a ninth cell.
+
+38. **A TEST WHOSE VALUE DEPENDS ON HOW IT NAVIGATED NEEDS AN ASSERTION ABOUT
+    THE NAVIGATION (Phase JC, 2026-09-08).** JC's seam test has two legs that
+    only test different things because leg A navigates by CLICK: the settings
+    screen's inline root properties survive a client-side nav and die on a
+    reload, and that asymmetry is the whole gate. The plan required the click
+    in PROSE and gated nothing. Measured: swap the click for a `page.goto` and
+    **every colour assertion still passes** — the boot apply repaints from
+    storage, so the cell is the right colour either way — while the
+    two-legs claim is silently false. A same-document sentinel, asserted
+    PRESENT in one leg and ABSENT in the other, is what closes it; neither leg
+    alone is sound. Generalised: **when a test's conclusion rests on a
+    property of HOW it got there, that property is an assertion, not a
+    comment.**
+
+39. **A FORCE-PUSH CAN PRODUCE NO CI RUN AT ALL, AND `gh pr checks` THEN SAYS
+    "no checks reported" — ABSENT, NOT RED (2026-09-08).** After amending a
+    commit message and `--force-with-lease`-ing, PR #371's head had **zero**
+    runs; `gh run list` showed only the previous head's green, and a wait loop
+    scoped to the new SHA would have hung forever. This is recurring failure
+    28's shape one machine over: there, a PR's green said nothing about the
+    run its MERGE produced; here, a PR's green belonged to a head that no
+    longer existed. **Before any merge, assert the run's `headSha` EQUALS the
+    PR's current head and its `conclusion` is `success`** — never that "a
+    green run exists on this branch". The same trap bit a watcher in the same
+    session: an `until` loop that exited on the first COMPLETED run in a list
+    reported a neighbouring PR's success as this merge's.
 
 ## Commands
 
