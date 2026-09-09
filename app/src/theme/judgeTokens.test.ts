@@ -93,10 +93,12 @@ const TINT_RULES = [
 describe("the judge palette: raw inks and resolved slots (tokens.css)", () => {
   // The two inks a rower may choose. Their hex values are the ones the
   // retired `--judge-faster`/`--judge-slower` pair carried, so the split
-  // repainted nothing — contrast measured against both backgrounds a
-  // judged value sits on (--surface #fffdf7, --page #f4f1e8):
-  // --judge-blue 8.25:1 / 7.43:1, --judge-red 7.94:1 / 7.15:1. Both clear
-  // the house 4.5:1 floor.
+  // repainted nothing — contrast recomputed 2026-09-08 against the THREE
+  // backgrounds a judged value sits on (--surface #fffdf7, --page #f4f1e8,
+  // --surface-sunken #efeade, the last of them a resting grid row's SPM
+  // cell): --judge-blue 8.25 / 7.43 / 6.99:1, --judge-red 7.94 / 7.15 /
+  // 6.73:1. Both clear the house 4.5:1 floor. `tokens.css`'s own block
+  // carries the same table and why the third ground is reachable.
   it("declares the two raw inks as literal hex, not as references", () => {
     expect(declaredValue(TOKENS_ROOT, "--judge-blue")).toBe("#1d4e89");
     expect(declaredValue(TOKENS_ROOT, "--judge-red")).toBe("#962718");

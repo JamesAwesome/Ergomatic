@@ -319,10 +319,36 @@ pane and a summary — is approved before task 1.
       leg and absent in the other, is what closes it. Shape: *a test whose value
       depends on HOW it navigated needs an assertion about the navigation, or
       the requirement is a comment.*
-- [ ] **The PR.** Nine tasks, spec §"PR shape". The load-bearing one is the
+- **`/you/settings` gets NO `DEVIATIONS.md` row, decided at the Task 8 sweep
+      (2026-09-08) — recorded so the next author does not re-open it.** Three
+      reasons. The handoff has no settings screen, so there is nothing to
+      deviate FROM; the file's own inclusion test is the SPM-target row's
+      ("recorded here since this is a genuinely NEW cell, not a re-use of an
+      existing color decision") and every colour on this screen is a re-use —
+      `--ink`/`--ink-3` at ratios the file already records many times over,
+      `--accent` as the checked state (the onboarding chip's own idiom), the
+      swatch inks from the judgement-palette row, and a decorative sub-3:1
+      `--rule-3` border that `.diag-copy` and `.onb-option` already ship
+      rowless on the SHUFFLE/FILTER-chip row's precedent. And insertion
+      is not free: this table numbers rows BY POSITION, so a new row would rot
+      every "see row N" above it, including the three this phase just
+      reconciled — the migration-to-stable-IDs item is still open below.
+      (Cited by subject, not by number, on purpose: main added a row at the
+      file's line 81 while this branch was open, so every number above it has
+      already moved once.) The
+      screen's full computed-contrast table, including the one figure under
+      3:1 and why it is decoration, lives in its own `index.css` block instead.
+- [x] **The PR — BUILT 2026-09-08; review and the PM final gate still owed.**
+      Eight tasks, spec §"PR shape". The load-bearing one is the
       e2e seam test: Vitest mocks every `.css` import to an empty string here,
       so **no client test can prove a colour lands on a pixel** — only e2e can
-      start upstream of the producer (recurring failure 24). **M**
+      start upstream of the producer (recurring failure 24). Shipped: the
+      `you/judgeColors.ts` store; the palette split into two raw inks and four
+      resolvable slots; four `.judge-{pace,spm}-{faster,slower}` rules where two
+      pairs stood; the six judged call sites taking a REQUIRED metric; the
+      legend deletion; a generalised `OptionGroup`; `/you/settings` behind
+      You's third door; the `main.tsx` boot apply; and the two-leg seam test.
+      **M**
 
 **Three structural notes worth keeping even if the phase changes shape.**
 `index.css` documented "ONE PAIR SERVES BOTH JUDGED METRICS ... There is no
@@ -3243,9 +3269,10 @@ trigger is the whole entry.
   You-screen PR — they are cheap and they ride it. **Phase JC IS that PR
   (2026-09-08), and its spec recommends they do NOT ride it:** pace tolerance
   changes what a judged number MEANS, which is the triad's first clause, and
-  it would put a second independent risk model into one review. James decides
-  at JC's Gate 0. If he agrees, this trigger retargets to the SECOND SETTINGS
-  PR rather than being struck.
+  it would put a second independent risk model into one review. **RULED at
+  JC's Gate 0 (ruling 9, James, 2026-09-08): NO, they do not ride it.** Not
+  struck — this trigger now retargets to the SECOND SETTINGS PR, which
+  `/you/settings` exists to receive.
 - **The rest of the old Phase 9's preferences**, which was killed as a phase for
   its multi-user framing (_"Two users with different preferences get different
   Today suggestions"_) rather than for its content: the suggest-workouts-at

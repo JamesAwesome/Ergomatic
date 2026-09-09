@@ -117,9 +117,14 @@ export function rateDisplay(phase: EnginePhase): {
  *  mediation survives, not a second copy of either function.
  *
  *  Of the CSS hooks the retired variant exercised, only the
- *  judgement-keyed one survives: `timer-card-actual-{judgement}` is
- *  declared in `index.css` and rendered today by `connected/PaneLive.tsx`
- *  and `connected/PaneGrid.tsx` (connected-revamp Task 3 retired
+ *  judgement-keyed family survives, and Phase JC SPLIT it in two: the two
+ *  preference-bearing verdicts moved to `judge-{pace,spm}-{faster,slower}`
+ *  so a rower can colour pace and stroke rate differently, and
+ *  `.timer-card-actual-faster`/`-slower` were deleted with their last
+ *  emitter — only `timer-card-actual-{within,stale}` still carries this
+ *  prefix. Both families are declared in `index.css` and rendered today by
+ *  `connected/PaneLive.tsx` and `connected/PaneGrid.tsx`
+ *  (connected-revamp Task 3 retired
  *  `connected/JudgedCard.tsx` itself — pane B's own rebuild dropped the
  *  three metric cards it wrapped, and it had no other consumer).
  *  `.timer-card-static` and the bare `.timer-card-actual` had no renderer

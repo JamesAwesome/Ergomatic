@@ -809,9 +809,12 @@ describe("the baseline row: AVG beside TGT (connected-metrics design spec)", () 
     expect(body).toContain("margin-left: 2px");
     // No `color` declaration (the judged/absent convention
     // `.connected-hero-value`'s own comment gives, a few lines above this
-    // block in `index.css`): the class `judgedClass` layers on top
-    // (`timer-card-actual-{judgement}`) must be free to win on source
-    // order, the same reason that comment gives for the TARGET value.
+    // block in `index.css`): the class `judgedClass` layers on top must be
+    // free to win on source order, the same reason that comment gives for
+    // the TARGET value. Since Phase JC that class is
+    // `judge-pace-{faster,slower}` on this pace cell — AVG is a pace
+    // reading — or `timer-card-actual-{within,stale}` for the two verdicts
+    // no preference reaches.
     expect(body).not.toContain("color:");
   });
 });
