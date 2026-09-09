@@ -1992,6 +1992,92 @@ describe("the interstitial walk, fake-driven", () => {
 
     expect(loadLastDevice()).toBeNull();
   });
+
+  /**
+   * THE OTHER HALF OF THE SAME INVARIANT: ONLY the machine refusal
+   * un-remembers. Every other failure — the link dying, a scan finding
+   * nothing, permission withdrawn, the monitor rejecting the workout — must
+   * leave LAST USED standing, because that caption is the whole one-tap
+   * route back after a drop.
+   *
+   * Gated because the guard is one comparison and the wrong side of it is
+   * silent: widening it to "any failure" reads as harmless tidying and
+   * costs the rower the reconnect button in exactly the situation the
+   * button exists for.
+   *
+   * The failure driven here is a real one — `injectNak(0)` rejects the
+   * FIRST programming frame, so the driver raises a real
+   * `ProgramRejectionError` and the hook's own `mapProgramFailure` types it
+   * `nak`. The monitor is a perfectly good RowErg that said no to this one
+   * program; the rower must still be one tap from it.
+   *
+   * Positive readiness before the negative (the same rule the refusal test
+   * above follows, in mirror): this asserts the name IS on disk after the
+   * pair, then asserts it is STILL on disk after the failure renders — so a
+   * walk that stalled before ever pairing cannot pass this by writing
+   * nothing at all.
+   */
+  it("only the machine refusal un-remembers: a rejected program leaves LAST USED intact", async () => {
+    vi.doUnmock("../monitor/useMonitorSession");
+    const real = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    mockUseMonitorSession.mockImplementation(real.useMonitorSession);
+
+    const fake = createFakeTransport({
+      program: FIXTURE.program,
+      deviceName: DEVICE_NAME,
+    });
+    fake.injectNak(0);
+
+    expect(loadLastDevice()).toBeNull();
+
+    render(
+      <MemoryRouter>
+        <ConnectedInterstitial
+          request={{
+            kind: "picker",
+            attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+          }}
+          program={FIXTURE.program}
+          phases={FIXTURE.phases}
+          identity={FIXTURE.identity}
+          baselines={baselines}
+          nudgedCount={0}
+          onExit={vi.fn()}
+          onRowInstead={vi.fn()}
+          onEnded={vi.fn()}
+          deps={{
+            createTransport: () => fake,
+            now: () => t0,
+            driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Connecting");
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("The monitor wouldn't take it")) break;
+    }
+
+    // The pair really happened and really wrote the caption's name — the
+    // positive half, without which "still remembered" would be vacuous.
+    expect(loadLastDevice()).toBe(DEVICE_NAME);
+    // ...and a real, rendered, NON-refusal failure really happened over it.
+    expect(
+      screen.getByText("The monitor wouldn't take it"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Erg type not supported"),
+    ).not.toBeInTheDocument();
+
+    expect(loadLastDevice()).toBe(DEVICE_NAME);
+  });
 });
 
 // ---------------------------------------------------------------------------
