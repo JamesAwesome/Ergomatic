@@ -5,6 +5,33 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.44.0: git log v0.43.0..main --oneline — FOUR merges besides this
+    // notes PR itself, each accounted for (RF15; no --merges, which returns
+    // empty on this squash-merged repo):
+    //   #371 Phase JC: the judged colours become the rower's choice — items
+    //     1 and 2. They are ONE change and two notes on purpose: the setting
+    //     is the feature, and the legend's disappearance is what a rower on
+    //     defaults actually experiences, so a note that mentioned only the
+    //     setting would leave the removal unexplained.
+    //   #370 pairs the buttons on a failure frame so the message window grows
+    //     — item 3. NOT a repeat of v0.43.0's item 9 below: that one fixed the
+    //     scroll ORIGIN, so an overflowing screen could be reached at all;
+    //     this one gives the headline back the space the action stack was
+    //     eating (248px of 390 on a four-button frame).
+    //   #369 two e2e design gates and comment-only corrections, including one
+    //     to v0.43.0's own merge count. No rower-visible change, no note.
+    //   #372 the close-phase skill — process tooling, invisible on device.
+    // Item 2 is the only REMOVAL in this release, which is why it is worded
+    // as one rather than buried inside item 1.
+    version: "v0.44.0",
+    date: "2026-09-09",
+    items: [
+      "You choose what the colours mean now. In You, open SETTINGS: pace and stroke rate each get a faster and a slower colour, and each one can be red, blue, or off entirely. Nothing changes until you change it, so if you liked it as it was, it still is.",
+      "The line under your interval list that read FASTER (BLUE) SLOWER (RED) is gone. It could no longer be true for everyone once the colours became yours to set, and a key that lies is worse than no key.",
+      "On a failure screen in landscape, the headline and the reason now fit. The buttons underneath had been taking most of the screen, leaving the part that says what went wrong with nowhere to sit.",
+    ],
+  },
+  {
     // v0.43.0: git log v0.42.0..v0.43.0 --oneline — SIXTEEN merges besides
     // this notes PR itself, each accounted for (RF15; no --merges, which
     // returns empty on this squash-merged repo):
