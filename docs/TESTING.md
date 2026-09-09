@@ -412,7 +412,7 @@ and the pattern is worth naming so reviews aim there:
   `app/domain/validate.ts`; fake stores against real ones (§5); a deleted
   component's CSS; whether the named e2e specs still pass locally against an
   already-booted stack, then whether the e2e job on the PR is green for the
-  full suite (a full local `pnpm e2e` run now costs 1.5-2.4x its old
+  full suite (a full local `pnpm e2e` run now costs ~1.5x its old
   wall-clock under Phase MEM's local worker cap — CLAUDE.md RF37).
 
 ## 13. Self-mutation is part of writing the test

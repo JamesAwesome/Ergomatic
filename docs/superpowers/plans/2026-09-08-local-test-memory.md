@@ -10,6 +10,18 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-08-local-test-memory-design.md` — read it alongside this plan; every task below argues from it.
 
+> **This plan is a record of what was PRESCRIBED, and the spec plus the
+> shipped tree win wherever they differ.** Five prescriptions were
+> superseded during implementation and the final review; each is marked
+> `SUPERSEDED` inline where it appears, so nothing here should be pasted
+> without reading its note: `test:watch` routing, the Playwright default
+> of 2, the advisory's `workers=` field, the `rc=$?` mutation row, and
+> `test-run.sh`'s child invocation (which now carries an
+> `ERGOMATIC_TEST_RUN_BIN` seam so the gate can drive the real pipeline).
+> A sixth: the hook's dry-run seam is `PREPUSH_DRY_RUN`, not `DRY_RUN` —
+> an unnamespaced one would let an ambient environment variable turn a
+> push into two echoed lines and a zero exit.
+
 ## Global Constraints
 
 - **Bash is 3.2.57** (`/bin/bash`, the only bash on the machine). No `mapfile`, no associative arrays, no `${var,,}`. Nothing enforces this in CI; the implementer is the gate.
@@ -57,7 +69,7 @@ Under the spec as written, **every Ctrl-C prints `MEMORY KILL`**. Task 1 impleme
 | `app/vitest.config.ts` | MODIFY. `maxWorkers` default 4, env-overridable, inert under CI. |
 | `app/playwright.config.ts` | MODIFY. `workers` default 2, same shape. |
 | `app/scripts/testEnv.ts` | CREATE. `isCI` + `workerCap`, shared by both configs so the two cannot drift. Lives under `scripts/` because that is what the `unit` project's include globs collect — at `app/testEnv.test.ts` it would match NO project, and `passWithNoTests` would render its absence as a pass. |
-| `app/package.json` | MODIFY. Route `test`, `test:coverage`, `test:watch` through the wrapper; add `test:full`. |
+| `app/package.json` | MODIFY. Route `test`, `test:coverage`, `test:watch` through the wrapper; add `test:full`. **SUPERSEDED as shipped: `test:watch` deliberately does NOT route through the wrapper** — see the note under Step 3 and the spec's "Four mechanical constraints on the wrapper". |
 | `.husky/pre-push` | MODIFY. Ref guard, two invocations, `sh -e`-safe. |
 | `.github/workflows/ci.yml` | MODIFY. Named step for `test-run.test.sh`. |
 | `.gitignore` | MODIFY. Ignore `app/.test-kills/`. |
@@ -181,6 +193,10 @@ else
   # On a clean run stderr is empty (measured: 260 bytes stdout, 0 stderr),
   # so nothing useful is deferred. PIPESTATUS[0] -- NOT $? -- because a
   # pipe's status is its tail's, which makes a SIGKILL read as exit 0.
+  # SUPERSEDED as shipped: the comment overstates the case (with pipefail
+  # set, `$?` is 137 too) and the child is now injectable --
+  # "${ERGOMATIC_TEST_RUN_BIN:-$APP_ROOT/node_modules/.bin/vitest}" -- so
+  # the gate can drive this pipeline. Read test-run.sh, not this block.
   "$APP_ROOT/node_modules/.bin/vitest" run "$@" 2>"$ERR" | tee "$OUT"
   rc=${PIPESTATUS[0]}
   cat "$ERR" >&2
@@ -239,7 +255,7 @@ observed to fail the named case**; the fifth is verified by hand in Step 6.
 | Change the needle to `out of memory` | "lowercase 'out of memory' not promoted" — **not** the capital-O row, which misses on case |
 | Add `&& ! grep -qF "Test Files" "$OUT"` to the `Allocation failed` branch | "fork OOM: exit 1 WITH a summary" |
 | Change `-eq 130` to `-eq 129` | "130 SIGINT is silent (Ctrl-C)" |
-| Change `rc=${PIPESTATUS[0]}` to `rc=$?` | (not covered by the gate — verify by hand in Step 6) |
+| Change `rc=${PIPESTATUS[0]}` to `rc=$?` | **SUPERSEDED.** It IS covered now — `test-run.test.sh`'s "the REAL pipeline" case drives the actual pipeline through `ERGOMATIC_TEST_RUN_BIN`. But `rc=$?` alone does not bite (measured 2026-09-08): the script sets `pipefail`, under which a pipeline's status is its rightmost non-zero, i.e. the child's 137. The biting mutation is BOTH halves — drop `-o pipefail` AND substitute `rc=$?`, which then reports exit 0 and no banner. |
 
 - [ ] **Step 6: Prove the pipeline status by hand**
 
@@ -526,6 +542,10 @@ if mkdir -p "$_peer_dir" 2>/dev/null; then
   if [ "$_live" -gt 0 ]; then
     _free="$(vm_stat 2>/dev/null | awk '/Pages free/{gsub(/\./,"",$3); printf "%d MB", $3*16384/1048576}')"
     _swap="$(sysctl -n vm.swapusage 2>/dev/null | awk '{print $6" / "$3}')"
+    # SUPERSEDED as shipped: this literal was measured WRONG under `CI=1`
+    # (printed 4, real value undefined) and `=999` (printed 999, real 16).
+    # The shipped field reproduces isCI()'s string test and quotes an
+    # override with its bound instead. Read test-run-advisory.sh.
     # workers= is the only place the cap actually in force becomes visible.
     _w="${ERGOMATIC_TEST_WORKERS:-4}"
     echo "      Free ${_free:-unknown}, swap ${_swap:-unknown}, workers=${_w}. Consider a scoped run." >&2
@@ -693,6 +713,11 @@ import { isCI, workerCap } from "./scripts/testEnv";
   workers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_E2E_WORKERS, 2),
 ```
 
+**SUPERSEDED: the shipped default is 3, not 2.** Task 4 measured 2 workers
+at 2.34-2.39x the old default of 5 (total wall 6:12 vs 2:39), over the
+spec's ~2x threshold, while 3 costs ~1.5x (3:58). See the spec's Part B2
+table, which the spec itself was revised to carry.
+
 - [ ] **Step 6: Add the measurement scripts**
 
 Create `app/scripts/measure-test-memory.sh` and `app/scripts/count-test-workers.sh` **verbatim from the spec's Appendix** (they are already paste-tested there against no-args, a missing command, an unwritable log dir, an instant command, and a non-zero child). Then `chmod +x` both.
@@ -763,6 +788,8 @@ ROOT="$(cd "$HERE/.." && pwd)"
 fails=0
 check() { if [ "$2" = "$3" ]; then echo "ok    $1"; else echo "FAIL  $1 -- expected '$2' got '$3'"; fails=$((fails+1)); fi; }
 
+# SUPERSEDED as shipped: the seam is PREPUSH_DRY_RUN (see the note on the
+# hook block below). Read scripts/pre-push.test.sh, not this block.
 # DRY_RUN makes the hook echo its invocations instead of running them.
 run_hook() { ( cd "$ROOT" && DRY_RUN=1 PREPUSH_BASE="$1" sh -e .husky/pre-push 2>&1 ); }
 
@@ -821,6 +848,8 @@ BASE="${PREPUSH_BASE:-refs/remotes/origin/main}"
 SCOPE="--project unit --project client"
 
 run() {
+  # SUPERSEDED as shipped: PREPUSH_DRY_RUN. An unnamespaced DRY_RUN in the
+  # ambient environment disarms the whole hook. Read .husky/pre-push.
   if [ -n "${DRY_RUN:-}" ]; then echo "would run: $*"; else "$@"; fi
 }
 

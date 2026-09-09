@@ -496,7 +496,7 @@ often they recur.
    diff touches anything under `app/src/`, run the named e2e specs locally
    against an already-booted stack, then read the e2e job on the PR for the
    full suite** (Phase MEM's local worker cap makes a full local run
-   1.5-2.4x its old cost — see RF37) — and `pnpm screenshots` too if you
+   ~1.5x its old cost — see RF37) — and `pnpm screenshots` too if you
    changed a screen's layout.
 2. **Trusting the aggregate coverage gate.** The 90×4 threshold is repo-wide,
    so a brand-new file can ship with entire branches uncovered and the gate

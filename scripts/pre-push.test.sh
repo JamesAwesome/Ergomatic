@@ -6,8 +6,24 @@ ROOT="$(cd "$HERE/.." && pwd)"
 fails=0
 check() { if [ "$2" = "$3" ]; then echo "ok    $1"; else echo "FAIL  $1 -- expected '$2' got '$3'"; fails=$((fails+1)); fi; }
 
-# DRY_RUN makes the hook echo its invocations instead of running them.
-run_hook() { ( cd "$ROOT" && DRY_RUN=1 PREPUSH_BASE="$1" sh -e .husky/pre-push 2>&1 ); }
+# The hook's preamble (.husky/common.sh) blocks below the .nvmrc Node major,
+# and CI's `scripts` job installs no node -- so a real `node -v` there is
+# whatever the runner image happens to ship. Measured 2026-09-08 by putting a
+# `v24.9.0` stub on PATH: 8 of 11 cases FAIL on "HOOK BLOCKED", including
+# every case about the hook's body. Stub it, exactly as the sibling
+# scripts/pre-commit.test.sh does, so this gate tests the BODY and not the
+# runner image. Production is unaffected: the real hook still reads real node.
+STUB="$(mktemp -d)"
+trap 'rm -rf "$STUB"' EXIT
+cat > "$STUB/node" <<'STUB_NODE'
+#!/bin/sh
+if [ "${1:-}" = "-v" ]; then echo v26.0.0; exit 0; fi
+exit 64
+STUB_NODE
+chmod +x "$STUB/node"
+
+# PREPUSH_DRY_RUN makes the hook echo its invocations instead of running them.
+run_hook() { ( cd "$ROOT" && PATH="$STUB:$PATH" PREPUSH_DRY_RUN=1 PREPUSH_BASE="$1" sh -e .husky/pre-push 2>&1 ); }
 
 out="$(run_hook refs/remotes/origin/main)"; rc=$?
 check "a resolvable base exits 0"            "0" "$rc"
@@ -23,7 +39,7 @@ check "the fallback does NOT use --changed"  "0" "$r"
 # The brief's own mutation table pairs "drop $SCOPE from the fallback" with
 # the Docker-free check below -- but that check reads $out from the LATER
 # resolvable-base call, never the fallback's own output, so dropping $SCOPE
-# from the fallback could never make it fail (DRY_RUN never spells out
+# from the fallback could never make it fail (PREPUSH_DRY_RUN never spells out
 # vitest's default project list either, so grepping the fallback's own
 # output for the absent flag "--project integration" wouldn't catch it).
 # "--project client" is distinctive to the SCOPE-bearing invocation (the
@@ -44,6 +60,25 @@ check "there are two vitest invocations"       "2" "$(printf '%s' "$out" | grep 
 # Docker-free: the integration project must never be admitted.
 case "$out" in *"--project integration"*) r=1 ;; *) r=0 ;; esac
 check "integration project is never admitted" "0" "$r"
+
+# The seam is NAMESPACED, and that is the point: an ambient DRY_RUN=1 must
+# not turn a push into two echoed lines and a zero exit. Runs the hook for
+# real with a stub `pnpm` first on PATH, so nothing heavy executes.
+FAKEBIN="$(mktemp -d)"
+printf '#!/bin/sh\necho "ran: $*"\n' > "$FAKEBIN/pnpm"
+chmod +x "$FAKEBIN/pnpm"
+out="$( cd "$ROOT" && DRY_RUN=1 PREPUSH_BASE=refs/remotes/origin/main \
+  PATH="$FAKEBIN:$STUB:$PATH" sh -e .husky/pre-push 2>&1 )"
+case "$out" in *"would run:"*) r=1 ;; *) r=0 ;; esac
+check "an ambient DRY_RUN does not disarm the hook" "0" "$r"
+check "an ambient DRY_RUN still runs both gates"    "2" "$(printf '%s' "$out" | grep -c '^ran: ')"
+rm -rf "$FAKEBIN"
+# Mutation run 2026-09-08: rename PREPUSH_DRY_RUN back to DRY_RUN in
+# .husky/pre-push --
+#   FAIL  an ambient DRY_RUN does not disarm the hook -- expected '0' got '1'
+#   FAIL  an ambient DRY_RUN still runs both gates    -- expected '2' got '0'
+# 6 failures in total: the four dry-run cases above lose their seam and go
+# red too, which is the same fact from the other side.
 
 if [ "$fails" -ne 0 ]; then echo "$fails failure(s)"; exit 1; fi
 echo "all pre-push cases pass"

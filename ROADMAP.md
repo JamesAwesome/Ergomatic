@@ -2057,8 +2057,13 @@ a full `Test Files` summary.
 re-derives them:** idle per-worktree compose stacks cost **236 MB across
 two** (not a memory lever); `--coverage` adds **50 MB**; and a V8 OOM
 prints `Ineffective mark-compacts near heap limit`, not `Reached heap
-limit`, on 4 of 4 runs of the growth shape a real suite has — the common
-needle is `JavaScript heap out of memory`.
+limit`, on 4 of 4 runs of the growth shape a real suite has. **The needle
+that ships is `Allocation failed`**: a third V8 fatal string exists
+(`Allocation failed - process out of memory`) that carries no "heap"
+wording at all, so `JavaScript heap out of memory` misses it, and
+`Allocation failed` matches 2 of 23 lines in the node binary against 14
+for the tempting `out of memory` (which catches recoverable HTTP/2 and
+wasm errors).
 
 **Three parts, James-approved 2026-09-08:** (A) a wrapper reading the
 exit code first and the message second, plus a preflight advisory that
@@ -2068,7 +2073,9 @@ Playwright `workers` 2 (proposed), both env-overridable and both
 pre-push runs `--changed` plus, unconditionally, the whole-tree gates
 that `--changed` structurally cannot select.
 
-**SHIPPED (Tasks 1-5, merged; this is Task 6, the documentation half).**
+**BUILT, UNMERGED — all six tasks are on branch `phase-mem-test-memory`
+(Tasks 1-5 the mechanism, Task 6 the documentation half); nothing has
+landed on main.**
 `app/scripts/test-run.sh` implements the four-way signal split (silent
 Ctrl-C at 130; memory banner at 134/137; a distinct "killed by signal"
 banner at any other exit ≥ 128; then the stderr needle; then the
@@ -2096,14 +2103,14 @@ capture step for exactly this; the next real kill answers it.
 prescribed blocks: the pre-push hook body runs under `sh -e`, so the ref
 guard as written **aborts the hook** instead of falling back; `--changed`
 and a path filter INTERSECT, so "append the `scripts/` gates" needed two
-invocations rather than one; piping the child through `tee` makes a
-SIGKILL read as exit **0**, silently defeating the deterministic rule; a
-**third** V8 fatal OOM string exists (`Allocation failed - process out of
-memory`) that the chosen needle missed, and the replacement needle was
-picked by counting matches in the binary (`Allocation failed` → 2 of 23;
-the tempting `out of memory` → 14, including recoverable HTTP/2 and wasm
-errors); and `process.env.CI` being a string means `CI=false` silently
-removes both caps.
+invocations rather than one; piping the child through `tee` puts the
+child's status out of `$?`'s reach, so the wrapper reads `PIPESTATUS[0]`
+(measured 2026-09-08 at the final review: `rc=$?` alone still reports 137
+because the script also sets `pipefail`, but the two together — a dropped
+`-o pipefail` and `rc=$?` — make a SIGKILL read as exit **0**, and
+`PIPESTATUS[0]` is correct either way); the third V8 fatal OOM string
+above forced the needle change; and `process.env.CI` being a string means
+`CI=false` silently removes both caps.
 
 **One of them is worth remembering on its own:** the clause invoking RF34
 committed RF34 — it said the e2e instruction lives in "all three places"

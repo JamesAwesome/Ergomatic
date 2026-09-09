@@ -14,7 +14,8 @@ export default defineConfig({
   // spec's proposed 2 to 3 after measuring: 2 workers cost 2.34-2.39x the
   // old default of 5 (test phase 5.5m vs 2.3m; total wall 6:12 vs 2:39),
   // over the spec's ~2x threshold, while 3 workers cost only ~1.5x
-  // (test phase 3.6m; total wall 3:58) — task-4-report.md has the full figures.
+  // (test phase 3.6m; total wall 3:58). The full figures are the Part B
+  // tables in docs/superpowers/specs/2026-09-08-local-test-memory-design.md.
   workers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_E2E_WORKERS, 3),
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

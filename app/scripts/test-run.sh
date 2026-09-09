@@ -29,9 +29,20 @@ else
   [ -f "$HERE/test-run-advisory.sh" ] && . "$HERE/test-run-advisory.sh"
   # stdout streams live via tee; stderr is captured and replayed after.
   # On a clean run stderr is empty (measured: 260 bytes stdout, 0 stderr),
-  # so nothing useful is deferred. PIPESTATUS[0] -- NOT $? -- because a
-  # pipe's status is its tail's, which makes a SIGKILL read as exit 0.
-  "$APP_ROOT/node_modules/.bin/vitest" run "$@" 2>"$ERR" | tee "$OUT"
+  # so nothing useful is deferred. PIPESTATUS[0] names the CHILD's status
+  # and does so whether or not `pipefail` is set; `$?` names neither. Without
+  # pipefail it is tee's 0, so a SIGKILL reads as a clean pass; with pipefail
+  # it is the RIGHTMOST non-zero, i.e. tee's status whenever tee also fails.
+  #
+  # ERGOMATIC_TEST_RUN_BIN is a test seam, and the only way the gate can
+  # drive this pipeline at all: --self-test fabricates rc and never reaches
+  # `| tee`, so every classifier case is blind to a regression here. See
+  # test-run.test.sh's "the REAL pipeline" block, which points it at a child
+  # that dies by SIGKILL. Measured there 2026-09-08: `rc=$?` on its own is
+  # still 137, because the `set -uo pipefail` at the top of this file saves
+  # it -- the mutation that turns that case red is dropping `-o pipefail`
+  # AND substituting `rc=$?`, which then reports exit 0 and no banner.
+  "${ERGOMATIC_TEST_RUN_BIN:-$APP_ROOT/node_modules/.bin/vitest}" run "$@" 2>"$ERR" | tee "$OUT"
   rc=${PIPESTATUS[0]}
   cat "$ERR" >&2
 fi

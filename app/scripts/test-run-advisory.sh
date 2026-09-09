@@ -13,7 +13,11 @@ if mkdir -p "$_peer_dir" 2>/dev/null; then
     _pid=""; _started=""; _wt=""
     while IFS='=' read -r _k _v; do
       case "$_k" in pid) _pid="$_v" ;; started) _started="$_v" ;; worktree) _wt="$_v" ;; esac
-    done < "$_f"
+    done 2>/dev/null < "$_f"   # 2> BEFORE the <, or the shell's own
+                               # "Permission denied" for a chmod 000 peer
+                               # file still reaches the terminal (measured
+                               # 2026-09-08: `done < f 2>/dev/null` prints
+                               # it, `done 2>/dev/null < f` does not).
     [ -n "$_pid" ] || { rm -f "$_f" 2>/dev/null; continue; }
     # Skip our own prior registration: bash keeps $$ fixed across command
     # substitution (verified: bash 3.2.57), so a process that sources this
@@ -32,9 +36,26 @@ if mkdir -p "$_peer_dir" 2>/dev/null; then
   if [ "$_live" -gt 0 ]; then
     _free="$(vm_stat 2>/dev/null | awk '/Pages free/{gsub(/\./,"",$3); printf "%d MB", $3*16384/1048576}')"
     _swap="$(sysctl -n vm.swapusage 2>/dev/null | awk '{print $6" / "$3}')"
-    # workers= is the only place the cap actually in force becomes visible.
-    _w="${ERGOMATIC_TEST_WORKERS:-4}"
-    echo "      Free ${_free:-unknown}, swap ${_swap:-unknown}, workers=${_w}. Consider a scoped run." >&2
+    # The cap in force -- the failure it exists to reveal is the cap
+    # SILENTLY ABSENT, which nothing else surfaces (spec Part A3 / B1).
+    # It says only what this shell can read WITHOUT reimplementing
+    # testEnv.ts's workerCap(): isCI()'s three-way string test reproduced
+    # exactly, an override quoted verbatim beside the bound it is subject
+    # to, and the default as a literal. It never states a resulting worker
+    # count for an override, because a hardcoded one was wrong twice --
+    # measured 2026-09-08: `CI=1` printed `workers=4` where the real value
+    # is `undefined` (9 workers), and `ERGOMATIC_TEST_WORKERS=999` printed
+    # `workers=999` where workerCap clamps to 16. The `4` below is pinned
+    # against vitest.config.ts by test-run-advisory.test.sh.
+    _ci="${CI:-}"
+    if [ -n "$_ci" ] && [ "$_ci" != "false" ] && [ "$_ci" != "0" ]; then
+      _w="uncapped (CI=$_ci)"
+    elif [ -n "${ERGOMATIC_TEST_WORKERS:-}" ]; then
+      _w="from ERGOMATIC_TEST_WORKERS=${ERGOMATIC_TEST_WORKERS}, bounded 1..16"
+    else
+      _w="4"
+    fi
+    echo "      Free ${_free:-unknown}, swap ${_swap:-unknown}, worker cap ${_w}. Consider a scoped run." >&2
   fi
   _me="$_peer_dir/$$.peer"
   {

@@ -308,13 +308,24 @@ it earns its place:
 
 ```
 NOTE: another Ergomatic test run is live (pid 1234, worktree av, started 14:02).
-      Free pages 66 MB, swap 6.6/7.2 GB, workers=4. Consider a scoped run.
+      Free pages 66 MB, swap 6.6/7.2 GB, worker cap 4. Consider a scoped run.
 ```
 
-**`workers=` is not decoration.** It is the only place the cap actually
-in force becomes visible, and the failure that matters — the cap silently
-absent — is otherwise invisible. See B1 on why `CI` can remove it by
-accident.
+**The `worker cap` field is not decoration.** It is the only place the
+cap actually in force becomes visible, and the failure that matters — the
+cap silently absent — is otherwise invisible. See B1 on why `CI` can
+remove it by accident.
+
+**It states only what the advisory's shell can read without
+reimplementing `workerCap()`, because a hardcoded literal there was
+measured wrong twice** (2026-09-08, final review): `CI=1` printed
+`workers=4` where the real value is `undefined`, and
+`ERGOMATIC_TEST_WORKERS=999` printed `workers=999` where `workerCap`
+clamps to 16. So it reproduces `isCI()`'s three-way string test exactly
+(`worker cap uncapped (CI=1)`), quotes an override verbatim beside the
+bound it is subject to (`worker cap from ERGOMATIC_TEST_WORKERS=999,
+bounded 1..16`) rather than claiming a resulting count, and prints the
+default as a literal pinned against `vitest.config.ts` by the gate.
 
 **Lifetime table** (recurring failure 27 — invariants, not mechanisms):
 
@@ -539,13 +550,13 @@ already thought of cannot find the site you forgot.
 | A1 signal preservation | The wrapper is run under a heap cap through its real entry point and observed returning ≥ 128, not 1. |
 | A1 fork case | A deliberately allocating test in a fork under a low `--max-old-space-size`; assert exit 1, summary present, **memory banner printed**. |
 | A0 capture | Assert the file is written, names the exit code and signal, and that a failure to write it never changes the command's exit code. |
-| A3 advisory | Fixtures: a live peer, a dead pid, a live pid with a *different start time* (reuse), two simultaneous peers, and an unreadable directory (must stay silent and not fail the run). |
+| A3 advisory | Fixtures: a live peer, a dead pid, a live pid with a *different start time* (reuse), two simultaneous peers, an unreadable directory and an unreadable peer *file* (both must stay silent and not fail the run), and — starting upstream of the writer, per RF24 — an entry the advisory itself produced in a background shell. The `worker cap` field is pinned at `CI=1`, `CI=false`, `CI=0` and `ERGOMATIC_TEST_WORKERS=999`. |
 | B1 | Worker counts re-measured with the path-scoped oracle against a verified floor. `ERGOMATIC_TEST_WORKERS=8` takes effect; `CI=1` leaves the default. |
 | B2 | Measured during implementation; the number replaces the "untested" tag. Override and CI paths as for B1. |
 | C1 ref guard | `origin/main` made unresolvable; assert the hook falls back to the full scoped suite and says so, rather than passing on zero tests. |
 | C1 coverage | A branch changing only `vitest.config.ts` is pushed; assert the `scripts/` gates still run. |
 | A1 needle breadth | A fixture whose output carries `Out of memory` from a caught `ERR_HTTP2_NO_MEM` asserts **no** banner — the over-match guard. |
-| A1 pipeline status | The wrapper is run against a self-SIGKILLing child and asserted to return 137, not 0 — the `tee` defect. |
+| A1 pipeline status | The wrapper is run against a self-SIGKILLing child, injected via `ERGOMATIC_TEST_RUN_BIN`, and asserted to return 137 **and** print the memory banner — the `tee` defect. The `--self-test` classifier cases cannot cover this: they fabricate `rc` and never reach the pipeline. |
 | A0 path | The wrapper is invoked via `pnpm test` (cwd `app/`) and from the repo root; both must write to the same directory. |
 | A0 ignore | `git check-ignore` on the capture directory exits 0, and `git status --porcelain` is empty after a captured kill. |
 | C1 hook errexit | The hook body is run under `sh -e` with `origin/main` unresolvable; assert it reaches the fallback and exits 0, rather than aborting at the guard. |

@@ -13,8 +13,12 @@
 BASE="${PREPUSH_BASE:-refs/remotes/origin/main}"
 SCOPE="--project unit --project client"
 
+# PREPUSH_DRY_RUN, not DRY_RUN: this is a test seam in a PRODUCTION hook, and
+# an unnamespaced DRY_RUN is common enough in an ambient environment that
+# exporting one would silently turn every push into two echoed lines and a
+# zero exit -- no tests, push proceeds. Namespaced to match PREPUSH_BASE.
 run() {
-  if [ -n "${DRY_RUN:-}" ]; then echo "would run: $*"; else "$@"; fi
+  if [ -n "${PREPUSH_DRY_RUN:-}" ]; then echo "would run: $*"; else "$@"; fi
 }
 
 if git rev-parse --verify --quiet "$BASE" >/dev/null 2>&1; then

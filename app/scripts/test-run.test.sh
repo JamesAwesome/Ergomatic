@@ -47,6 +47,36 @@ check "caught ERR_HTTP2_NO_MEM not promoted" "EMPTY"               "$(classify 1
 # does NOT bite; with this row it does.
 check "lowercase 'out of memory' not promoted" "EMPTY"              "$(classify 1 " Test Files  1 failed (1)" "MEMALLOC: Error allocating memory, we are most likely out of memory")"
 
+# --- the REAL pipeline ---
+# Every case above runs --self-test, which fabricates rc and never reaches
+# the `| tee` pipeline -- so none of them can see a PIPESTATUS regression,
+# the single mechanic this whole script exists to protect. This case drives
+# the actual pipeline by pointing ERGOMATIC_TEST_RUN_BIN at a child that
+# dies by SIGKILL. No node: the child is three lines of `sh`, so it runs on
+# ubuntu-latest in CI's `scripts` job.
+#
+# The mutation that makes it red (run 2026-09-08): drop `-o pipefail` from
+# test-run.sh's `set -uo pipefail` AND substitute `rc=$?` for
+# `rc=${PIPESTATUS[0]}` --
+#   FAIL  ... exits 137 -- expected '137', got: 0
+#   FAIL  ... banners   -- expected '0', got: 1
+# Substituting `rc=$?` ALONE does NOT bite: under pipefail a pipeline's
+# status is its rightmost non-zero, which is the child's 137 here. Both
+# halves are the mechanic, so the mutation is both halves.
+PIPEDIR="$(mktemp -d)"
+cat > "$PIPEDIR/dies-by-signal" <<'SH'
+#!/bin/sh
+kill -9 $$
+SH
+chmod +x "$PIPEDIR/dies-by-signal"
+pipe_out="$(ERGOMATIC_TEST_RUN_BIN="$PIPEDIR/dies-by-signal" \
+  ERGOMATIC_TEST_PEERDIR="$PIPEDIR/peers" \
+  bash "$HERE/test-run.sh" 2>&1)"; pipe_rc=$?
+check "a SIGKILLed child through the real pipeline exits 137" "137" "$pipe_rc"
+case "$pipe_out" in *"MEMORY KILL"*) r=0 ;; *) r=1 ;; esac
+check "a SIGKILLed child through the real pipeline banners" "0" "$r"
+rm -rf "$PIPEDIR"
+
 # --- capture (Task 2) ---
 CAPDIR="$(cd "$HERE/.." && pwd)/.test-kills"
 rm -rf "$CAPDIR"
