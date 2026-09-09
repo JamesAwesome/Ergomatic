@@ -2278,21 +2278,40 @@ question, not a re-raised one.
 | **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by THREE FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window; and, since 2026-09-04, the per-user `C2_ALLOWED_EMAILS` gate — the VICTIM must be on that list for the callback to complete at all, because the hop re-checks `availableFor(user.email)` at step 3b after resolving its principal, so on a one-account rollout the population that can be victimised is one) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**; and since 2026-09-04 "a real cohort" is itself gated on `C2_ALLOWED_EMAILS`, so the flag flip alone no longer admits one) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 | **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
 
-- **The `PM5` / `Timer` provenance label is the one place RF32 was not
-  swept.** `UnsavedWorkouts.tsx:66,170`, `ReviewSession.tsx:75,111` and
+- **The `PM5` / `Timer` provenance label is a design decision RF32's census
+  did not take.** `UnsavedWorkouts.tsx:66,170`, `ReviewSession.tsx:75,111` and
   `ReadOnlyRecording.tsx:13` render `PM5 · Sep 8 · Not saved` and
   `Discard PM5 workout X`. Phase MT's RF32 census (2026-09-08) LEFT these
   deliberately: the label's whole job is telling the reader a MACHINE recorded
   the row rather than the phone timer, which is RF32's own
-  naming-the-source-of-a-stored-number exemption. But it is the last
-  user-facing `PM5` vocabulary outside disambiguation, it reads against
-  `Timer` as its opposite, and swapping it to `Monitor` would change one word
-  across three screens at once. **A design decision, not a mechanical one** —
-  hence here rather than in the sweep. Related: the NFC connecting card's copy
-  WAS changed in the same census, on a screen whose shape was Gate 0 approved
+  naming-the-source-of-a-stored-number exemption. It reads against `Timer` as
+  its opposite, and swapping it to `Monitor` would change one word across
+  three screens at once. **A design decision, not a mechanical one** — hence
+  here rather than in the sweep. Related: the NFC connecting card's copy WAS
+  changed in the same census, on a screen whose shape was Gate 0 approved
   2026-09-06, one day before the RF32 rule existed; the change is wording-only
   (no captures owed, James 2026-08-23) and the review judged it correct, but
   it is the precedent this row would follow.
+  **STRUCK from this row, 2026-09-09 (fix round): it used to call itself "the
+  one place RF32 was not swept" and "the last user-facing `PM5` vocabulary
+  outside disambiguation". Both were false when written** — the census had
+  missed `driver.ts`'s eight `REJECTION_VERBS`, which reach a rower as
+  `ConnectedError.detail` on all three failure doors and printed
+  `PM5 rejected frame 0`. They now read "The monitor …", gated by a test that
+  derives its reason list from the driver's own exhaustive `Record`. The two
+  struck sentences are RF30's shape: a later census reads a completeness claim
+  INSTEAD of re-running the grep, so the wrong one costs more than none.
+  **What still says `PM5` to a rower, so the next census starts from a true
+  list** (`grep -rn "PM5" app/src` over string literals, run 2026-09-09):
+  this row's provenance label; `MachineSummaryTable.tsx:34`'s
+  `PM5 · PER INTERVAL` eyebrow and `useMonitorSession.ts:1723`'s "More than
+  one PM5 has this name." (both are examples RF32's own text names as
+  allowed); the device caption and `Couldn't reach PM5 …`, which interpolate
+  the monitor's advertised name; `capacitorBle.ts`'s three targeted-scan
+  errors, which render in the DETAIL panel's `raw` slot and keep the name on a
+  receipt recorded in that file; `connectTheMonitor.tsx:34`'s "You'll need a
+  PM5 (the standard Concept2 monitor)", never assessed by any census; and nine
+  mentions in shipped release notes (its own row below).
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
