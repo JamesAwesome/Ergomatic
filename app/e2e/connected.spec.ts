@@ -2374,3 +2374,179 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
     await expect(page.getByRole("button", { name: "Scan NFC" })).toBeVisible();
   });
 });
+
+/**
+ * Phase RN — the ready screen becomes a preference (spec
+ * `2026-09-09-ready-card-preference-design.md`, Gate 0 CLOSED 2026-09-09).
+ *
+ * THE LOAD-BEARING GATE OF THE WHOLE PHASE, and it takes two legs for a
+ * reason. The client seam test drives the settings screen and then mounts a
+ * consumer, but both live in one JS realm, so it cannot tell a working store
+ * from a module that merely remembers. A CLICK navigation has the same
+ * blindness — it is same-document by construction, so the store module and
+ * its in-memory fallback survive it. Only a RELOAD proves the rower's choice
+ * was really written down.
+ *
+ * Each leg therefore asserts the property of HOW it navigated, rather than
+ * describing it in a comment (RF38, from Phase JC: a test whose conclusion
+ * rests on how it got there owes an assertion about that). The sentinel below
+ * is stamped on `window` right after the choice is made: the click leg must
+ * still see it, and the reload leg must not.
+ */
+test.describe("the ready screen is a preference (Phase RN)", () => {
+  const SENTINEL = "__rnSameDocument";
+
+  /**
+   * NO FRAMES AT ALL, and this is what makes every assertion below mean
+   * something. `injectFakeMonitor` defaults to `buildStoryEvents()`, a
+   * streaming timeline; the first rowing frame opens the run, and an open run
+   * makes `axes.session !== "none"`, which renders the surface REGARDLESS of
+   * the ready-screen setting.
+   *
+   * Measured, not reasoned: with the store's `setItem` call deleted — the
+   * mutation this whole describe block exists to catch — all three legs
+   * passed on the streaming fixture, including the reload leg. On an empty
+   * timeline the same mutation fails them. The identical trap appeared once
+   * already in this phase, in Just Row's capture harness, which is why it is
+   * written down here rather than fixed quietly (RF21).
+   */
+  const NO_MOTION: (FakeStatusEventLike | FakeBoundaryEventLike)[] = [];
+
+  /** Signs in, chooses SKIP on the real settings screen, and stamps the
+   *  same-document sentinel. Writes nothing to storage by hand: the rower's
+   *  tap is the only producer (RF24). */
+  async function chooseSkip(page: Page, email: string): Promise<void> {
+    await signInViaBackdoor(page, { email, name: "Ready Screen Tester" });
+    await page.goto("/you/settings");
+    const group = page.getByRole("radiogroup", { name: "Ready screen" });
+    await expect(group).toBeVisible();
+    await group.getByRole("radio", { name: "SKIP", exact: true }).click();
+    await expect(
+      group.getByRole("radio", { name: "SKIP", exact: true }),
+    ).toHaveAttribute("aria-checked", "true");
+    await page.evaluate((key) => {
+      (window as unknown as Record<string, unknown>)[key] = true;
+    }, SENTINEL);
+  }
+
+  async function sentinelPresent(page: Page): Promise<boolean> {
+    return await page.evaluate(
+      (key) => (window as unknown as Record<string, unknown>)[key] === true,
+      SENTINEL,
+    );
+  }
+
+  /** The rest of the connected walk, from an already-signed-in page with the
+   *  fake injected: import the workout, open it, Connect. Stops at Connect —
+   *  what comes next is the thing under test. */
+  async function connectToTheFake(page: Page, title: string): Promise<void> {
+    await setBaselines(page);
+    await importBulk(page, BULK_TEXT(title));
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await page.getByRole("button", { name: "Connect" }).click();
+  }
+
+  const readyLine = (page: Page) =>
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" });
+
+  test("SKIP, reached without a reload: the numbers replace the ready card", async ({
+    page,
+  }) => {
+    const title = "RN Skip Same Document";
+    await injectFakeMonitor(page, "PM5 918273645", NO_MOTION, FIXTURE_PROGRAM);
+    await signInViaBackdoor(page, {
+      email: "rn-skip-samedoc@e2e.test",
+      name: "Ready Screen Tester",
+    });
+
+    // ALL THE SETUP FIRST, because `setBaselines` and `importBulk` navigate
+    // with `page.goto` — a full document load. An earlier draft of this test
+    // chose SKIP before the import and then claimed the whole walk was
+    // same-document; the sentinel below caught that, which is the reason it
+    // is an assertion and not a comment (RF38).
+    await setBaselines(page);
+    await importBulk(page, BULK_TEXT(title));
+
+    // From here every navigation is a CLICK inside the running app.
+    await page.getByRole("link", { name: "YOU" }).click();
+    await page.getByRole("link", { name: "SETTINGS" }).click();
+    const group = page.getByRole("radiogroup", { name: "Ready screen" });
+    await expect(group).toBeVisible();
+    await group.getByRole("radio", { name: "SKIP", exact: true }).click();
+    await expect(
+      group.getByRole("radio", { name: "SKIP", exact: true }),
+    ).toHaveAttribute("aria-checked", "true");
+    await page.evaluate((key) => {
+      (window as unknown as Record<string, unknown>)[key] = true;
+    }, SENTINEL);
+
+    await page.getByRole("link", { name: "LIBRARY" }).click();
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await page.getByRole("button", { name: "Connect" }).click();
+
+    // POSITIVE FIRST, then the negatives — a negative async assertion waits
+    // for positive readiness (CLAUDE.md).
+    await expect(page.getByRole("button", { name: "End session" })).toBeVisible(
+      { timeout: 20_000 },
+    );
+    await expect(readyLine(page)).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Show me the numbers" }),
+    ).toHaveCount(0);
+
+    // THE LEG'S OWN CLAIM: not one document load since the choice was made,
+    // so the store module that answered on the settings screen is the same
+    // instance that answered at the erg. This leg therefore proves the app
+    // agrees with itself; the reload leg below is what proves the choice was
+    // written down.
+    expect(await sentinelPresent(page)).toBe(true);
+  });
+
+  test("SKIP, across a RELOAD: the choice crossed a real store, not a live module", async ({
+    page,
+  }) => {
+    const title = "RN Skip Across Reload";
+    await injectFakeMonitor(page, "PM5 918273645", NO_MOTION, FIXTURE_PROGRAM);
+    await chooseSkip(page, "rn-skip-reload@e2e.test");
+
+    await page.reload();
+    // The leg's own claim, and the whole difference between the two: this is
+    // a fresh document, so nothing the previous one held in memory survives.
+    // Only localStorage can carry the rower's choice from here.
+    expect(await sentinelPresent(page)).toBe(false);
+    await expect(
+      page.getByRole("heading", { name: "Settings", exact: true }),
+    ).toBeVisible();
+
+    await connectToTheFake(page, title);
+
+    await expect(page.getByRole("button", { name: "End session" })).toBeVisible(
+      { timeout: 20_000 },
+    );
+    await expect(readyLine(page)).toHaveCount(0);
+  });
+
+  test("SHOW across the same reload keeps the ready card, so the skip is the setting and not the reload", async ({
+    page,
+  }) => {
+    const title = "RN Show Across Reload";
+    await injectFakeMonitor(page, "PM5 918273645", NO_MOTION, FIXTURE_PROGRAM);
+    await signInViaBackdoor(page, {
+      email: "rn-show-reload@e2e.test",
+      name: "Ready Screen Tester",
+    });
+    await page.goto("/you/settings");
+    const group = page.getByRole("radiogroup", { name: "Ready screen" });
+    await group.getByRole("radio", { name: "SHOW", exact: true }).click();
+    await page.reload();
+
+    await connectToTheFake(page, title);
+
+    await expect(readyLine(page)).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByRole("button", { name: "Show me the numbers" }),
+    ).toBeVisible();
+  });
+});
