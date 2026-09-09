@@ -317,11 +317,16 @@ export default function ConnectedInterstitial({
   // `ConnectedSurface` uses — this screen already has explicit buttons
   // for everything else, and a failure screen is exactly the moment a
   // rower is looking for a way to see more, not a gesture to discover.
-  // (This used to enumerate them as "Try again, Row on the phone timer
-  // instead, Cancel". The refusal frame withholds the phone-timer offer
-  // as of the Phase MT close-out, so the list was true of three shapes
-  // and is now true of none; the ARGUMENT is unaffected, which is why
-  // the list went rather than the reasoning.)
+  // (A list of button labels used to sit here. It went at the Phase MT
+  // close-out because the stack now has THREE shapes and no single
+  // enumeration is true of all of them: three buttons on the refusal
+  // frame, four on the other eighteen reasons, and five on
+  // `permission-denied` where the platform has a settings door. The
+  // ARGUMENT is unaffected, which is why the list went rather than the
+  // reasoning. A correction to this parenthetical's own first draft,
+  // which claimed the old list was "true of three shapes and is now
+  // true of none": there were TWO shapes before, not three, and the
+  // list is still exactly true of the four-button one.)
   const [logOpen, setLogOpen] = useState(false);
   const logOpener = useRef<HTMLElement | null>(null);
 

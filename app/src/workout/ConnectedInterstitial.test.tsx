@@ -826,7 +826,10 @@ describe("state 6: the two invariants that hold on EVERY failure frame", () => {
     },
     // `connect()`'s own `fail()` when the platform has no transport.
     "transport-missing": { detail: "This device has no Bluetooth transport." },
-    // `connect()`'s `device === undefined` arm.
+    // `mapRadioFailure`'s cancel arm. NOT `connect()`'s own
+    // `device === undefined` arm, which this comment used to cite and
+    // which supplies no `raw` at all; the no-`raw` path is covered by
+    // `transport-missing` and `timeout` below.
     "scan-dismissed": {
       detail: "No monitor was picked.",
       raw: "User cancelled the requestDevice() chooser.",
