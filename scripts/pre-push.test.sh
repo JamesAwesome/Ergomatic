@@ -25,7 +25,20 @@ chmod +x "$STUB/node"
 # PREPUSH_DRY_RUN makes the hook echo its invocations instead of running them.
 run_hook() { ( cd "$ROOT" && PATH="$STUB:$PATH" PREPUSH_DRY_RUN=1 PREPUSH_BASE="$1" sh -e .husky/pre-push 2>&1 ); }
 
-out="$(run_hook refs/remotes/origin/main)"; rc=$?
+# The "resolvable" cases below use HEAD, not refs/remotes/origin/main --
+# the hook's own production default. Measured 2026-09-08 by simulating CI's
+# checkout exactly (actions/checkout@v7 with no fetch-depth defaults to 1):
+# `git clone --depth 1 --branch <branch> file://<repo> sim` leaves
+# `sim`'s `git for-each-ref` with ONLY this branch's heads/remotes entries --
+# refs/remotes/origin/main is absent, so `git rev-parse --verify --quiet` on
+# it fails and the hook correctly takes its FALLBACK branch, failing this
+# test for a ref reason having nothing to do with the hook body. HEAD always
+# resolves in any checkout depth and still exercises the --changed branch
+# (the hook only needs $BASE to resolve, not to be origin/main specifically).
+# Do NOT swap this back to refs/remotes/origin/main and do NOT add
+# fetch-depth: 0 to ci.yml to make that ref exist -- the hook's production
+# default is correct and unrelated; only this test's base needed changing.
+out="$(run_hook HEAD)"; rc=$?
 check "a resolvable base exits 0"            "0" "$rc"
 case "$out" in *"--changed"*) r=0 ;; *) r=1 ;; esac
 check "a resolvable base uses --changed"     "0" "$r"
@@ -50,7 +63,8 @@ check "the fallback keeps its Docker-free scope" "0" "$r"
 
 # The whole-tree gates cannot be selected by --changed, so they must be a
 # SECOND invocation -- `--changed X scripts/` INTERSECTS and finds nothing.
-out="$(run_hook refs/remotes/origin/main)"
+# HEAD again -- see the comment above the first run_hook call.
+out="$(run_hook HEAD)"
 # Both dry-run lines contain "scripts/test-run.sh", so a bare `grep -c
 # 'scripts/'` counts 2 and fails against a CORRECT hook. Anchor on the
 # second invocation's distinctive argument instead.
@@ -67,7 +81,7 @@ check "integration project is never admitted" "0" "$r"
 FAKEBIN="$(mktemp -d)"
 printf '#!/bin/sh\necho "ran: $*"\n' > "$FAKEBIN/pnpm"
 chmod +x "$FAKEBIN/pnpm"
-out="$( cd "$ROOT" && DRY_RUN=1 PREPUSH_BASE=refs/remotes/origin/main \
+out="$( cd "$ROOT" && DRY_RUN=1 PREPUSH_BASE=HEAD \
   PATH="$FAKEBIN:$STUB:$PATH" sh -e .husky/pre-push 2>&1 )"
 case "$out" in *"would run:"*) r=1 ;; *) r=0 ;; esac
 check "an ambient DRY_RUN does not disarm the hook" "0" "$r"
