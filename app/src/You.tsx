@@ -85,13 +85,6 @@ export default function You({
           Sign out
         </button>
       </section>
-      {/* No SETTINGS section: the mock's settings rows (PRE-WORKOUT
-          COUNTDOWN, PACE TOLERANCE, ACCENT COLOR) are filler
-          (DEVIATIONS.md/handoff README §7) and are deliberately not
-          built; the two rows that WERE real are both since removed —
-          WARM-UP by Phase WU (2026-08-21), and "Learning the app" by
-          James's 2026-08-23 ruling (the teaching lives in News's pinned
-          articles alone now). */}
       {/* THE DOORS (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1,
           Gate 0 amendment §8 approved 2026-09-04; THIRD ROW added by the
           baselines-subpage Gate 0, 2026-09-05): the foot of You is one
@@ -99,10 +92,16 @@ export default function You({
           `margin-top: auto` on this wrapper (`.you-doors`, index.css) —
           invariant R7; rows each carrying their own auto margin would
           be a flex free-space split, not a stack. ORDER: BASELINES,
-          CONCEPT2, DIAGNOSTICS — ruling 7 fixed CONCEPT2 above
-          DIAGNOSTICS and keeps DIAGNOSTICS You's last child; BASELINES
-          goes on top because it is the only one of the three a rower
-          reads FOR its value rather than opens for a task.
+          CONCEPT2, SETTINGS, DIAGNOSTICS — ruling 7 fixed CONCEPT2 above
+          DIAGNOSTICS and keeps DIAGNOSTICS You's last child, Phase JC's
+          Gate 0 ruling 3 (James, 2026-09-08: "put settings under concept
+          2 but above diagnostics") put SETTINGS between them, and
+          BASELINES goes on top because it is the one a rower reads FOR
+          its value rather than opens for a task. The group stays FLAT —
+          no "Advanced" container (Gate 0 ruling 3 again, on the PM
+          verdict): CONCEPT2 is a status surface whose SEND FAILED /
+          RECONNECT NEEDED warning a drawer would hide, and neither
+          "Advanced" nor "Settings" is an honest name for all four.
 
           BASELINES (Gate 0, 2026-09-05 — James: "move baselines into a
           subpage of You, I'd still like them to be visible when they are
@@ -125,18 +124,39 @@ export default function You({
           the CARD beside RESET BASELINE SETUP; it does not transfer to
           this adjacency, which Gate 0 §8.2/8.4 drew and approved instead.
 
+          SETTINGS (Phase JC, Gate 0 2026-09-08): the judged-colour slots
+          (`you/SettingsScreen.tsx`) — what red and blue mean on a judged
+          pace or stroke rate, or nothing at all. It holds ONLY those four
+          slots today. The mock's other settings rows (PRE-WORKOUT
+          COUNTDOWN, PACE TOLERANCE, ACCENT COLOR) are still unbuilt: the
+          first two are parked in ROADMAP for a second SETTINGS PR (Gate 0
+          ruling 9 kept them off this one — pace tolerance changes what a
+          judged number MEANS, which would be a second risk model in one
+          review), and ACCENT COLOR is filler (DEVIATIONS.md/handoff
+          README §7). The two rows that WERE real on this screen are both
+          long since removed — WARM-UP by Phase WU (2026-08-21), and
+          "Learning the app" by James's 2026-08-23 ruling (the teaching
+          lives in News's pinned articles alone now). Renders on every
+          account, like BASELINES and unlike CONCEPT2.
+
           DIAGNOSTICS (Task 3, Gate 0 rev 2/3, 2026-09-01): one quiet mono
           row, at the bottom of You, on purpose — the diagnostics ring is
           not a product feature a rower reaches for, it's a tool for the
           rare "something went wrong" moment. Opens the menu screen
           (`you/Diagnostics.tsx`), not Monitor logs directly — the menu is
           the extensible home for whatever diagnostic tools follow.
-          `state={{ from: "/you" }}`: the same origin idiom the two rows
-          above use, so the menu's own BackLink returns HERE. Stays the
-          LAST child of You. */}
+          `state={{ from: "/you" }}`: the same origin idiom every other row
+          in this group uses (a count, not a list — the group has grown
+          twice and prose naming "the two rows above" went stale both
+          times), so the menu's own BackLink returns HERE. Stays the LAST
+          child of You. */}
       <nav className="you-doors" aria-label="More">
         <BaselinesRow />
         <Concept2Row accountId={user.id} />
+        <Link to="/you/settings" state={{ from: "/you" }} className="diag-row">
+          <span>SETTINGS</span>
+          <span aria-hidden="true">&rsaquo;</span>
+        </Link>
         <Link
           to="/you/diagnostics"
           state={{ from: "/you" }}

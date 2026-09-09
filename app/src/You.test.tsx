@@ -224,28 +224,48 @@ describe("You", () => {
     const row = screen.getByRole("link", { name: "DIAGNOSTICS" });
     expect(row).toHaveAttribute("href", "/you/diagnostics");
   });
+
+  // Phase JC (Gate 0 ruling 3): the SETTINGS door — the judged-colour
+  // slots. It renders on every account, unlike CONCEPT2, so this case
+  // does not need an available:true read; the four-row ORDER is pinned in
+  // the Concept2 describe below, where the third row exists.
+  it("carries a SETTINGS row navigating to /you/settings, inside the doors group", () => {
+    renderYou(user);
+    const row = screen.getByRole("link", { name: "SETTINGS" });
+    expect(row).toHaveAttribute("href", "/you/settings");
+    expect(screen.getByRole("navigation", { name: "More" })).toContainElement(
+      row,
+    );
+  });
 });
 
 describe("You: the Concept2 row (Wave E PR A, spec §5.1)", () => {
   const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
 
-  it("renders the CONCEPT2 row ABOVE the DIAGNOSTICS row, both inside one doors group (R7, ruling 7)", async () => {
-    // DOCUMENT ORDER, not presence: ruling 7 puts CONCEPT2 first and keeps
-    // DIAGNOSTICS You's last child; presence alone would pass either order.
+  it("renders all four doors in the ruled order, inside one group (R7, ruling 7; Phase JC Gate 0 ruling 3)", async () => {
+    // DOCUMENT ORDER, not presence: ruling 7 puts CONCEPT2 above
+    // DIAGNOSTICS and keeps DIAGNOSTICS You's last child, and Phase JC's
+    // Gate 0 ruling 3 (James, 2026-09-08: "put settings under concept 2 but
+    // above diagnostics") fixes SETTINGS between them. Presence alone would
+    // pass any of the 24 permutations.
     c2Link.body = { available: true, linked: false };
     renderYou(user);
     const row = await screen.findByRole("link", { name: /CONCEPT2/ });
     const diagnostics = screen.getByRole("link", { name: /DIAGNOSTICS/ });
     const baselines = screen.getByRole("link", { name: /BASELINES/ });
+    const settings = screen.getByRole("link", { name: "SETTINGS" });
     const following = Node.DOCUMENT_POSITION_FOLLOWING;
-    // BASELINES, then CONCEPT2, then DIAGNOSTICS — order is the ruling
-    // (ruling 7 for the lower pair), and presence alone would pass any of
-    // the six permutations.
+    // BASELINES, then CONCEPT2, then SETTINGS, then DIAGNOSTICS.
     expect(baselines.compareDocumentPosition(row) & following).toBeTruthy();
-    expect(row.compareDocumentPosition(diagnostics) & following).toBeTruthy();
+    expect(row.compareDocumentPosition(settings) & following).toBeTruthy();
+    expect(
+      settings.compareDocumentPosition(diagnostics) & following,
+    ).toBeTruthy();
     const group = screen.getByRole("navigation", { name: "More" });
     expect(group).toContainElement(row);
+    expect(group).toContainElement(settings);
     expect(group).toContainElement(diagnostics);
+    expect(settings).toHaveAttribute("href", "/you/settings");
     expect(row).toHaveAttribute("href", "/you/concept2");
     expect(screen.getByText("NOT LINKED")).toBeInTheDocument();
   });

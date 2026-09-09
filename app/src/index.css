@@ -4807,65 +4807,122 @@ button.back-link:disabled,
   color: var(--ink-3);
 }
 
-/* The judgement-keyed classes below (`timer-card-actual-slower/-within/
-   -faster/-stale`, from `domain/judge.ts`'s own `Judgement` union) are the
-   tint hooks Task 3 declared and Task 6 filled in. Every connected pane's
-   live actual wears exactly one of them, assigned by ONE code path
+/* THE JUDGEMENT-KEYED CLASSES, IN TWO FAMILIES SINCE PHASE JC TASK 3.
+   Every judged actual in the app wears exactly one of them, and on the
+   connected panes they are all assigned by ONE code path
    (`src/workout/connected/surfaceModel.ts`'s `judgedValue`, the only
-   caller of `judgeActual` in `src/`).
+   caller of `judgeActual` in `src/`). The suffix is still
+   `domain/judge.ts`'s own `Judgement` member, so the union and the CSS
+   cannot drift apart silently.
 
-   BLUE FOR FASTER, RED FOR SLOWER (tester feedback via James, 2026-08-13),
-   from the dedicated `--judge-faster`/`--judge-slower` tokens — see
-   `tokens.css` for the values, the contrast measurements, and why they are
-   no longer the handoff's `--type-o2`/`--type-at` teal and ochre. Still
-   never `--accent`: on these panes the target is the neutral ink reference
-   and accent appears nowhere (DEVIATIONS row 0).
+   The split is about who owns the colour:
 
-   ONE PAIR SERVES BOTH JUDGED METRICS. The testers also asked that the spm
-   colours match the split's; they already did, and this is why — the class
-   suffix IS the `Judgement` value, and `judgeActual` resolves both metrics
-   to the same union (a faster split and a higher rate are both `"faster"`,
-   which is exactly the direction rule that file exists to hold). There is
-   no per-metric colour branch to keep in step, here or in either pane.
+   - `faster` and `slower` are the two verdicts a rower may recolour or
+     silence, per metric, on the SETTINGS screen. They wear the four
+     `.judge-{pace,spm}-{faster,slower}` rules declared below
+     `.timer-card-actual-stale`, each reading its own resolved slot token.
+   - `within` and `stale` are not a rower's to choose — on-target is plain
+     `--ink` by design, and a held reading is grey because we cannot vouch
+     for it — so they keep `.timer-card-actual-within`/`-stale` and stay
+     outside the preference entirely. `-within` deliberately declares
+     nothing at all: a rule restating "plain ink" would be one more place
+     for the neutral case to drift.
 
-   Measured against `--surface` (#fffdf7): `--judge-faster` 8.25:1,
-   `--judge-slower` 7.94:1, `--ink-3` 7.44:1 (and 6.30:1 against
-   `--surface-sunken`). All clear the house's 4.5:1 floor. `-within`
-   deliberately declares nothing: within tolerance IS plain `--ink`, and a
-   rule restating that would be one more place for the neutral case to
-   drift.
+   BLUE FOR FASTER, RED FOR SLOWER (tester feedback via James, 2026-08-13)
+   is now the DEFAULT rather than the rule — see `tokens.css` for the raw
+   inks, the contrast measurements, and why they are not the handoff's
+   `--type-o2`/`--type-at` teal and ochre. Still never `--accent`: on these
+   panes the target is the neutral ink reference and accent appears nowhere
+   (DEVIATIONS row 0).
+
+   ONE PAIR USED TO SERVE BOTH JUDGED METRICS, and this is what retired it.
+   The testers also asked that the spm colours match the split's; they did,
+   for free, because the class suffix WAS the `Judgement` value and
+   `judgeActual` resolves both metrics to the same union (a faster split
+   and a higher rate are both `"faster"`, which is exactly the direction
+   rule that file exists to hold). Matching is now a default rather than a
+   structural fact, because a rower who wants the split coloured may not
+   want the rate coloured at all — so `PaneLive.tsx` and `PaneGrid.tsx`
+   pass a REQUIRED metric alongside the judgement, and
+   `.timer-card-actual-faster`/`-slower` and the `--judge-faster`/
+   `--judge-slower` tokens behind them were deleted with their last
+   emitter.
+
+   Contrast, recomputed here rather than carried forward (the WCAG
+   relative-luminance formula over the token hexes): `--ink-3` #57544c is
+   7.43:1 against `--surface` #fffdf7 and 6.30:1 against
+   `--surface-sunken`. The slot tokens' own numbers live with the inks in
+   `tokens.css`. All clear the house's 4.5:1 floor.
 
    Fix wave (review H5/N3): `.timer-card-static` and the bare
    `.timer-card-actual` used to sit between this comment and the rules it
    describes. Both were rendered ONLY by `TimerTargets`' `variant="connected"`
    JSX, which Task 8 deleted; a grep across `src`/`e2e`/`domain` found zero
    renderers for either. Removed rather than kept "in case" — the shipped
-   renderers of the judgement-keyed hook are `connected/PaneLive.tsx` and
-   `connected/PaneGrid.tsx` (connected-revamp Task 3's fix round retired
-   the third, `connected/JudgedCard.tsx`, along with the cards it wrapped —
-   see that task's own report), and they use the
-   `-slower`/`-faster`/`-stale` suffixed classes only. */
+   renderers of the judgement-keyed hooks are `connected/PaneLive.tsx`,
+   `connected/PaneGrid.tsx` and (the slot pair only)
+   `session/PostWorkoutSummary.tsx`; connected-revamp Task 3's fix round
+   retired a third connected renderer, `connected/JudgedCard.tsx`, along
+   with the cards it wrapped — see that task's own report. */
 
 /* Handoff: "every stale value greys to --ink-3" — task-3 review HIGH-1:
    this shipped as `--ink-5` (2.76:1 against --surface, FAILS the house's
    binding >=4.5:1 AA rule; 2.33:1 against --surface-sunken, worse).
-   `--ink-3` measures 7.44:1 / 6.30:1 against the same two backgrounds —
+   `--ink-3` measures 7.43:1 / 6.30:1 against the same two backgrounds —
    both pass comfortably. Pinned structurally (not just by eye) in
    TimerTargets.test.tsx, which reads this exact rule
    out of this file's own source text. The rule it describes is
-   `.timer-card-actual-stale`, third below — this comment used to sit
-   immediately above the first of the pair (`-slower`, `-under` as it was
-   named then), which is not it (review N3). */
-.timer-card-actual-slower {
-  color: var(--judge-slower);
-}
-
-.timer-card-actual-faster {
-  color: var(--judge-faster);
-}
-
+   `.timer-card-actual-stale`, IMMEDIATELY below — it used to be third,
+   behind `.timer-card-actual-slower`/`-faster`, and Phase JC Task 3
+   deleted that pair with its last emitter. */
 .timer-card-actual-stale {
   color: var(--ink-3);
+}
+
+/* THE PER-SLOT VERDICT RULES (Phase JC, spec `docs/superpowers/specs/
+   2026-09-08-judge-colours-design.md`). Four classes where TWO PAIRS stood
+   before — `.timer-card-actual-faster`/`-slower` on the connected panes
+   and `.summary-row-faster`/`-slower` on the summary, both now deleted —
+   because a rower chooses a colour per SLOT and pace must be able to
+   differ from stroke rate.
+
+   Each names a RESOLVED slot, never a raw ink: `tokens.css` declares
+   `--judge-{pace,spm}-{faster,slower}` as `var(--judge-blue)` /
+   `var(--judge-red)`, and `you/judgeColors.ts` overrides them on
+   `document.documentElement` when the rower picks something else. That is
+   the whole mechanism — these rules never change, and nothing here learns
+   a preference exists.
+
+   `color` ONLY, never `background`: the alarm banner (`.connected-lost`,
+   below) must stay red at every setting, so it paints from the raw
+   `--judge-red` instead. `theme/judgeTokens.test.tsx` sweeps every rule in
+   this file for a slot token in a `background` declaration and fails on
+   the first one.
+
+   THREE EMITTERS, ALL RENDER CODE: `connected/PaneLive.tsx`'s
+   `judgedClass` (split hero and AVG as pace, rate hero as spm),
+   `connected/PaneGrid.tsx`'s `cellClass` (the /500M and SPM columns), and
+   `session/PostWorkoutSummary.tsx`'s `judgedColorClass` (pace only — the
+   summary's SPM cell is not tinted). Each passes its metric as a REQUIRED
+   argument; a default would be silently right for one metric and wrong for
+   the other, and invisible until a rower changed a slot. Contrast is
+   unchanged from the pairs these replaced, and is measured in `tokens.css`
+   against all THREE backgrounds a judged value sits on — `--surface`,
+   `--page`, and `--surface-sunken` for a resting grid row's SPM cell. */
+.judge-pace-faster {
+  color: var(--judge-pace-faster);
+}
+
+.judge-pace-slower {
+  color: var(--judge-pace-slower);
+}
+
+.judge-spm-faster {
+  color: var(--judge-spm-faster);
+}
+
+.judge-spm-slower {
+  color: var(--judge-spm-slower);
 }
 
 .timer-upnext {
@@ -6390,14 +6447,17 @@ section:not(.news-pinned) .news-row:last-of-type {
       has to be the neutral reference, or the rower is reading three
       judgement colours.
    2. THE ACTUAL CARRIES THE JUDGEMENT, and only on the value.
-      `.timer-card-actual-faster/-slower` (declared with the other
-      `timer-card-*` rules above, Task 3) resolve to `--judge-faster` blue
-      and `--judge-slower` red — dedicated verdict tokens since 2026-08-13,
+      `.judge-{pace,spm}-{faster,slower}` (declared with the other
+      `timer-card-*` rules above) resolve to `--judge-blue` and
+      `--judge-red` by DEFAULT — dedicated verdict inks since 2026-08-13,
       not the reused `--type-at`/`--type-o2` ochre and teal DEVIATIONS row 3
-      had sanctioned a second meaning for. Measured against `--surface`
+      had sanctioned a second meaning for — and to whatever the rower has
+      chosen per slot after that (Phase JC). Measured against `--surface`
       (#fffdf7): blue 8.25:1, red 7.94:1; `--ink-3` (the stale/absent grey)
-      7.44:1 against `--surface` and 6.30:1 against `--surface-sunken`. All
-      clear the house's 4.5:1 floor.
+      7.43:1 against `--surface` and 6.30:1 against `--surface-sunken`. All
+      clear the house's 4.5:1 floor. OFF resolves the slot to `--ink`
+      itself (17.11:1), so a silenced verdict is the same plain ink an
+      on-target reading already wears.
 
    Height: no `- var(--tap)` term — the tab bar this surface renders
    underneath (`/library/:id` still shows it by ROUTE) is HIDDEN by the
@@ -6867,9 +6927,11 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* NO `color` DECLARATION on the value OR the target value, deliberately —
-   both are judged/absent cells that layer `timer-card-actual-{judgement}`
-   or `connected-value-absent` on top of this class, and those rules are
-   declared EARLIER in this file; a `color: var(--ink)` here would win on
+   both are judged/absent cells that layer a judgement class
+   (`judge-{pace,spm}-{faster,slower}` for the two preference-bearing
+   verdicts, `timer-card-actual-{within,stale}` for the two that are not)
+   or `connected-value-absent` on top of this class, and all of those rules
+   are declared EARLIER in this file; a `color: var(--ink)` here would win on
    source order and silently paint every verdict (or every no-target dash)
    plain ink. Caught first by task-6's own hero bug, and again by this
    task's own no-target state: the target value used to hardcode ink,
@@ -7059,10 +7121,11 @@ section:not(.news-pinned) .news-row:last-of-type {
    opposite-direction correction `.connected-hero-avg-label` makes just
    above. NO `color` declaration (the judged/absent convention
    `.connected-hero-value`'s own comment gives, a few lines above this
-   block): `judgedClass` (`PaneLive.tsx`) layers `timer-card-actual-
-   {judgement}` on top, and `-within` (rowing) declares no colour of its
-   own — plain ink — while `-slower`/`-faster` (the rest verdict) repaint
-   it. That is the whole "judged colour absent while rowing, present at
+   block): `judgedClass` (`PaneLive.tsx`) layers this cell's judgement
+   class on top — the PACE metric, since AVG is a split — and
+   `timer-card-actual-within` (rowing) declares no colour of its own,
+   plain ink, while `judge-pace-slower`/`-faster` (the rest verdict)
+   repaint it. That is the whole "judged colour absent while rowing, present at
    rest" behaviour this task adds, and it falls out of leaving this rule's
    own colour undeclared rather than needing a second class here. */
 .connected-hero-avg-value {
@@ -7343,9 +7406,10 @@ section:not(.news-pinned) .news-row:last-of-type {
    The task-6 review's L5 finding is that the
    phone timer's landscape query carries unscoped `.timer-*` declarations
    which arrive uninvited on any pane reusing those components; pane C
-   reuses none of those components (its only borrowed class is
-   `.timer-card-actual-{judgement}`, which sets `color` and nothing else),
-   and it adds no unscoped selector of its own — so the trap neither bites
+   reuses none of those components (its only borrowed classes are the
+   judgement ones — `.judge-{pace,spm}-{faster,slower}` and
+   `.timer-card-actual-{within,stale}` — which set `color` and nothing
+   else), and it adds no unscoped selector of its own — so the trap neither bites
    this pane nor is widened by it.
 
    TWO SPECIFICITY RULES THIS BLOCK OBEYS, both learned from task 6's own
@@ -7356,8 +7420,9 @@ section:not(.news-pinned) .news-row:last-of-type {
       cells are `/500M` and `SPM`; their neutral tone arrives by
       INHERITANCE — from `body` for a completed/active row, from
       `.connected-grid-upcoming`'s own `color` for an upcoming one — which
-      any `.timer-card-actual-*` class beats automatically, since an
-      inherited value loses to any matching rule at all. Task 5 REMOVED
+      any judgement class beats automatically, whichever of the two
+      prefixes it carries, since an inherited value loses to any matching
+      rule at all. Task 5 REMOVED
       the old line-wrapper indirection (`.connected-grid-line1`/`-line2`)
       that used to carry this; the rule itself is unchanged; only where it
       is declared moved, from the wrapper to the row.
@@ -7878,8 +7943,15 @@ section:not(.news-pinned) .news-row:last-of-type {
    fill is what makes this land at arm's length, mid-stroke, out of the
    corner of an eye.
 
+   THE RAW INK, NOT A JUDGED SLOT (Phase JC Task 2). This fill is an ALARM,
+   not a judged number, so it reads `--judge-red` directly and never
+   follows the rower's per-slot colour preference — a rower who sets every
+   slot to blue still gets a red LOST banner. That is the whole reason
+   `tokens.css` splits raw inks from resolved slots rather than overriding
+   the inks in place. `theme/judgeTokens.test.tsx` pins both halves.
+
    Contrast, computed rather than eyeballed: --surface #fffdf7 on
-   --judge-slower #962718 is 7.94:1, against the house 4.5:1 floor. The
+   --judge-red #962718 is 7.94:1, against the house 4.5:1 floor. The
    same pair the token's own comment already measures the other way round
    (a slower-than-target reading on paper) — a ratio is symmetric, so the
    fill inherits its headroom.
@@ -7894,7 +7966,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   flex-direction: column;
   gap: 5px;
   flex: none;
-  background: var(--judge-slower);
+  background: var(--judge-red);
   padding: 12px;
   /* Portrait's own share of `.connected-surface`'s margin-based gap
      scheme (see that rule's comment) — paid only when this banner is
@@ -9392,8 +9464,8 @@ section:not(.news-pinned) .news-row:last-of-type {
      on-color on ink (a selected HELD chip, ↑ MORE LIKE THIS selected) 17.11:1
      on-color on accent (a selected EFFORT chip, ↓ selected, the lead save
        button, a selected DISCARD-armed button) 5.94:1
-     judge-faster on page (a faster row's pace/deviation/bar) 7.43:1
-     judge-slower on page (a slower row's pace/deviation/bar) 7.15:1
+     judge-blue on page (a faster row's pace/deviation/bar, by default) 7.43:1
+     judge-red on page (a slower row's pace/deviation/bar, by default) 7.15:1
      ink on surface (the secondary save button) 17.11:1
    All comfortably clear the 4.5:1 AA floor. */
 /* THE DROP STRIP (Wave F PR 1 Task 4, design spec
@@ -9553,7 +9625,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* No color override (PM final-PR gate, condition round, 2026-08-17,
      James's ruling "neutral is best, prefer black"): this used to set
      `color: var(--accent)` (rust/gold), which collided with the
-     --judge-slower red family on the same screen that introduces the
+     --judge-red family on the same screen that introduces the
      blue-faster/red-slower legend below. Inherits `--ink` from
      `.summary-hero-value` like every sibling hero — only the size
      hierarchy (36px vs 20px) still marks this as the lead. */
@@ -9946,13 +10018,31 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-variant-numeric: tabular-nums;
 }
 
+/* NO `color` DECLARATION, and it is load-bearing rather than an omission
+   (Phase JC Task 3). `.summary-row-pace` is a JUDGED cell: it carries
+   `.judge-pace-faster`/`-slower` on a judged row, and those rules are
+   declared ~5000 lines above this one, with the same (0,1,0) specificity.
+   A `color: var(--ink)` here would win on source order and paint every
+   verdict on the summary plain ink — which is exactly what it did, caught
+   by `design.spec.ts`'s §2E computed-colour leg during the rename. Both
+   cells inherit `--ink` from `body`, byte-identical to what the
+   declaration produced, and an inherited value loses to any matching rule
+   at all — so the verdict class wins wherever it lands.
+
+   The connected panes' own grid block a few thousand lines above states
+   this same rule ("NO RULE THAT COULD MATCH A JUDGED CELL DECLARES
+   `color`"), learned from the identical bug on pane B's hero. It reaches
+   the summary now because the summary's verdicts moved onto the shared
+   `.judge-*` family; before that its own `.summary-row-faster`/`-slower`
+   sat 30 lines BELOW this rule and beat it by source order, which is why
+   nothing here ever had to know. `.summary-row-target` is not judged and
+   is only along for the shared geometry; it inherits the same ink. */
 .summary-row-pace,
 .summary-row-target {
   flex: 0 0 52px;
   font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 600;
-  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 
@@ -9987,20 +10077,24 @@ section:not(.news-pinned) .news-row:last-of-type {
    cell can sit on, task-3-report.md's own numbers: 6.69:1 on --page,
    7.43:1 on --surface — both clear the house 4.5:1 AA floor with room to
    spare) is this app's own established "quiet label" token (matches
-   `.summary-row-offset`, `.summary-legend`, `.summary-targets-only-
-   caption` a few rules below — never a bespoke color for one cell). */
+   `.summary-row-offset` and `.summary-targets-only-caption` a few rules
+   below — never a bespoke color for one cell). Phase JC deleted a third
+   member of that family, `.summary-legend`, along with the copy it
+   carried; the token class is unchanged. */
 .summary-row-spm-target {
   font-weight: 400;
   color: var(--ink-3);
 }
 
-.summary-row-faster {
-  color: var(--judge-faster);
-}
-
-.summary-row-slower {
-  color: var(--judge-slower);
-}
+/* THE SUMMARY'S OWN VERDICT PAIR RETIRED HERE (Phase JC Task 3). It was
+   `.summary-row-faster`/`-slower`, a second pair consuming the same two
+   tokens the connected panes' pair consumed. Both pairs are now the four
+   `.judge-{pace,spm}-{faster,slower}` rules declared beside
+   `.timer-card-actual-stale` above: a rower chooses a colour per slot, and
+   one set of rules serving every judged number in the app is what keeps
+   that choice from having to be made twice. `PostWorkoutSummary.tsx`'s
+   `judgedColorClass` emits the pace pair (this surface's SPM cell is not
+   tinted), so a pace choice repaints the summary and the panes together. */
 
 .summary-row-bar-track {
   position: relative;
@@ -10088,15 +10182,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 13px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
-}
-
-.summary-legend {
-  margin: 10px 0 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--ink-3);
-  text-align: center;
 }
 
 .summary-targets-only-caption {
@@ -10340,9 +10425,11 @@ section:not(.news-pinned) .news-row:last-of-type {
   fill: var(--trace-rest);
 }
 
-/* F-2 (review round 2): same quiet-caption idiom as `.summary-legend`
-   (`PostWorkoutSummary.tsx`) — mono, small, quiet ink, centered under
-   the element it explains. --ink-3 on --surface: 7.43:1 (this file's own
+/* F-2 (review round 2): the quiet-caption idiom — mono, small, quiet
+   ink, centered under the element it explains. It cited the summary's
+   own `.summary-legend` as the precedent until Phase JC deleted that
+   rule; `.summary-targets-only-caption` is the surviving sibling, and
+   the shape here is unchanged. --ink-3 on --surface: 7.43:1 (this file's own
    trace-tick-label rule a few lines below computes the identical
    pairing; not re-measured here). */
 .trace-legend {
@@ -10452,11 +10539,13 @@ section:not(.news-pinned) .news-row:last-of-type {
    above the group ever exceeds that height, the group simply follows it in
    flow (no `margin-top: auto` room left to absorb) and the page scrolls.
    That overflow case was BASELINES content when this rule was written and
-   is unreachable today — Gate 0 (2026-09-05) moved the editor to
-   `/you/baselines` and left You holding an identity card and three rows,
-   which no phone viewport comes close to filling. The rule stays because
-   it is what puts the group at the foot at all, not because the overflow
-   still happens. */
+   is out of reach at today's row count — Gate 0 (2026-09-05) moved the
+   editor to `/you/baselines`, leaving You an identity card above the doors
+   group, which no phone viewport comes close to filling at the handful of
+   rows `You.tsx` renders. The rule stays because it is what puts the group
+   at the foot at all, not because the overflow is impossible: rows keep
+   being added to that group (Phase JC added SETTINGS), so `You.tsx`'s own
+   JSX is the count, not this comment. */
 .you-screen {
   display: flex;
   flex-direction: column;
@@ -10479,21 +10568,26 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* THE DOORS GROUP (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1
-   R7; Gate 0 amendment §8.2/8.4). Two `.diag-row`s — CONCEPT2 above
-   DIAGNOSTICS — sit at the foot of You inside ONE wrapper, and the wrapper
-   carries the ONE `margin-top: auto` that pins the group to the bottom of
-   `.you-screen`'s flex column. This used to live on `.diag-row` itself
+   R7; Gate 0 amendment §8.2/8.4). A STACK of `.diag-row`s sits at the foot
+   of You inside ONE wrapper, and the wrapper carries the ONE
+   `margin-top: auto` that pins the group to the bottom of `.you-screen`'s
+   flex column. THE COUNT IS NOT THIS FILE'S TO STATE — `You.tsx`'s
+   `.you-doors` nav is the enumeration, it has grown twice since this rule
+   was written (BASELINES on 2026-09-05, SETTINGS on 2026-09-08), and this
+   comment named "two" through both. Nothing here depends on how many there
+   are; what it depends on is that there is MORE THAN ONE and that the auto
+   margin lives on the wrapper. That used to live on `.diag-row` itself
    (`.you-screen .diag-row { margin-top: auto }`, "single JSX site, grep
-   confirmed"); with two rows that rule would have given EACH row an auto
-   margin, and CSS Flexbox §8.1 splits positive free space equally between
-   auto margins on the main axis — two rows floating apart, not a second row
-   under the first. `auto` resolves to 0 when BASELINES content already fills
-   the column, exactly as before; each row's own `border-top` is then the
-   only separation, on purpose (the rows carry no `margin-top` of their own
-   any more — the 12px `.diag-row` used to declare was overridden to `auto`
-   at its only site, so it never painted). The CONCEPT2 row is absent on any
-   deployment or account without Concept2, and the group is then one row,
-   drawn exactly as the lone DIAGNOSTICS row was. */
+   confirmed"); with a second row that rule would have given EACH row an
+   auto margin, and CSS Flexbox §8.1 splits positive free space equally
+   between auto margins on the main axis — rows floating apart, not a stack.
+   `auto` resolves to 0 when content above already fills the column, exactly
+   as before; each row's own `border-top` is then the only separation, on
+   purpose (the rows carry no `margin-top` of their own any more — the 12px
+   `.diag-row` used to declare was overridden to `auto` at its only site, so
+   it never painted). CONCEPT2 is the one CONDITIONAL row — absent on any
+   deployment or account without Concept2 — so the group is one row shorter
+   there, drawn the same way. */
 .you-doors {
   margin-top: auto;
   display: flex;
@@ -10604,6 +10698,181 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
   font-size: 13px;
   margin: 8px 0 0;
+}
+
+/* THE JUDGED-COLOUR SETTINGS SCREEN (Phase JC, `/you/settings`,
+   `you/SettingsScreen.tsx`; Gate 0 approved 2026-09-08). Four slots — pace
+   and SPM, faster and slower — each RED / BLUE / OFF.
+
+   WHY THIS IS A NEW CONTROL AND NOT `.onb-option`. The onboarding
+   radiogroup this screen reuses (`onboarding/OptionGroup.tsx`, generalised
+   for exactly this caller) is styled as a COLUMN of full-width 48px rows —
+   four groups of three of those is a screen you scroll. These rules give
+   the same control an INLINE three-across shape. Only the stylesheet
+   differs; the keyboard contract (one tab stop, arrows move focus and
+   selection together, wrapping) is the shared component's and is tested
+   there against these very class names.
+
+   CONTRAST, COMPUTED, NEVER EYEBALLED (recurring failure 6; the ratios are
+   this file's own WCAG relative-luminance method, reproduced 2026-09-08):
+     --ink #1b1a17 option word on --surface #fffdf7      17.11:1
+     --ink slot name on --page #f4f1e8                   15.41:1
+     --ink-3 #57544c parenthetical on --page              6.69:1
+     --ink-3 PREVIEW label on --surface                   7.43:1
+     --judge-blue #1d4e89 specimen on --surface           8.25:1
+     --judge-red #962718 specimen on --surface            7.94:1
+     --accent #b5341f 2px checked border on --surface     5.94:1 (>=3:1 non-text)
+     --judge-blue / --judge-red swatch fill on --surface  8.25 / 7.94:1 (>=3:1)
+     --ink-3 OFF swatch ring and dash on --surface        7.43:1
+   Every text pairing clears the 4.5:1 AA floor and every state-bearing
+   graphic clears the 3:1 non-text floor.
+
+   THE ONE THAT DOES NOT, STATED RATHER THAN OMITTED: the resting 1px
+   --rule-3 #c9c3b2 border measures 1.73:1 on --surface (1.56:1 against the
+   --page around it), below WCAG 1.4.11's 3:1. It is DECORATION and carries
+   no meaning: an option is identified by its WORD plus its swatch, and the
+   selected state — the only state a rower has to perceive here — is the
+   2px --accent border at 5.94:1 alongside `aria-checked`. The same
+   treatment `.diag-copy` and the onboarding chip border already ship with,
+   for the same reason.
+
+   HIT TARGETS: every option is >=44px on BOTH axes (`--tap` on each), with
+   three across a 375px viewport measuring ~105px wide. */
+.judge-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.judge-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.judge-slot-name {
+  margin: 0;
+}
+
+.judge-slot-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+/* The parenthetical. FASTER means a LOWER split and a HIGHER rate, so the
+   screen never asks the reader to hold that inversion in their head. */
+.judge-slot-hint {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.judge-options {
+  display: flex;
+  gap: 8px;
+}
+
+.judge-option {
+  flex: 1 1 0;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  padding: 0 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* The 2px border eats 1px of padding on each side so checking never shifts
+   the word — `.onb-option`'s own trick, kept. */
+.judge-option[aria-checked="true"] {
+  border-width: 2px;
+  border-color: var(--accent);
+  padding: 0 7px;
+}
+
+/* The swatch paints from the RAW inks, never from a resolved slot: it shows
+   what RED and BLUE ARE, so it must not follow the slot it is offering to
+   change (a RED swatch that had already gone blue would be telling the
+   rower nothing). `aria-hidden` in the JSX — the word carries the meaning
+   (WCAG 1.4.1) and the swatch must stay out of the accessible name. */
+.judge-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border-radius: var(--radius);
+}
+
+.judge-swatch[data-color="red"] {
+  background: var(--judge-red);
+}
+
+.judge-swatch[data-color="blue"] {
+  background: var(--judge-blue);
+}
+
+/* OFF is a ringed dash, not an empty box: an empty box reads as an
+   unfilled checkbox next to two filled ones. */
+.judge-swatch[data-color="off"] {
+  position: relative;
+  border: 1px solid var(--ink-3);
+}
+
+.judge-swatch[data-color="off"]::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  height: 1px;
+  background: var(--ink-3);
+}
+
+/* The live preview: each group's two specimens wearing the SAME judged
+   classes a real row emits, so what the rower sees here is what the
+   cascade will do to a real number. */
+.judge-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.judge-preview-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+/* DECLARES NO `color`, DELIBERATELY, and this is the rule Phase JC Task 3
+   already broke once elsewhere: this class shares its element with
+   `.judge-pace-faster` and friends at identical (0,1,0) specificity, and it
+   sits ~5,700 lines BELOW them — so a `color` here would beat the verdict
+   by source order alone and the preview would show the same ink whatever
+   the rower picked, with every class-name assertion green. The neutral tone
+   arrives by INHERITANCE, which any matching verdict rule beats.
+   `theme/judgeTokens.test.tsx` carries `judge-preview-value` in its
+   `JUDGED_CELL_CLASSES` sweep so this is a gate rather than a note. */
+.judge-preview-value {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 500;
 }
 
 /* Wave E PR2, Surface 1 (board 1a-1e + Gate 0 amendment 1f-1j). House card

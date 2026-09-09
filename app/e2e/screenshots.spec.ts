@@ -20,6 +20,7 @@ import {
   type TodayOverrides,
 } from "../src/today/todayOverrides";
 import { RUN_KEY, type SessionRun } from "../src/session/run";
+import { JUDGE_COLORS_KEY, type JudgeColors } from "../src/you/judgeColors";
 
 // Committed into docs/screenshots/ for PR bodies. NOT diff-asserted — a
 // human judges these, this spec only judges "did it render" (see
@@ -2632,6 +2633,39 @@ test("you", async ({ page }) => {
   });
 });
 
+// Phase JC (Gate 0 approved 2026-09-08): the screen behind You's new
+// SETTINGS row. Captured with a NON-DEFAULT set stored — pace swapped and
+// SPM turned off entirely — because a capture of the defaults shows the
+// screen in the one state that is indistinguishable from the feature not
+// existing (recurring failure 7). Seeded, then navigated to with a full
+// document load, so `main.tsx`'s boot apply is what paints the two preview
+// strips rather than the screen's own change handler.
+test("you-settings-colors", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-settings@e2e.test",
+    name: "Screenshot Tester",
+  });
+  const chosen: JudgeColors = {
+    paceFaster: "red",
+    paceSlower: "blue",
+    spmFaster: "off",
+    spmSlower: "off",
+  };
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: JUDGE_COLORS_KEY,
+    value: JSON.stringify(chosen),
+  });
+  await page.goto("/you/settings");
+  await expect(
+    page
+      .getByRole("radiogroup", { name: "Pace faster color" })
+      .getByRole("radio", { name: "RED", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-settings-colors.png"),
+  });
+});
+
 // Phase BL PR B — the post-test prompt, reached the only way it can be:
 // through a REAL completed 2K Test (the You shortcut's own start, the
 // timer, a realistic 8-minute clock fast-forward, the save). Captured at
@@ -3201,11 +3235,12 @@ test("post-workout-summary", async ({ page }) => {
   await expect(rows.last().locator(".summary-row-pace")).not.toBeEmpty();
   // JUDGED FASTER/SLOWER (Task 4, PM condition C1): the live door's first
   // ever committed judged rows — the actual `.summary-row-pace`/
-  // `.summary-row-bar` carry the SAME `summary-row-faster`/
-  // `summary-row-slower` color class the stored `log-detail.png` door's
+  // `.summary-row-bar` carry the SAME `judge-pace-faster`/
+  // `judge-pace-slower` color class the stored `log-detail.png` door's
   // own rows do (`PostWorkoutSummary.tsx`'s `judgedColorClass`), proving
   // the live door renders the feature's color, not just its TARGET/SPM
-  // cells. `.summary-row-dev`'s exact magnitude is left to a range (real
+  // cells. PACE, not a bare direction, since Phase JC: a rower colours the
+  // four slots independently and this cell reads the pace pair. `.summary-row-dev`'s exact magnitude is left to a range (real
   // browser timing, not a POSTed literal, feeds this row) but the SIGN and
   // ".0"-precision format are pinned — recurring failure #7's own
   // "invoke it and assert the consequence" rule, applied to a live capture
@@ -3213,20 +3248,20 @@ test("post-workout-summary", async ({ page }) => {
   const fasterRow = rows.nth(2);
   await expect(fasterRow.locator(".summary-row-target")).toHaveText("2:02.0");
   await expect(fasterRow.locator(".summary-row-pace")).toHaveClass(
-    /summary-row-faster/,
+    /judge-pace-faster/,
   );
   await expect(
     fasterRow.locator(".summary-row-bar-track .summary-row-bar"),
-  ).toHaveClass(/summary-row-faster/);
+  ).toHaveClass(/judge-pace-faster/);
   await expect(fasterRow.locator(".summary-row-dev")).toHaveText(/^−\d+\.\d$/);
   const slowerRow = rows.nth(3);
   await expect(slowerRow.locator(".summary-row-target")).toHaveText("2:02.0");
   await expect(slowerRow.locator(".summary-row-pace")).toHaveClass(
-    /summary-row-slower/,
+    /judge-pace-slower/,
   );
   await expect(
     slowerRow.locator(".summary-row-bar-track .summary-row-bar"),
-  ).toHaveClass(/summary-row-slower/);
+  ).toHaveClass(/judge-pace-slower/);
   await expect(slowerRow.locator(".summary-row-dev")).toHaveText(/^\+\d+\.\d$/);
   // ON-TARGET: plain ink, no bar, no ± label — the third state
   // `judgeBand.ts` produces, sitting right beside the two colored ones.
@@ -3236,8 +3271,11 @@ test("post-workout-summary", async ({ page }) => {
   await expect(
     onTargetRow.locator(".summary-row-bar-track .summary-row-bar"),
   ).toHaveCount(0);
+  // Widened at Phase JC: NO judged slot class of either metric, not only
+  // the pace pair this cell can legally reach. An on-target row is plain
+  // ink, and a slot class arriving here from any metric would repaint it.
   await expect(onTargetRow.locator(".summary-row-pace")).not.toHaveClass(
-    /summary-row-faster|summary-row-slower/,
+    /judge-(pace|spm)-(faster|slower)/,
   );
   // The abstained effort row (the "100m max @22" phase, `rows.last()`): a
   // real elapsed reading, no TARGET cell at all, but a real TARGET-ONLY

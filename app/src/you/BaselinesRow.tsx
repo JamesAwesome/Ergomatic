@@ -21,8 +21,11 @@ import { baselinesRowState } from "./baselinesRowState";
  *
  * `baselinesRowState` (./baselinesRowState.ts) is the decision table.
  *
- * `state={{ from: "/you" }}` is carried for the same reason the two rows
- * below it carry it, and it is currently UNOBSERVABLE (found at review):
+ * `state={{ from: "/you" }}` is carried for the same reason every other
+ * row in the doors group carries it (`You.tsx`'s `.you-doors` nav is the
+ * enumeration; this comment used to say "the two rows below it" and the
+ * group has grown since), and it is currently UNOBSERVABLE (found at
+ * review):
  * `BaselinesScreen` passes the identical value as its BackLink fallback, so
  * deleting this prop changes nothing and no test can see it. It stays as
  * the group's shared idiom — the fallback is the screen's answer for a cold
