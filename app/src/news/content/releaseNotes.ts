@@ -5,6 +5,40 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.45.0: git log v0.44.0..main --oneline — SIX merges besides this
+    // notes PR itself, each accounted for (RF15; no --merges, which returns
+    // empty on this squash-merged repo). Two phases in one range, which is
+    // why this was written jointly: Phase MT (#377, #378, #380) and Phase RN
+    // (#381), coordinated with the session that owned RN so its two changes
+    // were described by the person who built them rather than guessed at.
+    //   #381 Phase RN — items 5 and 6. TWO notes on purpose: the ready-screen
+    //     choice is opt-in and defaults to SHOW, while the quiet-link fix
+    //     reaches every tester with no setting at all. One note covering both
+    //     would tell a rower on defaults that nothing changed, which is false.
+    //   #378 the failure screens stop repeating themselves — item 3 — and the
+    //     refusal screen stops offering the phone timer — item 4. The removal
+    //     gets its own note for the same reason v0.44.0's item 2 did: a
+    //     disappearing button is what a rower actually experiences.
+    //   #377 the monitor wording — item 1 — and a refused machine no longer
+    //     remembered — item 2.
+    //   #380 a dev-only seam making the five-button failure screen testable,
+    //     plus the Gate 0 record moved onto main. Test and evidence only,
+    //     provably absent from the production bundle (dist-grep). No note.
+    //   #375 a killed test run reports as killed instead of reading as a
+    //     flake. Agent-facing tooling, invisible on device. No note.
+    //   #376 RELEASING.md corrections. Documentation. No note.
+    version: "v0.45.0",
+    date: "2026-09-09",
+    items: [
+      "The app calls it the monitor now, not the PM5. The name only appears where it tells you WHICH monitor, like when two of them answer to the same one.",
+      "When the app refuses a machine it cannot record, it stops offering that machine as the quick way back. Before, the erg it had just turned down was still sitting there as your last used one.",
+      "The failure screens no longer say the same sentence twice. The detail panel underneath was repeating the line already at the top of the screen, which pushed the useful part off the bottom in landscape.",
+      "The screen that refuses a machine no longer offers to row on the phone timer instead. After a SkiErg is turned down, that button led to saving the ski piece as a row, which is the thing the refusal exists to prevent. Every other failure screen still offers it, because when Bluetooth is off the phone timer is exactly the right answer.",
+      "You now choose whether the ready screen appears. In You, open SETTINGS: READY SCREEN set to SKIP takes you straight to the numbers when you connect, instead of stopping at \"Ready when you pull\" for a tap. SHOW is the default, so nothing changes unless you change it. Skipping also means you stop seeing the KEEP YOUR PHONE SCREEN ON reminder, and the ready screen's Cancel becomes the numbers screen's End.",
+      "In Just Row, if the monitor goes quiet before your first pull, the screen now says it is waiting instead of offering a Try again. That button could not actually reconnect in that situation, and this state usually clears on its own. A monitor that genuinely disconnects still says LOST THE MONITOR and still offers Try again, because there it works.",
+    ],
+  },
+  {
     // v0.44.0: git log v0.43.0..main --oneline — FOUR merges besides this
     // notes PR itself, each accounted for (RF15; no --merges, which returns
     // empty on this squash-merged repo):
