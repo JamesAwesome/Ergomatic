@@ -30,7 +30,7 @@ web-overflow-scroll           | DONE   | Top of an overflowing interstitial body
 phone-timer-offer-on-refusal  | BUILD  | "Row on the phone timer instead" is offered on the refusal screen | gate 0  | James 2026-09-08: REMOVE it; 4->3 buttons re-opens #370 landscape math
 two-design-gates              | DONE   | Two design gates the refusal screen owes                          | closed  | #369 3eed9f29, both proven red
 refusal-guard-ungated         | CARRY  | The refusal-survives-its-own-consequences guard is UNGATED        | open    | needs a bounded-withhold fake control — see P3-G
-design-3540-flake             | DOC    | design.spec.ts:3540 flakes under a full parallel run              | closed  | PR A: folded into "Hunt the e2e flakes" as a datapoint
+design-3540-flake             | DOC    | design.spec.ts:3541 flakes under a full parallel run              | closed  | PR A: folded into "Hunt the e2e flakes" as a datapoint
 connected-1703-poison         | CARRY  | connected.spec.ts:1703 poisons its own origin for a later run     | open    | new flake class; lift to the flake register
 refused-machine-last-used     | BUILD  | A refused machine is still remembered as LAST USED                | closed  | PR A: forgetLastDevice on unsupported-machine; gated + 2 probes
 type-rower-hardcoded          | CARRY  | type: "rower" is still hardcoded for machines the denylist admits | open    | accepted consequence of the approved direction

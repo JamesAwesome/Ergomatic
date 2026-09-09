@@ -847,7 +847,7 @@ while we are in here.
       `docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md`.
       **The `stableBoundingBox` flake was sighted again on 2026-09-08**
       (Phase MT, filed as its own row at first and folded in here — a new
-      datapoint, not a new flake): `design.spec.ts:3540`, "picking a effort
+      datapoint, not a new flake): `design.spec.ts:3541`, "picking a effort
       level does not shift the chips below it", failed once in a 547-test
       parallel run, then passed in isolation immediately after AND on a full
       re-run of the same tree. It compares a chip's `y` before and after a
