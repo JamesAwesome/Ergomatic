@@ -2180,12 +2180,16 @@ closed with zero Concept2 contact.
   > Gate 0 for the whole kept vocabulary. Evidence:
   > `ConnectedSurface.tsx:848`.
 
-- **v0.32.0's notes owe the DIAGNOSTICS door its affordance sentence** (PM
-  gate on #258, 2026-09-01): where it is (You → DIAGNOSTICS → Monitor logs),
-  WHEN a rower would tap it (something went wrong in a connected session and
-  someone asks for the log), and what COPY does. The note is the affordance,
-  not the announcement — the row itself never says when to tap it. Ships in
-  the v0.32.0 notes PR, tag on that (#231/#238 shape).
+- **STRUCK 2026-09-09 (Phase OD): the DIAGNOSTICS door's affordance sentence
+  SHIPPED.** `app/src/news/content/releaseNotes.ts:476` carries it verbatim —
+  where it is (You, then DIAGNOSTICS, then Monitor logs), WHEN a rower would
+  tap it (a connected session went wrong and someone asks for the log), and
+  what COPY does. **THE STRIKE CARRIES A CORRECTION, and without it the next
+  reader reopens this row: it landed in `v0.33.0`, not the `v0.32.0` this row
+  named.** The version block above line 476 is `version: "v0.33.0"` (line
+  473). Anyone greping the v0.32.0 notes for the sentence finds nothing and
+  concludes it is still owed. Originally filed at the PM gate on #258,
+  2026-09-01.
 - **The ring history's three-slot eviction has an incident-shaped failure
   mode, filed with its trigger** (PM gate on #258): the identity upsert
   gives one slot per LOGICAL SESSION, so three fumbled reconnects after an
@@ -3054,20 +3058,33 @@ new.
   the residue as everyday behaviour.** (`bugfix-rounds.md`)
 - **Programming limits live in `program.ts`, not on `MonitorCapabilities`** — it
   hardcodes PM5 Table 19 limits, and six `CompileError` branches name "the PM5".
-  Disclosed and accepted as correct for now at `program.ts:112`.
+  Disclosed and accepted as correct for now — **cited by SYMBOL, not by line,
+  because the line drifted: this row said `program.ts:112`, which as of
+  2026-09-09 is an unrelated doc comment.** The Table 19 limit constants live
+  under the `/** Table 19 "PM5 Workout Configuration Parameter Limits" */`
+  block in `domain/monitor/program.ts` (grep `Table 19` in that file).
 - **Anonymous-run logging** — every storage layer accepts `workoutId: null`, no
   product path can create one, and `ANONYMOUS_RUN` is dead code by its own
   comment. **Phase JR is the door that would create them — and PR 2 (#259)
   DISCHARGES this: `/justrow/log` posts `workoutId: null` with
   `advancesPlan: false`, and Today's recovery row serves the id-less
   record.**
-- **`surfaceModel.ts:1573`'s `if (digits.startsWith("8")) return "AN";`** is the
+- **`surfaceModel.ts`'s `if (digits.startsWith("8")) return "AN";`** is the
   English article in "AN 800 M PIECE", not the workout type. A rename trap, not
-  a task.
-- **Concept2 wire hardening (PR1 final review, M3)** — the C2 wire calls carry
-  no timeout, and the per-user token refresh holds a `FOR UPDATE` row lock plus
-  a pooled connection across the outbound refresh call (`client.ts`,
-  `stores/concept2.ts`). Follow-up hardening; household-scale acceptable today.
+  a task. **Cited by SYMBOL, not by line: this row said `:1573` and the code is
+  at `app/src/workout/connected/surfaceModel.ts:1881` as of 2026-09-09.** Grep
+  the predicate, not the number.
+- **Concept2 wire hardening (PR1 final review, M3) — HALF THIS ACCEPTANCE IS
+  NOW FALSE, corrected 2026-09-09 (Phase OD).** It said "the C2 wire calls
+  carry no timeout". They do: `C2_TIMEOUT_MS = 10_000`
+  (`server/concept2/client.ts:73`) guards all four outbound fetches via
+  `AbortSignal.timeout` (`:115`, `:250`, `:339`, `:395`), added by #290 on
+  2026-09-04 — AFTER this acceptance was written. **An acceptance that
+  outlives the cost it accepted reads as a live risk that nobody is
+  fixing, which is worse than no row.** STILL TRUE, and still accepted: the
+  per-user token refresh holds a `FOR UPDATE` row lock plus a pooled
+  connection across the outbound refresh call (`stores/concept2.ts`).
+  Follow-up hardening; household-scale acceptable today.
   (`2026-08-31-concept2-logbook-design.md`)
 - **Our NFC capability probe reports device support, never code signing**
   (Phase NF spec residual, confirmed at the phase-close gate 2026-09-06).
@@ -3161,14 +3178,17 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **Ten shipped release-note strings say `PM5`, 13 occurrences in all**
-  (`src/news/content/releaseNotes.ts`; lines 133, 160, 161, 181 ×3, 182 ×2,
-  695, 715, 1030, 1072, 1090 — measured 2026-09-09 with
-  `grep -vn '^\s*//' app/src/news/content/releaseNotes.ts | grep -c "PM5"`
-  for the strings and the same pipeline through `grep -o "PM5" | wc -l` for
-  the occurrences; the `-v` drops ten `//` provenance comments, which are not
-  copy). **This row said "nine" until 2026-09-09 and nobody had run the
-  count** — re-run it rather than quoting it. Phase MT's RF32 census
+- **Shipped release-note strings say `PM5`. THIS ROW NO LONGER CARRIES A
+  COUNT, on purpose — run the command:**
+  `grep -v '^\s*//' app/src/news/content/releaseNotes.ts | grep -c "PM5"` for
+  the strings, the same pipeline through `grep -o "PM5" | wc -l` for the
+  occurrences (the `-v` drops the file's `//` provenance comments, which are
+  not copy). **The count in this row has been WRONG THREE TIMES:** it said
+  "nine" until 2026-09-09; it was corrected to 10/13 that day and was stale
+  within 36 minutes when #382 landed; re-run on 2026-09-09 it returns 11/14.
+  A release-notes file grows every tag, so any number written here is wrong by
+  the next merge. That is the whole lesson — **a stored count is a claim with
+  an expiry date; a stored command is not.** Phase MT's RF32 census
   (2026-09-08) left the strings on purpose: editing them rewrites what testers
   have already read, and the release-notes tests carry POSITIONAL pins that
   shift when the text moves. Sweep only if James wants the archive consistent;
@@ -3413,9 +3433,16 @@ Each needs erg time or a deliberate recording session.
   (`storedSummary.ts:947`). Same distance, two spellings, one screen apart.
   Owed: pick one and share the formatter. Rides the next PR touching
   either. **XS**
-- **FILED (door PR A's PM gate, 2026-09-02):
-  `server/concept2/mapping.test.ts:160-169` is pinned by TYPECHECK, not by
-  its own assertion.** The leg exists to make the retired
+- **STRUCK 2026-09-09 (Phase OD): the comment now says exactly this, so the
+  row's own first branch is satisfied.** `server/concept2/mapping.test.ts`
+  (the block above the `mutation discriminator` case) states verbatim that the
+  row is _"UNREACHABLE on the wire"_, that the extra key is _"deliberately
+  cast past the excess-property check"_, and that _"it exists ONLY to make the
+  two predicates disagree"_ — the honest reading the row asked for, rather than
+  a reachability claim. Struck against the landed text, not against a memory of
+  it. **Original filing (door PR A's PM gate, 2026-09-02):**
+  `mapping.test.ts:160-169` is pinned by TYPECHECK, not by
+  its own assertion. The leg exists to make the retired
   `deviceName === null` gate and the live `source !== "pm5"` gate disagree,
   and to do it the fixture is cast past the excess-property check
   (`as unknown as Parameters<typeof eligibilityFailure>[0]`) onto a row
