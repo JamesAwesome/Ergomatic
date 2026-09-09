@@ -10738,23 +10738,35 @@ section:not(.news-pinned) .news-row:last-of-type {
 
    HIT TARGETS: every option is >=44px on BOTH axes (`--tap` on each), with
    three across a 375px viewport measuring ~105px wide. */
-.judge-group {
+/* PHASE RN appended `.setting-*` to each of the eight rules below IN PLACE.
+   Nothing moved and nothing was renamed: RF37 is this repo's most recent
+   production bug, and it was caused by relocating colour rules ~5000 lines up
+   this file, above an equal-specificity neighbour that then won. Adding a
+   selector to a rule at its existing position cannot reorder any existing
+   selector; renaming or relocating these can. The new section uses no swatch
+   and no preview, so it introduces no colour pairing the table above has not
+   already computed. */
+.judge-group,
+.setting-group {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.judge-slot {
+.judge-slot,
+.setting-slot {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.judge-slot-name {
+.judge-slot-name,
+.setting-slot-name {
   margin: 0;
 }
 
-.judge-slot-title {
+.judge-slot-title,
+.setting-slot-title {
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -10763,17 +10775,20 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* The parenthetical. FASTER means a LOWER split and a HIGHER rate, so the
    screen never asks the reader to hold that inversion in their head. */
-.judge-slot-hint {
+.judge-slot-hint,
+.setting-slot-hint {
   font-size: 12px;
   color: var(--ink-3);
 }
 
-.judge-options {
+.judge-options,
+.setting-options {
   display: flex;
   gap: 8px;
 }
 
-.judge-option {
+.judge-option,
+.setting-option {
   flex: 1 1 0;
   min-width: var(--tap);
   min-height: var(--tap);
@@ -10795,7 +10810,8 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* The 2px border eats 1px of padding on each side so checking never shifts
    the word — `.onb-option`'s own trick, kept. */
-.judge-option[aria-checked="true"] {
+.judge-option[aria-checked="true"],
+.setting-option[aria-checked="true"] {
   border-width: 2px;
   border-color: var(--accent);
   padding: 0 7px;

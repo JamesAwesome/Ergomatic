@@ -9,6 +9,7 @@ import {
   saveJudgeColors,
   type JudgeColors,
 } from "./judgeColors";
+import { READY_CARD_KEY, loadReadyCard, saveReadyCard } from "./readyCard";
 
 // A PARTIAL mock: `saveJudgeColors` and `applyJudgeColors` keep their real
 // bodies (so the root properties this file asserts on are the ones the
@@ -24,20 +25,33 @@ vi.mock("./judgeColors", async (importOriginal) => {
   };
 });
 
+// The same partial-mock treatment for the ready-card store, and for the same
+// reason: I-6 needs THIS write to fail on demand while the other one still
+// works, which is the only way to show the two controls own separate
+// warnings.
+vi.mock("./readyCard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./readyCard")>();
+  return { ...actual, saveReadyCard: vi.fn(actual.saveReadyCard) };
+});
+
 // `src/test/setup.ts` is one line and clears nothing, so both of this
 // screen's outputs — the stored key and the four inline root properties —
 // leak into every later test in the file unless they are reset by hand.
 beforeEach(() => {
   localStorage.removeItem(JUDGE_COLORS_KEY);
+  localStorage.removeItem(READY_CARD_KEY);
   document.documentElement.removeAttribute("style");
   vi.mocked(saveJudgeColors).mockClear();
   vi.mocked(applyJudgeColors).mockClear();
+  vi.mocked(saveReadyCard).mockClear();
 });
 
 afterEach(() => {
   localStorage.removeItem(JUDGE_COLORS_KEY);
+  localStorage.removeItem(READY_CARD_KEY);
   document.documentElement.removeAttribute("style");
   vi.mocked(saveJudgeColors).mockRestore();
+  vi.mocked(saveReadyCard).mockRestore();
 });
 
 /** A stored value non-default in all four slots, so no assertion below can
@@ -109,8 +123,18 @@ describe("SettingsScreen — the four judged-colour slots", () => {
 
   it("offers RED, BLUE and OFF in every one of the four slots, each word beside a swatch that is NOT part of its name", () => {
     renderScreen();
+    // A WHOLE-SCREEN census, not a scoped one, so a group appearing here
+    // without a test is a failure rather than a silence. Phase RN made it
+    // five: the four colour slots plus READY SCREEN, which has its own
+    // describe block below and its own three options.
     const groups = screen.getAllByRole("radiogroup");
-    expect(groups).toHaveLength(4);
+    expect(groups.map((g) => g.getAttribute("aria-label"))).toStrictEqual([
+      "Pace faster color",
+      "Pace slower color",
+      "SPM faster color",
+      "SPM slower color",
+      "Ready screen",
+    ]);
     for (const name of groupNames) {
       const group = screen.getByRole("radiogroup", { name });
       const radios = within(group).getAllByRole("radio");
@@ -243,5 +267,155 @@ describe("SettingsScreen — I-6, a refused write", () => {
     await userEvent.click(within(group).getByRole("radio", { name: "RED" }));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(rootProperty("--judge-pace-slower")).toBe("var(--judge-red)");
+  });
+});
+
+/**
+ * Phase RN: the READY SCREEN section, Gate 0 CLOSED 2026-09-09 with copy
+ * candidate A. Its control is the same `OptionGroup` the colour slots use, so
+ * the roving-tabindex keyboard contract is already covered above and is not
+ * re-tested here (recurring failure 8: reuse the pattern AND its tests).
+ * What IS this section's own is the copy, the default, the persistence, and
+ * the fact that its save-failure warning belongs to it alone.
+ */
+describe("SettingsScreen — the ready screen section (Phase RN)", () => {
+  const GROUP = "Ready screen";
+
+  it("carries Gate 0's approved copy", () => {
+    renderScreen();
+    expect(
+      screen.getByRole("heading", { name: "READY SCREEN", level: 2 }),
+    ).toBeVisible();
+    expect(screen.getByText("WHEN THE MONITOR IS READY")).toBeVisible();
+    expect(screen.getByText("(before your first pull)")).toBeVisible();
+    const group = screen.getByRole("radiogroup", { name: GROUP });
+    expect(
+      within(group)
+        .getAllByRole("radio")
+        .map((radio) => radio.textContent?.trim()),
+    ).toStrictEqual(["SHOW", "SKIP"]);
+  });
+
+  it("says the erg's display is THE MONITOR, never the PM5 (RF32)", () => {
+    renderScreen();
+    const section = screen
+      .getByRole("heading", { name: "READY SCREEN", level: 2 })
+      .closest("section");
+    expect(section).not.toBeNull();
+    expect(section?.textContent).not.toMatch(/PM5/);
+  });
+
+  it("shows SHOW on a device that has never touched the setting (I-1)", () => {
+    renderScreen();
+    expect(checkedIn(GROUP)).toBe("SHOW");
+  });
+
+  it("reflects a STORED skip rather than the default", () => {
+    localStorage.setItem(READY_CARD_KEY, "skip");
+    renderScreen();
+    expect(checkedIn(GROUP)).toBe("SKIP");
+  });
+
+  it("persists the tap, so the next connect reads what the rower chose", async () => {
+    renderScreen();
+    await userEvent.click(
+      within(screen.getByRole("radiogroup", { name: GROUP })).getByRole(
+        "radio",
+        { name: "SKIP" },
+      ),
+    );
+    expect(checkedIn(GROUP)).toBe("SKIP");
+    // Asserted through the store's own reader, not by peeking at the key:
+    // this is the value a consumer will actually get.
+    expect(loadReadyCard()).toBe("skip");
+  });
+
+  it("leaves every colour slot exactly where it was", async () => {
+    seed(STORED);
+    renderScreen();
+    await userEvent.click(
+      within(screen.getByRole("radiogroup", { name: GROUP })).getByRole(
+        "radio",
+        { name: "SKIP" },
+      ),
+    );
+    expect(checkedIn("Pace faster color")).toBe("RED");
+    expect(checkedIn("Pace slower color")).toBe("OFF");
+    expect(checkedIn("SPM faster color")).toBe("OFF");
+    expect(checkedIn("SPM slower color")).toBe("BLUE");
+    expect(vi.mocked(saveJudgeColors)).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TWO CONTROLS, TWO WARNINGS. The colour screen's existing notice says "These
+ * colors are on now, but they won't stick" — a sentence about a control the
+ * rower did not touch — so the ready card cannot borrow it. And a single
+ * shared `saveFailed` boolean would let a successful tap on one control clear
+ * a genuine warning raised by the other, which is what these two cases pin.
+ */
+describe("SettingsScreen — a refused write belongs to the control that made it", () => {
+  async function tapSkip() {
+    await userEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "Ready screen" }),
+      ).getByRole("radio", { name: "SKIP" }),
+    );
+  }
+
+  async function tapBlue() {
+    await userEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "Pace slower color" }),
+      ).getByRole("radio", { name: "BLUE" }),
+    );
+  }
+
+  it("warns in the ready screen's own words, which never mention colours", async () => {
+    vi.mocked(saveReadyCard).mockReturnValue(false);
+    renderScreen();
+    await tapSkip();
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(/reload/i);
+    expect(alert).not.toHaveTextContent(/colors/i);
+    // The choice is still live for this session — the whole promise of the
+    // store's in-memory fallback.
+    expect(checkedIn("Ready screen")).toBe("SKIP");
+  });
+
+  it("does not let a working colour tap clear the ready screen's warning", async () => {
+    vi.mocked(saveReadyCard).mockReturnValue(false);
+    renderScreen();
+    await tapSkip();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+
+    await tapBlue(); // this write succeeds
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent(/reload/i);
+    expect(alerts[0]).not.toHaveTextContent(/colors/i);
+  });
+
+  it("does not let a working ready-screen tap clear the colour warning", async () => {
+    seed(STORED);
+    vi.mocked(saveJudgeColors).mockReturnValue(false);
+    renderScreen();
+    await tapBlue();
+    expect(screen.getByRole("alert")).toHaveTextContent(/colors/i);
+
+    await tapSkip(); // this write succeeds
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent(/colors/i);
+  });
+
+  it("shows BOTH warnings when both writes are refused", async () => {
+    seed(STORED);
+    vi.mocked(saveJudgeColors).mockReturnValue(false);
+    vi.mocked(saveReadyCard).mockReturnValue(false);
+    renderScreen();
+    await tapBlue();
+    await tapSkip();
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
   });
 });
