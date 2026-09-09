@@ -874,6 +874,26 @@ often they recur.
     test (RF26). **Any value a module can answer with WITHOUT consulting its
     store is a value that hides the store being broken.**
 
+    **AND A PROBE THAT REPORTS "THIS CHANGES NOTHING" IS A QUESTION ABOUT THE
+    SUITE, NOT AN ANSWER ABOUT THE CODE (added 2026-09-09, from the same
+    phase).** A mutation proves an assertion can fail when the CODE changes.
+    It cannot tell you the assertions are missing a STATE, and that is a
+    different defect with the same green. Phase RN measured that restoring its
+    store's old read order failed none of 17 cases and wrote that up as
+    "defence-in-depth, not the thing under test" — the measurement was
+    accurate and the conclusion was wrong. No case in the suite held a valid
+    value in storage at the moment a write was refused, which is the only
+    state where the two orders differ; that state was a live bug, and the
+    screen told the rower their choice was set while the erg obeyed the old
+    one. A reviewer found it by enumerating orderings of USE, which is not
+    what a mutation probe does.
+    **So when a probe comes back green, name the case in the suite where it
+    could have gone red.** If you cannot name one, you have found a hole in
+    the tests, not a fact about the code — and the write-up says so instead of
+    promoting the silence into a property of the design (RF26). The tell is a
+    sentence of the form "restoring X alone breaks nothing, so X is safe":
+    that is only true if something was watching X.
+
     **A concurrency gate proved by RACING is RF21 by construction (PR #269,
     2026-09-02).** "Two concurrent mints leave one row" was specified with a
     `Promise.all` race; the named mutation (atomic upsert → delete + insert)
