@@ -2515,15 +2515,31 @@ moved to 3. `test-run.test.sh` and `test-run-advisory.test.sh` are both in
 
 ## Needs a decision from James
 
-- **The 1 000 ms collision window is paid on every NFC connect.**
-  `TARGET_COLLISION_WINDOW_MS` (`src/monitor/transports/capacitorBle.ts`)
-  holds every targeted scan open for a full second after the first exact-name
-  match, so that two devices carrying one name fail closed instead of
-  programming the wrong erg. The walk measured 2-3 s to CONNECTED; a third of
-  that is ours. It is an Ergomatic policy, not a platform fact (Phase NF spec,
-  "Residuals accepted for review"). **Whether a household of one erg should
-  pay a gym's safety margin on every row** is a one-constant change with a
-  named test; James's call.
+**BOTH BULLETS BELOW WERE RULED 2026-09-09** in the Phase OD order sweep, so
+this section currently holds NO live question. **That is not the same as
+nothing being owed him.** The sweep found seven live decisions waiting on
+James elsewhere in this file — the hand-verified log-dev row (`:3031`), the
+belted 0x0039 capture (`:1830`), the Wave E / LP flag-flip trip (`:1704`), the
+`DETAIL`-over-slug panel (`:2824`), and three questions explicitly scheduled to
+be RE-ASKED at Wave A's close (the plan calendar and parametric generator at
+`:3774`, and Phase PROTO at `:2623`). A reader who takes this section's
+emptiness as "he owes nothing" will be wrong by seven.
+
+- **RULED KEEP (James, 2026-09-09): the 1 000 ms collision window stays.**
+  `TARGET_COLLISION_WINDOW_MS` (`src/monitor/transports/capacitorBle.ts`) holds
+  every targeted scan open for a full second after the first exact-name match,
+  so two devices carrying one name fail closed instead of programming the wrong
+  erg. The walk measured 2-3 s to CONNECTED; a third of that is ours.
+  **THE ROW'S OWN PREMISE WAS WRONG, and that is the part worth keeping.** It
+  asked "whether a household of ONE erg should pay a gym's safety margin".
+  Asked directly, James rows REGULARLY AROUND SEVERAL ERGS — so the wrong-erg
+  accident is reachable in his actual environment, not a gym's hypothetical —
+  and he does not notice the second. A cost nobody pays against a risk that is
+  live buys nothing by being shortened.
+  **Consequence for the next reader: whether two PM5s can genuinely advertise
+  one name is NO LONGER LOAD-BEARING.** Keeping the window is correct under
+  either answer, so do not spend a research pass on it. Filed at Phase NF's
+  close 2026-09-06; ruled 2026-09-09 in the Phase OD order sweep.
 - _(previously none open)_ — the `/api/today` row that sat here from Phase SF PR1
   closed 2026-09-05: James ruled DELETE, and the route, its unit block and
   the isolation test's dependence on it left in the same PR (the "done is
@@ -2562,16 +2578,25 @@ question, not a re-raised one.
 | **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by THREE FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window; and, since 2026-09-04, the per-user `C2_ALLOWED_EMAILS` gate — the VICTIM must be on that list for the callback to complete at all, because the hop re-checks `availableFor(user.email)` at step 3b after resolving its principal, so on a one-account rollout the population that can be victimised is one) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**; and since 2026-09-04 "a real cohort" is itself gated on `C2_ALLOWED_EMAILS`, so the flag flip alone no longer admits one) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 | **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
 
-- **The `PM5` / `Timer` provenance label is a design decision RF32's census
-  did not take.** `UnsavedWorkouts.tsx:66,170`, `ReviewSession.tsx:75,111` and
+- **RULED KEEP (James, 2026-09-09): the `PM5` / `Timer` provenance label
+  stays.** `UnsavedWorkouts.tsx:66,170`, `ReviewSession.tsx:75,111` and
   `ReadOnlyRecording.tsx:13` render `PM5 · Sep 8 · Not saved` and
   `Discard PM5 workout X`. Phase MT's RF32 census (2026-09-08) LEFT these
   deliberately: the label's whole job is telling the reader a MACHINE recorded
   the row rather than the phone timer, which is RF32's own
   naming-the-source-of-a-stored-number exemption. It reads against `Timer` as
   its opposite, and swapping it to `Monitor` would change one word across
-  three screens at once. **A design decision, not a mechanical one** — hence
-  here rather than in the sweep. Related: the NFC connecting card's copy WAS
+  three screens at once.
+  **HIS REASON, which decides the shape of any future attempt:** the label
+  carries provenance AND device identity, and the two do not separate on these
+  screens. So `Monitor · Sep 8 · Not saved` keeps the provenance half and drops
+  the identity half — a strict loss, not a clarity win. RF32 covers it as
+  written.
+  **The successor is DELIBERATELY UNFILED, and that is a decision, not an
+  oversight.** If the entanglement ever bites, the fix is a design pass
+  separating the two jobs on the row (a provenance word plus the device's own
+  caption), behind a Gate 0. It is **not** a copy sweep and must not be filed
+  as one — filing it as a sweep is how it would get done wrongly and cheaply. Related: the NFC connecting card's copy WAS
   changed in the same census, on a screen whose shape was Gate 0 approved
   2026-09-06, one day before the RF32 rule existed; the change is wording-only
   (no captures owed, James 2026-08-23) and the review judged it correct, but
