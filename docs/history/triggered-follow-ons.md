@@ -310,6 +310,12 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   is the way it gets settled — copy the connection log immediately if it
   recurs during a walk. The removal this entry wants remains separate and
   is strengthened by the report regardless of cause.
+  **DISPOSITION 2026-09-09 (annotation, not a rewrite — this file is kept
+  verbatim): James WITHDREW the removal order.** Asked directly when the
+  Phase OD order sweep surfaced it at 23 days old, he ruled the row struck
+  and the screen kept. The removal described below is NO LONGER OWED WORK.
+  The flash residual above is unaffected and stays open. Live record:
+  `ROADMAP.md`'s connected-surface table. Do not work from this file.
   Original entry: **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
   rid of the pull to resume screen"): the stale-state band on
   `ConnectedSurface.tsx` (~line 584) still renders its inverted ink field
