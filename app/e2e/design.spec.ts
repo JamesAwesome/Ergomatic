@@ -3,6 +3,7 @@ import path from "node:path";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import {
+  forceAppSettingsDoor,
   signInViaBackdoor,
   stableBoundingBox,
   stubBluetoothPermissionDenied,
@@ -7691,11 +7692,17 @@ test.describe("connected screens (fake-driven)", () => {
     // MEASURED: reverting the rule to `nth-last-child(-n + 2)` leaves every
     // assertion on THIS frame green. At four buttons `-n + 2` still gives a
     // 142px window and the remedy at 102 clears it; the shape that falls to
-    // 74px is the FIVE-button iOS stack, and `canOpenAppSettings()` is
-    // `isNative()`, so the web build is four buttons by construction and that
-    // shape is unreachable from here.
+    // 74px is the FIVE-button iOS stack.
     //
-    // The count is caught, but ONE FRAME OVER: the refusal test's
+    // SUPERSEDED (Phase MT close-out): this comment used to close with "and
+    // `canOpenAppSettings()` is `isNative()`, so the web build is four buttons
+    // by construction and that shape is unreachable from here." That adapter
+    // now carries a dev-only door override, and the FIVE-BUTTON case directly
+    // below reaches the shape and reddens on exactly this mutation. What
+    // remains true is only the narrow half: this FOUR-button test cannot pin
+    // the count, which is why the case below exists.
+    //
+    // The count is also caught ONE FRAME OVER: the refusal test's
     // `contentHeight` precondition fails at 157px against a 142px window
     // ("overflows its window by 15px"), because that frame is the one whose
     // content sits between the two windows. Round 0 of this PR claimed the
@@ -7709,6 +7716,78 @@ test.describe("connected screens (fake-driven)", () => {
       m.remedyTop,
       `the remedy sentence starts ${(m.remedyTop ?? 0) - m.clientHeight}px below the fold, so the rower is told something is wrong and not what to do`,
     ).toBeLessThan(m.clientHeight);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // THE FIVE-BUTTON SHAPE — the frame a rower on iOS actually gets (Phase MT
+  // close-out; ROADMAP register, "Nothing can gate the five-button failure
+  // frame"). `permission-denied` is the only screen in the app that renders
+  // `Open Settings`, and it renders it only where `canOpenAppSettings()` is
+  // true, which was `isNative()` alone. So every assertion above stands on
+  // the FOUR-button web shape, and a landscape regression that reached only
+  // the five-button stack — the one with 308px of content and the tightest
+  // window of any frame in the app, 138px — had no gate at all.
+  // `forceAppSettingsDoor` writes the adapter's dev-only override token so a
+  // browser can reach it; `src/adapters/appSettings.ts`'s own header carries
+  // why that override gates one boolean and nothing else, and
+  // `scripts/dist-grep.sh` carries the proof it never ships.
+  //
+  // TWO MUTATIONS, BOTH RUN, and neither reddens the four-button case above:
+  //   - `-n + 4` -> `-n + 2` on `.connected-interstitial-actions--failure`
+  //     in `src/index.css` (the pairing count). The five-button window falls
+  //     138px -> 74px and `assertHeadlineOnFrame` fails on the headline's
+  //     BOTTOM, which runs to y94. This is the regression class the row was
+  //     filed for: it is invisible on every four-button frame, where `-n + 2`
+  //     still leaves 142px.
+  //   - `error.reason === "permission-denied"` -> `"link-failed"` on the
+  //     `Open Settings` guard in `ConnectedInterstitial.tsx` (chosen over
+  //     deleting the button so every import stays used and `pnpm build`
+  //     still succeeds — RF12's corollary: a mutation that breaks the build
+  //     leaves compose serving the previous image and reads as a pass). The
+  //     count assertion fails at 4.
+  //
+  // The overflow precondition below is what keeps `assertHeadlineOnFrame`
+  // falsifiable here, the same role the refusal frame's `contentHeight`
+  // assertion plays: a future edit that shrinks this frame under its own
+  // window would disarm the geometry assertions silently, and this reddens
+  // instead.
+  test("the interstitial's PERMISSION-DENIED frame is FIVE buttons with the settings door open, and still reads in landscape", async ({
+    page,
+  }) => {
+    const title = "Design Connected Five Button Workout";
+    await forceAppSettingsDoor(page);
+    await stubBluetoothPermissionDenied(page);
+    await openConnected(page, title, "design-connected-fivebutton@e2e.test");
+    const denied = page.locator(".connected-serif-line", {
+      hasText: "Bluetooth permission needed",
+    });
+    await expect(denied).toBeVisible({ timeout: 10_000 });
+
+    // The shape itself, asserted BEFORE anything geometric: without this a
+    // frame that quietly lost its fifth button would sail through every
+    // measurement below and read as coverage of a stack it never rendered
+    // (recurring failure 21).
+    const actions = page.locator(".connected-interstitial-actions--failure");
+    await expect(actions.locator("button")).toHaveCount(5);
+    await expect(actions.locator("button").first()).toHaveText("Open Settings");
+
+    await sweep(page);
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(denied).toBeVisible();
+    await assertTapTargets(page);
+    const m = await measureFailureFrame(page);
+    expect(
+      m.contentHeight,
+      `the five-button frame no longer overflows its landscape window ` +
+        `(content ${m.contentHeight}px in ${m.clientHeight}px), so the two ` +
+        `geometry assertions below have no free space to get wrong`,
+    ).toBeGreaterThan(m.clientHeight);
+    assertHeadlineOnFrame(m);
+    assertNothingAboveTheScrollOrigin(m);
 
     await page.setViewportSize({ width: 390, height: 844 });
 
