@@ -34,7 +34,15 @@ classify() {
 KILLDIR="$(mktemp -d)"
 export ERGOMATIC_TEST_KILLDIR="$KILLDIR"
 REAL_KILLDIR="$(cd "$HERE/.." && pwd)/.test-kills"
-real_before="$(ls -1 "$REAL_KILLDIR" 2>/dev/null | sort | tr '\n' ' ')"
+# cksum, not the listing itself: this file's `check` is a SUBSTRING match
+# (see its EMPTY branch), and a listing that has GAINED files still contains
+# the old one as a substring -- so comparing listings passes while the
+# directory is being written to. Measured 2026-09-08 with the
+# ERGOMATIC_TEST_KILLDIR override deleted: 30 files became 42 and the case
+# still read `ok`. cksum of the sorted listing is a fixed-width digest, so a
+# substring match on it is an equality.
+_killdir_digest() { ls -1 "$REAL_KILLDIR" 2>/dev/null | sort | cksum; }
+real_before="$(_killdir_digest)"
 trap 'rm -rf "$KILLDIR"' EXIT
 
 SUMMARY=" Test Files  1 passed (1)"
@@ -172,7 +180,7 @@ rm -rf "$CAPDIR"
 # gate must not disturb the live forensic directory. Before the seam it was
 # `rm -rf`'d three times, so a real kill's evidence survived only until the
 # next `pnpm test`.
-real_after="$(ls -1 "$REAL_KILLDIR" 2>/dev/null | sort | tr '\n' ' ')"
+real_after="$(_killdir_digest)"
 check "the gate leaves app/.test-kills untouched" "$real_before" "$real_after"
 
 if [ "$fails" -ne 0 ]; then echo "$fails failure(s)"; exit 1; fi
