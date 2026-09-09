@@ -4416,6 +4416,43 @@ test.describe("settings screen (judged colours)", () => {
     await assertNoA11yViolations(page);
   });
 
+  /**
+   * Phase RN: the READY SCREEN group. The two sweeps above (tap targets and
+   * a11y) run over the whole page and so already cover this control — but
+   * neither would notice it going MISSING, and the block's colour assertions
+   * key on the "Pace slower color" group by name. So the new group gets its
+   * own structural assertion rather than riding the sweeps, which is the
+   * honest version of "it extends for free".
+   */
+  test("the ready screen group is present, checked on SHOW, and shares the option chrome", async ({
+    page,
+  }) => {
+    const group = page.getByRole("radiogroup", { name: "Ready screen" });
+    await expect(group).toBeVisible();
+    const show = group.getByRole("radio", { name: "SHOW", exact: true });
+    const skip = group.getByRole("radio", { name: "SKIP", exact: true });
+    await expect(show).toHaveAttribute("aria-checked", "true");
+    await expect(skip).toHaveAttribute("aria-checked", "false");
+
+    // The same painted chrome the colour options use, which is the point of
+    // appending `.setting-*` to their rules rather than writing new ones:
+    // 2px --accent when checked, 1px --rule-3 at rest. Same numbers as the
+    // block above, and they come from `index.css`'s own computed table.
+    const border = (locator: typeof show) =>
+      locator.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { width: cs.borderTopWidth, color: cs.borderTopColor };
+      });
+    expect(await border(show)).toStrictEqual({
+      width: "2px",
+      color: "rgb(181, 52, 31)", // --accent, 5.94:1 on --surface (>=3:1)
+    });
+    expect(await border(skip)).toStrictEqual({
+      width: "1px",
+      color: "rgb(201, 195, 178)", // --rule-3, decoration
+    });
+  });
+
   test("the checked option is an accent border, the resting one a quiet rule", async ({
     page,
   }) => {
