@@ -4242,8 +4242,10 @@ export function createPm5Driver(
 
   /**
    * Schedules the summary gate's reconcile for the instant the finish grace
-   * closes (fast-follow Task 2, design spec §5). `FINISH_GRACE_MS` (the
-   * default `ms`) is the delay for a reason that is not convenience: the
+   * closes (fast-follow Task 2, design spec §5). `FINISH_GRACE_MS` — which
+   * the natural-finish call site passes explicitly, since `ms` HAS NO
+   * DEFAULT (see the parameters' own comment below) — is the delay for a
+   * reason that is not convenience: the
    * reconcile's question is "did the split fail to arrive before the grace
    * expired?", so it must ask at exactly the moment the grace stopped
    * accepting one — a shorter delay would answer while a split could still
@@ -4313,6 +4315,58 @@ export function createPm5Driver(
     }, ms);
   }
 
+  /**
+   * V2's second sentence, as code: **SETTLING MAY NOT FAIL THE REPLACEMENT**
+   * (branch review, finding 4). The doors called `drainSummaryReconcile`
+   * bare, inside a `try { … } finally { replacingRun = null; }` with no
+   * `catch` — and in `program()` that sits inside the very `try` whose last
+   * statement is the `armed` emit, so a throw out of the settlement would
+   * reject `driver.program(p)` AFTER `verifyArmed` confirmed the erg holds
+   * the workout, leaving this driver tracking the outgoing run while the
+   * machine holds the new program. That is `emit`'s own live defect (V1) one
+   * function over.
+   *
+   * NOT REACHABLE TODAY, and said plainly: with per-listener isolation in
+   * place only driver code runs on that stack, and no throwing path was
+   * found in it. It is here for the same reason V3 is — the driver knowing
+   * this about itself beats an argument that nothing on the current call
+   * graph can do it.
+   *
+   * WHAT THE SWALLOW COSTS, stated because a swallow that hides a cost is
+   * the defect it is meant to prevent: the outgoing run's answer — its
+   * `summary-reconciled` verdict, its `avg-pace-verdict`, and any
+   * observations still pending — is LOST for good, and the `settlement-threw`
+   * entry is the only trace of it. The replacement is what may not fail;
+   * the answer is not rescued.
+   *
+   * WHAT IT MAY NOT DO IS RELOCATE THE THROW, and the first version of this
+   * function did (scoped re-review, finding 1). `drainSummaryReconcile` ran
+   * its canceller BEFORE emptying the slot, so a throwing canceller left
+   * `pendingSummaryReconcile` holding itself; this `catch` then let the door
+   * proceed and handed the live fault to the next caller of that slot —
+   * `driver.reconcile()` re-threw, and `armSummaryReconcile` fired the stale
+   * canceller from inside a BLE notification handler at the NEXT run's
+   * natural finish. Both are gated now. The slot is emptied first, so a
+   * swallowed settlement leaves nothing armed.
+   *
+   * SCOPED TO THE DOORS ON PURPOSE. The teardown paths (`disconnect()`,
+   * `reconcile()`, `t.onDisconnect`) still call `drainSummaryReconcile`
+   * bare: V2 is an invariant about REPLACEMENT, and swallowing a throw on a
+   * teardown would change what those callers see for a reason nothing has
+   * argued for. That is a statement about a teardown's OWN settlement only —
+   * it never licensed this function to leave a fault behind for one.
+   */
+  function settleOutgoingRun(cause: string): void {
+    try {
+      drainSummaryReconcile(cause);
+    } catch (err) {
+      log.record(
+        "settlement-threw",
+        `settling the outgoing run (${cause}) threw — the replacement completes regardless and the outgoing run's answer is lost: ${String(err)}`,
+      );
+    }
+  }
+
   /** THE F7 RULE, AS ITS OWN FUNCTION (Task 7, "one terminal path" — this
    *  used to be inline, only inside `t.onDisconnect`'s callback below,
    *  whose own doc comment still carries the full reasoning for why a
@@ -4337,46 +4391,16 @@ export function createPm5Driver(
    *  `pendingSummaryReconcile` is already `null` is a no-op, so calling it
    *  from more than one of those three sites in the same teardown costs
    *  nothing. */
-  /**
-   * V2's second sentence, as code: **SETTLING MAY NOT FAIL THE REPLACEMENT**
-   * (branch review, finding 4). The doors called `drainSummaryReconcile`
-   * bare, inside a `try { … } finally { replacingRun = null; }` with no
-   * `catch` — and in `program()` that sits inside the very `try` whose last
-   * statement is the `armed` emit, so a throw out of the settlement would
-   * reject `driver.program(p)` AFTER `verifyArmed` confirmed the erg holds
-   * the workout, leaving this driver tracking the outgoing run while the
-   * machine holds the new program. That is `emit`'s own live defect (V1) one
-   * function over.
-   *
-   * NOT REACHABLE TODAY, and said plainly: with per-listener isolation in
-   * place only driver code runs on that stack, and no throwing path was
-   * found in it. It is here for the same reason V3 is — the driver knowing
-   * this about itself beats an argument that nothing on the current call
-   * graph can do it.
-   *
-   * SCOPED TO THE DOORS ON PURPOSE. The teardown paths (`disconnect()`,
-   * `reconcile()`, `t.onDisconnect`) still call `drainSummaryReconcile`
-   * bare: V2 is an invariant about REPLACEMENT, and swallowing a throw on a
-   * teardown would change what those callers see for a reason nothing has
-   * argued for.
-   */
-  function settleOutgoingRun(cause: string): void {
-    try {
-      drainSummaryReconcile(cause);
-    } catch (err) {
-      log.record(
-        "settlement-threw",
-        `settling the outgoing run (${cause}) threw — the replacement completes regardless and the outgoing run's answer is lost: ${String(err)}`,
-      );
-    }
-  }
-
   function drainSummaryReconcile(
     /** THE NEUTRAL HALF OF THE RELEASE CAUSE — who drained, with no window
      *  clause attached (branch review, finding 2). This parameter used to be
-     *  the whole sentence, and five of the six call sites spelled it "…
-     *  before the finish grace closed", which this function then handed to
-     *  BOTH slots. That is false on the terminate slot: `noteTerminateObservations`'s
+     *  the whole sentence, and five of the six call sites named a finish
+     *  grace in it — three as "… before the finish grace closed" and two as
+     *  "… before ITS finish grace closed" (the two doors) — which this
+     *  function then handed to BOTH slots. (The count is stated exactly
+     *  because the round that introduced this comment got it wrong: it said
+     *  five sites "spelled it" the first way, when two spelled it the
+     *  second, which is why three test expectations had to be edited.) That is false on the terminate slot: `noteTerminateObservations`'s
      *  two call sites are gated on `terminatedAwaitingSummary`, and a
      *  terminated close opens NO finish grace and arms NO reconcile deadline
      *  (`maybeEmitFrame`'s terminated branch says so in as many words), so
@@ -4405,8 +4429,23 @@ export function createPm5Driver(
       `${cause} while the ${HASH_SUBWINDOW_MS}ms wait for 0x003F was still open`,
     );
     if (pendingSummaryReconcile !== null) {
-      pendingSummaryReconcile();
+      // EMPTIED BEFORE THE CANCELLER RUNS, not after (scoped re-review,
+      // finding 1) — the same discipline `flushTerminateObservations` states
+      // one function up, for a second reason. It used to be
+      // `pendingSummaryReconcile(); pendingSummaryReconcile = null;`, so a
+      // canceller that THREW left the slot holding itself. `settleOutgoingRun`
+      // then swallowed at the door and proceeded, handing the live fault to
+      // whoever touched the slot next — measured on two reachable arms, and
+      // neither is wrapped: `driver.reconcile()` (the hook's own
+      // `reconcileAndReleaseHandoff` teardown) re-entered this branch and
+      // re-threw, and `armSummaryReconcile`'s opening
+      // `pendingSummaryReconcile?.()` fired the stale canceller from inside
+      // `maybeEmitFrame`, i.e. inside a BLE notification handler, when the
+      // NEXT run reached its own natural finish. A swallow that relocates a
+      // throw is not containment.
+      const cancelDeadline = pendingSummaryReconcile;
       pendingSummaryReconcile = null;
+      cancelDeadline();
       // A deadline still pending here can only name the CURRENT
       // `activeRun`, closed and non-null — and RC-13 corrected the support
       // this sentence used to carry, which was false twice.
@@ -4431,7 +4470,18 @@ export function createPm5Driver(
       // register row rather than argued here: binding the run into the slot
       // would make the precondition structural instead of stated.
       if (activeRun !== null) {
-        reconcileSummary(activeRun, `${cause} before the finish grace closed`);
+        // "BEFORE THE DEADLINE FIRED", never "before the grace closed"
+        // (scoped re-review, finding 5). This driver already uses
+        // open/closed for the GRACE PREDICATE (`graceIsOpen`,
+        // `describeClosedGrace`), and one composed sentence — the summary
+        // burst's — is true under that reading and false under "the 3000ms
+        // deadline fired". Naming the deadline is the reading that is true
+        // at every one of these call sites, and it matches
+        // `armSummaryReconcile`'s own default sentence.
+        reconcileSummary(
+          activeRun,
+          `${cause} before the finish grace's own deadline fired`,
+        );
         // RC-9a: the same pairing `armSummaryReconcile`'s own scheduled
         // callback makes (its own comment) — this is the SECOND of the two
         // places `reconcileSummary` is ever called, and this verdict must
@@ -4523,7 +4573,7 @@ export function createPm5Driver(
       return;
     }
     drainSummaryReconcile(
-      "the summary burst completed (0x0039 and its verification hash both in hand)",
+      "the summary burst completed early (0x0039 and its verification hash both in hand)",
     );
   }
 

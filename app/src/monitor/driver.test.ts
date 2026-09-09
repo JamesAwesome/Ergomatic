@@ -10508,6 +10508,17 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       "buffered",
       "split-won",
     ]);
+    // ...AND ITS RELEASE CAUSE (RC-13 §10, scoped re-review finding 5).
+    // Nothing pinned this string, and the restructuring that gave every
+    // `summary-reconciled` detail a release cause silently widened THIS one:
+    // its cause deliberately named no window ("completed early"), and it
+    // inherited a "before the finish grace closed" clause that is true under
+    // this driver's `graceIsOpen`/`describeClosedGrace` vocabulary and false
+    // under "the 3000ms deadline fired". The composed sentence now names the
+    // DEADLINE, which is the reading that is true at every call site.
+    expect(verdicts(g.log)[1]!.detail).toContain(
+      "split-won — interval 0 was already recorded when the summary burst completed early (0x0039 and its verification hash both in hand) before the finish grace's own deadline fired",
+    );
     // The SPECIFIC reason, not a disjunction: "a boundary claimed it" and
     // "this run ended by terminate" both leave `finishGraceUntil === null`,
     // and a stash reader has to tell them apart (review Minor-2). Test (f)
@@ -12092,7 +12103,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     // The RELEASE CAUSE names the door, not a 3000ms window that never
     // closed (RC-13 §10).
     expect(filed[0]!.detail).toContain(
-      "released when program() replaced this run before the finish grace closed",
+      "released when program() replaced this run before the finish grace's own deadline fired",
     );
     // Filed BEFORE the new run was announced.
     const armedSeqs = g.log
@@ -14058,9 +14069,9 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
     // The RELEASE CAUSE, named — this reconcile did not run because a 3000ms
     // window closed on its own clock, and the detail may not say it did.
     expect(reconciled[0]!.detail).toContain(
-      "split-won — interval 0 was already recorded when program() replaced this run before the finish grace closed",
+      "split-won — interval 0 was already recorded when program() replaced this run before the finish grace's own deadline fired",
     );
-    expect(reconciled[0]!.detail).not.toContain("3000ms finish grace closed");
+    expect(reconciled[0]!.detail).not.toContain("3000ms finish grace");
 
     // ...and it was filed BEFORE the new run existed: the second `armed`
     // entry is the new run's own.
@@ -14087,7 +14098,7 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
       .filter((e) => e.kind === "summary-reconciled");
     expect(reconciled).toHaveLength(1);
     expect(reconciled[0]!.detail).toContain(
-      "split-won — interval 0 was already recorded when beginFreeRow() replaced this run before the finish grace closed",
+      "split-won — interval 0 was already recorded when beginFreeRow() replaced this run before the finish grace's own deadline fired",
     );
 
     // Settled before the free row opened.
@@ -14097,16 +14108,22 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
     expect(reconciled[0]!.seq).toBeLessThan(opened[0]!.seq);
   });
 
-  it("a settlement that THROWS does not fail the replacement — program() resolves, the new run opens, and the ring says the answer was lost", async () => {
-    // V2's second sentence: "Settling may not fail the replacement." The
-    // fault is injected at `DriverOptions.schedule`, an existing seam: the
-    // reconcile deadline's own CANCELLER is what `drainSummaryReconcile`
-    // calls first, so a canceller that throws makes the settlement throw
-    // from inside the door with nothing invented in the driver.
-    //
-    // Without the `catch`, `program()` rejects AFTER `verifyArmed` — the erg
-    // holds the new program while this driver still tracks the outgoing run,
-    // and the hook tells the rower programming failed.
+  /**
+   * Drives one run to a natural finish, then replaces it through `program()`
+   * with the reconcile deadline's own CANCELLER rigged to throw — so the
+   * settlement throws from inside the door with nothing invented in the
+   * driver. The fault is injected at `DriverOptions.schedule`, an existing
+   * seam, and the canceller is what `drainSummaryReconcile` reaches first.
+   *
+   * Returns with the replacement already complete, so each test below asks a
+   * DIFFERENT question of the same aftermath.
+   */
+  async function replacementOverAThrowingSettlement(): Promise<{
+    transport: ReturnType<typeof stubTransport>;
+    log: ReturnType<typeof createEventLog>;
+    driver: ReturnType<typeof createPm5Driver>;
+    events: MonitorEvent[];
+  }> {
     let cancellerThrows = false;
     const transport = stubTransport();
     const log = createEventLog();
@@ -14139,6 +14156,15 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
     await expect(
       programViaStub(driver, transport, MINIMAL_PROGRAM),
     ).resolves.toBeUndefined();
+    return { transport, log, driver, events };
+  }
+
+  it("a settlement that THROWS does not fail the replacement — program() resolves, the new run opens, and the ring says the answer was lost", async () => {
+    // V2's second sentence: "Settling may not fail the replacement." Without
+    // the `catch`, `program()` rejects AFTER `verifyArmed` — the erg holds
+    // the new program while this driver still tracks the outgoing run, and
+    // the hook tells the rower programming failed.
+    const { log, events } = await replacementOverAThrowingSettlement();
 
     // The replacement completed: the new run was announced.
     expect(events.filter((e) => e.kind === "armed")).toHaveLength(2);
@@ -14151,6 +14177,60 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
     ).toStrictEqual([
       "settling the outgoing run (program() replaced this run) threw — the replacement completes regardless and the outgoing run's answer is lost: Error: the canceller blew up",
     ]);
+  });
+
+  it("...and it leaves NOTHING armed: reconcile(), the hook's own teardown, does not inherit the fault the door swallowed", async () => {
+    // THE FIRST OF TWO REACHABLE ARMS THE FIRST FIX MISSED (scoped
+    // re-review, finding 1). `drainSummaryReconcile` used to run its
+    // canceller BEFORE emptying the slot, so a throw left
+    // `pendingSummaryReconcile` holding the throwing canceller. The door
+    // swallowed and proceeded; `reconcile()` — which `useMonitorSession`'s
+    // `reconcileAndReleaseHandoff` calls on every teardown — then re-entered
+    // the same branch and re-threw. A swallow that relocates a throw is not
+    // containment.
+    const { log, driver } = await replacementOverAThrowingSettlement();
+
+    expect(() => driver.reconcile()).not.toThrow();
+    // Exactly one throw happened, at the door, and nothing after it.
+    expect(
+      log.entries().filter((e) => e.kind === "settlement-threw"),
+    ).toHaveLength(1);
+  });
+
+  it("...nor does a BLE notification: the NEXT run's own natural finish re-arms the slot without firing a stale canceller", async () => {
+    // THE SECOND ARM, and the worse one: `armSummaryReconcile`'s first
+    // statement is `pendingSummaryReconcile?.()`, and it runs inside
+    // `maybeEmitFrame` — i.e. inside the transport's notification handler.
+    // A stale throwing canceller left in the slot therefore threw out of
+    // `transport.notify(...)`, on the ordinary wire path, one run later.
+    const { transport, driver, log } =
+      await replacementOverAThrowingSettlement();
+
+    // Drive the NEW run to its own natural finish. `armSummaryReconcile`
+    // cancels whatever is in the slot before scheduling.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    expect(() =>
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+      ),
+    ).not.toThrow();
+    // The new run really did close and arm — this is not a test that passed
+    // because nothing happened.
+    expect(
+      log
+        .entries()
+        .filter((e) => e.kind === "terminal" && e.detail === "finished"),
+    ).toHaveLength(2);
+    expect(
+      log.entries().filter((e) => e.kind === "settlement-threw"),
+    ).toHaveLength(1);
+    // And `driver` is used above only through `transport`; naming it here
+    // keeps the destructure honest.
+    expect(driver).toBeDefined();
   });
 
   it("beginFreeRow(): a pending terminate-observations emit is FLUSHED to the outgoing run, not dropped", async () => {

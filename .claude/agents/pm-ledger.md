@@ -6329,8 +6329,10 @@ own words against the same evidence bar it applied.**
 **Ruling: build, but with the spec's halves inverted.** RC-13's spec (REV 2) led
 with a driver-door drain no rower can reach and filed its `emit` containment as
 task 3 of 7. The containment is the only part with a supported producer —
-`driver.ts:6887`'s `emit({ kind: "armed" })` is the last statement inside
-`program()`'s own `try`, so a throwing subscriber rejects `program()` **after**
+`driver.ts`'s `MonitorDriver.program` ends its own `try` with
+`emit({ kind: "armed" })` — cited by symbol, because the line number this
+entry first carried (`:6887`, true on main at the time) was already stale on
+the branch that landed it, and a ledger outlives every line number in it, so a throwing subscriber rejects `program()` **after**
 `verifyArmed` confirmed the erg holds the workout, and the hook then tells the
 rower programming failed for a workout the erg is holding. It is also the exact
 blocker `ROADMAP.md`'s RC-14 row records for James's "INSTRUMENT it" order. One
