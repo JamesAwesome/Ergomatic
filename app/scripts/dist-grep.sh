@@ -10,7 +10,7 @@
 # record/replay stage A) — because a single gate that only ever grows is
 # easier to trust than several that might drift apart.
 #
-# NINE needles, nine different reasons — and every needle is a STRING
+# TEN needles, ten different reasons — and every needle is a STRING
 # LITERAL from the source, deliberately never a function/variable
 # identifier: `vite build` minifies the production bundle, which renames
 # every identifier it can (verified empirically this task — grepping for
@@ -134,7 +134,22 @@ fi
 # and haptics plugin chunks themselves DO ship, lazily, behind a runtime
 # `isNative()` — exactly as `@capacitor/app`'s chunk already does — because
 # Rollup folds an `import()` only behind a build-time constant (RF12).
-NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "C2 link probe (dev harness)" "scripted start failure")
+# Phase MT close-out adds ONE: `app-settings door (dev override)` is
+# `DEV_DOOR_TOKEN` in `src/adapters/appSettings.ts`, the literal
+# `canOpenAppSettings()` compares `window.__appSettingsDoor__` against so
+# `e2e/design.spec.ts` can reach the FIVE-button `permission-denied` stack
+# that otherwise exists only on iOS. The comparison sits inside the same
+# `DEV || VITE_ENABLE_FAKE_MONITOR` fold every seam above lives behind, so
+# both the read and the token are dropped from a real deploy's bundle. A
+# STRING rather than the global's bare property name, following this
+# header's own `__pm5HoldOpen__` precedent — though for the opposite reason:
+# that name ships because an UNGUARDED reader exists, whereas nothing reads
+# this one outside the fold, so the string is chosen purely because
+# minification cannot rename it. RED PROVEN (RF12, both directions):
+# `VITE_ENABLE_FAKE_MONITOR=1 pnpm build` opens the gate and this needle
+# fires on `dist/client/assets/index-*.js`; the same build without the flag
+# is clean.
+NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "C2 link probe (dev harness)" "scripted start failure" "app-settings door (dev override)")
 FAILED=0
 
 for needle in "${NEEDLES[@]}"; do
