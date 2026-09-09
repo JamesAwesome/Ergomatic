@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import {
   signInViaBackdoor,
   stableBoundingBox,
+  stubBluetoothPermissionDenied,
   stubBluetoothScanFailure,
 } from "./helpers";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
@@ -7316,17 +7317,27 @@ async function injectConnectedFake(
   events: unknown[],
   delayWritesMs = CONNECTED_DELAY_WRITES_MS,
   program: unknown = CONNECTED_PROGRAM,
+  /** Phase MT: the `Erg Machine Type` this fake monitor reports on 0x0032
+   *  and 0x0038. Omitted by every other caller here, so they keep the
+   *  fake's own default of `0` (`ERGMACHINE_TYPE_STATIC_D`) and are
+   *  untouched; `128` (`ERGMACHINE_TYPE_STATIC_SKI`) drives the refusal.
+   *  Threaded exactly as `screenshots.spec.ts`'s
+   *  `injectFakeMonitorForScreenshots` threads it — the supported producer
+   *  — including its omit-the-key-entirely spelling, so an undefined value
+   *  never reaches the fake as an explicit `undefined`. */
+  ergMachineType?: number,
 ): Promise<void> {
   await page.addInitScript(
-    ({ program: p, events: e, delayWritesMs: delay }) => {
+    ({ program: p, events: e, delayWritesMs: delay, ergMachineType: erg }) => {
       window.__pm5FakeScript__ = {
         program: p,
         events: e,
         deviceName: "PM5 918273645",
         delayWritesMs: delay,
+        ...(erg === undefined ? {} : { ergMachineType: erg }),
       } as typeof window.__pm5FakeScript__;
     },
-    { program, events, delayWritesMs },
+    { program, events, delayWritesMs, ergMachineType },
   );
 }
 
@@ -7429,6 +7440,107 @@ async function walkToSurface(page: Page): Promise<void> {
   ).toBeVisible();
 }
 
+/** Phase MT gate (b): the geometry that decides whether a failure frame's
+ *  message is actually ON the frame. Every read happens in ONE
+ *  `page.evaluate` so no React re-render can land between them, and the
+ *  numbers come back RELATIVE to `.connected-interstitial-body`'s own client
+ *  box — the box the rower can actually see.
+ *
+ *  `firstChildTopAtMinScroll` is the second half, and it pins the nastier
+ *  one. Assigning a negative `scrollTop` asks the engine for the region ABOVE
+ *  the scroll origin: chromium clamps that at 0 and reports a `scrollHeight`
+ *  that does not know the overflowing region exists, so content placed above
+ *  the origin is UNREACHABLE rather than merely scrolled past, while webkit
+ *  allowed `scrollTop: -99` on the same frame (both measurements are recorded
+ *  in `src/index.css`'s own `.connected-interstitial-body` comment).
+ *
+ *  BE CLEAR ABOUT WHICH READ DOES THE WORK. This suite runs chromium only, so
+ *  the `-9999` write always clamps to 0 and this read lands at the SAME offset
+ *  as the at-rest one — it discriminates nothing here, and `minScrollTop` is
+ *  returned as a recorded observation, never asserted on, because on chromium
+ *  it is a constant no CSS can change (an earlier revision asserted
+ *  `toBe(0)`; that assertion could not go red, so it is gone — RF21). The
+ *  write stays because it is what makes the number mean "at the minimum
+ *  REACHABLE position" rather than "at rest", which is the difference the day
+ *  a webkit project is added. What bites today is the first child's top. */
+async function measureFailureFrame(page: Page): Promise<{
+  clientHeight: number;
+  contentHeight: number;
+  serifTop: number;
+  serifBottom: number;
+  remedyTop: number | null;
+  minScrollTop: number;
+  firstChildTopAtMinScroll: number;
+}> {
+  return page.evaluate(() => {
+    const body = document.querySelector<HTMLElement>(
+      ".connected-interstitial-body",
+    );
+    const serif = document.querySelector<HTMLElement>(".connected-serif-line");
+    const first = (body?.firstElementChild ?? null) as HTMLElement | null;
+    if (body === null || serif === null || first === null)
+      throw new Error("no failure frame on screen to measure");
+    const clientTopOf = (el: HTMLElement): number =>
+      el.getBoundingClientRect().top + el.clientTop;
+    body.scrollTop = 0;
+    const restTop = clientTopOf(body);
+    const serifRect = serif.getBoundingClientRect();
+    const atRest = {
+      clientHeight: body.clientHeight,
+      contentHeight: body.scrollHeight,
+      serifTop: serifRect.top - restTop,
+      serifBottom: serifRect.bottom - restTop,
+    };
+    const remedy = body.querySelector<HTMLElement>(".connected-body-line");
+    const remedyTop =
+      remedy === null ? null : remedy.getBoundingClientRect().top - restTop;
+    body.scrollTop = -9999;
+    const minScrollTop = body.scrollTop;
+    const firstChildTopAtMinScroll =
+      first.getBoundingClientRect().top - clientTopOf(body);
+    body.scrollTop = 0;
+    return {
+      ...atRest,
+      remedyTop,
+      minScrollTop,
+      firstChildTopAtMinScroll,
+    };
+  });
+}
+
+/** The headline is ON the frame at rest — inside `.connected-interstitial-
+ *  body`'s client box, top and bottom. Held by every failure frame since the
+ *  landscape action stack learned to pair its buttons (Phase MT follow-on):
+ *  before that, four full-width buttons left a 78px window against a headline
+ *  that runs to y94 on any frame whose title wraps to two lines, which is
+ *  `link-failed` (470px at 36px serif) and `permission-denied` (457px) in a
+ *  440px column. */
+function assertHeadlineOnFrame(
+  m: Awaited<ReturnType<typeof measureFailureFrame>>,
+): void {
+  expect(
+    m.serifTop,
+    `the headline starts ${-m.serifTop}px above the body's visible top`,
+  ).toBeGreaterThanOrEqual(-0.5);
+  expect(
+    m.serifBottom,
+    `the headline ends ${m.serifBottom - m.clientHeight}px below the body's visible bottom`,
+  ).toBeLessThanOrEqual(m.clientHeight + 0.5);
+}
+
+/** The half of gate (b) that holds on EVERY failure frame: nothing may sit
+ *  above the minimum reachable scroll position, because no scroll can bring
+ *  it back. */
+function assertNothingAboveTheScrollOrigin(
+  m: Awaited<ReturnType<typeof measureFailureFrame>>,
+): void {
+  expect(
+    m.firstChildTopAtMinScroll,
+    `the frame's first child sits ${-m.firstChildTopAtMinScroll}px above the ` +
+      `minimum reachable scroll position, where no scroll can reach it`,
+  ).toBeGreaterThanOrEqual(-0.5);
+}
+
 // The connected walk is minutes of real setup per test (sign-in, import,
 // a 200ms-per-chunk five-interval program, a pumped session), well past
 // Playwright's 30s default.
@@ -7500,6 +7612,240 @@ test.describe("connected screens (fake-driven)", () => {
     await expect(failed).toBeVisible({ timeout: 10_000 });
     await sweep(page);
     await expect(failed).toBeVisible({ timeout: 1000 });
+
+    // Gate (b) IN FULL on the other failure frame, and free here: this test
+    // already stands on a failure screen, so it costs a resize rather than a
+    // second minutes-long connected setup.
+    //
+    // SUPERSEDED CLAIM (Phase MT follow-on): this comment used to assert only
+    // the reachability half, on the ground that four full-width buttons left a
+    // window this frame's headline "legitimately" overran. That is no longer
+    // true — the landscape stack now pairs its last four buttons, taking the
+    // window 78px -> 206px against a 94px headline, so the headline clears the
+    // fold and the containment half is a real gate here. The frame as a whole
+    // still overflows, by 13px (content 219px), which is what keeps the
+    // reachability half falsifiable on this frame: under the
+    // `justify-content: center` mutation it fails at 6.5px, half of that
+    // overflow. TWO FIGURES CORRECTED FROM REVIEW ROUND 0: that number was
+    // written as 70.5px, which was measured against the OLD 78px window, and
+    // this frame was called the one that "fails hardest of the three" — it is
+    // now the mildest, since `permission-denied` carries 308px of content into
+    // the same 206px window and fails at 29px on the headline.
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(failed).toBeVisible();
+    const lf = await measureFailureFrame(page);
+    assertHeadlineOnFrame(lf);
+    assertNothingAboveTheScrollOrigin(lf);
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // THE FRAME THE LANDSCAPE BUDGET WAS FIXED FOR (Phase MT follow-on, Gate 0
+  // approved 2026-09-08). `permission-denied` carries more than any other
+  // failure screen — a headline that wraps to two lines at 36px in a 440px
+  // column (457px), the remedy sentence, the reassurance and a DETAIL panel,
+  // 219px of content — and it is the one screen whose message IS the fix
+  // ("Allow Bluetooth for Ergomatic in Settings"). Before the pairing rule its
+  // landscape window was 78px against a headline running to y94.
+  test("the interstitial's PERMISSION-DENIED frame reads in landscape, headline and all", async ({
+    page,
+  }) => {
+    const title = "Design Connected Permission Workout";
+    await stubBluetoothPermissionDenied(page);
+    await openConnected(page, title, "design-connected-permission@e2e.test");
+    const denied = page.locator(".connected-serif-line", {
+      hasText: "Bluetooth permission needed",
+    });
+    await expect(denied).toBeVisible({ timeout: 10_000 });
+    await sweep(page);
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(denied).toBeVisible();
+    await assertTapTargets(page);
+    const m = await measureFailureFrame(page);
+    assertHeadlineOnFrame(m);
+    assertNothingAboveTheScrollOrigin(m);
+
+    // The remedy must at least BEGIN on screen. This is the only failure
+    // screen whose body line tells the rower what to DO — "Allow Bluetooth for
+    // Ergomatic in Settings" — rather than restating the headline, so a rower
+    // who cannot see it start has been told something is wrong and not how to
+    // fix it. It bites when this frame loses its `--failure` modifier.
+    //
+    // WHAT IT CANNOT DO IS PIN THE PAIRING COUNT, and the comment that shipped
+    // here in review round 0 claimed it did — a claim this PR's own probe
+    // table and ROADMAP row both contradicted while it sat here (it survived a
+    // `git checkout --` that reverted an unrelated probe, RF22 exactly).
+    // MEASURED: reverting the rule to `nth-last-child(-n + 2)` leaves every
+    // assertion on THIS frame green. At four buttons `-n + 2` still gives a
+    // 142px window and the remedy at 102 clears it; the shape that falls to
+    // 74px is the FIVE-button iOS stack, and `canOpenAppSettings()` is
+    // `isNative()`, so the web build is four buttons by construction and that
+    // shape is unreachable from here.
+    //
+    // The count is caught, but ONE FRAME OVER: the refusal test's
+    // `contentHeight` precondition fails at 157px against a 142px window
+    // ("overflows its window by 15px"), because that frame is the one whose
+    // content sits between the two windows. Round 0 of this PR claimed the
+    // count was pinned by nothing in the suite, which was true when written
+    // and stopped being true when that precondition landed in round 1.
+    expect(
+      m.remedyTop,
+      "the frame has no body line to read as the remedy",
+    ).not.toBeNull();
+    expect(
+      m.remedyTop,
+      `the remedy sentence starts ${(m.remedyTop ?? 0) - m.clientHeight}px below the fold, so the rower is told something is wrong and not what to do`,
+    ).toBeLessThan(m.clientHeight);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // --- Phase MT: the two gates the refusal screen owed (ROADMAP register,
+  // "Two design gates the refusal screen owes") ---
+  //
+  // Both exist because coverage was CLAIMED where there was none, so each is
+  // kept only because it went red on the mutation its own comment names; the
+  // measured failures are in the PR that added them.
+
+  /** The refusal frame, reached for real: `128` is
+   *  `ERGMACHINE_TYPE_STATIC_SKI`, the fake reports it on 0x0032, and the
+   *  real parser, driver and hook refuse the sitting.
+   *
+   *  `INTERSTITIAL_DELAY_WRITES_MS` is deliberately NOT used. That budget
+   *  exists to hold a TRANSIENT state still long enough to sweep it; this
+   *  screen is terminal — it holds until the rower acts — so the default
+   *  200ms/write only reaches it sooner. */
+  async function openRefused(
+    page: Page,
+    title: string,
+    email: string,
+  ): Promise<Locator> {
+    await injectConnectedFake(
+      page,
+      [],
+      CONNECTED_DELAY_WRITES_MS,
+      CONNECTED_PROGRAM,
+      128,
+    );
+    await openConnected(page, title, email);
+    const refused = page.locator(".connected-serif-line", {
+      hasText: "Erg type not supported",
+    });
+    await expect(refused).toBeVisible({ timeout: 30_000 });
+    return refused;
+  }
+
+  // GATE (a). `assertTapTargets` sweeps every a/button/[role=button]/input/
+  // select for 44px in both dimensions, and it does run on the FAILED case
+  // above — but that one drives a `link-failed` failure, and
+  // `SupportMatrixLink` renders only for `unsupported-machine`, so the link
+  // has never once been in the DOM while the sweep ran. This case puts it
+  // there. The link's own visibility is asserted BEFORE the sweep for the
+  // reason recurring failure 21 exists: without it, a refusal that rendered
+  // no link at all would sail through the sweep and read as coverage.
+  //
+  // MUTATION, RUN: drop `min-height: var(--tap)` from
+  // `.connected-support-link` in `src/index.css`. The sweep fails with
+  // `height < 44 for: <a class="connected-support-link" …>WHICH ERGS WORK ›`,
+  // `Received: 15` — the link collapses to its 15px line box. (The CSS
+  // comment's own estimate was ~18px, from the design pass's replica.)
+  test("the interstitial's REFUSED state (unsupported machine): axe, the 44px floor over the support link, and the ink-4 rule", async ({
+    page,
+  }) => {
+    const title = "Design Connected Refused Workout";
+    const refused = await openRefused(
+      page,
+      title,
+      "design-connected-refused@e2e.test",
+    );
+    await expect(page.locator(".connected-support-link")).toBeVisible();
+    await sweep(page);
+    await expect(refused).toBeVisible({ timeout: 1000 });
+    await cleanupAllConnected(page, title);
+  });
+
+  // GATE (b) on the refusal frame. WHAT THIS TEST STILL PROVES, AND WHAT IT NO
+  // LONGER CAN (Phase MT follow-on rev 2, review round 0 finding 3): the
+  // landscape budget fix took this frame's window 142px -> 206px against 157px
+  // of content, so it is the one failure frame that now FITS. With no overflow
+  // there is no free space to split, which makes `justify-content: center` and
+  // the auto margins indistinguishable here — the -7.5px mutation this
+  // comment's own option table names can no longer redden either geometry
+  // assertion below, and the containment half needs a window under 58px, which
+  // nothing reaches on this frame. Both are kept deliberately, as tripwires
+  // for a future line added to this frame, and the `contentHeight` assertion
+  // pins the precondition that makes them dormant, so a frame that starts
+  // overflowing again reddens HERE rather than silently re-arming them.
+  // THE FALSIFIABLE COPIES LIVE ON THE OTHER TWO FRAMES, which still overflow:
+  // measured under that mutation, `link-failed` fails at 6.5px and
+  // `permission-denied` at 29px. What this test uniquely still gates is the
+  // 44px sweep with the support link in the DOM, which reddens at 15px.
+  //
+  // The historical text: at 844x390 four full-width buttons left a 142px
+  // window for a taller column, so the frame overflowed BY DESIGN; what must
+  // never happen
+  // is the overflow being split above and below the window, which is what
+  // `justify-content: center` did and what the auto margins now prevent.
+  //
+  // MUTATIONS, RUN — the two assertions here fail to DIFFERENT things, and
+  // what it took to make each go red is the honest measure of what each one
+  // is worth:
+  //
+  //   - Restore `justify-content: center` on `.connected-interstitial-body`
+  //     (it is `flex-start` plus auto margins on the first and last child).
+  //     The REACHABILITY assertion fails: "the frame's first child sits 7.5px
+  //     above the minimum reachable scroll position", `Received: -7.5`. The
+  //     auto margins do NOT save it — they resolve to zero once the free
+  //     space is negative, which is exactly when this matters — so flipping
+  //     that one declaration is enough. Deleting the auto margins as well
+  //     (the full pre-#366 shape) reproduces the same -7.5px, not the -99px
+  //     the design pass measured, because #366 also dropped the DETAIL panel
+  //     from this frame: those historical figures are not reachable by a
+  //     CSS-only mutation any more.
+  //   - The CONTAINMENT assertion needs the landscape body window below 58px
+  //     to bite, so removing the pairing alone did NOT make it fail —
+  //     measured: window 78px, headline at 22..58, test green. (That table was
+  //     written against `--refusal`, the modifier this rule carried when it
+  //     applied to the refusal alone; it is `--failure` now, on every failure
+  //     frame.) It goes red on the shape the
+  //     ROADMAP already files as a real defect — the FIVE-button stack, with
+  //     the pairing gone: window 10px, "the headline ends 48px below the
+  //     body's visible bottom", `Received: 58`. That is its whole job: it
+  //     pins the landscape ACTION-STACK BUDGET, not the centring.
+  test("the REFUSED frame's headline is on screen at rest in landscape, and nothing sits above the scroll origin", async ({
+    page,
+  }) => {
+    const title = "Design Connected Refused Landscape Workout";
+    const refused = await openRefused(
+      page,
+      title,
+      "design-connected-refused-landscape@e2e.test",
+    );
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(refused).toBeVisible();
+
+    // The 44px floor AT THIS VIEWPORT. The portrait case above sweeps at the
+    // project's default 390x844; `.connected-support-link`'s own comment
+    // claims the floor in BOTH orientations ("350x44 portrait, 440x44
+    // landscape"), and half a claim gated reads as all of it.
+    await assertTapTargets(page);
+
+    const m = await measureFailureFrame(page);
+    // The precondition for the two assertions below being dormant rather than
+    // broken (see this test's own header). If a line is ever added to this
+    // frame this is what goes red first.
+    expect(
+      m.contentHeight,
+      `this frame overflows its window by ${m.contentHeight - m.clientHeight}px, so the two geometry assertions below are live again and their comment is stale`,
+    ).toBeLessThanOrEqual(m.clientHeight);
+    assertHeadlineOnFrame(m);
+    assertNothingAboveTheScrollOrigin(m);
+
+    await page.setViewportSize({ width: 390, height: 844 });
     await cleanupAllConnected(page, title);
   });
 

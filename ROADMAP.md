@@ -40,6 +40,12 @@ only. The contract:
 Each wave gets its own design/plan cycle (spec in `docs/superpowers/specs/`,
 plan in `docs/superpowers/plans/`) when it starts.
 
+**Phase TD (below the live slate) is where DEBT goes** — gaps in evidence, a
+capture that cannot be taken, a test that could not be made to bite. It is
+deliberately not scheduled. The rule that put it there (James, 2026-09-08):
+a filed row needs either a TRIGGER, so it resurfaces when it starts to
+matter, or a PHASE, so it can be scheduled as one piece of work. "Small,
+queued" is neither once it passes a couple of hundred rows, and it had.
 ## Locked decisions
 
 | Area              | Decision                                                                                                                                                                                                                                                                                                  |
@@ -186,23 +192,61 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       do not subscribe. The two we read (footnotes 7 and 11) say only "the
       Machine Type of the current interval". No capture and no vendor sentence
       settles what a real MultiErg reports on 0x0032. Unowned, accepted. **S**
-- [ ] **`permission-denied` already ships a five-button action stack, and it
-      leaves a 10px body in landscape.** Measured in Playwright against both
-      engines during Phase MT's design pass, with the harness validated against
-      the committed landscape capture (predicted action-stack top 96px, capture
-      ~97px). `ConnectedInterstitial.tsx` renders `Open Settings` above
-      `Try again` whenever the reason is `permission-denied` and
-      `canOpenAppSettings()`: actions 316px of a 338px column. Pre-existing and
-      unrelated to Phase MT, found only because MT priced a fifth button
-      (4 buttons leave 78px, 5 leave 14px). **S**
-- [ ] **On the web build, the top of an overflowing interstitial body cannot be
-      scrolled to at all.** `.connected-interstitial-body` is
-      `justify-content: center`, which overflows in BOTH directions; chromium
-      clamps `scrollTop` at 0 while the first child sits at -30 to -100px, so
-      the headline is unreachable. WebKit permits negative `scrollTop`
-      (measured range [-101, 102]), so the iOS app can pull it into view and
-      the web build never can. This is why the committed landscape capture
-      shows a headline nobody can scroll to. Web-only, pre-existing. **S**
+- [x] **`permission-denied` already ships a five-button action stack, and it
+      leaves a 10px body in landscape.** CLOSED by the landscape budget fix
+      (Gate 0 approved 2026-09-08): the failure frames' action stack now pairs
+      its last FOUR buttons, taking this frame 10px -> 138px, `link-failed`
+      78px -> 206px and `unsupported-machine` 142px -> 206px, all measured on
+      the real frames at 844x390. The scope widened at the gate because the
+      capture showed `link-failed` — the failure a rower actually hits — was
+      cutting its headline too.
+      CORRECTION TO THIS ROW'S OWN CLAIM: it said the last-two pairing left
+      five buttons at "74px and the headline is on screen". The headline runs
+      to y94 on any frame whose title wraps, so 74px CUT it — the reason the
+      approved fix pairs four rather than two. **S**
+- [ ] **Nothing can gate the five-button failure frame.** `canOpenAppSettings()`
+      is `isNative()`, so the web build renders `permission-denied` with four
+      buttons and every e2e assertion stands on that shape. The deciding case —
+      five buttons, a 74px window under the old pairing count — exists only on
+      iOS, where the frame's own message would be cut.
+      NARROWED IN REVIEW ROUND 1: the PAIRING COUNT itself is now caught, one
+      frame over — reverting to `nth-last-child(-n + 2)` fails the refusal
+      test's `contentHeight` precondition at 157px against a 142px window,
+      because that frame's content sits between the two windows. What stays
+      ungateable is the five-button SHAPE: no web assertion can stand on it, so
+      nothing would catch a regression that only reached the iOS stack. Either
+      a seam on that adapter or an accepted gap; not decided. **S**
+- [ ] **`pnpm screenshots` rewrites 64 of its 201 captures on every run, with
+      no code change at all.** Measured 2026-09-08: run it, `git checkout --
+      docs/screenshots/`, run it again on the identical tree — the same 64
+      files come back modified. So a capture PR's `git status` cannot tell the
+      frames a change actually altered from the ones that merely re-rendered,
+      and the committed captures are the visual record every design gate and
+      RF7 leans on. This PR worked around it by adding only the two frames its
+      rule can touch and discarding the rest. Cause unknown; the churn spans
+      concept2, justrow, diagnostics and log captures, so it smells like seeded
+      data or a date rather than antialiasing. **M**
+- [ ] **The permission screen says "your PM5" where it means "your monitor".**
+      `useMonitorSession.ts`'s `BluetoothPermissionError` detail reads
+      "Ergomatic can't reach your PM5 without Bluetooth." The rower is not being
+      told WHICH monitor, so by the 2026-09-07 anonymise-the-PM5 rule (RF32)
+      that is the wrong word. Found while measuring the landscape gate; left out
+      of that PR because it is a second product file and the fast path allows
+      one. **S**
+- [ ] **The permission frame's DETAIL panel repeats its own remedy sentence.**
+      `error.detail` renders as the body line AND again inside the panel — 125px
+      of the frame's 308px, verbatim duplication. This is the same argument
+      #366 used to drop the panel from the refusal frame ("the top half saying
+      exactly what the bottom half already says"); nobody has applied it here.
+      Changes what the screen contains, so it needs its own design ruling. **S**
+- [x] **On the web build, the top of an overflowing interstitial body cannot be
+      scrolled to at all.** CLOSED by #366's landscape fix: the body is
+      `flex-start` plus auto margins on its first and last child, so overflow
+      now falls entirely BELOW the window. Was: `justify-content: center`
+      overflowed in BOTH directions; chromium clamps `scrollTop` at 0 while the
+      first child sat at -30 to -100px, so the headline was unreachable, while
+      WebKit permits negative `scrollTop` (measured range [-101, 102]) and the
+      iOS app could pull it into view. Now GATED, by the row below. **S**
 - [ ] **"Row on the phone timer instead" is offered on the refusal screen.**
       After a SkiErg refusal it routes the rower to store the ski piece as a
       rowing log by hand. No Concept2 upload follows — `eligibilityFailure`
@@ -210,21 +254,32 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       not clearly wrong, since the likeliest cause of that screen is picking
       the wrong monitor from a list and that rower does have a RowErg. Filed
       at the design gate rather than found later. **S**
-- [ ] **Two design gates the refusal screen owes.** Both named with a mutation
-      that bites, neither built. (a) `assertTapTargets` has never measured
-      `.connected-support-link`: `e2e/design.spec.ts`'s failed-interstitial
-      case drives a `link-failed` failure, and the link renders only for
-      `unsupported-machine`. Add `ergMachineType` to `injectConnectedFake` —
-      the fake already consumes `__pm5FakeScript__.ergMachineType` — plus a
-      third case driving the refusal through `sweep(page)`. Mutation: drop
-      `min-height: var(--tap)`; the link measures ~18px and the sweep fails.
-      (b) The gate that would have caught the landscape bug: at 844x390 with
-      `scrollTop === 0`, assert `.connected-serif-line`'s box lies inside
-      `.connected-interstitial-body`'s client rect. Mutation: restore
-      `justify-content: center`; the serif sits at y −73..−37, entirely above
-      the window. Companion: set `scrollTop = -9999` and assert the first
-      child's top is not above the client top, which pins the unreachable
-      region rather than only its symptom. **S**
+- [x] **Two design gates the refusal screen owes.** BUILT, in
+      `e2e/design.spec.ts`, each kept only because it went red on a stated
+      mutation. (a) A REFUSED interstitial case (`ergMachineType: 128`,
+      threaded through `injectConnectedFake` the way `screenshots.spec.ts`
+      threads it) puts `.connected-support-link` in the DOM while
+      `assertTapTargets` sweeps — the first time it ever has, since the
+      existing case drives a `link-failed` failure and the link renders only
+      for `unsupported-machine`. Dropping `min-height: var(--tap)` fails the
+      sweep at `Received: 15`. (b) At 844x390 the same frame asserts the
+      headline lies inside `.connected-interstitial-body`'s client box and
+      that nothing sits above the minimum reachable scroll position (on
+      chromium that position is always 0, so what the assertion reads is the
+      first child's top; the review pass deleted a `minScrollTop === 0`
+      companion that no CSS could fail); the FAILED case gets the second half
+      too, for the price of a resize.
+      Restoring `justify-content: center` fails it at -7.5px on the refusal
+      frame and -70.5px on the link-failed one. TWO CORRECTIONS TO THIS ROW'S
+      OWN PRESCRIPTION, both measured: the auto margins are not what saves the
+      frame (they resolve to zero exactly when the overflow is negative, so
+      flipping the one declaration is enough), and the design pass's -73..-37
+      figures are unreachable by a CSS-only mutation now, because #366 also
+      dropped the DETAIL panel from this frame. The containment half needs a
+      body window under 58px, which four buttons never produce — it goes red
+      only on the five-button stack with the pairing removed (window 10px,
+      headline 48px below the fold), so what it actually pins is the landscape
+      action-stack budget, not the centring. **S**
 - [ ] **The refusal-survives-its-own-consequences guard is UNGATED.** `fail()`
       refuses to let a standing `unsupported-machine` error be overwritten by
       the `program()` rejection the refusal itself caused — without it the
@@ -238,6 +293,13 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       for a bounded number of ticks without starving the CSAFE ack path.** On
       hardware the window is the measured 544 ms between the first 0x0032 and
       `armed`. Found by the whole-branch review, finding 1. **S**
+- [ ] **`design.spec.ts:3540` flakes under a full parallel run.** "picking a
+      effort level does not shift the chips below it" failed once in a
+      547-test run on 2026-09-08 (the run that added the two gates above),
+      passed in isolation immediately after, and passed on a full re-run of
+      the same tree. It compares a chip's `y` before and after a click through
+      `stableBoundingBox`, so the suspicion is load, not the assertion. CI
+      retries once, so it costs a red PR check at worst. Unowned. **S**
 - [ ] **`connected.spec.ts:1703` poisons its own origin for a later run.** The
       QuotaExceededError leg fills origin storage until `setItem` genuinely
       throws; its own title says "junk cleaned up after", but a SECOND run
@@ -2544,7 +2606,12 @@ Each needs erg time or a deliberate recording session.
       `docs/superpowers/research/2026-09-08-c2-results-list-verified.md`.
       Needs James's browser; zero erg time. **Until it exists, the release
       note may not claim that rows you verify yourself pick up their tick** —
-      it covers the setting and the mark only. **S**
+      it covers the setting and the mark only.
+      **TRIGGER: before the release note claims that rows you verify yourself
+      pick up their tick.** That sentence may not ship until this is
+      measured. Owner: James — his browser, log-dev, no erg time, and
+      explicitly NOT walk work (PM gate 2026-09-08: do not bundle it into a
+      hardware runsheet where it waits on a calendar). **S**
 
 - [ ] **Count the victims once AUTO VERIFY has been on for a few sends.** The
       PM gate's standing test is "when a degradation path returns success, ask
@@ -2557,108 +2624,11 @@ Each needs erg time or a deliberate recording session.
       hypothesis is live — Concept2 checks `date`, we send the PHONE's clock,
       and the monitor's own stamp ran 1.29-3.23 minutes earlier across seven
       captures (spec M8/M9). Per the five-users ruling this is one query, not
-      a measurement gate or a dashboard. **XS**
+      a measurement gate or a dashboard.
+      **TRIGGER: after the first handful of sends with AUTO VERIFY actually
+      on** — not before, because on zero opted-in sends the count is
+      trivially zero and proves nothing. **XS**
 
-- [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
-      catch in `routes/concept2.ts`'s reconciliation now warns rather than
-      swallowing silently — that was the real defect (RF24's shape: a
-      permanently broken mechanism emitting nothing, forever). What has no
-      test is the other half: that the send still returns 200 when
-      `markC2Verified` throws. **Four attempts, all abandoned honestly
-      (2026-09-08):** every shape produced a 500 from the FIXTURE rather than
-      from the code under test, including one that 500s with no override at
-      all, so the setup is what could not be got right.
-      `makeFakeStores()` returns interlinked stores — handing the router a
-      `logs` from a second call breaks the sharing — and the reconciliation
-      sits inside `resolveWeightClass`, several layers below the file's
-      helpers. Deliberately shipped as a gap rather than as a green test
-      that proves the wrong thing. **The likely route:** an integration test
-      in `concept2Send.integration.test.ts`, where the store is real and can
-      be made to fail at the DB rather than by replacing a method.
-      **ALSO IN THE ICEBOX, with its trigger** (a send that 500s for no
-      visible reason, or anyone editing that `try`/`catch`), because what
-      would make this matter is an EVENT, not a date — this row is the
-      to-do, the icebox entry is the tripwire. Keep them in step. **S**
-
-- [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
-      Filed by #363's review (F7). `postResult` answers a 409 whose body
-      carries no numeric `id` as `{kind:"c2_error", status:409}`, and #363
-      excludes 409 from the retry band — correctly, because retrying would
-      re-POST a row Concept2 already holds. The consequence is that the route
-      answers 502, `recordC2Result` is never called, the UI shows the row
-      unsent forever, and every re-send repeats the same loop. RF25's shape:
-      a lower layer reports a fact the caller cannot act on. **Not observed** —
-      the one captured Concept2 409 carries its id
-      (`docs/monitor/c2-crossconnect-2026-09/raw-output.txt`), so this is
-      hardening debt, not a live bug. Closing it means either parsing the id
-      out of the message text or giving the rower a "Concept2 already has
-      this" state. **S**
-
-- [ ] **No committed capture shows `VERIFIED ✓`.** Phase AV ships the mark
-      with client tests and two biting mutations, but the screenshots stack
-      cannot photograph it, for a reason already written down at length in
-      `e2e/screenshots.spec.ts`'s Wave E PR2 header: this stack is
-      Concept2-DARK by construction (`compose.yml` passes
-      `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`, `screenshots.sh` exports
-      nothing, and `scripts/compose-env.test.sh` enforces it), so
-      `POST /api/concept2/results/:logId` 403s before it writes anything.
-      **That route is the only writer of `verified`, exactly as it is the
-      only writer of `c2_result_id`** — the note's own words: "a capture step
-      that says 'seed state X' must be able to name a WRITER of X reachable
-      in the environment the capture runs in; here there is none." The SENT
-      and NO-WEIGHT captures already drive a tap against a routed answer
-      instead; the mark needs the row READ routed too, which is a larger
-      fake than either. Unblocks with the same work that would let this stack
-      photograph a sent row at all.
-
-- [ ] **The log detail issues TWO `GET /api/concept2/link` on EVERY view,
-      including rows with no machine block at all.** Phase AV
-      added the verified mark to `MachineConfirmedBlock`, which needs the live
-      link for its account gate, and `Concept2SendBlock` on the same screen
-      already calls `useConcept2Link()`. The hook has no shared cache — it is
-      a per-call fetch with its own generation ref — so the second caller is a
-      second request, not a second read of one. **Named in the PR that created
-      it rather than discovered later (RF29's shape).** The fix is to lift the
-      read to `FromTheLog` and pass `link` to both blocks, which changes
-      `Concept2SendBlock`'s props and its tests; not carried in Phase AV
-      because it is a refactor that PR did not need. **Scope corrected after
-      the branch review (N9): the hook is called at the top of
-      `MachineConfirmedBlock`, BEFORE its `machineWorkSeconds === null` early
-      return, and the block is rendered unconditionally — so the second
-      request fires on manual and timer rows too, where the block draws
-      nothing. The first wording said "per view", which is true and reads as
-      "per machine row".**
-
-- [ ] **No committed capture shows the free-row summary's machine tiles.**
-      They ship in #351 gated from upstream of the producer — the
-      2026-08-31 walk's own bytes replayed through the real driver, hook and
-      store, then the door mounted over what it wrote
-      (`justRowReplay.test.ts`) — but `docs/screenshots/justrow-log.png`
-      cannot show them:
-      `injectJustRowShotFake` sends no burst, and `fake.test.ts` pins that a
-      burst-less script emits no 0x0039/0x003A. **Attempted and reverted in
-      #351**, so the next attempt starts here rather than from scratch. A
-      `FakeBurst` rides a `FakeBoundaryEvent`, whose `actual` needs
-      `index`, `elapsedSeconds`, `distanceMeters`, `avgSpm`,
-      `avgHeartRateBpm` and `restDistanceMeters` (`restSeconds` is
-      optional), plus
-      sibling `cumulativeElapsedSeconds`/`cumulativeDistanceMeters`.
-      Calories live on 0x003A, which `FakeBurst` takes only as raw bytes, so
-      `summaryOverrides` cannot reach them. Appending such a boundary to the
-      free-row script left Connect permanently disabled and broke four
-      justrow captures — that is the thing to solve. **The cheap route was
-      tried and does not work as-is (measured 2026-09-07, four orderings,
-      each a full run of the live free-row flow):** `FakeControls`
-      `deliverSummary` is boundary-free and already Playwright-driven
-      (`connected.spec.ts` uses it on the programmed arm), but on the
-      free-row END path it produced no summary ring event and no
-      `summaryTotals` — delivered immediately after the second END tap,
-      with and without `deliverVerification`, and again after asserting the
-      hand-off hold visibly open ("Wrapping up", that file's own idiom).
-      Whether the free-row arm declines it or the fake needs 0x003A (which
-      `deliverSummary` never writes) is UNRESOLVED and is the next thing to
-      find out. This is a FAKE-side gap only: the same fold works on real
-      wire bytes, which is what `justRowReplay.test.ts` gates.
 
 - **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
   one and offered the other at the 7 s offset.** James's ruling ("If a user
@@ -3160,6 +3130,136 @@ Each needs erg time or a deliberate recording session.
   `NfcSessionCoordinator.async(_:)` and `tagAttemptId`. Remove them at the
   next patch edit, which re-runs the Swift suite anyway. (`phase-nf.md`)
 
+## Phase TD — the debt Phases LP and AV left behind
+
+**NOT SCHEDULED, and grouped so it can be scheduled as ONE piece of work
+rather than rediscovered five times** (James, 2026-09-08: file things "either
+with triggers or in a tech debt phase"). Every row below was filed by the PR
+that created it — that rule worked. What it lacked was a home: "Small,
+queued" had grown past 240 rows, which is where things go to be forgotten
+rather than found.
+
+**TWO OF THESE SHARE ONE BLOCKER AND SHOULD BE DONE TOGETHER.** The fake
+monitor sends no end-of-workout summary burst, so neither the free-row machine
+tiles nor `VERIFIED ✓` can be photographed. Whoever unblocks that gets both
+captures from one piece of work; doing either alone is most of the cost for
+half the value.
+
+**None of these is a defect a rower can hit today.** Four are gaps in
+EVIDENCE — a capture that cannot be taken, a test that could not be made to
+bite — and one is a hardening case (the unparsable 409) that has never been
+observed. That is why they are grouped rather than queued, and why the entry
+condition for working on them is a quiet week, not an incident.
+
+**Sizes:** S each; M for the capture pair together.
+
+
+- [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
+      catch in `routes/concept2.ts`'s reconciliation now warns rather than
+      swallowing silently — that was the real defect (RF24's shape: a
+      permanently broken mechanism emitting nothing, forever). What has no
+      test is the other half: that the send still returns 200 when
+      `markC2Verified` throws. **Four attempts, all abandoned honestly
+      (2026-09-08):** every shape produced a 500 from the FIXTURE rather than
+      from the code under test, including one that 500s with no override at
+      all, so the setup is what could not be got right.
+      `makeFakeStores()` returns interlinked stores — handing the router a
+      `logs` from a second call breaks the sharing — and the reconciliation
+      sits inside `resolveWeightClass`, several layers below the file's
+      helpers. Deliberately shipped as a gap rather than as a green test
+      that proves the wrong thing. **The likely route:** an integration test
+      in `concept2Send.integration.test.ts`, where the store is real and can
+      be made to fail at the DB rather than by replacing a method.
+      **ALSO IN THE ICEBOX, with its trigger** (a send that 500s for no
+      visible reason, or anyone editing that `try`/`catch`), because what
+      would make this matter is an EVENT, not a date — this row is the
+      to-do, the icebox entry is the tripwire. Keep them in step.
+      **Grouped into Phase TD 2026-09-08** so it is scheduled with the rest
+      of the phase's debt rather than waiting for a PR that happens to touch
+      this file. **S**
+
+- [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
+      Filed by #363's review (F7). `postResult` answers a 409 whose body
+      carries no numeric `id` as `{kind:"c2_error", status:409}`, and #363
+      excludes 409 from the retry band — correctly, because retrying would
+      re-POST a row Concept2 already holds. The consequence is that the route
+      answers 502, `recordC2Result` is never called, the UI shows the row
+      unsent forever, and every re-send repeats the same loop. RF25's shape:
+      a lower layer reports a fact the caller cannot act on. **Not observed** —
+      the one captured Concept2 409 carries its id
+      (`docs/monitor/c2-crossconnect-2026-09/raw-output.txt`), so this is
+      hardening debt, not a live bug. Closing it means either parsing the id
+      out of the message text or giving the rower a "Concept2 already has
+      this" state. **S**
+
+- [ ] **No committed capture shows `VERIFIED ✓`.** Phase AV ships the mark
+      with client tests and two biting mutations, but the screenshots stack
+      cannot photograph it, for a reason already written down at length in
+      `e2e/screenshots.spec.ts`'s Wave E PR2 header: this stack is
+      Concept2-DARK by construction (`compose.yml` passes
+      `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`, `screenshots.sh` exports
+      nothing, and `scripts/compose-env.test.sh` enforces it), so
+      `POST /api/concept2/results/:logId` 403s before it writes anything.
+      **That route is the only writer of `verified`, exactly as it is the
+      only writer of `c2_result_id`** — the note's own words: "a capture step
+      that says 'seed state X' must be able to name a WRITER of X reachable
+      in the environment the capture runs in; here there is none." The SENT
+      and NO-WEIGHT captures already drive a tap against a routed answer
+      instead; the mark needs the row READ routed too, which is a larger
+      fake than either. Unblocks with the same work that would let this stack
+      photograph a sent row at all.
+
+- [ ] **The log detail issues TWO `GET /api/concept2/link` on EVERY view,
+      including rows with no machine block at all.** Phase AV
+      added the verified mark to `MachineConfirmedBlock`, which needs the live
+      link for its account gate, and `Concept2SendBlock` on the same screen
+      already calls `useConcept2Link()`. The hook has no shared cache — it is
+      a per-call fetch with its own generation ref — so the second caller is a
+      second request, not a second read of one. **Named in the PR that created
+      it rather than discovered later (RF29's shape).** The fix is to lift the
+      read to `FromTheLog` and pass `link` to both blocks, which changes
+      `Concept2SendBlock`'s props and its tests; not carried in Phase AV
+      because it is a refactor that PR did not need. **Scope corrected after
+      the branch review (N9): the hook is called at the top of
+      `MachineConfirmedBlock`, BEFORE its `machineWorkSeconds === null` early
+      return, and the block is rendered unconditionally — so the second
+      request fires on manual and timer rows too, where the block draws
+      nothing. The first wording said "per view", which is true and reads as
+      "per machine row".**
+
+- [ ] **No committed capture shows the free-row summary's machine tiles.**
+      They ship in #351 gated from upstream of the producer — the
+      2026-08-31 walk's own bytes replayed through the real driver, hook and
+      store, then the door mounted over what it wrote
+      (`justRowReplay.test.ts`) — but `docs/screenshots/justrow-log.png`
+      cannot show them:
+      `injectJustRowShotFake` sends no burst, and `fake.test.ts` pins that a
+      burst-less script emits no 0x0039/0x003A. **Attempted and reverted in
+      #351**, so the next attempt starts here rather than from scratch. A
+      `FakeBurst` rides a `FakeBoundaryEvent`, whose `actual` needs
+      `index`, `elapsedSeconds`, `distanceMeters`, `avgSpm`,
+      `avgHeartRateBpm` and `restDistanceMeters` (`restSeconds` is
+      optional), plus
+      sibling `cumulativeElapsedSeconds`/`cumulativeDistanceMeters`.
+      Calories live on 0x003A, which `FakeBurst` takes only as raw bytes, so
+      `summaryOverrides` cannot reach them. Appending such a boundary to the
+      free-row script left Connect permanently disabled and broke four
+      justrow captures — that is the thing to solve. **The cheap route was
+      tried and does not work as-is (measured 2026-09-07, four orderings,
+      each a full run of the live free-row flow):** `FakeControls`
+      `deliverSummary` is boundary-free and already Playwright-driven
+      (`connected.spec.ts` uses it on the programmed arm), but on the
+      free-row END path it produced no summary ring event and no
+      `summaryTotals` — delivered immediately after the second END tap,
+      with and without `deliverVerification`, and again after asserting the
+      hand-off hold visibly open ("Wrapping up", that file's own idiom).
+      Whether the free-row arm declines it or the fake needs 0x003A (which
+      `deliverSummary` never writes) is UNRESOLVED and is the next thing to
+      find out. This is a FAKE-side gap only: the same fold works on real
+      wire bytes, which is what `justRowReplay.test.ts` gates.
+
+
+
 # Icebox
 
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
@@ -3186,6 +3286,8 @@ an iceboxed item is not a phase-close requirement.
   in `concept2Send.integration.test.ts`, where the store is REAL and can be
   made to fail at the database rather than by replacing a method — which is
   the manoeuvre that produced every one of the four fixture 500s.
+  **Its to-do twin now lives in Phase TD**, not in "Small, queued" where it
+  was first filed. This entry stays the tripwire; that one is the work.
   **What DID ship, so this is a missing gate and not a missing fix:** the
   catch warns instead of swallowing silently. Before it, a permanently broken
   reconciliation emitted nothing at all, forever, because the success log is

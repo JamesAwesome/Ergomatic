@@ -15,6 +15,32 @@ export async function stubBluetoothScanFailure(page: Page): Promise<void> {
   });
 }
 
+/** The Bluetooth PERMISSION refusal, which `useMonitorSession.ts` keys off the
+ *  error's `name` ("BluetoothPermissionError"), not its prose. Its frame is
+ *  the longest of any failure screen — a two-line headline, the remedy
+ *  sentence, the reassurance AND a DETAIL panel — so it is the one that
+ *  proves the landscape budget.
+ *
+ *  WHAT THIS CANNOT REACH: on iOS the same frame also renders `Open Settings`,
+ *  a fifth button, because `canOpenAppSettings()` is `isNative()`. The web
+ *  build is four buttons by construction, so no e2e here can stand on the
+ *  five-button shape; its 10px -> 138px measurement came from the design gate
+ *  with that adapter forced, which is not a gate anything can run. */
+export async function stubBluetoothPermissionDenied(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, "bluetooth", {
+      value: {
+        requestDevice: async () => {
+          const denied = new Error("BLE permission denied");
+          denied.name = "BluetoothPermissionError";
+          throw denied;
+        },
+      },
+      configurable: true,
+    });
+  });
+}
+
 // Must match the TEST_AUTH_SECRET env var scripts/e2e.sh and
 // scripts/screenshots.sh pass to the compose stack — see
 // server/auth/testSignin.ts for the route this signs in through.
