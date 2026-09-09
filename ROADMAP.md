@@ -1114,13 +1114,17 @@ while we are in here.
       claims `grep -ri simulator` "returns only the fake transport's own
       prose"; re-run 2026-09-09 it returns 15 hits across
       `domain/monitor/pm5/ergMachine.ts`, `intervalIndex.ts`,
-      `transports/capacitorBle.ts`, `adapters/nfcReader.ts` and four test files.
-      The ORDER is still undone — `grep -rn simulator app/scripts .github`
-      returns nothing, so no harness, script or CI job exists — but a row whose
-      stated proof no longer reproduces is one re-read away from being struck
-      wrongly. **NEXT (≤0.25): replace the count with the COMMAND**
-      (`grep -rn simulator app/scripts .github`), which is what actually
-      answers it and does not go stale.
+      `transports/capacitorBle.ts`, `adapters/nfcReader.ts`, `fake.ts` and six
+      test files (`grep -ric simulator app`).
+      The ORDER is still undone. **The receipt, with its output NAMED rather
+      than summarised:** `grep -rn simulator app/scripts` returns nothing — no
+      harness, no script. `grep -rn simulator .github` returns exactly ONE hit,
+      `.github/workflows/ci.yml:73`, and **it does not count**: it is prose
+      inside a `dist:grep` comment about `fake.ts`'s simulator, not a job. So no
+      simulator instrument exists. The first draft of this row claimed the
+      combined grep "returns nothing" and was wrong on the day it was written —
+      which is the rule, not an anecdote: **a "grep finds nothing" sentence
+      pastes its actual output and names every hit that does not count.**
       **Trigger note:** bound to Wave D, which follows Wave A, which is
       unopened — so its subject is two waves out and on no calendar.
 - [ ] **Let a build flag reach the fake transport on NATIVE.** One line in
@@ -1189,9 +1193,9 @@ while we are in here.
       the problem": it had an ACTIVE trigger, the trigger FIRED, and nothing
       happened, because the question underneath it had no owner.
       **OPEN QUESTION: is this one defect or four?** The population has GROWN
-      since the order — `:1112` files two more (2026-09-08/09), `:1152` a third
-      class (integration under container contention), `:453` a fourth
-      (`connected.spec.ts:1703` poisons its own origin) — and a fifth was
+      since the order — Wave D files two more (2026-09-08/09) and a third
+      class (integration under container contention), and Phase JC files a
+      fourth (`connected.spec.ts:1703` poisons its own origin) — and a fifth was
       dropped from Phase OD's own slate when its stated mechanism was falsified
       (`e2e/helpers.ts:117` mints `RUN_ID` per run; `postTestOffer.ts:53-66`
       reads no baseline, so a surviving `pgdata` cannot suppress that prompt).
@@ -2359,23 +2363,30 @@ closed with zero Concept2 contact.
   re-checked. A leading rest gets FIVE answers, not two. `validate.ts` has no
   positional rule for rests at all (the `r` case checks only that `minutes` is a
   whole second; the sole post-loop rules are "at most one reps marker" and
-  "needs at least one work or test step"), `builderState.ts`'s `addRow`/reorder
-  carry no guard, and `bulk.ts` parses a rest line wherever it appears — so
+  "needs at least one work or test step"); `builderState.ts`'s `addRow` appends
+  unconditionally and its `removeRow` can strip the first work row, leaving a
+  rest in front (**there is no `reorder` in the builder — an earlier draft of
+  this row said there was, inherited verbatim from `intervalBoundaries.ts`'s
+  comment and never checked**); and `bulk.ts` parses a rest line wherever it
+  appears — so
   `[r 2', w 1']` VALIDATES AND SAVES. `intervalBoundaries.ts:86-103` then
   SUPPORTS it deliberately on the phone timer, returning its seconds as
   `leadInSeconds` to seed the first boundary; a version that dropped them put
   every notch `leadIn/total` too far left, measured at 20.8% against 41.7% on
   `[5:00 rest, 4 × (4:00 + 1:00)]`, and that comment records a first draft which
-  DENIED the shape was reachable until a review corrected it. `program.ts:353`
-  rejects it with `leading-rest`, correctly and in words. `stepDetail.ts:58-62`
+  DENIED the shape was reachable until a review corrected it. `compileProgram`'s
+  `intervals.length === 0` guard (grep `leading-rest` in
+  `domain/monitor/program.ts`) rejects it, correctly and in words. `stepDetail.ts:58-62`
   SILENTLY DROPS it. **Display is the only one that is wrong.**
   **RULED 2026-09-09 (James): display RENDERS the leading rest, matching
   Timer.** He first ruled "reject at authoring" and REVERSED on the Timer
   evidence — rejecting would strand `leadInSeconds` as dead code (RF29) and make
   existing stored workouts un-re-saveable, to satisfy a constraint that binds
-  only connected mode. (`validateWorkoutInput` is called only from the three
-  write paths in `server/routes/data.ts` — `:1283`, `:1329`, `:1379` — so reads
-  were never at risk; an edit-then-save of an existing leading-rest workout is
+  only connected mode. (`validateWorkoutInput`'s three route callers in
+  `server/routes/data.ts` are all WRITES — POST `/api/workouts`, PUT
+  `/api/workouts/:id`, POST `/api/workouts/bulk` — and its only other non-test
+  callers, in `scripts/library-moves.ts`, are writes too. No read path
+  validates, so reads were never at risk; an edit-then-save of an existing leading-rest workout is
   what would have started failing.)
   **OPEN QUESTION: none left in the fix shape — it was the blocker and it is
   answered above.** What remains is a decision only James can give: **the
@@ -2613,7 +2624,7 @@ moved to 3. `test-run.test.sh` and `test-run-advisory.test.sh` are both in
 
 ## Phase OD — an order of James's does not go quiet
 
-**S · one PR · docs-only · tester sees nothing · opened and closed 2026-09-09.**
+**S · one PR · docs-only · tester sees nothing · opened 2026-09-09.**
 
 **What and why.** Four orders James gave in his own words sat undone in one
 register band, the oldest 23 days, and were found only because a debt census
@@ -2626,9 +2637,10 @@ notices.**
 **Two diagnoses were wrong before the right one, and both are recorded because
 the wrongness is the useful part.**
 
-1. _Passive triggers kill orders; give them dates._ FALSIFIED by `:1144` — a
-   live order from 2026-08-20 in Wave D with an ACTIVE trigger the row records
-   as having FIRED. The remedy already applied, already failing.
+1. _Passive triggers kill orders; give them dates._ FALSIFIED by Wave D's
+   **Hunt the e2e flakes** row — a live order from 2026-08-20 with an ACTIVE
+   trigger the row itself records as having FIRED. The remedy already applied,
+   already failing.
 2. _Size kills them; every order is fast-path or a phase, and the middle state
    is banned._ FALSIFIED at the PM gate: it reads one variable off a single
    control (n=1) in which cheapness, a scheduled trigger, and having no open
@@ -2659,7 +2671,8 @@ merged; and added one line to CLAUDE.md's post-merge ritual.
 banned state, cut at the PM gate for three independent reasons: ten of
 seventeen attribution hits are RULINGS, which close by being made, so it taxes
 the common case to catch the rare one; its defining grep already missed four
-live orders, so it would ship at ~56% recall reading as coverage (RF26); and
+live orders, so it would ship at roughly half recall reading as coverage — 5 of the 9 orders
+known when it was proposed, and 5 of the 12 the finished sweep found (RF26); and
 worst, **a green check retires the human grep, which is the only thing that has
 ever found one of these.**
 
@@ -2667,9 +2680,14 @@ ever found one of these.**
 
 **This is not a completeness claim, and it must never be quoted as one.** The
 first sweep of this phase used `awk 'NR>=2109 && NR<=3680 && /James, 20/'` and
-was confidently incomplete: it missed `:1089`, `:1144`, `:1721` (outside the
-range) and `:2618` (undated). Re-run the commands rather than trusting this
-prose.
+was confidently incomplete: it missed Wave D's **Stand the iOS simulator up as
+a standing instrument** and **Hunt the e2e flakes**, Wave E's **Verification
+code: hide it, say "verified"** (all three outside the range) and **Phase
+PROTO**'s own order (undated). Re-run the commands rather than trusting this
+prose. **Cite rows by NAME here, never by line — this file folds, and a line
+number written into it is wrong by the next merge that touches anything above
+it. This PR proved that on itself: an earlier draft of this very section cited
+thirteen line numbers, and its own diff broke every one.**
 
 - **Swept:** all of `ROADMAP.md`; `docs/` recursively including `docs/history/`;
   `.claude/` including both agent ledgers and `CLAUDE.md`; code comments under
@@ -2692,11 +2710,12 @@ prose.
 **BOTH BULLETS BELOW WERE RULED 2026-09-09** in the Phase OD order sweep, so
 this section currently holds NO live question. **That is not the same as
 nothing being owed him.** The sweep found seven live decisions waiting on
-James elsewhere in this file — the hand-verified log-dev row (`:3031`), the
-belted 0x0039 capture (`:1830`), the Wave E / LP flag-flip trip (`:1704`), the
-`DETAIL`-over-slug panel (`:2824`), and three questions explicitly scheduled to
-be RE-ASKED at Wave A's close (the plan calendar and parametric generator at
-`:3774`, and Phase PROTO at `:2623`). A reader who takes this section's
+James elsewhere in this file, each findable by NAME rather than by a line this
+merge would break — the hand-verified concept2.com log-dev row, the belted
+0x0039 capture owed on the next walk, the Wave E / Phase LP flag-flip trip, the
+`DETAIL`-over-slug failure panel, and three questions explicitly scheduled to be
+RE-ASKED at Wave A's close (the plan calendar, the parametric generator, and
+Phase PROTO's sweep). A reader who takes this section's
 emptiness as "he owes nothing" will be wrong by seven.
 
 - **RULED KEEP (James, 2026-09-09): the 1 000 ms collision window stays.**
@@ -2910,8 +2929,10 @@ from the trace), so the longer it stays shut the larger its Gate 0 gets.
 
 **Opened by James's 2026-08-31 ruling** on the axis-quantity question: take the
 three surviving work-versus-rest mismatches together, in ONE design pass with
-ONE Gate 0, rather than approving a third of a screen at a time. All three were
-sitting apart — one in Phase PROTO, two under "accepted, pinned" — which is how
+ONE Gate 0, rather than approving a third of a screen at a time. **"Three" is
+the count AT THAT RULING, not now — the section holds five members; two were
+added on 2026-09-07 by PM gates, which is the accretion the heading records.**
+All three of the original ones were sitting apart — one in Phase PROTO, two under "accepted, pinned" — which is how
 the screen came to mix quantities without saying so. **Every item changes what a
 displayed number MEANS, so the gate renders the whole summary before and after,
 in both orientations.**
@@ -3024,7 +3045,7 @@ to lose the row has no move except to walk away.
 | Item                                       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Evidence                     |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | **RC-8**                                   | Correct the fake's contradictions of the real wire. **3 of 5 corrected** in #182 T1 (`ergMachineType`, `intervalRestTimeSeconds`, `splitIntervalType`); the other two read as already conditional and want verification. Residual: `fake.ts`'s `toMachineIndex` is resting-conditional while `intervalIndex.ts`'s `toActualIndex` is unconditional. **Merged with LL's reconnect precondition — one piece of fake work, and specced apart it gets done twice** | `phase-rc.md`, `phase-ll.md`, `docs/testing/2026-09-04-unlogged-session-evidence.md` |
-| **RC-13**                                  | The avg-pace verdict zero-fires on a rapid re-arm: `program()` inside `FINISH_GRACE_MS` cancels the pending deadline instead of draining it. **James, 2026-08-31: FIX IT here** — drain the deadline rather than cancel. Not covered by the close-out corpus (no committed capture re-arms inside 3 s; closest pieces are 148.1 s apart), so the gate is a synthetic replay with a stated mutation. **STILL LIVE, re-verified 2026-09-09 — and TWO agents misread it as already fixed in one session, which is why the mechanism is written out here.** `driver.ts:1180-1185` defines `schedule` as returning a CANCELLER (`return () => clearTimeout(id)`), so `pendingSummaryReconcile` holds a cancel function, not the callback. The real drain is `drainSummaryReconcile()` (`:4246-4276`): it cancels, nulls, **and then does the work** — `reconcileSummary(activeRun)`. `program()`'s replacement path (`:6859-6860`) does `pendingSummaryReconcile?.(); pendingSummaryReconcile = null;` and stops — cancel only, no reconcile, no verdict — and because it NULLS the slot, the later `drainSummaryReconcile()` calls hit their own non-null guard at `:4259` and skip too. The comment above it argues cancelling is correct so the outgoing run's deadline cannot speak about the new run; that concern is real and a DRAIN satisfies it anyway (reconcile the outgoing run, then open the new one), which is why the comment reads as a settled decision and is not one. **OPEN QUESTION, and it is the whole cost — not the line change:** does draining produce a WRONG verdict? It computes at the moment a NEW piece starts instead of 3 s after the last ended, and those 3 s exist to catch a late split or summary. A wrong verdict is worse than a missing one, because a wrong one gets believed. RF34 also sits two lines below: `pendingTerminateObservations?.cancel()` is cancelled "for the identical reason", so draining one slot and leaving its stated twin is the half-applied invariant again. **NEXT (≤0.25):** read `reconcileSummary` and say whether a drain at re-arm time can see less evidence than the deadline would have. That answer sizes the row; until it exists the row cannot be specced | `phase-rc.md`                |
+| **RC-13**                                  | The avg-pace verdict zero-fires on a rapid re-arm: `program()` inside `FINISH_GRACE_MS` cancels the pending deadline instead of draining it. **James, 2026-08-31: FIX IT here** — drain the deadline rather than cancel. Not covered by the close-out corpus (no committed capture re-arms inside 3 s; closest pieces are 148.1 s apart), so the gate is a synthetic replay with a stated mutation. **STILL LIVE, re-verified 2026-09-09 — and TWO agents misread it as already fixed in one session, which is why the mechanism is written out here.** `driver.ts:1180-1185` defines `schedule` as returning a CANCELLER (`return () => clearTimeout(id)`), so `pendingSummaryReconcile` holds a cancel function, not the callback. The real drain is `drainSummaryReconcile()`: it cancels, nulls, **and then does the work** — `reconcileSummary(activeRun)`. `program()`'s replacement path (`:6859-6860`) does `pendingSummaryReconcile?.(); pendingSummaryReconcile = null;` and stops — cancel only, no reconcile, no verdict — and because it NULLS the slot, the later `drainSummaryReconcile()` calls hit their own non-null guard at `:4259` and skip too. The comment above it argues cancelling is correct so the outgoing run's deadline cannot speak about the new run; that concern is real and a DRAIN satisfies it anyway (reconcile the outgoing run, then open the new one), which is why the comment reads as a settled decision and is not one. **OPEN QUESTION, and it is the whole cost — not the line change:** does draining produce a WRONG verdict? It computes at the moment a NEW piece starts instead of 3 s after the last ended, and those 3 s exist to catch a late split or summary. A wrong verdict is worse than a missing one, because a wrong one gets believed. RF34 also sits six lines below: `pendingTerminateObservations?.cancel()` is cancelled "for the identical reason one line up", so draining one slot and leaving its stated twin is the half-applied invariant again. **NEXT (≤0.25):** read `reconcileSummary` and say whether a drain at re-arm time can see less evidence than the deadline would have. That answer sizes the row; until it exists the row cannot be specced | `phase-rc.md`                |
 | **RC-14**                                  | The avg-pace verdict zero-fires on an ORDINARY finish (walk 2026-08-25, W-2). **Distinct from RC-13; do not fold.** Replay through the walk's own commit `c219ee0` DOES produce the verdict, eliminating the wire, the driver's response and ring eviction; **two survivors — it threw, or something outside the driver dropped the entry.** **James, 2026-08-31: do NOT hunt it; INSTRUMENT it** so the next occurrence names which survivor it was, instead of another silent zero. Per RF19, the instrument ships in the same change. **HELD 2026-09-09 — the obvious instrument CANNOT catch the failure it exists for, and shipping it would discharge this order while printing nothing.** `emit` is a bare `for (const cb of listeners) cb(e)` with NO error isolation, running the hook's subscribers synchronously on the caller's stack IMMEDIATELY BEFORE the verdict call. So a try/catch around `recordAvgPaceVerdict` cannot catch a throw that happens before the call is reached — a THIRD survivor this row's two-survivor enumeration does not contain. The walked ring's `seq 71` (`split-won ... (a 0x0039 was held...)`) is emitted only by the branch that then runs `emit(summaryObservationsEvent(...))`, so that path demonstrably ran on the losing run. The replay missed it because it drives a TEST subscriber set. Also: `eventLog.record()` coalesces identical consecutive entries WITHOUT advancing `seq`, so a constant-string marker is RF21-vulnerable, and `avgPaceVerdict.replay.test.ts` holds only the success state. **OPEN QUESTION: ANSWERED 2026-09-09** — the survivor set is three, not two, and the third is a throw inside a subscriber. **NEXT (≤0.25):** none owed before the work; the blocker is gone. When it is taken it must BRACKET THE PAIR — a record at the call site BEFORE `reconcileSummary(...)`, the try/catch around BOTH calls, and a discriminator in every constant detail string. Anything narrower is a green gate over a silent zero | `phase-rc.md`                |
 | **RC-38**                                  | Transcribe `OBJ_WORKOUTTYPE_T` — see Phase PROTO above. Pulled forward alone by James on 2026-08-31 while the rest of the sweep is held                                                                                                                                                                                                                                                                                                                       | `phase-rc.md`                |
 | **RC-11**                                  | The stroke-data reframe: three-way, not two. Owns RC-6's deferred `p: 0` half. Our series clock is a third quantity, and none of the three is C2's `time`                                                                                                                                                                                                                                                                                                      | `phase-rc.md`                |
@@ -3034,7 +3055,7 @@ to lose the row has no move except to walk away.
 | **`MONITOR_SPM_MIN = 0`**                  | Re-parked at CR2's close, re-owned by LT spec 1                                                                                                                                                                                                                                                                                                                                                                                                                | `phase-cr2.md`               |
 | **The landscape gutter**                   | The phone timer's landscape gutter absorbs no left inset                                                                                                                                                                                                                                                                                                                                                                                                       | `phase-cr2.md`               |
 | **iOS 26 `100dvh`**                        | Under `viewport-fit=cover`. Wave D's native fake flag is what makes this answerable at a desk                                                                                                                                                                                                                                                                                                                                                                  | `phase-cr2.md`               |
-| **`PULL TO RESUME`** — **ORDER STRUCK 2026-09-09** | James, 2026-08-17: _"we never got rid of the pull to resume screen."_ CR2 2a task 5 only re-worded it. **James WITHDREW the removal order on 2026-09-09**, asked directly when the Phase OD sweep surfaced it at 23 days old: the screen stays. This is the author of an order withdrawing it, **not** a strike on a stated cost — RF30 does not apply and no receipt is owed. Recorded here rather than deleted, because the unwithdrawn 2026-08-17 quote still stands in `docs/history/triggered-follow-ons.md:301` and would otherwise resurrect it. **Every other site carrying the order, reconciled (CLAUDE.md's withdraw-then-grep rule):** `docs/history/triggered-follow-ons.md:301` — ANNOTATED with a dated disposition, verbatim text preserved; `docs/superpowers/specs/2026-08-22-link-truth-design.md:193` (_"The standing follow-on to REMOVE the PULL TO RESUME band entirely ... stays where it is"_) — STANDS as written: it is a dated design record that defers to this ROADMAP entry by name, so its pointer resolves here and reads the strike. `ROADMAP.md:847` is NOT this order — it is the separate, still-live gap that `PULL TO RESUME` is undesigned on a free row's frozen clock. Everything else the grep returns describes the SCREEN, which stays. **RESIDUAL, NOT STRUCK — the flash:** §2b's suspected mechanism was FALSIFIED (zero PAUSED firings across six captures) and the flash's real mechanism is still unexplained; it pairs with the stale-while-armed observation, still owed from the CR2 phone pass. **OPEN QUESTION:** does the flash survive now that the removal is off the table, i.e. is it a defect in its own right rather than a symptom of the band? **NEXT (≤0.25):** read `ConnectedSurface.tsx:795` and its `model.stale` producer and say whether a flash is reachable without a PAUSED firing | `phase-cr2.md` |
+| **`PULL TO RESUME`** — **ORDER STRUCK 2026-09-09** | James, 2026-08-17: _"we never got rid of the pull to resume screen."_ CR2 2a task 5 only re-worded it. **James WITHDREW the removal order on 2026-09-09**, asked directly when the Phase OD sweep surfaced it at 23 days old: the screen stays. This is the author of an order withdrawing it, **not** a strike on a stated cost — RF30 does not apply and no receipt is owed. Recorded here rather than deleted, because the unwithdrawn 2026-08-17 quote still stands in `docs/history/triggered-follow-ons.md:301` and would otherwise resurrect it. **Every other site carrying the order, reconciled (CLAUDE.md's withdraw-then-grep rule):** `docs/history/triggered-follow-ons.md:301` — ANNOTATED with a dated disposition, verbatim text preserved; `docs/superpowers/specs/2026-08-22-link-truth-design.md:193` (_"The standing follow-on to REMOVE the PULL TO RESUME band entirely ... stays where it is"_) — STANDS as written: it is a dated design record that defers to this ROADMAP entry by name, so its pointer resolves here and reads the strike. Phase JR's "Owed within PR 2's own scope" block is NOT this order — it is the separate, still-live gap that `PULL TO RESUME` is undesigned on a free row's frozen clock, and it stands. Everything else the grep returns describes the SCREEN, which stays. **RESIDUAL, NOT STRUCK — the flash:** §2b's suspected mechanism was FALSIFIED (zero PAUSED firings across six captures) and the flash's real mechanism is still unexplained; it pairs with the stale-while-armed observation, still owed from the CR2 phone pass. **OPEN QUESTION:** does the flash survive now that the removal is off the table, i.e. is it a defect in its own right rather than a symptom of the band? **NEXT (≤0.25):** read `ConnectedSurface.tsx:795` and its `model.stale` producer and say whether a flash is reachable without a PAUSED firing | `phase-cr2.md` |
 | **Reconnect's three preconditions**        | Constraints on the deferred Correct Resume entry, not separate scheduled work. #183's gate requires a reconnect design to reset or quarantine `lastContinuityRef`'s count axis across a re-subscribe; preserving the old baseline without that policy is unresolved. | Correct Resume research, "Status: deferred, not an implementation contract" |
 | **Two declined CR questions**              | Projected finish split; distance intervals with a rate cap. Each waits on a hardware fact. Reconnect belongs to the deferred Correct Resume entry, not this row; its research does not authorize backfill or a MISSED writer. | `phase-cr.md`                |
 | **LL-F4**                                  | The `disconnected` handler records no liveness snapshot where `fail()` does, so a retry's ring has one fewer data point                                                                                                                                                                                                                                                                                                                                        | `phase-ll.md`                |
@@ -3143,8 +3164,8 @@ new.
   Disclosed and accepted as correct for now — **cited by SYMBOL, not by line,
   because the line drifted: this row said `program.ts:112`, which as of
   2026-09-09 is an unrelated doc comment.** The Table 19 limit constants live
-  under the `/** Table 19 "PM5 Workout Configuration Parameter Limits" */`
-  block in `domain/monitor/program.ts` (grep `Table 19` in that file).
+  under the `Table 19 "PM5 Workout Configuration Parameter Limits"`
+  doc-comment block in `domain/monitor/program.ts` (grep `Table 19` in that file).
 - **Anonymous-run logging** — every storage layer accepts `workoutId: null`, no
   product path can create one, and `ANONYMOUS_RUN` is dead code by its own
   comment. **Phase JR is the door that would create them — and PR 2 (#259)
@@ -3523,8 +3544,10 @@ Each needs erg time or a deliberate recording session.
   two predicates disagree"_ — the honest reading the row asked for, rather than
   a reachability claim. Struck against the landed text, not against a memory of
   it. **Original filing (door PR A's PM gate, 2026-09-02):**
-  `mapping.test.ts:160-169` is pinned by TYPECHECK, not by
-  its own assertion. The leg exists to make the retired
+  `mapping.test.ts`'s `source, not deviceName, decides eligibility (mutation
+  discriminator)` leg is pinned by TYPECHECK, not by its own assertion (the row
+  said `:160-169`; the leg is at `:173-182` as of 2026-09-09 — grep the test
+  title). The leg exists to make the retired
   `deviceName === null` gate and the live `source !== "pm5"` gate disagree,
   and to do it the fixture is cast past the excess-property check
   (`as unknown as Parameters<typeof eligibilityFailure>[0]`) onto a row
