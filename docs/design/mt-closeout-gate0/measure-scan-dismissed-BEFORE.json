@@ -1,0 +1,68 @@
+[
+  {
+    "reason": "scan-dismissed",
+    "variant": "before",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 176.5,
+    "serifBottom": 248.5,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "SCAN-DISMISSED",
+      "No monitor was picked.",
+      "User cancelled the requestDevice() chooser."
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "No monitor was picked.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "SCAN-DISMISSED",
+      "No monitor was picked.",
+      "User cancelled the requestDevice() chooser."
+    ]
+  },
+  {
+    "reason": "scan-dismissed",
+    "variant": "before",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 33.5,
+    "serifBottom": 69.5,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "SCAN-DISMISSED",
+      "No monitor was picked.",
+      "User cancelled the requestDevice() chooser."
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "No monitor was picked.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "SCAN-DISMISSED",
+      "No monitor was picked.",
+      "User cancelled the requestDevice() chooser."
+    ]
+  }
+]

@@ -1,0 +1,64 @@
+[
+  {
+    "reason": "target-already-connected",
+    "variant": "reconstructed",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 168,
+    "serifBottom": 276,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TARGET-ALREADY-CONNECTED",
+      "already connected to another central"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "End the monitor's current connection, then try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TARGET-ALREADY-CONNECTED",
+      "already connected to another central"
+    ]
+  },
+  {
+    "reason": "target-already-connected",
+    "variant": "reconstructed",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 25,
+    "serifBottom": 97,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TARGET-ALREADY-CONNECTED",
+      "already connected to another central"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "End the monitor's current connection, then try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TARGET-ALREADY-CONNECTED",
+      "already connected to another central"
+    ]
+  }
+]

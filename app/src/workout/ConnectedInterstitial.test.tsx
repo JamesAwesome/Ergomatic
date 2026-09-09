@@ -200,21 +200,28 @@ function renderInterstitial(
   const onExit = props.onExit ?? vi.fn();
   const onRowInstead = props.onRowInstead ?? vi.fn();
   const onEnded = props.onEnded ?? vi.fn();
+  // `MemoryRouter`, because ONE failure frame routes: the
+  // `unsupported-machine` refusal renders `SupportMatrixLink`, whose
+  // `useLocation()` throws "may be used only in the context of a <Router>"
+  // outside one. Wrapped here rather than per-test so no future frame that
+  // grows a link can fail for a reason that is not about this screen.
   const view = render(
-    <ConnectedInterstitial
-      request={{
-        kind: "picker",
-        attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-      }}
-      program={FIXTURE.program}
-      phases={FIXTURE.phases}
-      identity={FIXTURE.identity}
-      baselines={props.baselines === undefined ? baselines : props.baselines}
-      nudgedCount={props.nudgedCount ?? 0}
-      onExit={onExit}
-      onRowInstead={onRowInstead}
-      onEnded={onEnded}
-    />,
+    <MemoryRouter>
+      <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={props.baselines === undefined ? baselines : props.baselines}
+        nudgedCount={props.nudgedCount ?? 0}
+        onExit={onExit}
+        onRowInstead={onRowInstead}
+        onEnded={onEnded}
+      />
+    </MemoryRouter>,
   );
   return { ...view, session: current, onExit, onRowInstead, onEnded };
 }
@@ -943,6 +950,262 @@ describe("state 6: failed — every ConnectedError rendered", () => {
     });
     const buttons = screen.getAllByRole("button");
     expect(buttons.at(-1)).toHaveTextContent("Cancel");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase MT close-out, the two rulings on the failure interstitial (James,
+// 2026-09-08). Both are asserted here as INVARIANTS over every member of
+// `ConnectedError["reason"]`, not as per-frame patches, because the defect
+// each fixes was reachable from ~10 frames and the shipped guard covered
+// two of them (RF34: a change that half-applies its own principle reads as
+// though the rest was considered and dismissed).
+//
+// The fixture below is an exhaustive `Record` over the union rather than a
+// list, for the reason `NOT_A_MACHINE_REFUSAL` is one: adding a reason to
+// `ConnectedError` without giving it a row here is a COMPILE error, so a
+// future frame cannot silently escape either invariant.
+//
+// Every `detail`/`raw` is production's own, cited beside it — an invented
+// string could satisfy an assertion about duplication that the real copy
+// would fail (the `detail` strings are exactly what decides both).
+// ---------------------------------------------------------------------------
+
+describe("state 6: the two invariants that hold on EVERY failure frame", () => {
+  const EVERY_REASON: Record<
+    ConnectedError["reason"],
+    { detail: string; raw?: string }
+  > = {
+    // `mapProgramFailure` (useMonitorSession.ts): `ProgramBusyError`.
+    busy: {
+      detail: "A programming attempt is already in flight.",
+      raw: "a program() is already in flight",
+    },
+    // `mapRadioFailure`'s `unavailable` arm.
+    "bluetooth-off": {
+      detail: "Bluetooth isn't available.",
+      raw: "Bluetooth adapter not available",
+    },
+    // `mapRadioFailure`'s fallback arm.
+    "link-failed": {
+      detail: "The link to the monitor failed.",
+      raw: "NetworkError: Connection failed",
+    },
+    // `connect()`'s own `fail()` when the platform has no transport.
+    "transport-missing": { detail: "This device has no Bluetooth transport." },
+    // `mapRadioFailure`'s cancel arm. NOT `connect()`'s own
+    // `device === undefined` arm, which this comment used to cite and
+    // which supplies no `raw` at all; the no-`raw` path is covered by
+    // `transport-missing` and `timeout` below.
+    "scan-dismissed": {
+      detail: "No monitor was picked.",
+      raw: "User cancelled the requestDevice() chooser.",
+    },
+    // `mapRadioFailure`'s `BluetoothPermissionError` arm.
+    "permission-denied": {
+      detail:
+        "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+      raw: "BLE permission denied",
+    },
+    // `mapProgramFailure` passing a `ProgramRejectionError` through.
+    disconnected: {
+      detail: "PM5 disconnected before completing",
+      raw: "0x00 0x00",
+    },
+    // `notAdvertisingDetail(exactName)` — two lines, `\n`-separated.
+    "target-not-advertising": {
+      detail:
+        "Couldn't reach PM5 432331249.\nCheck nothing else is connected to it, then try again.",
+      raw: "PM5 432331249 did not advertise within 10000ms",
+    },
+    // The four `TARGETED_FAILURE_COPY` entries.
+    "target-already-connected": {
+      detail: "End the monitor's current connection, then try again.",
+      raw: "PM5 432331249 is already connected to another central",
+    },
+    "target-ambiguous": {
+      detail: "More than one PM5 has this name. Use Connect.",
+      raw: "2 devices advertise PM5 432331249",
+    },
+    "target-interrupted": {
+      detail: "Connection interrupted. Try again.",
+      raw: "scan aborted",
+    },
+    "scan-cleanup-failed": {
+      detail:
+        "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
+      raw: "stopLEScan rejected",
+    },
+    // `unsupportedMachineDetail("ski")` — two lines, `\n`-separated.
+    "unsupported-machine": {
+      detail:
+        "Erg type not supported\nThis monitor is on a SkiErg. Nothing here will start.",
+    },
+    // The seven genuine machine statements (`driver.ts`'s
+    // `REJECTION_VERBS`), whose detail reaches the panel and nowhere else.
+    nak: { detail: "PM5 rejected frame 3", raw: "0x81 0x00" },
+    bad: {
+      detail: "PM5 reported the frame as malformed (bad)",
+      raw: "0x82 0x00",
+    },
+    "not-ready": { detail: "PM5 reported not ready", raw: "0x83 0x00" },
+    garbled: {
+      detail: "PM5 returned a frame this driver could not even parse",
+      raw: "f1 00 ff",
+    },
+    timeout: { detail: "PM5 never acked (ack-timeout policy)" },
+    "not-observed": {
+      detail: 'PM5 never reported "armed"',
+      raw: "12 armed ticks, none matching",
+    },
+    "structure-mismatch": {
+      detail:
+        'PM5 reported "armed" while holding a different workout than the one just sent',
+      raw: "observed workoutType=1; expected workoutType=0",
+    },
+  };
+
+  const REASONS = Object.keys(EVERY_REASON) as ConnectedError["reason"][];
+
+  /** Every line of text the rower can READ on the frame, in DOM order —
+   *  the panel included. Scoped to `.connected-interstitial-body` so the
+   *  action stack's own button labels can never satisfy an assertion about
+   *  what the message area prints. */
+  function bodyLines(): string[] {
+    return Array.from(
+      document.querySelectorAll<HTMLElement>(
+        ".connected-interstitial-body p, .connected-interstitial-body a",
+      ),
+    ).map((el) => (el.textContent ?? "").trim());
+  }
+
+  // INVARIANT 1 (change 2): no failure frame prints `error.detail` more than
+  // once. Two routes put it on screen already — `failedSerifLine` returns it
+  // as the HEADLINE for every non-machine-refusal reason, and the
+  // permission door prints it as its own body line — and the DETAIL panel
+  // then printed it a second time on both. Counted per LINE, because two
+  // details are `\n`-separated pairs the frame splits across a headline and
+  // a body line, and the panel's single node carries both.
+  it.each(REASONS)(
+    "'%s': every line of error.detail is printed exactly once",
+    (reason) => {
+      const { detail, raw } = EVERY_REASON[reason];
+      renderInterstitial({
+        phase: "failed",
+        deviceName: DEVICE_NAME,
+        error: { reason, detail, ...(raw === undefined ? {} : { raw }) },
+      });
+      const lines = bodyLines();
+      for (const line of detail.split("\n")) {
+        const printed = lines.filter((l) => l.includes(line));
+        expect(
+          printed.length,
+          `"${line}" is printed ${printed.length}x on the ${reason} frame: ${JSON.stringify(printed)}`,
+        ).toBe(1);
+      }
+    },
+  );
+
+  // The half of invariant 1 that is NOT about duplication: the panel is what
+  // carries the diagnostics a rower reads out to us, so its two other lines
+  // survive the de-duplication. `permission-denied` is the frame that proves
+  // it matters — `mapRadioFailure` always gives that arm a `raw`, so
+  // dropping the whole panel would have deleted real content.
+  it.each(REASONS.filter((r) => r !== "unsupported-machine"))(
+    "'%s': the DETAIL panel still carries the reason slug, and the raw trace when there is one",
+    (reason) => {
+      const { detail, raw } = EVERY_REASON[reason];
+      renderInterstitial({
+        phase: "failed",
+        deviceName: DEVICE_NAME,
+        error: { reason, detail, ...(raw === undefined ? {} : { raw }) },
+      });
+      const panel = screen.getByText("DETAIL").closest("div")!;
+      // What the panel must still CARRY. Deliberately not an exact list:
+      // whether `error.detail` also belongs in it is invariant 1's question,
+      // and answering it a second time here would mean re-deriving the
+      // production predicate in the test — a mirror, which proves nothing.
+      // This half only says the de-duplication took nothing else with it.
+      expect(
+        Array.from(panel.querySelectorAll(".connected-detail-line")).map(
+          (el) => el.textContent,
+        ),
+      ).toStrictEqual(
+        expect.arrayContaining([
+          reason.toUpperCase(),
+          ...(raw === undefined ? [] : [raw]),
+        ]),
+      );
+    },
+  );
+
+  // INVARIANT 2 (change 1): the phone timer is offered on every failure the
+  // PHONE had, and on none where the monitor told us the machine is one we
+  // cannot record. Routing a refused SkiErg into the phone timer stores a
+  // ski piece as a rowing log by hand, which is the exact row #366 refused
+  // to write.
+  it.each(REASONS)(
+    "'%s': the phone-timer offer is present iff the machine was not refused",
+    (reason) => {
+      const { detail, raw } = EVERY_REASON[reason];
+      renderInterstitial({
+        phase: "failed",
+        deviceName: DEVICE_NAME,
+        error: { reason, detail, ...(raw === undefined ? {} : { raw }) },
+      });
+      const offered =
+        screen.queryByRole("button", {
+          name: "Row on the phone timer instead",
+        }) !== null;
+      expect(
+        offered,
+        `the ${reason} frame ${offered ? "offers" : "withholds"} the phone timer`,
+      ).toBe(reason !== "unsupported-machine");
+    },
+  );
+
+  // The refusal frame's remaining stack, in order: the ways forward the
+  // ruling KEEPS. `Try again` is still first and still the one L1 — the
+  // refusal is per-connection (`driver.ts`'s own once-per-instance guard),
+  // so sitting on a rower is the remedy.
+  it("the refusal frame keeps Try again, the log door and Cancel, in that order", () => {
+    renderInterstitial({
+      phase: "failed",
+      deviceName: DEVICE_NAME,
+      error: {
+        reason: "unsupported-machine",
+        detail: EVERY_REASON["unsupported-machine"].detail,
+      },
+    });
+    expect(
+      screen.getAllByRole("button").map((b) => b.textContent),
+    ).toStrictEqual(["Try again", "View connection log", "Cancel"]);
+    expect(screen.getByRole("button", { name: "Try again" })).toHaveClass(
+      "button-l1",
+    );
+  });
+
+  // The landscape budget, at THREE buttons. `--failure`'s pairing rule is
+  // `nth-last-child(-n + 4)`, which matches all three children of the
+  // refusal stack and would leave `Cancel` alone in the left column with a
+  // hole beside it; the approved layout (James, 2026-09-08) is `Try again`
+  // full width over a `View connection log` / `Cancel` pair. Pinned as the
+  // SELECTOR that produces it, because jsdom resolves no grid — the real
+  // geometry is asserted in `e2e/design.spec.ts`.
+  it("the landscape stack spans the first of exactly three buttons", () => {
+    const rules = cssRules(INTERSTITIAL_CSS).filter(
+      (r) =>
+        r.at.includes("@media (orientation: landscape)") &&
+        r.selectors.some((s) => s.includes(":nth-last-child(3)")),
+    );
+    expect(
+      rules,
+      "expected one landscape rule spanning the first of three failure buttons",
+    ).toHaveLength(1);
+    expect(rules[0]!.selectors).toStrictEqual([
+      ".connected-interstitial-actions--failure > button:first-child:nth-last-child(3)",
+    ]);
+    expect(rules[0]!.body).toContain("grid-column: 1 / -1");
   });
 });
 
@@ -2218,7 +2481,12 @@ describe("targeted failures (Phase NF)", () => {
     return { ...view, session: current, onExit, onRowInstead, onEnded };
   }
 
-  it("target-not-advertising: the first line is the serif line, the second the body line, the DETAIL panel keeps both", () => {
+  // RENAMED AND RE-POINTED (Phase MT close-out): this used to end
+  // "…the DETAIL panel keeps both", and pinned the panel repeating the two
+  // lines the rower had just read. James ruled that duplication out on
+  // 2026-09-08, so the assertion now pins the other side of it — the split
+  // still happens, and the panel no longer says it again.
+  it("target-not-advertising: the first line is the serif line, the second the body line, and the DETAIL panel repeats neither", () => {
     renderTargeted({
       phase: "failed",
       error: connectedError({
@@ -2240,14 +2508,17 @@ describe("targeted failures (Phase NF)", () => {
         "End whatever is showing on the monitor, then try again.",
       ),
     ).not.toBeInTheDocument();
+    const panel = screen.getByText("DETAIL").closest("div")!;
     expect(
-      screen.getByText(
+      within(panel).getByText("TARGET-NOT-ADVERTISING"),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).queryByText(
         (_, el) =>
           el?.classList.contains("connected-detail-line") === true &&
-          el.textContent ===
-            "Couldn't reach PM5 999.\nCheck nothing else is connected to it, then try again.",
+          (el.textContent ?? "").includes("Couldn't reach PM5 999."),
       ),
-    ).toBeInTheDocument();
+    ).toBeNull();
     expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
   });
 

@@ -106,6 +106,32 @@ function failedSerifLine(error: ConnectedError): string {
   return "The monitor wouldn't take it";
 }
 
+/** Whether the frame has ALREADY printed `error.detail` above the DETAIL
+ *  panel (Phase MT close-out, James 2026-09-08).
+ *
+ *  The invariant it serves: no failure frame prints `error.detail` more than
+ *  once. Twelve of the twenty reasons were printing it twice — the panel
+ *  repeating, verbatim, the sentence the rower had just read as the
+ *  headline — and the two routes that put it up there are both derived here
+ *  rather than re-listed, so a change to either follows automatically:
+ *
+ *  - the HEADLINE is the detail for every non-machine-refusal reason, which
+ *    is what `failedSerifLine` returns (asked, not re-derived: if that
+ *    function ever stops returning `detail` for some reason, this stops
+ *    claiming it does);
+ *  - the PERMISSION door prints it as its own body line, the one reason
+ *    whose headline is a fixed title instead.
+ *
+ *  What does NOT come out is the reason slug or `raw`: `mapRadioFailure`
+ *  always attaches a `raw` on the permission arm, so dropping the panel
+ *  wholesale would delete the only diagnostic the frame carries. The seven
+ *  machine refusals share one generic headline and print their detail
+ *  NOWHERE else — the panel is the whole reason they can be read at all. */
+function detailIsAlreadyOnScreen(error: ConnectedError): boolean {
+  if (failedSerifLine(error) === error.detail) return true;
+  return error.reason === "permission-denied";
+}
+
 /** Connected-axes 2a, Task 4: stands in for `session.error` at
  *  `phase === "disconnected"`, which is always `null` there —
  *  `useMonitorSession.ts`'s own `event.kind === "disconnected"` handler
@@ -264,9 +290,18 @@ export default function ConnectedInterstitial({
   // recorded about a connect/program failure was unreachable the instant
   // it mattered most. A plain button rather than the triple-tap gesture
   // `ConnectedSurface` uses — this screen already has explicit buttons
-  // for everything else (Try again, Row on the phone timer instead,
-  // Cancel), and a failure screen is exactly the moment a rower is
-  // looking for a way to see more, not a gesture to discover.
+  // for everything else, and a failure screen is exactly the moment a
+  // rower is looking for a way to see more, not a gesture to discover.
+  // (A list of button labels used to sit here. It went at the Phase MT
+  // close-out because the stack now has THREE shapes and no single
+  // enumeration is true of all of them: three buttons on the refusal
+  // frame, four on the other eighteen reasons, and five on
+  // `permission-denied` where the platform has a settings door. The
+  // ARGUMENT is unaffected, which is why the list went rather than the
+  // reasoning. A correction to this parenthetical's own first draft,
+  // which claimed the old list was "true of three shapes and is now
+  // true of none": there were TWO shapes before, not three, and the
+  // list is still exactly true of the four-button one.)
   const [logOpen, setLogOpen] = useState(false);
   const logOpener = useRef<HTMLElement | null>(null);
 
@@ -634,15 +669,28 @@ export default function ConnectedInterstitial({
                   record.
 
                   Gated on the REASON, not on `NOT_A_MACHINE_REFUSAL` — that
-                  map is `true` for `disconnected` too, and the disconnected
-                  frame's DETAIL is the one that earns its place. */}
+                  map is `true` for `disconnected` too, so keying on the map
+                  would drop the panel from twelve frames rather than one.
+
+                  SUPERSEDED at the Phase MT close-out: this used to end "and
+                  the disconnected frame's DETAIL is the one that earns its
+                  place." That was true of the OLD panel, which repeated
+                  `detail`. Now that the duplicate line is suppressed, a
+                  `disconnected` frame built from `LINK_LOST_NO_RUN_ERROR`
+                  (no `raw`) renders the word DETAIL over the word
+                  DISCONNECTED and nothing else — as do `transport-missing`
+                  (no producer supplies a `raw`) and `scan-dismissed`'s
+                  `device === undefined` arm. That is the approved ruling
+                  working, not a defect, and it carries a ROADMAP row. */}
               {error.reason !== "unsupported-machine" && (
                 <div className="connected-detail-panel">
                   <p className="connected-detail-title">DETAIL</p>
                   <p className="connected-detail-line">
                     {error.reason.toUpperCase()}
                   </p>
-                  <p className="connected-detail-line">{error.detail}</p>
+                  {!detailIsAlreadyOnScreen(error) && (
+                    <p className="connected-detail-line">{error.detail}</p>
+                  )}
                   {error.raw !== undefined && (
                     <p className="connected-detail-line connected-detail-raw">
                       {error.raw}
@@ -687,13 +735,27 @@ export default function ConnectedInterstitial({
           >
             Try again
           </button>
-          <button
-            type="button"
-            className="button-l2"
-            onClick={handleRowInstead}
-          >
-            Row on the phone timer instead
-          </button>
+          {/* NOT ON A REFUSED MACHINE (Phase MT close-out, James
+              2026-09-08). Everywhere else this is the right offer — a radio
+              that will not come up is exactly when the phone's own timer
+              earns its place — but the rower whose SkiErg was just refused
+              would be routed into logging a ski piece as a rowing row by
+              hand, which is the row #366 refused to store in the first
+              place. Keyed on the REASON, not on `NOT_A_MACHINE_REFUSAL`:
+              that map is `true` for eleven other tags whose offer stands.
+
+              The landscape stack is three buttons here; `index.css`'s
+              `--failure` pairing rule spans the first of exactly three so
+              `Try again` keeps its own row. */}
+          {(error === null || error.reason !== "unsupported-machine") && (
+            <button
+              type="button"
+              className="button-l2"
+              onClick={handleRowInstead}
+            >
+              Row on the phone timer instead
+            </button>
+          )}
           {/* THE RING DOOR (this file's own header comment on
               `logOpen`/`logOpener` has the full reasoning: the walk's own
               lost-evidence finding, and why this is a plain button rather

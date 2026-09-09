@@ -1,0 +1,64 @@
+[
+  {
+    "reason": "transport-missing",
+    "variant": "before",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 186,
+    "serifBottom": 258,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TRANSPORT-MISSING",
+      "This device has no Bluetooth transport."
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "This device has no Bluetooth transport.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TRANSPORT-MISSING",
+      "This device has no Bluetooth transport."
+    ]
+  },
+  {
+    "reason": "transport-missing",
+    "variant": "before",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 25,
+    "serifBottom": 97,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TRANSPORT-MISSING",
+      "This device has no Bluetooth transport."
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "This device has no Bluetooth transport.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TRANSPORT-MISSING",
+      "This device has no Bluetooth transport."
+    ]
+  }
+]

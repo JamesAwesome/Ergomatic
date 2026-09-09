@@ -225,12 +225,18 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       (`grep -rn "PM5" app/src` over string literals) also caught the NFC
       connecting card's "Keep the PM5 on and close by.", in both components
       that render it, and that changed with them. **S**
-- [ ] **The permission frame's DETAIL panel repeats its own remedy sentence.**
-      `error.detail` renders as the body line AND again inside the panel — 125px
-      of the frame's 308px, verbatim duplication. This is the same argument
-      #366 used to drop the panel from the refusal frame ("the top half saying
-      exactly what the bottom half already says"); nobody has applied it here.
-      Changes what the screen contains, so it needs its own design ruling. **S**
+- [x] **The permission frame's DETAIL panel repeats its own remedy sentence.**
+      RULED (James, 2026-09-08) and CLOSED at the Phase MT close-out: the panel
+      renders `error.detail` only where the frame has not already printed it.
+      Scoped to the invariant rather than the frame — TWELVE of the twenty
+      reasons were duplicating, not one: `failedSerifLine` returns `detail` as
+      the HEADLINE for every non-machine-refusal reason, and `permission-denied`
+      prints it as its own body line. The reason slug and `raw` stay
+      (`mapRadioFailure` always attaches a `raw` on the permission arm, so
+      dropping the whole panel would delete the only diagnostic). Measured at
+      844x390: permission-denied's landscape overflow 102px -> 53px, the
+      five-button iOS shape 170px -> 121px, `link-failed` 13px -> 0. Every
+      frame's before/after is in `docs/design/mt-closeout-gate0/`. **S**
 - [x] **On the web build, the top of an overflowing interstitial body cannot be
       scrolled to at all.** CLOSED by #366's landscape fix: the body is
       `flex-start` plus auto margins on its first and last child, so overflow
@@ -239,13 +245,17 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       first child sat at -30 to -100px, so the headline was unreachable, while
       WebKit permits negative `scrollTop` (measured range [-101, 102]) and the
       iOS app could pull it into view. Now GATED, by the row below. **S**
-- [ ] **"Row on the phone timer instead" is offered on the refusal screen.**
-      After a SkiErg refusal it routes the rower to store the ski piece as a
-      rowing log by hand. No Concept2 upload follows — `eligibilityFailure`
-      gates on `source !== "pm5"` — so only the local harm applies, and it is
-      not clearly wrong, since the likeliest cause of that screen is picking
-      the wrong monitor from a list and that rower does have a RowErg. Filed
-      at the design gate rather than found later. **S**
+- [x] **"Row on the phone timer instead" is offered on the refusal screen.**
+      RULED OUT (James, 2026-09-08) and CLOSED at the Phase MT close-out: the
+      offer is withheld on `unsupported-machine` and kept on every other
+      failure, where a radio that will not come up is exactly when the phone's
+      own timer earns its place. Was: after a SkiErg refusal it routed the
+      rower to store the ski piece as a rowing log by hand. The refusal is now
+      the one failure stack with three buttons — `Try again` full width over a
+      `View connection log` / `Cancel` pair, held by a
+      `:first-child:nth-last-child(3)` rule and gated on real geometry in
+      `e2e/design.spec.ts`. It costs no landscape budget (the stack is 120px
+      either way) and gains 64px of portrait message window. **S**
 - [x] **Two design gates the refusal screen owes.** BUILT, in
       `e2e/design.spec.ts`, each kept only because it went red on a stated
       mutation. (a) A REFUSED interstitial case (`ergMachineType: 128`,
@@ -2635,6 +2645,28 @@ to lose the row has no move except to walk away.
 | **Just Row's refusal stack never gets #370's pairing** | `JustRow.tsx`'s free-row refusal wears `.connected-interstitial-actions` WITHOUT the `--failure` modifier, so the landscape pairing rule #370 shipped does not reach it. Harmless TODAY at two buttons — it becomes a cut headline the moment that stack grows a third. Found at Phase MT's Gate 0, 2026-09-08 | Phase MT Gate 0 |
 
 ## Accepted, pinned, and not being fixed
+
+- **Three failure frames now render a DETAIL panel that is a heading and a
+  slug, with no other content (Phase MT close-out, 2026-09-08).** The approved
+  de-duplication suppresses the panel's `detail` line wherever `detail` is
+  already the headline or the body line. On the three reasons that carry no
+  `raw`, that leaves the panel as the word `DETAIL` over the word
+  `TRANSPORT-MISSING` (no producer supplies a `raw`), `DISCONNECTED` (the
+  `LINK_LOST_NO_RUN_ERROR` construction), or `SCAN-DISMISSED` (its
+  `device === undefined` arm). **This is the ruling working as James approved
+  it, not a defect** — the alternative was printing the same sentence twice —
+  and the slug is still real diagnostic content the connection log lacks in
+  that position. Filed because it is a product observation James has not been
+  walked through, NOT because no picture of it exists — one does, committed in
+  the same PR: `docs/design/mt-closeout-gate0/transport-missing-landscape.png`
+  shows the panel reading `DETAIL` over `TRANSPORT-MISSING` and nothing else,
+  and `measure-transport-missing.json` carries
+  `panelLines: ["TRANSPORT-MISSING"]`. **This row first said "no committed
+  screenshot does", which was false when written** — a record claim that reads
+  as evidence is worse than none (RF16). What is true: no capture under
+  `docs/screenshots/` shows it, because that set has no `transport-missing`
+  frame at all. Revisit only if a rower reports the panel reading as empty.
+  **S**
 
 - **Suggestion helpers are pure over the id arrays they are handed (Phase SF
   PR1, lifted at close 2026-09-05).** James: the library may lazy-load one

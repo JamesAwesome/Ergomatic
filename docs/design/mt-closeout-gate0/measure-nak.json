@@ -1,0 +1,70 @@
+[
+  {
+    "reason": "nak",
+    "variant": "reconstructed",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 153.5,
+    "serifBottom": 225.5,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "NAK",
+      "PM5 rejected frame 3",
+      "0x81 0x00"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "The monitor wouldn't take it",
+      "End whatever is showing on the monitor, then try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "NAK",
+      "PM5 rejected frame 3",
+      "0x81 0x00"
+    ]
+  },
+  {
+    "reason": "nak",
+    "variant": "reconstructed",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 244,
+    "overflow": 38,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "NAK",
+      "PM5 rejected frame 3",
+      "0x81 0x00"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "The monitor wouldn't take it",
+      "End whatever is showing on the monitor, then try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "NAK",
+      "PM5 rejected frame 3",
+      "0x81 0x00"
+    ]
+  }
+]

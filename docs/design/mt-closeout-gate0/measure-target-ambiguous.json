@@ -1,0 +1,64 @@
+[
+  {
+    "reason": "target-ambiguous",
+    "variant": "reconstructed",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 168,
+    "serifBottom": 276,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TARGET-AMBIGUOUS",
+      "2 devices advertise PM5 918273645"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "More than one PM5 has this name. Use Connect.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TARGET-AMBIGUOUS",
+      "2 devices advertise PM5 918273645"
+    ]
+  },
+  {
+    "reason": "target-ambiguous",
+    "variant": "reconstructed",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 25,
+    "serifBottom": 97,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TARGET-AMBIGUOUS",
+      "2 devices advertise PM5 918273645"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "More than one PM5 has this name. Use Connect.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TARGET-AMBIGUOUS",
+      "2 devices advertise PM5 918273645"
+    ]
+  }
+]

@@ -6154,6 +6154,11 @@ section:not(.news-pinned) .news-row:last-of-type {
      link-failed               4         78px -> 206px          219px
      unsupported-machine       4        142px -> 206px          157px
 
+   (That row's four buttons and 157px are the shape as it stood when this rule
+   shipped; the close-out took the same frame to three buttons and dropped the
+   DETAIL panel's duplicate line from the other twelve. Every frame's current
+   figures are in `docs/design/mt-closeout-gate0/`.)
+
    All six figures measured in Playwright on the real frames, chromium at
    844x390; portrait is byte-identical before and after in all three (the gate
    captures hash the same). Two of the three frames wrap their headline, and
@@ -6168,13 +6173,22 @@ section:not(.news-pinned) .news-row:last-of-type {
    actually fixes the error — full width above two pairs.
 
    THIS REVERSES A DELIBERATE CHOICE, and the reversal is the change's most
-   consequential effect rather than a side effect: on every FOUR-button frame,
-   which is every failure frame except `permission-denied` on iOS, nothing
-   stays full width any more, `Try again` included. The rule this replaces
-   protected it explicitly ("`Try again` and `Row on the phone timer instead`
-   stay full width: they are the two ways forward"). Gate 0 put both layouts in
-   front of James as rendered captures and he took this one; the primary action
-   keeps its accent fill and its first position in the pair.
+   consequential effect rather than a side effect: on every FOUR-button frame
+   nothing stays full width any more, `Try again` included. The rule this
+   replaces protected it explicitly ("`Try again` and `Row on the phone timer
+   instead` stay full width: they are the two ways forward"). Gate 0 put both
+   layouts in front of James as rendered captures and he took this one; the
+   primary action keeps its accent fill and its first position in the pair.
+
+   RECONCILED at the Phase MT close-out: this sentence used to say four
+   buttons was "every failure frame except `permission-denied` on iOS", and
+   there are now three shapes, not two. The refusal frame withholds the
+   phone-timer offer and runs to THREE — see the quantity-query rule at the
+   bottom of this block, under which `Try again` is full width again on that
+   one frame. Measured on the real render, chromium at 844x390: the refusal's
+   stack is 120px at three buttons and was 120px at four, so the message
+   window is 206px either way; portrait gains 64px of window (532 -> 596) as
+   the stack drops from 248px to 184px.
 
    SCOPED TO `--failure`, NOT TO `.connected-interstitial-actions`, and that is
    load-bearing rather than tidy. ELEVEN stacks carry the base class — JustRow's
@@ -6209,6 +6223,25 @@ section:not(.news-pinned) .news-row:last-of-type {
 
   .connected-interstitial-actions--failure > button:nth-last-child(-n + 4) {
     grid-column: auto;
+  }
+
+  /* THE THREE-BUTTON FRAME (Phase MT close-out, James 2026-09-08: `Try
+     again` spans, `View connection log` and `Cancel` pair beneath it).
+
+     The refusal frame no longer offers `Row on the phone timer instead`
+     (`ConnectedInterstitial.tsx` says why), so it is the one failure stack
+     with an ODD button count, and `-n + 4` matches all three of them: the
+     grid would put `Try again` beside the log door and leave `Cancel` alone
+     in the left column with a hole beside it.
+
+     A quantity query rather than a second modifier class, so it cannot
+     drift from the count it describes: `:first-child:nth-last-child(3)`
+     matches only a first child that is also third from last, which is
+     exactly a stack of three. Specificity (0,3,1) beats the `-n + 4` rule's
+     (0,2,1), so ordering is not what carries it. */
+  .connected-interstitial-actions--failure
+    > button:first-child:nth-last-child(3) {
+    grid-column: 1 / -1;
   }
 }
 
