@@ -410,7 +410,12 @@ and the pattern is worth naming so reviews aim there:
   it off a committed screenshot.
 - **Check the seams the diff doesn't show.** Client bounds against
   `app/domain/validate.ts`; fake stores against real ones (§5); a deleted
-  component's CSS; whether `pnpm e2e` still passes.
+  component's CSS; whether the named e2e specs still pass locally against an
+  already-booted stack, then whether the e2e job on the PR is green for the
+  full suite. That split is James's tiering decision (2026-09-08) — CI owns
+  the full suite, locally you run what your change touches — not a
+  wall-clock saving, though a full local run does cost ~1.5x under the
+  worker cap (CLAUDE.md RF1).
 
 ## 13. Self-mutation is part of writing the test
 

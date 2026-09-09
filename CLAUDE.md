@@ -35,7 +35,9 @@ requirements).
   client+unit against a green HEAD; not a jsdom-vs-Node issue). Prefix the
   bare form yourself:
   `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`
-  — jsdom loads and the tests pass.
+  — jsdom loads and the tests pass. Note this form collapses a signal death
+  to exit 1 — see recurring failure 40. Prefer `pnpm test --project client`
+  when you do not need a file filter.
 - `pnpm dist:grep` — the production-bundle gate. CI runs it in the `app` job
   right after `pnpm build`; it proves named dev-only seams are absent from
   `dist/`.
@@ -44,6 +46,10 @@ requirements).
   same way. **Both `up -d --build --wait` unconditionally** (a rebuild every
   invocation, not "boots it if not running") **and leave the stack UP
   afterwards** — `E2E_KEEP` defaults to `1`.
+- `ERGOMATIC_TEST_WORKERS` / `ERGOMATIC_E2E_WORKERS` — local worker
+  ceilings, defaulting to 4 and 3. Tuned for a 16 GB / 4-performance-core
+  Mac running several agent sessions; **raise or unset them on a bigger
+  machine**. Both are inert under CI.
 - `pnpm mutate` — Stryker mutation testing, on-demand (see docs/TESTING.md §3);
   minutes, not part of the push/CI gate.
 - Local dev DB: `docker run --rm -d --name erg-dev-pg -p 5433:5432 -e POSTGRES_PASSWORD=dev postgres:18.4`
@@ -498,8 +504,19 @@ often they recur.
 1. **Changing UI without running `pnpm e2e`.** Three phases running, a task
    changed a component and left the e2e suite red because only
    `--project unit --project client` was run. The e2e job gates CI. **If your
-   diff touches anything under `app/src/`, run `pnpm e2e` before you report
-   done** — and `pnpm screenshots` too if you changed a screen's layout.
+   diff touches anything under `app/src/`, run the named e2e specs locally
+   against an already-booted stack, then read the e2e job on the PR for the
+   full suite** — and `pnpm screenshots` too if you changed a screen's
+   layout. **The reason the local half is now NAMED specs is James's
+   decision to tier the gate (2026-09-08, Phase MEM): CI owns the full
+   suite, locally you run what your change touches.** It is not a
+   wall-clock argument — the Playwright worker cap that costs ~1.5x
+   locally (RF40) is one env var away from being lifted, and a cost you
+   can opt out of could never justify weakening the repo's number-one
+   gate. What justifies it is that the full suite still runs, on every
+   PR, where nobody can skip it. The obligation is unchanged: **an
+   `app/src/` change is not done until a full e2e run has passed
+   somewhere you have read the result.**
 2. **Trusting the aggregate coverage gate.** The 90×4 threshold is repo-wide,
    so a brand-new file can ship with entire branches uncovered and the gate
    still passes. Four components did exactly that (keyboard handlers twice,
@@ -1264,6 +1281,35 @@ often they recur.
     green run exists on this branch". The same trap bit a watcher in the same
     session: an `until` loop that exited on the first COMPLETED run in a list
     reported a neighbouring PR's success as this merge's.
+
+40. **Reading a KILLED test run as a flaky one, and retrying it into a
+    machine that just proved it has no room (Phase MEM, 2026-09-08).**
+    Three signatures, none of which is a test result:
+    **(a) An exit code ≥ 128 is a signal death.** 137 is SIGKILL and reads
+    as memory on its own, because an OS memory kill leaves no message at
+    all. 134 is SIGABRT, which covers a V8 fatal OOM *and* every other
+    abort, so it reads as memory only when stderr carries
+    `Allocation failed` and as a plain signal death otherwise. 130 is your
+    own Ctrl-C and 143 a SIGTERM — killed, but not memory.
+    **(b) `pnpm exec` COLLAPSES all of them to exit 1.** Measured: raw
+    node and `pnpm run` both preserve 134/137; `pnpm exec` reports 1 with
+    `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL`. This matters because the
+    Commands section above prescribes `pnpm exec vitest` as the scoped-run
+    workaround — **the repo's own advice hides this signal**, so when you
+    use that form, a kill is indistinguishable from a failure by status.
+    **(c) A fork-worker OOM exits 1 AND prints a full `Test Files`
+    summary.** Vitest defaults to `pool: "forks"` and each fork has its own
+    4192 MB heap limit, so the parent survives. The presence of a summary
+    proves nothing; the tell is `Allocation failed` on stderr.
+    **Never re-run a suite showing any of the three.** `pnpm test` routes
+    through `app/scripts/test-run.sh`, which says so out loud and writes
+    the evidence to `app/.test-kills/`. A retry is not free: it is the
+    thing that turns one kill into a lost session.
+    **And the lesson that generalises past this bug:** the first draft of
+    the design asserted "the system gives us no signal", derived entirely
+    from measurements taken through `pnpm exec`. When a claim is that no
+    signal exists, re-run it through every INVOCATION SHAPE the production
+    path uses before believing it.
 
 ## Commands
 
