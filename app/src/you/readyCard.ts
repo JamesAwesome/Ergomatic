@@ -18,13 +18,15 @@ function isReadyCardChoice(value: unknown): value is ReadyCardChoice {
 }
 
 export function loadReadyCard(): ReadyCardChoice {
-  if (lastSet !== null) return lastSet;
+  // STORAGE FIRST. Reading `lastSet` first makes every persistence gate
+  // structurally incapable of failing — proven, see the spec.
   try {
     const raw = localStorage.getItem(READY_CARD_KEY);
-    return isReadyCardChoice(raw) ? raw : READY_CARD_DEFAULT;
+    if (isReadyCardChoice(raw)) return raw;
   } catch {
-    return READY_CARD_DEFAULT;
+    /* fall through to the in-memory value, then the default */
   }
+  return lastSet ?? READY_CARD_DEFAULT;
 }
 
 export function saveReadyCard(next: ReadyCardChoice): boolean {

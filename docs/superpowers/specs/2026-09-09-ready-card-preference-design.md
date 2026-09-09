@@ -1,6 +1,6 @@
 # Straight to the numbers, if that is how you row
 
-**Phase RN.** Status: DRAFT, awaiting the anchor antagonist pass and Gate 0.
+**Phase RN.** Status: HARDENED (lens 1 folded), awaiting lens 2 and Gate 0.
 
 TRIAD (a stored shape), so this spec takes a full antagonist pass and the PR
 takes a PM final gate. It changes user-visible copy and layout on
@@ -48,7 +48,8 @@ of two `useState` flags, and it touches nothing on the wire.
 - **No earlier screen.** The looking / pairing / programming checklists, Just
   Row's `Starting your row` sending card, the failure screen and the
   interstitial's disconnected treatment all render exactly as they do now.
-  The setting reaches one branch in each file.
+  The setting reaches one branch in each file — **with one exception, which
+  is a decision rather than a footnote and is put to Gate 0 below.**
 - **No behaviour after the first pull.** Once the rower is on the surface,
   every screen, control and number is the same one they see today.
 
@@ -102,6 +103,83 @@ exactly how a cited number rots. The commands above re-derive them.
 **James ruled the scope covers both (2026-09-09).** One setting, both cards.
 A per-flow distinction would be a second setting nobody asked for.
 
+## The exception: a link lost BEFORE the first pull
+
+Found by the anchor antagonist pass, verified here independently against
+`connectedAxes.ts` and `JustRow.tsx`. This is not a footnote — it deletes an
+affordance from the one state where that affordance is the whole point.
+
+`deriveProgram("ready")` is `"armed"`, and `deriveLink` at `ready` returns
+`frameSilence ? "lost" : "up"`. So `armed ∧ lost` is a reachable pair. Just
+Row's render ladder tests the surface arm — `axes.session !== "none" ||
+(showNumbers && axes.program === "armed")` — **above** its link-lost branch,
+so with the flag seeded true:
+
+| | Today (card shown, untapped) | Under `skip` |
+| --- | --- | --- |
+| Link goes silent before the first pull | the pre-row lost screen: **Try again** and Cancel | the connected surface's LOST banner, whose only control is a two-tap End |
+
+**The screen being bypassed states its own precondition**, and the change
+breaks it: _"A link lost BEFORE any run opened (a run in flight renders the
+surface above, which owns the mid-row lost treatment). The monitor does not
+advertise while a Just Row is open, so Try again is honest here only because
+no row was under way."_ Skipping routes the pre-row case into the mid-row
+treatment. That is RF18's tripwire class — a comment naming the condition
+that holds it up, and a change that changes exactly that condition.
+
+**And the producer is the same event as the accepted loss.** In-stream frame
+gaps do not reach the 2500 ms watchdog (`liveness.ts`'s own comment: worst
+measured in-stream gap 810.3 ms across 3,442 gaps, zero over 2500 ms). The
+documented producer is a background/resume gap, which latches `frameSilence`
+identically and is exactly what RF19's 2026-08-26 walk recorded over a link
+that never dropped. In plain terms: **the phone sleeping during the pre-pull
+wait** — the event `KEEP YOUR PHONE SCREEN ON` exists to prevent, on the
+screen `skip` removes. The two accepted losses and this one are one event,
+not three.
+
+The programmed interstitial diverges in the OTHER direction: its ready branch
+carries no link check at all, so today a frame-silent ready card says "Ready
+when you pull" with no warning, and under `skip` the rower gets the surface's
+LOST banner instead. Arguably an improvement; stated because it is a change.
+
+**Reachability, split honestly.** PROVEN: the state is reachable in the axes,
+and the watchdog has no phase guard. NOT PROVEN: that it has ever latched at
+`ready` on hardware — no committed capture pins it there, and native's own
+inter-frame gap distribution is unmeasured (that constant's own comment says
+so). So this is a real mechanism at an unmeasured frequency, which is a
+reason to decide it deliberately rather than to wave it through.
+
+### Gate 0 decides this, with the costs measured rather than argued
+
+| | What it does | Cost, measured |
+| --- | --- | --- |
+| **A — accept** | `skip` lands a pre-row link loss on the surface. | Zero code. The rower loses **Try again** in the one state where nothing was under way, and reconnecting means End, then Connect again. Note this is already what a rower who TAPPED the button gets today, so it is not a new screen, only a new way to reach it without choosing. |
+| **B — guard the seeded arm only** | The skip arm additionally requires `link !== "lost"`; a tapped `showNumbers` behaves as today. | Needs a second piece of state to tell seeded from tapped — the ladder currently cannot distinguish them. More mechanism than the feature has anywhere else. |
+| **C — guard both arms (recommended)** | The `showNumbers` arm requires `link !== "lost"`, for tap and skip alike. `axes.session !== "none"` is untouched, so a mid-row loss still reaches the surface's own treatment. | One clause. It also CHANGES today's tapped behaviour, which is why it is James's call and not mine. The argument for it: `session === "none"` is precisely the test the bypassed screen's comment names ("Try again is honest here only because no row was under way"), so C makes the ladder say what that comment already claims. |
+
+I recommend **C** and I am not neutral about it: A leaves a rower stranded on
+an End button in the exact state a reconnect would have worked, and the state
+is produced by the phone sleeping — the thing this feature makes more likely
+by removing the warning.
+
+## The other exit: End does not go where Cancel went
+
+Also from the anchor pass, and it sharpens what was accepted. The Cancel/End
+trade is not only a different confirmation, it is a different **destination**.
+The wire half is fine — `endSession` calls `driver.terminate()` unconditionally
+when a driver exists, so the erg is put back either way. What differs is where
+the rower lands:
+
+| | Card shown | Under `skip` |
+| --- | --- | --- |
+| Programmed workout | Cancel → back to the workout's detail screen | End → the workout's **log door**, for a workout that was never rowed |
+| Just Row | Cancel → back to the Just Row door | End → **`/justrow/log`**, likewise |
+
+`closeRecord` at `ready` with no run open logs `close-no-record` and returns,
+so both doors open on an empty record. Gate 0 carries these two as rendered
+items; they are not a copy question but they are a "what does the rower see"
+question, which is the same gate.
+
 ## What is lost with the card, and why James accepted it
 
 The ready card carries two things that exist nowhere else in that moment:
@@ -149,9 +227,12 @@ means "skip", which means the flag `numbersRequested` starts `true`. Every
 place a boolean would appear (the parse, the screen's `value`, the
 initializer, four test titles) is a place to invert it once too often. The
 union carries the word the rower chose all the way to the call site:
-`loadReadyCard() === "skip"`. It also gives the parse the same totality
-`judgeColors.ts` has for free — anything that is not one of the two members
-resolves to the default.
+`loadReadyCard() === "skip"`. It also makes the parse total in the shape
+`judgeColors.ts` uses — anything that is not one of the two members resolves
+to the default. **Not "for free":** `isReadyCardChoice` is hand-written
+exactly as `isJudgeColor` is, and a boolean stored as a word would need the
+same guard. The union's real justification is the triple negative, which
+stands on its own.
 
 **The parse is total and the catch is bare.**
 `docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md`,
@@ -191,13 +272,15 @@ function isReadyCardChoice(value: unknown): value is ReadyCardChoice {
 }
 
 export function loadReadyCard(): ReadyCardChoice {
-  if (lastSet !== null) return lastSet;
+  // STORAGE FIRST, `lastSet` ONLY AS THE FALLBACK. The precedence is the
+  // whole point and it is not interchangeable — see below.
   try {
     const raw = localStorage.getItem(READY_CARD_KEY);
-    return isReadyCardChoice(raw) ? raw : READY_CARD_DEFAULT;
+    if (isReadyCardChoice(raw)) return raw;
   } catch {
-    return READY_CARD_DEFAULT;
+    /* fall through to the in-memory value, then the default */
   }
+  return lastSet ?? READY_CARD_DEFAULT;
 }
 
 export function saveReadyCard(next: ReadyCardChoice): boolean {
@@ -210,6 +293,41 @@ export function saveReadyCard(next: ReadyCardChoice): boolean {
   }
 }
 ```
+
+**THE PRECEDENCE IS LOAD-BEARING, AND THE OBVIOUS ORDER DISARMS BOTH GATES.**
+The first draft read `lastSet` first. The anchor antagonist pass ran that
+module under Node with `setItem` replaced by a no-op and got:
+
+```
+saveReadyCard('skip') returned: true
+raw storage now: (nothing written)
+loadReadyCard() says: skip
+```
+
+and, with storage holding the opposite value, `loadReadyCard()` still said
+`skip` — after a `localStorage.clear()` too. Three consequences, all fatal to
+the gates this spec calls load-bearing:
+
+1. **The I-3 client seam test could not fail on a broken store.** Settings →
+   click → unmount → mount the consumer all happens in one JS realm, so
+   `lastSet` carried the value and storage was never read. Delete the
+   `setItem` call outright and the test stays green — RF35's exact shape: the
+   named mutation bites, the mutation that matters does not.
+2. **The e2e leg could not either, and this spec's own prescription
+   guaranteed it.** Navigating by CLICK is same-document by construction, so
+   the module instance and its `lastSet` survive the navigation. The leg
+   would have proven that the module remembers, never that the store does.
+   **This is RF38 inverted:** Phase JC's problem was that a reload made both
+   legs pass; here a click makes both legs blind. So the e2e gate takes TWO
+   legs — a click leg and a `reload()` leg — and the reload one is the gate.
+3. **Cross-test poisoning.** Module state outlives an `it()` block, and a
+   `beforeEach` calling `localStorage.clear()` does nothing against it.
+
+With storage first, a successful write is proven by the store, `lastSet`
+covers exactly the refused-write case it was invented for, and both gates
+bite. **`saveReadyCard`'s `true` is a claim about not throwing, not a receipt
+for durability** — the module header says so, because RF25's tell is a
+boolean that reads as one.
 
 `isReadyCardChoice` takes the raw `string | null` straight from
 `getItem`, so absent (`null`), empty (`""`) and unknown (`"SKIP"`,
@@ -244,6 +362,7 @@ either consumer mounts.
 | `lastSet` (module scope)     | `saveReadyCard`, on every call incl. a failed one | process exit only                  | yes               | no                                      |
 | `numbersRequested` (`ConnectedInterstitial`) | the component's `useState` initializer, once per mount | unmount                    | no                | no                                      |
 | `showNumbers` (`JustRow`)    | the component's `useState` initializer, once per mount | unmount                     | no                | no                                      |
+| `readyCard` (`SettingsScreen`) | the screen's own `useState` initializer, once per mount | unmount                   | no                | no                                      |
 
 **Read once per mount is the correct lifetime, and here is why it cannot go
 stale.** The only writer is `/you/settings`, a screen the rower must leave to
@@ -279,9 +398,16 @@ Two constraints on whatever Gate 0 picks. The word **monitor**, never PM5 —
 this copy is not disambiguating which machine (RF32). And no em-dashes in
 anything a rower reads (house style).
 
-The `saveFailed` notice already on the screen is reused verbatim if it fits
-both controls; if Gate 0 prefers wording specific to each, that is two
-notices and the spec is amended.
+**The existing `saveFailed` notice CANNOT be reused, and the first draft was
+wrong to offer it.** It reads "These colors are on now, but they won't stick.
+This device wouldn't let the app save them, so a reload brings the old ones
+back." — a sentence about colours, whose central promise is about a control
+the rower did not touch. Worse, one boolean shared between two writers means
+a successful ready-card tap CLEARS a genuine colour-save failure, and the
+reverse. So: **two notices, each owned by its own control**, and the ready
+card's says what is true of it — the choice is live for this session and a
+reload brings the old one back. Wording goes to Gate 0 with the rest of the
+copy.
 
 ### CSS: add selectors, never move rules
 
@@ -317,10 +443,16 @@ is proposing the JC bug.
   A `skip` written by the settings screen is what the interstitial and Just
   Row read on their next mount, through real storage, with nothing
   hand-written in between.
-- **I-4 — `skip` removes the ready card and nothing else.** Every other
-  screen either entry point can render — looking, pairing, programming, Just
-  Row's sending card, failed, disconnected, and the whole surface — is
-  byte-identical to what it renders today at the same phase.
+- **I-4 — `skip` removes the ready card, and changes exactly one other
+  screen, deliberately.** Every screen either entry point can render at
+  looking, pairing, programming, Just Row's sending card, failed, genuine
+  `disconnected`, and the whole in-session surface is what it renders today
+  at the same phase. **The single exception is the pre-pull link-lost state**,
+  whose disposition Gate 0 chooses from the A/B/C table above; whichever it
+  picks, the invariant is restated to say so and the gate below tests that
+  state explicitly. _This invariant read "and nothing else" in the first
+  draft, which was false — the honest version is what makes the exception
+  a decision instead of a surprise._
 - **I-5 — `skip` changes nothing on the wire.** The sequence of transport
   writes across a connect is identical under both settings.
 - **I-6 — a refused write costs the reload, not the session** (RF25: the
@@ -339,22 +471,33 @@ named here so the implementer runs *these*, not ones chosen after the fix
 
 | Inv | Gate                                                                                                                                                | Mutation that must bite                                                                            |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| I-1 | The existing `ConnectedInterstitial`, `JustRow`, `connected.spec.ts`, `justrow.spec.ts` and `screenshots.spec.ts` legs, unchanged — they all run at the default and every one of them taps the button | flip `READY_CARD_DEFAULT` to `"skip"`; the existing suites go red without a line being added to them |
-| I-2 | Unit tests over `loadReadyCard`, one per falsification, plus a `localStorage.getItem` stub that throws                                                | narrow the bare `catch` to `catch (e) { if (e.name === "SecurityError") … }`; the throwing-getter case escapes |
-| I-3 | **The seam test, and it starts upstream of the producer (RF24):** render `SettingsScreen`, click the skip option, unmount, then mount `ConnectedInterstitial` and drive it to `ready`. Nothing writes storage by hand. Plus an e2e leg doing the same through a real browser and the real store | delete the initializer's `loadReadyCard()` call (back to `useState(false)`); both go red. Also: replace the settings-screen click with a direct `localStorage.setItem` — the test must still pass, and if it does not, it is testing the wrong thing |
-| I-4 | Client tests at both entry points with `skip` stored, asserting each earlier phase screen still renders                                              | widen the initializer to force `numbersRequested` regardless of phase; the pairing/programming assertions go red |
-| I-5 | A test that records the transport's writes across a full connect under both settings and asserts the two logs are equal                              | add one extra write on the skip path; the equality fails |
-| I-6 | Unit test: `saveReadyCard` returns `false` when `setItem` throws, and `loadReadyCard` still returns the chosen value afterwards. Client test: the notice renders and the control shows the new choice | make `saveReadyCard` swallow and return `true`; the notice test goes red. Remove the `lastSet` fallback; the load-after-failure test goes red |
-| I-7 | The existing `design.spec.ts` settings block and the `you-settings-colors` screenshot, recaptured                                                    | none needed: the block already carries its own mutations. Its tap-target and a11y sweeps extend to the new control for free |
+| I-1 | The **five** existing e2e specs that tap the button, plus the two components' own suites, unchanged — they all run at the default. The five are derived, not typed: `grep -rln "Show me the numbers" app/e2e/` returns `justrow`, `design`, `diagnostics`, `screenshots`, `connected`. _The first draft named three and missed `design` and `diagnostics`._ | flip `READY_CARD_DEFAULT` to `"skip"`; the existing suites go red without a line being added to them |
+| I-2 | Unit tests over `loadReadyCard`, one per falsification, plus a `localStorage.getItem` stub that throws | narrow the bare `catch` to `catch (e) { if (e.name === "SecurityError") … }`; the throwing-getter case escapes |
+| I-3 | **The seam test, upstream of the producer (RF24):** render `SettingsScreen`, click skip, unmount, mount `ConnectedInterstitial`, drive to `ready`. Nothing writes storage by hand. Plus **two** e2e legs: a click leg and a `reload()` leg | **the reviewer's own mutant, not one of mine (RF35): delete the `setItem` call from `saveReadyCard`.** With storage-first precedence the reload leg and the seam test both go red; under the first draft's precedence every one of them stayed green. Second mutation: revert the initializer to `useState(false)` |
+| I-4 | Client tests at both entry points with `skip` stored, asserting each earlier phase screen still renders — **and one test per entry point at `phase: "ready"` with `frameSilence: true`**, asserting whichever screen Gate 0's A/B/C answer names | widen the initializer to force the flag regardless of phase; the pairing/programming assertions go red. For the lost case, flip `frameSilence` and assert the other screen — the pair is what pins the ladder order |
+| I-5 | A test that records the transport's writes across a full connect under both settings and asserts the two logs are equal | add one extra write on the skip path; the equality fails |
+| I-6 | Unit test: `saveReadyCard` returns `false` when `setItem` throws, and `loadReadyCard` still returns the chosen value afterwards. Client test: the ready card's **own** notice renders, and a colour-save failure and a ready-card failure do not clear each other | make `saveReadyCard` swallow and return `true`; the notice test goes red. Remove the `lastSet` fallback; the load-after-failure test goes red. Point both controls at one `saveFailed` boolean; the independence test goes red |
+| I-7 | The existing `design.spec.ts` settings block and the `you-settings-colors` screenshot, recaptured | **its sweeps extend, its assertions do not** — `assertTapTargets` and `assertNoA11yViolations` run over the whole page and so already cover the new control (measured: all four tests in that block pass against the Gate 0 render), but its third test keys on the "Pace slower color" radiogroup and would not notice the new group's absence. The new group needs its own assertion; "for free" was over-stated |
 
-**The e2e leg is the load-bearing one**, for the reason Phase JC's was: a
-client test can prove the flag, but only a browser proves the value survives
-a real store and a real navigation. It taps the skip option on
-`/you/settings`, navigates by **click** rather than `page.goto`, walks a
-workout to the point `walkToReady` would find the ready line, asserts the
-surface's own positive observable first, and only then asserts the ready line
-never appeared — a negative async assertion waits for positive readiness
-(CLAUDE.md).
+**Two e2e legs, and the reload one is the gate.** A click navigation is
+same-document, so the module instance and its `lastSet` survive it — proven
+above. The click leg proves the choice survives a client-side navigation; the
+**reload** leg is the only one that proves it survived the store. Per RF38,
+each leg asserts the property of HOW it navigated — a same-document sentinel,
+present in one and absent in the other — rather than describing it in a
+comment. Both walk a workout to the point `walkToReady` would find the ready
+line, assert the surface's own positive observable first, and only then assert
+the ready line never appeared: a negative async assertion waits for positive
+readiness.
+
+**The Just Row leg carries a trap that already caught this spec's own capture
+run.** `injectJustRowShotFake` starts sending frames 8 s after injection, and
+the first frame makes `axes.session !== "none"`, which renders the surface no
+matter what the skip flag says. Measured, with the production initializer
+reverted to `useState(false)`: a Just Row probe waiting 20 s for the surface
+**passed anyway**; bounded to 4 s it failed correctly, and the workout probe
+failed either way. Any Just Row assertion about this feature is bounded below
+`JR_STORY_START_MS` or driven by a motionless fake, or it is decoration.
 
 ## What this deliberately does not do
 
@@ -427,8 +570,27 @@ count. (2) Line citations into this document: none, at any revision.
 executable content and it has now been paste-tested at its real path, with
 the commands and their output recorded beside it.
 
-**Lens 1 (mechanism) — dispatched.** Full pass, not a delta: phase open and
-TRIAD work. Findings and the vetted ground fold back into this document.
+**Lens 1 (mechanism) — RUN, and it earned its dispatch.** Full pass (phase
+open, TRIAD). One BLOCKING and three MAJOR, all folded above:
+
+- **BLOCKING:** the store's `lastSet`-first precedence made both persistence
+  gates structurally incapable of failing. Proven by running the module under
+  Node with `setItem` sabotaged, not argued. Precedence inverted; the e2e gate
+  now takes a reload leg.
+- **MAJOR:** I-4 was false — `skip` re-routes a pre-pull link loss past Just
+  Row's `Try again`. Now its own section with an A/B/C decision for Gate 0.
+- **MAJOR:** End does not land where Cancel did. Gate 0 items 5.
+- **MAJOR:** the colour screen's save-failure notice cannot be reused, and one
+  shared boolean would let each control clear the other's warning.
+
+**Vetted ground (later RN work inherits these, attacked and held):** mounting
+the surface early issues nothing on the wire — established by a census of
+every effect and timer in `ConnectedSurface` and its subtree, not by its
+header comment; both entry points hand ONE `useMonitorSession` instance down
+as a value, so no second driver or record exists; exactly two consumers, by
+two routes that do not share a method; read-once-per-mount holds because
+reaching the writer necessarily unmounts the reader; and the CSS
+selector-append claim holds structurally, with a browser check still owed.
 
 **Lens 2 (prescribed code) — runs after lens 1**, scoped to the store module
 and to the gate table. The table is the half worth the dispatch: I-5's
@@ -444,5 +606,12 @@ pairing's contrast ratio computed and stated as a number:
 2. The programmed-workout path at `ready` with the card OFF — the screen the
    rower now lands on — beside the card it replaces.
 3. The Just Row path at `armed` with the card OFF, likewise.
-4. The copy table above, resolved: heading, slot name, hint, option words.
-5. The comfort-settings question, answered.
+4. The pre-pull link-lost pair, at both entry points — the screen today and
+   the screen under each of A / B / C — because that table's choice is about
+   what a rower sees.
+5. Where **End** lands under `skip`, at both entry points: the log door for a
+   workout that was never rowed, and `/justrow/log`, each against the screen
+   Cancel reaches today.
+6. The copy table above, resolved: heading, slot name, hint, option words,
+   and the ready card's own save-failure notice.
+7. The comfort-settings question, answered.
