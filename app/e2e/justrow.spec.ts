@@ -594,3 +594,140 @@ test.describe("Just Row: standing in for a plan session", () => {
     await expect(page.locator("a.plan-row-done")).toHaveCount(1);
   });
 });
+
+/**
+ * Phase RN — the ready screen becomes a preference, and Gate 0's ruling 2
+ * (spec `2026-09-09-ready-card-preference-design.md`, CLOSED 2026-09-09).
+ *
+ * NO MOTION IN EITHER FIXTURE BELOW, and it is what makes the assertions
+ * mean anything. A rowing frame opens the run, and an open run renders the
+ * surface regardless of the setting — `connected.spec.ts`'s own RN block
+ * carries the measurement that proved it (three legs passed with the store's
+ * `setItem` deleted, on a streaming fixture).
+ */
+test.describe("Just Row: the ready screen is a preference (Phase RN)", () => {
+  /** Connects, arms, and then says nothing further. */
+  async function injectSilentFake(page: Page): Promise<void> {
+    await page.addInitScript(
+      ({ program }) => {
+        window.__pm5FakeScript__ = {
+          program,
+          events: [],
+          deviceName: "PM5 e2e-justrow",
+        };
+      },
+      { program: FIXTURE_PROGRAM },
+    );
+  }
+
+  /**
+   * One WAITTOBEGIN frame, then silence. The frame arms the frame watchdog —
+   * its arming rule is the first valid 0x0031 after connect — and carries
+   * distance 0, so no run opens. The silence that follows crosses the
+   * 2500 ms threshold, which `deriveLink` reads as `lost` at phase `ready`.
+   * This is the state ruling 2 exists for: the link gone BEFORE the first
+   * pull, with nothing under way.
+   */
+  async function injectArmedThenSilentFake(page: Page): Promise<void> {
+    await page.addInitScript(
+      ({ program }) => {
+        window.__pm5FakeScript__ = {
+          program,
+          deviceName: "PM5 e2e-justrow",
+          events: [
+            {
+              atMs: 1000,
+              kind: "status",
+              workoutState: 1,
+              elapsedSeconds: 0,
+              distanceMeters: 0,
+              spm: 0,
+              currentSplit: 0,
+              heartRateBpm: null,
+              programIntervalIndex: 0,
+            },
+          ],
+        };
+      },
+      { program: FIXTURE_PROGRAM },
+    );
+  }
+
+  async function chooseReadyScreen(
+    page: Page,
+    option: "SHOW" | "SKIP",
+    email: string,
+  ): Promise<void> {
+    await signInViaBackdoor(page, { email, name: "Just Row RN Tester" });
+    await page.goto("/you/settings");
+    const group = page.getByRole("radiogroup", { name: "Ready screen" });
+    await expect(group).toBeVisible();
+    await group.getByRole("radio", { name: option, exact: true }).click();
+    await expect(
+      group.getByRole("radio", { name: option, exact: true }),
+    ).toHaveAttribute("aria-checked", "true");
+  }
+
+  test("SKIP hands a free row straight to the numbers", async ({ page }) => {
+    await injectSilentFake(page);
+    await chooseReadyScreen(page, "SKIP", "rn-jr-skip@e2e.test");
+    await page.goto("/justrow");
+    await page.getByRole("button", { name: "Connect" }).click();
+
+    await expect(page.getByRole("button", { name: "End session" })).toBeVisible(
+      { timeout: 20_000 },
+    );
+    await expect(
+      page.getByRole("heading", { name: "Ready when you pull" }),
+    ).toHaveCount(0);
+  });
+
+  test("SHOW keeps the ready card, so SKIP is the setting and not the fixture", async ({
+    page,
+  }) => {
+    await injectSilentFake(page);
+    await chooseReadyScreen(page, "SHOW", "rn-jr-show@e2e.test");
+    await page.goto("/justrow");
+    await page.getByRole("button", { name: "Connect" }).click();
+
+    await expect(
+      page.getByRole("heading", { name: "Ready when you pull" }),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByRole("button", { name: "Show me the numbers" }),
+    ).toBeVisible();
+  });
+
+  /**
+   * GATE 0 RULING 2, in a real browser. Without the link guard this lands on
+   * the surface's LOST banner with only a two-tap End, and the rower loses
+   * the reconnect the pre-row screen exists to offer.
+   */
+  test("SKIP still yields to the waiting screen when frames stop before the first pull", async ({
+    page,
+  }) => {
+    await injectArmedThenSilentFake(page);
+    await chooseReadyScreen(page, "SKIP", "rn-jr-lost@e2e.test");
+    await page.goto("/justrow");
+    await page.getByRole("button", { name: "Connect" }).click();
+
+    // THE SCREEN, not just a control. Other cards on this door carry an
+    // identically-named Cancel and also have no `End session`, so asserting
+    // controls alone would let a connect failure satisfy this leg (RF4).
+    await expect(
+      page.getByRole("heading", { name: "Waiting for the monitor" }),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByText("It has gone quiet. This usually clears on its own."),
+    ).toBeVisible();
+    // Neither control that would be wrong here: the surface's End, which
+    // ruling 2's guard keeps the rower away from, and a Try again that cannot
+    // reconnect while the driver is still installed.
+    await expect(page.getByRole("button", { name: "End session" })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(
+      0,
+    );
+  });
+});

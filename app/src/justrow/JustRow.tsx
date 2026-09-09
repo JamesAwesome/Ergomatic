@@ -23,7 +23,7 @@ import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 // component entirely, and without its own acquire the phone sleeps mid-row
 // — the exact iOS data-loss failure the lifecycle work exists to prevent.
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
-import { deriveAxes } from "../monitor/connectedAxes";
+import { deriveAxes, deriveLinkLoss } from "../monitor/connectedAxes";
 import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption";
 import { read as readHandoff } from "../monitor/handoffStore";
 import SupportMatrixLink from "../monitor/SupportMatrixLink";
@@ -32,6 +32,7 @@ import ChecklistLine from "../workout/ChecklistLine";
 import ConnectedSurface from "../workout/ConnectedSurface";
 import FreeRowChip from "../workout/FreeRowChip";
 import { freeRowTotals } from "./totals";
+import { loadReadyCard } from "../you/readyCard";
 
 /**
  * `/justrow` — the free row.
@@ -70,7 +71,13 @@ export default function JustRow() {
   // lead action, inherited from the programmed interstitial (Gate 0 kept
   // both of its buttons). Motion makes this moot: once the record opens the
   // surface takes over regardless.
-  const [showNumbers, setShowNumbers] = useState(false);
+  // PHASE RN: the rower's own setting seeds this (spec
+  // `2026-09-09-ready-card-preference-design.md`). Read once per mount, which
+  // is the correct lifetime — the only writer is `/you/settings`, and
+  // reaching it unmounts this screen.
+  const [showNumbers, setShowNumbers] = useState(
+    () => loadReadyCard() === "skip",
+  );
 
   // Phase NF: the press's own attempt ID keys the guard's staged receipt, so
   // it travels into `connect(request)`; Try again replays the LAST REQUEST
@@ -136,6 +143,13 @@ export default function JustRow() {
   // precedent — so this screen asks the four axes the same questions
   // `JustRowObserver` asks.
   const axes = deriveAxes({
+    phase: session.phase,
+    frozen: session.frozen,
+    runOpen: session.runOpen,
+    failureLeavesLinkUp: null,
+    frameSilence: session.frameSilence,
+  });
+  const linkLoss = deriveLinkLoss({
     phase: session.phase,
     frozen: session.frozen,
     runOpen: session.runOpen,
@@ -249,7 +263,27 @@ export default function JustRow() {
   // interstitial makes, on the same axis. The one `useMonitorSession`
   // instance this component owns is handed DOWN, never re-called: two
   // hooks would mean two drivers and two records.
-  if (axes.session !== "none" || (showNumbers && axes.program === "armed")) {
+  // GATE 0 RULING 2 (James, 2026-09-09): the hand-off arm also requires the
+  // link to be UP, for a tapped hand-off as well as a skipped one.
+  //
+  // Without `axes.link !== "lost"` this arm sits above the pre-row lost
+  // branch below, so an `armed AND lost` session — reachable, since
+  // `deriveLink` at `ready` returns `frameSilence ? "lost" : "up"` — renders
+  // the mid-row surface and its two-tap End, deleting the `Try again` the
+  // pre-row screen exists to offer. The documented producer is a
+  // background/resume gap over the 2500 ms watchdog, i.e. the phone sleeping
+  // through the pre-pull wait: precisely the event the ready card's
+  // KEEP YOUR PHONE SCREEN ON exists to prevent, and precisely what a rower
+  // who turned that card off no longer sees.
+  //
+  // `axes.session !== "none"` is deliberately NOT guarded: once a run is
+  // open, the surface owns the mid-row lost treatment, and the branch below
+  // says so in its own comment ("Try again is honest here only because no row
+  // was under way"). That sentence is the condition this line now tests.
+  if (
+    axes.session !== "none" ||
+    (showNumbers && axes.program === "armed" && axes.link !== "lost")
+  ) {
     // THE KEPT PAIR, read here because this component owns the store read
     // (`ConnectedSurface` is store-blind by its own layering rule) and
     // resolved by `freeRowTotals` — the same single source the log door
@@ -352,23 +386,61 @@ export default function JustRow() {
     // surface above, which owns the mid-row lost treatment). The monitor
     // does not advertise while a Just Row is open, so Try again is honest
     // here only because no row was under way.
+    //
+    // TWO PRODUCERS, ONE BRANCH, AND ONLY ONE OF THEM IS AUTHORITATIVE
+    // (Gate 0 round 2, James 2026-09-09). `axes.link === "lost"` is reached
+    // from a transport-reported `disconnected` AND from `frameSilence` at
+    // `ready`/`programming`/`pairing`. They are not the same fact:
+    //
+    //   - `disconnected` is the radio telling us. Its handler disposes the
+    //     driver, so `connect()`'s opening guard passes and Try again really
+    //     does reconnect. That case keeps the screen it has always had.
+    //   - `frameSilence` is a GUESS: 2.5 s of absence, retracted after 10 s
+    //     if frames resume (`BANNER_RETRACT_HYSTERESIS_MS`), and its
+    //     documented producer is a background/resume gap over a link that is
+    //     perfectly healthy. `handleFrameSilence` sets one flag and disposes
+    //     nothing, so `driverRef` is still installed and `connect()`
+    //     early-returns: TRY AGAIN WAS DEAD IN THIS STATE, and had been since
+    //     before this phase. Phase RN made it the destination for two more
+    //     classes of rower, which is how it was found.
+    //
+    // Offering an action that cannot run is worse than offering none, and
+    // making it run was rejected at the gate: the fix would have terminated
+    // an armed monitor in response to a heuristic that retracts itself, and
+    // the terminate's own ack has no bound while frames are stopped. So the
+    // silent case says what is true and waits. It costs nothing, and the
+    // state usually heals before the rower has finished reading it.
+    // ASKED OF THE AXES, never of `session.phase` — this file is not on the
+    // `ConnectedPhase` reader allowlist, and its own test pins that. The
+    // distinction the screen needs is "who said so", which is what
+    // `deriveLinkLoss` answers.
+    const linkGoneForReal = linkLoss === "reported";
     return (
       <main className="screen connected-interstitial">
         <div className="connected-interstitial-body">
           <p className="connected-status-label">JUST ROW</p>
-          <h1 className="connected-serif-line">Lost the monitor</h1>
+          <h1 className="connected-serif-line">
+            {linkGoneForReal ? "Lost the monitor" : "Waiting for the monitor"}
+          </h1>
+          {!linkGoneForReal && (
+            <p className="connected-body-line">
+              It has gone quiet. This usually clears on its own.
+            </p>
+          )}
         </div>
         <div className="action-stack connected-interstitial-actions">
-          <button
-            type="button"
-            className="button-l1"
-            onClick={() => {
-              armedThisStart.current = false;
-              retryConnect();
-            }}
-          >
-            Try again
-          </button>
+          {linkGoneForReal && (
+            <button
+              type="button"
+              className="button-l1"
+              onClick={() => {
+                armedThisStart.current = false;
+                retryConnect();
+              }}
+            >
+              Try again
+            </button>
+          )}
           <button
             type="button"
             className="button-l2"

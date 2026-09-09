@@ -51,6 +51,7 @@ import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { createFakeTransport } from "../monitor/transports/fake";
+import { createRecordingTransport } from "../monitor/transports/recording";
 import {
   ProgramRejectionError,
   REJECTION_VERBS,
@@ -62,6 +63,7 @@ import {
   type MonitorSession,
   type RunIdentity,
 } from "../monitor/useMonitorSession";
+import { READY_CARD_KEY } from "../you/readyCard";
 import { commentStrippedSource, cssRules } from "../test/cssView";
 import { renderedCopy } from "../test/renderedCopy";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
@@ -2663,5 +2665,325 @@ describe("targeted failures (Phase NF)", () => {
       await Promise.resolve();
     });
     expect(store.stagedRetireAttemptId()).toBeNull();
+  });
+});
+
+/**
+ * Phase RN: the ready card becomes a preference (spec
+ * `2026-09-09-ready-card-preference-design.md`, Gate 0 CLOSED 2026-09-09).
+ *
+ * The store is REAL here, driven through `localStorage`, because the thing
+ * being tested is that the component reads what a rower's setting actually
+ * wrote. `readyCard.ts` keeps a module-scope fallback that is only ever set
+ * on a REFUSED write, so a plain `setItem` in these tests is indistinguishable
+ * from a real save.
+ */
+describe("the ready card is a preference (Phase RN)", () => {
+  beforeEach(() => {
+    localStorage.removeItem(READY_CARD_KEY);
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(READY_CARD_KEY);
+  });
+
+  it("shows the card at ready when nothing is stored — today's behaviour (I-1)", () => {
+    renderInterstitial({ phase: "ready", deviceName: "PM5 918273645" });
+    expect(screen.getByText("Ready when you pull")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Show me the numbers" }),
+    ).toBeVisible();
+  });
+
+  it("hands straight over to the numbers when the rower chose SKIP", () => {
+    localStorage.setItem(READY_CARD_KEY, "skip");
+    renderInterstitial({ phase: "ready", deviceName: "PM5 918273645" });
+    expect(screen.queryByText("Ready when you pull")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Show me the numbers" }),
+    ).toBeNull();
+    // The positive observable, asserted alongside the two negatives: the
+    // surface is what replaced the card, not an empty screen.
+    expect(screen.getByRole("button", { name: "End session" })).toBeVisible();
+  });
+
+  it("shows the card for a stored SHOW, so the skip is not just 'any stored value'", () => {
+    localStorage.setItem(READY_CARD_KEY, "show");
+    renderInterstitial({ phase: "ready", deviceName: "PM5 918273645" });
+    expect(screen.getByText("Ready when you pull")).toBeVisible();
+  });
+
+  /**
+   * I-4: SKIP removes the ready card and reaches no other screen. Each case
+   * is a phase this screen renders its own treatment for, asserted with the
+   * preference set to SKIP — the value that could bypass them.
+   *
+   * THESE THREE CANNOT GO RED ON ANY MUTATION OF THIS FEATURE, and that is
+   * worth saying rather than letting them read as gates. `pairing`,
+   * `programming` and `failed` all early-return ABOVE the
+   * `ready && !numbersRequested` branch, so the initializer cannot reach
+   * them — the spec's named mutation for I-4 ("widen the initializer to force
+   * the flag regardless of phase") is not constructible in this file. They
+   * are regression cover for a future reordering of the ladder, not proof
+   * about the setting.
+   *
+   * Just Row's equivalent case is NOT in the same position: its hand-off arm
+   * sits at the TOP of its ladder, so the same mutation there does bite. The
+   * asymmetry is a property of the two ladders, not of the two test files.
+   */
+  describe("SKIP reaches no screen but the ready card (I-4)", () => {
+    beforeEach(() => {
+      localStorage.setItem(READY_CARD_KEY, "skip");
+    });
+
+    it("still shows the pairing screen", () => {
+      renderInterstitial({ phase: "pairing" });
+      expect(screen.getByText(/Connecting/)).toBeVisible();
+    });
+
+    it("still shows the programming screen", () => {
+      renderInterstitial({ phase: "programming", deviceName: "PM5 918273645" });
+      expect(screen.getByText("Sending the workout")).toBeVisible();
+    });
+
+    it("still shows the failure screen", () => {
+      renderInterstitial({
+        phase: "failed",
+        error: connectedError({ reason: "timeout" }),
+      });
+      expect(screen.queryByRole("button", { name: "End session" })).toBeNull();
+    });
+  });
+
+  /**
+   * GATE 0 RULING 2, THE HALF THAT DOES NOT CHANGE HERE. Just Row's ladder
+   * gained a link guard because its hand-off arm sits above a pre-row
+   * `Try again` screen. This screen has no such branch — frame silence at
+   * `ready` is not phase `disconnected` — so under SKIP a frame-silent ready
+   * lands on the surface's LOST treatment instead of on a ready card that
+   * says "Ready when you pull" and mentions nothing. That is the accepted
+   * divergence, and this test is what makes it a decision rather than an
+   * accident: if someone later adds a link guard here to "match JustRow",
+   * this goes red and they have to come back to the ruling.
+   */
+  it("hands over even when the link has gone silent, and says so on the surface", () => {
+    localStorage.setItem(READY_CARD_KEY, "skip");
+    renderInterstitial({
+      phase: "ready",
+      deviceName: "PM5 918273645",
+      frameSilence: true,
+    });
+    expect(screen.queryByText("Ready when you pull")).toBeNull();
+    expect(screen.getByText("LOST THE MONITOR")).toBeVisible();
+  });
+});
+
+/**
+ * I-5: SKIP CHANGES NOTHING ON THE WIRE.
+ *
+ * The claim is that by the time either ready card renders, the program has
+ * been sent and acked, so the card's button only flips local state and
+ * skipping it cannot change what the monitor was told or when. An effect
+ * census of `ConnectedSurface` and its subtree said the same thing, and a
+ * census is a structural argument (RF26) — this is the empirical one.
+ *
+ * The real hook, the real driver, the real CSAFE-correct fake, wrapped in the
+ * recording tap that `transports/recording.ts` already provides. Walk the
+ * same fixture twice, once per setting, and compare every byte the app WROTE.
+ * Nothing is asserted about what the fake sent back: the invariant is about
+ * what we say to the monitor.
+ */
+describe("I-5: skipping the ready card changes nothing on the wire", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.removeItem(READY_CARD_KEY);
+  });
+
+  /** Runs one connect-and-arm walk and returns every transmitted frame as
+   *  `char|hex` strings — the app's side of the conversation, in order. */
+  async function transmittedBytes(choice: "show" | "skip"): Promise<string[]> {
+    localStorage.setItem(READY_CARD_KEY, choice);
+    vi.doUnmock("../monitor/useMonitorSession");
+    const real = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    mockUseMonitorSession.mockImplementation(real.useMonitorSession);
+
+    let clock = 0;
+    const tap = createRecordingTransport(
+      createFakeTransport({
+        program: FIXTURE.program,
+        deviceName: DEVICE_NAME,
+      }),
+      // A DETERMINISTIC clock, so the two walks cannot differ by timing
+      // noise. The comparison is about byte sequence, not latency.
+      () => (clock += 1),
+    );
+
+    const view = render(
+      <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
+        deps={{
+          createTransport: () => tap.transport,
+          now: () => t0,
+          driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        }}
+      />,
+    );
+
+    // Pump until the walk has armed. The two settings land on DIFFERENT
+    // screens at that moment, which is the whole feature, so the stop
+    // condition is the one thing both share: the surface's own navigation
+    // for `skip`, the ready card for `show`.
+    for (let i = 0; i < 40; i += 1) {
+      await act(async () => {
+        (tap.transport as unknown as { tick?: (n: number) => void }).tick?.(0);
+        await Promise.resolve();
+      });
+      if (
+        screen.queryByText("Ready when you pull") ??
+        screen.queryByRole("navigation", { name: "Connected panes" })
+      ) {
+        break;
+      }
+    }
+
+    // Both walks must actually have got there, or an equality of two empty
+    // lists would pass (RF21: a gate that cannot go red).
+    if (choice === "show") {
+      expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
+    } else {
+      expect(
+        screen.getByRole("navigation", { name: "Connected panes" }),
+      ).toBeInTheDocument();
+    }
+
+    const written = tap
+      .events()
+      .filter(
+        (e): e is Extract<typeof e, { dir: "tx" }> =>
+          "dir" in e && e.dir === "tx",
+      )
+      .map((e) => `${e.char}|${e.hex}`);
+    view.unmount();
+    cleanup();
+    return written;
+  }
+
+  it("writes the identical byte sequence whether the card is shown or skipped", async () => {
+    const shown = await transmittedBytes("show");
+    const skipped = await transmittedBytes("skip");
+
+    // The independent literal the pair rests on: a connect-and-program walk
+    // over this fixture writes SOMETHING. Without it, two empty lists are
+    // equal and the test proves nothing.
+    expect(shown.length).toBeGreaterThan(0);
+    expect(skipped).toStrictEqual(shown);
+  });
+
+  /**
+   * THE PROBE'S OWN PROBE. The equality above is only worth something if the
+   * recorded sequence actually carries the programming exchange — two walks
+   * that recorded nothing but a connect handshake would also be equal, and
+   * the gate would be decoration (RF21).
+   *
+   * So: walk a DIFFERENT workout and show the bytes differ. That proves the
+   * tap records what the app sent about this particular program, which is the
+   * thing the equality is claiming stayed the same.
+   *
+   * It does NOT claim the skip path could produce a divergence. It could not,
+   * and the reason is structural rather than empirical: `ConnectedSurface` is
+   * handed a `MonitorSession` VALUE and has no transport handle, so there is
+   * no one-line edit that makes mounting it write. The hardening pass's
+   * effect census established that; this pair stops the equality from being a
+   * green light nobody ever tested.
+   */
+  it("records the programming exchange, so the equality is over real content", async () => {
+    const shown = await transmittedBytes("show");
+
+    const other = LIBRARY_WORKOUTS.find(
+      (w) => w.title !== "Filling Low" && w.steps.length > 0,
+    );
+    if (other === undefined) throw new Error("no second library fixture");
+    const otherPhases = buildRun(
+      buildDraft({
+        id: "other",
+        title: other.title,
+        type: other.type as WorkoutType,
+        steps: other.steps,
+      }),
+      baselines,
+      t0,
+    ).phases;
+    const otherCompiled = compileProgram(otherPhases);
+    if ("code" in otherCompiled) {
+      throw new Error(
+        `second fixture failed to compile: ${otherCompiled.code}`,
+      );
+    }
+
+    let clock = 0;
+    const tap = createRecordingTransport(
+      createFakeTransport({
+        program: otherCompiled,
+        deviceName: DEVICE_NAME,
+      }),
+      () => (clock += 1),
+    );
+    render(
+      <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
+        program={otherCompiled}
+        phases={otherPhases}
+        identity={{
+          workoutId: "other",
+          title: other.title,
+          ...TEST_SEED,
+        }}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
+        deps={{
+          createTransport: () => tap.transport,
+          now: () => t0,
+          driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        }}
+      />,
+    );
+    for (let i = 0; i < 40; i += 1) {
+      await act(async () => {
+        (tap.transport as unknown as { tick?: (n: number) => void }).tick?.(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("Ready when you pull")) break;
+    }
+    expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
+
+    const otherWritten = tap
+      .events()
+      .filter(
+        (e): e is Extract<typeof e, { dir: "tx" }> =>
+          "dir" in e && e.dir === "tx",
+      )
+      .map((e) => `${e.char}|${e.hex}`);
+
+    expect(otherWritten.length).toBeGreaterThan(0);
+    expect(otherWritten).not.toStrictEqual(shown);
   });
 });

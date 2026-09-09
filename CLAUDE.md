@@ -857,6 +857,23 @@ often they recur.
     the layer that can reach it** — and a green assertion you could not make
     fail is decoration, so delete it or move it rather than keeping it for
     the coverage.
+    **AN IN-MEMORY FALLBACK BESIDE A STORE DISARMS EVERY PERSISTENCE GATE,
+    AND THE READ ORDER IS NOT THE HALF THAT MATTERS (Phase RN, 2026-09-09).**
+    A preference module kept a module-scope `lastSet` so a REFUSED write still
+    took effect for the session. Written the obvious way — assigned on every
+    write, read before storage — it meant a completely broken `setItem` still
+    read back the chosen value, so the seam test and the e2e leg that existed
+    to catch a broken store both stayed green. The antagonist settled it by
+    running the module under Node with `setItem` replaced by a no-op: the save
+    reported `true`, storage held nothing, the read said `skip`.
+    **The fix is the ASSIGNMENT, not the ordering:** set the fallback only on
+    the refused path and clear it on the successful one. Four probes against
+    the finished suite measured which half was load-bearing — restoring the old
+    read order alone fails NOTHING, restoring the old assignment fails two — so
+    the spec says the ordering is defence-in-depth rather than the thing under
+    test (RF26). **Any value a module can answer with WITHOUT consulting its
+    store is a value that hides the store being broken.**
+
     **A concurrency gate proved by RACING is RF21 by construction (PR #269,
     2026-09-02).** "Two concurrent mints leave one row" was specified with a
     `Promise.all` race; the named mutation (atomic upsert → delete + insert)
@@ -1268,6 +1285,18 @@ often they recur.
     alone is sound. Generalised: **when a test's conclusion rests on a
     property of HOW it got there, that property is an assertion, not a
     comment.**
+    **THE MIRROR, from Phase RN (2026-09-09): a CLICK navigation makes both
+    legs BLIND where JC's reload made both PASS.** A click is same-document by
+    construction, so a module's own in-memory state survives it — a storage
+    seam test that navigates by click proves the module remembers, never that
+    the store does. A phase whose whole claim was "the rower's choice survived
+    being written down" prescribed exactly that leg and called it
+    load-bearing. **Ask which process boundary a gate actually crosses**, then
+    take two legs and say which one IS the gate; a same-document sentinel,
+    asserted present in one and absent in the other, is what keeps them
+    honest. It earned itself immediately: the first draft's setup helpers used
+    `page.goto`, so its "same document" claim was false before the feature was
+    even reached.
 
 39. **A FORCE-PUSH CAN PRODUCE NO CI RUN AT ALL, AND `gh pr checks` THEN SAYS
     "no checks reported" — ABSENT, NOT RED (2026-09-08).** After amending a
@@ -1310,6 +1339,27 @@ often they recur.
     from measurements taken through `pnpm exec`. When a claim is that no
     signal exists, re-run it through every INVOCATION SHAPE the production
     path uses before believing it.
+
+41. **A CONNECTED E2E FIXTURE THAT STREAMS FRAMES MAKES EVERY ASSERTION ABOUT
+    A PRE-ROW STATE DECORATION (Phase RN, 2026-09-09).** `injectFakeMonitor`
+    and the Just Row capture harness both default to a streaming timeline. The
+    first rowing frame OPENS THE RUN, and an open run makes
+    `axes.session !== "none"`, which renders the connected surface **regardless
+    of any pre-row flag, screen or setting**. So a test that waits patiently
+    for the surface will find it whether or not the thing it is testing works.
+    **Measured, in both directions.** A phase gating a new pre-row preference
+    deleted its store's `setItem` — the mutation the whole feature's gate
+    existed to catch — and **all three e2e legs passed**. On an empty
+    timeline (`events: []`) the same mutation fails both. Separately, a Just
+    Row capture probe waiting 20 s for the surface passed with the feature
+    reverted; bounded to 4 s, under the fake's own 8 s story start, it failed
+    correctly. **It hit twice in one day in two different harnesses, which
+    makes it a property of the fake rather than of one test.**
+    Two checks: **any assertion about a state BEFORE the first pull runs on a
+    motionless fixture, or bounded below the fixture's own first frame**; and
+    when such a test passes on the first try, delete the producer it depends on
+    and confirm it goes red, because "the surface appeared" is the one
+    observable this fake will hand you for free.
 
 ## Commands
 

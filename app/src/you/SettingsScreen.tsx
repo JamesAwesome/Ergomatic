@@ -8,6 +8,11 @@ import {
   type JudgeColor,
   type JudgeColors,
 } from "./judgeColors";
+import {
+  loadReadyCard,
+  saveReadyCard,
+  type ReadyCardChoice,
+} from "./readyCard";
 
 /**
  * `/you/settings` — the screen behind You's SETTINGS row (Phase JC, spec
@@ -35,6 +40,21 @@ import {
  * nothing else: the colours are live for this session and the screen says
  * the choice will not survive a reload. A storage failure must never also
  * make the screen look inert.
+ *
+ * PHASE RN ADDED THE READY SCREEN SECTION (spec
+ * `2026-09-09-ready-card-preference-design.md`, Gate 0 CLOSED 2026-09-09,
+ * copy candidate A). Same `OptionGroup`, same `.setting-*` styling — those
+ * class names were added to the existing `.judge-*` rules' selector lists IN
+ * PLACE rather than by moving or renaming anything, because RF37 is this
+ * repo's most recent production bug and it was caused by relocating colour
+ * rules past an equal-specificity neighbour.
+ *
+ * TWO WARNINGS, ONE PER CONTROL, AND THAT IS NOT TIDINESS. The colour
+ * notice's own words are "These colors are on now" — a promise about a
+ * control the rower may not have touched — and a single shared boolean would
+ * let a successful tap on either control clear a genuine warning raised by
+ * the other. The two `useState`s below are what make each warning belong to
+ * the write that produced it.
  *
  * PLAIN `.screen`, like `BaselinesScreen.tsx` and unlike the two read-only
  * `.overlay-screen` doors — this screen carries interactive controls and
@@ -137,9 +157,21 @@ const GROUPS: readonly { heading: string; rows: readonly SlotRow[] }[] = [
   },
 ];
 
+/** Gate 0's approved wording. No swatch and no preview specimen: the thing
+ *  being switched is a whole screen, and it is not this one. */
+const READY_CARD_OPTIONS: readonly {
+  value: ReadyCardChoice;
+  label: ReactNode;
+}[] = [
+  { value: "show", label: "SHOW" },
+  { value: "skip", label: "SKIP" },
+];
+
 export default function SettingsScreen() {
   const [colors, setColors] = useState<JudgeColors>(loadJudgeColors);
-  const [saveFailed, setSaveFailed] = useState(false);
+  const [colorSaveFailed, setColorSaveFailed] = useState(false);
+  const [readyCard, setReadyCard] = useState<ReadyCardChoice>(loadReadyCard);
+  const [readyCardSaveFailed, setReadyCardSaveFailed] = useState(false);
 
   function choose(slot: keyof JudgeColors, next: JudgeColor) {
     const updated = { ...colors, [slot]: next };
@@ -148,17 +180,33 @@ export default function SettingsScreen() {
     // on the persist. A `false` here is not an error the rower can act on
     // beyond knowing it happened, and it never costs them the repaint.
     applyJudgeColors(updated);
-    setSaveFailed(!saveJudgeColors(updated));
+    setColorSaveFailed(!saveJudgeColors(updated));
+  }
+
+  /** The ready card has no live half to apply — its consumers read the store
+   *  at the next connect — so the state below IS the session's answer, and
+   *  the store's in-memory fallback is what keeps it true after a refused
+   *  write. The rower is told only that it will not survive a reload. */
+  function chooseReadyCard(next: ReadyCardChoice) {
+    setReadyCard(next);
+    setReadyCardSaveFailed(!saveReadyCard(next));
   }
 
   return (
     <main className="screen">
       <BackLink fallback="/you" />
       <h1 className="screen-title">Settings</h1>
-      {saveFailed && (
+      {colorSaveFailed && (
         <p className="notice" role="alert">
           These colors are on now, but they won&apos;t stick. This device
           wouldn&apos;t let the app save them, so a reload brings the old ones
+          back.
+        </p>
+      )}
+      {readyCardSaveFailed && (
+        <p className="notice" role="alert">
+          This is set for now, but it won&apos;t stick. This device
+          wouldn&apos;t let the app save it, so a reload brings the old choice
           back.
         </p>
       )}
@@ -200,6 +248,25 @@ export default function SettingsScreen() {
           </p>
         </section>
       ))}
+      <section className="setting-group">
+        <h2 className="section-heading">READY SCREEN</h2>
+        <div className="setting-slot">
+          <p className="setting-slot-name">
+            <span className="setting-slot-title">
+              WHEN THE MONITOR IS READY
+            </span>{" "}
+            <span className="setting-slot-hint">(before your first pull)</span>
+          </p>
+          <OptionGroup
+            options={READY_CARD_OPTIONS}
+            value={readyCard}
+            onChange={chooseReadyCard}
+            ariaLabel="Ready screen"
+            className="setting-options"
+            optionClassName="setting-option"
+          />
+        </div>
+      </section>
     </main>
   );
 }

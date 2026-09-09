@@ -9790,3 +9790,75 @@ through to it, and both B-block expressions pass `tsc --noEmit`, `eslint` and
 per-fork heap limit is 4192 MB. Idle compose stacks cost 236 MB across two, and
 `--coverage` adds 50 MB — both falsified as memory levers, both recorded so
 nobody re-derives them.
+
+## Hardening run, 2026-09-09 (Phase RN, the ready-card preference)
+
+One entry for the whole run, both lenses. Techniques, not history.
+
+- **"An in-memory `lastSet` beside the store is four harmless lines that make a
+  refused write take effect for the session."** False, and it disarmed the two
+  gates the spec called load-bearing. `loadReadyCard` returned `lastSet` BEFORE
+  consulting storage, so after any save in the same JS realm the store is never
+  read again. Both prescribed persistence gates live in one realm — the client
+  seam test by construction, and the e2e leg because the spec itself required a
+  CLICK navigation (same-document) rather than a reload. Deleting `setItem`
+  outright leaves both green. **Technique: copy the module into a scratch tree
+  and run it under Node with the platform API sabotaged** (`setItem` a no-op,
+  then storage holding the opposite value). Three lines of output settled what
+  three paragraphs of spec prose asserted: `saveReadyCard('skip')` returned
+  `true`, storage held nothing, `loadReadyCard()` said `skip`. **Corollary
+  worth keeping: a same-document navigation is the mirror of RF38.** JC's
+  lesson was that a reload made both legs pass; here a click makes both legs
+  blind. When a gate's whole claim is "the value survived a real store", ask
+  which process boundary it actually crosses.
+
+- **"Skipping the card removes the card and nothing else."** False for JustRow.
+  `deriveProgram("ready") === "armed"` and `deriveLink` at `ready` returns
+  `frameSilence ? "lost" : "up"`, so `armed ∧ lost` is reachable — and
+  `JustRow.tsx`'s `showNumbers && program === "armed"` clause sits ABOVE its
+  link-lost branch. Seeding the flag true routes a pre-row link loss into the
+  MID-ROW surface, deleting the "Try again" the pre-row screen exists to offer.
+  The screen's own comment named the precondition being broken: "Try again is
+  honest here only because no row was under way." **Technique: when a change
+  seeds a boolean that a render LADDER already reads, execute the axis
+  functions over the states the ladder discriminates and diff which branch wins
+  before and after.** Reading the diff (`useState(false)` → `useState(() =>
+  loadReadyCard() === "skip")`) shows a one-line change; running `deriveAxes`
+  shows a re-routed screen. A flag's blast radius is the ladder, not the line.
+  **Then it was reproduced in a browser rather than left as a derivation:** a
+  one-frame `WAITTOBEGIN` fake (distance 0, so no run opens) arms the watchdog
+  and then goes silent, which latches `frameSilence` at `ready`. Two captures,
+  four minutes. A finding James can see beats a finding he has to trust.
+
+- **Attacked and NOT broken: "mounting the connected surface earlier cannot
+  reach the wire."** Held under a full effect census of `ConnectedSurface` and
+  its subtree: two gesture-armed timers with cleanup-only mount effects, one
+  ended-effect gated on `phase === "ended"`, one storage READ, and a poll that
+  bails unless a dev-only global exists. Both entry points hand the SAME
+  `useMonitorSession` instance down as a value, so no second driver is built.
+  **Technique that made this cheap: census every `useEffect`/`setTimeout`/
+  `setInterval` in the newly-reachable subtree and classify each as
+  mount-armed or gesture-armed**, rather than trusting the component's own
+  header comment claiming it "calls no driver, no transport and no monitorRun
+  function". The header was right; it was not evidence.
+
+- **Two cheap record checks that both found something.** (1) `grep -rln` the
+  string a spec claims to have grepped: its I-1 gate named three e2e specs; the
+  grep returns five. (2) When a spec's `file:line` citations look off, run the
+  same grep against `HEAD~1` — this spec's `ConnectedInterstitial` line numbers
+  matched the commit BEFORE the branch's own base exactly, which said the
+  author had not opened the current file, and the head commit had changed 50
+  lines of it.
+
+- **Lens 2's one find, and it is a decomposition finding rather than a code
+  one.** The module itself was clean under absent/empty/valued and fails open
+  to today's behaviour on every path. But the gate table stated I-5 ("the wire
+  is unchanged") as ONE row over two consumers whose test seams are not
+  symmetrical: `ConnectedInterstitial` already accepts `deps.createTransport`
+  and has a real-hook fake walk to copy, while `JustRow` calls the hook with no
+  arguments, has no `deps` prop, and mocks the whole hook module in its tests —
+  so its half needs a `vi.doMock` of `adapters/monitorTransport`, a technique
+  used nowhere else here. **Technique: for any invariant stated once over two
+  consumers, ask what the IMPLEMENTER will find when they reach the second
+  one.** An unnamed asymmetry is a silent off-ramp (RF34's shape): build the
+  easy half, find no analogous seam, and let the claim stand half-proved.
