@@ -2146,14 +2146,15 @@ closed with zero Concept2 contact.
 
 ## Tooling
 
-- **`pnpm screenshots` rewrites captures no code change touched.** Filed FIVE
-  separate times over three weeks; reconciled into this one row on 2026-09-08
-  (Phase MT close-out, ruled DOC-only by James — the FIX CARRIES). The count
-  moves with the corpus and with the day, so the history is the useful part,
-  not any single figure — and the EARLIEST sighting is the one that says how
-  long this has been visible:
+- **`pnpm screenshots` rewrites captures no code change touched.** SIGHTED
+  five times over three weeks, in FOUR filings — the 2026-08-18 sighting never
+  got a row of its own; it rode inside the 2026-08-28 one. Those four rows were
+  deleted and reconciled into this one on 2026-09-08 (Phase MT close-out, ruled
+  DOC-only by James — the FIX CARRIES). The count moves with the corpus and
+  with the day, so the history is the useful part, not any single figure — and
+  the EARLIEST sighting is the one that says how long this has been visible:
   - **2026-08-18 — one file, and it was reverted rather than explained**:
-    filed as `today.png`'s "unexplained onboarding read-marker diff",
+    recorded as `today.png`'s "unexplained onboarding read-marker diff",
     reverted where it surfaced and never explained. It rode inside the
     2026-08-28 row below and was LOST when the rows were first merged into
     this one; the merge's own review put it back, because on a row whose

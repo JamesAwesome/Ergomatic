@@ -155,7 +155,7 @@ class ScanTimeoutError extends Error {
 export const TARGET_SCAN_DEADLINE_MS = 10_000;
 export const TARGET_COLLISION_WINDOW_MS = 1_000;
 
-// RF32 CENSUS, SETTLED — THESE THREE SAY "PM5" AND A ROWER READS THEM.
+// RF32 CENSUS — THESE THREE SAY "PM5" AND A ROWER CAN READ THEM.
 // Recorded here rather than in a PR body (RF14) so the next anonymise-the-PM5
 // sweep does not have to re-litigate it.
 //
@@ -165,12 +165,28 @@ export const TARGET_COLLISION_WINDOW_MS = 1_000;
 // (`ConnectedInterstitial.tsx`'s detail panel) — so an NFC scan that finds
 // nothing advertising prints the first of these to a rower today.
 //
-// They KEEP the name anyway, under RF32's own disambiguation exemption: each
-// is about the monitor targeted BY NAME, which is the case where the rower
-// has to be told WHICH monitor. "The named monitor was not advertising"
-// loses the only fact the sentence exists to carry. `TargetScanInterrupted`
-// and `ScanCleanupFailed` below target nothing by name and correctly say
-// neither.
+// WHY THEY KEEP THE NAME — REASON CORRECTED 2026-09-09, the ruling unchanged.
+// This block used to argue that "The named monitor was not advertising" loses
+// the only fact the sentence carries. That was invented and it is wrong: the
+// word "named" carries it, and the exact name is already on the same frame two
+// lines up (`notAdvertisingDetail`: "Couldn't reach PM5 432331249."). An
+// invented receipt behind a "SETTLED" label is worse than none (RF30), so here
+// is the true one, which is about the SLOT rather than the sentence.
+//
+// These are Error `message`s and they reach the screen only through `raw`,
+// documented as "the un-prettified evidence ... for state 6's DETAIL panel"
+// (`ConnectedError`'s own doc comment) — the same line that prints hex traces.
+// The COPY for these reasons is `detail`, and it is already RF32-clean without
+// them: "End the monitor's current connection, then try again.", "More than
+// one PM5 has this name. Use Connect." (an example RF32's own text names as
+// allowed) and `notAdvertisingDetail`'s two lines. What each message names is
+// the advertised NAME the targeted lookup matched on, whose format is literally
+// `PM5 <serial>` — the string both device pickers filter by prefix
+// (`webBluetooth.ts`'s `requestDevice` filters, and `requestDevice` below).
+//
+// NOT settled forever: if the DETAIL panel is ever promoted from evidence to
+// copy, these three come back into scope. `TargetScanInterrupted` and
+// `ScanCleanupFailed` below target nothing by name and correctly say neither.
 export class TargetMonitorNotAdvertisingError extends Error {
   constructor() {
     super("The named PM5 was not advertising within the targeted deadline.");

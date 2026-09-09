@@ -333,6 +333,17 @@ export default function ConnectedInterstitial({
   // never writes the caption and so could never have cleared it from here.
   // The clear now sits at the refusal itself, in `useMonitorSession.ts`,
   // which all three doors share (`monitor/lastDevice.ts`'s own header).
+  //
+  // WHY THE SPLIT IS SAFE, since the invariant rests on it (F5, 2026-09-09):
+  // this save is a PASSIVE effect on `session.deviceName`, while the forget is
+  // SYNCHRONOUS inside the driver-event callback — so on paper a refusal could
+  // land before the name is published and this effect could write it back. It
+  // cannot: `connect()` has no `await` between subscribing to `driver.events()`
+  // and `update({ deviceName: device.name })` (`useMonitorSession.ts`; verified
+  // by reading the whole span), so no event can interleave there, and by the
+  // time a refusal callback can run the name is already published and this
+  // effect has already saved it. Add an `await` in that span and the ordering
+  // is gone.
   useEffect(() => {
     if (session.deviceName !== null) saveLastDevice(session.deviceName);
   }, [session.deviceName]);
