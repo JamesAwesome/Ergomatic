@@ -33,8 +33,24 @@
 // `cssView.ts`'s own header documents three shipped instances of exactly
 // that defect.
 
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { cleanup, render } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { compileProgram } from "../../domain/monitor/program.js";
+import type { MonitorFrame } from "../../domain/monitor/types.js";
+import type { WorkoutType } from "../../domain/types.js";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import { buildDraft } from "../session/draft";
+import { buildRun } from "../session/engine";
+import PostWorkoutSummary from "../session/PostWorkoutSummary";
+import type { SummaryModel } from "../session/summaryModel";
+import PaneGrid from "../workout/connected/PaneGrid";
+import PaneLive from "../workout/connected/PaneLive";
+import type { SurfaceModel } from "../workout/connected/surfaceModel";
+import { buildSurfaceModel } from "../workout/connected/surfaceModel";
+import SettingsScreen from "../you/SettingsScreen";
 import {
   commentStrippedSource,
   cssRules,
@@ -48,7 +64,7 @@ function thisDirPath(filename: string): string {
   // only this file's OWN basename, so `filename` is relative to `theme/`.
   return import.meta.url
     .replace(/^file:\/\//, "")
-    .replace(/judgeTokens\.test\.ts$/, filename);
+    .replace(/judgeTokens\.test\.tsx$/, filename);
 }
 
 const tokensCss = commentStrippedSource(
@@ -328,5 +344,350 @@ describe("I-3's cascade half: nothing outranks a verdict by source order", () =>
     expect(inheritanceBreakers(commentStrippedSource(sample))).toStrictEqual([
       ".summary-row-pace { color: var(--ink) }",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LOW-3: the list above is DERIVED, not maintained by hand
+// ---------------------------------------------------------------------------
+
+// WHY THIS EXISTS (whole-branch review, 2026-09-08). `JUDGED_CELL_CLASSES`
+// was eight names typed out by hand. All eight were right on the day, and
+// NOTHING failed when a ninth judged cell appeared without being added: the
+// sweep above would simply stop covering it. That is the weakest possible
+// link in the fix for this branch's own worst bug, because the bug class is
+// INVISIBLE at the class layer — a rule moving in `index.css` lost an
+// equal-specificity tie and blanked every judged summary row while every
+// client assertion here stayed green.
+//
+// TWO GATES, AND NEITHER IS THE OTHER'S DUPLICATE:
+//
+//   THE FILE CENSUS walks every non-test source file under `src/` and
+//   requires the set that COMPOSES a verdict class to be exactly the four
+//   emitters named below. It catches a judged cell added in a NEW file,
+//   which the render census cannot see.
+//
+//   THE RENDER CENSUS mounts those four emitters, forces every judgeable
+//   value in their models to a verdict, and collects the classes that
+//   actually land on the same ELEMENT as a `judge-*` class in jsdom. It
+//   catches a ninth judged cell added to a file that is already an emitter,
+//   which the file census cannot see. It reads the DOM rather than the
+//   source on purpose: the four emitters compose their class strings four
+//   different ways (a two-level helper, a one-level helper, a template with
+//   a variable, a template with a table lookup), so any source-text
+//   extractor would encode today's four shapes and go quietly blind on a
+//   fifth — recurring failure 21 with extra steps.
+//
+// WHAT THE PAIR DOES NOT PROVE, stated rather than left to be assumed
+// (recurring failure 26): a judged cell added to an existing emitter behind
+// a branch that `forceEveryJudgement` cannot reach — one keyed on something
+// other than a `JudgedValue` — is still invisible to both. The browser gate
+// (`e2e/design.spec.ts` §2E's computed-colour legs) is what has actually
+// caught this bug class once; these two make the cheap client sweep stop
+// narrowing silently in the two ways it demonstrably could.
+
+/** `src/`, resolved off this file's own path — the same plain-string
+ *  surgery `thisDirPath` above and `connectedPhaseReaders.test.ts` both
+ *  use, and for the same reason (jsdom resolves `new URL(...)` against
+ *  `http://localhost:3000/`, not the `file://` base). */
+const SRC_ROOT = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(/\/theme\/judgeTokens\.test\.tsx$/, "");
+
+/** Every non-test `.ts`/`.tsx` under `src/`, relative to `src/`. */
+function productionSourceFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(join(SRC_ROOT, dir))) {
+      const rel = dir === "" ? entry : `${dir}/${entry}`;
+      if (statSync(join(SRC_ROOT, rel)).isDirectory()) {
+        walk(rel);
+        continue;
+      }
+      if (!/\.tsx?$/.test(rel) || /\.test\.tsx?$/.test(rel)) continue;
+      out.push(rel);
+    }
+  };
+  walk("");
+  return out.sort();
+}
+
+/** Does this source COMPOSE a judged verdict class name?
+ *
+ *  Matches the literal form (`"judge-pace-faster"`, `PostWorkoutSummary`
+ *  and `SettingsScreen`) and the interpolated one
+ *  (`` `judge-${metric}-${judgement}` ``, `PaneLive` and `PaneGrid`) — a
+ *  literal-only sweep would report two emitters, not four.
+ *
+ *  `(?<!-)` is load-bearing: `you/judgeColors.ts` names all four CUSTOM
+ *  PROPERTIES (`--judge-pace-faster`), which are the tokens the classes
+ *  read, not classes a cell can wear. Without the guard that file joins the
+ *  emitter list and the census stops meaning anything. */
+const VERDICT_COMPOSER =
+  /(?<!-)judge-(?:pace|spm|\$\{[^}]*\})-(?:faster|slower|\$\{[^}]*\})/;
+
+/** The four files allowed to put a verdict class on an element. Each one's
+ *  cells are enumerated in `JUDGED_CELL_CLASSES` above. */
+const VERDICT_EMITTERS = [
+  "session/PostWorkoutSummary.tsx",
+  "workout/connected/PaneGrid.tsx",
+  "workout/connected/PaneLive.tsx",
+  "you/SettingsScreen.tsx",
+] as const;
+
+describe("LOW-3, the file census: only four files compose a verdict class", () => {
+  it("no production file outside the four known emitters composes one", () => {
+    const offenders = productionSourceFiles().filter(
+      (rel) =>
+        !(VERDICT_EMITTERS as readonly string[]).includes(rel) &&
+        VERDICT_COMPOSER.test(
+          commentStrippedSource(readFileSync(join(SRC_ROOT, rel), "utf-8")),
+        ),
+    );
+    expect(offenders).toStrictEqual([]);
+  });
+
+  // The allowlist half. Without this, an emitter that stopped emitting
+  // would leave a dead entry nobody notices, and the sweep above would be
+  // guarding a name that no longer exists.
+  it("every allowlisted emitter really does compose one — no dead entries", () => {
+    for (const rel of VERDICT_EMITTERS) {
+      const stripped = commentStrippedSource(
+        readFileSync(join(SRC_ROOT, rel), "utf-8"),
+      );
+      expect([rel, VERDICT_COMPOSER.test(stripped)]).toStrictEqual([rel, true]);
+    }
+  });
+
+  // RF21, on the detector rather than on the sweep: both shapes fire, prose
+  // does not, and a custom-property name does not.
+  it("the detector fires on both composition shapes and on neither decoy", () => {
+    const fires = (source: string): boolean =>
+      VERDICT_COMPOSER.test(commentStrippedSource(source));
+    expect(fires('const c = "judge-spm-slower";')).toBe(true);
+    expect(fires("const c = `judge-${metric}-${judgement}`;")).toBe(true);
+    expect(fires('const t = "--judge-pace-faster";')).toBe(false);
+    expect(fires("// a comment naming judge-pace-slower in prose\n")).toBe(
+      false,
+    );
+  });
+});
+
+/** THE FORCED MODEL. Every judged cell in the app reads a `JudgedValue`
+ *  (`{ display, judgement, absent }`) or a `GridValue` (`{ display, judged
+ *  }`), so a deep walk that sets every one of them to `slower` puts a
+ *  verdict on every cell that can hold one, without this file needing to
+ *  know which frame or interval state reaches which cell. That genericity
+ *  is the point: `PaneLive`'s AVG cell is judged only during a rest that
+ *  folded onto a completed interval, and a census that had to arrange that
+ *  state would be a census of the fixtures rather than of the surface. */
+function forceEveryJudgement<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((v: unknown) => forceEveryJudgement(v)) as unknown as T;
+  }
+  if (value === null || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = forceEveryJudgement(v);
+  }
+  if ("judgement" in out && "display" in out && "absent" in out) {
+    out.judgement = "slower";
+    out.absent = false;
+  }
+  if ("judged" in out) {
+    out.judged = {
+      display: typeof out.display === "string" ? out.display : "2:00.0",
+      judgement: "slower",
+      absent: false,
+    };
+  }
+  return out as T;
+}
+
+const VERDICT_CLASS = /^judge-(?:pace|spm)-(?:faster|slower)$/;
+
+/** Every OTHER class sharing an element with a verdict class. The whole
+ *  element's class list, not just the base: a sibling class that declares
+ *  `color` breaks the verdict exactly as the base class would, so it
+ *  belongs in the sweep too. */
+function judgedCellClassesIn(container: ParentNode): string[] {
+  const found = new Set<string>();
+  for (const el of Array.from(container.querySelectorAll("*"))) {
+    const classes = Array.from(el.classList);
+    if (!classes.some((c) => VERDICT_CLASS.test(c))) continue;
+    for (const c of classes) if (!VERDICT_CLASS.test(c)) found.add(c);
+  }
+  return Array.from(found);
+}
+
+/** A REAL library workout (agent briefing's realistic-fixture rule), the
+ *  same `Filling Low` + authored opener `PaneLive.test.tsx` builds its own
+ *  model from. */
+function connectedModel(): SurfaceModel {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
+  if (!w) throw new Error("missing library fixture: Filling Low");
+  const draft = buildDraft({
+    id: "filling-low",
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 8 },
+        ref: { effort: "min" },
+      },
+      ...w.steps,
+    ],
+  });
+  const phases = buildRun(
+    draft,
+    { k2Seconds: 112, k6Seconds: 122 },
+    new Date("2026-08-07T09:00:00.000Z"),
+  ).phases;
+  const program = compileProgram(phases);
+  if ("code" in program)
+    throw new Error(`fixture failed to compile: ${program.code}`);
+  const frame: MonitorFrame = {
+    elapsedSeconds: 600,
+    distanceMeters: 2400,
+    sessionElapsedSeconds: 600,
+    sessionDistanceMeters: 2400,
+    currentSplit: 117.8,
+    spm: 21,
+    heartRateBpm: 164,
+    splitAvgPace: 121.4,
+    restSeconds: 0,
+    intervalIndex: 1,
+    intervalRemaining: { kind: "distance", value: 1200 },
+    intervalAccrued: null,
+    state: "rowing",
+    rowingActive: true,
+  };
+  return forceEveryJudgement(
+    buildSurfaceModel({
+      phases,
+      program,
+      status: "live",
+      linkLost: false,
+      frame,
+      deviceName: "PM5 432331249",
+      actuals: [],
+      freeRow: false,
+    }),
+  );
+}
+
+/** The monitor-door shape `PostWorkoutSummary.test.tsx` uses: an unjudged
+ *  opener plus a faster row and a slower one. */
+function summaryModel(): SummaryModel {
+  return {
+    meta: {
+      dateLabel: "AUG 10",
+      timeLabel: "18:57",
+      sourceLabel: "PM5 432331249",
+    },
+    heroes: { avgSplit: "2:09.2", time: "25:50", distanceMeters: 6000 },
+    rows: [
+      {
+        measured: true,
+        index: 1,
+        label: "4:00 @ MIN",
+        timeLabel: "4:00",
+        paceLabel: "2:20.0",
+      },
+      {
+        measured: true,
+        index: 2,
+        label: "6:00 @ 6k",
+        timeLabel: "6:00",
+        paceLabel: "2:05.0",
+        judged: {
+          direction: "faster",
+          deviationSeconds: -4.2,
+          deviationLabel: "−4.2",
+          barWidthPercent: 50,
+        },
+      },
+      {
+        measured: true,
+        index: 3,
+        label: "6:00 @ 6k",
+        timeLabel: "6:20",
+        paceLabel: "2:13.4",
+        judged: {
+          direction: "slower",
+          deviationSeconds: 4.2,
+          deviationLabel: "+4.2",
+          barWidthPercent: 50,
+        },
+      },
+    ],
+  };
+}
+
+describe("LOW-3, the render census: the sweep's list is what the emitters emit", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("every class sharing an element with a verdict is in JUDGED_CELL_CLASSES, and every entry is reached", () => {
+    const model = connectedModel();
+    const found = new Set<string>();
+    const add = (container: HTMLElement) => {
+      for (const c of judgedCellClassesIn(container)) found.add(c);
+    };
+
+    add(render(<PaneLive model={model} />).container);
+    cleanup();
+    add(render(<PaneGrid model={model} />).container);
+    cleanup();
+    add(
+      render(
+        <MemoryRouter>
+          <PostWorkoutSummary
+            title="Sea Fret"
+            model={summaryModel()}
+            pacesOffCaption="PACES OFF 6K 2:09.0"
+            hint="TARGET 2:09.0"
+            expectedEffort={3}
+            held={null}
+            onHeld={vi.fn()}
+            effort={null}
+            onEffort={vi.fn()}
+            thumbs={null}
+            onThumbs={vi.fn()}
+            notes=""
+            onNotes={vi.fn()}
+            plan={null}
+            accountBaselines={{ k2Seconds: 112, k6Seconds: 122 }}
+            saving={false}
+            saveError={null}
+            onLogAgainstPlan={vi.fn()}
+            onSaveWithoutLogging={vi.fn()}
+            discardSlot={null}
+          />
+        </MemoryRouter>,
+      ).container,
+    );
+    cleanup();
+    add(
+      render(
+        <MemoryRouter initialEntries={["/you/settings"]}>
+          <Routes>
+            <Route path="/you" element={<p>You screen</p>} />
+            <Route path="/you/settings" element={<SettingsScreen />} />
+          </Routes>
+        </MemoryRouter>,
+      ).container,
+    );
+
+    // ONE ASSERTION, BOTH DIRECTIONS. Extra means a judged cell the sweep
+    // above never checks; missing means a listed name no emitter puts on a
+    // judged element any more (a rename, or a cell that quietly stopped
+    // being judged) — dead weight in a negative sweep, which is how a
+    // negative sweep goes quietly vacuous.
+    expect(Array.from(found).sort()).toStrictEqual(
+      Array.from(JUDGED_CELL_CLASSES).sort(),
+    );
   });
 });

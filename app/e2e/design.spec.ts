@@ -4448,7 +4448,7 @@ test.describe("settings screen (judged colours)", () => {
   });
 
   // AND THIS IS THE ONLY LAYER THAT CAN SEE ONE WHOLE CLASS OF BREAKAGE.
-  // `theme/judgeTokens.test.ts`'s cascade sweep is scoped to BARE (0,1,0)
+  // `theme/judgeTokens.test.tsx`'s cascade sweep is scoped to BARE (0,1,0)
   // selectors on purpose, so a two-class override
   // (`.judge-preview .judge-preview-value { color: var(--ink) }`) leaves it
   // green — 18/18 — while the preview shows one ink whatever the rower

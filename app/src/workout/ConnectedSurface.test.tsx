@@ -1053,7 +1053,7 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
     // THE HEX MOVED DOWN A LAYER (Phase JC). `--judge-faster` and
     // `--judge-slower` are GONE — Task 2 made them `var()` aliases for one
     // commit boundary and Task 3 deleted them once every emitter had moved
-    // onto the four resolved slots (`theme/judgeTokens.test.ts` asserts
+    // onto the four resolved slots (`theme/judgeTokens.test.tsx` asserts
     // both read `null`). The literal colours live on the raw inks
     // `--judge-blue` / `--judge-red` that each slot resolves through, so
     // this reads the INKS: "actually blue and red" is a fact about the
@@ -1549,7 +1549,7 @@ describe("the lost banner says what survived", () => {
   //
   // THE RAW INK, NOT A JUDGED SLOT (Phase JC Task 2): this banner is an
   // alarm, so it must stay red even for a rower who sets every judged slot
-  // to blue. `theme/judgeTokens.test.ts` owns that invariant in full — it
+  // to blue. `theme/judgeTokens.test.tsx` owns that invariant in full — it
   // sweeps every rule in `index.css` for a `--judge-{pace,spm}-*` token in
   // a `background` declaration. This assertion keeps the banner's own half
   // beside the rest of the banner's tests.

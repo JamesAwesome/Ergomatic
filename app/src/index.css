@@ -4895,7 +4895,7 @@ button.back-link:disabled,
 
    `color` ONLY, never `background`: the alarm banner (`.connected-lost`,
    below) must stay red at every setting, so it paints from the raw
-   `--judge-red` instead. `theme/judgeTokens.test.ts` sweeps every rule in
+   `--judge-red` instead. `theme/judgeTokens.test.tsx` sweeps every rule in
    this file for a slot token in a `background` declaration and fails on
    the first one.
 
@@ -7948,7 +7948,7 @@ section:not(.news-pinned) .news-row:last-of-type {
    follows the rower's per-slot colour preference — a rower who sets every
    slot to blue still gets a red LOST banner. That is the whole reason
    `tokens.css` splits raw inks from resolved slots rather than overriding
-   the inks in place. `theme/judgeTokens.test.ts` pins both halves.
+   the inks in place. `theme/judgeTokens.test.tsx` pins both halves.
 
    Contrast, computed rather than eyeballed: --surface #fffdf7 on
    --judge-red #962718 is 7.94:1, against the house 4.5:1 floor. The
@@ -10867,7 +10867,7 @@ section:not(.news-pinned) .news-row:last-of-type {
    by source order alone and the preview would show the same ink whatever
    the rower picked, with every class-name assertion green. The neutral tone
    arrives by INHERITANCE, which any matching verdict rule beats.
-   `theme/judgeTokens.test.ts` carries `judge-preview-value` in its
+   `theme/judgeTokens.test.tsx` carries `judge-preview-value` in its
    `JUDGED_CELL_CLASSES` sweep so this is a gate rather than a note. */
 .judge-preview-value {
   font-family: var(--font-mono);
