@@ -494,6 +494,15 @@ requirements).
   release recommendation so both happen in the same breath. Fast-path
   merges are exempt by definition: if a change was small enough to skip
   the cycle, it is small enough to teach nothing.
+- **And if the merge RECORDED AN ORDER of James's, say which state it is in
+  (Phase OD, 2026-09-09).** Two states only: it rides a named PR, or it has a
+  date. A row with a trigger is the third state and it is where orders die —
+  the sweep that produced this line found twelve live orders, the oldest 23
+  days, four of them carrying triggers that had ALREADY FIRED and one carrying
+  no trigger at all. **The rule that actually keeps one alive: schedule its
+  OPEN QUESTION before scheduling the order.** All four rotted orders were
+  0.5-1.0 of work blocked behind a question that took a read to answer and had
+  no owner. Say the question, or say there is none.
 
 ## Recurring failures — read before you start
 

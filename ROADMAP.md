@@ -161,7 +161,7 @@ replace — is approved before task 1.
       Copy candidate A; the pre-pull link loss takes option C (Just Row's
       hand-off arm requires the link to be up, for a tapped hand-off as well
       as a skipped one); the parked comfort settings do NOT ride. **S**
-- [ ] **The PR — BUILT, awaiting review and James's merge approval.** Seven
+- [x] **The PR — MERGED as #381 (`2157a9bd`), ticked 2026-09-09.** Seven
       tasks, spec §"PR shape". Shipped: the `you/readyCard.ts` store; the
       READY SCREEN section on `/you/settings` with its own save-failure
       notice; both consumers reading the setting; Gate 0 ruling 2's link
@@ -287,7 +287,7 @@ workout_type and machine type match".
 TRIAD (it decides what a stored row may MEAN): full antagonist pass on the
 spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
 
-- [ ] **PR 1 — the refusal, the link, and the matrix.** A domain denylist
+- [x] **PR 1 — MERGED as #366 (`a476cbc6`), ticked 2026-09-09. The refusal, the link, and the matrix.** A domain denylist
       stating the RULE rather than a subset of it: refuse every value the vendor
       NAMES as not rowing — 64 (Dyno), 128/143 (ski), 192-194/207 (bike),
       225/226 (MultiErg ski/bike) — and allow everything else, named or not,
@@ -564,10 +564,16 @@ pane and a summary — is approved before task 1.
       already moved once.) The
       screen's full computed-contrast table, including the one figure under
       3:1 and why it is decoration, lives in its own `index.css` block instead.
-- [ ] **The PR — #371, OPEN 2026-09-08.** Built and PM-gated (PASS WITH
-      CONDITIONS); the whole-branch review and James's merge approval are owed.
-      Unticked deliberately: a ticked box whose text says it is not done has
-      been wrong on main for weeks at a time here.
+- [x] **The PR — MERGED as #371 (`e162c091`), ticked 2026-09-09.** Built and
+      PM-gated (PASS WITH CONDITIONS); the whole-branch review and James's merge
+      approval were given and it landed.
+      **This row's own rule is why it took a sweep to tick it, and the rule is
+      RIGHT:** it said "unticked deliberately — a ticked box whose text says it
+      is not done has been wrong on main for weeks at a time here." So the tick
+      and the TEXT move together, or neither moves. What the rule does not
+      supply is anyone to come back and do it: this box stayed open for a day
+      after its own PR merged, and three others like it were open when the
+      Phase OD sweep ran.
       Eight tasks, spec §"PR shape". The load-bearing one is the
       e2e seam test: Vitest mocks every `.css` import to an empty string here,
       so **no client test can prove a colour lands on a pixel** — only e2e can
