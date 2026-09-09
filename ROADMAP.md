@@ -963,6 +963,22 @@ while we are in here.
       the four unsafe-`any` rules there. Do not queue
       `noPropertyAccessFromIndexSignature` without a real failure class; its
       current volume is mostly access style. **M**
+- [ ] **Two more order-dependent flakes, both seen during Phase JC's release
+      (2026-09-08/09), both filed here rather than shrugged at.** Neither
+      reproduced alone or on a re-run of the same command, so both are
+      ORDER-dependent rather than broken tests, and both were observed by
+      different agents in different worktrees.
+      (a) `e2e/connected.spec.ts`'s genuine-`QuotaExceededError` leg failed
+      once in a full run (550/551), passed alone, then passed 551/551 twice.
+      The test fills origin storage to a real quota error, which is exactly
+      the shape that makes a suite order-sensitive — a neighbour that writes
+      to the same origin afterwards would see a full store.
+      (b) `src/news/Releases.test.tsx`'s "renders each release's version,
+      date, and every item" failed once in a full `--project client --project
+      unit` run and passed both alone (6/6) and on an immediate full re-run
+      (286 files, 7937). Client-project only, so unrelated to (a)'s origin
+      storage. **Trigger:** the flake hunt below, or a third sighting of
+      either. **S**
 - [ ] **Hunt the e2e flakes.** James, 2026-08-20: _"post release lets hunt down
       the flake."_ Its trigger ("immediately after v0.15.0 ships") fired
       2026-08-20. Two named flakes remain unresolved: the manual-door
