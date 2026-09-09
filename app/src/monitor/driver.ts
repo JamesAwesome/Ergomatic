@@ -2403,7 +2403,7 @@ export function createPm5Driver(
     // `drainSummaryReconcile` (Task 7): `disconnect()` below now applies
     // this identical rule for a caller-initiated hang-up, which used to
     // discard the same verdict this comment refuses to.
-    drainSummaryReconcile("the link dropped before the finish grace closed");
+    drainSummaryReconcile("the link dropped");
     if (activeRun !== null && activeRun.closed) {
       // The old `terminalLatched` flag's SECOND consumer, re-scoped to the
       // run (Task 4, spec §4: replaced, never deleted). Appendix E (cited
@@ -3249,7 +3249,11 @@ export function createPm5Driver(
       // the two windows are coupled constants and their ORDER of arming is
       // what makes "the fill happens before navigation" a fact about the
       // code rather than about the event loop.
-      armSummaryReconcile(activeRun!);
+      armSummaryReconcile(
+        activeRun!,
+        FINISH_GRACE_MS,
+        `the ${FINISH_GRACE_MS}ms finish grace closed on its own clock`,
+      );
       log.record("terminal", "finished");
       emit({ kind: "workoutComplete" });
       // Review fix round 1, HIGH finding: fired AFTER the emit above, not
@@ -4273,13 +4277,17 @@ export function createPm5Driver(
    */
   function armSummaryReconcile(
     run: NonNullable<typeof activeRun>,
-    ms: number = FINISH_GRACE_MS,
-    /** RC-13 §10: what this deadline's own firing RELEASES the reconcile
-     *  for, in the words `reconcileSummary` prints. Paired with `ms` at
-     *  every call site rather than derived from it, so a caller that
-     *  re-arms the slot at a different delay cannot quietly keep the
-     *  3000ms sentence. */
-    release: string = `the ${FINISH_GRACE_MS}ms finish grace closed on its own clock`,
+    /** BOTH REQUIRED, and `ms` lost its `FINISH_GRACE_MS` default to make
+     *  `release` so (branch review, finding 5). `release` is what this
+     *  deadline's own firing RELEASES the reconcile for, in the words
+     *  `reconcileSummary` prints. This pair used to be `ms = FINISH_GRACE_MS`
+     *  plus an OPTIONAL `release` defaulting to the 3000ms sentence, under a
+     *  comment claiming a caller re-arming at a different delay "cannot
+     *  quietly keep the 3000ms sentence" — which `armSummaryReconcile(run,
+     *  500)` compiled and did. The claim is now the signature's, not the
+     *  comment's. */
+    ms: number,
+    release: string,
   ): void {
     pendingSummaryReconcile?.();
     pendingSummaryReconcile = schedule(() => {
@@ -4329,7 +4337,57 @@ export function createPm5Driver(
    *  `pendingSummaryReconcile` is already `null` is a no-op, so calling it
    *  from more than one of those three sites in the same teardown costs
    *  nothing. */
-  function drainSummaryReconcile(release: string): void {
+  /**
+   * V2's second sentence, as code: **SETTLING MAY NOT FAIL THE REPLACEMENT**
+   * (branch review, finding 4). The doors called `drainSummaryReconcile`
+   * bare, inside a `try { … } finally { replacingRun = null; }` with no
+   * `catch` — and in `program()` that sits inside the very `try` whose last
+   * statement is the `armed` emit, so a throw out of the settlement would
+   * reject `driver.program(p)` AFTER `verifyArmed` confirmed the erg holds
+   * the workout, leaving this driver tracking the outgoing run while the
+   * machine holds the new program. That is `emit`'s own live defect (V1) one
+   * function over.
+   *
+   * NOT REACHABLE TODAY, and said plainly: with per-listener isolation in
+   * place only driver code runs on that stack, and no throwing path was
+   * found in it. It is here for the same reason V3 is — the driver knowing
+   * this about itself beats an argument that nothing on the current call
+   * graph can do it.
+   *
+   * SCOPED TO THE DOORS ON PURPOSE. The teardown paths (`disconnect()`,
+   * `reconcile()`, `t.onDisconnect`) still call `drainSummaryReconcile`
+   * bare: V2 is an invariant about REPLACEMENT, and swallowing a throw on a
+   * teardown would change what those callers see for a reason nothing has
+   * argued for.
+   */
+  function settleOutgoingRun(cause: string): void {
+    try {
+      drainSummaryReconcile(cause);
+    } catch (err) {
+      log.record(
+        "settlement-threw",
+        `settling the outgoing run (${cause}) threw — the replacement completes regardless and the outgoing run's answer is lost: ${String(err)}`,
+      );
+    }
+  }
+
+  function drainSummaryReconcile(
+    /** THE NEUTRAL HALF OF THE RELEASE CAUSE — who drained, with no window
+     *  clause attached (branch review, finding 2). This parameter used to be
+     *  the whole sentence, and five of the six call sites spelled it "…
+     *  before the finish grace closed", which this function then handed to
+     *  BOTH slots. That is false on the terminate slot: `noteTerminateObservations`'s
+     *  two call sites are gated on `terminatedAwaitingSummary`, and a
+     *  terminated close opens NO finish grace and arms NO reconcile deadline
+     *  (`maybeEmitFrame`'s terminated branch says so in as many words), so
+     *  every terminate-observations emit concerns a run whose
+     *  `finishGraceUntil` is `null`. The detail read "… released when
+     *  `reconcile()` … before its finish grace closed … this run was
+     *  abandoned, not finished" — self-contradictory in one breath, and a
+     *  WIDENING, since the pre-RC-13 wording named no window at all. Each
+     *  slot now appends the window that is actually its own. */
+    cause: string,
+  ): void {
     // The terminate path's own pending emit drains here too (summary-record
     // design spec §1). Same rule as the sentence above, applied to the
     // other slot: the link going away costs this run its ability to WAIT
@@ -4341,7 +4399,11 @@ export function createPm5Driver(
     // because the emit reaches the record and the reconcile below can only
     // ever concern a DIFFERENT run's shape (the two are mutually exclusive
     // — `terminatedAwaitingSummary`'s own doc comment).
-    flushTerminateObservations(release);
+    // The terminate slot's own window is the hash sub-window, never a
+    // finish grace (see `cause`).
+    flushTerminateObservations(
+      `${cause} while the ${HASH_SUBWINDOW_MS}ms wait for 0x003F was still open`,
+    );
     if (pendingSummaryReconcile !== null) {
       pendingSummaryReconcile();
       pendingSummaryReconcile = null;
@@ -4369,7 +4431,7 @@ export function createPm5Driver(
       // register row rather than argued here: binding the run into the slot
       // would make the precondition structural instead of stated.
       if (activeRun !== null) {
-        reconcileSummary(activeRun, release);
+        reconcileSummary(activeRun, `${cause} before the finish grace closed`);
         // RC-9a: the same pairing `armSummaryReconcile`'s own scheduled
         // callback makes (its own comment) — this is the SECOND of the two
         // places `reconcileSummary` is ever called, and this verdict must
@@ -4461,7 +4523,7 @@ export function createPm5Driver(
       return;
     }
     drainSummaryReconcile(
-      "the summary burst completed early (0x0039 and its verification hash both in hand)",
+      "the summary burst completed (0x0039 and its verification hash both in hand)",
     );
   }
 
@@ -6792,9 +6854,7 @@ export function createPm5Driver(
       // see `replacingRun`'s declaration for how the two cover this door.
       replacingRun = "beginFreeRow()";
       try {
-        drainSummaryReconcile(
-          "beginFreeRow() replaced this run before its finish grace closed",
-        );
+        settleOutgoingRun("beginFreeRow() replaced this run");
         activeRun = {
           program: { intervals: [] },
           freeRow: true,
@@ -7045,9 +7105,7 @@ export function createPm5Driver(
           // emits `intervalComplete`/`summary-observations`. That is contained
           // (V1, `emit`'s own comment) and its re-entrancy is refused (V3,
           // `replacingRun`), which is why both of those landed with it.
-          drainSummaryReconcile(
-            "program() replaced this run before its finish grace closed",
-          );
+          settleOutgoingRun("program() replaced this run");
           boundaryHalves.split = null;
           boundaryHalves.asSplit = null;
           // The session register map is per-RUN state for the same reason a
@@ -7239,9 +7297,7 @@ export function createPm5Driver(
     // is still live) and leaves nothing here to drain — this call is the
     // belt to that braces for any OTHER caller of `disconnect()`.
     reconcile(): void {
-      drainSummaryReconcile(
-        "the caller drained it (reconcile()) before the finish grace closed",
-      );
+      drainSummaryReconcile("the caller drained it (reconcile())");
     },
 
     async disconnect(): Promise<void> {
@@ -7277,9 +7333,7 @@ export function createPm5Driver(
       // after the radio really is hung up below, so nothing is deferred
       // past this line — and a driver that leaves live timers behind is a
       // driver a test cannot finish cleanly.
-      drainSummaryReconcile(
-        "the caller hung up (disconnect()) before the finish grace closed",
-      );
+      drainSummaryReconcile("the caller hung up (disconnect())");
       await t.disconnect();
     },
   };

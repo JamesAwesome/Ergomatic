@@ -12092,7 +12092,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     // The RELEASE CAUSE names the door, not a 3000ms window that never
     // closed (RC-13 §10).
     expect(filed[0]!.detail).toContain(
-      "released when program() replaced this run before its finish grace closed",
+      "released when program() replaced this run before the finish grace closed",
     );
     // Filed BEFORE the new run was announced.
     const armedSeqs = g.log
@@ -13909,6 +13909,53 @@ describe("createPm5Driver: a throwing subscriber is contained (RC-13 V1)", () =>
       'a subscriber threw while receiving an "armed" event — that delivery is abandoned, the driver and the operation that emitted it continue: Error: the subscriber blew up on armed',
     ]);
   });
+
+  it("a throwing subscriber costs its OWN delivery and nothing else — every listener registered after it still receives the event", async () => {
+    // THE OTHER HALF OF V1, and the half the resolution assertion above
+    // cannot see. Containment that wraps the whole LOOP rather than each
+    // delivery also resolves `program()` and also writes one identical
+    // `listener-threw` entry — and silently cancels delivery to every
+    // listener registered after the thrower. `listeners` is a `Set`, so
+    // registration order is delivery order and "after" is well defined.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    const received: string[] = [];
+    driver.events((e) => {
+      if (e.kind === "armed") throw new Error("subscriber 1 blew up");
+    });
+    driver.events((e) => {
+      if (e.kind === "armed") received.push("subscriber 2");
+    });
+    // A SECOND thrower, further down the chain, with a DIFFERENT message:
+    // it proves one contained throw does not disarm the containment for the
+    // next one, and the distinct messages keep the two ring entries from
+    // coalescing (`eventLog.record` collapses a consecutive identical
+    // kind+detail pair without advancing `seq`).
+    driver.events((e) => {
+      if (e.kind === "armed") throw new Error("subscriber 3 blew up");
+    });
+    driver.events((e) => {
+      if (e.kind === "armed") received.push("subscriber 4");
+    });
+
+    await expect(
+      programViaStub(driver, transport, MINIMAL_PROGRAM),
+    ).resolves.toBeUndefined();
+
+    // Both non-throwing subscribers ran, including the one BEHIND both
+    // throwers. This is the assertion a loop-level try cannot pass.
+    expect(received).toStrictEqual(["subscriber 2", "subscriber 4"]);
+    expect(
+      log
+        .entries()
+        .filter((e) => e.kind === "listener-threw")
+        .map((e) => e.detail),
+    ).toStrictEqual([
+      'a subscriber threw while receiving an "armed" event — that delivery is abandoned, the driver and the operation that emitted it continue: Error: subscriber 1 blew up',
+      'a subscriber threw while receiving an "armed" event — that delivery is abandoned, the driver and the operation that emitted it continue: Error: subscriber 3 blew up',
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -14011,7 +14058,7 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
     // The RELEASE CAUSE, named — this reconcile did not run because a 3000ms
     // window closed on its own clock, and the detail may not say it did.
     expect(reconciled[0]!.detail).toContain(
-      "split-won — interval 0 was already recorded when program() replaced this run before its finish grace closed",
+      "split-won — interval 0 was already recorded when program() replaced this run before the finish grace closed",
     );
     expect(reconciled[0]!.detail).not.toContain("3000ms finish grace closed");
 
@@ -14040,7 +14087,7 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
       .filter((e) => e.kind === "summary-reconciled");
     expect(reconciled).toHaveLength(1);
     expect(reconciled[0]!.detail).toContain(
-      "split-won — interval 0 was already recorded when beginFreeRow() replaced this run before its finish grace closed",
+      "split-won — interval 0 was already recorded when beginFreeRow() replaced this run before the finish grace closed",
     );
 
     // Settled before the free row opened.
@@ -14048,6 +14095,62 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
     expect(opened).toHaveLength(1);
     expect(verdicts[0]!.seq).toBeLessThan(opened[0]!.seq);
     expect(reconciled[0]!.seq).toBeLessThan(opened[0]!.seq);
+  });
+
+  it("a settlement that THROWS does not fail the replacement — program() resolves, the new run opens, and the ring says the answer was lost", async () => {
+    // V2's second sentence: "Settling may not fail the replacement." The
+    // fault is injected at `DriverOptions.schedule`, an existing seam: the
+    // reconcile deadline's own CANCELLER is what `drainSummaryReconcile`
+    // calls first, so a canceller that throws makes the settlement throw
+    // from inside the door with nothing invented in the driver.
+    //
+    // Without the `catch`, `program()` rejects AFTER `verifyArmed` — the erg
+    // holds the new program while this driver still tracks the outgoing run,
+    // and the hook tells the rower programming failed.
+    let cancellerThrows = false;
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log, {
+      schedule: (cb, ms) => {
+        const id = setTimeout(cb, ms);
+        return () => {
+          clearTimeout(id);
+          if (cancellerThrows) throw new Error("the canceller blew up");
+        };
+      },
+    });
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    // A natural finish, so a reconcile deadline is armed and its canceller
+    // is what the next door will call.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    cancellerThrows = true;
+
+    await expect(
+      programViaStub(driver, transport, MINIMAL_PROGRAM),
+    ).resolves.toBeUndefined();
+
+    // The replacement completed: the new run was announced.
+    expect(events.filter((e) => e.kind === "armed")).toHaveLength(2);
+    // ...and the loss is stated rather than swallowed.
+    expect(
+      log
+        .entries()
+        .filter((e) => e.kind === "settlement-threw")
+        .map((e) => e.detail),
+    ).toStrictEqual([
+      "settling the outgoing run (program() replaced this run) threw — the replacement completes regardless and the outgoing run's answer is lost: Error: the canceller blew up",
+    ]);
   });
 
   it("beginFreeRow(): a pending terminate-observations emit is FLUSHED to the outgoing run, not dropped", async () => {
@@ -14112,6 +14215,72 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
       );
     expect(flushed).toHaveLength(1);
     expect(flushed[0]!.seq).toBeLessThan(opened[0]!.seq);
+    // THE WHOLE DETAIL, PINNED — nothing pinned it before, and the release
+    // cause it carried was false: a terminated close opens NO finish grace
+    // (`maybeEmitFrame`'s terminated branch), so a sentence ending "before
+    // its finish grace closed" contradicted this same string's own "this run
+    // was abandoned, not finished" four clauses later. The window named here
+    // is the hash sub-window, which is the one this emit was actually
+    // waiting out. `200` is written out, never built from
+    // `HASH_SUBWINDOW_MS`.
+    expect(flushed[0]!.detail).toBe(
+      "terminate-observations — 0x0039 arrived after a rower-ended close (60s/200m, hash never arrived), released when beginFreeRow() replaced this run while the 200ms wait for 0x003F was still open, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)",
+    );
+    expect(flushed[0]!.detail).not.toContain("finish grace");
+  });
+
+  it("reconcile(): the teardown drain states the hash sub-window too, never a finish grace a terminated run never opened", async () => {
+    // THE ONE INHERITED CAUSE A ROWER CAN ACTUALLY PRODUCE (branch review,
+    // finding 2): `reconcile()` is the hook's own teardown
+    // (`reconcileAndReleaseHandoff`), so a rower who ends on the monitor and
+    // leaves the screen inside the 200ms hash window takes this path today.
+    // It is not a replacement door at all, which is why it gets its own
+    // assertion rather than riding the door tests.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+    transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      buildEndOfWorkoutSummaryBytes({
+        elapsedSeconds: 60,
+        meters: 200,
+        avgStrokeRate: 22,
+        endingHeartRateBpm: 150,
+        avgHeartRateBpm: 150,
+        minHeartRateBpm: 130,
+        maxHeartRateBpm: 160,
+        dragFactorAverage: 130,
+        recoveryHeartRateBpm: 100,
+        workoutType: 8,
+        avgPaceSecondsPer500m: 150,
+      }),
+    );
+
+    driver.reconcile();
+
+    const flushed = log
+      .entries()
+      .filter(
+        (e) =>
+          e.kind === "summary-reconciled" &&
+          e.detail.startsWith("terminate-observations"),
+      );
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]!.detail).toBe(
+      "terminate-observations — 0x0039 arrived after a rower-ended close (60s/200m, hash never arrived), released when the caller drained it (reconcile()) while the 200ms wait for 0x003F was still open, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)",
+    );
+    expect(flushed[0]!.detail).not.toContain("finish grace");
   });
 });
 
@@ -14254,7 +14423,11 @@ describe("createPm5Driver: a replacement has one writer of activeRun (RC-13 V3)"
     driver.beginFreeRow();
 
     expect(reentrant).not.toBeNull();
-    await expect(reentrant).rejects.toBeInstanceOf(ProgramBusyError);
+    // THE RING FIRST, THEN THE PROMISE (branch review). The refusal is
+    // synchronous, so asserting it before the `await` makes a driver that
+    // does NOT refuse fail on this line — where awaiting first would instead
+    // hang on a `program()` that proceeded and is waiting for an ack nobody
+    // will send, and report a 5s test timeout rather than a defect.
     const refusals = log
       .entries()
       .filter((e) => e.kind === "run-replace-reentered");
@@ -14262,6 +14435,7 @@ describe("createPm5Driver: a replacement has one writer of activeRun (RC-13 V3)"
     expect(refusals[0]!.detail).toBe(
       "program() was called while beginFreeRow() was replacing the active run — refused; a replacement has exactly one writer of activeRun in flight",
     );
+    await expect(reentrant).rejects.toBeInstanceOf(ProgramBusyError);
     // The door that was already replacing finished its own job: exactly one
     // free row opened, and the refusal cost it nothing.
     expect(
