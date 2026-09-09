@@ -179,9 +179,24 @@ and classifies:
 
 | # | Condition | Verdict | Class |
 | --- | --- | --- | --- |
-| 1 | exit ≥ 128 | killed by signal `exit-128`; 134 = SIGABRT (V8 fatal), 137 = SIGKILL | **deterministic** |
+| 1a | exit 130 | a deliberate Ctrl-C — **silent, no banner** | **deterministic** |
+| 1b | exit 134 or 137 | killed by signal `exit-128`; 134 = SIGABRT (V8 fatal), 137 = SIGKILL | **deterministic** |
+| 1c | exit ≥ 128, not one of the above | killed by signal `exit-(rc-128)` (e.g. 143 = SIGTERM) — a distinct "killed by signal" banner, not the memory one | **deterministic** |
 | 2 | stderr contains `Allocation failed` | heap OOM — **checked regardless of exit code or of whether a summary printed** | heuristic, covers the fork case |
 | 3 | non-zero exit and no `Test Files` line in stdout | suite did not complete, cause unknown | heuristic |
+
+**Corrected 2026-09-08 (Task 6): rule 1 was approved as a single "exit ≥
+128 → memory banner" row.** That is wrong as written: SIGINT (a rower's own
+Ctrl-C) is exit 130 and SIGTERM is 143, both ≥ 128, so the approved table
+would print `MEMORY KILL` on every interrupted run — precisely the
+over-claim rules 2 and 3 exist to guard against. The shipped wrapper
+(`app/scripts/test-run.sh`) implements the four-way split above instead:
+130 is silent (a rower's own Ctrl-C is not a finding); 134/137 are the two
+signals that are actually memory (SIGABRT from a V8 fatal, SIGKILL); any
+other exit ≥ 128 gets its own "killed by signal" banner, distinct from the
+memory one, so a signal death that is not a memory death is never promoted
+into one; and only then do rules 2 and 3 apply. This is what is gated by
+`app/scripts/test-run.test.sh` and is the authoritative version of rule 1.
 
 **Evaluated in order 1 → 2 → 3, first match wins.** The order is part of
 the specification, not an implementation detail: exit 137 satisfies rules
@@ -225,9 +240,17 @@ defect in the obvious implementation, not a style note:
   prints **0** — a SIGKILL reading as a pass. With `set -o pipefail` it
   prints **137**. Both are available in `/bin/sh` here.
 - **It forwards `"$@"`** — the hook passes `--project unit --project
-  client`, and `pnpm test:coverage` and `pnpm test:watch` must route
-  through it too or they keep the old behaviour silently.
-
+  client`, and `pnpm test:coverage` must route through it too or it keeps
+  the old behaviour silently.
+- **Narrowed 2026-09-08 (Task 6): `pnpm test:watch` does NOT route through
+  the wrapper**, and this is deliberate, not an oversight the sweep missed.
+  Watch mode is an interactive, long-lived TTY session — the wrapper pipes
+  stdout through `tee` and defers stderr to replay it after the child
+  exits, which would break vitest's live watch reporter (it rewrites the
+  terminal in place). A watch run is also, by definition, being watched by
+  a human at the moment it dies, so the silent gap this design closes for
+  `pnpm test` (a kill that looks like a pass in a log nobody is staring at)
+  does not exist for `test:watch`.
 - **It owns `NODE_OPTIONS`.** `package.json`'s `test` script currently
   hard-sets `NODE_OPTIONS=--no-experimental-webstorage`, and an inline
   assignment in a script **replaces** the caller's — measured: exporting

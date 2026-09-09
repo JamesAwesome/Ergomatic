@@ -35,7 +35,9 @@ requirements).
   client+unit against a green HEAD; not a jsdom-vs-Node issue). Prefix the
   bare form yourself:
   `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`
-  — jsdom loads and the tests pass.
+  — jsdom loads and the tests pass. Note this form collapses a signal death
+  to exit 1 — see recurring failure 37. Prefer `pnpm test --project client`
+  when you do not need a file filter.
 - `pnpm dist:grep` — the production-bundle gate. CI runs it in the `app` job
   right after `pnpm build`; it proves named dev-only seams are absent from
   `dist/`.
@@ -44,6 +46,10 @@ requirements).
   same way. **Both `up -d --build --wait` unconditionally** (a rebuild every
   invocation, not "boots it if not running") **and leave the stack UP
   afterwards** — `E2E_KEEP` defaults to `1`.
+- `ERGOMATIC_TEST_WORKERS` / `ERGOMATIC_E2E_WORKERS` — local worker
+  ceilings, defaulting to 4 and 3. Tuned for a 16 GB / 4-performance-core
+  Mac running several agent sessions; **raise or unset them on a bigger
+  machine**. Both are inert under CI.
 - `pnpm mutate` — Stryker mutation testing, on-demand (see docs/TESTING.md §3);
   minutes, not part of the push/CI gate.
 - Local dev DB: `docker run --rm -d --name erg-dev-pg -p 5433:5432 -e POSTGRES_PASSWORD=dev postgres:18.4`
@@ -487,8 +493,11 @@ often they recur.
 1. **Changing UI without running `pnpm e2e`.** Three phases running, a task
    changed a component and left the e2e suite red because only
    `--project unit --project client` was run. The e2e job gates CI. **If your
-   diff touches anything under `app/src/`, run `pnpm e2e` before you report
-   done** — and `pnpm screenshots` too if you changed a screen's layout.
+   diff touches anything under `app/src/`, run the named e2e specs locally
+   against an already-booted stack, then read the e2e job on the PR for the
+   full suite** (Phase MEM's local worker cap makes a full local run
+   1.5-2.4x its old cost — see RF37) — and `pnpm screenshots` too if you
+   changed a screen's layout.
 2. **Trusting the aggregate coverage gate.** The 90×4 threshold is repo-wide,
    so a brand-new file can ship with entire branches uncovered and the gate
    still passes. Four components did exactly that (keyboard handlers twice,
@@ -1202,6 +1211,32 @@ often they recur.
     matters more than a PR body (RF14) because a PR body is a presentation
     that someone reads once; a commit message is what `git log` hands the
     next person forever.
+
+37. **Reading a KILLED test run as a flaky one, and retrying it into a
+    machine that just proved it has no room (Phase MEM, 2026-09-08).**
+    Three signatures, none of which is a test result:
+    **(a) An exit code ≥ 128 is a signal death.** 134 is SIGABRT (a V8
+    fatal, including OOM), 137 is SIGKILL. 130 is your own Ctrl-C and 143
+    a SIGTERM — killed, but not memory.
+    **(b) `pnpm exec` COLLAPSES all of them to exit 1.** Measured: raw
+    node and `pnpm run` both preserve 134/137; `pnpm exec` reports 1 with
+    `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL`. This matters because the
+    Commands section above prescribes `pnpm exec vitest` as the scoped-run
+    workaround — **the repo's own advice hides this signal**, so when you
+    use that form, a kill is indistinguishable from a failure by status.
+    **(c) A fork-worker OOM exits 1 AND prints a full `Test Files`
+    summary.** Vitest defaults to `pool: "forks"` and each fork has its own
+    4192 MB heap limit, so the parent survives. The presence of a summary
+    proves nothing; the tell is `Allocation failed` on stderr.
+    **Never re-run a suite showing any of the three.** `pnpm test` routes
+    through `app/scripts/test-run.sh`, which says so out loud and writes
+    the evidence to `app/.test-kills/`. A retry is not free: it is the
+    thing that turns one kill into a lost session.
+    **And the lesson that generalises past this bug:** the first draft of
+    the design asserted "the system gives us no signal", derived entirely
+    from measurements taken through `pnpm exec`. When a claim is that no
+    signal exists, re-run it through every INVOCATION SHAPE the production
+    path uses before believing it.
 
 ## Commands
 

@@ -2063,10 +2063,25 @@ needle is `JavaScript heap out of memory`.
 **Three parts, James-approved 2026-09-08:** (A) a wrapper reading the
 exit code first and the message second, plus a preflight advisory that
 **warns and does not block** (his call); (B) `maxWorkers` 4 and
-Playwright `workers` 2, both env-overridable and both **disabled under
-CI**, so a bigger machine pays nothing (his call); (C) pre-push runs
-`--changed` plus, unconditionally, the whole-tree gates that `--changed`
-structurally cannot select.
+Playwright `workers` 2 (proposed), both env-overridable and both
+**disabled under CI**, so a bigger machine pays nothing (his call); (C)
+pre-push runs `--changed` plus, unconditionally, the whole-tree gates
+that `--changed` structurally cannot select.
+
+**SHIPPED (Tasks 1-5, merged; this is Task 6, the documentation half).**
+`app/scripts/test-run.sh` implements the four-way signal split (silent
+Ctrl-C at 130; memory banner at 134/137; a distinct "killed by signal"
+banner at any other exit ≥ 128; then the stderr needle; then the
+missing-summary rule — CLAUDE.md RF37, spec A1) and is wired into
+`ci.yml`'s `scripts` job by name. **Worker counts, measured (Task 4,
+verified clean floor):** default → **4**; `ERGOMATIC_TEST_WORKERS=8` →
+**8**; `CI=true` → **9** (the cap is genuinely inert under CI). **The
+Playwright default shipped as 3, not the proposed 2** — measured wall-clock
+(Task 4): 2 workers = 6:12 total (5.5 m test phase), 3 workers = 3:58
+(3.6 m), 5 workers (the old default) = 2:39 (2.3 m). 2 workers cost
+2.34-2.39x the old default, over the spec's ~2x threshold; 3 costs only
+~1.5x, so the implementing PR raised the shipped default from 2 to 3
+(`playwright.config.ts`, spec Part B2).
 
 **The open question the desk cannot settle.** No capture of the real
 failure exists — everything measured so far is a reproduction. A V8 OOM
@@ -2095,12 +2110,12 @@ committed RF34 — it said the e2e instruction lives in "all three places"
 and named three, where a repo-wide grep finds **five** (a second
 `CLAUDE.md` site and `README.md` were missed).
 
-**Owed at implementation:** Playwright's cost at 2 workers is
-**unmeasured** and tagged as such (recurring failure 30).
-`test-run.test.sh` must be added to `ci.yml`'s `scripts` job **by name** —
-that job enumerates six scripts and does not glob, so a new one otherwise
-runs nowhere; and that job is `ubuntu-latest`, so **nothing gates the
-bash-3.2.57 constraint** the wrapper is written under.
+**Owed at implementation — both resolved.** Playwright's cost at 2 workers
+was measured at Task 4 (table above), which is why the shipped default
+moved to 3. `test-run.test.sh` and `test-run-advisory.test.sh` are both in
+`ci.yml`'s `scripts` job by name (`.github/workflows/ci.yml:181,185`).
+**Still true and still unaddressed:** that job is `ubuntu-latest`, so
+**nothing gates the bash-3.2.57 constraint** the wrapper is written under.
 
 ## Needs a decision from James
 
