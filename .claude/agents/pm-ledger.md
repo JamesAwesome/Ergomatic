@@ -6240,3 +6240,75 @@ the moment the countdown setting lands.
 owes.** JC's Gate 0 item 2 requires a four-row group captured against today's
 three-row one. An IA decision taken from a list of rows that do not exist yet is
 taken without the one artifact that would answer it.
+
+## 2026-09-09 — Phase RN final gate (#381, TRIAD stored shape): the bullet that hid the better half of its own PR
+
+**A BODY CAN FAIL THE PRESENTATION GATE ON TRUTH, NOT LENGTH, AND THAT IS THE
+FAILURE WORTH CATCHING.** #381 counted 144 words above the fold against ~120 —
+the best of the last six gated PRs (#228 ~270, #230 266, #327 218, LP PR2 172,
+MT 147) and, on the count alone, a record-and-pass. What blocked it was two
+bullets that were factually wrong in the same direction: *"Tester impact: none
+unless they change it"* beside *"**skipping** used to strand a link lost before
+your first pull"*. Skipping did not exist before that PR. Gate 0 ruling 2
+changed the hand-off arm for a **tapped** hand-off too, so the PR fixed a
+shipped Just Row bug that reaches every tester on the default path — and the
+body said there was no default-path impact. **When a PR adds an opt-in feature
+and fixes something on the way, check which path the fix lands on before
+writing "tester impact: none".** An opt-in feature makes "none by default" feel
+true, and that feeling is what stops anyone from checking. The tell is a body
+that describes a pre-existing fix as a property of the new option.
+
+**A RETARGETED TRIGGER GOES ON THE ROW THAT OWNS THE ITEM, NEVER ONLY IN THE
+PHASE THAT DECLINED IT.** The two parked comfort settings (countdown length,
+pace tolerance) live at the register row, and their trigger was retargeted at
+Phase JC's Gate 0 to "the SECOND SETTINGS PR". RN was that PR, declined them,
+and wrote the answer into the RN phase section — which is archived to
+`docs/history/` at phase close. The register row would then have pointed at a
+trigger that fired inside a history file. **Before a phase section records a
+ruling about a deferred item, put the ruling on the deferred item's own row in
+the same commit** — the phase section is a narrative and it does not survive.
+
+**TWO DECLINES ON THE SAME GROUND MAKE A TRIGGER, NOT A DEFERRAL — COUNT THEM.**
+"It retargets again, to the THIRD settings PR" is filing-as-deferral: two
+settings PRs have existed, both declined, each costing James a Gate 0 turn to
+re-decline, and no third is on the slate. **PM recommendation, recorded:** split
+the pair. Pace tolerance is TRIAD (it changes what a judged number means), so
+it is not a cheap comfort setting riding a PR of convenience and should carry a
+rower-complaint trigger and its own pass — it has been mis-filed as cheap since
+Phase 9. Countdown length has been declined twice on review SHAPE, never on
+merit, and its one open question is a MEASUREMENT ("how does `/you/settings`
+read at four sections on 375px"), not a PR — per RF30, take the capture and
+then build or strike with the receipt, rather than retargeting a third time.
+
+**A RECORDED "ACCEPTED COST" IS A FACTUAL CLAIM AND GETS RF30's EVIDENCE BAR
+EVEN AFTER THE RULING.** RN's spec, ROADMAP row and PR body all said the rower
+who picks SKIP loses `KEEP YOUR PHONE SCREEN ON`. None said what is NOT lost:
+`keepAwakeOn()` is a mount-lifetime `useEffect` in BOTH consumers, independent
+of the setting. SKIP loses the printed reminder, not the wake lock. The ROADMAP
+row is explicitly where this is re-opened "if the phone-sleep work ever needs
+the warning back", so an overstated cost there is the version a future author
+inherits. **When a gate accepts a loss, state the mechanism that SURVIVES it in
+the same sentence** — an accepted cost written larger than it is will be paid
+twice.
+
+**A LESSON ABOUT A SHARED TEST FAKE IS NOT A PHASE FACT.** RN's own best find:
+`injectFakeMonitor`'s default streaming timeline opens a run, and an open run
+renders the connected surface regardless of any pre-row state — so with the
+store's `setItem` deleted, ALL THREE of the phase's first e2e legs passed. It
+hit twice in one day, in two different harnesses. It was filed in the phase's
+ROADMAP section, which is archived at close. **A finding about a fixture every
+future test imports belongs in CLAUDE.md at the moment it is found, not in a
+phase section awaiting a merge-time check.** (Landed as recurring failure 41 in
+this PR, with lessons 2 and 3 as amendments to 21 and 38.)
+
+**Presentation:** 144 words above the fold against ~120, six bullets averaging
+21.2, two over ~25 at 26 and 27. Best count of the seven gated so far; blocked
+on accuracy, which is the right way round for the gate to fail.
+
+**Release: v0.45.0, MINOR, recommended on merge.** `git log v0.44.0..main
+--oneline` returns four merges (#375 test-signal, #376 RELEASING docs, #377
+copy/refusal memory, #378 failure-screen dedup) — thin alone, a real tag with
+RN. Two note lines are non-negotiable: the Just Row Try-again fix stated as a
+DEFAULT-PATH fix (it is the only thing a rower gets without touching anything),
+and the setting with its cost in one clause (SKIP means no on-screen reminder to
+keep the phone awake — the reminder, not the wake lock).

@@ -185,11 +185,16 @@ question, which is the same gate.
 
 The ready card carries two things that exist nowhere else in that moment:
 
-1. **`KEEP YOUR PHONE SCREEN ON`.** Phase LM's Gate 0 called it "the only
-   preventive element in the phase" — five quiet words, every session,
-   because the rower who forgets is exactly the rower it exists for
-   (`ConnectedInterstitial.tsx`, the comment above the line). A rower who
-   turns the card off stops seeing it.
+1. **`KEEP YOUR PHONE SCREEN ON` — the REMINDER, not the mechanism.** Phase
+   LM's Gate 0 called it "the only preventive element in the phase" — five
+   quiet words, every session, because the rower who forgets is exactly the
+   rower it exists for (`ConnectedInterstitial.tsx`, the comment above the
+   line). A rower who turns the card off stops seeing it. **What they do NOT
+   lose is the wake lock:** `keepAwakeOn()` is a mount-lifetime `useEffect` in
+   both consumers, with no dependency on this setting, so it is armed for the
+   whole flow either way. Stated because an accepted cost written larger than
+   it is gets paid twice, and this is the sentence a future author inherits
+   (PM final gate, #381).
 2. **Cancel.** From the card, Cancel runs `useMonitorSession`'s `ready`-phase
    terminate, which puts the erg back (DEVIATIONS row 63). From the surface,
    the equivalent is the header's **End session**, which is a different act

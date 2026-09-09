@@ -171,8 +171,13 @@ replace — is approved before task 1.
       the recaptured settings screen. Unticked deliberately until it merges.
       **M**
 
-**THREE LESSONS FOUND WHILE BUILDING IT, for the merge-time agent-config
-check.** All three are the same shape — a gate that was green and could not
+**THREE LESSONS FOUND WHILE BUILDING IT, ALL THREE LANDED IN `CLAUDE.md` IN
+THIS PR** rather than deferred to the merge-time agent-config check: this
+section is archived at phase close, and two of them are facts about a fixture
+and a module shape every future test touches (PM final gate, #381). Lesson 1
+is now recurring failure 41; lesson 2 amends recurring failure 21; lesson 3
+amends recurring failure 38. Kept here as the account of where they came
+from. All three are the same shape — a gate that was green and could not
 have been red — and all three were caught by running a mutation rather than
 by reading.
 
@@ -200,10 +205,15 @@ its options are the colour options' rules with `.setting-*` appended to the
 selector lists in place — so Phase JC's "`/you/settings` gets NO row" ruling
 still holds for the same three reasons it gave.
 
-**ACCEPTED CONSEQUENCE, ruled by James 2026-09-09.** A rower who turns the
-card off stops seeing `KEEP YOUR PHONE SCREEN ON` — Phase LM's Gate 0 called
-it the only preventive element in that phase, and the ready card is the only
-place it appears — and trades the card's Cancel, which terminates on the erg,
+**ACCEPTED CONSEQUENCE, ruled by James 2026-09-09 — and it is the REMINDER
+that is lost, not the mechanism.** `keepAwakeOn()` is a mount-lifetime
+`useEffect` in both consumers, independent of this setting, so SKIP costs the
+printed line and nothing else. That belongs on this row because this row is
+where the loss is re-opened, and an overstated cost is the version a future
+author inherits (PM final gate, #381). What a rower who turns the card off
+stops seeing is `KEEP YOUR PHONE SCREEN ON` — Phase LM's Gate 0 called it the
+only preventive element in that phase, and the ready card is the only place it
+appears — and trades the card's Cancel, which terminates on the erg,
 for the surface's End session. Both were offered a home on the pre-pull
 surface and declined: the default is on, and a rower who turned it off asked
 for less copy, not more. This row is where that is re-opened if the
@@ -3686,9 +3696,27 @@ trigger is the whole entry.
   (2026-09-08), and its spec recommends they do NOT ride it:** pace tolerance
   changes what a judged number MEANS, which is the triad's first clause, and
   it would put a second independent risk model into one review. **RULED at
-  JC's Gate 0 (ruling 9, James, 2026-09-08): NO, they do not ride it.** Not
-  struck — this trigger now retargets to the SECOND SETTINGS PR, which
-  `/you/settings` exists to receive.
+  JC's Gate 0 (ruling 9, James, 2026-09-08): NO, they do not ride it.**
+  **DECLINED A SECOND TIME at Phase RN's Gate 0 (James, 2026-09-09), and the
+  pair now SPLITS.** The answer lives here rather than only in RN's phase
+  section, which is archived at phase close and would leave this row pointing
+  at a trigger that fired inside a history file.
+  - **Pace tolerance is TRIAD work and stops travelling as a comfort setting.**
+    It changes what a judged number MEANS, which is the triad's first clause,
+    so it is not cheap and never was — it has been mis-filed as cheap since
+    Phase 9. **Trigger:** a rower says the on-target band is wrong. Its own
+    antagonist pass whenever it opens.
+  - **Countdown length (0-60 s) has been declined twice on review SHAPE, never
+    on merit**, and the one thing that would settle it is a MEASUREMENT rather
+    than a PR: nobody has rendered `/you/settings` at four sections on a 375px
+    viewport. Per RF30, an item held on a stated cost owes the same receipt a
+    design gate's option owes. **The next action is that capture, not a third
+    retarget** — the screen, the section pattern and `pnpm screenshots` all
+    exist. Take it, then build or strike with the image attached.
+  - **Do NOT retarget either to "the third settings PR".** Two settings PRs
+    have existed and both declined, each costing a Gate 0 turn to re-decline,
+    and no third is on the slate: that is filing-as-deferral rather than a
+    trigger (PM final gate, #381).
 - **The rest of the old Phase 9's preferences**, which was killed as a phase for
   its multi-user framing (_"Two users with different preferences get different
   Today suggestions"_) rather than for its content: the suggest-workouts-at
