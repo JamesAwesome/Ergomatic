@@ -506,9 +506,17 @@ often they recur.
    `--project unit --project client` was run. The e2e job gates CI. **If your
    diff touches anything under `app/src/`, run the named e2e specs locally
    against an already-booted stack, then read the e2e job on the PR for the
-   full suite** (Phase MEM's local worker cap makes a full local run
-   ~1.5x its old cost — see RF40) — and `pnpm screenshots` too if you
-   changed a screen's layout.
+   full suite** — and `pnpm screenshots` too if you changed a screen's
+   layout. **The reason the local half is now NAMED specs is James's
+   decision to tier the gate (2026-09-08, Phase MEM): CI owns the full
+   suite, locally you run what your change touches.** It is not a
+   wall-clock argument — the Playwright worker cap that costs ~1.5x
+   locally (RF40) is one env var away from being lifted, and a cost you
+   can opt out of could never justify weakening the repo's number-one
+   gate. What justifies it is that the full suite still runs, on every
+   PR, where nobody can skip it. The obligation is unchanged: **an
+   `app/src/` change is not done until a full e2e run has passed
+   somewhere you have read the result.**
 2. **Trusting the aggregate coverage gate.** The 90×4 threshold is repo-wide,
    so a brand-new file can ship with entire branches uncovered and the gate
    still passes. Four components did exactly that (keyboard handlers twice,
@@ -1277,9 +1285,12 @@ often they recur.
 40. **Reading a KILLED test run as a flaky one, and retrying it into a
     machine that just proved it has no room (Phase MEM, 2026-09-08).**
     Three signatures, none of which is a test result:
-    **(a) An exit code ≥ 128 is a signal death.** 134 is SIGABRT (a V8
-    fatal, including OOM), 137 is SIGKILL. 130 is your own Ctrl-C and 143
-    a SIGTERM — killed, but not memory.
+    **(a) An exit code ≥ 128 is a signal death.** 137 is SIGKILL and reads
+    as memory on its own, because an OS memory kill leaves no message at
+    all. 134 is SIGABRT, which covers a V8 fatal OOM *and* every other
+    abort, so it reads as memory only when stderr carries
+    `Allocation failed` and as a plain signal death otherwise. 130 is your
+    own Ctrl-C and 143 a SIGTERM — killed, but not memory.
     **(b) `pnpm exec` COLLAPSES all of them to exit 1.** Measured: raw
     node and `pnpm run` both preserve 134/137; `pnpm exec` reports 1 with
     `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL`. This matters because the

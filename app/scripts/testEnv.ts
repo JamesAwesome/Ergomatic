@@ -11,9 +11,15 @@ export const isCI = (v: string | undefined = process.env.CI): boolean =>
   !!v && v !== "false" && v !== "0";
 
 /**
- * Local worker ceiling. Measured on a 16 GB / 4-performance-core Mac:
- * 4 workers = 38 s / 1.84 GB peak, unset (9) = 25 s / 2.76 GB, and 6 is
- * strictly dominated by 4 (41 s AND 2.63 GB). Override with
+ * Local worker ceiling. 4 is the LIGHTEST setting, and that is what chose
+ * it. Measured on a 16 GB / 4-performance-core Mac, path-scoped against a
+ * verified `start_floor=0MB`, running
+ * `bash scripts/test-run.sh --project client`: 4 workers = 37 s /
+ * 1459 MB peak, 6 = 30 s / 2091 MB, 9 = 28 s / 2612 MB. The spec's earlier
+ * table (38 s / 1.84 GB at 4, 25 s / 2.76 GB at 9) was taken with an
+ * UNSCOPED sampler that summed every Node process on the machine; its
+ * ordering holds, its absolutes do not, and its "6 is strictly dominated
+ * by 4" line does not reproduce on the command above. Override with
  * ERGOMATIC_TEST_WORKERS / ERGOMATIC_E2E_WORKERS on a bigger machine.
  *
  * trunc: a fractional worker count is not a setting.

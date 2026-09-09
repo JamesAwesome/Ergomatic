@@ -125,7 +125,9 @@ describes reproductions. Two facts sit awkwardly together and the spec
 will not pretend otherwise:
 
 - A V8 heap OOM is a **per-process** limit of 4192 MB here, while the
-  whole node tree at default concurrency peaks at **2.76 GB**. No single
+  whole node tree at default concurrency peaks at **2.76 GB** (an
+UNSCOPED sampler reading — see Part B1's note; a path-scoped re-run of
+the client project at 9 workers reads 2612 MB). No single
   process is near its own ceiling, so these runs should not spontaneously
   V8-OOM.
 - An OS memory kill of a terminal-launched `node` on darwin is
@@ -180,10 +182,29 @@ and classifies:
 | # | Condition | Verdict | Class |
 | --- | --- | --- | --- |
 | 1a | exit 130 | a deliberate Ctrl-C — **silent, no banner** | **deterministic** |
-| 1b | exit 134 or 137 | killed by signal `exit-128`; 134 = SIGABRT (V8 fatal), 137 = SIGKILL | **deterministic** |
-| 1c | exit ≥ 128, not one of the above | killed by signal `exit-(rc-128)` (e.g. 143 = SIGTERM) — a distinct "killed by signal" banner, not the memory one | **deterministic** |
-| 2 | stderr contains `Allocation failed` | heap OOM — **checked regardless of exit code or of whether a summary printed** | heuristic, covers the fork case |
+| 1b | exit 137 | **memory** — SIGKILL. An OS memory kill leaves no message at all, so the absence of one is its only signature here | **deterministic** |
+| 2 | non-zero exit **and** stderr contains `Allocation failed` | **memory** — a V8 fatal OOM. Covers exit 134 (SIGABRT) and the fork-worker case (exit 1 *with* a summary) alike | heuristic on the string, gated on the status |
+| 1c | exit ≥ 128, not matched above | killed by signal `exit-(rc-128)` — 143 = SIGTERM, and **134 = SIGABRT without the needle** — a distinct "killed by signal" banner, not the memory one | **deterministic** |
 | 3 | non-zero exit and no `Test Files` line in stdout | suite did not complete, cause unknown | heuristic |
+
+**Corrected 2026-09-08 (review fix wave): 134 and 137 are not
+symmetrical, and rule 2 is gated on a non-zero status.** Two over-claims
+of the RF26 class, both measured on the first implementation:
+- 134 (SIGABRT) was `memory` before the needle was ever consulted, so
+  `process.abort()`, a native abort and a manual `kill -6` all reported
+  "the suite ran out of memory". A V8 fatal OOM *always* prints
+  `Allocation failed`, so the needle is what tells the two apart: 134
+  **with** it is memory, 134 **without** it is a signal death, which is
+  all we can honestly say. 137 keeps its unconditional reading for the
+  opposite reason — an OS memory kill prints nothing, so requiring a
+  message would make it unreportable.
+- Rule 2 was checked "regardless of exit code". Measured:
+  `FAKE_RC=0 FAKE_OUT=" Test Files  1 passed (1)" FAKE_ERR="FATAL ERROR:
+  Allocation failed" bash scripts/test-run.sh --self-test` printed
+  `!! MEMORY KILL`, wrote a capture, and exited 0 — a **passing** run
+  declared a memory kill on a string match. The fork-worker case this
+  rule exists for always exits non-zero, so the `rc != 0` gate costs
+  nothing.
 
 **Corrected 2026-09-08 (Task 6): rule 1 was approved as a single "exit ≥
 128 → memory banner" row.** That is wrong as written: SIGINT (a rower's own
@@ -192,20 +213,24 @@ would print `MEMORY KILL` on every interrupted run — precisely the
 over-claim rules 2 and 3 exist to guard against. The shipped wrapper
 (`app/scripts/test-run.sh`) implements the four-way split above instead:
 130 is silent (a rower's own Ctrl-C is not a finding); 134/137 are the two
-signals that are actually memory (SIGABRT from a V8 fatal, SIGKILL); any
-other exit ≥ 128 gets its own "killed by signal" banner, distinct from the
-memory one, so a signal death that is not a memory death is never promoted
-into one; and only then do rules 2 and 3 apply. This is what is gated by
-`app/scripts/test-run.test.sh` and is the authoritative version of rule 1.
+signal that is unconditionally memory (SIGKILL) takes the memory banner;
+any other exit ≥ 128 that does not carry the needle gets its own "killed
+by signal" banner, distinct from the memory one, so a signal death that is
+not a memory death is never promoted into one; and only then does rule 3
+apply. This is what is gated by `app/scripts/test-run.test.sh` and is the
+authoritative version of rule 1.
 
-**Evaluated in order 1 → 2 → 3, first match wins.** The order is part of
-the specification, not an implementation detail: exit 137 satisfies rules
-1 and 3, and exit 134 satisfies all three, with different banners. Left
-unstated, two of the eight fixtures below have two legal answers.
+**Evaluated in the table's own order — 1a, 1b, 2, 1c, 3 — first match
+wins.** The order is part of the specification, not an implementation
+detail: exit 137 satisfies 1b and 3, and exit 134 satisfies 2, 1c and 3,
+with different banners. Left unstated, several of the fixtures below have
+two legal answers. Rule 2 sits **above** 1c precisely so that a 134
+carrying the needle is read as memory rather than as a bare signal.
 
-Rule 2 is deliberately not gated on the others: the fork-worker OOM exits
-1 *and* prints a summary, so any rule requiring a missing summary or a
-signal exit misses the case that matters most.
+Rule 2 requires only a non-zero status, never a missing summary: the
+fork-worker OOM exits 1 *and* prints a full summary, so any rule
+demanding a missing summary or a signal exit misses the case that matters
+most.
 
 **Rules 2 and 3 read different streams** — the needle lands on stderr,
 the `Test Files` line on stdout (verified against a real vitest fork
@@ -239,15 +264,28 @@ defect in the obvious implementation, not a style note:
   `( node -e 'process.kill(process.pid,"SIGKILL")' 2>&1 | tee /dev/null ); echo $?`
   prints **0** — a SIGKILL reading as a pass. With `set -o pipefail` it
   prints **137**. Both are available in `/bin/sh` here.
+- **BOTH streams stream live; neither is buffered to a file and replayed.**
+  Vitest writes failure detail to **stderr** — measured 2026-09-08 on one
+  failing client test: 504 bytes stderr against 351 bytes stdout — so
+  deferring stderr hides every failure until the run ends, prints the
+  summary *before* the failures it summarises, and loses the lot in the
+  one event this design exists for: if the OS kills the wrapper itself,
+  the `EXIT` trap never runs and the buffered stderr is orphaned in
+  `/tmp`. The shape is a synchronous fd swap,
+  `( cmd 2>&1 1>&3 3>&- | tee "$ERR" >&2; exit ${PIPESTATUS[0]} ) 3>&1 | tee "$OUT"`,
+  **not** `2> >(tee "$ERR" >&2)`: a process substitution is asynchronous
+  and bash 3.2.57 sets no `$!` for one, so rule 2's `grep` would race the
+  tee still writing the file. As pipeline members both tees are waited
+  for, so `$ERR` is complete before the classifier reads it — and the gate
+  drives that path with a real child whose needle is on stderr.
 - **It forwards `"$@"`** — the hook passes `--project unit --project
   client`, and `pnpm test:coverage` must route through it too or it keeps
   the old behaviour silently.
 - **Narrowed 2026-09-08 (Task 6): `pnpm test:watch` does NOT route through
   the wrapper**, and this is deliberate, not an oversight the sweep missed.
   Watch mode is an interactive, long-lived TTY session — the wrapper pipes
-  stdout through `tee` and defers stderr to replay it after the child
-  exits, which would break vitest's live watch reporter (it rewrites the
-  terminal in place). A watch run is also, by definition, being watched by
+  BOTH streams through `tee`, so neither is a terminal any more, which
+  breaks vitest's live watch reporter (it rewrites the terminal in place). A watch run is also, by definition, being watched by
   a human at the moment it dies, so the silent gap this design closes for
   `pnpm test` (a kill that looks like a pass in a log nobody is staring at)
   does not exist for `test:watch`.
@@ -351,10 +389,34 @@ the choice of number.
 | 6 | 41 s | 2.63 GB |
 | unset (→ 9 workers) | 25 s | 2.76 GB |
 
-**6 is strictly dominated by 4** — slower *and* 0.8 GB heavier. That
-domination is PRIMARY. The *explanation* (workers 5 and 6 landing on
-efficiency cores) is **INFERENCE**; no per-core scheduling was observed,
-and the design rests on the domination, not the explanation.
+**Read those RSS figures as a RELATIVE comparison, not as absolutes.**
+They were taken in one sitting with `measure-test-memory.sh` *before* it
+was path-scoped, so each one sums every Node process on the machine —
+other worktrees, agent sessions, language servers — and carries an
+unmeasured floor. The sampler is scoped now (it takes an
+`<app-abs-path>`, like its `count-test-workers.sh` sibling, and prints
+`start_floor`); these numbers were not re-taken, because re-baselining
+them silently would lose the one thing they are good for, which is the
+ordering.
+
+**4 is the lightest setting, and that is what chose it.** A scoped
+re-measurement 2026-09-08 against a verified `start_floor=0MB`, running
+`bash scripts/test-run.sh --project client` (a narrower command than the
+table above, whose command was never recorded):
+
+| `ERGOMATIC_TEST_WORKERS` | Wall | Peak node RSS (scoped) |
+| --- | --- | --- |
+| 4 (the shipped default) | 37 s | 1459 MB |
+| 6 | 30 s | 2091 MB |
+| 9 | 28 s | 2612 MB |
+
+**The "6 is strictly dominated by 4" claim does not reproduce on that
+command** — 6 was 7 s *faster* and 632 MB heavier, which is a trade
+rather than a domination. The two runs are of different commands, so
+neither falsifies the other; what survives is the monotone RSS ordering,
+which is what the default rests on. The old *explanation* (workers 5 and
+6 landing on efficiency cores) was already tagged **INFERENCE**; no
+per-core scheduling was ever observed and nothing here depends on it.
 
 **Verified before prescribing.** Every block below was pasted and run
 (`.claude/agent-briefing.md`, "Plan authoring"). The oracle is
@@ -428,7 +490,9 @@ and should raise it in the same edit that raises the default.
 **B3. No change to Docker, container limits, or `E2E_KEEP` on memory
 grounds.** Measured: two live compose stacks cost **236 MB total**
 (~118 MB each), and `--coverage` adds **50 MB** over a plain run (2.81 vs
-2.76 GB). Neither is a memory lever. Both premises were falsified during
+2.76 GB — both unscoped readings taken in the same sitting, so the
+50 MB delta stands even though neither absolute does). Neither is a
+memory lever. Both premises were falsified during
 this spec's own measurement and are recorded so nobody re-derives them.
 A separate `E2E_KEEP=0` default may still be right for staleness; it is
 out of scope so it can be argued on its own evidence.
@@ -480,19 +544,43 @@ reach.** Three constraints, each from a measured defect:
   **`--changed` and a path filter INTERSECT, so "append the `scripts/`
   gates" is not expressible in one command.** Measured:
   `--changed origin/main … scripts/` → `No test files found`, while
-  `--project unit scripts/` alone → **7 files, 153 tests**. The hook
-  therefore runs two invocations — the changed set, then the `scripts/`
-  gates unconditionally — and **the wrapper classifies both and returns
-  the first non-zero status**, so a kill in either is reported rather than
-  masked by the other's success. Without this the Risk section's whole
-  mitigation is inoperative.
+  `--project unit scripts/` alone → **7 files, 153 tests**.
+  **The `client` project has the same class of test, and it needs its own
+  invocation for the same reason** (added in the review fix wave; the
+  first implementation covered only `scripts/` and so was a REGRESSION
+  against the old hook, which ran the whole client project). Measured
+  2026-09-08: appending `.zz-probe { color: var(--totally-undefined-probe); }`
+  to `app/src/index.css` and running `--changed HEAD --project client`
+  selects **nothing**, while
+  `--project client src/theme/customPropertyCensus.test.ts` **fails** —
+  `index.css` is imported only by `main.tsx`, which no test imports, so it
+  is in no test's module graph.
+  The client set is **enumerated at hook time**, not listed: every client
+  test importing `node:fs` (46 files / 1941 tests, **10.3 s**, against
+  **57 s** for the whole client project). A hardcoded list goes stale the
+  first time someone adds a census suite, so `scripts/pre-push.test.sh`
+  pins the selection against an *independent* needle — the
+  `readFileSync`/`readdirSync`/`statSync` call sites — and goes red naming
+  any suite the hook's needle stopped reaching. An enumeration that comes
+  back empty falls back, loudly, to the whole client project.
+  The hook therefore runs three invocations — the changed set, then the
+  `scripts/` gates, then the client whole-tree gates — and **the wrapper
+  classifies each and the hook returns on the first non-zero status**, so
+  a kill in any of them is reported rather than masked by another's
+  success. Without this the Risk section's whole mitigation is
+  inoperative.
 - **An empty selection exits 0 because `passWithNoTests` defaults true**
   (measured; nothing in the repo sets it). Under C1 an empty selection is
   the everyday path, so that default is now load-bearing: flipping it
   turns every no-op push into a false `SUITE DID NOT COMPLETE`.
 
-**C2. `pnpm test:full`** is the explicit full run, unchanged in meaning
-from today's `pnpm test`.
+**C2. `pnpm test:full`** is a stable NAME for "the whole suite", so the
+scoped/full distinction has something to say. It is currently
+**byte-identical to `pnpm test`** — both are `bash scripts/test-run.sh`
+with no arguments — and it is kept so that a document, a brief or a CI
+step can ask for the full run without depending on `pnpm test` never
+gaining a default scope. It buys a name, not a behaviour, and nothing
+about `pnpm test` changes.
 
 **C3. CI is the only place the full suite is mandatory.** `ci.yml` already
 runs `pnpm test:coverage` and the full e2e job. What changes is that
@@ -556,6 +644,12 @@ already thought of cannot find the site you forgot.
 | C1 ref guard | `origin/main` made unresolvable; assert the hook falls back to the full scoped suite and says so, rather than passing on zero tests. |
 | C1 coverage | A branch changing only `vitest.config.ts` is pushed; assert the `scripts/` gates still run. |
 | A1 needle breadth | A fixture whose output carries `Out of memory` from a caught `ERR_HTTP2_NO_MEM` asserts **no** banner — the over-match guard. |
+| A1 rule-2 status gate | A fixture with `rc=0`, a passing summary and the needle on stderr asserts **no** banner. |
+| A1 134 split | Two fixtures at exit 134 — one with the needle (memory banner), one without (signal banner, and an explicit assertion that it never says memory). |
+| A1 stderr streaming | A real child (via `ERGOMATIC_TEST_RUN_BIN`) writing the needle to stderr and a summary to stdout at exit 1: the memory banner fires, so `$ERR` was complete when rule 2 read it, and the child's stderr text reaches the caller. |
+| A0 isolation | The gate points `ERGOMATIC_TEST_KILLDIR` at a `mktemp -d`, and a case asserts the live `app/.test-kills` listing is byte-identical before and after a gate run. |
+| A0 quiet failure | An unwritable capture directory produces no shell noise on stderr — skipped out loud under root, where `chmod 500` is no barrier. |
+| C1 client coverage | The hook's dry-run output carries a third invocation, `--project client <files>`, whose file list is checked against an independently-computed census of every client test that reads the filesystem. |
 | A1 pipeline status | The wrapper is run against a self-SIGKILLing child, injected via `ERGOMATIC_TEST_RUN_BIN`, and asserted to return 137 **and** print the memory banner — the `tee` defect. The `--self-test` classifier cases cannot cover this: they fabricate `rc` and never reach the pipeline. |
 | A0 path | The wrapper is invoked via `pnpm test` (cwd `app/`) and from the repo root; both must write to the same directory. |
 | A0 ignore | `git check-ignore` on the capture directory exits 0, and `git status --porcelain` is empty after a captured kill. |
@@ -598,27 +692,33 @@ interval, and returned 0 for every one of: no arguments, a logfile with
 no command, an unwritable log directory, and a command that itself
 exited 7.
 
-`measure-test-memory.sh` — peak RSS of the node tree while a command runs:
+`measure-test-memory.sh` — peak RSS of the node tree **belonging to one
+app path** while a command runs:
 
 ```bash
 #!/usr/bin/env bash
-# Usage: bash scripts/measure-test-memory.sh <logfile> <command...>
+# Usage: bash scripts/measure-test-memory.sh <logfile> <app-abs-path> <command...>
 set -uo pipefail
-if [ $# -lt 2 ]; then echo "usage: $0 <logfile> <command...>" >&2; exit 2; fi
-LOG="$1"; shift
+if [ $# -lt 3 ]; then echo "usage: $0 <logfile> <app-abs-path> <command...>" >&2; exit 2; fi
+LOG="$1"; APPPATH="$2"; shift 2
 mkdir -p "$(dirname "$LOG")" 2>/dev/null || { echo "cannot create dir for $LOG" >&2; exit 2; }
 : > "$LOG" 2>/dev/null || { echo "cannot write $LOG" >&2; exit 2; }
-( while true; do
-    ps -Ao rss,comm | grep -E 'node|vitest' | awk '{s+=$1} END{print s/1024}' >> "$LOG"
-    sleep 0.5
-  done ) & SAMPLER=$!
+_rss_mb() {
+  ps -Ao rss,args | grep -E '[n]ode|[v]itest' | grep -F -- "$APPPATH" \
+    | awk '{s+=$1} END{printf "%.0f\n", s/1024}'
+}
+FLOOR=$(_rss_mb)
+( while true; do _rss_mb >> "$LOG"; sleep 0.5; done ) & SAMPLER=$!
 START=$(date +%s); "$@" >/dev/null 2>&1; RC=$?; END=$(date +%s)
 { kill "$SAMPLER"; wait "$SAMPLER"; } 2>/dev/null   # 'wait' suppresses the job-control notice
 N=$(grep -c . "$LOG" || true)
 if [ "${N:-0}" -eq 0 ]; then
   echo "MEASUREMENT INVALID: no samples (command finished inside one interval)" >&2; exit 3
 fi
-echo "exit=$RC wall=$((END-START))s samples=$N floor=$(sort -n "$LOG"|head -1)MB peak=$(sort -rn "$LOG"|head -1)MB log=$LOG"
+echo "exit=$RC wall=$((END-START))s samples=$N start_floor=${FLOOR}MB min=$(sort -n "$LOG"|head -1)MB peak=$(sort -rn "$LOG"|head -1)MB log=$LOG"
+if [ "${FLOOR:-0}" -ne 0 ]; then
+  echo "NOTE: ${FLOOR}MB of node was already running for this checkout; peak includes it." >&2
+fi
 exit "$RC"
 ```
 
@@ -670,12 +770,15 @@ exit "$RC"
   floor itself and **fails the measurement** when foreign workers are
   present for that path.
 
-**One caveat stands and cannot be engineered away.** The RSS sampler is
-**machine-wide** — it greps every `node` process — so its floor moves
-with whatever else is running. Measured baseline with nothing of ours
-under test: **~850 MB across 56 processes, 54 of them another app's
-bundled node.** It therefore prints `floor=` alongside `peak=` so the
-reading can be judged, it discriminates between settings only within one
-sitting, and it must never be compared across days. The worker counter
-is the oracle to trust for anything structural; RSS is the one that
-chose `4`, and its numbers carry that caveat.
+**The RSS sampler used to be machine-wide, and Part B1's headline
+numbers were taken while it was.** It greped every `node` process, so its
+floor moved with whatever else was running — measured baseline with
+nothing of ours under test: **~850 MB across 56 processes, 54 of them
+another app's bundled node** — and only the delta between two runs in one
+sitting meant anything. It now takes an `<app-abs-path>` and filters on
+it, exactly as `count-test-workers.sh` always did, and prints
+`start_floor` so a contaminated reading announces itself; a scoped
+re-measurement of the client project reads `start_floor=0MB`. The old
+figures in Part B1 are **annotated, not restated**: re-baselining them
+silently would lose their ordering, which is the thing that chose `4`.
+The worker counter remains the oracle for anything structural.

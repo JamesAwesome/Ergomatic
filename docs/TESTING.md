@@ -412,8 +412,10 @@ and the pattern is worth naming so reviews aim there:
   `app/domain/validate.ts`; fake stores against real ones (§5); a deleted
   component's CSS; whether the named e2e specs still pass locally against an
   already-booted stack, then whether the e2e job on the PR is green for the
-  full suite (a full local `pnpm e2e` run now costs ~1.5x its old
-  wall-clock under Phase MEM's local worker cap — CLAUDE.md RF40).
+  full suite. That split is James's tiering decision (2026-09-08) — CI owns
+  the full suite, locally you run what your change touches — not a
+  wall-clock saving, though a full local run does cost ~1.5x under the
+  worker cap (CLAUDE.md RF1).
 
 ## 13. Self-mutation is part of writing the test
 

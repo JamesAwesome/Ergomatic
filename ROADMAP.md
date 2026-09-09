@@ -2210,8 +2210,14 @@ read as flake, so it gets retried into a machine with no room. Baseline
 at rest is 8.8 GB of 16 GB with swap at 6.6 of 7.2 GB and 66 MB of free
 pages, across 3 live agent sessions and 6 worktrees. The client suite
 peaks at **2.76 GB** at Vitest's default 9 workers and **1.84 GB** at 4
-(38 s vs 25 s); six workers is strictly dominated by four — 41 s *and*
-2.63 GB.
+(38 s vs 25 s). **Those two figures came from an UNSCOPED sampler** that
+summed every Node process on the machine, in one sitting, against an
+unmeasured floor — they are a relative comparison, not absolutes. The
+sampler is path-scoped now; a re-measurement of `--project client`
+against `start_floor=0MB` reads 1459 MB at 4, 2091 MB at 6, 2612 MB at 9.
+Four is the LIGHTEST setting and that is why it ships; the old "six is
+strictly dominated by four" line does not reproduce on that command
+(six was faster and heavier), so it is withdrawn.
 
 **The first framing was wrong and is corrected here, not appended to.**
 The spec originally said a memory kill exits 1 and is indistinguishable
@@ -2242,15 +2248,19 @@ exit code first and the message second, plus a preflight advisory that
 Playwright `workers` 2 (proposed), both env-overridable and both
 **disabled under CI**, so a bigger machine pays nothing (his call); (C)
 pre-push runs `--changed` plus, unconditionally, the whole-tree gates
-that `--changed` structurally cannot select.
+that `--changed` structurally cannot select — **both** the `scripts/`
+suites and the 46 client suites that read the tree, the second of which
+the first implementation missed.
 
 **BUILT, UNMERGED — all six tasks are on branch `phase-mem-test-memory`
 (Tasks 1-5 the mechanism, Task 6 the documentation half); nothing has
 landed on main.**
 `app/scripts/test-run.sh` implements the four-way signal split (silent
-Ctrl-C at 130; memory banner at 134/137; a distinct "killed by signal"
-banner at any other exit ≥ 128; then the stderr needle; then the
-missing-summary rule — CLAUDE.md RF40, spec A1) and is wired into
+Ctrl-C at 130; memory banner at 137; then the stderr needle, gated on a
+non-zero exit, which is what makes a 134 a memory kill rather than a bare
+abort; a distinct "killed by signal" banner at any other exit ≥ 128,
+including a needle-less 134; then the missing-summary rule — CLAUDE.md
+RF40, spec A1) and is wired into
 `ci.yml`'s `scripts` job by name. **Worker counts, measured (Task 4,
 verified clean floor):** default → **4**; `ERGOMATIC_TEST_WORKERS=8` →
 **8**; `CI=true` → **9** (the cap is genuinely inert under CI). **The
@@ -2263,7 +2273,8 @@ Playwright default shipped as 3, not the proposed 2** — measured wall-clock
 
 **The open question the desk cannot settle.** No capture of the real
 failure exists — everything measured so far is a reproduction. A V8 OOM
-is a per-process 4192 MB limit while the whole tree peaks at 2.76 GB, and
+is a per-process 4192 MB limit while the whole tree peaks at 2.76 GB
+(unscoped; 2612 MB scoped to this checkout), and
 an OS memory kill of a terminal `node` on darwin is unobserved
 (`memorystatus`, not the Linux OOM killer;
 `kill_on_sustained_pressure_count` is 0 here). So Part B's lever and Part

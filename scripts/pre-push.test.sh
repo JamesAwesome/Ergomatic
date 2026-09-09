@@ -69,7 +69,46 @@ out="$(run_hook HEAD)"
 # 'scripts/'` counts 2 and fails against a CORRECT hook. Anchor on the
 # second invocation's distinctive argument instead.
 check "the scripts/ gates run unconditionally" "1" "$(printf '%s' "$out" | grep -c -- '--project unit scripts/')"
-check "there are two vitest invocations"       "2" "$(printf '%s' "$out" | grep -c 'test-run.sh')"
+check "there are three vitest invocations"     "3" "$(printf '%s' "$out" | grep -c 'test-run.sh')"
+
+# The CLIENT half of the same class. Measured 2026-09-08 on this branch:
+# appending `.zz-probe { color: var(--totally-undefined-probe); }` to
+# app/src/index.css and running
+# `vitest run --changed HEAD --project client` prints no test-file summary at
+# all and selects nothing, while
+# `vitest run --project client src/theme/customPropertyCensus.test.ts` prints
+# `Test Files  1 failed (1)`. index.css is imported only by main.tsx, which
+# no test imports, so it sits in no test's module graph and `--changed`
+# cannot reach the suites whose subject it is. Before this invocation existed
+# the hook let that push through.
+check "the client whole-tree gate runs unconditionally" "1" "$(printf '%s' "$out" | grep -c -- '--project client src/')"
+client_line="$(printf '%s\n' "$out" | grep -- '--project client src/' | head -1 || true)"
+case "$client_line" in *" src/theme/customPropertyCensus.test.ts"*) r=0 ;; *) r=1 ;; esac
+check "the selection names the index.css census suite" "0" "$r"
+
+# CENSUS, on a needle INDEPENDENT of the hook's own. The hook enumerates on
+# the `node:fs` IMPORT; this enumerates on the readFileSync/readdirSync/
+# statSync CALL. Measured 2026-09-08: both return the same 46 files. The
+# moment they stop agreeing, the hook's enumeration has gone stale for a
+# suite that reads the tree, and this goes red naming it -- which is the
+# whole reason the hook enumerates instead of carrying a list.
+missing=""
+for f in $( cd "$ROOT/app" && grep -rlE 'readFileSync|readdirSync|statSync' src \
+              --include='*.test.ts' --include='*.test.tsx' | sort ); do
+  case "$client_line" in *" $f"*) ;; *) missing="$missing $f" ;; esac
+done
+check "every file-reading client suite is selected" "" "$missing"
+# Mutation run 2026-09-08: delete the whole `CLIENT_TREE` block from
+# .husky/pre-push --
+#   FAIL  there are three vitest invocations -- expected '3' got '2'
+#   FAIL  the client whole-tree gate runs unconditionally -- expected '1' got '0'
+#   FAIL  the selection names the index.css census suite -- expected '0' got '1'
+#   FAIL  every file-reading client suite is selected -- expected '' got ' src/...'
+#     (46 names)
+# Mutation run 2026-09-08: narrow the hook's needle to `'"node:fs"'` with the
+# closing quote, so `node:fs/promises` importers drop out -- the census stays
+# green because no client test imports that form today, which is exactly why
+# the census needle is the CALL and not a second spelling of the import.
 
 # Docker-free: the integration project must never be admitted.
 case "$out" in *"--project integration"*) r=1 ;; *) r=0 ;; esac
@@ -85,12 +124,12 @@ out="$( cd "$ROOT" && DRY_RUN=1 PREPUSH_BASE=HEAD \
   PATH="$FAKEBIN:$STUB:$PATH" sh -e .husky/pre-push 2>&1 )"
 case "$out" in *"would run:"*) r=1 ;; *) r=0 ;; esac
 check "an ambient DRY_RUN does not disarm the hook" "0" "$r"
-check "an ambient DRY_RUN still runs both gates"    "2" "$(printf '%s' "$out" | grep -c '^ran: ')"
+check "an ambient DRY_RUN still runs all three gates" "3" "$(printf '%s' "$out" | grep -c '^ran: ')"
 rm -rf "$FAKEBIN"
 # Mutation run 2026-09-08: rename PREPUSH_DRY_RUN back to DRY_RUN in
 # .husky/pre-push --
 #   FAIL  an ambient DRY_RUN does not disarm the hook -- expected '0' got '1'
-#   FAIL  an ambient DRY_RUN still runs both gates    -- expected '2' got '0'
+#   FAIL  an ambient DRY_RUN still runs all three gates -- expected '3' got '0'
 # 6 failures in total: the four dry-run cases above lose their seam and go
 # red too, which is the same fact from the other side.
 

@@ -64,7 +64,7 @@ Under the spec as written, **every Ctrl-C prints `MEMORY KILL`**. Task 1 impleme
 | `app/scripts/test-run.test.sh` | CREATE. Fixture-per-row gate for the classifier. Runs in CI. |
 | `app/scripts/test-kill-capture.sh` | CREATE. Writes one forensic file per classified kill. Sourced by the wrapper so the wrapper stays readable. |
 | `app/scripts/test-run-advisory.sh` | CREATE. Preflight peer/memory advisory + pidfile lifetime. Sourced by the wrapper. Never fails a run. |
-| `app/scripts/measure-test-memory.sh` | CREATE. Peak-RSS sampler (spec appendix, verbatim). |
+| `app/scripts/measure-test-memory.sh` | CREATE. Peak-RSS sampler (spec appendix, verbatim). **Path-scoped in the review fix wave**: it takes `<app-abs-path>` and prints `start_floor`, like its `count-test-workers.sh` sibling. |
 | `app/scripts/count-test-workers.sh` | CREATE. Path-scoped worker counter (spec appendix, verbatim). |
 | `app/vitest.config.ts` | MODIFY. `maxWorkers` default 4, env-overridable, inert under CI. |
 | `app/playwright.config.ts` | MODIFY. `workers` default 2, same shape. |
@@ -281,7 +281,7 @@ exactly why the wrapper reads the former.
 
 - [ ] **Step 7: Wire package.json**
 
-In `app/package.json`, replace the three test scripts and add a fourth. Note `test:full` is today's `test` verbatim, and that `NODE_OPTIONS` is no longer set here because the wrapper owns it:
+In `app/package.json`, replace the three test scripts and add a fourth. Note `test:full` is **byte-identical to `test`** — it buys a stable NAME for "the whole suite" so the scoped/full distinction has something to say, not a different behaviour (spec C2) — and that `NODE_OPTIONS` is no longer set here because the wrapper owns it:
 
 ```json
 "test": "bash scripts/test-run.sh",
@@ -680,6 +680,11 @@ export const isCI = (v: string | undefined = process.env.CI): boolean =>
  * 4 workers = 38 s / 1.84 GB peak, unset (9) = 25 s / 2.76 GB, and 6 is
  * strictly dominated by 4 (41 s AND 2.63 GB). Override with
  * ERGOMATIC_TEST_WORKERS / ERGOMATIC_E2E_WORKERS on a bigger machine.
+ *
+ * SUPERSEDED by the review fix wave: those RSS figures came from an
+ * unscoped sampler, and the shipped comment in app/scripts/testEnv.ts
+ * carries the path-scoped re-measurement instead. 4 is still the default,
+ * for being the lightest.
  *
  * trunc: a fractional worker count is not a setting.
  * max(1): Playwright's resolveWorkers throws below 1.
