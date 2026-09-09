@@ -33,13 +33,15 @@ declare global {
  *  WHY THE OVERRIDE EXISTS. On iOS this returns `true`, so
  *  `permission-denied` renders a FIVE-button action stack (`Open Settings`
  *  above `Try again`, `Row on the phone timer instead`, `View connection
- *  log` and `Cancel`); on the web it returns `false` and the same frame is
- *  four buttons by construction. Every browser assertion therefore stood on
- *  the four-button shape, and nothing could catch a landscape regression
- *  that reached only the iOS stack — the frame with the tightest budget of
- *  any in the app (308px of content, and the shape whose window the pairing
- *  rule takes 10px -> 138px). `e2e/design.spec.ts`'s five-button case drives
- *  this seam to reach it.
+ *  log` and `Cancel`); on the web, with the door shut, it returns `false`
+ *  and the same frame is four buttons. Every browser assertion therefore
+ *  stood on the four-button shape, and nothing could catch a landscape
+ *  regression that reached only the iOS stack — the frame with the tightest
+ *  budget of any in the app: measured at 844x390 through this seam, a 138px
+ *  window against 259px of content, 121px of overflow. (`index.css`'s own
+ *  table says 308px; that predates #378's DETAIL-panel dedupe, whose ROADMAP
+ *  row records the same 121px this seam now measures.)
+ *  `e2e/design.spec.ts`'s five-button case drives this seam to reach it.
  *
  *  WHY IT GATES THIS FUNCTION AND NOTHING ELSE. A global `isNative()` stub
  *  would have been the obvious lever and is ruled out with a receipt:

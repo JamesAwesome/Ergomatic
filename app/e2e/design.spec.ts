@@ -7728,8 +7728,12 @@ test.describe("connected screens (fake-driven)", () => {
   // `Open Settings`, and it renders it only where `canOpenAppSettings()` is
   // true, which was `isNative()` alone. So every assertion above stands on
   // the FOUR-button web shape, and a landscape regression that reached only
-  // the five-button stack — the one with 308px of content and the tightest
-  // window of any frame in the app, 138px — had no gate at all.
+  // the five-button stack — the tightest window of any frame in the app,
+  // measured here at 138px against 259px of content — had no gate at all.
+  // (259, not the 308 in `index.css`'s own table: that table predates #378's
+  // DETAIL-panel dedupe. Its ROADMAP row records the same 121px of overflow
+  // this test measures, which is the check that the seam renders the shipped
+  // frame and not something reconstructed.)
   // `forceAppSettingsDoor` writes the adapter's dev-only override token so a
   // browser can reach it; `src/adapters/appSettings.ts`'s own header carries
   // why that override gates one boolean and nothing else, and
@@ -7738,16 +7742,21 @@ test.describe("connected screens (fake-driven)", () => {
   // TWO MUTATIONS, BOTH RUN, and neither reddens the four-button case above:
   //   - `-n + 4` -> `-n + 2` on `.connected-interstitial-actions--failure`
   //     in `src/index.css` (the pairing count). The five-button window falls
-  //     138px -> 74px and `assertHeadlineOnFrame` fails on the headline's
-  //     BOTTOM, which runs to y94. This is the regression class the row was
-  //     filed for: it is invisible on every four-button frame, where `-n + 2`
-  //     still leaves 142px.
+  //     138px -> 74px and `assertHeadlineOnFrame` fails: "the headline ends
+  //     20px below the body's visible bottom", `Expected: <= 74.5`,
+  //     `Received: 94`. This is the regression class the row was filed for:
+  //     it is invisible on every four-button frame, where `-n + 2` still
+  //     leaves 142px.
   //   - `error.reason === "permission-denied"` -> `"link-failed"` on the
   //     `Open Settings` guard in `ConnectedInterstitial.tsx` (chosen over
   //     deleting the button so every import stays used and `pnpm build`
   //     still succeeds — RF12's corollary: a mutation that breaks the build
-  //     leaves compose serving the previous image and reads as a pass). The
-  //     count assertion fails at 4.
+  //     leaves compose serving the previous image and reads as a pass; here
+  //     the served image demonstrably changed, since the count changed). The
+  //     count assertion fails, `Received: 4`.
+  //   - AND the seam itself: `canOpenAppSettings()` reverted to `isNative()`
+  //     alone. Same failure, `Received: 4` — which is what proves this case
+  //     depends on the override and not on some other route to the button.
   //
   // The overflow precondition below is what keeps `assertHeadlineOnFrame`
   // falsifiable here, the same role the refusal frame's `contentHeight`
@@ -7901,11 +7910,15 @@ test.describe("connected screens (fake-driven)", () => {
   //     measured: window 78px, headline at 22..58, test green. (That table was
   //     written against `--refusal`, the modifier this rule carried when it
   //     applied to the refusal alone; it is `--failure` now, on every failure
-  //     frame.) It goes red on the shape the
-  //     ROADMAP already files as a real defect — the FIVE-button stack, with
+  //     frame.) It goes red on the FIVE-button stack with
   //     the pairing gone: window 10px, "the headline ends 48px below the
   //     body's visible bottom", `Received: 58`. That is its whole job: it
   //     pins the landscape ACTION-STACK BUDGET, not the centring.
+  //     SUPERSEDED (Phase MT close-out): that shape was described here as one
+  //     "the ROADMAP already files as a real defect" — i.e. unreachable from
+  //     any browser. The door override reaches it and the five-button case
+  //     above gates it directly, so this copy is now a dormant tripwire for
+  //     THIS frame rather than the only home of the claim.
   test("the REFUSED frame's headline is on screen at rest in landscape, and nothing sits above the scroll origin", async ({
     page,
   }) => {
