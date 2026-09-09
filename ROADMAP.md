@@ -1000,6 +1000,13 @@ generation):
       the API and the log line; delete the three localStorage fallbacks.
       Legacy bulk headers are kept on purpose. Own RELEASING.md floor row.
 
+      **OPEN QUESTION: none. This is the ONLY order in the file whose trigger
+      is a calendar date**, and it is the one order the Phase OD sweep found
+      that is not at risk. Recorded here as the contrast case: eleven other
+      live orders carry a wave, a PR, or him asking, and every one of those has
+      slipped. **NEXT: nothing owed before Saturday** — but the migration
+      warning above is a PRECONDITION, not a footnote: a migration written off
+      an older main is skipped SILENTLY and `/api/prefs` 500s for every rower.
 **Exit:** the two phase-close greps in spec §6 (no `pain`/`difficult`; and
 `effort` means one thing) pasted into the close gate; e2e and screenshots
 green with refreshed captures; the by-hand stale-build check (a `v0.38.1`
@@ -1096,6 +1103,20 @@ while we are in here.
       PRIMARY), but the height model does not, because Safari's chrome collapses
       on scroll, so Safari-in-simulator is **never authoritative for a `100dvh`
       question**. **S**
+      **OPEN QUESTION (Phase OD, 2026-09-09): this row's own receipt is STALE,
+      and the receipt is the only thing saying the order is undone.** The row
+      claims `grep -ri simulator` "returns only the fake transport's own
+      prose"; re-run 2026-09-09 it returns 15 hits across
+      `domain/monitor/pm5/ergMachine.ts`, `intervalIndex.ts`,
+      `transports/capacitorBle.ts`, `adapters/nfcReader.ts` and four test files.
+      The ORDER is still undone — `grep -rn simulator app/scripts .github`
+      returns nothing, so no harness, script or CI job exists — but a row whose
+      stated proof no longer reproduces is one re-read away from being struck
+      wrongly. **NEXT (≤0.25): replace the count with the COMMAND**
+      (`grep -rn simulator app/scripts .github`), which is what actually
+      answers it and does not go stale.
+      **Trigger note:** bound to Wave D, which follows Wave A, which is
+      unopened — so its subject is two waves out and on no calendar.
 - [ ] **Let a build flag reach the fake transport on NATIVE.** One line in
       `src/adapters/monitorTransport.ts`. Today `isNative()` sends the simulator
       down the Capacitor arm, `initialize()` rejects `BLE unsupported`, and the
@@ -1157,6 +1178,20 @@ while we are in here.
       click through that same helper, so the suspicion is LOAD rather than
       the assertion. CI retries once, so it costs a red PR check at worst.
       **M**
+      **TRIGGER ALREADY FIRED — 2026-08-20, and 20 days have passed.** The row
+      says so itself. This is the order that falsified "passive triggers are
+      the problem": it had an ACTIVE trigger, the trigger FIRED, and nothing
+      happened, because the question underneath it had no owner.
+      **OPEN QUESTION: is this one defect or four?** The population has GROWN
+      since the order — `:1112` files two more (2026-09-08/09), `:1152` a third
+      class (integration under container contention), `:453` a fourth
+      (`connected.spec.ts:1703` poisons its own origin) — and a fifth was
+      dropped from Phase OD's own slate when its stated mechanism was falsified
+      (`e2e/helpers.ts:117` mints `RUN_ID` per run; `postTestOffer.ts:53-66`
+      reads no baseline, so a surviving `pgdata` cannot suppress that prompt).
+      Hunting four separately is four times the work if they share a producer.
+      **NEXT (≤0.25): read the four filed rows together and say whether any two
+      share a producer.** That answer decides whether this is one row or four.
 - [ ] **A THIRD flake class: integration, under container contention.**
       `server/routes/isolation.integration.test.ts` failed once with
       `expected 401 to be 400` on 2026-09-01, and a second run of the same
@@ -1751,6 +1786,17 @@ closed with zero Concept2 contact.
       that falls out of that one page of 50, or a rower who verifies by hand
       and never sends again, is never seen. The reversal narrative above is
       written as history for the same reason.
+      **OPEN QUESTION (Phase OD, 2026-09-09): is this row still LIVE, or is it
+      dischargeable with a residual?** PARTLY DELIVERED by #360 and #365. The
+      row states its own unmet condition — "a row that falls out of that one
+      page of 50, or a rower who verifies by hand and never sends again, is
+      never seen" — but nobody has checked the 50-row reach against the code.
+      A reader could reasonably grade it DISCHARGED-with-residual today, and a
+      row that two readers grade differently is the shape that rots.
+      **It also carries NO TRIGGER AT ALL** — it names its closing condition
+      and nothing that fires it. That is rarer than a passive trigger and worse.
+      **NEXT (≤0.25): read `server/concept2/` and say whether a row outside the
+      50-row page is genuinely unreachable.** If it is, this row closes.
 - [ ] **Auto-verification, as an option, DEFAULTED OFF (James, 2026-09-07).**
       Sending the monitor's code with the upload verifies the row at receipt;
       that shipped as #336, was reversed as #337 because it took the act away
@@ -2682,6 +2728,16 @@ question, not a re-raised one.
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
+**Phase OD, 2026-09-09 — CORRECTLY PARKED, and recorded so the sweep does not
+re-flag it.** James's 2026-08-27 order (_"a deep dive to ensure we arent
+hallucinating anything in the protocol"_) is 13 days old and undone, but it is
+held by HIS OWN later ruling (2026-08-31): the sweep waits until after the
+front door, RC-38 is pulled forward alone, **re-ask at Wave A's close, not
+before**. **OPEN QUESTION: none.** The trigger's subject — Wave A's close —
+does not exist on any calendar yet, since Wave A is not open. That is a real
+dependency, not a passive trigger, and the distinction is the one this phase
+exists to draw. **NEXT (≤0.25): none owed until Wave A opens.**
+
 James, 2026-08-27: _"im also interested into a deep dive to ensure we arent
 hallucinating anything in the protocol... we've misused fields before or
 conflated them to meanings they dont have."_ Enumerate every claim we make about
@@ -2699,7 +2755,17 @@ close, not before.**
   `app/ios/App/App.xcodeproj/project.pbxproj`'s four `E2A1B0…` entries sit out
   of ascending-id order and Xcode will re-sort them on its next save (cosmetic;
   expect that churn in the next iOS PR, not a CLI rewrite).
-- **RC-38 — SCHEDULED (2026-08-31), rides the next connected-surface PR.**
+- **RC-38 — BLOCKED ON JAMES (re-stated Phase OD, 2026-09-09).**
+  **OPEN QUESTION: none for us — the residual needs a document only he can
+  supply.** Concept2's PDFs sit behind Cloudflare and could not be fetched, so
+  the honest half already shipped (the disposition is recorded where the value
+  is used, `domain/monitor/pm5/commands.ts:32-46`, which says in terms that
+  `0x01` is a doc LABEL and not a transcription). What is still owed is the
+  verbatim `OBJ_WORKOUTTYPE_T` row. **NEXT (≤0.25): ask James to drop the
+  CSAFE PDF into `docs/monitor/`; the transcription is then a comment change.**
+  This is a decision/action owed by him, not work waiting on a PR, and it
+  should stop being written as though a PR will carry it.
+  _Original framing:_ SCHEDULED (2026-08-31), rides the next connected-surface PR.
   Transcribe `OBJ_WORKOUTTYPE_T`. We have read one row of an enum we key a check
   on: `8` is sourced, `1` and `0` are sourced nowhere. James, 2026-08-27:
   _"have we been making assumptions that are unfounded here? is there
@@ -2725,7 +2791,19 @@ close, not before.**
   this is" design pass below. It was never only about `traceModel.ts`'s `t` and
   `d`; it is one of three places the same screen mixes two quantities.
 
-## The "say which number this is" design pass (post-Wave F, unopened)
+## The "say which number this is" design pass — TRIGGER FIRED 2026-09-04, STILL UNOPENED
+
+**Phase OD, 2026-09-09: this heading said "(post-Wave F, unopened)" for five
+days after Wave F closed on 2026-09-04.** The trigger fired; the heading kept
+describing it as pending. Opened by James's 2026-08-31 ruling on the
+axis-quantity question — take the surviving work-versus-rest mismatches
+together, in ONE design pass with ONE Gate 0, rather than approving a third of
+a screen at a time. **OPEN QUESTION: none — the ruling already says what shape
+the pass takes.** What is missing is that nobody scheduled it. **And it is
+ACCRETING while unopened:** two of its five members were ADDED on 2026-09-07
+by PM gates (`PM5 · PER INTERVAL` over Concept2's arithmetic; AVG HR derived
+from the trace), so the longer it stays shut the larger its Gate 0 gets.
+**NEXT (≤0.25): none owed — this one needs a date, not an answer.**
 
 - [ ] **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
       columns that are Concept2's arithmetic** (PM final gate #327,
@@ -2765,7 +2843,10 @@ in both orientations.**
 - **The interrupted TOTAL line** — an interrupted session can show a rest clause
   LIVE and none STORED for the identical row. Silent. Lifted here from
   "accepted, pinned" on 2026-08-31. (`phase-rc.md`)
-- **The rest bands are only as wide as the rower kept the flywheel moving
+- **[Phase OD 2026-09-09: this is James's own reported defect, 9 days old, and
+  its disposition is the section heading above — it is a MEMBER of the pass,
+  not separate work. It needs the pass opened, not an answer.]**
+  **The rest bands are only as wide as the rower kept the flywheel moving
   (James, 2026-08-31: _"it's weird the rests only show in the bottom graph
   if I rowed. It makes it look like the rests were different lengths"_).**
   Seen on the first machine-confirmed prod row: five identical 1:30 rests
