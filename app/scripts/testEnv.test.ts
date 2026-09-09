@@ -4,15 +4,40 @@ import { isCI, workerCap } from "./testEnv";
 describe("isCI", () => {
   // CI is a STRING. Truthiness would make "false" and "0" enable CI mode
   // and silently remove both worker caps on the machine they protect.
+  //
+  // `undefined` is deliberately excluded from this table: isCI's parameter
+  // defaults to `process.env.CI`, and in JavaScript passing `undefined`
+  // explicitly still triggers the default -- so `isCI(undefined)` does not
+  // test "absent value", it reads the ambient environment. Under GitHub
+  // Actions (CI=true) that made this table assert `isCI(undefined) ===
+  // false` while the real read was `true`, passing everywhere except CI.
+  // Every case here pins the pure function on an EXPLICIT string argument;
+  // the default-parameter behaviour gets its own case below, with the
+  // environment under the test's own control.
   it.each([
-    [undefined, false],
     ["", false],
     ["false", false],
     ["0", false],
     ["true", true],
     ["1", true],
   ])("isCI(%p) === %p", (v, expected) => {
-    expect(isCI(v as string | undefined)).toBe(expected);
+    expect(isCI(v)).toBe(expected);
+  });
+
+  it("with no argument, reads process.env.CI", () => {
+    const original = process.env.CI;
+    try {
+      process.env.CI = "true";
+      expect(isCI()).toBe(true);
+      delete process.env.CI;
+      expect(isCI()).toBe(false);
+    } finally {
+      if (original === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = original;
+      }
+    }
   });
 });
 

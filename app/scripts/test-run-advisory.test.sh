@@ -77,8 +77,13 @@ kill $producer 2>/dev/null; wait $producer 2>/dev/null
 sleep 30 & cappeer=$!
 capstart="$(ps -o lstart= -p $cappeer | tr -s ' ')"
 capline() { # $1.. = env assignments; echoes the "Free ..." line
+  # `-u CI` strips whatever CI the outer runner set (GitHub Actions exports
+  # CI=true) before applying this case's own assignments, so a case that
+  # means "CI is unset" actually gets that -- not the ambient value with an
+  # unrelated var layered on top. A case that wants CI set (e.g. `CI=1`)
+  # still gets it: the explicit assignment below applies after the unset.
   printf 'pid=%s\nstarted=%s\nworktree=/x\n' "$cappeer" "$capstart" > "$DIR/$cappeer.peer"
-  env "$@" bash -c '. "$0"' "$HERE/test-run-advisory.sh" 2>&1 | grep 'Free ' || true
+  env -u CI "$@" bash -c '. "$0"' "$HERE/test-run-advisory.sh" 2>&1 | grep 'Free ' || true
 }
 case "$(capline CI=1)" in *"worker cap uncapped (CI=1)"*) r=0 ;; *) r=1 ;; esac
 check "CI says the cap is off, not a number"   "0" "$r"
