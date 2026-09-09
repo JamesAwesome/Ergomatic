@@ -38,6 +38,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   compileProgram,
@@ -1829,6 +1830,95 @@ describe("the interstitial walk, fake-driven", () => {
         selector: ".connected-serif-line",
       }),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * THE INVARIANT: a machine the denylist refuses is never remembered as
+   * LAST USED.
+   *
+   * It has to be gated on the whole seam rather than on the guard, because
+   * the write and the refusal are two different events and the ORDER is the
+   * defect: the refusal cannot fire until the monitor has been paired and
+   * subscribed (`driver.ts`'s `classifyErgMachine` runs on a decoded 0x0032),
+   * and the save fires the instant `session.deviceName` lands, which is the
+   * pair. So the name is on disk before anything can refuse it, and the
+   * previous test in this file proves that write really happens on this exact
+   * harness ("... `expect(loadLastDevice()).toBe(DEVICE_NAME)`").
+   *
+   * `fail()` clears `session.deviceName` in the SAME update as the phase flip
+   * (`useMonitorSession.ts`, "the field Try Again's retry actually branches
+   * on"), so by the time the refusal is renderable the component can no
+   * longer read the refused name off the session — which is why the guard
+   * cannot simply re-read `session.deviceName`.
+   *
+   * Starting UPSTREAM of the producer (RF24): this test mounts before
+   * anything is written and asserts after the refusal, so it can see the
+   * write-then-refuse seam that a test seeding `LAST_DEVICE_KEY` by hand
+   * would step over.
+   */
+  it("a machine the denylist refuses is never remembered as LAST USED", async () => {
+    vi.doUnmock("../monitor/useMonitorSession");
+    const real = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    mockUseMonitorSession.mockImplementation(real.useMonitorSession);
+
+    // 128 is a SkiErg (`domain/monitor/pm5/ergMachine.ts`'s
+    // `unsupportedErgMachine`), the same value `useMonitorSession.test.ts`'s
+    // "a SkiErg sitting fails with the approved copy" drives — a real
+    // refusal through the real driver, not a hand-built `ConnectedError`.
+    const fake = createFakeTransport({
+      program: FIXTURE.program,
+      deviceName: DEVICE_NAME,
+      ergMachineType: 128,
+    });
+
+    expect(loadLastDevice()).toBeNull();
+
+    // The refusal frame renders `SupportMatrixLink`, which is a real
+    // `<Link>` — the only test in this file that needs a router.
+    render(
+      <MemoryRouter>
+        <ConnectedInterstitial
+          request={{
+            kind: "picker",
+            attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+          }}
+          program={FIXTURE.program}
+          phases={FIXTURE.phases}
+          identity={FIXTURE.identity}
+          baselines={baselines}
+          nudgedCount={0}
+          onExit={vi.fn()}
+          onRowInstead={vi.fn()}
+          onEnded={vi.fn()}
+          deps={{
+            createTransport: () => fake,
+            now: () => t0,
+            driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Connecting");
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("Erg type not supported")) break;
+    }
+
+    // The refusal really rendered — the positive readiness this negative
+    // assertion waits on, so "no name stored" can never pass because the
+    // walk stalled before the machine was ever classified.
+    expect(screen.getByText("Erg type not supported")).toBeInTheDocument();
+    expect(
+      screen.getByText("This monitor is on a SkiErg. Nothing here will start."),
+    ).toBeInTheDocument();
+
+    expect(loadLastDevice()).toBeNull();
   });
 });
 

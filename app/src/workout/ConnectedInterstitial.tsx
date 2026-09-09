@@ -68,6 +68,21 @@ export function loadLastDevice(): string | null {
   }
 }
 
+/** Un-remembers `name`, and ONLY `name` — the caption must not lose a
+ *  perfectly good monitor because a different one was refused. Phase MT
+ *  close-out; see `forgetRefusedDevice`'s effect below for why this exists. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function forgetLastDevice(name: string): void {
+  try {
+    if (localStorage.getItem(LAST_DEVICE_KEY) === name) {
+      localStorage.removeItem(LAST_DEVICE_KEY);
+    }
+  } catch {
+    // best-effort, symmetric with `saveLastDevice`: a storage that cannot be
+    // read or written cannot be showing a stale caption either.
+  }
+}
+
 /** Every reason that is NOT the machine actively refusing a workout — the
  *  six that are OURS (about the phone/radio side, never the PM5's own
  *  vocabulary — `ConnectedError`'s own doc comment in
@@ -279,6 +294,15 @@ export default function ConnectedInterstitial({
   // its own doc comment.
   const programmedForDeviceRef = useRef<string | null>(null);
 
+  /** The last name `saveLastDevice` actually wrote in this mount, held for
+   *  the refusal effect below. LIFETIME: minted at mount as `null`, written
+   *  by the save effect on every device name the session reports, never
+   *  cleared — a refusal cannot arrive before the pair that set it, and a
+   *  reconnect within the same mount overwrites it with whatever the new
+   *  attempt paired with. It deliberately survives `fail()`, which is the
+   *  whole point: `session.deviceName` does not. */
+  const rememberedDeviceRef = useRef<string | null>(null);
+
   // Phase LL Task 1 (link-truth design spec §1, exit criterion 7): THE
   // RING DOOR ON THE FAILURE SCREEN. `ConnectedSurface.tsx`'s own
   // diagnostics sheet (triple-tap a pager target) is only reachable from
@@ -347,12 +371,48 @@ export default function ConnectedInterstitial({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.phase, session.deviceName]);
 
+  /** Hoisted so the refusal effect below can depend on a plain string:
+   *  `session.error` is a fresh object on every failure render. */
+  const refusedReason = session.error?.reason ?? null;
+
   // Handoff §1: "After a first successful pair" — the picker's own result
   // already named the device before this fires; this just remembers it for
   // the NEXT visit to the button.
   useEffect(() => {
-    if (session.deviceName !== null) saveLastDevice(session.deviceName);
+    if (session.deviceName !== null) {
+      rememberedDeviceRef.current = session.deviceName;
+      saveLastDevice(session.deviceName);
+    }
   }, [session.deviceName]);
+
+  // INVARIANT (Phase MT close-out): a machine the denylist refuses is never
+  // remembered as LAST USED. Without this, `WorkoutDetail.tsx`'s
+  // `LAST USED · <name>` caption offers to reconnect to the very monitor the
+  // app has just told the rower it cannot record.
+  //
+  // A CLEAR, not a narrower save, because the two events cannot be reordered:
+  // the refusal rides `driver.ts`'s `classifyErgMachine`, which runs on a
+  // DECODED 0x0032 — so the monitor is necessarily paired, and the effect
+  // above has necessarily already written its name, before anything can
+  // refuse it.
+  //
+  // The name comes from the ref rather than from `session.deviceName` because
+  // `fail()` clears that field in the same `update()` as the phase flip
+  // ("the field Try Again's retry actually branches on",
+  // `useMonitorSession.ts`), so by the time this effect can observe the
+  // refusal the session no longer names the machine it refused.
+  //
+  // The interstitial is the ONLY writer of this key (`saveLastDevice` has one
+  // call site, the effect above), so this closes the invariant rather than
+  // half of it: Just Row runs the same hook and can hit the same refusal, but
+  // it never writes the caption, and a machine it refuses would have been
+  // refused at this door too — a refused machine can never reach storage by
+  // any route.
+  useEffect(() => {
+    if (refusedReason !== "unsupported-machine") return;
+    const refused = rememberedDeviceRef.current;
+    if (refused !== null) forgetLastDevice(refused);
+  }, [refusedReason]);
 
   // RC-37 ([R5], design spec 2026-08-27-link-authority-design.md §1): the
   // hook already ran Cancel's own exit (minus the terminate — the machine
