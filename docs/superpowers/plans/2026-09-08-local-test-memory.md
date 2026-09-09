@@ -243,8 +243,25 @@ observed to fail the named case**; the fifth is verified by hand in Step 6.
 
 - [ ] **Step 6: Prove the pipeline status by hand**
 
-Run: `bash -c 'set -uo pipefail; node -e "process.kill(process.pid,\"SIGKILL\")" 2>/dev/null | tee /dev/null; echo "PIPESTATUS=${PIPESTATUS[0]} dollar-question=$?"'`
-Expected: `PIPESTATUS=137 dollar-question=0` — the two differ, which is why the wrapper uses the former.
+Run, exactly as written — **without** `pipefail`, and reading both values in
+one command:
+
+```bash
+bash -c 'node -e "process.kill(process.pid,\"SIGKILL\")" 2>/dev/null | tee /dev/null; echo "PIPESTATUS[0]=${PIPESTATUS[0]}  dollar-question=$?"'
+```
+
+Expected: `PIPESTATUS[0]=137  dollar-question=0` — they differ, which is
+exactly why the wrapper reads the former.
+
+**Two traps in this probe, both of which defeated an earlier version of it:**
+
+- **Do not set `pipefail` in the probe.** With it, `$?` becomes 137 too and
+  the two coincide, so the probe demonstrates nothing. (The wrapper itself
+  *does* set `pipefail` — belt and braces — but the probe exists to show why
+  `PIPESTATUS[0]` is load-bearing on its own.)
+- **Read both in the SAME command.** Any intervening command, `st=$?`
+  included, resets `PIPESTATUS` — so a probe that stashes the exit code first
+  reads `PIPESTATUS[0]=0` and looks like the opposite result.
 
 - [ ] **Step 7: Wire package.json**
 
