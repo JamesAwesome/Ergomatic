@@ -552,7 +552,14 @@ Expected: 5 `ok` lines, `all advisory cases pass`.
 | Mutation | Case that must fail |
 | --- | --- |
 | Drop the `[ "$_now" != "$_started" ]` clause | "a reused pid is not a live peer" |
-| Replace the `mkdir -p ... 2>/dev/null` guard with an unguarded `mkdir -p` | "an unusable peer dir does not fail the run" |
+| Replace the `if`/`fi` block with `&&`-chaining AND delete the trailing `true` | "an unusable peer dir does not fail the run" |
+
+**Not** "replace the guard with an unguarded `mkdir -p`" — that mutation
+cannot bite, and an earlier draft of this plan prescribed it. `if <false>;
+then …; fi` with no `else` returns **0** (verified), so the `if` is not what
+protects the invariant; the trailing `true` is. A mutation must remove the
+thing that actually holds the invariant up, which means collapsing the `if`
+into `&&`-chaining and dropping the `true` together.
 
 - [ ] **Step 6: Verify the trap clears the entry**
 
