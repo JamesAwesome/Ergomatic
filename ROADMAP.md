@@ -216,23 +216,15 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       ungateable is the five-button SHAPE: no web assertion can stand on it, so
       nothing would catch a regression that only reached the iOS stack. Either
       a seam on that adapter or an accepted gap; not decided. **S**
-- [ ] **`pnpm screenshots` rewrites 64 of its 201 captures on every run, with
-      no code change at all.** Measured 2026-09-08: run it, `git checkout --
-      docs/screenshots/`, run it again on the identical tree — the same 64
-      files come back modified. So a capture PR's `git status` cannot tell the
-      frames a change actually altered from the ones that merely re-rendered,
-      and the committed captures are the visual record every design gate and
-      RF7 leans on. This PR worked around it by adding only the two frames its
-      rule can touch and discarding the rest. Cause unknown; the churn spans
-      concept2, justrow, diagnostics and log captures, so it smells like seeded
-      data or a date rather than antialiasing. **M**
-- [ ] **The permission screen says "your PM5" where it means "your monitor".**
-      `useMonitorSession.ts`'s `BluetoothPermissionError` detail reads
-      "Ergomatic can't reach your PM5 without Bluetooth." The rower is not being
-      told WHICH monitor, so by the 2026-09-07 anonymise-the-PM5 rule (RF32)
-      that is the wrong word. Found while measuring the landscape gate; left out
-      of that PR because it is a second product file and the fast path allows
-      one. **S**
+- [x] **The permission screen says "your PM5" where it means "your monitor".**
+      CLOSED in the Phase MT close-out PR, together with the Bluetooth scan
+      sheet's own instance of the same rule (both were RF32, both copy-only,
+      so they landed as one change). `useMonitorSession.ts`'s
+      `BluetoothPermissionError` detail now reads "Ergomatic can't reach your
+      monitor without Bluetooth." The census the rule prescribes
+      (`grep -rn "PM5" app/src` over string literals) also caught the NFC
+      connecting card's "Keep the PM5 on and close by.", in both components
+      that render it, and that changed with them. **S**
 - [ ] **The permission frame's DETAIL panel repeats its own remedy sentence.**
       `error.detail` renders as the body line AND again inside the panel — 125px
       of the frame's 308px, verbatim duplication. This is the same argument
@@ -293,13 +285,6 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       for a bounded number of ticks without starving the CSAFE ack path.** On
       hardware the window is the measured 544 ms between the first 0x0032 and
       `armed`. Found by the whole-branch review, finding 1. **S**
-- [ ] **`design.spec.ts:3540` flakes under a full parallel run.** "picking a
-      effort level does not shift the chips below it" failed once in a
-      547-test run on 2026-09-08 (the run that added the two gates above),
-      passed in isolation immediately after, and passed on a full re-run of
-      the same tree. It compares a chip's `y` before and after a click through
-      `stableBoundingBox`, so the suspicion is load, not the assertion. CI
-      retries once, so it costs a red PR check at worst. Unowned. **S**
 - [ ] **`connected.spec.ts:1703` poisons its own origin for a later run.** The
       QuotaExceededError leg fills origin storage until `setItem` genuinely
       throws; its own title says "junk cleaned up after", but a SECOND run
@@ -309,10 +294,16 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       surviving stack failed. Either the cleanup misses something or the
       failure is in the harness's own storage use. Costs a debugging round to
       whoever meets it next. **S**
-- [ ] **A refused machine is still remembered as `LAST USED`.**
-      `ConnectedInterstitial.tsx` calls `saveLastDevice` on every successful
-      pair, and a refusal happens after pairing. Cosmetic; fixing it inside the
-      refusal PR would widen it into the handoff-memory surface. **S**
+- [x] **A refused machine is still remembered as `LAST USED`.** FIXED in the
+      Phase MT close-out PR (James ruled it in on 2026-09-08). The invariant
+      now gated: a machine the denylist refuses is never remembered as
+      LAST USED. It had to be a CLEAR rather than a narrower save — the
+      refusal rides a decoded 0x0032, so the pair (and therefore
+      `saveLastDevice`) necessarily precedes it — and the refused name comes
+      from a ref rather than `session.deviceName`, which `fail()` nulls in the
+      same update as the phase flip. `forgetLastDevice` removes the key only
+      when it still holds that exact name, so refusing one monitor cannot
+      un-remember a different, good one. **S**
 - [ ] **`type: "rower"` is still hardcoded for machines the denylist lets
       through.** Concept2's results enum has separate `dynamic`, `slides` and
       `multierg` members, and the PM5 enum names `STATIC_DYNAMIC` (8), the
@@ -853,7 +844,16 @@ while we are in here.
       tap-target flake (399/401, then 401/401 twice) and `design.spec.ts`'s
       `stableBoundingBox` flake (`e2e/helpers.ts:89`). #152 landed evidence
       capture for a _third_ flake and produced
-      `docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md`. **M**
+      `docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md`.
+      **The `stableBoundingBox` flake was sighted again on 2026-09-08**
+      (Phase MT, filed as its own row at first and folded in here — a new
+      datapoint, not a new flake): `design.spec.ts:3540`, "picking a effort
+      level does not shift the chips below it", failed once in a 547-test
+      parallel run, then passed in isolation immediately after AND on a full
+      re-run of the same tree. It compares a chip's `y` before and after a
+      click through that same helper, so the suspicion is LOAD rather than
+      the assertion. CI retries once, so it costs a red PR check at worst.
+      **M**
 - [ ] **A THIRD flake class: integration, under container contention.**
       `server/routes/isolation.integration.test.ts` failed once with
       `expected 401 to be 400` on 2026-09-01, and a second run of the same
@@ -1448,16 +1448,6 @@ closed with zero Concept2 contact.
       that falls out of that one page of 50, or a rower who verifies by hand
       and never sends again, is never seen. The reversal narrative above is
       written as history for the same reason.
-- [ ] **`pnpm screenshots` rewrites ~61 PNGs per run with no content change.**
-      Measured twice on 2026-09-07 (PR #341): two consecutive runs on an
-      unchanged tree each rewrote the same 61 captures, differing only in the
-      clock rendered into the frame (`SEP 7 · 00:15` → `12:49`, diff bounding
-      box 37×11 px). `log-detail-legacy.png` moves 181 bytes despite carrying
-      no machine block at all. **Why it matters:** committed captures are the
-      PR's visual record (RF7), and 61 noisy PNGs bury the two that actually
-      changed — this PR had to revert them by hand twice to keep the record
-      readable. **Fix:** freeze the clock the captures render, the way the
-      fixtures already freeze their data.
 - [ ] **Auto-verification, as an option, DEFAULTED OFF (James, 2026-09-07).**
       Sending the monitor's code with the upload verifies the row at receipt;
       that shipped as #336, was reversed as #337 because it took the act away
@@ -1720,15 +1710,13 @@ closed with zero Concept2 contact.
       is an extension of the existing check or a different mechanism. Needs
       the reporter's firmware version and a recorded session. **M**
 
-- [ ] **The Bluetooth scan sheet mixes "PM5" and "monitor" in one flow.**
-      `capacitorBle.ts`'s scan copy reads "Looking for your PM5" and then
-      "No monitor found. Wake the PM5, then tap Cancel and try again." —
-      two words for one thing, three lines apart. James, 2026-09-07,
-      after PR #331 made the NFC surface say "monitor" wherever PM5 was
-      not the device's own advertised name: same rule here — "Looking for
-      your monitor" / "No monitor found. Wake the monitor, then tap Cancel
-      and try again." Copy only; rides the next PR that touches the
-      connect flow or the Bluetooth adapter. **S**
+- [x] **The Bluetooth scan sheet mixes "PM5" and "monitor" in one flow.**
+      CLOSED in the Phase MT close-out PR, with the permission-screen row that
+      is the same rule (RF32). `capacitorBle.ts`'s `DISPLAY_STRINGS` now read
+      "Looking for your monitor" / "No monitor found. Wake the monitor, then
+      tap Cancel and try again.", the wording James prescribed on 2026-09-07
+      after PR #331 made the NFC surface say "monitor" wherever PM5 was not
+      the device's own advertised name. **S**
 
 - [ ] **A row thinned BY the fallback reads as a successful send, and no
       query can find it.** PM #332 C1 (2026-09-07): when Concept2 refuses
@@ -2019,28 +2007,61 @@ closed with zero Concept2 contact.
 
 ## Tooling
 
-- **13 of the 83 committed screenshots are NOT byte-stable across two
-  consecutive `pnpm screenshots` runs of identical code.** Measured at the
-  hand-off store's final fix round (2026-08-30): two back-to-back runs at the
-  same commit produced differing bytes for `log-delete-confirm`,
-  `log-detail`, `log-detail-legacy`, `log-monitor`, `log-monitor-landscape`,
-  `post-workout-summary`, `post-workout-summary-landscape`, and all six
-  `you-*` captures. Two causes seen by eye: a trace chart whose axis ticks
-  follow a series recorded over REAL elapsed test time (`log-monitor`:
-  `0:00/0:05/0:10/0:15` one run, `0:00/0:10/0:20` the next), and a focus-
-  dependent hint that comes and goes (`you-derive-offer-accepted`:
-  `ESTIMATED · TYPE TO ADJUST` vs `ESTIMATED`). A further ~10 differ from
-  the committed bytes only by the seeded DATE STAMP (`AUG 25` → `AUG 30`),
-  which is stable per-day and re-churns on every calendar day.
-  **Why it matters:** capture triage currently cannot distinguish a real
-  rendering regression from run-to-run noise without re-running the suite
-  twice and diffing run-against-run, which is what this round had to do.
-  Rides the next PR touching the screenshots harness. **The measurement is
-  written out above rather than cited**, because the round's own report
-  lives under git-excluded `.superpowers/` and a citation into it is
-  unreachable to anyone but the session that wrote it (recurring failure
-  16's corollary). To reproduce: run `pnpm screenshots` twice at the same
-  commit, saving the first run's PNGs, and diff run against run.
+- **`pnpm screenshots` rewrites captures no code change touched.** Filed FOUR
+  separate times with four different counts; reconciled into this one row on
+  2026-09-08 (Phase MT close-out, ruled DOC-only by James — the FIX CARRIES).
+  The count moves with the corpus and with the day, so the history is the
+  useful part, not any single figure:
+  - **2026-08-28 — 19 of 90 no longer reproduced**: `today*.png` (5), `log-*`
+    (4), `post-workout-*` (3), `you*.png` (6), `releases.png`. **Run as a
+    control on a second worktree whose branch touched none of those screens,
+    the SAME 19 moved** — so the drift is environmental, not anything a PR
+    did. Separately, `you.png` differed run-to-run against the same stack on
+    the same day (differing md5) while `today.png`, `releases.png` and
+    `log-history.png` held across those same two runs: staleness and
+    nondeterminism are two problems, not one.
+  - **2026-08-30 — 13 of 83 were not byte-stable** across two back-to-back
+    runs at the same commit: `log-delete-confirm`, `log-detail`,
+    `log-detail-legacy`, `log-monitor`, `log-monitor-landscape`,
+    `post-workout-summary`, `post-workout-summary-landscape` and all six
+    `you-*`. A further ~10 differed from the committed bytes only by the
+    seeded DATE STAMP (`AUG 25` → `AUG 30`), which is stable per-day and
+    re-churns on every calendar day.
+  - **2026-09-07 (PR #341) — ~61 PNGs per run**, measured twice on an
+    unchanged tree. **This is the filing that carries the CAUSE:** the two
+    runs differed only in the CLOCK rendered into the frame
+    (`SEP 7 · 00:15` → `12:49`, diff bounding box 37×11 px), and
+    `log-detail-legacy.png` moved 181 bytes while carrying no machine block
+    at all.
+  - **2026-09-08 (Phase MT) — 64 of 201**, by `git checkout --
+    docs/screenshots/` and a second run on the identical tree. That filing
+    said **"Cause unknown". It was already false when written** — the
+    2026-09-07 measurement above had named the clock a day earlier, and
+    nothing but reconciling the four rows surfaced the contradiction. Its own
+    observation (the churn spans concept2, justrow, diagnostics and log
+    captures, "so it smells like seeded data or a date rather than
+    antialiasing") is consistent with the clock.
+  **Causes now measured:** the clock rendered into the frame (2026-09-07);
+  a trace chart whose axis ticks follow REAL elapsed test time (`log-monitor`:
+  `0:00/0:05/0:10/0:15` one run, `0:00/0:10/0:20` the next); a focus-dependent
+  hint that comes and goes (`you-derive-offer-accepted`:
+  `ESTIMATED · TYPE TO ADJUST` vs `ESTIMATED`); and the per-day seeded date
+  stamp. **Still unexplained:** which cause owns which files — no run has
+  attributed a count file by file — and whether anything is left once all four
+  are frozen. The 2026-08-28 control says the residue is environmental rather
+  than PR-shaped, which is a bound on the answer, not the answer.
+  **Why it matters:** committed captures are the PR's visual record (RF7) and
+  a reviewer's only look at a screen. A `git status` full of noise buries the
+  frames a change actually altered — PR #341 reverted 61 by hand twice, and
+  Phase MT's PR worked around it by adding only the two frames its rule could
+  touch and discarding the rest.
+  **Fix:** freeze the clock the captures render, the way the fixtures already
+  freeze their data; then re-measure and attribute what survives.
+  To reproduce: run `pnpm screenshots` twice at the same commit, saving the
+  first run's PNGs, and diff run against run. **The 2026-08-30 measurement is
+  written out here rather than cited**, because that round's report lives
+  under git-excluded `.superpowers/` and a citation into it is unreachable to
+  anyone but the session that wrote it (RF16's corollary). **M**
 - **`src/monitor/useMonitorSession.test.ts` — a pre-existing flake**
   (`listSessionLogs()` expected length 1, got 2: an extra session-log ring
   entry, RF27's own territory) fired once during PR1.75b's coverage runs,
@@ -2958,26 +2979,6 @@ Each needs erg time or a deliberate recording session.
 
 - **Door 1's adjust step shows a PROPOSED number with no provenance eyebrow of
   its own.** Revisit if that step becomes reachable without passing the offer.
-- **19 of the 90 committed captures no longer reproduce, and one is
-  nondeterministic.** This was filed on 2026-08-18 as `today.png`'s
-  "unexplained onboarding read-marker diff", reverted where it surfaced and
-  never explained. **Measured 2026-08-28 and it is far wider than one file.**
-  A bare `pnpm screenshots` on a clean branch regenerates 19 files that differ
-  from what is committed: `today*.png` (5), `log-*` (4), `post-workout-*` (3),
-  `you*.png` (6), `releases.png`. **Run as a control on a second worktree
-  whose branch touched none of those screens, the SAME 19 moved** — so the
-  drift is environmental, not anything a PR did.
-  **And `you.png` differs run-to-run against the same stack on the same day**
-  (two consecutive `pnpm screenshots` invocations, differing md5), while
-  `today.png`, `releases.png` and `log-history.png` were stable across those
-  same two runs. So there are two distinct problems here: 18 captures that are
-  merely stale, and at least one that is genuinely nondeterministic.
-  **Why it matters beyond tidiness:** captures are the PR's visual record and
-  a reviewer's only look at a screen. Right now any PR that regenerates them
-  ships 19 files of noise that bury the one real change, which is exactly what
-  makes a wrong capture survive review (recurring failure 7). **The
-  nondeterministic one is the half to chase first** — a capture that changes
-  without the app changing cannot be a record of anything. **S/M**
 - **A read is lost if you leave an article before its read-state GET lands.**
   Prose renders instantly, read state waits on a network GET, and BACK in that
   window drops the read permanently. Reproduced: `7 UNREAD` held against an

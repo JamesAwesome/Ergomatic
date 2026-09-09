@@ -23,16 +23,16 @@ matrix-goes-stale             | CARRY  | The published matrix goes stale silentl
 multierg-static-refused       | CARRY  | A MultiErg reporting a STATIC ski or bike value would be refused  | open    | unowned/accepted; no capture or vendor sentence settles it
 permission-denied-landscape   | DONE   | permission-denied ships a five-button stack, 10px body            | closed  | #370 d7319040 (10->138px, 78->206px, 142->206px)
 five-button-shape-ungateable  | BUILD  | Nothing can gate the five-button failure frame                    | ruled   | James 2026-09-08: dev-only seam on canOpenAppSettings + dist-grep needle + e2e case
-screenshots-churn             | DOC    | pnpm screenshots rewrites 64 of 201 captures on every run         | ruled   | James 2026-09-08: reconcile 4 rows into 1, CARRY the fix — see P3-A
-permission-copy-your-pm5      | BUILD  | The permission screen says "your PM5" where it means "monitor"    | open    | RF32; bundle with the capacitorBle scan copy row — see P3-B
+screenshots-churn             | DOC    | pnpm screenshots rewrites 64 of 201 captures on every run         | closed  | PR A: 4 filings -> 1 row under ## Tooling; fix CARRIES
+permission-copy-your-pm5      | BUILD  | The permission screen says "your PM5" where it means "monitor"    | closed  | PR A, with the scan-sheet row and the NFC card's body line
 detail-panel-duplication      | DECIDE | The permission frame's DETAIL panel repeats its own remedy        | gate 0  | rendered artifact owed before any build
 web-overflow-scroll           | DONE   | Top of an overflowing interstitial body cannot be scrolled to     | closed  | #366; index.css:6035 justify-content: flex-start
 phone-timer-offer-on-refusal  | BUILD  | "Row on the phone timer instead" is offered on the refusal screen | gate 0  | James 2026-09-08: REMOVE it; 4->3 buttons re-opens #370 landscape math
 two-design-gates              | DONE   | Two design gates the refusal screen owes                          | closed  | #369 3eed9f29, both proven red
 refusal-guard-ungated         | CARRY  | The refusal-survives-its-own-consequences guard is UNGATED        | open    | needs a bounded-withhold fake control — see P3-G
-design-3540-flake             | DOC    | design.spec.ts:3540 flakes under a full parallel run              | open    | fold into the standing flake row — see P3-C
+design-3540-flake             | DOC    | design.spec.ts:3540 flakes under a full parallel run              | closed  | PR A: folded into "Hunt the e2e flakes" as a datapoint
 connected-1703-poison         | CARRY  | connected.spec.ts:1703 poisons its own origin for a later run     | open    | new flake class; lift to the flake register
-refused-machine-last-used     | BUILD  | A refused machine is still remembered as LAST USED                | ruled   | James 2026-09-08: fix in the close-out PR
+refused-machine-last-used     | BUILD  | A refused machine is still remembered as LAST USED                | closed  | PR A: forgetLastDevice on unsupported-machine; gated + 2 probes
 type-rower-hardcoded          | CARRY  | type: "rower" is still hardcoded for machines the denylist admits | open    | accepted consequence of the approved direction
 pre-2018-classification       | CARRY  | A monitor on pre-2018 firmware cannot be classified at all        | open    | blocked on Transport.read; 0x0016 may not exist
 waveE-entry-row               | DOC    | We never check WHICH Concept2 machine is attached (line 1661)     | open    | pass 2; tick + point at the archive once released
