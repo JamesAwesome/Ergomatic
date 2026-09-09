@@ -12058,19 +12058,55 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(verdict[0]!.detail).toContain("no 0x0039 arrived");
   });
 
-  it("A REPLACED RUN takes its deadline with it: the stale reconcile fires into nothing and cannot fill the NEW run's last interval", async () => {
+  it("A REPLACED RUN IS SETTLED, NOT CANCELLED (RC-13 V2): the outgoing run's fill is filed at the door, and the stale reconcile still fires into nothing", async () => {
+    // REWRITTEN BY RC-13, and the old title is the change. This test used to
+    // assert `expect(boundaries(g.events)).toHaveLength(0)` after the
+    // replacement: `program()` cancelled the outgoing run's deadline and the
+    // fill it could already have reached — from a summary sitting in hand —
+    // was discarded. V2 settles it instead. What the test was PROTECTING
+    // (the stale timer cannot fill the NEW run's last interval) is unchanged
+    // and is still asserted below.
     const g = primedGate();
     await rowToFinish(g);
     g.clock.advance(400);
     g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
     const stale = g.timer.calls[0]!;
+    expect(boundaries(g.events)).toHaveLength(0);
 
     // A second workout on the same driver, no reconnect (the §19.4
     // regression's own fix): `program()` replaces the run outright.
     await programViaStub(g.driver, g.transport, seaFretProgram());
-    stale.fire();
 
-    expect(boundaries(g.events)).toHaveLength(0);
+    // The OUTGOING run's answer, filed at the door with the outgoing run's
+    // own numbers (I2) — index 0 of the one-interval piece that finished,
+    // never an index of the three-interval program that just armed.
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, elapsedSeconds: 62.5, distanceMeters: 214 },
+      finalBoundary: true,
+    });
+    const filed = verdicts(g.log);
+    expect(filed).toHaveLength(1);
+    expect(filed[0]!.detail).toContain("filled-from-summary");
+    // The RELEASE CAUSE names the door, not a 3000ms window that never
+    // closed (RC-13 §10).
+    expect(filed[0]!.detail).toContain(
+      "released when program() replaced this run before its finish grace closed",
+    );
+    // Filed BEFORE the new run was announced.
+    const armedSeqs = g.log
+      .entries()
+      .filter((e) => e.kind === "armed")
+      .map((e) => e.seq);
+    expect(armedSeqs).toHaveLength(2);
+    expect(filed[0]!.seq).toBeLessThan(armedSeqs[1]!);
+
+    // ...and the timer this run took with it is dead: firing it changes
+    // nothing, so it can never reach the NEW run's last interval.
+    stale.fire();
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(verdicts(g.log)).toHaveLength(1);
     expect(stale.cancelled).toBe(true);
   });
 
@@ -13872,5 +13908,301 @@ describe("createPm5Driver: a throwing subscriber is contained (RC-13 V1)", () =>
     expect(contained).toStrictEqual([
       'a subscriber threw while receiving an "armed" event — that delivery is abandoned, the driver and the operation that emitted it continue: Error: the subscriber blew up on armed',
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RC-13 (spec 2026-09-09) — V2: A RUN MAY NOT BE REPLACED WHILE IT STILL OWES
+// AN ANSWER. Both doors that replace `activeRun` — `program()` and
+// `beginFreeRow()` — SETTLE the outgoing run's pending reconcile and its
+// pending terminate-observations before the new run exists.
+//
+// FAULT INJECTION, SAID ALOUD (RF26): unlike the containment above, neither
+// ordering has a supported producer. `useMonitorSession`'s `beginFreeRow`
+// returns on `phase === "ended"` (a guard added 2026-09-01 in #259),
+// `JustRow.tsx` latches `armedThisStart`, and `session.program()`'s one caller
+// is gated on `phase === "pairing"`, which is written only inside `connect()`,
+// which itself refuses when a driver already exists. These tests drive the
+// driver's PUBLIC API directly. They prove that GIVEN a run replaced inside
+// its window the driver settles and files; they prove nothing about whether a
+// rower can create that ordering.
+//
+// RF41 does not bite here: every assertion below is about a run that has
+// already CLOSED, never about a state before the first pull.
+// ---------------------------------------------------------------------------
+
+describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", () => {
+  /**
+   * One complete run driven to a NATURAL finish (`WORKOUTSTATE_WORKOUTEND`),
+   * with its final split recorded and a work-state 0x0032 reading in hand, so
+   * the 3000ms reconcile deadline is armed and STILL PENDING when it returns
+   * — this file's own file-wide `vi.useFakeTimers()` means it never fires on
+   * its own. The run is closed and owes exactly one answer.
+   */
+  async function closedRunOwingAnAnswer(): Promise<{
+    transport: ReturnType<typeof stubTransport>;
+    log: ReturnType<typeof createEventLog>;
+    driver: ReturnType<typeof createPm5Driver>;
+    events: MonitorEvent[];
+  }> {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+    // GENERAL STATUS FIRST — the 0x0032 merge callback judges `averageSplit`
+    // against `raw.workoutState` as already merged, so this order is what
+    // lets it see a WORK state and set `lastWorkStateAverageSplit`.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(150.0));
+    // OUR side: one recorded actual, 60s/200m -> 500*60/200 = 150.00s/500m
+    // exactly, so the machine and our own quotient agree by construction.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(1);
+    // Nothing answered yet: the deadline is the only thing that would, and
+    // no time passes in this file.
+    expect(
+      log.entries().filter((e) => e.kind === "avg-pace-verdict"),
+    ).toHaveLength(0);
+    expect(
+      log.entries().filter((e) => e.kind === "summary-reconciled"),
+    ).toHaveLength(0);
+    return { transport, log, driver, events };
+  }
+
+  // THE EXPECTED DETAIL IS WRITTEN OUT, NEVER BUILT FROM THE DRIVER'S OWN
+  // SYMBOLS (RF21's corollary): `AVG_PACE_VERDICT_BAND_SECONDS` is
+  // interpolated into this string as `band ${…toFixed(1)}s`, so importing it
+  // here would retune the assertion with the constant it exists to pin.
+  const VERDICT_150 =
+    "machine(0x0032)=150.00s/500m ours=150.00s/500m delta=0.00s — agree (band 1.0s)";
+
+  it("program(): the outgoing run's avg-pace verdict is filed, from the outgoing run's own numbers, before the new run is announced", async () => {
+    const { transport, log, driver } = await closedRunOwingAnAnswer();
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    const verdicts = log.entries().filter((e) => e.kind === "avg-pace-verdict");
+    expect(verdicts).toHaveLength(1);
+    expect(verdicts[0]!.detail).toBe(VERDICT_150);
+
+    // C1: the settlement runs ABOVE the replacement block's per-run resets.
+    // Below `lastWorkStateAverageSplit = null` the verdict is still PRESENT
+    // and still of kind `avg-pace-verdict` — only its detail changes, to a
+    // suppression reason that is false about this run. Which is why the
+    // assertion above pins the detail rather than the kind.
+    expect(verdicts[0]!.detail).not.toContain("suppressed");
+
+    const reconciled = log
+      .entries()
+      .filter((e) => e.kind === "summary-reconciled");
+    expect(reconciled).toHaveLength(1);
+    // The RELEASE CAUSE, named — this reconcile did not run because a 3000ms
+    // window closed on its own clock, and the detail may not say it did.
+    expect(reconciled[0]!.detail).toContain(
+      "split-won — interval 0 was already recorded when program() replaced this run before its finish grace closed",
+    );
+    expect(reconciled[0]!.detail).not.toContain("3000ms finish grace closed");
+
+    // ...and it was filed BEFORE the new run existed: the second `armed`
+    // entry is the new run's own.
+    const armedSeqs = log
+      .entries()
+      .filter((e) => e.kind === "armed")
+      .map((e) => e.seq);
+    expect(armedSeqs).toHaveLength(2);
+    expect(verdicts[0]!.seq).toBeLessThan(armedSeqs[1]!);
+    expect(reconciled[0]!.seq).toBeLessThan(armedSeqs[1]!);
+  });
+
+  it("beginFreeRow(): the same, at the other door — the free row does not open over an unanswered run", async () => {
+    const { log, driver } = await closedRunOwingAnAnswer();
+
+    driver.beginFreeRow();
+
+    const verdicts = log.entries().filter((e) => e.kind === "avg-pace-verdict");
+    expect(verdicts).toHaveLength(1);
+    expect(verdicts[0]!.detail).toBe(VERDICT_150);
+
+    const reconciled = log
+      .entries()
+      .filter((e) => e.kind === "summary-reconciled");
+    expect(reconciled).toHaveLength(1);
+    expect(reconciled[0]!.detail).toContain(
+      "split-won — interval 0 was already recorded when beginFreeRow() replaced this run before its finish grace closed",
+    );
+
+    // Settled before the free row opened.
+    const opened = log.entries().filter((e) => e.kind === "free-row-open");
+    expect(opened).toHaveLength(1);
+    expect(verdicts[0]!.seq).toBeLessThan(opened[0]!.seq);
+    expect(reconciled[0]!.seq).toBeLessThan(opened[0]!.seq);
+  });
+
+  it("beginFreeRow(): a pending terminate-observations emit is FLUSHED to the outgoing run, not dropped", async () => {
+    // The other slot, and the other door — `beginFreeRow()` used to touch
+    // neither, so the 200ms hash sub-window's timer fired later, took its
+    // `activeRun !== run` branch, and dropped the emit silently.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    // All three status characteristics, so `maybeEmitFrame`'s own seen-gate
+    // opens and the terminal transition below is actually detected.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    // A rower-ended close, with the machine's own summary arriving after it:
+    // gate 2 opens, `noteSummary` routes it to `noteTerminateObservations`,
+    // and with no 0x003F hash in hand the emit waits out HASH_SUBWINDOW_MS.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+    transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      buildEndOfWorkoutSummaryBytes({
+        elapsedSeconds: 60,
+        meters: 200,
+        avgStrokeRate: 22,
+        endingHeartRateBpm: 150,
+        avgHeartRateBpm: 150,
+        minHeartRateBpm: 130,
+        maxHeartRateBpm: 160,
+        dragFactorAverage: 130,
+        recoveryHeartRateBpm: 100,
+        workoutType: 8,
+        avgPaceSecondsPer500m: 150,
+      }),
+    );
+    expect(
+      events.filter((e) => e.kind === "summary-observations"),
+    ).toHaveLength(0);
+
+    driver.beginFreeRow();
+
+    const observations = events.filter(
+      (e) => e.kind === "summary-observations",
+    );
+    expect(observations).toHaveLength(1);
+    const opened = log.entries().filter((e) => e.kind === "free-row-open");
+    expect(opened).toHaveLength(1);
+    const flushed = log
+      .entries()
+      .filter(
+        (e) =>
+          e.kind === "summary-reconciled" &&
+          e.detail.startsWith("terminate-observations"),
+      );
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]!.seq).toBeLessThan(opened[0]!.seq);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RC-13 (spec 2026-09-09) — V3: A REPLACEMENT IS ATOMIC WITH RESPECT TO THE
+// DRIVER'S OWN API. Settling at a door is what puts subscriber code on that
+// door's stack, and a subscriber can call back INTO the driver. Traced: a
+// re-entrant `program()` already hits `programInFlight`, a re-entrant
+// `disconnect()` reaches an idempotent no-op — but a re-entrant
+// `beginFreeRow()` PASSES `runIsOpen()` (the outgoing run is closed) and
+// assigns `activeRun` in the middle of the other door's replacement, which
+// that door then overwrites. Held today only by the hook's
+// `phase === "programming"` guard, which is the call-graph argument this whole
+// change exists to stop relying on.
+// ---------------------------------------------------------------------------
+
+describe("createPm5Driver: a replacement has one writer of activeRun (RC-13 V3)", () => {
+  it("a subscriber that re-enters beginFreeRow() from inside program()'s replacement is REFUSED at the driver, and the refusal is in the ring", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    // A rower-ended close with the summary arriving after it, so the
+    // terminate-observations emit is PENDING when the next door opens — that
+    // emit is the listener code the door puts on its own stack.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+    transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      buildEndOfWorkoutSummaryBytes({
+        elapsedSeconds: 60,
+        meters: 200,
+        avgStrokeRate: 22,
+        endingHeartRateBpm: 150,
+        avgHeartRateBpm: 150,
+        minHeartRateBpm: 130,
+        maxHeartRateBpm: 160,
+        dragFactorAverage: 130,
+        recoveryHeartRateBpm: 100,
+        workoutType: 8,
+        avgPaceSecondsPer500m: 150,
+      }),
+    );
+
+    let reentries = 0;
+    driver.events((e) => {
+      if (e.kind === "summary-observations") {
+        reentries += 1;
+        driver.beginFreeRow();
+      }
+    });
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    // The re-entry really happened — this is not a test of a listener that
+    // never ran.
+    expect(reentries).toBe(1);
+    const refusals = log
+      .entries()
+      .filter((e) => e.kind === "run-replace-reentered");
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]!.detail).toBe(
+      "beginFreeRow() was called while program() was replacing the active run — refused; a replacement has exactly one writer of activeRun in flight",
+    );
+    // Not merely refused: no free row was opened at all.
+    expect(log.entries().some((e) => e.kind === "free-row-open")).toBe(false);
+
+    // ...and the run the driver is now tracking is the one `program()`
+    // opened, not the re-entrant one: a boundary lands on interval 0 of the
+    // programmed workout, which an empty free-row program could never index.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(1);
+    expect(boundaries[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0 },
+    });
   });
 });
