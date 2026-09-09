@@ -51,6 +51,7 @@ import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { createFakeTransport } from "../monitor/transports/fake";
+import { createRecordingTransport } from "../monitor/transports/recording";
 import {
   ProgramRejectionError,
   REJECTION_VERBS,
@@ -2490,5 +2491,215 @@ describe("the ready card is a preference (Phase RN)", () => {
     });
     expect(screen.queryByText("Ready when you pull")).toBeNull();
     expect(screen.getByText("LOST THE MONITOR")).toBeVisible();
+  });
+});
+
+/**
+ * I-5: SKIP CHANGES NOTHING ON THE WIRE.
+ *
+ * The claim is that by the time either ready card renders, the program has
+ * been sent and acked, so the card's button only flips local state and
+ * skipping it cannot change what the monitor was told or when. An effect
+ * census of `ConnectedSurface` and its subtree said the same thing, and a
+ * census is a structural argument (RF26) — this is the empirical one.
+ *
+ * The real hook, the real driver, the real CSAFE-correct fake, wrapped in the
+ * recording tap that `transports/recording.ts` already provides. Walk the
+ * same fixture twice, once per setting, and compare every byte the app WROTE.
+ * Nothing is asserted about what the fake sent back: the invariant is about
+ * what we say to the monitor.
+ */
+describe("I-5: skipping the ready card changes nothing on the wire", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.removeItem(READY_CARD_KEY);
+  });
+
+  /** Runs one connect-and-arm walk and returns every transmitted frame as
+   *  `char|hex` strings — the app's side of the conversation, in order. */
+  async function transmittedBytes(choice: "show" | "skip"): Promise<string[]> {
+    localStorage.setItem(READY_CARD_KEY, choice);
+    vi.doUnmock("../monitor/useMonitorSession");
+    const real = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    mockUseMonitorSession.mockImplementation(real.useMonitorSession);
+
+    let clock = 0;
+    const tap = createRecordingTransport(
+      createFakeTransport({
+        program: FIXTURE.program,
+        deviceName: DEVICE_NAME,
+      }),
+      // A DETERMINISTIC clock, so the two walks cannot differ by timing
+      // noise. The comparison is about byte sequence, not latency.
+      () => (clock += 1),
+    );
+
+    const view = render(
+      <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
+        deps={{
+          createTransport: () => tap.transport,
+          now: () => t0,
+          driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        }}
+      />,
+    );
+
+    // Pump until the walk has armed. The two settings land on DIFFERENT
+    // screens at that moment, which is the whole feature, so the stop
+    // condition is the one thing both share: the surface's own navigation
+    // for `skip`, the ready card for `show`.
+    for (let i = 0; i < 40; i += 1) {
+      await act(async () => {
+        (tap.transport as unknown as { tick?: (n: number) => void }).tick?.(0);
+        await Promise.resolve();
+      });
+      if (
+        screen.queryByText("Ready when you pull") ??
+        screen.queryByRole("navigation", { name: "Connected panes" })
+      ) {
+        break;
+      }
+    }
+
+    // Both walks must actually have got there, or an equality of two empty
+    // lists would pass (RF21: a gate that cannot go red).
+    if (choice === "show") {
+      expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
+    } else {
+      expect(
+        screen.getByRole("navigation", { name: "Connected panes" }),
+      ).toBeInTheDocument();
+    }
+
+    const written = tap
+      .events()
+      .filter(
+        (e): e is Extract<typeof e, { dir: "tx" }> =>
+          "dir" in e && e.dir === "tx",
+      )
+      .map((e) => `${e.char}|${e.hex}`);
+    view.unmount();
+    cleanup();
+    return written;
+  }
+
+  it("writes the identical byte sequence whether the card is shown or skipped", async () => {
+    const shown = await transmittedBytes("show");
+    const skipped = await transmittedBytes("skip");
+
+    // The independent literal the pair rests on: a connect-and-program walk
+    // over this fixture writes SOMETHING. Without it, two empty lists are
+    // equal and the test proves nothing.
+    expect(shown.length).toBeGreaterThan(0);
+    expect(skipped).toStrictEqual(shown);
+  });
+
+  /**
+   * THE PROBE'S OWN PROBE. The equality above is only worth something if the
+   * recorded sequence actually carries the programming exchange — two walks
+   * that recorded nothing but a connect handshake would also be equal, and
+   * the gate would be decoration (RF21).
+   *
+   * So: walk a DIFFERENT workout and show the bytes differ. That proves the
+   * tap records what the app sent about this particular program, which is the
+   * thing the equality is claiming stayed the same.
+   *
+   * It does NOT claim the skip path could produce a divergence. It could not,
+   * and the reason is structural rather than empirical: `ConnectedSurface` is
+   * handed a `MonitorSession` VALUE and has no transport handle, so there is
+   * no one-line edit that makes mounting it write. The hardening pass's
+   * effect census established that; this pair stops the equality from being a
+   * green light nobody ever tested.
+   */
+  it("records the programming exchange, so the equality is over real content", async () => {
+    const shown = await transmittedBytes("show");
+
+    const other = LIBRARY_WORKOUTS.find(
+      (w) => w.title !== "Filling Low" && w.steps.length > 0,
+    );
+    if (other === undefined) throw new Error("no second library fixture");
+    const otherPhases = buildRun(
+      buildDraft({
+        id: "other",
+        title: other.title,
+        type: other.type as WorkoutType,
+        steps: other.steps,
+      }),
+      baselines,
+      t0,
+    ).phases;
+    const otherCompiled = compileProgram(otherPhases);
+    if ("code" in otherCompiled) {
+      throw new Error(
+        `second fixture failed to compile: ${otherCompiled.code}`,
+      );
+    }
+
+    let clock = 0;
+    const tap = createRecordingTransport(
+      createFakeTransport({
+        program: otherCompiled,
+        deviceName: DEVICE_NAME,
+      }),
+      () => (clock += 1),
+    );
+    render(
+      <ConnectedInterstitial
+        request={{
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }}
+        program={otherCompiled}
+        phases={otherPhases}
+        identity={{
+          workoutId: "other",
+          title: other.title,
+          ...TEST_SEED,
+        }}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
+        deps={{
+          createTransport: () => tap.transport,
+          now: () => t0,
+          driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        }}
+      />,
+    );
+    for (let i = 0; i < 40; i += 1) {
+      await act(async () => {
+        (tap.transport as unknown as { tick?: (n: number) => void }).tick?.(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("Ready when you pull")) break;
+    }
+    expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
+
+    const otherWritten = tap
+      .events()
+      .filter(
+        (e): e is Extract<typeof e, { dir: "tx" }> =>
+          "dir" in e && e.dir === "tx",
+      )
+      .map((e) => `${e.char}|${e.hex}`);
+
+    expect(otherWritten.length).toBeGreaterThan(0);
+    expect(otherWritten).not.toStrictEqual(shown);
   });
 });
