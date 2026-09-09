@@ -9422,3 +9422,65 @@ chaining; and the fake's need for a new `FakeScript` field. Also: the kinship
 with `verificationEligibility.ts` is earned and was UNDERSTATED — that module's
 "we ship no BikeErg" assertion is false today, and this design is what makes it
 true.
+
+## /close-phase skill — hardening pass (2026-09-08)
+
+Both `/harden` lenses against a new process document. Techniques, not history.
+
+- **"Open rows in a ROADMAP phase are `- [ ]`."** File-wide the checkbox is the
+  MINORITY form: 68 open checkboxes against 177 plain `- **…**` bullets.
+  `## Phase JR` holds ZERO open checkboxes and nine prose bullets, six carrying
+  live follow-on work, under a status line reading "the follow-on slate below is
+  the live work" — so a checkbox-only freeze returns an empty slate and the
+  archive step deletes them, the exact failure ROADMAP's "Open items never live
+  in a closed body" bullet exists to prevent. **Technique: never validate a
+  document convention on the section that motivated it. Census the FORM across
+  every section and read the sections where the counts diverge.**
+
+- **"A phase section runs to the next `^## `."** ROADMAP carries five H1
+  headings, so `## Phase TD` gets a 370-line span swallowing `# Icebox`,
+  `# After the strangers` and the whole completed-phase ledger. Its row count
+  still came out RIGHT, because the swallowed sections use a different bullet
+  form. **Technique: run a prescribed extraction against the input that does NOT
+  look like the worked example — and when the count matches, check the SPAN, not
+  the count. A tally that agrees for the wrong reason is a mirror (RF11).**
+
+- **A "cache" holding the only copy of a judgement is not a cache.** The worklist
+  was declared re-derivable from ROADMAP; three of its six state classes are
+  judgements (pass-3 claim/reject receipts, per-row dispositions, DONE receipts)
+  that a re-run yields DIFFERENTLY with no divergence signal. **Technique: for
+  any "X is a cache, Y is the truth" claim, walk every field of X and name the
+  command that re-derives it from Y. The fields with no command die at the next
+  compaction.** Corollary: a cap whose counter has no durable home is a heuristic
+  wearing a number.
+
+- **A record format keyed by line numbers into the file the process rewrites.**
+  `.claude/agent-briefing.md` forbids this by name, and the document told its own
+  subagents to read that briefing. **Technique: when a process document
+  prescribes a record format, grep the briefing it tells its subagents to read
+  for a rule the format breaks.**
+
+- **A gate list whose order is circular against an existing runbook.** Gate 1
+  required a released tag; gate 2 then ran the main-CI check that RELEASING.md
+  makes step 0 OF CUTTING THAT TAG; gate 4 then asked the PM for the release
+  call. Reconstructs RF28. **Technique: for each gate naming an artifact, ask
+  which OTHER gate produces it and draw the edge — any back-edge is circular.
+  And check whether a gate is a hand-back to James; the stop rule must list it,
+  or the close-out stalls mid-gate believing it is still running.**
+
+- **A stop rule that declares a later gate's input empty.** Five terminal
+  dispositions, none meaning "carried", while the lift gate's whole job was
+  lifting carried rows. **Technique: read the terminal-state set and the gate
+  list against each other — a gate whose input state is unreachable is dead, and
+  the missing state is usually the honest one (blocked, carried, owed).**
+
+- **Both lenses committed the failure they were hired to find, and so did the
+  controller.** The controller's own fold of lens 1 introduced an awk bug
+  (`exit` still runs `END`, so every span printed its terminator twice), caught
+  by the paste-test. Lens 2's severe indented-bullet finding was FALSIFIED on
+  re-measurement: its evidence came from a mis-derived span, and a census of all
+  five real phase spans found zero indented bullets in every one. The safer
+  pattern was kept; the justification was rewritten to what could be measured.
+  **Technique: re-derive the span before trusting any measurement taken inside
+  it — and re-measure a lens's own load-bearing count before folding it. A
+  finding is a claim (RF31).**
