@@ -977,8 +977,15 @@ while we are in here.
       date, and every item" failed once in a full `--project client --project
       unit` run and passed both alone (6/6) and on an immediate full re-run
       (286 files, 7937). Client-project only, so unrelated to (a)'s origin
-      storage. **Trigger:** the flake hunt below, or a third sighting of
-      either. **S**
+      storage.
+      (c) A third, on the SAME release run: `pnpm e2e` returned `553 passed`
+      with exit 1, and the two immediately following full runs both returned
+      `554 passed`. **Which test failed was not captured** — the tail showed
+      only the progress line — so this one is logged as an occurrence rather
+      than a suspect, deliberately: guessing the test from a progress line is
+      how a flake hunt chases the wrong file.
+      **Trigger:** the flake hunt below, or a further sighting of any of the
+      three. **S**
 - [ ] **Hunt the e2e flakes.** James, 2026-08-20: _"post release lets hunt down
       the flake."_ Its trigger ("immediately after v0.15.0 ships") fired
       2026-08-20. Two named flakes remain unresolved: the manual-door
