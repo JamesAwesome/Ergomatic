@@ -56,7 +56,7 @@ Under the spec as written, **every Ctrl-C prints `MEMORY KILL`**. Task 1 impleme
 | `app/scripts/count-test-workers.sh` | CREATE. Path-scoped worker counter (spec appendix, verbatim). |
 | `app/vitest.config.ts` | MODIFY. `maxWorkers` default 4, env-overridable, inert under CI. |
 | `app/playwright.config.ts` | MODIFY. `workers` default 2, same shape. |
-| `app/testEnv.ts` | CREATE. `isCI` + `workerCap`, shared by both configs so the two cannot drift. |
+| `app/scripts/testEnv.ts` | CREATE. `isCI` + `workerCap`, shared by both configs so the two cannot drift. Lives under `scripts/` because that is what the `unit` project's include globs collect — at `app/testEnv.test.ts` it would match NO project, and `passWithNoTests` would render its absence as a pass. |
 | `app/package.json` | MODIFY. Route `test`, `test:coverage`, `test:watch` through the wrapper; add `test:full`. |
 | `.husky/pre-push` | MODIFY. Ref guard, two invocations, `sh -e`-safe. |
 | `.github/workflows/ci.yml` | MODIFY. Named step for `test-run.test.sh`. |
@@ -164,7 +164,11 @@ NODE_OPTIONS="--no-experimental-webstorage ${NODE_OPTIONS:-}"
 export NODE_OPTIONS
 
 OUT="$(mktemp)"; ERR="$(mktemp)"
-trap 'rm -f "$OUT" "$ERR"' EXIT
+# ONE trap for the whole script. A second `trap ... EXIT` REPLACES the first
+# (verified), and Task 3 sources an advisory that needs cleanup too -- so it
+# sets _PEER_FILE rather than trapping. ${_PEER_FILE:-} because set -u.
+_cleanup() { rm -f "$OUT" "$ERR" "${_PEER_FILE:-}" 2>/dev/null; }
+trap _cleanup EXIT
 
 if [ "${1:-}" = "--self-test" ]; then
   # Gate hook: classify a fabricated child instead of running Vitest.
@@ -252,6 +256,12 @@ In `app/package.json`, replace the three test scripts and add a fourth. Note `te
 "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
 "test:coverage": "bash scripts/test-run.sh --coverage",
 ```
+
+**`test:watch` deliberately does NOT route through the wrapper**, narrowing
+the spec's A1 sentence. Watch mode is an interactive, long-lived TTY session;
+the wrapper pipes stdout through `tee` and defers stderr, which would break
+the live reporter — and a watch run is by definition being watched by a human
+who sees the kill. Task 6 records the narrowing in the spec.
 
 - [ ] **Step 8: Verify the wiring end to end**
 
@@ -508,7 +518,9 @@ if mkdir -p "$_peer_dir" 2>/dev/null; then
     echo "pid=$$"
     echo "started=$(ps -o lstart= -p $$ 2>/dev/null | tr -s ' ')"
     echo "worktree=${APP_ROOT:-unknown}"
-  } > "$_me" 2>/dev/null && trap 'rm -f "$_me" 2>/dev/null' EXIT
+  } > "$_me" 2>/dev/null && _PEER_FILE="$_me"
+  # NOT a trap: test-run.sh owns the single EXIT trap, and a second one here
+  # would silently replace it, leaking its two temp files every run.
 fi
 true   # the advisory must never be the reason a run fails
 ```
@@ -552,8 +564,8 @@ git commit -m "Phase MEM: warn when another run is already using the machine"
 ### Task 4: The worker caps and the measurement scripts
 
 **Files:**
-- Create: `app/testEnv.ts`
-- Create: `app/testEnv.test.ts`
+- Create: `app/scripts/testEnv.ts`
+- Create: `app/scripts/testEnv.test.ts`
 - Create: `app/scripts/measure-test-memory.sh`, `app/scripts/count-test-workers.sh`
 - Modify: `app/vitest.config.ts`, `app/playwright.config.ts`
 
@@ -562,7 +574,7 @@ git commit -m "Phase MEM: warn when another run is already using the machine"
 
 - [ ] **Step 1: Write the failing test**
 
-Create `app/testEnv.test.ts`. Note the literals are independent of the implementation — pinning a contract with the production symbol proves nothing (RF21):
+Create `app/scripts/testEnv.test.ts`. Note the literals are independent of the implementation — pinning a contract with the production symbol proves nothing (RF21):
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -599,12 +611,12 @@ describe("workerCap", () => {
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `cd app && NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit testEnv`
-Expected: FAIL — cannot resolve `./testEnv`.
+Run: `cd app && NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit scripts/testEnv`
+Expected: FAIL — cannot resolve `./testEnv`. **If it instead reports "No test files found" and exits 0, stop:** the file is outside every project include and the gate cannot go red.
 
 - [ ] **Step 3: Write the helpers**
 
-Create `app/testEnv.ts`:
+Create `app/scripts/testEnv.ts`:
 
 ```ts
 /**
@@ -636,15 +648,15 @@ export const workerCap = (v: string | undefined, fallback: number): number =>
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `cd app && NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit testEnv`
-Expected: PASS, all cases.
+Run: `cd app && NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit scripts/testEnv`
+Expected: PASS, all cases. Confirm the run reports a non-zero test count.
 
 - [ ] **Step 5: Wire both configs**
 
 In `app/vitest.config.ts`, add the import and one key to the top-level `test` block (verified: a top-level `maxWorkers` reaches `projects[]` — unset → 9 workers, 2 → 2, 4 → 4):
 
 ```ts
-import { isCI, workerCap } from "./testEnv";
+import { isCI, workerCap } from "./scripts/testEnv";
 // ... inside `test: {`, alongside `projects` and `coverage`:
     maxWorkers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_TEST_WORKERS, 4),
 ```
@@ -652,7 +664,7 @@ import { isCI, workerCap } from "./testEnv";
 In `app/playwright.config.ts`, alongside `fullyParallel`:
 
 ```ts
-import { isCI, workerCap } from "./testEnv";
+import { isCI, workerCap } from "./scripts/testEnv";
 // ...
   workers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_E2E_WORKERS, 2),
 ```
@@ -745,7 +757,10 @@ check "the fallback does NOT use --changed"  "0" "$r"
 # The whole-tree gates cannot be selected by --changed, so they must be a
 # SECOND invocation -- `--changed X scripts/` INTERSECTS and finds nothing.
 out="$(run_hook refs/remotes/origin/main)"
-check "the scripts/ gates run unconditionally" "1" "$(printf '%s' "$out" | grep -c 'scripts/')"
+# Both dry-run lines contain "scripts/test-run.sh", so a bare `grep -c
+# 'scripts/'` counts 2 and fails against a CORRECT hook. Anchor on the
+# second invocation's distinctive argument instead.
+check "the scripts/ gates run unconditionally" "1" "$(printf '%s' "$out" | grep -c -- '--project unit scripts/')"
 check "there are two vitest invocations"       "2" "$(printf '%s' "$out" | grep -c 'test-run.sh')"
 
 # Docker-free: the integration project must never be admitted.
