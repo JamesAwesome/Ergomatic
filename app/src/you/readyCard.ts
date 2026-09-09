@@ -73,15 +73,24 @@ function isReadyCardChoice(value: unknown): value is ReadyCardChoice {
  * mis-cased, whitespace-padded, JSON, a value from an older build, or a
  * getter that throws: all resolve to `show`.
  *
- * STORAGE IS CONSULTED FIRST, AND THE ORDER IS THE POINT. The first draft of
- * this module returned `lastSet` before touching storage, which made every
- * persistence gate in the phase structurally incapable of failing — the
+ * STORAGE IS CONSULTED FIRST, and the honest account of why is narrower than
+ * the one this comment first carried. The first draft returned `lastSet`
+ * before touching storage AND set it on every write, which together made
+ * every persistence gate in the phase structurally incapable of failing — the
  * anchor antagonist pass proved it by running the module with `setItem`
  * replaced by a no-op: the save reported `true`, storage held nothing, and
- * this function still said `skip`. A same-realm test (and a same-document
- * click navigation in e2e) could never see the break. With storage first, a
- * successful write is proven by the store and `lastSet` covers exactly the
- * refused-write case it was invented for.
+ * this function still said `skip`.
+ *
+ * WHICH HALF WAS LOAD-BEARING, MEASURED (RF26 — a gate gets the claim it
+ * earns, not the strongest one available). Four probes against this suite:
+ * restoring the old read order ALONE leaves all 17 green, because `lastSet`
+ * is now null except on the refused path, so there is no reachable state
+ * where the two disagree. Restoring the old ASSIGNMENT alone fails 2;
+ * restoring both fails 2; the old read order combined with a deleted
+ * `setItem` fails 3. So `saveReadyCard`'s assignment discipline is what makes
+ * the gates bite, and this ordering is defence-in-depth: it costs nothing and
+ * it means a future writer of `lastSet` cannot quietly re-open the hole. Do
+ * not read it as the thing under test.
  */
 export function loadReadyCard(): ReadyCardChoice {
   try {

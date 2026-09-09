@@ -295,7 +295,7 @@ export function saveReadyCard(next: ReadyCardChoice): boolean {
 }
 ```
 
-**THE PRECEDENCE IS LOAD-BEARING, AND THE OBVIOUS ORDER DISARMS BOTH GATES.**
+**THE PRECEDENCE AND THE ASSIGNMENT DISCIPLINE TOGETHER DISARMED BOTH GATES.**
 The first draft read `lastSet` first. The anchor antagonist pass ran that
 module under Node with `setItem` replaced by a no-op and got:
 
@@ -326,7 +326,18 @@ the gates this spec calls load-bearing:
 
 With storage first, a successful write is proven by the store, `lastSet`
 covers exactly the refused-write case it was invented for, and both gates
-bite. **`saveReadyCard`'s `true` is a claim about not throwing, not a receipt
+bite.
+
+**AND THE FIX IS SMALLER THAN IT LOOKS, WHICH TASK 1 MEASURED RATHER THAN
+ASSUMED (RF26).** Implementing this found a second, narrower version of the
+same hole: `lastSet` surviving a SUCCESSFUL write means deleting the `setItem`
+call still reads back the chosen value. So `saveReadyCard` sets `lastSet` only
+on the refused path and clears it on the successful one — and with that
+discipline in place, the READ ORDER alone turns out not to be load-bearing:
+restoring it fails none of the module's 17 tests, because no reachable state
+has the two disagreeing. Restoring the old assignment fails 2, and the old
+read order plus a deleted `setItem` fails 3. Storage-first stays as
+defence-in-depth; the spec no longer claims it is the thing under test. **`saveReadyCard`'s `true` is a claim about not throwing, not a receipt
 for durability** — the module header says so, because RF25's tell is a
 boolean that reads as one.
 
