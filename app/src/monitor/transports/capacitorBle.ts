@@ -96,14 +96,18 @@ function serviceFor(characteristicId: string): string {
 // sheet ever drawn.
 const SCAN_TIMEOUT_MS = 35_000;
 
-// Spec §7, verbatim. House copy: no em-dash. `noDeviceFound` names Cancel
-// because Cancel is the sheet's only control once the plugin's own 30s
-// scan has stopped (REVIEW M4).
+// Spec §7, with the PM5 anonymised (CLAUDE.md RF32, James 2026-09-07): the
+// spec wrote `scanning`/`noDeviceFound` as "your PM5" / "Wake the PM5", and
+// neither line tells the rower WHICH monitor — the sheet below them is the
+// thing that names devices. `availableDevices` already said "monitor", so the
+// old pair also said two words for one thing three lines apart.
+// House copy: no em-dash. `noDeviceFound` names Cancel because Cancel is the
+// sheet's only control once the plugin's own 30s scan has stopped (REVIEW M4).
 const DISPLAY_STRINGS = {
-  scanning: "Looking for your PM5",
+  scanning: "Looking for your monitor",
   availableDevices: "Choose your monitor",
   noDeviceFound:
-    "No monitor found. Wake the PM5, then tap Cancel and try again.",
+    "No monitor found. Wake the monitor, then tap Cancel and try again.",
   cancel: "Cancel",
 } as const;
 

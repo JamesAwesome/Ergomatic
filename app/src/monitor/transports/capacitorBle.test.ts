@@ -336,17 +336,17 @@ describe("scan(): the pipeline and its filter (spec §3.1-§3.3)", () => {
     expect(found).toStrictEqual([{ id: "d1", name: "PM5 431910706" }]);
   });
 
-  it("display strings are passed once, with the spec §7 values verbatim", async () => {
+  it("display strings are passed once, RF32-anonymised where the spec §7 values named the PM5", async () => {
     const transport = createCapacitorBleTransport();
 
     await transport.scan();
 
     expect(BleClient.setDisplayStrings).toHaveBeenCalledTimes(1);
     expect(BleClient.setDisplayStrings).toHaveBeenCalledWith({
-      scanning: "Looking for your PM5",
+      scanning: "Looking for your monitor",
       availableDevices: "Choose your monitor",
       noDeviceFound:
-        "No monitor found. Wake the PM5, then tap Cancel and try again.",
+        "No monitor found. Wake the monitor, then tap Cancel and try again.",
       cancel: "Cancel",
     });
   });

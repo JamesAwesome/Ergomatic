@@ -734,7 +734,7 @@ describe("useMonitorSession: connect", () => {
     expect(result.current.error).toStrictEqual({
       reason: "permission-denied",
       detail:
-        "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+        "Ergomatic can't reach your monitor without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
       raw: "BLE permission denied",
     });
   });

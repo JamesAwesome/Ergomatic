@@ -470,7 +470,9 @@ export default function ConnectedInterstitial({
             <p className="connected-serif-line">
               Looking for {request.exactName}
             </p>
-            <p className="connected-body-line">Keep the PM5 on and close by.</p>
+            <p className="connected-body-line">
+              Keep the monitor on and close by.
+            </p>
           </div>
           <div className="action-stack connected-interstitial-actions">
             <button type="button" className="button-l2" onClick={handleCancel}>

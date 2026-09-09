@@ -631,7 +631,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       error: connectedError({
         reason: "permission-denied",
         detail:
-          "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+          "Ergomatic can't reach your monitor without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
         raw: "BLE permission denied",
       }),
     });
@@ -639,7 +639,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
     expect(screen.getByText("Bluetooth permission needed")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+        "Ergomatic can't reach your monitor without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
         { selector: ".connected-body-line" },
       ),
     ).toBeInTheDocument();
@@ -661,7 +661,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -677,7 +677,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -698,7 +698,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -718,7 +718,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -736,7 +736,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       phase: "failed",
       error: connectedError({
         reason: "permission-denied",
-        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+        detail: "Ergomatic can't reach your monitor without Bluetooth.",
       }),
     });
 
@@ -1949,7 +1949,7 @@ describe("targeted failures (Phase NF)", () => {
     expect(screen.getByText("Looking for PM5 432331249 Row")).toHaveClass(
       "connected-serif-line",
     );
-    expect(screen.getByText("Keep the PM5 on and close by.")).toHaveClass(
+    expect(screen.getByText("Keep the monitor on and close by.")).toHaveClass(
       "connected-body-line",
     );
     expect(screen.queryByText("Choosing your monitor")).toBeNull();
