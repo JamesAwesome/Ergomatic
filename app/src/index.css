@@ -6210,6 +6210,25 @@ section:not(.news-pinned) .news-row:last-of-type {
   .connected-interstitial-actions--failure > button:nth-last-child(-n + 4) {
     grid-column: auto;
   }
+
+  /* THE THREE-BUTTON FRAME (Phase MT close-out, James 2026-09-08: `Try
+     again` spans, `View connection log` and `Cancel` pair beneath it).
+
+     The refusal frame no longer offers `Row on the phone timer instead`
+     (`ConnectedInterstitial.tsx` says why), so it is the one failure stack
+     with an ODD button count, and `-n + 4` matches all three of them: the
+     grid would put `Try again` beside the log door and leave `Cancel` alone
+     in the left column with a hole beside it.
+
+     A quantity query rather than a second modifier class, so it cannot
+     drift from the count it describes: `:first-child:nth-last-child(3)`
+     matches only a first child that is also third from last, which is
+     exactly a stack of three. Specificity (0,3,1) beats the `-n + 4` rule's
+     (0,2,1), so ordering is not what carries it. */
+  .connected-interstitial-actions--failure
+    > button:first-child:nth-last-child(3) {
+    grid-column: 1 / -1;
+  }
 }
 
 .connected-serif-line {
