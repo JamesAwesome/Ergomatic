@@ -2417,10 +2417,26 @@ question, not a re-raised one.
   one PM5 has this name." (both are examples RF32's own text names as
   allowed); the device caption and `Couldn't reach PM5 …`, which interpolate
   the monitor's advertised name; `capacitorBle.ts`'s three targeted-scan
-  errors, which render in the DETAIL panel's `raw` slot and keep the name on a
-  receipt recorded in that file; `connectTheMonitor.tsx:34`'s "You'll need a
-  PM5 (the standard Concept2 monitor)", never assessed by any census; and nine
-  mentions in shipped release notes (its own row below).
+  errors (lines 192/199/206), which render in the DETAIL panel's `raw` slot
+  and keep the name on a receipt recorded in that file; **THREE** lines of
+  rendered article prose in `connectTheMonitor.tsx` — line 6 "Connected mode
+  adds a Concept2 PM5", line 14 "The PM5 then runs the piece the way it runs
+  a race", line 34 "You'll need a PM5 (the standard Concept2 monitor)" — none
+  assessed by any census; and **10 note strings / 13 occurrences** in shipped
+  release notes (its own row below).
+  **THIS LIST HAS NOW BEEN WRONG TWICE, so re-run the commands rather than
+  trusting the prose.** Round 1 wrote two false completeness claims (struck
+  above); round 2 replaced them with this list and miscounted both of the
+  numbers in it — `connectTheMonitor` as one mention when it has three, the
+  release notes as "nine" when they carry 13 occurrences over 10 strings.
+  Round 3 (2026-09-09) measured both:
+  `grep -n "PM5" app/src/news/content/bodies/connectTheMonitor.tsx` → 3 hits
+  (6, 14, 34, all inside rendered `<p>` prose);
+  `grep -vn '^\s*//' app/src/news/content/releaseNotes.ts | grep -c "PM5"` →
+  10 and
+  `grep -v '^\s*//' app/src/news/content/releaseNotes.ts | grep -o "PM5" | wc -l`
+  → 13 (the `-v` drops the file's ten `//` provenance comments, which are not
+  copy). Both are counts of the tree at the Phase MT close-out branch.
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
@@ -2800,12 +2816,18 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **Nine `PM5` mentions sit in already-shipped release notes**
-  (`src/news/content/releaseNotes.ts`). Phase MT's RF32 census (2026-09-08)
-  left them on purpose: editing them rewrites what testers have already read,
-  and the release-notes tests carry POSITIONAL pins that shift when the text
-  moves. Sweep only if James wants the archive consistent; the rule itself is
-  about what a rower reads NOW.
+- **Ten shipped release-note strings say `PM5`, 13 occurrences in all**
+  (`src/news/content/releaseNotes.ts`; lines 133, 160, 161, 181 ×3, 182 ×2,
+  695, 715, 1030, 1072, 1090 — measured 2026-09-09 with
+  `grep -vn '^\s*//' app/src/news/content/releaseNotes.ts | grep -c "PM5"`
+  for the strings and the same pipeline through `grep -o "PM5" | wc -l` for
+  the occurrences; the `-v` drops ten `//` provenance comments, which are not
+  copy). **This row said "nine" until 2026-09-09 and nobody had run the
+  count** — re-run it rather than quoting it. Phase MT's RF32 census
+  (2026-09-08) left the strings on purpose: editing them rewrites what testers
+  have already read, and the release-notes tests carry POSITIONAL pins that
+  shift when the text moves. Sweep only if James wants the archive consistent;
+  the rule itself is about what a rower reads NOW.
 
 - [ ] **NOBODY HAS MEASURED THAT A HAND VERIFICATION ON concept2.com SETS THE
       LIST'S `verified` — and #365's headline rests on it.** Filed by the PM
