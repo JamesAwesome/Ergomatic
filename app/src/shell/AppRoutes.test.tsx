@@ -351,6 +351,37 @@ describe("AppRoutes", () => {
     ).toBeVisible();
   });
 
+  // Phase JC (Gate 0, 2026-09-08): the judged-colour settings screen behind
+  // You's SETTINGS row, behind the same signed-in guard. Mounted for REAL
+  // rather than stubbed like Diagnostics/Concept2Screen above — the screen
+  // reads localStorage and nothing else, so a real mount costs nothing and
+  // proves the route serves the actual screen instead of a route string.
+  it("routes /you/settings when signed in", async () => {
+    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+    render(
+      <MemoryRouter initialEntries={["/you/settings"]}>
+        <AppRoutes user={user} onSignedOut={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Settings", level: 1 }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("radiogroup", { name: "Pace faster color" }),
+    ).toBeInTheDocument();
+  });
+
+  // Signed OUT, the door and its screen are both absent: the wildcard
+  // resolves a typed /you/settings to Today, exactly as it does for /you.
+  it("wildcards /you/settings to Today when signed out", async () => {
+    render(
+      <MemoryRouter initialEntries={["/you/settings"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
+  });
+
   // James's 2026-08-23 ruling removed /you/learning (LearningTheApp) —
   // an old bookmark or stale client lands on the signed-in wildcard and
   // resolves to Today rather than 404ing.

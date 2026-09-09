@@ -548,8 +548,11 @@ function judge(rowSplitSeconds: number, baselineSeconds: number): RowJudgment {
   // "+ = slower" (R-C/§1): a positive deviation means the row's own split
   // took MORE seconds per 500m than the baseline, i.e. slower. A
   // dead-even row (deviation exactly 0) reads as "slower" by this same
-  // rule when called directly — there is no third "even" bucket in THIS
-  // function's own two-color legend, "← FASTER (BLUE) · SLOWER (RED) →".
+  // rule when called directly — there is no third "even" bucket in the
+  // two-way `faster`/`slower` split this function returns. (It used to
+  // cite the summary's `← FASTER (BLUE) · SLOWER (RED) →` legend as that
+  // split's rendering; Phase JC deleted the legend, since a rower now
+  // chooses each colour. The split itself is unchanged.)
   // `rowJudgment` (this module's ONLY caller as of Task 3, live rows and
   // stored rows alike) never reaches this function with a dead-even (or
   // any within-band) deviation at all — it intercepts the on-target case

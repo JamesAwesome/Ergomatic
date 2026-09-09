@@ -389,11 +389,13 @@ export default function TraceChart({
         </g>
       </svg>
       {/* F-2 (James's ruling, review round 2): one quiet line explaining
-          the band, same idiom as `PostWorkoutSummary.tsx`'s own
-          `.summary-legend` ("<- FASTER (BLUE) . SLOWER (RED) ->") —
-          shown only when there is something to explain (that file's own
-          `hasJudgedRow` guard), never a permanent fixture on a rest-free
-          trace. Spec §3 forbids copy claiming the rest PACE is
+          the band, shown only when there is something to explain, never a
+          permanent fixture on a rest-free trace. It used to cite the
+          summary's `.summary-legend` and that file's `hasJudgedRow` guard
+          as its idiom; Phase JC deleted both, on this very comment's own
+          reasoning below — the legend named two colours a rower can now
+          repoint or switch off. The additive-only-when-there-is-something-
+          to-explain rule is unchanged; only the precedent moved. Spec §3 forbids copy claiming the rest PACE is
           meaningful; it says nothing about naming what the mark
           itself is, so this says only that.
           "BAND = REST", never "SHADED = REST" (review round 4, C1):

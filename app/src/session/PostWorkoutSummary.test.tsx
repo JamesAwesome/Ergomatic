@@ -511,22 +511,37 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
     expect(within(opener).queryByText(/^[+−]/)).not.toBeInTheDocument();
   });
 
-  it("renders a judged measured row's deviation label and shows the legend", () => {
-    renderSummary();
+  // Phase JC, Gate 0 ruling 7 (James, 2026-09-08): the legend is DELETED,
+  // not derived from the settings. It read
+  // "← FASTER (BLUE) · SLOWER (RED) →" and named two colours a rower can now
+  // repoint or switch off per slot, so eight of the nine reachable pace
+  // configurations made it false. The house had already ruled this way
+  // once on the neighbouring surface — `TraceChart.tsx`, verbatim:
+  // "naming a colour here would just be a second thing to get wrong
+  // later."
+  //
+  // The assertion lives HERE, on a judged model, because a judged row was
+  // the only thing that ever rendered the legend (`hasJudgedRow`); asserted
+  // against a model with nothing to judge it would be vacuous. Both the
+  // element and the withdrawn copy are pinned, so a re-add under any
+  // wording fails.
+  it("renders a judged measured row's deviation label and no colour legend", () => {
+    const { container } = renderSummary();
     expect(screen.getByText("−4.2")).toBeInTheDocument();
     expect(screen.getByText("+4.2")).toBeInTheDocument();
+    expect(container.querySelector(".summary-legend")).toBeNull();
     expect(
-      screen.getByText("← FASTER (BLUE) · SLOWER (RED) →"),
-    ).toBeInTheDocument();
+      screen.queryByText("← FASTER (BLUE) · SLOWER (RED) →"),
+    ).not.toBeInTheDocument();
   });
 
   // Review finding C3: nothing previously asserted `barWidthPercent` -> the
   // bar's own `width` style, the `right:50%`/`left:50%` anchoring, or that
-  // `summary-row-faster`/`-slower` actually lands on the pace text — a
+  // `judge-pace-faster`/`-slower` actually lands on the pace text — a
   // faster/slower color or width swap would have passed the whole suite.
   // Two distinct `barWidthPercent` values (32 vs 47) prove the width is
   // READ from the model, not a hardcoded per-direction constant.
-  it("a faster row's pace and bar carry summary-row-faster, the bar anchored from the right at the model's own width (C3)", () => {
+  it("a faster row's pace and bar carry judge-pace-faster, the bar anchored from the right at the model's own width (C3)", () => {
     renderSummary({
       model: monitorModel({
         rows: [
@@ -548,19 +563,19 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
     });
     const row = screen.getByRole("listitem");
     const pace = row.querySelector(".summary-row-pace");
-    expect(pace?.className).toContain("summary-row-faster");
-    expect(pace?.className).not.toContain("summary-row-slower");
+    expect(pace?.className).toContain("judge-pace-faster");
+    expect(pace?.className).not.toContain("judge-pace-slower");
     const dev = row.querySelector(".summary-row-dev");
-    expect(dev?.className).toContain("summary-row-faster");
+    expect(dev?.className).toContain("judge-pace-faster");
     const bar = row.querySelector(".summary-row-bar");
     expect(bar).not.toBeNull();
-    expect(bar!.className).toContain("summary-row-faster");
+    expect(bar!.className).toContain("judge-pace-faster");
     expect((bar as HTMLElement).style.width).toBe("32%");
     expect((bar as HTMLElement).style.right).toBe("50%");
     expect((bar as HTMLElement).style.left).toBe("");
   });
 
-  it("a slower row's pace and bar carry summary-row-slower, the bar anchored from the left at the model's own width (C3)", () => {
+  it("a slower row's pace and bar carry judge-pace-slower, the bar anchored from the left at the model's own width (C3)", () => {
     renderSummary({
       model: monitorModel({
         rows: [
@@ -582,13 +597,13 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
     });
     const row = screen.getByRole("listitem");
     const pace = row.querySelector(".summary-row-pace");
-    expect(pace?.className).toContain("summary-row-slower");
-    expect(pace?.className).not.toContain("summary-row-faster");
+    expect(pace?.className).toContain("judge-pace-slower");
+    expect(pace?.className).not.toContain("judge-pace-faster");
     const dev = row.querySelector(".summary-row-dev");
-    expect(dev?.className).toContain("summary-row-slower");
+    expect(dev?.className).toContain("judge-pace-slower");
     const bar = row.querySelector(".summary-row-bar");
     expect(bar).not.toBeNull();
-    expect(bar!.className).toContain("summary-row-slower");
+    expect(bar!.className).toContain("judge-pace-slower");
     expect((bar as HTMLElement).style.width).toBe("47%");
     expect((bar as HTMLElement).style.left).toBe("50%");
     expect((bar as HTMLElement).style.right).toBe("");
@@ -627,8 +642,8 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
     // The pace still renders, unjudged (no faster/slower color class).
     const pace = row.querySelector(".summary-row-pace");
     expect(pace?.textContent).toBe("2:05.0");
-    expect(pace?.className).not.toContain("summary-row-faster");
-    expect(pace?.className).not.toContain("summary-row-slower");
+    expect(pace?.className).not.toContain("judge-pace-faster");
+    expect(pace?.className).not.toContain("judge-pace-slower");
   });
 
   // A real, if unusual, monitor-door shape (LogSession.test.tsx's own
@@ -673,14 +688,17 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
     expect(screen.getAllByText("—")).toHaveLength(2);
   });
 
-  it("renders the TARGETS ONLY · NOTHING MEASURED caption only when the model supplies one, and omits the legend when nothing is judged", () => {
+  // This test also carried the legend's ABSENCE half until Phase JC. With
+  // the legend deleted outright, an absence assertion on a model with
+  // nothing to judge is strictly weaker than the one the judged test above
+  // now makes, and no mutation can redden it that does not redden that one
+  // first — decoration, so it is gone rather than kept for the count
+  // (recurring failure 21). The caption half still bites.
+  it("renders the TARGETS ONLY · NOTHING MEASURED caption only when the model supplies one", () => {
     renderSummary({ model: prescribedOnlyModel() });
     expect(
       screen.getByText("TARGETS ONLY · NOTHING MEASURED"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("← FASTER (BLUE) · SLOWER (RED) →"),
-    ).not.toBeInTheDocument();
   });
 
   it("renders the paces-off caption next to INTERVALS when present, and omits it when null", () => {
@@ -864,11 +882,11 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
     });
     const row = screen.getByRole("listitem");
     const pace = row.querySelector(".summary-row-pace");
-    expect(pace?.className).not.toContain("summary-row-faster");
-    expect(pace?.className).not.toContain("summary-row-slower");
+    expect(pace?.className).not.toContain("judge-pace-faster");
+    expect(pace?.className).not.toContain("judge-pace-slower");
     const dev = row.querySelector(".summary-row-dev");
-    expect(dev?.className).not.toContain("summary-row-faster");
-    expect(dev?.className).not.toContain("summary-row-slower");
+    expect(dev?.className).not.toContain("judge-pace-faster");
+    expect(dev?.className).not.toContain("judge-pace-slower");
     expect(dev?.textContent).toBe("");
     expect(row.querySelector(".summary-row-bar-tick")).toBeNull();
     expect(row.querySelector(".summary-row-bar")).toBeNull();
@@ -1546,5 +1564,90 @@ describe("index.css: .summary-row-partial is a NON-SHRINKING, NON-WRAPPING flex 
     const rule = summaryRuleFor(".summary-row-offset");
     expect(rule.body).toMatch(/flex:\s*1\s*;/);
     expect(rule.body).toMatch(/min-width:\s*0/);
+  });
+});
+
+// ---------------------------------------------------------------------
+// Phase JC Task 3: the summary's judged class names its metric
+// ---------------------------------------------------------------------
+
+// `judgedColorClass` reaches THREE states, not four: its parameter is
+// `"faster" | "slower" | undefined`, so `within` and `stale` — the two
+// `Judgement` members the connected panes also render — cannot arrive
+// here at all. The two it does reach are both PACE: the summary's SPM
+// cell is not tinted today and this change does not tint it, so no
+// `judge-spm-*` class may ever appear on this surface.
+describe("judged rows name their metric (Phase JC Task 3)", () => {
+  function paceRow(direction: "faster" | "slower" | undefined) {
+    const view = renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:05.0",
+            spmCell: { measured: 24, target: 22 },
+            judged:
+              direction === undefined
+                ? undefined
+                : {
+                    direction,
+                    deviationSeconds: direction === "faster" ? -4.2 : 4.2,
+                    deviationLabel: direction === "faster" ? "−4.2" : "+4.2",
+                    barWidthPercent: 32,
+                  },
+          },
+        ],
+      }),
+    });
+    return { row: screen.getByRole("listitem"), unmount: view.unmount };
+  }
+
+  it.each(["faster", "slower"] as const)(
+    "a %s row's pace and deviation wear judge-pace-%s",
+    (direction) => {
+      const { row } = paceRow(direction);
+      for (const sel of [".summary-row-pace", ".summary-row-dev"]) {
+        expect(row.querySelector(sel)!.className).toContain(
+          `judge-pace-${direction}`,
+        );
+      }
+    },
+  );
+
+  it("an unjudged row wears no slot class of either metric", () => {
+    const { row } = paceRow(undefined);
+    for (const sel of [".summary-row-pace", ".summary-row-dev"]) {
+      expect(row.querySelector(sel)!.className).not.toMatch(
+        /judge-(pace|spm)-/,
+      );
+    }
+  });
+
+  it.each(["faster", "slower", undefined] as const)(
+    "the SPM cell is never a slot at all — direction %s",
+    (direction) => {
+      // The two SPM slots reach the connected pane only: this surface's
+      // rate cell is quiet ink whatever the pace verdict is, so a
+      // `judge-spm-*` arriving here would be a tint nothing asked for.
+      const { row } = paceRow(direction);
+      expect(row.querySelector(".summary-row-spm")!.className).not.toMatch(
+        /judge-(pace|spm)-/,
+      );
+    },
+  );
+
+  it("index.css retired .summary-row-faster/-slower with their last emitter", () => {
+    // The four `.judge-{pace,spm}-{faster,slower}` rules are the single
+    // successors for BOTH former pairs — this surface's and the connected
+    // panes' — so leaving these two behind would give the next author a
+    // rule that nothing can ever reach (recurring failure 5).
+    const selectors = cssRules(SUMMARY_CSS).flatMap((r) => r.selectors);
+    expect(selectors).not.toContain(".summary-row-faster");
+    expect(selectors).not.toContain(".summary-row-slower");
+    expect(selectors).toContain(".judge-pace-faster");
+    expect(selectors).toContain(".judge-pace-slower");
   });
 });

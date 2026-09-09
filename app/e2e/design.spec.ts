@@ -5,6 +5,7 @@ import AxeBuilder from "@axe-core/playwright";
 import {
   signInViaBackdoor,
   stableBoundingBox,
+  stubBluetoothPermissionDenied,
   stubBluetoothScanFailure,
 } from "./helpers";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
@@ -3173,10 +3174,10 @@ test.describe("from-the-log detail (Phase LT spec 1, Task 4: computed styles on 
 
   // §1's on-target row (index 2, dev 118−118=0.0 — inside the ±0.5s
   // band): `screenshots.spec.ts`'s own capture already proves the CLASS
-  // is absent (`not.toHaveClass(/summary-row-faster|summary-row-slower/)`)
+  // is absent (`not.toHaveClass(/judge-(pace|spm)-(faster|slower)/)`)
   // — this proves the CONSEQUENCE, live: with neither class present, the
   // cascade resolves `.summary-row-pace`/`.summary-row-dev` to plain
-  // `--ink`, never a `--judge-faster`/`--judge-slower` token surviving
+  // `--ink`, never a judged ink surviving
   // through some other selector (a class-name check alone cannot tell
   // "no color rule fired" apart from "a DIFFERENT rule fired the same
   // token by coincidence" — computed style can).
@@ -3188,14 +3189,14 @@ test.describe("from-the-log detail (Phase LT spec 1, Task 4: computed styles on 
       .locator(".summary-row-pace")
       .evaluate((el) => getComputedStyle(el).color);
     expect(paceColor).toBe("rgb(27, 26, 23)"); // --ink
-    expect(paceColor).not.toBe("rgb(29, 78, 137)"); // --judge-faster
-    expect(paceColor).not.toBe("rgb(150, 39, 24)"); // --judge-slower
+    expect(paceColor).not.toBe("rgb(29, 78, 137)"); // --judge-blue
+    expect(paceColor).not.toBe("rgb(150, 39, 24)"); // --judge-red
 
     const devColor = await onTargetRow
       .locator(".summary-row-dev")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(devColor).not.toBe("rgb(29, 78, 137)"); // --judge-faster
-    expect(devColor).not.toBe("rgb(150, 39, 24)"); // --judge-slower
+    expect(devColor).not.toBe("rgb(29, 78, 137)"); // --judge-blue
+    expect(devColor).not.toBe("rgb(150, 39, 24)"); // --judge-red
   });
 
   // §2's own ruling ("the authored target after the slash in quiet ink"),
@@ -4381,6 +4382,263 @@ test.describe("diagnostics screen", () => {
   });
 });
 
+// Phase JC (Gate 0 approved 2026-09-08): the judged-colour settings screen
+// behind You's SETTINGS row. TESTING.md, §"structural design assertions":
+// "a new screen with no entry here is a screen the a11y/tap-target/token
+// rules aren't actually checking". The ratios named below are `index.css`'s
+// own, computed there by the WCAG relative-luminance method and repeated
+// here as numbers rather than judged by eye (recurring failure 6).
+//
+// WHAT THIS BLOCK CLAIMS, AT THE STRENGTH IT EARNS (recurring failure 26):
+// that the SETTINGS SCREEN'S OWN chrome paints from the palette and that a
+// tap repaints the preview specimen ON THIS SCREEN. It says nothing about
+// whether the choice reaches a judged row elsewhere in the app, or survives
+// a reload — that is the seam test's claim, and it is a different test.
+test.describe("settings screen (judged colours)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-settings@e2e.test",
+      name: "Design Settings Tester",
+    });
+    await page.goto("/you/settings");
+    await expect(
+      page.getByRole("heading", { name: "Settings", exact: true }),
+    ).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the checked option is an accent border, the resting one a quiet rule", async ({
+    page,
+  }) => {
+    const group = page.getByRole("radiogroup", { name: "Pace slower color" });
+    const red = group.getByRole("radio", { name: "RED", exact: true });
+    const blue = group.getByRole("radio", { name: "BLUE", exact: true });
+    // The default: SLOWER is RED, on a fresh device with nothing stored.
+    await expect(red).toHaveAttribute("aria-checked", "true");
+
+    const border = (locator: typeof red) =>
+      locator.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          width: cs.borderTopWidth,
+          color: cs.borderTopColor,
+          background: cs.backgroundColor,
+        };
+      });
+
+    expect(await border(red)).toStrictEqual({
+      width: "2px",
+      color: "rgb(181, 52, 31)", // --accent, 5.94:1 on --surface (>=3:1)
+      background: "rgb(255, 253, 247)", // --surface
+    });
+    expect(await border(blue)).toStrictEqual({
+      width: "1px",
+      color: "rgb(201, 195, 178)", // --rule-3, decoration at 1.73:1
+      background: "rgb(255, 253, 247)",
+    });
+  });
+
+  // AND THIS IS THE ONLY LAYER THAT CAN SEE ONE WHOLE CLASS OF BREAKAGE.
+  // `theme/judgeTokens.test.tsx`'s cascade sweep is scoped to BARE (0,1,0)
+  // selectors on purpose, so a two-class override
+  // (`.judge-preview .judge-preview-value { color: var(--ink) }`) leaves it
+  // green — 18/18 — while the preview shows one ink whatever the rower
+  // picks. Probed exactly that way (RF21): this test failed with "Expected:
+  // rgb(150, 39, 24) / Received: rgb(27, 26, 23)" against a rebuilt image
+  // whose served CSS was confirmed to carry the override first (RF12's
+  // corollary — a stale image reads as a pass).
+  test("a tap repaints this screen's preview specimen, and leaves the swatches saying what red and blue ARE", async ({
+    page,
+  }) => {
+    const specimen = page.locator(".judge-preview-value.judge-pace-slower");
+    const swatch = (color: string) =>
+      page.locator(`.judge-swatch[data-color="${color}"]`).first();
+
+    await expect(specimen).toHaveCSS("color", "rgb(150, 39, 24)"); // --judge-red
+    await page
+      .getByRole("radiogroup", { name: "Pace slower color" })
+      .getByRole("radio", { name: "BLUE", exact: true })
+      .click();
+    await expect(specimen).toHaveCSS("color", "rgb(29, 78, 137)"); // --judge-blue
+
+    // THE SWATCHES DO NOT MOVE. They paint from the RAW inks, so the RED
+    // option still shows red after the slot it belongs to has gone blue —
+    // a swatch that followed its own slot would be offering the rower a
+    // choice it had already made for them.
+    await expect(swatch("red")).toHaveCSS(
+      "background-color",
+      "rgb(150, 39, 24)",
+    );
+    await expect(swatch("blue")).toHaveCSS(
+      "background-color",
+      "rgb(29, 78, 137)",
+    );
+  });
+});
+
+// Phase JC Task 7 — THE SEAM TEST, at the strength it earns and no more
+// (recurring failure 26). This file ALREADY proves that *a* judged colour
+// reaches a pixel: `expectedJudgedRgb`/`judgedColor` read live computed
+// styles at seven call sites and the from-the-log describe reads two more.
+// Every one of those runs at the DEFAULTS, because no other test opens the
+// SETTINGS screen.
+//
+// WHAT THESE TWO TESTS CLAIM, AND IT IS THE ONE THING NOTHING ELSE COVERS:
+//   (A) a colour the ROWER PICKED on `/you/settings` reaches a judged cell
+//       on a different screen, live, with no reload in between; and
+//   (B) that the same choice is still on the cell after a reload — the only
+//       gate anywhere on `main.tsx`'s boot-time
+//       `applyJudgeColors(loadJudgeColors())`, a line `vitest.config.ts`
+//       excludes from coverage entirely.
+// They claim nothing about iOS, nothing about the connected panes (whose
+// per-metric classes are the client suites' job), and nothing about any
+// slot other than PACE SLOWER.
+//
+// THE TWO LEGS TEST DIFFERENT THINGS, AND THE CLICK IS WHY. The settings
+// screen's own `applyJudgeColors` writes the four resolved custom
+// properties as INLINE style on `documentElement`: they survive a
+// client-side navigation and die with the document on a reload. So leg A
+// can ride the settings screen's write, and leg B can only ride
+// `main.tsx`'s. Reaching the summary with `page.goto` would collapse the
+// pair into the same test twice — deleting the `main.tsx` call would then
+// redden both, and the claim above would be false.
+//
+// SO EACH LEG PROVES ITS OWN NAVIGATION HAPPENED THE WAY IT CLAIMS
+// (recurring failure 21: an assertion nobody can redden is decoration). A
+// sentinel is set on `window` at the settings screen and asserted PRESENT
+// at the end of leg A — no document was ever replaced — and ABSENT at the
+// end of leg B, where one was. A tab link that silently did a full load, or
+// a `reload()` that silently did not, is a failing test rather than a
+// quietly duplicated one.
+const JC_SAME_DOCUMENT = "__jcSameDocument";
+
+/** Signs a fresh rower in, seeds the four-row judged log, opens the
+ *  settings screen and taps BLUE on PACE SLOWER. Ends on `/you/settings`
+ *  with the sentinel set. */
+async function chooseBlueForPaceSlower(
+  page: Page,
+  email: string,
+): Promise<void> {
+  await signInViaBackdoor(page, { email, name: "Design Judge Seam Tester" });
+  // The same mixed fixture the from-the-log describe uses: row 2 is the
+  // SLOWER one (target 130, actual 140), so its pace cell wears
+  // `judge-pace-slower` — the class the tap below recolours.
+  await postJudgmentMixLog(page);
+  await page.goto("/you/settings");
+  const paceSlower = page.getByRole("radiogroup", {
+    name: "Pace slower color",
+  });
+  const blue = paceSlower.getByRole("radio", { name: "BLUE", exact: true });
+  // The precondition the whole test rests on: this rower has never chosen,
+  // so the slot sits at its RED default and a blue cell later can only be
+  // this tap's doing.
+  await expect(
+    paceSlower.getByRole("radio", { name: "RED", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
+  await blue.click();
+  await expect(blue).toHaveAttribute("aria-checked", "true");
+  await page.evaluate((key) => {
+    (window as unknown as Record<string, boolean>)[key] = true;
+  }, JC_SAME_DOCUMENT);
+}
+
+/** Settings -> the TODAY tab -> the seeded row, every hop a client-side
+ *  `Link`/`NavLink`. The rower has exactly one log, so LAST THREE's
+ *  three-row cap cannot hide it and no ALL SESSIONS detour is needed. */
+async function clickThroughToTheSeededLog(page: Page): Promise<void> {
+  await page.locator(".tabbar").getByRole("link", { name: "TODAY" }).click();
+  const row = page.locator(".today-log-row").first();
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+}
+
+/** True while the document that ran `chooseBlueForPaceSlower` is still the
+ *  one on screen. */
+async function stillTheSameDocument(page: Page): Promise<boolean> {
+  return page.evaluate(
+    (key) => (window as unknown as Record<string, boolean>)[key] === true,
+    JC_SAME_DOCUMENT,
+  );
+}
+
+test.describe("the rower's own judged colour reaches a judged row (Phase JC seam)", () => {
+  test("live: PACE SLOWER set to BLUE paints the slower row's pace cell blue, with no reload in between", async ({
+    page,
+  }, testInfo) => {
+    await chooseBlueForPaceSlower(
+      page,
+      `design-judge-seam-live-${testInfo.parallelIndex}@e2e.test`,
+    );
+    await clickThroughToTheSeededLog(page);
+
+    const slowerRow = page.locator(".summary-row").nth(1);
+    // An INDEPENDENT literal, never a value read back from the token
+    // (recurring failure 21's "a test that imports the constant it gates
+    // proves nothing about it"): retuning `--judge-blue` retunes the app,
+    // and it must not retune this.
+    await expect(slowerRow.locator(".summary-row-pace")).toHaveCSS(
+      "color",
+      "rgb(29, 78, 137)", // --judge-blue
+    );
+    // Read AFTER the colour on purpose, so a mutation that sends this cell
+    // to the wrong slot reddens the COLOUR assertion — the one this test
+    // exists for — rather than being caught early by a class name.
+    await expect(slowerRow.locator(".summary-row-pace")).toHaveClass(
+      /judge-pace-slower/,
+    );
+    await expect(slowerRow.locator(".summary-row-index")).toHaveText("2");
+
+    expect(await stillTheSameDocument(page)).toBe(true);
+  });
+
+  test("boot: the choice is still on the cell after a reload — the only gate on main.tsx's boot apply", async ({
+    page,
+  }, testInfo) => {
+    await chooseBlueForPaceSlower(
+      page,
+      `design-judge-seam-boot-${testInfo.parallelIndex}@e2e.test`,
+    );
+    await clickThroughToTheSeededLog(page);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+    // The reload really replaced the document, so the settings screen's
+    // inline properties went with it: anything blue below came from
+    // `main.tsx` reading localStorage before the first render.
+    //
+    // THIS ASSERTION IS ONLY HALF A PROOF, AND LEG A IS THE OTHER HALF —
+    // do not delete leg A as a duplicate of this one. An absent sentinel
+    // says SOME document replacement happened between the settings screen
+    // and here; it does not say `reload()` caused it, because
+    // `clickThroughToTheSeededLog` runs first and a tab link that silently
+    // did a full load would produce exactly this reading. Leg A supplies
+    // the missing half: it runs the same click-through and asserts the
+    // sentinel is STILL PRESENT, so the hops are proven client-side there
+    // and the only replacement left to explain here is the `reload()`. The
+    // pair is sound; either leg standing alone is not.
+    expect(await stillTheSameDocument(page)).toBe(false);
+
+    const slowerRow = page.locator(".summary-row").nth(1);
+    await expect(slowerRow.locator(".summary-row-pace")).toHaveCSS(
+      "color",
+      "rgb(29, 78, 137)", // --judge-blue
+    );
+    await expect(slowerRow.locator(".summary-row-pace")).toHaveClass(
+      /judge-pace-slower/,
+    );
+    await expect(slowerRow.locator(".summary-row-index")).toHaveText("2");
+  });
+});
+
 /** A plausible mix of the driver's own real `log.record` kinds, same idiom
  *  `screenshots.spec.ts`'s own `sessionLogRing` uses (duplicated rather
  *  than shared across e2e files, this file's own established precedent for
@@ -5080,7 +5338,7 @@ test.describe("post-workout summary (session door, just finished)", () => {
     // PM final-PR gate, condition round, 2026-08-17: the rust `--accent`
     // fill (5.35:1) is GONE — James's ruling ("neutral is best, prefer
     // black") after the PM gate flagged it colliding with the
-    // --judge-slower red family on this same screen. Inherits `--ink`
+    // --judge-red family on this same screen. Inherits `--ink`
     // from `.summary-hero-value` like every sibling hero; 15.41:1 on
     // --page (the house text default, so it clears the 4.5:1 floor
     // trivially — computed here rather than judged by eye).
@@ -5802,7 +6060,7 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   // Rows render in `[opening piece, interval 1, interval 2]` order — all
   // three come from the SAME `monitorWorkRows` index order now; there is no
   // separate warm-up-row branch to special-case any more (Phase WU).
-  test("§2E judged colors: the slower row paints --judge-slower, the faster row paints --judge-faster, and the legend renders", async ({
+  test("§2E judged colors: the slower row paints --judge-red, the faster row paints --judge-blue, and no colour legend rides along", async ({
     page,
   }) => {
     const rows = page.locator(".summary-row");
@@ -5813,16 +6071,25 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     const slowerPaceColor = await slowerRow
       .locator(".summary-row-pace")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(slowerPaceColor).toBe("rgb(150, 39, 24)"); // --judge-slower
+    // The raw ink `--judge-pace-slower` resolves to at the defaults these
+    // specs run under (Phase JC): a rower may repoint that slot.
+    expect(slowerPaceColor).toBe("rgb(150, 39, 24)"); // --judge-red
 
     const fasterPaceColor = await fasterRow
       .locator(".summary-row-pace")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(fasterPaceColor).toBe("rgb(29, 78, 137)"); // --judge-faster
+    expect(fasterPaceColor).toBe("rgb(29, 78, 137)"); // --judge-blue
 
-    await expect(page.locator(".summary-legend")).toHaveText(
-      "← FASTER (BLUE) · SLOWER (RED) →",
-    );
+    // Phase JC, Gate 0 ruling 7 (James, 2026-09-08). This locator used to
+    // pin the copy `← FASTER (BLUE) · SLOWER (RED) →`; the legend is
+    // DELETED because a rower can now repoint or switch off either pace
+    // slot, which made it false on eight of nine reachable pace
+    // configurations. The pin becomes its negative rather than
+    // disappearing: I-8 ("no copy names a colour the settings could
+    // contradict") is gated at e2e, and this page is the one that renders
+    // judged summary rows, so re-adding the element reddens it here as
+    // well as in the client suite.
+    await expect(page.locator(".summary-legend")).toHaveCount(0);
   });
 
   // §1's own capped formula (`min(50, max(1.2, |dev|/1.6×50))`) — both
@@ -7209,8 +7476,10 @@ async function walkToSurface(page: Page): Promise<void> {
  *  a webkit project is added. What bites today is the first child's top. */
 async function measureFailureFrame(page: Page): Promise<{
   clientHeight: number;
+  contentHeight: number;
   serifTop: number;
   serifBottom: number;
+  remedyTop: number | null;
   minScrollTop: number;
   firstChildTopAtMinScroll: number;
 }> {
@@ -7229,16 +7498,45 @@ async function measureFailureFrame(page: Page): Promise<{
     const serifRect = serif.getBoundingClientRect();
     const atRest = {
       clientHeight: body.clientHeight,
+      contentHeight: body.scrollHeight,
       serifTop: serifRect.top - restTop,
       serifBottom: serifRect.bottom - restTop,
     };
+    const remedy = body.querySelector<HTMLElement>(".connected-body-line");
+    const remedyTop =
+      remedy === null ? null : remedy.getBoundingClientRect().top - restTop;
     body.scrollTop = -9999;
     const minScrollTop = body.scrollTop;
     const firstChildTopAtMinScroll =
       first.getBoundingClientRect().top - clientTopOf(body);
     body.scrollTop = 0;
-    return { ...atRest, minScrollTop, firstChildTopAtMinScroll };
+    return {
+      ...atRest,
+      remedyTop,
+      minScrollTop,
+      firstChildTopAtMinScroll,
+    };
   });
+}
+
+/** The headline is ON the frame at rest — inside `.connected-interstitial-
+ *  body`'s client box, top and bottom. Held by every failure frame since the
+ *  landscape action stack learned to pair its buttons (Phase MT follow-on):
+ *  before that, four full-width buttons left a 78px window against a headline
+ *  that runs to y94 on any frame whose title wraps to two lines, which is
+ *  `link-failed` (470px at 36px serif) and `permission-denied` (457px) in a
+ *  440px column. */
+function assertHeadlineOnFrame(
+  m: Awaited<ReturnType<typeof measureFailureFrame>>,
+): void {
+  expect(
+    m.serifTop,
+    `the headline starts ${-m.serifTop}px above the body's visible top`,
+  ).toBeGreaterThanOrEqual(-0.5);
+  expect(
+    m.serifBottom,
+    `the headline ends ${m.serifBottom - m.clientHeight}px below the body's visible bottom`,
+  ).toBeLessThanOrEqual(m.clientHeight + 0.5);
 }
 
 /** The half of gate (b) that holds on EVERY failure frame: nothing may sit
@@ -7326,20 +7624,92 @@ test.describe("connected screens (fake-driven)", () => {
     await sweep(page);
     await expect(failed).toBeVisible({ timeout: 1000 });
 
-    // Gate (b)'s universal half, on the OTHER failure frame, and free here:
-    // this test already stands on a failure screen, so it costs a resize
-    // rather than a second minutes-long connected setup. Only the
-    // reachability half is asserted — this frame carries a DETAIL panel and
-    // four full-width buttons, so its landscape column genuinely does not
-    // fit and its headline is legitimately clipped at the BOTTOM. What is
-    // never legitimate is content above the scroll origin. Under the same
-    // `justify-content: center` mutation this frame fails hardest of the two
-    // — "the frame's first child sits 70.5px above the minimum reachable
-    // scroll position" — which is the defect the committed
-    // `connected-interstitial-failed-landscape.png` shows.
+    // Gate (b) IN FULL on the other failure frame, and free here: this test
+    // already stands on a failure screen, so it costs a resize rather than a
+    // second minutes-long connected setup.
+    //
+    // SUPERSEDED CLAIM (Phase MT follow-on): this comment used to assert only
+    // the reachability half, on the ground that four full-width buttons left a
+    // window this frame's headline "legitimately" overran. That is no longer
+    // true — the landscape stack now pairs its last four buttons, taking the
+    // window 78px -> 206px against a 94px headline, so the headline clears the
+    // fold and the containment half is a real gate here. The frame as a whole
+    // still overflows, by 13px (content 219px), which is what keeps the
+    // reachability half falsifiable on this frame: under the
+    // `justify-content: center` mutation it fails at 6.5px, half of that
+    // overflow. TWO FIGURES CORRECTED FROM REVIEW ROUND 0: that number was
+    // written as 70.5px, which was measured against the OLD 78px window, and
+    // this frame was called the one that "fails hardest of the three" — it is
+    // now the mildest, since `permission-denied` carries 308px of content into
+    // the same 206px window and fails at 29px on the headline.
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(failed).toBeVisible();
-    assertNothingAboveTheScrollOrigin(await measureFailureFrame(page));
+    const lf = await measureFailureFrame(page);
+    assertHeadlineOnFrame(lf);
+    assertNothingAboveTheScrollOrigin(lf);
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // THE FRAME THE LANDSCAPE BUDGET WAS FIXED FOR (Phase MT follow-on, Gate 0
+  // approved 2026-09-08). `permission-denied` carries more than any other
+  // failure screen — a headline that wraps to two lines at 36px in a 440px
+  // column (457px), the remedy sentence, the reassurance and a DETAIL panel,
+  // 219px of content — and it is the one screen whose message IS the fix
+  // ("Allow Bluetooth for Ergomatic in Settings"). Before the pairing rule its
+  // landscape window was 78px against a headline running to y94.
+  test("the interstitial's PERMISSION-DENIED frame reads in landscape, headline and all", async ({
+    page,
+  }) => {
+    const title = "Design Connected Permission Workout";
+    await stubBluetoothPermissionDenied(page);
+    await openConnected(page, title, "design-connected-permission@e2e.test");
+    const denied = page.locator(".connected-serif-line", {
+      hasText: "Bluetooth permission needed",
+    });
+    await expect(denied).toBeVisible({ timeout: 10_000 });
+    await sweep(page);
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect(denied).toBeVisible();
+    await assertTapTargets(page);
+    const m = await measureFailureFrame(page);
+    assertHeadlineOnFrame(m);
+    assertNothingAboveTheScrollOrigin(m);
+
+    // The remedy must at least BEGIN on screen. This is the only failure
+    // screen whose body line tells the rower what to DO — "Allow Bluetooth for
+    // Ergomatic in Settings" — rather than restating the headline, so a rower
+    // who cannot see it start has been told something is wrong and not how to
+    // fix it. It bites when this frame loses its `--failure` modifier.
+    //
+    // WHAT IT CANNOT DO IS PIN THE PAIRING COUNT, and the comment that shipped
+    // here in review round 0 claimed it did — a claim this PR's own probe
+    // table and ROADMAP row both contradicted while it sat here (it survived a
+    // `git checkout --` that reverted an unrelated probe, RF22 exactly).
+    // MEASURED: reverting the rule to `nth-last-child(-n + 2)` leaves every
+    // assertion on THIS frame green. At four buttons `-n + 2` still gives a
+    // 142px window and the remedy at 102 clears it; the shape that falls to
+    // 74px is the FIVE-button iOS stack, and `canOpenAppSettings()` is
+    // `isNative()`, so the web build is four buttons by construction and that
+    // shape is unreachable from here.
+    //
+    // The count is caught, but ONE FRAME OVER: the refusal test's
+    // `contentHeight` precondition fails at 157px against a 142px window
+    // ("overflows its window by 15px"), because that frame is the one whose
+    // content sits between the two windows. Round 0 of this PR claimed the
+    // count was pinned by nothing in the suite, which was true when written
+    // and stopped being true when that precondition landed in round 1.
+    expect(
+      m.remedyTop,
+      "the frame has no body line to read as the remedy",
+    ).not.toBeNull();
+    expect(
+      m.remedyTop,
+      `the remedy sentence starts ${(m.remedyTop ?? 0) - m.clientHeight}px below the fold, so the rower is told something is wrong and not what to do`,
+    ).toBeLessThan(m.clientHeight);
+
     await page.setViewportSize({ width: 390, height: 844 });
 
     await cleanupAllConnected(page, title);
@@ -7409,11 +7779,26 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  // GATE (b), on the frame whose landscape budget is tightest — the gate
-  // that would have caught the landscape bug in the first place. At 844x390
-  // the refusal's four buttons leave a body window of 142px (measured here,
-  // matching `index.css`'s own figure) for a taller column, so the frame
-  // overflows BY DESIGN; what must never happen
+  // GATE (b) on the refusal frame. WHAT THIS TEST STILL PROVES, AND WHAT IT NO
+  // LONGER CAN (Phase MT follow-on rev 2, review round 0 finding 3): the
+  // landscape budget fix took this frame's window 142px -> 206px against 157px
+  // of content, so it is the one failure frame that now FITS. With no overflow
+  // there is no free space to split, which makes `justify-content: center` and
+  // the auto margins indistinguishable here — the -7.5px mutation this
+  // comment's own option table names can no longer redden either geometry
+  // assertion below, and the containment half needs a window under 58px, which
+  // nothing reaches on this frame. Both are kept deliberately, as tripwires
+  // for a future line added to this frame, and the `contentHeight` assertion
+  // pins the precondition that makes them dormant, so a frame that starts
+  // overflowing again reddens HERE rather than silently re-arming them.
+  // THE FALSIFIABLE COPIES LIVE ON THE OTHER TWO FRAMES, which still overflow:
+  // measured under that mutation, `link-failed` fails at 6.5px and
+  // `permission-denied` at 29px. What this test uniquely still gates is the
+  // 44px sweep with the support link in the DOM, which reddens at 15px.
+  //
+  // The historical text: at 844x390 four full-width buttons left a 142px
+  // window for a taller column, so the frame overflowed BY DESIGN; what must
+  // never happen
   // is the overflow being split above and below the window, which is what
   // `justify-content: center` did and what the auto margins now prevent.
   //
@@ -7433,8 +7818,11 @@ test.describe("connected screens (fake-driven)", () => {
   //     from this frame: those historical figures are not reachable by a
   //     CSS-only mutation any more.
   //   - The CONTAINMENT assertion needs the landscape body window below 58px
-  //     to bite, so removing the `--refusal` pairing alone does NOT make it
-  //     fail — measured: window 78px, headline at 22..58, test green. It goes red on the shape the
+  //     to bite, so removing the pairing alone did NOT make it fail —
+  //     measured: window 78px, headline at 22..58, test green. (That table was
+  //     written against `--refusal`, the modifier this rule carried when it
+  //     applied to the refusal alone; it is `--failure` now, on every failure
+  //     frame.) It goes red on the shape the
   //     ROADMAP already files as a real defect — the FIVE-button stack, with
   //     the pairing gone: window 10px, "the headline ends 48px below the
   //     body's visible bottom", `Received: 58`. That is its whole job: it
@@ -7458,14 +7846,14 @@ test.describe("connected screens (fake-driven)", () => {
     await assertTapTargets(page);
 
     const m = await measureFailureFrame(page);
+    // The precondition for the two assertions below being dormant rather than
+    // broken (see this test's own header). If a line is ever added to this
+    // frame this is what goes red first.
     expect(
-      m.serifTop,
-      `the headline starts ${-m.serifTop}px above the body's visible top`,
-    ).toBeGreaterThanOrEqual(-0.5);
-    expect(
-      m.serifBottom,
-      `the headline ends ${m.serifBottom - m.clientHeight}px below the body's visible bottom`,
-    ).toBeLessThanOrEqual(m.clientHeight + 0.5);
+      m.contentHeight,
+      `this frame overflows its window by ${m.contentHeight - m.clientHeight}px, so the two geometry assertions below are live again and their comment is stale`,
+    ).toBeLessThanOrEqual(m.clientHeight);
+    assertHeadlineOnFrame(m);
     assertNothingAboveTheScrollOrigin(m);
 
     await page.setViewportSize({ width: 390, height: 844 });
@@ -7591,38 +7979,69 @@ test.describe("connected screens (fake-driven)", () => {
   const INK_3_RGB = "rgb(87, 84, 76)";
   const RULE_2_RGB = "rgb(222, 216, 201)";
   const RULE_3_RGB = "rgb(201, 195, 178)";
-  const JUDGE_FASTER_RGB = "rgb(29, 78, 137)";
-  const JUDGE_SLOWER_RGB = "rgb(150, 39, 24)";
+  // THE RAW INKS, and the names matter (Phase JC). `--judge-blue` /
+  // `--judge-red` are the two colours a rower may choose; the four
+  // `--judge-{pace,spm}-{faster,slower}` SLOTS resolve to them by default
+  // and to whatever the rower picks after that. Written as independent
+  // literals rather than read from the stylesheet, so retuning a token
+  // cannot retune the test with it.
+  const JUDGE_BLUE_RGB = "rgb(29, 78, 137)";
+  const JUDGE_RED_RGB = "rgb(150, 39, 24)";
   const MARKER_RGB = "rgb(125, 85, 16)";
   const PROGRESS_ACTIVE_RGB = "rgb(138, 132, 120)";
   const SURFACE_RGB = "rgb(255, 253, 247)";
 
-  /** The colour a judged element SHOULD resolve to, read off whichever
-   *  `timer-card-actual-{judgement}` class is actually present — the same
-   *  mapping `index.css`'s own judgement-keyed rules encode. `"within"`
-   *  declares no colour of its own (plain ink by inheritance). */
+  /** The colour a judged element SHOULD resolve to at the DEFAULT
+   *  settings, read off whichever judgement class is actually present —
+   *  the same mapping `index.css`'s own rules encode. `"within"` declares
+   *  no colour of its own (plain ink by inheritance).
+   *
+   *  Blue-faster/red-slower is now a default rather than a rule (Phase
+   *  JC): a rower may recolour or silence either verdict per metric. These
+   *  specs never open the SETTINGS screen, so they run at the defaults and
+   *  this mapping holds. The one test that proves a rower's own CHOICE
+   *  reaches a pixel is Task 7's, and it sets the slot itself. */
   function expectedJudgedRgb(judgement: string): string {
-    if (judgement === "faster") return JUDGE_FASTER_RGB;
-    if (judgement === "slower") return JUDGE_SLOWER_RGB;
+    if (judgement === "faster") return JUDGE_BLUE_RGB;
+    if (judgement === "slower") return JUDGE_RED_RGB;
     if (judgement === "stale") return INK_3_RGB;
     return INK_RGB; // "within"
   }
 
-  /** Reads a judged element's own `timer-card-actual-*` class and its
-   *  resolved `color`, in one round trip. */
+  /** Reads a judged element's own judgement class and its resolved
+   *  `color`, in one round trip.
+   *
+   *  TWO PREFIXES since Phase JC, and the METRIC is an argument rather
+   *  than something read back: `faster`/`slower` wear
+   *  `judge-{pace,spm}-{judgement}` and `within`/`stale` keep
+   *  `timer-card-actual-{judgement}`. Passing the metric IN is what keeps
+   *  this harness discriminating — an element wearing the OTHER metric's
+   *  class matches nothing, reports `"(none)"`, and its caller's
+   *  `expectedJudgedRgb` then demands plain ink from a cell painted blue
+   *  or red. Reading whichever slot class happened to be present would
+   *  have made a pace class on the rate hero indistinguishable from a
+   *  correct one, since both metrics resolve to the same two inks by
+   *  default. */
   async function judgedColor(
     page: Page,
     selector: string,
+    metric: "pace" | "spm",
   ): Promise<{ judgement: string; color: string }> {
-    return page.locator(selector).evaluate((el) => {
-      const cls = Array.from(el.classList).find((c) =>
+    return page.locator(selector).evaluate((el, m) => {
+      const slot = Array.from(el.classList).find(
+        (c) => c === `judge-${m}-faster` || c === `judge-${m}-slower`,
+      );
+      const legacy = Array.from(el.classList).find((c) =>
         c.startsWith("timer-card-actual-"),
       );
+      const cls = slot ?? legacy;
       return {
-        judgement: cls ? cls.replace("timer-card-actual-", "") : "(none)",
+        judgement: cls
+          ? cls.replace(`judge-${m}-`, "").replace("timer-card-actual-", "")
+          : "(none)",
         color: getComputedStyle(el).color,
       };
-    });
+    }, metric);
   }
 
   test.describe("navigation and diagnostics (design spec §3 structure)", () => {
@@ -8008,14 +8427,17 @@ test.describe("connected screens (fake-driven)", () => {
         .evaluate((el) => getComputedStyle(el).fontSize);
       expect(tenths).toBe("58px");
 
-      // Split's own actual reads FASTER in this fixture (verified against
-      // the committed file: `grep timer-card-actual- connected-pane-
-      // live.html` — 1 faster, 1 within) — read dynamically anyway so the
-      // assertion states the mechanism, not a fact this fixture happens to
-      // hold today.
+      // Split's own actual reads FASTER in this fixture, on the PACE slot
+      // since Phase JC. Verified against the committed file:
+      // `grep -o "judge-[a-z]*-[a-z]*" connected-pane-live.html` → one
+      // `judge-pace-faster`, and `grep -o "timer-card-actual-[a-z]*"` →
+      // two `-within` (the rate hero and AVG). Read dynamically anyway so
+      // the assertion states the mechanism, not a fact this fixture
+      // happens to hold today.
       const split = await judgedColor(
         page,
         ".connected-hero-split .connected-hero-value",
+        "pace",
       );
       expect(split.color).toBe(expectedJudgedRgb(split.judgement));
 
@@ -8066,7 +8488,11 @@ test.describe("connected screens (fake-driven)", () => {
       expect(label.color).toBe(INK_3_RGB);
       expect(label.text).toBe("AVG");
 
-      const value = await judgedColor(page, ".connected-hero-avg-value");
+      const value = await judgedColor(
+        page,
+        ".connected-hero-avg-value",
+        "pace",
+      );
       const valueFontSize = await page
         .locator(".connected-hero-avg-value")
         .evaluate((el) => getComputedStyle(el).fontSize);
@@ -8114,6 +8540,7 @@ test.describe("connected screens (fake-driven)", () => {
       const rate = await judgedColor(
         page,
         ".connected-hero-rate .connected-hero-value",
+        "spm",
       );
       expect(rate.color).toBe(expectedJudgedRgb(rate.judgement));
 
@@ -8526,7 +8953,13 @@ test.describe("connected screens (fake-driven)", () => {
       // an already-dashing zero reading.
       expect(measured.coastText).toBe("—");
       expect(measured.paceCellRenderedText).toBe("—");
-      expect(measured.paceCellClasses).not.toMatch(/timer-card-actual-/);
+      // NOT DEAD AFTER PHASE JC, WIDENED: `within` and `stale` keep the
+      // `timer-card-actual-` prefix, so this still bites a stray verdict on
+      // a resting cell — and it now also catches the two per-metric slot
+      // classes, which is what a re-tinted rest would actually wear.
+      expect(measured.paceCellClasses).not.toMatch(
+        /timer-card-actual-|judge-(pace|spm)-/,
+      );
       // The CSS orientation swap itself, computed — not assumed from the
       // class list alone: the coast form is genuinely painted, the
       // rest-countdown form genuinely is not.
@@ -9096,11 +9529,13 @@ test.describe("connected screens (fake-driven)", () => {
       const pace = await judgedColor(
         page,
         ".connected-grid-active .connected-grid-pace",
+        "pace",
       );
       expect(pace.color).toBe(expectedJudgedRgb(pace.judgement));
       const spm = await judgedColor(
         page,
         ".connected-grid-active .connected-grid-spm",
+        "spm",
       );
       expect(spm.color).toBe(expectedJudgedRgb(spm.judgement));
 
@@ -9558,7 +9993,11 @@ test.describe("connected screens (fake-driven)", () => {
           className: el.className,
         }));
       expect(value.color).toBe(MARKER_RGB);
-      expect(value.className).not.toMatch(/timer-card-actual-/);
+      // Widened at Phase JC for the same reason as the portrait leg above:
+      // both class families have to be denied, not just the older one.
+      expect(value.className).not.toMatch(
+        /timer-card-actual-|judge-(pace|spm)-/,
+      );
     });
   });
 
@@ -9591,6 +10030,7 @@ test.describe("connected screens (fake-driven)", () => {
       const split = await judgedColor(
         page,
         ".connected-hero-split .connected-hero-value",
+        "pace",
       );
       // Forced "within" by the model (armedMirror), so ink-4 must come
       // from the `.connected-hero-ghost` class layered on top, not from a
@@ -9608,6 +10048,7 @@ test.describe("connected screens (fake-driven)", () => {
       const rate = await judgedColor(
         page,
         ".connected-hero-rate .connected-hero-value",
+        "spm",
       );
       expect(rate.judgement).toBe("within");
       expect(rate.color).toBe(INK_RGB);
@@ -9701,12 +10142,14 @@ test.describe("connected screens (fake-driven)", () => {
       const split = await judgedColor(
         page,
         ".connected-hero-split .connected-hero-value",
+        "pace",
       );
       expect(split.judgement).toBe("stale");
       expect(split.color).toBe(INK_3_RGB);
       const rate = await judgedColor(
         page,
         ".connected-hero-rate .connected-hero-value",
+        "spm",
       );
       expect(rate.judgement).toBe("stale");
       expect(rate.color).toBe(INK_3_RGB);
@@ -9742,8 +10185,11 @@ test.describe("connected screens (fake-driven)", () => {
         "1 interval kept.",
       );
       // FILLED RED (Gate 0), resolved through the real cascade rather than
-      // read off the stylesheet: `--judge-slower` ground with `--surface`
-      // text measures 7.94:1, against the house 4.5:1 floor. The banner
+      // read off the stylesheet: `--judge-red` ground with `--surface`
+      // text measures 7.94:1, against the house 4.5:1 floor. THE RAW INK,
+      // never a judged slot (Phase JC): this is an alarm, not a verdict,
+      // so it stays red at every setting — a rower who paints every slot
+      // blue must not get a blue LOST banner. The banner
       // has to land at arm's length mid-stroke — "the LOST isn't easy to
       // notice, i think we need to highlight that more" (James,
       // 2026-08-25).
@@ -9751,7 +10197,7 @@ test.describe("connected screens (fake-driven)", () => {
         const cs = getComputedStyle(el);
         return { bg: cs.backgroundColor };
       });
-      expect(fill.bg).toBe(JUDGE_SLOWER_RGB);
+      expect(fill.bg).toBe(JUDGE_RED_RGB);
       for (const child of [".connected-lost-title", ".connected-lost-body"]) {
         const color = await page
           .locator(child)
@@ -9812,12 +10258,13 @@ test.describe("connected screens (fake-driven)", () => {
         "1 OF 4 · READY",
       );
       // Same filled-red banner as the kept >= 1 arm above: dropping the
-      // body must not have dropped the emphasis with it. `--judge-slower`
-      // ground with `--surface` text is 7.94:1, computed at that leg.
+      // body must not have dropped the emphasis with it. `--judge-red`
+      // ground (the raw ink, outside the preference) with `--surface` text
+      // is 7.94:1, computed at that leg.
       const fill = await banner.evaluate(
         (el) => getComputedStyle(el).backgroundColor,
       );
-      expect(fill).toBe(JUDGE_SLOWER_RGB);
+      expect(fill).toBe(JUDGE_RED_RGB);
       const titleColor = await page
         .locator(".connected-lost-title")
         .evaluate((el) => getComputedStyle(el).color);
@@ -11554,7 +12001,7 @@ test.describe("the tab bar's bottom edge", () => {
   });
 });
 
-test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
+test.describe("You's doors group: BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS", () => {
   const C2_UNLINKED = {
     available: true,
     linked: false,
@@ -11615,7 +12062,7 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
     await assertNoA11yViolations(page);
   });
 
-  test("the three doors read as ONE group: each starts where the one above ends, in both orientations (R7)", async ({
+  test("the four doors read as ONE group: each starts where the one above ends, in both orientations (R7)", async ({
     page,
   }) => {
     // Invariant R7 (spec §5.1): exactly one auto top margin separates the
@@ -11634,23 +12081,32 @@ test.describe("You's doors group: BASELINES, CONCEPT2, DIAGNOSTICS", () => {
       const c2 = await stableBoundingBox(
         page.getByRole("link", { name: /CONCEPT2/ }),
       );
+      const settings = await stableBoundingBox(
+        page.getByRole("link", { name: "SETTINGS" }),
+      );
       const diag = await stableBoundingBox(
         page.getByRole("link", { name: /DIAGNOSTICS/ }),
       );
-      if (baselines == null || c2 == null || diag == null)
+      if (baselines == null || c2 == null || settings == null || diag == null)
         throw new Error("a door did not render");
-      // BASELINES, then CONCEPT2, then DIAGNOSTICS — the y-adjacency also
-      // pins the ORDER, which presence assertions never would. Probed
-      // (RF21) by swapping the two rows in You.tsx and REBUILDING the
-      // stack: this line fails, `Math.abs(...)` being the row height
+      // BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS — the y-adjacency also
+      // pins the ORDER, which presence assertions never would. Phase JC's
+      // Gate 0 ruling 3 (James, 2026-09-08) put SETTINGS third; this chain
+      // is what makes that a gate rather than a sentence. Probed (RF21) by
+      // swapping two rows in You.tsx and REBUILDING the stack: the
+      // corresponding line fails, `Math.abs(...)` being the row height
       // rather than 0. The rebuild is the point — the same swap against a
       // stale image passed in 929ms (RF12).
       expect(
         Math.abs(c2.y - (baselines.y + baselines.height)),
       ).toBeLessThanOrEqual(1);
-      expect(Math.abs(diag.y - (c2.y + c2.height))).toBeLessThanOrEqual(1);
+      expect(Math.abs(settings.y - (c2.y + c2.height))).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(diag.y - (settings.y + settings.height)),
+      ).toBeLessThanOrEqual(1);
       expect(baselines.height).toBeGreaterThanOrEqual(44);
       expect(c2.height).toBeGreaterThanOrEqual(44);
+      expect(settings.height).toBeGreaterThanOrEqual(44);
       expect(diag.height).toBeGreaterThanOrEqual(44);
       // R7's OTHER half: the ONE auto margin pins the group to the FOOT.
       // Measured against `.you-screen`'s own box, because a mutant that moves

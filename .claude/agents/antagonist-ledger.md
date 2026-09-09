@@ -9423,6 +9423,257 @@ with `verificationEligibility.ts` is earned and was UNDERSTATED — that module'
 "we ship no BikeErg" assertion is false today, and this design is what makes it
 true.
 
+## 2026-09-08 — Phase JC anchor pass (judge colours): the spec's own greps were right and its census was wrong
+
+**Context.** TRIAD spec (new localStorage shape) making the blue/red judged
+tint a four-slot preference. Full pass, phase open. Two blocking findings,
+four majors; the delivery mechanism survived intact.
+
+- **CLAIM (killed): "one class pair carries the tint for both metrics."** True
+  of the connected panes, false of the app: `.summary-row-faster`/`-slower`
+  (`index.css`, emitted by `PostWorkoutSummary.tsx`'s `judgedColorClass`) is a
+  second, independent pair with 29 references across 5 files. *Technique:*
+  don't grep the CALL SITES the spec names — grep the CSS for every rule whose
+  body consumes the token being retired. A "these tokens will have no
+  consumers" claim is settled by `grep -rn "var(--TOKEN)" src e2e`, and that
+  grep found a rule family the spec's call-site count structurally could not
+  see. Honest blast radius: 114 references, 29 files, incl. 12 committed HTML
+  fixtures.
+
+- **CLAIM (killed): "on the connected pane the target is on screen beside the
+  actual, so direction survives an all-red choice."** True of `PaneLive`, false
+  of `PaneGrid` — whose column set is fixed by the connected-redesign design
+  spec §2B at `# TIME METERS /500M SPM HR REST`, with no TARGET column in
+  either orientation. *Technique:* when a spec says "the pane", ask WHICH pane
+  and read the column table, not the hero. RF21's layer corollary in product
+  form: a justification true at one surface reads as true of the surface class.
+
+- **FOUND (kill-shot, invisible to every grep the spec ran): a hardcoded copy
+  string naming the two colours.** `PostWorkoutSummary.tsx` renders
+  `← FASTER (BLUE) · SLOWER (RED) →` on the exact surface the pace slots
+  repaint, pinned by an e2e `toHaveText`. *Technique:* **for any spec that
+  makes a VISUAL PROPERTY configurable, grep the user-facing string literals
+  for the property's own vocabulary** — colour words, direction words, unit
+  words — not just for the tokens and classes that implement it. Neither
+  `--judge-*` nor `timer-card-actual-*` appears anywhere near this line.
+
+- **CLAIM (held, and made stronger): "Vitest mocks every `.css` import to an
+  empty string, so no client test can prove a colour lands on a pixel."**
+  Verified: plain, `?raw` AND `?inline` all import as `""` (measured with a
+  scratch vitest config rooted at `app/`, never a file in the repo). But the
+  load-bearing reason is different and the spec did not have it: **jsdom 30
+  does not resolve `var()` at all** — with the stylesheet injected by hand,
+  `getComputedStyle(el).color` returns the literal `"var(--judge-pace-faster)"`
+  while a plain-hex rule returns `"rgb(29, 78, 137)"`. Consequence worth
+  keeping: a client assertion written as `toContain("var(--x)")` passes against
+  a totally broken cascade. Lifting the CSS mock would buy nothing.
+
+- **CLAIM (held): a custom property may hold a `var()` reference and resolve
+  through it.** PRIMARY, CSS Custom Properties L1 §2.3: *"Custom properties are
+  left almost entirely unevaluated, except that they allow and evaluate the
+  var() function in their value."* Probed in Playwright WebKit + Chromium
+  (identical). *The evidence that actually closes the WKWebView gap is neither:*
+  `theme/tokens.css`'s `--ink-1: var(--ink)` ships that indirection on James's
+  phone today. **Before probing a browser behaviour, grep the repo for a
+  shipped instance of it** — production is a stronger oracle than a headless
+  build.
+
+- **CLAIM (held, with the reason corrected): the contrast table covers every
+  combination.** `tokens.css` says a judged value sits on "both backgrounds";
+  `index.css`, about the same class family, records a THIRD
+  (`--surface-sunken`, 6.30:1). The resting active grid row sinks to
+  `--surface-sunken` and its SPM cell stays judged. Measured the third column
+  (blue 6.99, red 6.73, ink 14.50) — all pass, so the conclusion survived and
+  the evidence did not. *Technique:* **when a spec inherits a "measured against
+  N backgrounds" figure from a comment, grep the SAME file for the neighbouring
+  token's ground count.** Here two comments 30 lines apart said two and three
+  about cells in the same grid.
+
+- **RF16 second-corollary instance:** the spec cited `todayFilters.ts` as its
+  store pattern while requiring PER-FIELD corruption resilience. That file's own
+  comment reads *"a present-but-wrong-shaped value fails the SET"* — per-key
+  total, per-field strict. The citation is real; the attribute the argument
+  needed is the one attribute the source does not have.
+
+- **RF24 instance, pre-emptive:** the spec's I-2 table drives the reader from
+  hand-written strings and nothing drives it from `saveJudgeColors`. A
+  serialisation mismatch passes all twelve cases and resets the preference every
+  reload. **A store spec owes one round-trip test through its own writer**, over
+  a value non-default in every field.
+
+- **Un-instrumented boot read.** `applyJudgeColors` runs at module scope in
+  `main.tsx` before `createRoot`, which is the app's only top-level storage
+  read: a throw there is a white screen, not a lost preference. `vitest.config
+  .ts` excludes `src/main.tsx` from coverage entirely, so it has no client
+  instrument at all. The repo had already researched the reachability
+  (`docs/superpowers/research/2026-09-03-localstorage-getter-wkwebview.md`,
+  including its binding *"write them as bare `catch`"* prescription) and the
+  spec neither cited nor inherited it — RF18's re-research trap, caught before
+  it cost anything.
+
+## 2026-09-08 — Phase JC delta pass (the plan): every census reproduced, and the waves did not
+
+**Context.** DELTA pass on `docs/superpowers/plans/2026-09-08-judge-colours.md`
+at `80ac490b`, against the anchor pass's vetted ground. Two blocking, four
+major. Notable shape: all seven of the plan's censuses reproduced exactly —
+the defects were entirely in decomposition, gate contracts, and mutations.
+
+- **CLAIM (killed): "tasks in a wave touch disjoint files."** Wave 3's own two
+  Files sections both listed `app/src/index.css`. *Technique:* never read a
+  wave table's justification — diff the member tasks' own file lists,
+  pairwise. **And extend it past files:** both also gated on `pnpm e2e` +
+  `pnpm screenshots`, and `scripts/stack-env.sh` derives the compose project
+  name and ports from the WORKTREE PATH, so two agents in one worktree share
+  one stack with no lock. **A wave's disjointness claim covers its GATES as
+  well as its files** — a browser gate is a shared singleton on this repo.
+
+- **CLAIM (killed): "every onboarding test asserting the shipped class must go
+  red."** `grep -rn "onb-option" src e2e` returns five lines: two emitters in
+  `OptionGroup.tsx`, three rules in `index.css`, **zero tests**. The mutation
+  could not bite and the task's stated invariant ("every onboarding render
+  stays byte-identical") had no gate at all. *Technique:* **run a mutation's
+  own PRECONDITION as a grep before believing its stated consequence.** A plan
+  that says "N tests will go red" has stated a number, and the briefing's "a
+  plan states no number it has not measured" rule covers mutation counts.
+
+- **FOUND: the branch goes dark between two waves, and no task's gates can see
+  it.** Wave 1 deleted `--judge-faster`/`--judge-slower` and the two
+  `.timer-card-actual-faster/-slower` rules; wave 2 renamed the emitters. In
+  between, judged colour is gone on BOTH the connected panes (no rule for the
+  emitted class) and the summary (rules consuming deleted properties). An
+  unresolvable `var()` is not a parse error, so the task's stated proof
+  ("`pnpm build` exits 0") passes — **confirmed by running exactly that
+  experiment**, not inferred — and its class-presence e2e assertions pass too.
+  *Technique:* **walk the branch's STATE at each commit boundary, not each
+  task's gate list.** Per-task gates are precisely what hides a token/consumer
+  split across a wave. Fix: make the token task additive, keeping the old
+  names as aliases until the rename task deletes their consumers.
+
+- **CLAIM (killed, from the plan's own text): "after the rename that regex can
+  never match."** The plan's own destination table kept `within` and `stale`
+  on the `timer-card-actual-` prefix; a later task then called two
+  `not.toMatch(/timer-card-actual-/)` assertions vacuous and offered DELETION.
+  Both sit on resting cells and still catch a stray `-within`/`-stale`.
+  *Technique:* an RF21 "this assertion can no longer fail" claim is settled
+  against the change's own destination table — a PARTIAL rename leaves partial
+  guards, and "delete it" is the wrong half of RF21's advice for an assertion
+  that still bites.
+
+- **FOUND: the vacuous-assertion census named 2 of 18, and the wrong 2.**
+  Eight `not.toContain("summary-row-*")` in `PostWorkoutSummary.test.tsx`, two
+  in `ConnectedSurface.test.tsx`, two in `PaneLive.test.tsx`, and a multi-line
+  `not.toHaveClass(/summary-row-faster|summary-row-slower/)` in
+  `e2e/screenshots.spec.ts` — a file carrying 7 refs to the retiring classes
+  and appearing in NO task's Files list. *Technique:* `grep -rc <family>
+  $(grep -rl <family> src e2e)` — a per-file count, not a total. The anchor
+  pass's "don't grep the call sites the spec names" applies to PLANS one layer
+  down: a plan's census greps named files, so the blast radius outside those
+  names is structurally invisible to it. **And a multi-line assertion hides
+  from a single-line grep.**
+
+- **CLAIM (killed): a mutation that "deletes the `metric` argument so it emits
+  the pace class."** With `metric` required that does not compile and emits
+  `judge-undefined-faster`; it behaves as described only if the parameter
+  carries a `= "pace"` default — the silent-fallback design the same task's own
+  reasoning argues against. *Technique:* **a mutation description is a claim
+  about a production signature the plan has not yet specified.** Read the
+  prescribed probe as code against every signature the task permits; where it
+  is only correct under one, the plan has picked a design inside a mutation
+  step. The compiling form (swap `"spm"` for `"pace"`) is strictly stronger and
+  is what the plan already demands of its own e2e mutations, citing PR #344.
+
+- **CLAIM (held, after three attacks): the seam test's click-through
+  independence.** Every hop is client-side (`TabBar.tsx:50` NavLink,
+  `BackLink.tsx:69` Link, `Today.tsx:1606`/`:1620` Link), `/you/settings` is
+  not in `HIDDEN_TABBAR_PREFIXES` so the shortest path is two clicks, and
+  `design.spec.ts:230`'s `postJudgmentMixLog` already seeds a judged summary
+  that `/today/log/:id` renders via `SummaryIntervalsBlock`. The settings
+  screen's own `applyJudgeColors` writes inline properties that survive a
+  client-side nav and die on a reload, so removing `main.tsx`'s call reddens
+  only the reload leg. *Technique:* before attacking a "click, don't goto"
+  claim, find the existing e2e helper that already seeds the target surface —
+  the answer to "can this test be written" is usually a helper someone wrote
+  for a different reason.
+
+- **RF26 instance:** "Only this one proves a colour reaches a pixel" was false
+  — `design.spec.ts` already carries `expectedJudgedRgb`/`judgedColor` at 7
+  call sites plus two computed-colour blocks. The gate's real and sufficient
+  claim is the PREFERENCE reaching a pixel plus the boot apply. **A "this is
+  the only gate on X" superlative is a census claim** and gets a grep like any
+  other.
+
+- **Bookkeeping a plan generated about itself:** its 18-hit `FASTER (BLUE)`
+  census returned 20 at head, because two hits were the plan's own lines.
+  Sharper form of the briefing's rule: **a census whose grep scope includes the
+  document stating it is wrong the moment it is written.** Scope such a grep to
+  `app/` and `docs/design`, or state the exclusion.
+
+- **Contrast footnote, worth keeping because a sweep would have propagated it:**
+  `src/index.css` records `--ink-3` at 7.44:1 on `--surface` at three sites and
+  at 7.43:1 at another — the file contradicts itself, and 7.43 is correct.
+  **When a sweep says "carry the numbers with them", recompute them once.**
+## /close-phase skill — hardening pass (2026-09-08)
+
+Both `/harden` lenses against a new process document. Techniques, not history.
+
+- **"Open rows in a ROADMAP phase are `- [ ]`."** File-wide the checkbox is the
+  MINORITY form: 68 open checkboxes against 177 plain `- **…**` bullets.
+  `## Phase JR` holds ZERO open checkboxes and nine prose bullets, six carrying
+  live follow-on work, under a status line reading "the follow-on slate below is
+  the live work" — so a checkbox-only freeze returns an empty slate and the
+  archive step deletes them, the exact failure ROADMAP's "Open items never live
+  in a closed body" bullet exists to prevent. **Technique: never validate a
+  document convention on the section that motivated it. Census the FORM across
+  every section and read the sections where the counts diverge.**
+
+- **"A phase section runs to the next `^## `."** ROADMAP carries five H1
+  headings, so `## Phase TD` gets a 370-line span swallowing `# Icebox`,
+  `# After the strangers` and the whole completed-phase ledger. Its row count
+  still came out RIGHT, because the swallowed sections use a different bullet
+  form. **Technique: run a prescribed extraction against the input that does NOT
+  look like the worked example — and when the count matches, check the SPAN, not
+  the count. A tally that agrees for the wrong reason is a mirror (RF11).**
+
+- **A "cache" holding the only copy of a judgement is not a cache.** The worklist
+  was declared re-derivable from ROADMAP; three of its six state classes are
+  judgements (pass-3 claim/reject receipts, per-row dispositions, DONE receipts)
+  that a re-run yields DIFFERENTLY with no divergence signal. **Technique: for
+  any "X is a cache, Y is the truth" claim, walk every field of X and name the
+  command that re-derives it from Y. The fields with no command die at the next
+  compaction.** Corollary: a cap whose counter has no durable home is a heuristic
+  wearing a number.
+
+- **A record format keyed by line numbers into the file the process rewrites.**
+  `.claude/agent-briefing.md` forbids this by name, and the document told its own
+  subagents to read that briefing. **Technique: when a process document
+  prescribes a record format, grep the briefing it tells its subagents to read
+  for a rule the format breaks.**
+
+- **A gate list whose order is circular against an existing runbook.** Gate 1
+  required a released tag; gate 2 then ran the main-CI check that RELEASING.md
+  makes step 0 OF CUTTING THAT TAG; gate 4 then asked the PM for the release
+  call. Reconstructs RF28. **Technique: for each gate naming an artifact, ask
+  which OTHER gate produces it and draw the edge — any back-edge is circular.
+  And check whether a gate is a hand-back to James; the stop rule must list it,
+  or the close-out stalls mid-gate believing it is still running.**
+
+- **A stop rule that declares a later gate's input empty.** Five terminal
+  dispositions, none meaning "carried", while the lift gate's whole job was
+  lifting carried rows. **Technique: read the terminal-state set and the gate
+  list against each other — a gate whose input state is unreachable is dead, and
+  the missing state is usually the honest one (blocked, carried, owed).**
+
+- **Both lenses committed the failure they were hired to find, and so did the
+  controller.** The controller's own fold of lens 1 introduced an awk bug
+  (`exit` still runs `END`, so every span printed its terminator twice), caught
+  by the paste-test. Lens 2's severe indented-bullet finding was FALSIFIED on
+  re-measurement: its evidence came from a mis-derived span, and a census of all
+  five real phase spans found zero indented bullets in every one. The safer
+  pattern was kept; the justification was rewritten to what could be measured.
+  **Technique: re-derive the span before trusting any measurement taken inside
+  it — and re-measure a lens's own load-bearing count before folding it. A
+  finding is a claim (RF31).**
+
 ## Phase MEM anchor + prescribed-code lens, 2026-09-08 ("local test memory")
 
 One `/harden` run, two lenses, on a spec about local test runs being killed
