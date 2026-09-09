@@ -282,11 +282,22 @@ describe("saveLastDevice / loadLastDevice — the LAST USED caption's own storag
 });
 
 // ---------------------------------------------------------------------------
-// The other half of the LAST USED invariant, at the layer that can reach it:
-// the refusal effect's own guard. A refusal frame that never named a device
-// is unreachable through the real hook (the refusal rides a decoded 0x0032,
-// so the pair always precedes it), but it IS a state this component can be
-// handed, and what it must NOT do is clear a caption it never wrote.
+// A REGRESSION PIN AGAINST A COMPONENT-LEVEL CLEAR — not a gate on a live
+// guard, and it is labelled that way because the docblock that stood here
+// described code this branch had already deleted.
+//
+// It was written for this component's OWN refusal effect and its
+// `if (refused !== null)` guard (`e306f19f`). `dea06847` moved the forget
+// into `useMonitorSession.ts`, where all three doors reach it, and deleted
+// both — the component imports `saveLastDevice` alone now and its only
+// storage code is the save effect below. So there is no guard here for this
+// to bite, and no mutation of production could make it fail today.
+//
+// It is kept because the state it drives is still reachable (a refusal frame
+// with `deviceName: null`) and because the change it would catch is a real
+// one someone would think harmless: re-adding a clear at this door. That
+// clear costs a rower the one-tap route back after a refusal of a DIFFERENT
+// monitor — the exact defect `dea06847` was fixing.
 // ---------------------------------------------------------------------------
 
 describe("the refusal frame and an unrelated LAST USED", () => {
@@ -326,8 +337,9 @@ describe("the refusal frame and an unrelated LAST USED", () => {
       </MemoryRouter>,
     );
 
-    // The refusal really rendered, so the survival below is a statement about
-    // the effect having run and declined, not about it never firing.
+    // The refusal frame really rendered, so the survival below is a statement
+    // about a screen this component actually drew — not about a render that
+    // silently never happened.
     expect(screen.getByText("Erg type not supported")).toBeInTheDocument();
     expect(loadLastDevice()).toBe("PM5 430123456");
   });
