@@ -133,6 +133,49 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **C** | The submission surface      | L    | The most visible wave                       |
 | **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
+## Phase RN — straight to the numbers, if that is how you row
+
+**Status: SPEC DRAFTED 2026-09-09 — the anchor antagonist pass and Gate 0 are
+both owed before task 1.** Spec:
+[docs/superpowers/specs/2026-09-09-ready-card-preference-design.md](docs/superpowers/specs/2026-09-09-ready-card-preference-design.md).
+
+James asked for the `Ready when you pull` card to become a choice (2026-09-09):
+an option on `/you/settings` that, when turned off, makes the app behave as
+though **Show me the numbers** had been pressed the instant the monitor was
+ready. Default is today's behaviour, so a rower who never opens Settings sees
+no change. One stored word, the initial value of two `useState` flags, and
+nothing on the wire.
+
+TRIAD (a stored shape), so the spec takes a full antagonist pass and the PR
+takes a PM final gate. It changes user-visible copy and layout, so Gate 0 —
+the rendered settings screen, plus both skipped paths beside the cards they
+replace — is approved before task 1.
+
+- [ ] **The anchor antagonist pass — OWED.** Attacks the spec's stored shape,
+      its read-once-per-mount lifetime claim, and the argument that skipping
+      the card cannot reach the wire. **S**
+- [ ] **Gate 0 — OWED.** Five items, listed in the spec: the settings screen
+      against today's, both skipped paths against what they replace, the copy
+      table resolved, and the comfort-settings question answered. **S**
+- [ ] **The PR.** Seven tasks, spec §"PR shape". The load-bearing gate is the
+      seam test that starts at the settings screen and ends at a mounted
+      interstitial with nothing written to storage by hand (recurring failure
+      24), plus its e2e leg through a real browser and a real store. **M**
+
+**ACCEPTED CONSEQUENCE, ruled by James 2026-09-09.** A rower who turns the
+card off stops seeing `KEEP YOUR PHONE SCREEN ON` — Phase LM's Gate 0 called
+it the only preventive element in that phase, and the ready card is the only
+place it appears — and trades the card's Cancel, which terminates on the erg,
+for the surface's End session. Both were offered a home on the pre-pull
+surface and declined: the default is on, and a rower who turned it off asked
+for less copy, not more. This row is where that is re-opened if the
+phone-sleep work ever needs the warning back.
+
+**This is the SECOND SETTINGS PR** that the parked comfort settings (countdown
+length, pace tolerance) retargeted to at Phase JC's Gate 0. The spec puts the
+question with a recommendation of NO for both and a flagged-untested cost;
+Gate 0 answers it and this row records the answer.
+
 ## Phase MT — the app refuses a machine it cannot record
 
 **Status: SPEC APPROVED 2026-09-08, in flight.** Shape approved by James the

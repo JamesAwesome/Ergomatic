@@ -32,6 +32,7 @@ import ChecklistLine from "../workout/ChecklistLine";
 import ConnectedSurface from "../workout/ConnectedSurface";
 import FreeRowChip from "../workout/FreeRowChip";
 import { freeRowTotals } from "./totals";
+import { loadReadyCard } from "../you/readyCard";
 
 /**
  * `/justrow` — the free row.
@@ -70,7 +71,9 @@ export default function JustRow() {
   // lead action, inherited from the programmed interstitial (Gate 0 kept
   // both of its buttons). Motion makes this moot: once the record opens the
   // surface takes over regardless.
-  const [showNumbers, setShowNumbers] = useState(false);
+  const [showNumbers, setShowNumbers] = useState(
+    () => loadReadyCard() === "skip",
+  );
 
   // Phase NF: the press's own attempt ID keys the guard's staged receipt, so
   // it travels into `connect(request)`; Try again replays the LAST REQUEST

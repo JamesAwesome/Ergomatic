@@ -8,6 +8,11 @@ import {
   type JudgeColor,
   type JudgeColors,
 } from "./judgeColors";
+import {
+  loadReadyCard,
+  saveReadyCard,
+  type ReadyCardChoice,
+} from "./readyCard";
 
 /**
  * `/you/settings` — the screen behind You's SETTINGS row (Phase JC, spec
@@ -137,9 +142,26 @@ const GROUPS: readonly { heading: string; rows: readonly SlotRow[] }[] = [
   },
 ];
 
+/** GATE 0 RENDER ONLY (Phase RN). Candidate A of the copy table in
+ *  `docs/superpowers/specs/2026-09-09-ready-card-preference-design.md`.
+ *  Task 2 re-lands this tests-first once the gate closes. */
+const READY_CARD_OPTIONS: readonly {
+  value: ReadyCardChoice;
+  label: ReactNode;
+}[] = [
+  { value: "show", label: "SHOW" },
+  { value: "skip", label: "SKIP" },
+];
+
 export default function SettingsScreen() {
   const [colors, setColors] = useState<JudgeColors>(loadJudgeColors);
   const [saveFailed, setSaveFailed] = useState(false);
+  const [readyCard, setReadyCard] = useState<ReadyCardChoice>(loadReadyCard);
+
+  function chooseReadyCard(next: ReadyCardChoice) {
+    setReadyCard(next);
+    setSaveFailed(!saveReadyCard(next));
+  }
 
   function choose(slot: keyof JudgeColors, next: JudgeColor) {
     const updated = { ...colors, [slot]: next };
@@ -200,6 +222,25 @@ export default function SettingsScreen() {
           </p>
         </section>
       ))}
+      <section className="setting-group">
+        <h2 className="section-heading">READY SCREEN</h2>
+        <div className="setting-slot">
+          <p className="setting-slot-name">
+            <span className="setting-slot-title">
+              WHEN THE MONITOR IS READY
+            </span>{" "}
+            <span className="setting-slot-hint">(before your first pull)</span>
+          </p>
+          <OptionGroup
+            options={READY_CARD_OPTIONS}
+            value={readyCard}
+            onChange={chooseReadyCard}
+            ariaLabel="Ready screen"
+            className="setting-options"
+            optionClassName="setting-option"
+          />
+        </div>
+      </section>
     </main>
   );
 }
