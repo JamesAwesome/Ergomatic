@@ -171,6 +171,10 @@ jobs:
           bash -n app/scripts/ios-release.sh
           bash -n app/scripts/ios-google-client-id.sh
           bash app/scripts/ios-release.test.sh
+      - name: Lint + test the test-run classifier
+        run: |
+          bash -n app/scripts/test-run.sh
+          bash app/scripts/test-run.test.sh
 
   deploy:
     needs: [changes, root-hooks, app, docker, e2e, scripts]
