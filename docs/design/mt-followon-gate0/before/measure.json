@@ -1,0 +1,3796 @@
+{
+  "linkfailed-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 219,
+    "overflow": 13,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "remedyTop": null,
+    "remedyText": null,
+    "hasDetailPanel": true,
+    "detailPanelHeight": 95,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "The link to the monitor failed.",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "LINK-FAILED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "The link to the monitor failed.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "Test scan failed",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "linkfailed-optionB-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 25,
+    "serifBottom": 97,
+    "headlineOnFrame": true,
+    "remedyTop": null,
+    "remedyText": null,
+    "hasDetailPanel": true,
+    "detailPanelHeight": 76,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "The link to the monitor failed.",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "LINK-FAILED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "Test scan failed",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "linkfailed-optionB-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 248,
+    "actionStackHeightWithMargin": 260,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 186,
+    "serifBottom": 258,
+    "headlineOnFrame": true,
+    "remedyTop": null,
+    "remedyText": null,
+    "hasDetailPanel": true,
+    "detailPanelHeight": 76,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "The link to the monitor failed.",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "LINK-FAILED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "Test scan failed",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "linkfailed-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 248,
+    "actionStackHeightWithMargin": 260,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 176.5,
+    "serifBottom": 248.5,
+    "headlineOnFrame": true,
+    "remedyTop": null,
+    "remedyText": null,
+    "hasDetailPanel": true,
+    "detailPanelHeight": 95,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "The link to the monitor failed.",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "LINK-FAILED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "The link to the monitor failed.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "Test scan failed",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios4-dropped-reconstructed-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 308,
+    "overflow": 102,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "remedyTop": 102,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 125,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios4-dropped-reconstructed-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 20,
+        "y": 546,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 614,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 252,
+    "actionStackHeightWithMargin": 264,
+    "messageWindow": 528,
+    "contentHeight": 528,
+    "overflow": 0,
+    "serifTop": 128,
+    "serifBottom": 200,
+    "headlineOnFrame": true,
+    "remedyTop": 212,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 125,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios4-optionA-reconstructed-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 37.5,
+    "serifBottom": 109.5,
+    "headlineOnFrame": true,
+    "remedyTop": 117.5,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios4-optionA-reconstructed-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 20,
+        "y": 546,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 614,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 252,
+    "actionStackHeightWithMargin": 264,
+    "messageWindow": 528,
+    "contentHeight": 528,
+    "overflow": 0,
+    "serifTop": 196.5,
+    "serifBottom": 268.5,
+    "headlineOnFrame": true,
+    "remedyTop": 280.5,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios5-optionA-reconstructed-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 5,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 202,
+        "y": 156,
+        "width": 440,
+        "height": 56,
+        "gridColumn": "1 / -1",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 188,
+    "actionStackHeightWithMargin": 200,
+    "messageWindow": 138,
+    "contentHeight": 175,
+    "overflow": 37,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "remedyTop": 102,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios5-optionA-reconstructed-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 5,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 20,
+        "y": 482,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 316,
+    "actionStackHeightWithMargin": 328,
+    "messageWindow": 464,
+    "contentHeight": 464,
+    "overflow": 0,
+    "serifTop": 164.5,
+    "serifBottom": 236.5,
+    "headlineOnFrame": true,
+    "remedyTop": 248.5,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(156, 44, 25)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios5-optionB-reconstructed-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 5,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 202,
+        "y": 156,
+        "width": 440,
+        "height": 56,
+        "gridColumn": "1 / -1",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 188,
+    "actionStackHeightWithMargin": 200,
+    "messageWindow": 138,
+    "contentHeight": 259,
+    "overflow": 121,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "remedyTop": 102,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 76,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios5-optionB-reconstructed-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 5,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 20,
+        "y": 482,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 316,
+    "actionStackHeightWithMargin": 328,
+    "messageWindow": 464,
+    "contentHeight": 464,
+    "overflow": 0,
+    "serifTop": 120.5,
+    "serifBottom": 192.5,
+    "headlineOnFrame": true,
+    "remedyTop": 204.5,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 76,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(156, 44, 25)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios5-reconstructed-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 5,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 202,
+        "y": 156,
+        "width": 440,
+        "height": 56,
+        "gridColumn": "1 / -1",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 188,
+    "actionStackHeightWithMargin": 200,
+    "messageWindow": 138,
+    "contentHeight": 308,
+    "overflow": 170,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "remedyTop": 102,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 125,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-ios5-reconstructed-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 5,
+    "buttons": [
+      {
+        "label": "Open Settings",
+        "className": "button-l1",
+        "x": 20,
+        "y": 482,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 316,
+    "actionStackHeightWithMargin": 328,
+    "messageWindow": 464,
+    "contentHeight": 464,
+    "overflow": 0,
+    "serifTop": 96,
+    "serifBottom": 168,
+    "headlineOnFrame": true,
+    "remedyTop": 180,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 125,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Open Settings",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(156, 44, 25)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-web4-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 308,
+    "overflow": 102,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "remedyTop": 102,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 125,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-web4-optionA-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 37.5,
+    "serifBottom": 109.5,
+    "headlineOnFrame": true,
+    "remedyTop": 117.5,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-web4-optionA-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 248,
+    "actionStackHeightWithMargin": 260,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 198.5,
+    "serifBottom": 270.5,
+    "headlineOnFrame": true,
+    "remedyTop": 282.5,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-web4-optionB-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 259,
+    "overflow": 53,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "remedyTop": 102,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 76,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-web4-optionB-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 248,
+    "actionStackHeightWithMargin": 260,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 154.5,
+    "serifBottom": 226.5,
+    "headlineOnFrame": true,
+    "remedyTop": 238.5,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 76,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "permission-web4-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 248,
+    "actionStackHeightWithMargin": 260,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 130,
+    "serifBottom": 202,
+    "headlineOnFrame": true,
+    "remedyTop": 214,
+    "remedyText": "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+    "hasDetailPanel": true,
+    "detailPanelHeight": 125,
+    "minTapWidth": 350,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Bluetooth permission needed",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "PERMISSION-DENIED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "BLE permission denied",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "refusal-3btn-optionB-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 3,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 440,
+        "height": 56,
+        "gridColumn": "1 / -1",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 46.5,
+    "serifBottom": 82.5,
+    "headlineOnFrame": true,
+    "remedyTop": 90.5,
+    "remedyText": "This monitor is on a SkiErg. Nothing here will start.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 214,
+    "minTapHeight": 44,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Erg type not supported",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "This monitor is on a SkiErg. Nothing here will start.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-support-link",
+        "text": "WHICH ERGS WORK ›",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "refusal-3btn-optionB-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 3,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 614,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 184,
+    "actionStackHeightWithMargin": 196,
+    "messageWindow": 596,
+    "contentHeight": 596,
+    "overflow": 0,
+    "serifTop": 211,
+    "serifBottom": 283,
+    "headlineOnFrame": true,
+    "remedyTop": 295,
+    "remedyText": "This monitor is on a SkiErg. Nothing here will start.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 350,
+    "minTapHeight": 44,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Erg type not supported",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "This monitor is on a SkiErg. Nothing here will start.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-support-link",
+        "text": "WHICH ERGS WORK ›",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "refusal-3btn-optionC-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 3,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 440,
+        "height": 52,
+        "gridColumn": "1 / -1",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 46.5,
+    "serifBottom": 82.5,
+    "headlineOnFrame": true,
+    "remedyTop": 90.5,
+    "remedyText": "This monitor is on a SkiErg. Nothing here will start.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 214,
+    "minTapHeight": 44,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Erg type not supported",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "This monitor is on a SkiErg. Nothing here will start.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-support-link",
+        "text": "WHICH ERGS WORK ›",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "refusal-3btn-optionC-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 3,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 614,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 184,
+    "actionStackHeightWithMargin": 196,
+    "messageWindow": 596,
+    "contentHeight": 596,
+    "overflow": 0,
+    "serifTop": 211,
+    "serifBottom": 283,
+    "headlineOnFrame": true,
+    "remedyTop": 295,
+    "remedyText": "This monitor is on a SkiErg. Nothing here will start.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 350,
+    "minTapHeight": 44,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Erg type not supported",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "This monitor is on a SkiErg. Nothing here will start.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-support-link",
+        "text": "WHICH ERGS WORK ›",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "refusal-3btn-reconstructed-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 3,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 46.5,
+    "serifBottom": 82.5,
+    "headlineOnFrame": true,
+    "remedyTop": 90.5,
+    "remedyText": "This monitor is on a SkiErg. Nothing here will start.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 214,
+    "minTapHeight": 44,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Erg type not supported",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "This monitor is on a SkiErg. Nothing here will start.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-support-link",
+        "text": "WHICH ERGS WORK ›",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "refusal-3btn-reconstructed-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 3,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 614,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 184,
+    "actionStackHeightWithMargin": 196,
+    "messageWindow": 596,
+    "contentHeight": 596,
+    "overflow": 0,
+    "serifTop": 211,
+    "serifBottom": 283,
+    "headlineOnFrame": true,
+    "remedyTop": 295,
+    "remedyText": "This monitor is on a SkiErg. Nothing here will start.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 350,
+    "minTapHeight": 44,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Erg type not supported",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "This monitor is on a SkiErg. Nothing here will start.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-support-link",
+        "text": "WHICH ERGS WORK ›",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "refusal-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 46.5,
+    "serifBottom": 82.5,
+    "headlineOnFrame": true,
+    "remedyTop": 90.5,
+    "remedyText": "This monitor is on a SkiErg. Nothing here will start.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 214,
+    "minTapHeight": 44,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Erg type not supported",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "This monitor is on a SkiErg. Nothing here will start.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-support-link",
+        "text": "WHICH ERGS WORK ›",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  },
+  "refusal-portrait": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 20,
+        "y": 550,
+        "width": 350,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 20,
+        "y": 618,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 20,
+        "y": 682,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 20,
+        "y": 746,
+        "width": 350,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 248,
+    "actionStackHeightWithMargin": 260,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 179,
+    "serifBottom": 251,
+    "headlineOnFrame": true,
+    "remedyTop": 263,
+    "remedyText": "This monitor is on a SkiErg. Nothing here will start.",
+    "hasDetailPanel": false,
+    "detailPanelHeight": null,
+    "minTapWidth": 350,
+    "minTapHeight": 44,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "Erg type not supported",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-body-line",
+        "text": "This monitor is on a SkiErg. Nothing here will start.",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "13px"
+      },
+      {
+        "selector": "connected-support-link",
+        "text": "WHICH ERGS WORK ›",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  }
+}

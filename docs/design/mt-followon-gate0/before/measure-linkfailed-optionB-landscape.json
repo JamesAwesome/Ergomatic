@@ -1,0 +1,138 @@
+{
+  "linkfailed-optionB-landscape": {
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "buttonCount": 4,
+    "buttons": [
+      {
+        "label": "Try again",
+        "className": "button-l1",
+        "x": 202,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Row on the phone timer instead",
+        "className": "button-l2",
+        "x": 428,
+        "y": 224,
+        "width": 214,
+        "height": 56,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "View connection log",
+        "className": "button-l2",
+        "x": 202,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      },
+      {
+        "label": "Cancel",
+        "className": "button-l2",
+        "x": 428,
+        "y": 292,
+        "width": 214,
+        "height": 52,
+        "gridColumn": "auto",
+        "disabled": false
+      }
+    ],
+    "actionStackHeight": 120,
+    "actionStackHeightWithMargin": 132,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 25,
+    "serifBottom": 97,
+    "headlineOnFrame": true,
+    "remedyTop": null,
+    "remedyText": null,
+    "hasDetailPanel": true,
+    "detailPanelHeight": 76,
+    "minTapWidth": 214,
+    "minTapHeight": 52,
+    "subTapTargets": [],
+    "text": [
+      {
+        "selector": "connected-status-label",
+        "text": "CONNECT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-serif-line",
+        "text": "The link to the monitor failed.",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "36px"
+      },
+      {
+        "selector": "connected-reassurance",
+        "text": "YOUR WORKOUT AND NUDGES ARE KEPT",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(244, 241, 232)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-title",
+        "text": "DETAIL",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "11px"
+      },
+      {
+        "selector": "connected-detail-line",
+        "text": "LINK-FAILED",
+        "color": "rgb(63, 60, 53)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "connected-detail-line connected-detail-raw",
+        "text": "Test scan failed",
+        "color": "rgb(87, 84, 76)",
+        "background": "rgb(239, 234, 222)",
+        "fontSize": "12px"
+      },
+      {
+        "selector": "button-l1",
+        "text": "Try again",
+        "color": "rgb(255, 253, 247)",
+        "background": "rgb(181, 52, 31)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Row on the phone timer instead",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "View connection log",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      },
+      {
+        "selector": "button-l2",
+        "text": "Cancel",
+        "color": "rgb(27, 26, 23)",
+        "background": "rgb(255, 253, 247)",
+        "fontSize": "16px"
+      }
+    ]
+  }
+}

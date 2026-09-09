@@ -1,0 +1,112 @@
+[
+  {
+    "class": "button-l1",
+    "fg": "rgb(255, 253, 247)",
+    "bg": "rgb(181, 52, 31)",
+    "fontSize": "16px",
+    "ratio": 5.94,
+    "passesAA": true,
+    "sample": "Try again",
+    "frames": 44
+  },
+  {
+    "class": "connected-detail-title",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(239, 234, 222)",
+    "fontSize": "11px",
+    "ratio": 6.3,
+    "passesAA": true,
+    "sample": "DETAIL",
+    "frames": 16
+  },
+  {
+    "class": "connected-detail-line connected-detail-raw",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(239, 234, 222)",
+    "fontSize": "12px",
+    "ratio": 6.3,
+    "passesAA": true,
+    "sample": "Test scan failed",
+    "frames": 16
+  },
+  {
+    "class": "connected-status-label",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontSize": "11px",
+    "ratio": 6.69,
+    "passesAA": true,
+    "sample": "CONNECT",
+    "frames": 36
+  },
+  {
+    "class": "connected-reassurance",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontSize": "11px",
+    "ratio": 6.69,
+    "passesAA": true,
+    "sample": "YOUR WORKOUT AND NUDGES ARE KEPT",
+    "frames": 36
+  },
+  {
+    "class": "button-l1",
+    "fg": "rgb(255, 253, 247)",
+    "bg": "rgb(156, 44, 25)",
+    "fontSize": "16px",
+    "ratio": 7.41,
+    "passesAA": true,
+    "sample": "Open Settings",
+    "frames": 4
+  },
+  {
+    "class": "connected-detail-line",
+    "fg": "rgb(63, 60, 53)",
+    "bg": "rgb(239, 234, 222)",
+    "fontSize": "12px",
+    "ratio": 9.16,
+    "passesAA": true,
+    "sample": "LINK-FAILED",
+    "frames": 26
+  },
+  {
+    "class": "connected-body-line",
+    "fg": "rgb(63, 60, 53)",
+    "bg": "rgb(244, 241, 232)",
+    "fontSize": "13px",
+    "ratio": 9.74,
+    "passesAA": true,
+    "sample": "Ergomatic can't reach your PM5 without Bluetooth. Allow Blue",
+    "frames": 30
+  },
+  {
+    "class": "connected-serif-line",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(244, 241, 232)",
+    "fontSize": "36px",
+    "ratio": 15.41,
+    "passesAA": true,
+    "sample": "The link to the monitor failed.",
+    "frames": 36
+  },
+  {
+    "class": "connected-support-link",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(244, 241, 232)",
+    "fontSize": "12px",
+    "ratio": 15.41,
+    "passesAA": true,
+    "sample": "WHICH ERGS WORK ›",
+    "frames": 10
+  },
+  {
+    "class": "button-l2",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(255, 253, 247)",
+    "fontSize": "16px",
+    "ratio": 17.11,
+    "passesAA": true,
+    "sample": "Row on the phone timer instead",
+    "frames": 96
+  }
+]

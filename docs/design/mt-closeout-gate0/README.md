@@ -6,7 +6,10 @@ The design gate's evidence for the two rulings James made on 2026-09-08
 1. `Row on the phone timer instead` is withheld on `unsupported-machine`.
 2. The DETAIL panel no longer repeats `error.detail`.
 
-The follow-on Gate 0 (`close-phase-mt-gate0`) measured **two** frames. Both
+The follow-on Gate 0 — the artifact James actually ruled on, now committed at
+`docs/design/mt-followon-gate0/` (it was only ever on the
+`close-phase-mt-gate0` branch when this line was written) — measured **two**
+frames. Both
 changes reach thirteen of the twenty `ConnectedError` reasons, so this is the
 same measurement over all of them, in both orientations, before and after.
 
