@@ -13823,3 +13823,54 @@ describe("Phase MT: unsupported erg machine", () => {
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// RC-13 (spec 2026-09-09) — V1: DELIVERY IS ISOLATED. A listener that throws
+// while receiving a driver event costs that listener's own delivery and
+// nothing else. The live producer is `program()`'s own `armed` announcement:
+// `emit({ kind: "armed" })` is the LAST statement inside `program()`'s `try`,
+// three lines past `activeRun = { … }` and after `await verifyArmed(p)` has
+// confirmed the erg is holding the workout — so before this change a throwing
+// subscriber rejected `driver.program(p)`, `useMonitorSession`'s catch closed
+// the record `program-failed`, and the rower was told programming failed for a
+// workout the erg was holding. One production subscriber, ordinary programmed
+// path, no fault injection beyond the throw itself.
+// ---------------------------------------------------------------------------
+
+describe("createPm5Driver: a throwing subscriber is contained (RC-13 V1)", () => {
+  it("program() RESOLVES when a subscriber throws on the armed announcement, and the contained delivery is named in the ring", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    const seen: MonitorEvent[] = [];
+    driver.events((e) => {
+      seen.push(e);
+      if (e.kind === "armed") {
+        throw new Error("the subscriber blew up on armed");
+      }
+    });
+
+    // The whole assertion: this is the ORDINARY programmed path, driven to
+    // success (`programViaStub` awaits `driver.program(p)` itself), with the
+    // only injected fault being the throw. Before the isolation, this line
+    // rejects with the subscriber's own error.
+    await expect(
+      programViaStub(driver, transport, MINIMAL_PROGRAM),
+    ).resolves.toBeUndefined();
+
+    // The listener DID receive it — the containment is not "the event was
+    // never delivered".
+    expect(seen.filter((e) => e.kind === "armed")).toHaveLength(1);
+
+    const contained = log
+      .entries()
+      .filter((e) => e.kind === "listener-threw")
+      .map((e) => e.detail);
+    // The numbers/words are pinned, never just the kind: `eventLog.record`
+    // coalesces a CONSECUTIVE identical kind+detail without advancing `seq`,
+    // so a kind-only assertion cannot tell one contained delivery from four.
+    expect(contained).toStrictEqual([
+      'a subscriber threw while receiving an "armed" event — that delivery is abandoned, the driver and the operation that emitted it continue: Error: the subscriber blew up on armed',
+    ]);
+  });
+});

@@ -2170,8 +2170,47 @@ export function createPm5Driver(
     });
   }
 
+  /**
+   * V1 — DELIVERY IS ISOLATED (RC-13, spec 2026-09-09). A listener that
+   * throws while receiving a driver event costs that listener's own
+   * delivery and nothing else: the remaining listeners still receive the
+   * event, and no event delivery may fail the operation that emitted it.
+   *
+   * **This function used to be `for (const cb of listeners) cb(e);` and
+   * that was a LIVE defect, not hardening.** `emit({ kind: "armed" })` is
+   * the last statement inside `program()`'s own `try`, three lines past
+   * `activeRun = { … }` and after `await verifyArmed(p)` has confirmed the
+   * erg is holding the workout — so a throwing subscriber rejected
+   * `driver.program(p)` on the ordinary programmed path,
+   * `useMonitorSession`'s catch ran `mapProgramFailure`, closed the still-
+   * open record as `program-failed` and moved `phase` to `"failed"`. The
+   * rower was told programming failed for a workout the erg was holding.
+   * One production subscriber, no fault injection required.
+   *
+   * WHAT THIS DOES NOT CLAIM: that a subscriber has ever been observed
+   * throwing in production. RC-14's row names a throw in here as one of
+   * three surviving explanations for an observed silent zero-fired verdict
+   * — a SURVIVOR, not a cause. This is a live hazard on a supported path;
+   * it is not a confirmed field defect.
+   *
+   * The ring entry is what makes a contained throw diagnosable at all
+   * (RC-14's Shape A dependency): a swallowed error with no record would
+   * trade one silence for another. Its detail carries the event kind AND
+   * the error, so two different contained deliveries never coalesce into
+   * one entry (`eventLog.record` collapses a CONSECUTIVE identical
+   * kind+detail pair without advancing `seq`).
+   */
   function emit(e: MonitorEvent): void {
-    for (const cb of listeners) cb(e);
+    for (const cb of listeners) {
+      try {
+        cb(e);
+      } catch (err) {
+        log.record(
+          "listener-threw",
+          `a subscriber threw while receiving an "${e.kind}" event — that delivery is abandoned, the driver and the operation that emitted it continue: ${String(err)}`,
+        );
+      }
+    }
   }
 
   const controlReassembler = reassemble();
