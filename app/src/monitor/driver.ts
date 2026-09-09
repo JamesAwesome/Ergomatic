@@ -269,16 +269,33 @@ export class ProgramRejectionError extends Error implements ProgramRejection {
     //
     // "The monitor", never "PM5" (RF32, corrected 2026-09-09). This message
     // has exactly ONE consumer and it is rower-facing: `mapProgramFailure`
-    // (`useMonitorSession.ts`) maps it to `ConnectedError.detail`, which
-    // every failure door renders — the interstitial's DETAIL panel and, for
-    // `disconnected`, its serif headline; Just Row's body line; the Just Row
-    // observer's. The diagnostic path never reads it: both throw sites log
-    // `${reason} at frame ${n}: ${hexTrace}` to the ring, and `raw` carries
-    // `hexTrace`. So there is nothing to split off into a "what the PM5 said"
-    // string — a second vocabulary would have no reader. The ATTRIBUTION is
-    // unchanged and is the part that matters (contrast `ProgramBusyError`):
-    // these are still statements about what the machine said or failed to
-    // say; only the machine's brand name is gone.
+    // (`useMonitorSession.ts`) maps it to `ConnectedError.detail`, which the
+    // two doors that can reach a program rejection render — the
+    // interstitial's DETAIL panel and, for `disconnected`, its serif
+    // headline; and Just Row's body line. `JustRowObserver` renders
+    // `session.error.detail` as well, but it never calls `session.program()`
+    // (it only connects), and `mapProgramFailure` has exactly one call site,
+    // inside `program()`'s own catch — so no `ProgramRejectionError` message
+    // can reach that screen. An earlier version of this comment listed it as
+    // a third door.
+    //
+    // THE DIAGNOSTIC PATH NEVER READS THIS MESSAGE, and that is the claim
+    // that matters here. All FOUR throw sites build their ring entry from
+    // `reason` plus the trace, in three different shapes: the two inside
+    // `sendSequence` log `${reason} at frame ${n}: ${hexTrace}` (each
+    // suppressed for a prepare step, which `sendPrepare` reports itself),
+    // the prepare-settle cancel logs `disconnected during prepare-settle
+    // wait: ${reason}`, and `settleVerifyFailure` logs `${reason} during
+    // verify: ${detail}`. `raw` carries `hexTrace`. So there is nothing to
+    // split off into a "what the PM5 said" string — a second vocabulary
+    // would have no reader. The ATTRIBUTION is unchanged and is the part
+    // that matters (contrast `ProgramBusyError`): these are still statements
+    // about what the machine said or failed to say; only the machine's brand
+    // name is gone.
+    //
+    // This comment, and commit 768e5d1c's message, both said "both throw
+    // sites" and named one format. Four sites, three formats. The pushed
+    // commit message cannot be edited, so the correction lives here.
     super(
       rejection.atFrame >= 0
         ? `The monitor ${REJECTION_VERBS[rejection.reason]} frame ${rejection.atFrame}`
