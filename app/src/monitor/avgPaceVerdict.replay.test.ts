@@ -179,4 +179,69 @@ describe("createPm5Driver: the live average-pace verdict, replayed off a real re
     expect(delta).toBeLessThanOrEqual(0.02);
     expect(detail).toContain("agree");
   });
+
+  // RC-13 leg (a) — the same capture, the same numbers, released by the
+  // OTHER door. `beginFreeRow()` replaces `activeRun`, and before RC-13 it
+  // did nothing at all with the pending reconcile: the deadline's canceller
+  // stayed in the slot for a timer that would later fire, read
+  // `activeRun !== run` and return, and this capture's verdict was simply
+  // never filed.
+  //
+  // FAULT INJECTION, SAID ALOUD (RF26): no product path reaches this
+  // ordering — `useMonitorSession`'s `beginFreeRow` returns on
+  // `phase === "ended"` (#259, 2026-09-01) and `JustRow.tsx` latches
+  // `armedThisStart`. This calls the driver's public API directly. It proves
+  // the door settles from the capture's OWN numbers; it proves nothing about
+  // whether a rower can create the ordering.
+  it("session-2-wu-4unequal.jsonl: beginFreeRow() settles the outgoing run at the door — the same 129.78-vs-129.77 verdict is filed before the free row opens", async () => {
+    const text = readFileSync(
+      `${SESSIONS_DIR}session-2-wu-4unequal.jsonl`,
+      "utf8",
+    );
+    const parsed: ParsedRecording = parseRecording(text);
+
+    const replay = createReplayTransport(parsed);
+    const [dev] = await replay.transport.scan();
+    await replay.transport.connect(dev.id);
+
+    const log = createEventLog();
+    const driver = createSubscribedDriver(replay.transport, log, {
+      deviceName: dev.name,
+      now: () => replay.clock.now(),
+      schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+    });
+
+    const programPending = driver.program(SESSION_2_PROGRAM);
+    const result: ReplayResult = await replay.run();
+    await programPending;
+
+    expect(result.divergences).toStrictEqual([]);
+    // Nothing has answered yet: the recording's trailing "disconnect" fires
+    // no `onDisconnect` and its own clock never reaches the 3000ms deadline.
+    expect(
+      log.entries().filter((e) => e.kind === "avg-pace-verdict"),
+    ).toStrictEqual([]);
+
+    driver.beginFreeRow();
+
+    const entries = log.entries().filter((e) => e.kind === "avg-pace-verdict");
+    expect(entries).toHaveLength(1);
+    const detail = entries[0]!.detail;
+    expect(detail).not.toContain("suppressed");
+    // The capture's own numbers, and the outgoing run's — a free row's
+    // `program.intervals` is empty, so a verdict computed against the
+    // INCOMING run could never print these.
+    expect(detail).toContain("machine(0x0032)=129.78s/500m");
+    expect(detail).toContain("ours=129.77s/500m");
+    expect(detail).toContain("delta=0.01s");
+    // The band is written out, never imported from the driver: a test that
+    // built this from `AVG_PACE_VERDICT_BAND_SECONDS` would retune with the
+    // constant it exists to pin (RF21).
+    expect(detail).toContain("agree (band 1.0s)");
+
+    // Settled BEFORE the free row existed.
+    const opened = log.entries().filter((e) => e.kind === "free-row-open");
+    expect(opened).toHaveLength(1);
+    expect(entries[0]!.seq).toBeLessThan(opened[0]!.seq);
+  });
 });
