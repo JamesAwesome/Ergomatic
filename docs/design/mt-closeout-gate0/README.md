@@ -33,8 +33,27 @@ REPO_ROOT=<worktree> bash -c 'source scripts/stack-env.sh >/dev/null; \
   0x0032 and the real driver refuses the sitting).
 - **`reconstructed`** — the message column rebuilt from the reason by the
   harness's own `renderBody()`, on the real `link-failed` frame's real action
-  stack, with production's own `detail`/`raw` strings. Used for the fourteen
-  reasons no browser can reach.
+  stack, with production's own `detail`/`raw` strings. Used for EIGHT of the
+  fourteen reasons no browser can reach.
+
+  **Read the coverage precisely: 14 of the 20 reasons have a measured frame
+  here, not 20.** Six are `real` and eight are `reconstructed`. The remaining
+  six — `bad`, `not-ready`, `garbled`, `timeout`, `not-observed`,
+  `structure-mismatch` — were NOT rendered. `nak` stands in for all seven
+  machine refusals, which is legitimate because they share one headline
+  ("The monitor wouldn't take it") and one panel shape, but it is a stand-in
+  and is named as one here rather than left to be inferred from the file list.
+  Corrects an over-claim in commit `e9892360`'s message, which said "the other
+  fourteen are reconstructed" — 6 + 14 = 20, and the number of RECONSTRUCTED
+  frames is eight.
+
+  **One arm of the reconstruction is not cross-checked.** The twelve
+  real/reconstructed pairs agree on every field, but none of the six real
+  reasons is a machine refusal, so the branch that KEEPS the panel's detail
+  line (`mt-closeout.gate.ts:344`) is validated by no real render. The product
+  invariant for all seven refusals is gated at the React layer by the
+  exhaustive client tests; what rests on an unchecked reconstruction is only
+  `nak`'s geometry number.
 - **`before`** — the same reconstruction of the PRE-PR render: the panel's
   duplicate `detail` line restored, and (on the refusal) the phone-timer
   button back in the stack.

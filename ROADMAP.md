@@ -2430,6 +2430,22 @@ to lose the row has no move except to walk away.
 
 ## Accepted, pinned, and not being fixed
 
+- **Three failure frames now render a DETAIL panel that is a heading and a
+  slug, with no other content (Phase MT close-out, 2026-09-08).** The approved
+  de-duplication suppresses the panel's `detail` line wherever `detail` is
+  already the headline or the body line. On the three reasons that carry no
+  `raw`, that leaves the panel as the word `DETAIL` over the word
+  `TRANSPORT-MISSING` (no producer supplies a `raw`), `DISCONNECTED` (the
+  `LINK_LOST_NO_RUN_ERROR` construction), or `SCAN-DISMISSED` (its
+  `device === undefined` arm). **This is the ruling working as James approved
+  it, not a defect** — the alternative was printing the same sentence twice —
+  and the slug is still real diagnostic content the connection log lacks in
+  that position. Filed because it is a product observation James has NOT seen
+  a capture of: the gate 0 evidence shows it
+  (`docs/design/mt-closeout-gate0/measure-transport-missing.json` carries
+  `panelLines: ["TRANSPORT-MISSING"]`) but no committed screenshot does.
+  Revisit only if a rower reports the panel reading as empty. **S**
+
 - **Suggestion helpers are pure over the id arrays they are handed (Phase SF
   PR1, lifted at close 2026-09-05).** James: the library may lazy-load one
   day. `domain/suggest.ts`'s `drawOne`/`nextShuffle` and Today's draw

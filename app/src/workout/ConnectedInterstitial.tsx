@@ -664,8 +664,19 @@ export default function ConnectedInterstitial({
                   record.
 
                   Gated on the REASON, not on `NOT_A_MACHINE_REFUSAL` — that
-                  map is `true` for `disconnected` too, and the disconnected
-                  frame's DETAIL is the one that earns its place. */}
+                  map is `true` for `disconnected` too, so keying on the map
+                  would drop the panel from twelve frames rather than one.
+
+                  SUPERSEDED at the Phase MT close-out: this used to end "and
+                  the disconnected frame's DETAIL is the one that earns its
+                  place." That was true of the OLD panel, which repeated
+                  `detail`. Now that the duplicate line is suppressed, a
+                  `disconnected` frame built from `LINK_LOST_NO_RUN_ERROR`
+                  (no `raw`) renders the word DETAIL over the word
+                  DISCONNECTED and nothing else — as do `transport-missing`
+                  (no producer supplies a `raw`) and `scan-dismissed`'s
+                  `device === undefined` arm. That is the approved ruling
+                  working, not a defect, and it carries a ROADMAP row. */}
               {error.reason !== "unsupported-machine" && (
                 <div className="connected-detail-panel">
                   <p className="connected-detail-title">DETAIL</p>
