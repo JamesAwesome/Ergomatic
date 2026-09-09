@@ -62,6 +62,7 @@ import {
   type MonitorSession,
   type RunIdentity,
 } from "../monitor/useMonitorSession";
+import { READY_CARD_KEY } from "../you/readyCard";
 import { commentStrippedSource, cssRules } from "../test/cssView";
 import { renderedCopy } from "../test/renderedCopy";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
@@ -2392,5 +2393,102 @@ describe("targeted failures (Phase NF)", () => {
       await Promise.resolve();
     });
     expect(store.stagedRetireAttemptId()).toBeNull();
+  });
+});
+
+/**
+ * Phase RN: the ready card becomes a preference (spec
+ * `2026-09-09-ready-card-preference-design.md`, Gate 0 CLOSED 2026-09-09).
+ *
+ * The store is REAL here, driven through `localStorage`, because the thing
+ * being tested is that the component reads what a rower's setting actually
+ * wrote. `readyCard.ts` keeps a module-scope fallback that is only ever set
+ * on a REFUSED write, so a plain `setItem` in these tests is indistinguishable
+ * from a real save.
+ */
+describe("the ready card is a preference (Phase RN)", () => {
+  beforeEach(() => {
+    localStorage.removeItem(READY_CARD_KEY);
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(READY_CARD_KEY);
+  });
+
+  it("shows the card at ready when nothing is stored — today's behaviour (I-1)", () => {
+    renderInterstitial({ phase: "ready", deviceName: "PM5 918273645" });
+    expect(screen.getByText("Ready when you pull")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Show me the numbers" }),
+    ).toBeVisible();
+  });
+
+  it("hands straight over to the numbers when the rower chose SKIP", () => {
+    localStorage.setItem(READY_CARD_KEY, "skip");
+    renderInterstitial({ phase: "ready", deviceName: "PM5 918273645" });
+    expect(screen.queryByText("Ready when you pull")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Show me the numbers" }),
+    ).toBeNull();
+    // The positive observable, asserted alongside the two negatives: the
+    // surface is what replaced the card, not an empty screen.
+    expect(screen.getByRole("button", { name: "End session" })).toBeVisible();
+  });
+
+  it("shows the card for a stored SHOW, so the skip is not just 'any stored value'", () => {
+    localStorage.setItem(READY_CARD_KEY, "show");
+    renderInterstitial({ phase: "ready", deviceName: "PM5 918273645" });
+    expect(screen.getByText("Ready when you pull")).toBeVisible();
+  });
+
+  /**
+   * I-4: SKIP removes the ready card and reaches no other screen. Each case
+   * is a phase this screen renders its own treatment for, asserted with the
+   * preference set to SKIP — the value that could bypass them.
+   */
+  describe("SKIP reaches no screen but the ready card (I-4)", () => {
+    beforeEach(() => {
+      localStorage.setItem(READY_CARD_KEY, "skip");
+    });
+
+    it("still shows the pairing screen", () => {
+      renderInterstitial({ phase: "pairing" });
+      expect(screen.getByText(/Connecting/)).toBeVisible();
+    });
+
+    it("still shows the programming screen", () => {
+      renderInterstitial({ phase: "programming", deviceName: "PM5 918273645" });
+      expect(screen.getByText("Sending the workout")).toBeVisible();
+    });
+
+    it("still shows the failure screen", () => {
+      renderInterstitial({
+        phase: "failed",
+        error: connectedError({ reason: "timeout" }),
+      });
+      expect(screen.queryByRole("button", { name: "End session" })).toBeNull();
+    });
+  });
+
+  /**
+   * GATE 0 RULING 2, THE HALF THAT DOES NOT CHANGE HERE. Just Row's ladder
+   * gained a link guard because its hand-off arm sits above a pre-row
+   * `Try again` screen. This screen has no such branch — frame silence at
+   * `ready` is not phase `disconnected` — so under SKIP a frame-silent ready
+   * lands on the surface's LOST treatment instead of on a ready card that
+   * says "Ready when you pull" and mentions nothing. That is the accepted
+   * divergence, and this test is what makes it a decision rather than an
+   * accident: if someone later adds a link guard here to "match JustRow",
+   * this goes red and they have to come back to the ruling.
+   */
+  it("hands over even when the link has gone silent, and says so on the surface", () => {
+    localStorage.setItem(READY_CARD_KEY, "skip");
+    renderInterstitial({
+      phase: "ready",
+      deviceName: "PM5 918273645",
+      frameSilence: true,
+    });
+    expect(screen.queryByText("Ready when you pull")).toBeNull();
+    expect(screen.getByText("LOST THE MONITOR")).toBeVisible();
   });
 });

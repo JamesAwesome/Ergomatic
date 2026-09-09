@@ -32,6 +32,7 @@ import ChecklistLine from "../workout/ChecklistLine";
 import ConnectedSurface from "../workout/ConnectedSurface";
 import FreeRowChip from "../workout/FreeRowChip";
 import { freeRowTotals } from "./totals";
+import { loadReadyCard } from "../you/readyCard";
 
 /**
  * `/justrow` — the free row.
@@ -70,7 +71,13 @@ export default function JustRow() {
   // lead action, inherited from the programmed interstitial (Gate 0 kept
   // both of its buttons). Motion makes this moot: once the record opens the
   // surface takes over regardless.
-  const [showNumbers, setShowNumbers] = useState(false);
+  // PHASE RN: the rower's own setting seeds this (spec
+  // `2026-09-09-ready-card-preference-design.md`). Read once per mount, which
+  // is the correct lifetime — the only writer is `/you/settings`, and
+  // reaching it unmounts this screen.
+  const [showNumbers, setShowNumbers] = useState(
+    () => loadReadyCard() === "skip",
+  );
 
   // Phase NF: the press's own attempt ID keys the guard's staged receipt, so
   // it travels into `connect(request)`; Try again replays the LAST REQUEST
@@ -249,7 +256,27 @@ export default function JustRow() {
   // interstitial makes, on the same axis. The one `useMonitorSession`
   // instance this component owns is handed DOWN, never re-called: two
   // hooks would mean two drivers and two records.
-  if (axes.session !== "none" || (showNumbers && axes.program === "armed")) {
+  // GATE 0 RULING 2 (James, 2026-09-09): the hand-off arm also requires the
+  // link to be UP, for a tapped hand-off as well as a skipped one.
+  //
+  // Without `axes.link !== "lost"` this arm sits above the pre-row lost
+  // branch below, so an `armed AND lost` session — reachable, since
+  // `deriveLink` at `ready` returns `frameSilence ? "lost" : "up"` — renders
+  // the mid-row surface and its two-tap End, deleting the `Try again` the
+  // pre-row screen exists to offer. The documented producer is a
+  // background/resume gap over the 2500 ms watchdog, i.e. the phone sleeping
+  // through the pre-pull wait: precisely the event the ready card's
+  // KEEP YOUR PHONE SCREEN ON exists to prevent, and precisely what a rower
+  // who turned that card off no longer sees.
+  //
+  // `axes.session !== "none"` is deliberately NOT guarded: once a run is
+  // open, the surface owns the mid-row lost treatment, and the branch below
+  // says so in its own comment ("Try again is honest here only because no row
+  // was under way"). That sentence is the condition this line now tests.
+  if (
+    axes.session !== "none" ||
+    (showNumbers && axes.program === "armed" && axes.link !== "lost")
+  ) {
     // THE KEPT PAIR, read here because this component owns the store read
     // (`ConnectedSurface` is store-blind by its own layering rule) and
     // resolved by `freeRowTotals` — the same single source the log door

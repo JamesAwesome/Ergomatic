@@ -42,6 +42,7 @@ import type { EnginePhase } from "../session/engine";
 import ConnectedSurface from "./ConnectedSurface";
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import { saveLastDevice } from "../monitor/lastDevice";
+import { loadReadyCard } from "../you/readyCard";
 
 /** Every reason that is NOT the machine actively refusing a workout — the
  *  six that are OURS (about the phone/radio side, never the PM5's own
@@ -216,7 +217,22 @@ export default function ConnectedInterstitial({
   // `live` (the machine's side of the same promise). With the timer gone,
   // NOTHING in the connected flow runs on a wall clock. DEVIATIONS row
   // records the ruling.
-  const [numbersRequested, setNumbersRequested] = useState(false);
+  // PHASE RN: the initial value is the rower's own setting (spec
+  // `2026-09-09-ready-card-preference-design.md`). `skip` starts this true,
+  // which is exactly "as though they had pressed the button the instant the
+  // monitor was ready" — the whole feature. Read ONCE per mount, which is the
+  // correct lifetime: the only writer is `/you/settings`, a screen the rower
+  // must navigate away from to reach this one, and leaving unmounts this.
+  //
+  // NO LINK GUARD HERE, and its absence is Gate 0 ruling 2's other half
+  // rather than an oversight. Just Row's ladder gained one because its
+  // hand-off arm sits above a pre-row `Try again` screen; this screen has no
+  // such branch, so under `skip` a frame-silent ready lands on the surface's
+  // LOST treatment instead of on a ready card that says "Ready when you pull"
+  // and mentions nothing — more informative, and approved as such.
+  const [numbersRequested, setNumbersRequested] = useState(
+    () => loadReadyCard() === "skip",
+  );
   // Guards a double-press race on Try Again: two pointer events landing in
   // the same tick both read the SAME pre-update `session.phase` (React
   // batches the state write `connect()`'s synchronous phase flip makes),

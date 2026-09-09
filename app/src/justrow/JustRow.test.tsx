@@ -21,6 +21,7 @@ import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
 import JustRow from "./JustRow";
 import { ProgramRejectionError } from "../monitor/driver";
 import { renderedCopy } from "../test/renderedCopy";
+import { READY_CARD_KEY } from "../you/readyCard";
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 
@@ -480,6 +481,135 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
     vi.doUnmock("../adapters/keepAwake");
     vi.doUnmock("../monitor/useMonitorSession");
     vi.resetModules();
+  });
+
+  /**
+   * Phase RN (spec `2026-09-09-ready-card-preference-design.md`, Gate 0
+   * CLOSED 2026-09-09). The store is REAL and driven through `localStorage`,
+   * so these describe what a rower's own setting does rather than what a mock
+   * returns. `localStorage.clear()` in the outer `beforeEach` resets it, and
+   * the module's in-memory fallback is only ever set on a REFUSED write, so
+   * it cannot leak a value between cases here.
+   */
+  describe("the ready card is a preference (Phase RN)", () => {
+    async function connectAndArm() {
+      await renderMocked();
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    }
+
+    it("shows the ready card when nothing is stored — today's behaviour (I-1)", async () => {
+      mockSession({ phase: "ready", deviceName: "PM5 432331249" });
+      await connectAndArm();
+      expect(
+        screen.getByRole("heading", { name: "Ready when you pull" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Show me the numbers" }),
+      ).toBeInTheDocument();
+    });
+
+    it("hands straight over to the numbers when the rower chose SKIP", async () => {
+      localStorage.setItem(READY_CARD_KEY, "skip");
+      mockSession({ phase: "ready", deviceName: "PM5 432331249" });
+      await connectAndArm();
+      expect(
+        screen.queryByRole("heading", { name: "Ready when you pull" }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Show me the numbers" }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "End session" }),
+      ).toBeInTheDocument();
+    });
+
+    it("still shows the sending card, which SKIP must not reach (I-4)", async () => {
+      localStorage.setItem(READY_CARD_KEY, "skip");
+      mockSession({ phase: "programming", deviceName: "PM5 432331249" });
+      await connectAndArm();
+      expect(
+        screen.getByRole("heading", { name: "Starting your row" }),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * GATE 0 RULING 2 — the pair that pins the ladder order, and the reason
+     * the guard exists at all. `deriveProgram("ready")` is `armed` and
+     * `deriveLink` at `ready` returns `frameSilence ? "lost" : "up"`, so
+     * `armed AND lost` is reachable — the documented producer being the phone
+     * sleeping through the pre-pull wait. Without the guard the hand-off arm
+     * wins, and the rower lands on the mid-row surface with only a two-tap
+     * End, losing the `Try again` that the pre-row screen exists to offer.
+     *
+     * The two cases differ ONLY in `frameSilence`, which is what makes this a
+     * test of the ladder rather than of either screen.
+     */
+    it("yields to Try again when the link is lost before the first pull, even under SKIP", async () => {
+      localStorage.setItem(READY_CARD_KEY, "skip");
+      mockSession({
+        phase: "ready",
+        deviceName: "PM5 432331249",
+        frameSilence: true,
+      });
+      await connectAndArm();
+      expect(
+        screen.getByRole("button", { name: "Try again" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "End session" })).toBeNull();
+    });
+
+    it("yields to Try again for a TAPPED hand-off too — ruling 2 guards both arms", async () => {
+      // ONE MOUNT, not two. An earlier draft of this test re-rendered a fresh
+      // component after the tap, which made the tap irrelevant and let the
+      // case pass with the guard deleted — RF38's shape: the conclusion
+      // rested on how it got there, and nothing asserted it. The mutable
+      // `live` object below is read by the hook mock on every render, so the
+      // rerender below is the SAME component seeing its link go silent.
+      const live: Record<string, unknown> = {
+        phase: "ready",
+        deviceName: "PM5 432331249",
+      };
+      mockSession(live);
+      const { default: JustRow } = await import("./JustRow");
+      const { rerender } = render(
+        <MemoryRouter initialEntries={["/justrow"]}>
+          <JustRow />
+        </MemoryRouter>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Show me the numbers" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "End session" }),
+      ).toBeInTheDocument();
+
+      live.frameSilence = true;
+      rerender(
+        <MemoryRouter initialEntries={["/justrow"]}>
+          <JustRow />
+        </MemoryRouter>,
+      );
+      expect(
+        screen.getByRole("button", { name: "Try again" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "End session" })).toBeNull();
+    });
+
+    it("does NOT yield once a run is open — a mid-row loss keeps the surface", async () => {
+      localStorage.setItem(READY_CARD_KEY, "skip");
+      mockSession({
+        phase: "live",
+        deviceName: "PM5 432331249",
+        runOpen: true,
+        frameSilence: true,
+      });
+      await connectAndArm();
+      expect(
+        screen.getByRole("button", { name: "End session" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    });
   });
 
   it("does NOT arm mid-pairing while the driver has no name yet — the slow-radio race", async () => {
