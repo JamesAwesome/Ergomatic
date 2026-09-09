@@ -4906,8 +4906,9 @@ button.back-link:disabled,
    summary's SPM cell is not tinted). Each passes its metric as a REQUIRED
    argument; a default would be silently right for one metric and wrong for
    the other, and invisible until a rower changed a slot. Contrast is
-   unchanged from the pairs these replaced, measured in `tokens.css`
-   against both backgrounds a judged value sits on. */
+   unchanged from the pairs these replaced, and is measured in `tokens.css`
+   against all THREE backgrounds a judged value sits on — `--surface`,
+   `--page`, and `--surface-sunken` for a resting grid row's SPM cell. */
 .judge-pace-faster {
   color: var(--judge-pace-faster);
 }
