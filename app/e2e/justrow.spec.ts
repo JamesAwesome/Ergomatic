@@ -703,7 +703,7 @@ test.describe("Just Row: the ready screen is a preference (Phase RN)", () => {
    * the surface's LOST banner with only a two-tap End, and the rower loses
    * the reconnect the pre-row screen exists to offer.
    */
-  test("SKIP still yields to Try again when the link goes before the first pull", async ({
+  test("SKIP still yields to the waiting screen when frames stop before the first pull", async ({
     page,
   }) => {
     await injectArmedThenSilentFake(page);
@@ -711,10 +711,22 @@ test.describe("Just Row: the ready screen is a preference (Phase RN)", () => {
     await page.goto("/justrow");
     await page.getByRole("button", { name: "Connect" }).click();
 
-    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible({
-      timeout: 20_000,
-    });
+    // THE SCREEN, not just a control. Other cards on this door carry an
+    // identically-named Cancel and also have no `End session`, so asserting
+    // controls alone would let a connect failure satisfy this leg (RF4).
+    await expect(
+      page.getByRole("heading", { name: "Waiting for the monitor" }),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByText("It has gone quiet. This usually clears on its own."),
+    ).toBeVisible();
+    // Neither control that would be wrong here: the surface's End, which
+    // ruling 2's guard keeps the rower away from, and a Try again that cannot
+    // reconnect while the driver is still installed.
     await expect(page.getByRole("button", { name: "End session" })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(
       0,
     );
   });

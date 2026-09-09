@@ -544,7 +544,7 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
      * The two cases differ ONLY in `frameSilence`, which is what makes this a
      * test of the ladder rather than of either screen.
      */
-    it("yields to Try again when the link is lost before the first pull, even under SKIP", async () => {
+    it("yields to the waiting screen when frames stop before the first pull, even under SKIP", async () => {
       localStorage.setItem(READY_CARD_KEY, "skip");
       mockSession({
         phase: "ready",
@@ -553,12 +553,46 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
       });
       await connectAndArm();
       expect(
-        screen.getByRole("button", { name: "Try again" }),
+        screen.getByRole("heading", { name: "Waiting for the monitor" }),
       ).toBeInTheDocument();
+      expect(
+        screen.getByText("It has gone quiet. This usually clears on its own."),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Cancel" }),
+      ).toBeInTheDocument();
+      // The two controls this screen must NOT offer: the surface's End, which
+      // ruling 2's guard keeps it away from, and a Try again that cannot work
+      // here — `connect()` early-returns while the driver is still installed,
+      // and frame silence disposes nothing (Gate 0 round 2).
       expect(screen.queryByRole("button", { name: "End session" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     });
 
-    it("yields to Try again for a TAPPED hand-off too — ruling 2 guards both arms", async () => {
+    /**
+     * THE OTHER PRODUCER OF THE SAME BRANCH, and the reason this is a split
+     * rather than a deletion. A transport-reported disconnect is
+     * authoritative and disposes the driver, so `Try again` genuinely
+     * reconnects from there — that case keeps both its heading and its
+     * button. This test and the one above differ ONLY in what told us the
+     * link was gone, which is exactly the distinction the screen now makes.
+     */
+    it("keeps Lost the monitor and a working Try again when the transport reported a disconnect", async () => {
+      localStorage.setItem(READY_CARD_KEY, "skip");
+      mockSession({ phase: "disconnected", deviceName: "PM5 432331249" });
+      await connectAndArm();
+      expect(
+        screen.getByRole("heading", { name: "Lost the monitor" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Try again" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: "Waiting for the monitor" }),
+      ).toBeNull();
+    });
+
+    it("yields for a TAPPED hand-off too — ruling 2 guards both arms", async () => {
       // ONE MOUNT, not two. An earlier draft of this test re-rendered a fresh
       // component after the tap, which made the tap irrelevant and let the
       // case pass with the guard deleted — RF38's shape: the conclusion
@@ -591,7 +625,7 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
         </MemoryRouter>,
       );
       expect(
-        screen.getByRole("button", { name: "Try again" }),
+        screen.getByRole("heading", { name: "Waiting for the monitor" }),
       ).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "End session" })).toBeNull();
     });

@@ -379,23 +379,57 @@ export default function JustRow() {
     // surface above, which owns the mid-row lost treatment). The monitor
     // does not advertise while a Just Row is open, so Try again is honest
     // here only because no row was under way.
+    //
+    // TWO PRODUCERS, ONE BRANCH, AND ONLY ONE OF THEM IS AUTHORITATIVE
+    // (Gate 0 round 2, James 2026-09-09). `axes.link === "lost"` is reached
+    // from a transport-reported `disconnected` AND from `frameSilence` at
+    // `ready`/`programming`/`pairing`. They are not the same fact:
+    //
+    //   - `disconnected` is the radio telling us. Its handler disposes the
+    //     driver, so `connect()`'s opening guard passes and Try again really
+    //     does reconnect. That case keeps the screen it has always had.
+    //   - `frameSilence` is a GUESS: 2.5 s of absence, retracted after 10 s
+    //     if frames resume (`BANNER_RETRACT_HYSTERESIS_MS`), and its
+    //     documented producer is a background/resume gap over a link that is
+    //     perfectly healthy. `handleFrameSilence` sets one flag and disposes
+    //     nothing, so `driverRef` is still installed and `connect()`
+    //     early-returns: TRY AGAIN WAS DEAD IN THIS STATE, and had been since
+    //     before this phase. Phase RN made it the destination for two more
+    //     classes of rower, which is how it was found.
+    //
+    // Offering an action that cannot run is worse than offering none, and
+    // making it run was rejected at the gate: the fix would have terminated
+    // an armed monitor in response to a heuristic that retracts itself, and
+    // the terminate's own ack has no bound while frames are stopped. So the
+    // silent case says what is true and waits. It costs nothing, and the
+    // state usually heals before the rower has finished reading it.
+    const linkGoneForReal = session.phase === "disconnected";
     return (
       <main className="screen connected-interstitial">
         <div className="connected-interstitial-body">
           <p className="connected-status-label">JUST ROW</p>
-          <h1 className="connected-serif-line">Lost the monitor</h1>
+          <h1 className="connected-serif-line">
+            {linkGoneForReal ? "Lost the monitor" : "Waiting for the monitor"}
+          </h1>
+          {!linkGoneForReal && (
+            <p className="connected-body-line">
+              It has gone quiet. This usually clears on its own.
+            </p>
+          )}
         </div>
         <div className="action-stack connected-interstitial-actions">
-          <button
-            type="button"
-            className="button-l1"
-            onClick={() => {
-              armedThisStart.current = false;
-              retryConnect();
-            }}
-          >
-            Try again
-          </button>
+          {linkGoneForReal && (
+            <button
+              type="button"
+              className="button-l1"
+              onClick={() => {
+                armedThisStart.current = false;
+                retryConnect();
+              }}
+            >
+              Try again
+            </button>
+          )}
           <button
             type="button"
             className="button-l2"
