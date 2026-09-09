@@ -42,6 +42,7 @@ import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
 import { releasingSchedule } from "../test/statusSubscriptions";
 import { loadMonitorRun, MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
+import { loadLastDevice, saveLastDevice } from "./lastDevice";
 import {
   resetForTests as resetHandoffStore,
   currentUnretired as currentUnretiredHandoffForTest,
@@ -15731,6 +15732,79 @@ describe("useMonitorSession: an unsupported erg machine", () => {
     await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
 
     expect(result.current.runOpen).toBe(false);
+  });
+
+  /**
+   * THE MOVED HEAD (close-out review finding 2). These three gate the clear
+   * AT THE HOOK, which is the layer that can reach it: this file renders the
+   * hook with no screen around it, so nothing here ever writes
+   * `LAST_DEVICE_KEY` — exactly the shape of the JUST ROW doors
+   * (`JustRow.tsx`, `JustRowObserver.tsx`), which connect through this same
+   * `connect()` and never touch the caption. A version of this clear that
+   * lived on the writing screen could not fail these.
+   *
+   * Why the case is real rather than theoretical: `ergMachine.ts` quotes rev
+   * 1.30 footnote 23 — on a MultiErg the value names what the CURRENT
+   * interval is on — and its header records that the field reports which
+   * machine the detachable head is mounted on, while the advertised name is
+   * the head's serial. So `PM5 X` is written at the workout door on a RowErg,
+   * the head moves to the SkiErg, and the refusal lands on a door that never
+   * wrote anything. The seeded key IS that earlier sitting; the
+   * write-then-refuse seam within ONE sitting is gated upstream of the
+   * producer in `ConnectedInterstitial.test.tsx`.
+   */
+  it("a refusal un-remembers the caption even on a door that never wrote it", async () => {
+    // The name a previous sitting stored at the workout door, before the
+    // head was moved. Nothing in this file writes it — that is the point.
+    saveLastDevice(DEVICE_NAME);
+
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 128,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    // Positive readiness first: the refusal really happened, so a null
+    // caption cannot pass because the walk stalled before classification.
+    expect(result.current.error?.reason).toBe("unsupported-machine");
+    expect(loadLastDevice()).toBeNull();
+  });
+
+  it("refusing one monitor never un-remembers a different, good one", async () => {
+    // A DIFFERENT monitor is on record. Refusing this one must not cost the
+    // rower the one-tap route back to that one.
+    saveLastDevice("PM5 999999999");
+
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 128,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    expect(result.current.error?.reason).toBe("unsupported-machine");
+    expect(loadLastDevice()).toBe("PM5 999999999");
+  });
+
+  it("a RowErg sitting leaves the caption alone — the arm that must never fire", async () => {
+    saveLastDevice(DEVICE_NAME);
+
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      ergMachineType: 0,
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    // Reached READY, so a 0x0032 really was classified and really said
+    // RowErg — asserting the caption alone would pass from `pairing`, before
+    // anything had a chance to clear it.
+    expect(result.current.phase).toBe("ready");
+    expect(loadLastDevice()).toBe(DEVICE_NAME);
   });
 });
 

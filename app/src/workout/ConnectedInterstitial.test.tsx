@@ -60,11 +60,12 @@ import {
 import { commentStrippedSource, cssRules } from "../test/cssView";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
-import ConnectedInterstitial, {
+import ConnectedInterstitial from "./ConnectedInterstitial";
+import {
   forgetLastDevice,
   loadLastDevice,
   saveLastDevice,
-} from "./ConnectedInterstitial";
+} from "../monitor/lastDevice";
 
 /** `index.css` with every comment stripped — the same view
  *  `ConnectedSurface.test.tsx` takes of the stylesheet, and for its reason:
@@ -1917,11 +1918,11 @@ describe("the interstitial walk, fake-driven", () => {
    * previous test in this file proves that write really happens on this exact
    * harness ("... `expect(loadLastDevice()).toBe(DEVICE_NAME)`").
    *
-   * `fail()` clears `session.deviceName` in the SAME update as the phase flip
-   * (`useMonitorSession.ts`, "the field Try Again's retry actually branches
-   * on"), so by the time the refusal is renderable the component can no
-   * longer read the refused name off the session — which is why the guard
-   * cannot simply re-read `session.deviceName`.
+   * The CLEAR itself lives in `useMonitorSession.ts`, at the refusal, not on
+   * this screen — the close-out review found a door that refuses without ever
+   * writing (`useMonitorSession.test.ts`'s moved-head trio carries the case).
+   * This test is still the one that owns the SEAM, because this is the only
+   * door where a real write precedes a real refusal.
    *
    * Starting UPSTREAM of the producer (RF24): this test mounts before
    * anything is written and asserts after the refusal, so it can see the
