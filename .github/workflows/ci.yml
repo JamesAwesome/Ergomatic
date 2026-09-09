@@ -150,6 +150,10 @@ jobs:
         run: |
           bash -n .husky/pre-commit
           bash scripts/pre-commit.test.sh
+      - name: Lint + test the pre-push tier
+        run: |
+          bash -n .husky/pre-push
+          bash scripts/pre-push.test.sh
       - name: Lint + test the deploy script
         run: |
           bash -n scripts/deploy.sh

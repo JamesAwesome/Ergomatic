@@ -1,3 +1,28 @@
 . "$(dirname "$0")/common.sh"
-# Unit + client only: fast (~1s) and Docker-free. CI runs integration + e2e.
-pnpm --dir app test --project unit --project client
+# Tiered gate. This body runs under `sh -e` (.husky/_/h), so EVERY fallible
+# command is wrapped -- a bare failing statement aborts the hook, and husky
+# then prints "script failed", which reads like a test failure.
+#
+# Two invocations, not one: `--changed` selects through vite's module graph,
+# so a test whose subject is a file it READS (every census/contract suite
+# under scripts/) is structurally unselectable, and `--changed X scripts/`
+# INTERSECTS to nothing. Measured: vitest.config.ts selects 0 tests.
+#
+# --project flags are kept so the hook stays Docker-free; dropping them
+# re-admits the integration project (testcontainers, 120s timeouts).
+BASE="${PREPUSH_BASE:-refs/remotes/origin/main}"
+SCOPE="--project unit --project client"
+
+run() {
+  if [ -n "${DRY_RUN:-}" ]; then echo "would run: $*"; else "$@"; fi
+}
+
+if git rev-parse --verify --quiet "$BASE" >/dev/null 2>&1; then
+  run pnpm --dir app exec bash scripts/test-run.sh --changed "$BASE" $SCOPE || exit 1
+else
+  echo "pre-push: FALLBACK -- '$BASE' does not resolve, running the full scoped suite." >&2
+  run pnpm --dir app exec bash scripts/test-run.sh $SCOPE || exit 1
+fi
+
+# The whole-tree gates, always.
+run pnpm --dir app exec bash scripts/test-run.sh --project unit scripts/ || exit 1
