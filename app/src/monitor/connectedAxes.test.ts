@@ -10,6 +10,7 @@ import {
   deriveActivity,
   deriveAxes,
   deriveLink,
+  deriveLinkLoss,
   deriveProgram,
   deriveSession,
   type AxesInput,
@@ -386,5 +387,78 @@ describe("deriveLink — frameSilence (Phase LL Task 2, design spec §2a)", () =
         frameSilence: true,
       }),
     ).toBe("up");
+  });
+});
+
+/**
+ * `deriveLinkLoss` — WHO said the link was gone (Phase RN, Gate 0 round 2).
+ *
+ * Exhaustive over all nine `ConnectedPhase` members, because the whole value
+ * of this reader is that it splits a set `deriveLink` deliberately collapses:
+ * every row below where `link` is `"lost"` renders the same axis, and the two
+ * answers here are what a screen is entitled to say about it.
+ *
+ * The expectations are INDEPENDENT literals, not derived from the function —
+ * a table that computed its own answers would pass against any implementation.
+ */
+describe("deriveLinkLoss — reported versus inferred (Phase RN)", () => {
+  function input(over: Partial<AxesInput>): AxesInput {
+    return {
+      phase: "idle",
+      frozen: false,
+      runOpen: false,
+      failureLeavesLinkUp: null,
+      frameSilence: false,
+      ...over,
+    };
+  }
+
+  it.each([
+    ["idle", "idle", false, "none"],
+    ["picking", "picking", false, "none"],
+    ["pairing", "pairing", false, "none"],
+    ["programming", "programming", false, "none"],
+    ["ready, frames arriving", "ready", false, "none"],
+    ["live, frames arriving", "live", false, "none"],
+    ["ended", "ended", false, "none"],
+    // The two that matter, and they differ only in who told us.
+    ["ready, frames stopped", "ready", true, "inferred"],
+    ["live, frames stopped", "live", true, "inferred"],
+    ["disconnected", "disconnected", false, "reported"],
+    ["failed", "failed", false, "reported"],
+  ] as const)("%s -> %s", (_name, phase, frameSilence, expected) => {
+    expect(deriveLinkLoss(input({ phase, frameSilence }))).toBe(expected);
+  });
+
+  it("stays reported at disconnected even when frames also stopped", () => {
+    // Both producers at once. The authoritative one wins, because a radio
+    // that has reported a disconnect has already disposed the driver — the
+    // fact a reconnect depends on.
+    expect(
+      deriveLinkLoss(input({ phase: "disconnected", frameSilence: true })),
+    ).toBe("reported");
+  });
+
+  it("agrees with deriveLink about WHETHER the link is lost, on every phase", () => {
+    // The one derived assertion in this block, and it is a consistency
+    // contract rather than an expectation: `"none"` must mean exactly
+    // `link !== "lost"`, or a screen could show a loss treatment while this
+    // reader says nothing was lost.
+    for (const phase of [
+      "idle",
+      "picking",
+      "pairing",
+      "programming",
+      "ready",
+      "live",
+      "ended",
+      "disconnected",
+      "failed",
+    ] as const) {
+      for (const frameSilence of [false, true]) {
+        const i = input({ phase, frameSilence });
+        expect(deriveLinkLoss(i) === "none").toBe(deriveLink(i) !== "lost");
+      }
+    }
   });
 });

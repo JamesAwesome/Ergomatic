@@ -23,7 +23,7 @@ import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 // component entirely, and without its own acquire the phone sleeps mid-row
 // — the exact iOS data-loss failure the lifecycle work exists to prevent.
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
-import { deriveAxes } from "../monitor/connectedAxes";
+import { deriveAxes, deriveLinkLoss } from "../monitor/connectedAxes";
 import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption";
 import { read as readHandoff } from "../monitor/handoffStore";
 import SupportMatrixLink from "../monitor/SupportMatrixLink";
@@ -143,6 +143,13 @@ export default function JustRow() {
   // precedent — so this screen asks the four axes the same questions
   // `JustRowObserver` asks.
   const axes = deriveAxes({
+    phase: session.phase,
+    frozen: session.frozen,
+    runOpen: session.runOpen,
+    failureLeavesLinkUp: null,
+    frameSilence: session.frameSilence,
+  });
+  const linkLoss = deriveLinkLoss({
     phase: session.phase,
     frozen: session.frozen,
     runOpen: session.runOpen,
@@ -403,7 +410,11 @@ export default function JustRow() {
     // the terminate's own ack has no bound while frames are stopped. So the
     // silent case says what is true and waits. It costs nothing, and the
     // state usually heals before the rower has finished reading it.
-    const linkGoneForReal = session.phase === "disconnected";
+    // ASKED OF THE AXES, never of `session.phase` — this file is not on the
+    // `ConnectedPhase` reader allowlist, and its own test pins that. The
+    // distinction the screen needs is "who said so", which is what
+    // `deriveLinkLoss` answers.
+    const linkGoneForReal = linkLoss === "reported";
     return (
       <main className="screen connected-interstitial">
         <div className="connected-interstitial-body">

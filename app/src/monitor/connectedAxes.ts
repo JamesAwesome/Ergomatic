@@ -285,6 +285,34 @@ export function deriveActivity(input: AxesInput): ActivityAxis {
   }
 }
 
+/** WHO SAID THE LINK WAS GONE — and it is a separate question from whether it
+ *  is gone, which is why this is not a fifth value on `LinkAxis`. Both answers
+ *  render `link: "lost"`; what differs is how much we are entitled to claim.
+ *
+ *  `"reported"` — the transport told us (`disconnected`), or a connect attempt
+ *  failed outright. Authoritative, and the `disconnected` handler has already
+ *  disposed the driver, so a reconnect from here actually runs.
+ *
+ *  `"inferred"` — nobody told us anything; frames simply stopped for longer
+ *  than the watchdog's threshold. That is a GUESS, and one designed to be
+ *  wrong sometimes: it retracts itself once frames resume, and its documented
+ *  producer is a background/resume gap over a perfectly healthy link. Nothing
+ *  has been disposed, so `connect()` will early-return on the driver still
+ *  installed — a screen that offers a reconnect here is offering something
+ *  that cannot happen (Phase RN, Gate 0 round 2).
+ *
+ *  Exported as its own reader rather than added to `ConnectedAxes` because
+ *  exactly one screen needs it, and widening the shared shape for one caller
+ *  buys every other consumer a field to ignore. */
+export type LinkLossAxis = "none" | "reported" | "inferred";
+
+export function deriveLinkLoss(input: AxesInput): LinkLossAxis {
+  if (deriveLink(input) !== "lost") return "none";
+  return input.phase === "disconnected" || input.phase === "failed"
+    ? "reported"
+    : "inferred";
+}
+
 export function deriveAxes(input: AxesInput): ConnectedAxes {
   return {
     link: deriveLink(input),

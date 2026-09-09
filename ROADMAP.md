@@ -156,7 +156,8 @@ replace — is approved before task 1.
       persistence gates unfailable) and three MAJOR; the prescribed-code lens
       returned one (I-5's two consumers need different test seams, and the
       harder one had no name). All folded; one ledger entry landed. **S**
-- [x] **Gate 0 — CLOSED 2026-09-09.** Three rulings, tabled in the spec.
+- [x] **Gate 0 — CLOSED 2026-09-09, ROUND 2 CLOSED the same day.** Three
+      rulings from round 1, tabled in the spec, plus round 2's.
       Copy candidate A; the pre-pull link loss takes option C (Just Row's
       hand-off arm requires the link to be up, for a tapped hand-off as well
       as a skipped one); the parked comfort settings do NOT ride. **S**
@@ -236,6 +237,29 @@ rather than difficulty. **The trigger is not struck — it retargets again, to
 the THIRD settings PR.** The one thing that would change the countdown answer
 is still untested: nobody has measured how `/you/settings` reads at four
 sections on a 375px viewport.
+
+**GATE 0 ROUND 2 (James, 2026-09-09): the silent-link screen says what is
+true.** Ruling 2 was decided from an option table whose stated cost was
+false — "A leaves a rower stranded on an End button in the exact state a
+reconnect would have worked". The reconnect does not work: `frameSilence`
+disposes nothing, so `connect()` early-returns on the installed driver and
+Just Row's `Try again` was DEAD in that state, and had been before this phase.
+An adversary then blocked the obvious fix (cancel-then-connect) twice over: the
+naive form strands the connect claim and bricks the screen permanently, and the
+sequenced form terminates an armed monitor off a heuristic that retracts itself
+while awaiting an ack that has no bound. **Ruled: split the screen by what told
+us the link was gone.** A transport-reported `disconnected` keeps `Lost the
+monitor` and its working `Try again`; frame silence reads `Waiting for the
+monitor / It has gone quiet. This usually clears on its own.` with Cancel
+alone. RF30's own shape, pointed at the road TAKEN rather than the one refused.
+
+**OWED, and deliberately out of scope here — the programmed door's version of
+the same wire state.** At `ready` with frames stopped, `ConnectedInterstitial`
+switches on raw `session.phase` and renders `Ready when you pull` over a silent
+link: no warning, no lost treatment, and no `Try again` to be dead. It is the
+least honest of the three treatments this one wire state produces, and nobody
+has designed it. **Trigger:** the next phase that touches the programmed
+connect flow, or a tester reporting a ready screen that never starts. **S**
 
 **ACCEPTED DIVERGENCE, ruled at the same gate.** Ruling 2 changes `JustRow.tsx`
 and deliberately does not change `ConnectedInterstitial.tsx`: the programmed

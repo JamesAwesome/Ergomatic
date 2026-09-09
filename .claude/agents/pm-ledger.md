@@ -6308,7 +6308,18 @@ on accuracy, which is the right way round for the gate to fail.
 **Release: v0.45.0, MINOR, recommended on merge.** `git log v0.44.0..main
 --oneline` returns four merges (#375 test-signal, #376 RELEASING docs, #377
 copy/refusal memory, #378 failure-screen dedup) — thin alone, a real tag with
-RN. Two note lines are non-negotiable: the Just Row Try-again fix stated as a
-DEFAULT-PATH fix (it is the only thing a rower gets without touching anything),
-and the setting with its cost in one clause (SKIP means no on-screen reminder to
-keep the phone awake — the reminder, not the wake lock).
+RN. Two note lines are non-negotiable: the setting with its cost in one clause
+(SKIP means no on-screen reminder to keep the phone awake — the reminder, not
+the wake lock), and the default-path change to what a quiet link looks like.
+
+**CORRECTED AFTER GATE 0 ROUND 2 (2026-09-09), and the correction is the point
+of the entry above.** This gate ruled two note lines non-negotiable and got the
+second one wrong in the same direction the PR body did: it called the
+default-path change "the Just Row Try-again fix", which would have told testers
+a reconnect was restored. `Try again` never worked in that state — the whole-
+branch review proved it in a browser — and the shipped answer REMOVES the
+button there rather than repairing it. The honest line is that a link going
+quiet before your first pull now says so and waits, instead of showing an alarm
+or a control that did nothing. **A gate that catches a body for over-claiming a
+fix can restate the same over-claim in its own conditions; check the verdict's
+own words against the same evidence bar it applied.**

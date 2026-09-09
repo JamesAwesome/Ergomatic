@@ -655,6 +655,50 @@ a mockup) and approved by James. Three rulings:
 3. **The parked comfort settings do NOT ride this PR.** Both recommendations
    accepted. The ROADMAP row records the answer and keeps its trigger.
 
+### Gate 0 round 2 — CLOSED 2026-09-09, same day
+
+Ruling 2 was decided from an option table carrying a false cost, and the
+whole-branch review found it: *"A leaves a rower stranded on an End button in
+the exact state a reconnect would have worked."* The reconnect does not work.
+`handleFrameSilence` sets one flag and disposes nothing, so `driverRef` is
+still installed and `connect()` early-returns — Just Row's `Try again` is DEAD
+at `ready ∧ frameSilence`, and was before this phase existed. Confirmed in a
+browser: the screen is unchanged six seconds after the tap.
+
+James chose to make the button act (cancel-then-connect), and the delta
+antagonist pass blocked it twice:
+
+1. **The naive form is worse than the dead button.** `cancel()` bumps
+   `attemptRef`, awaits the terminate, then calls `teardown()` which bumps it
+   AGAIN — so the older cancel supersedes the newer connect, and that path
+   deliberately never releases `connectingRef`. The screen would read
+   "Connecting to monitor" permanently, with every later Connect a no-op.
+2. **The sequenced form reintroduces the symptom.** `terminate()` awaits an
+   ack whose only exits are a real frame, a disconnect, or a tick-driven
+   policy counting the frames that have stopped — and production configures
+   none. On a dead-but-not-yet-disconnected link the await has no bound.
+
+Plus the trigger is a heuristic that retracts itself after 10 s, whose
+documented producer is a healthy link and a sleeping phone: E would terminate
+an armed monitor and re-arm it, losing any pull in the window, to answer a
+guess.
+
+**RULED: split the screen by what told us the link was gone.** A
+transport-reported `disconnected` is authoritative and disposes the driver, so
+it keeps `Lost the monitor` and its working `Try again`. Frame silence reads
+`Waiting for the monitor` / *"It has gone quiet. This usually clears on its
+own."* with Cancel alone. Candidate B — keeping the `Lost the monitor` heading
+above a waiting line — was rejected on sight of its render: the heading and the
+body contradict each other.
+
+**Two corrections this round forced on the record**, both in the same
+direction and both worth keeping: the `disconnected` producer would NOT have
+regressed under E (it is safe there, and E would have fixed two more dead
+states for free), and there is no sibling dead button on the programmed door,
+so RF34 does not bite. What the programmed door has instead is worse and is
+now a ROADMAP row: at `ready` with frames stopped it renders `Ready when you
+pull` over a silent link, with no warning at all.
+
 ### Where ruling 2 applies, enumerated (RF34)
 
 An invariant stated once and applied to one of the sites it governs is worse
