@@ -61,10 +61,15 @@ REPO_ROOT=<worktree> bash -c 'source scripts/stack-env.sh >/dev/null; \
   duplicate `detail` line restored, and (on the refusal) the phone-timer
   button back in the stack.
 - **`*-ios5`** — the five-button `permission-denied` stack. `Open Settings`
-  renders only when `canOpenAppSettings()` is true, and that is `isNative()`,
-  which also flips `adapters/monitorTransport.ts` onto the Capacitor arm — so
-  no web render can reach this shape. The harness inserts the identical button
-  node the native render emits and re-measures.
+  renders only when `canOpenAppSettings()` is true, and at the time these
+  captures were taken that was `isNative()`, which also flips
+  `adapters/monitorTransport.ts` onto the Capacitor arm — so no web render
+  could reach this shape. The harness inserts the identical button node the
+  native render emits and re-measures.
+  **SUPERSEDED, and only for future readers:** the Phase MT close-out gave
+  `canOpenAppSettings()` a dev-only door, and `design.spec.ts` now drives the
+  real five-button frame in a browser. These captures still came from the
+  insertion described above, which is why the description stands.
 
 **The reconstruction is checked, not trusted.** Every one of the six real
 frames is measured twice in each orientation — once as React rendered it, once

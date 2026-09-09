@@ -368,9 +368,14 @@ async function renderBody(
  *  `phoneTimer` puts `Row on the phone timer instead` back where the refusal
  *  frame carried it before this PR (after `Try again`, before the log door),
  *  which is the BEFORE shape of change 1. `openSettings` inserts the
- *  native-only fifth button — `canOpenAppSettings()` is `isNative()`, and
- *  forcing that also flips `adapters/monitorTransport.ts` onto the Capacitor
- *  arm, so the frame could never be reached at all. Both insert the identical
+ *  fifth button that was native-only WHEN THESE CAPTURES WERE TAKEN:
+ *  `canOpenAppSettings()` was `isNative()`, and forcing that also flips
+ *  `adapters/monitorTransport.ts` onto the Capacitor arm, so the frame could
+ *  not be reached from a web render at all. SUPERSEDED by the Phase MT
+ *  close-out seam, which gives `canOpenAppSettings()` a dev-only door and an
+ *  e2e case that drives the real five-button frame; this harness keeps its
+ *  insertion because it is how these committed captures were actually made.
+ *  Both insert the identical
  *  node the real render emits, and every figure they produce is labelled
  *  `reconstructed`. */
 async function reshapeStack(
@@ -541,8 +546,10 @@ test.describe("Phase MT close-out — every failure frame, re-measured", () => {
       "permission-denied-BEFORE",
       { before: true, variant: "before" },
     );
-    // The FIVE-button iOS stack, which no web render can reach, in both
-    // variants — the shape the landscape budget is tightest on.
+    // The FIVE-button iOS stack — no web render could reach it when these
+    // captures were taken; the close-out seam has since made it reachable,
+    // and a `design.spec.ts` case now stands on the real frame. Both
+    // variants here, the shape the landscape budget is tightest on.
     await reconstructed(
       page,
       "permission-denied",

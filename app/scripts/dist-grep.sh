@@ -149,6 +149,12 @@ fi
 # `VITE_ENABLE_FAKE_MONITOR=1 pnpm build` opens the gate and this needle
 # fires on `dist/client/assets/index-*.js`; the same build without the flag
 # is clean.
+# NOTE (Phase MT close-out): a needle is a RETYPING of a literal that also
+# lives in product source, its unit test and (for the app-settings door) an
+# e2e helper — four copies, and NOTHING mechanically ties them together. A
+# rename that updates the other three and not this list leaves the needle
+# hunting a string that no longer exists: green forever, proving nothing.
+# True of all ten needles, not just the newest. Filed in ROADMAP.
 NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "C2 link probe (dev harness)" "scripted start failure" "app-settings door (dev override)")
 FAILED=0
 
