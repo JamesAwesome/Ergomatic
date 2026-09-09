@@ -7845,6 +7845,72 @@ test.describe("connected screens (fake-driven)", () => {
     // landscape"), and half a claim gated reads as all of it.
     await assertTapTargets(page);
 
+    // THE THREE-BUTTON STACK, RESOLVED BY THE REAL GRID (Phase MT close-out,
+    // James 2026-09-08: `Try again` spans, the log door and `Cancel` pair
+    // beneath it). This frame is the only failure stack with an odd button
+    // count — it withholds `Row on the phone timer instead`, because routing
+    // a refused SkiErg into the phone timer is how a ski piece gets stored as
+    // a rowing row by hand — and `--failure`'s own `nth-last-child(-n + 4)`
+    // matches all three, which would put `Cancel` alone in the left column
+    // with a hole beside it. Only a real browser can say which happened:
+    // jsdom resolves no grid, so `ConnectedInterstitial.test.tsx` can pin the
+    // SELECTOR and nothing else.
+    //
+    // Asserted as geometry (same row, same width) rather than as a computed
+    // `grid-column`, because `grid-column: auto` is what a broken layout also
+    // reports.
+    const stack = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>(
+        ".connected-interstitial-actions--failure",
+      );
+      if (el === null) throw new Error("no failure action stack");
+      const width = el.getBoundingClientRect().width;
+      return {
+        width,
+        buttons: Array.from(
+          el.querySelectorAll<HTMLButtonElement>("button"),
+        ).map((b) => {
+          const r = b.getBoundingClientRect();
+          return {
+            label: (b.textContent ?? "").trim(),
+            x: r.x,
+            y: r.y,
+            width: r.width,
+          };
+        }),
+      };
+    });
+    expect(stack.buttons.map((b) => b.label)).toStrictEqual([
+      "Try again",
+      "View connection log",
+      "Cancel",
+    ]);
+    const [tryAgain, log, cancel] = stack.buttons as [
+      (typeof stack.buttons)[number],
+      (typeof stack.buttons)[number],
+      (typeof stack.buttons)[number],
+    ];
+    expect(
+      stack.width - tryAgain.width,
+      `Try again is ${stack.width - tryAgain.width}px narrower than the stack, so it is sharing its row`,
+    ).toBeLessThanOrEqual(0.5);
+    expect(
+      Math.abs(log.y - cancel.y),
+      `the log door and Cancel sit ${Math.abs(log.y - cancel.y)}px apart vertically, so they are not paired on one row`,
+    ).toBeLessThanOrEqual(0.5);
+    expect(
+      log.y,
+      "the paired row does not sit below Try again",
+    ).toBeGreaterThan(tryAgain.y);
+    expect(
+      Math.abs(log.width - cancel.width),
+      `the pair is ${Math.abs(log.width - cancel.width)}px uneven`,
+    ).toBeLessThanOrEqual(0.5);
+    expect(
+      cancel.x,
+      "Cancel is not in the right-hand column beside the log door",
+    ).toBeGreaterThan(log.x);
+
     const m = await measureFailureFrame(page);
     // The precondition for the two assertions below being dormant rather than
     // broken (see this test's own header). If a line is ever added to this

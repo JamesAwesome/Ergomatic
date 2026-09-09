@@ -1,0 +1,56 @@
+[
+  {
+    "reason": "unsupported-machine",
+    "variant": "before",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 179,
+    "serifBottom": 251,
+    "headlineOnFrame": true,
+    "panelLines": [],
+    "bodyLines": [
+      "CONNECT",
+      "Erg type not supported",
+      "This monitor is on a SkiErg. Nothing here will start.",
+      "WHICH ERGS WORK ›",
+      "YOUR WORKOUT AND NUDGES ARE KEPT"
+    ]
+  },
+  {
+    "reason": "unsupported-machine",
+    "variant": "before",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 46.5,
+    "serifBottom": 82.5,
+    "headlineOnFrame": true,
+    "panelLines": [],
+    "bodyLines": [
+      "CONNECT",
+      "Erg type not supported",
+      "This monitor is on a SkiErg. Nothing here will start.",
+      "WHICH ERGS WORK ›",
+      "YOUR WORKOUT AND NUDGES ARE KEPT"
+    ]
+  }
+]

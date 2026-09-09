@@ -1,0 +1,68 @@
+[
+  {
+    "reason": "link-failed",
+    "variant": "before",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 176.5,
+    "serifBottom": 248.5,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "LINK-FAILED",
+      "The link to the monitor failed.",
+      "Test scan failed"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "The link to the monitor failed.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "LINK-FAILED",
+      "The link to the monitor failed.",
+      "Test scan failed"
+    ]
+  },
+  {
+    "reason": "link-failed",
+    "variant": "before",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 219,
+    "overflow": 13,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "LINK-FAILED",
+      "The link to the monitor failed.",
+      "Test scan failed"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "The link to the monitor failed.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "LINK-FAILED",
+      "The link to the monitor failed.",
+      "Test scan failed"
+    ]
+  }
+]

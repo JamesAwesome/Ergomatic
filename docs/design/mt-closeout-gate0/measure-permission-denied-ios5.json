@@ -1,0 +1,68 @@
+[
+  {
+    "reason": "permission-denied",
+    "variant": "reconstructed-ios5",
+    "orientation": "portrait",
+    "buttonCount": 5,
+    "buttonLabels": [
+      "Open Settings",
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 316,
+    "messageWindow": 464,
+    "contentHeight": 464,
+    "overflow": 0,
+    "serifTop": 120.5,
+    "serifBottom": 192.5,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "PERMISSION-DENIED",
+      "BLE permission denied"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Bluetooth permission needed",
+      "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "PERMISSION-DENIED",
+      "BLE permission denied"
+    ]
+  },
+  {
+    "reason": "permission-denied",
+    "variant": "reconstructed-ios5",
+    "orientation": "landscape",
+    "buttonCount": 5,
+    "buttonLabels": [
+      "Open Settings",
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 188,
+    "messageWindow": 138,
+    "contentHeight": 259,
+    "overflow": 121,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "PERMISSION-DENIED",
+      "BLE permission denied"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Bluetooth permission needed",
+      "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "PERMISSION-DENIED",
+      "BLE permission denied"
+    ]
+  }
+]

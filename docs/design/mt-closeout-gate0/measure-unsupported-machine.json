@@ -1,0 +1,106 @@
+[
+  {
+    "reason": "unsupported-machine",
+    "variant": "real",
+    "orientation": "portrait",
+    "buttonCount": 3,
+    "buttonLabels": [
+      "Try again",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 184,
+    "messageWindow": 596,
+    "contentHeight": 596,
+    "overflow": 0,
+    "serifTop": 211,
+    "serifBottom": 283,
+    "headlineOnFrame": true,
+    "panelLines": [],
+    "bodyLines": [
+      "CONNECT",
+      "Erg type not supported",
+      "This monitor is on a SkiErg. Nothing here will start.",
+      "WHICH ERGS WORK ›",
+      "YOUR WORKOUT AND NUDGES ARE KEPT"
+    ]
+  },
+  {
+    "reason": "unsupported-machine",
+    "variant": "reconstructed",
+    "orientation": "portrait",
+    "buttonCount": 3,
+    "buttonLabels": [
+      "Try again",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 184,
+    "messageWindow": 596,
+    "contentHeight": 596,
+    "overflow": 0,
+    "serifTop": 211,
+    "serifBottom": 283,
+    "headlineOnFrame": true,
+    "panelLines": [],
+    "bodyLines": [
+      "CONNECT",
+      "Erg type not supported",
+      "This monitor is on a SkiErg. Nothing here will start.",
+      "WHICH ERGS WORK ›",
+      "YOUR WORKOUT AND NUDGES ARE KEPT"
+    ]
+  },
+  {
+    "reason": "unsupported-machine",
+    "variant": "real",
+    "orientation": "landscape",
+    "buttonCount": 3,
+    "buttonLabels": [
+      "Try again",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 46.5,
+    "serifBottom": 82.5,
+    "headlineOnFrame": true,
+    "panelLines": [],
+    "bodyLines": [
+      "CONNECT",
+      "Erg type not supported",
+      "This monitor is on a SkiErg. Nothing here will start.",
+      "WHICH ERGS WORK ›",
+      "YOUR WORKOUT AND NUDGES ARE KEPT"
+    ]
+  },
+  {
+    "reason": "unsupported-machine",
+    "variant": "reconstructed",
+    "orientation": "landscape",
+    "buttonCount": 3,
+    "buttonLabels": [
+      "Try again",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 46.5,
+    "serifBottom": 82.5,
+    "headlineOnFrame": true,
+    "panelLines": [],
+    "bodyLines": [
+      "CONNECT",
+      "Erg type not supported",
+      "This monitor is on a SkiErg. Nothing here will start.",
+      "WHICH ERGS WORK ›",
+      "YOUR WORKOUT AND NUDGES ARE KEPT"
+    ]
+  }
+]

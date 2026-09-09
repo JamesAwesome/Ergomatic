@@ -1,0 +1,64 @@
+[
+  {
+    "reason": "target-interrupted",
+    "variant": "reconstructed",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 168,
+    "serifBottom": 276,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TARGET-INTERRUPTED",
+      "scan aborted"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Connection interrupted. Try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TARGET-INTERRUPTED",
+      "scan aborted"
+    ]
+  },
+  {
+    "reason": "target-interrupted",
+    "variant": "reconstructed",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 206,
+    "overflow": 0,
+    "serifTop": 25,
+    "serifBottom": 97,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TARGET-INTERRUPTED",
+      "scan aborted"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Connection interrupted. Try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TARGET-INTERRUPTED",
+      "scan aborted"
+    ]
+  }
+]

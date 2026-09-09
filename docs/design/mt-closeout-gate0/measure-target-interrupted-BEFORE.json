@@ -1,0 +1,68 @@
+[
+  {
+    "reason": "target-interrupted",
+    "variant": "before",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 158.5,
+    "serifBottom": 266.5,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TARGET-INTERRUPTED",
+      "Connection interrupted. Try again.",
+      "scan aborted"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Connection interrupted. Try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TARGET-INTERRUPTED",
+      "Connection interrupted. Try again.",
+      "scan aborted"
+    ]
+  },
+  {
+    "reason": "target-interrupted",
+    "variant": "before",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 219,
+    "overflow": 13,
+    "serifTop": 22,
+    "serifBottom": 94,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "TARGET-INTERRUPTED",
+      "Connection interrupted. Try again.",
+      "scan aborted"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Connection interrupted. Try again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "TARGET-INTERRUPTED",
+      "Connection interrupted. Try again.",
+      "scan aborted"
+    ]
+  }
+]

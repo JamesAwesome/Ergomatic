@@ -1,0 +1,126 @@
+[
+  {
+    "reason": "scan-cleanup-failed",
+    "variant": "real",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 150,
+    "serifBottom": 294,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "SCAN-CLEANUP-FAILED",
+      "stopLEScan rejected"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "SCAN-CLEANUP-FAILED",
+      "stopLEScan rejected"
+    ]
+  },
+  {
+    "reason": "scan-cleanup-failed",
+    "variant": "reconstructed",
+    "orientation": "portrait",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 248,
+    "messageWindow": 532,
+    "contentHeight": 532,
+    "overflow": 0,
+    "serifTop": 150,
+    "serifBottom": 294,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "SCAN-CLEANUP-FAILED",
+      "stopLEScan rejected"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "SCAN-CLEANUP-FAILED",
+      "stopLEScan rejected"
+    ]
+  },
+  {
+    "reason": "scan-cleanup-failed",
+    "variant": "real",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 236,
+    "overflow": 30,
+    "serifTop": 22,
+    "serifBottom": 130,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "SCAN-CLEANUP-FAILED",
+      "stopLEScan rejected"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "SCAN-CLEANUP-FAILED",
+      "stopLEScan rejected"
+    ]
+  },
+  {
+    "reason": "scan-cleanup-failed",
+    "variant": "reconstructed",
+    "orientation": "landscape",
+    "buttonCount": 4,
+    "buttonLabels": [
+      "Try again",
+      "Row on the phone timer instead",
+      "View connection log",
+      "Cancel"
+    ],
+    "actionStackHeight": 120,
+    "messageWindow": 206,
+    "contentHeight": 236,
+    "overflow": 30,
+    "serifTop": 22,
+    "serifBottom": 130,
+    "headlineOnFrame": true,
+    "panelLines": [
+      "SCAN-CLEANUP-FAILED",
+      "stopLEScan rejected"
+    ],
+    "bodyLines": [
+      "CONNECT",
+      "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
+      "YOUR WORKOUT AND NUDGES ARE KEPT",
+      "DETAIL",
+      "SCAN-CLEANUP-FAILED",
+      "stopLEScan rejected"
+    ]
+  }
+]
