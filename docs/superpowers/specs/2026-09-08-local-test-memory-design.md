@@ -294,7 +294,7 @@ variant → memory banner (both V8 strings)". It could not go red: both
 was a duplicate of row 3 proving nothing about coverage. Replaced with
 the message that genuinely lacks the old needle.
 
-**A2. A CLAUDE.md recurring-failure entry (RF37)**, carrying three
+**A2. A CLAUDE.md recurring-failure entry (RF40)**, carrying three
 things an agent needs without the wrapper: that **exit ≥ 128 is a signal
 death, not a test result**; that **`pnpm exec` collapses it to 1**, so
 the documented scoped-run workaround hides the very signal this rule

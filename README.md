@@ -105,7 +105,7 @@ e2e job on the PR read for the full suite — `pnpm e2e` is the Playwright
 suite that runs flows *and* structural design assertions (44 px hit targets,
 WCAG AA contrast, token usage, safe-area insets) against the real compose
 stack, and a full local run now costs ~1.5x its old wall-clock under the
-local worker cap (CLAUDE.md RF37). `pnpm screenshots` refreshes
+local worker cap (CLAUDE.md RF40). `pnpm screenshots` refreshes
 `docs/screenshots/`, which the phase PR body embeds. Coverage is gated at
 90% repo-wide with `app/domain/**` pinned at 100.
 

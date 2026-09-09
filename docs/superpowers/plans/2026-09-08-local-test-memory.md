@@ -73,7 +73,7 @@ Under the spec as written, **every Ctrl-C prints `MEMORY KILL`**. Task 1 impleme
 | `.husky/pre-push` | MODIFY. Ref guard, two invocations, `sh -e`-safe. |
 | `.github/workflows/ci.yml` | MODIFY. Named step for `test-run.test.sh`. |
 | `.gitignore` | MODIFY. Ignore `app/.test-kills/`. |
-| `CLAUDE.md`, `.claude/agent-briefing.md`, `docs/TESTING.md`, `README.md` | MODIFY. RF37 + the five-site e2e amendment. |
+| `CLAUDE.md`, `.claude/agent-briefing.md`, `docs/TESTING.md`, `README.md` | MODIFY. RF40 + the five-site e2e amendment. |
 
 ---
 
@@ -913,7 +913,7 @@ git commit -m "Phase MEM: pre-push runs what changed, plus the gates --changed c
 ### Task 6: The rules, in all five places
 
 **Files:**
-- Modify: `CLAUDE.md` (RF37; the Commands bullet; RF1)
+- Modify: `CLAUDE.md` (RF40; the Commands bullet; RF1)
 - Modify: `.claude/agent-briefing.md` (gate table)
 - Modify: `docs/TESTING.md`
 - Modify: `README.md`
@@ -925,7 +925,7 @@ git commit -m "Phase MEM: pre-push runs what changed, plus the gates --changed c
 Run: `grep -rn "pnpm e2e" --include='*.md' . | grep -v node_modules | grep -v docs/history`
 Record the hits. A grep over sites you already thought of cannot find the one you forgot — this is the failure C6 itself committed.
 
-- [ ] **Step 2: Add RF37 to CLAUDE.md**
+- [ ] **Step 2: Add RF40 to CLAUDE.md**
 
 Append to the recurring-failures list:
 
@@ -961,7 +961,7 @@ Append to the recurring-failures list:
 
 RF1's prescription becomes: for a diff touching `app/src/`, run the named e2e specs locally against an already-booted stack, and **read the e2e job on the PR** for the full suite. `pnpm screenshots` is unchanged.
 
-The Commands bullet on the `pnpm exec vitest` workaround gains one sentence: *"Note this form collapses a signal death to exit 1 — see recurring failure 37. Prefer `pnpm test --project client` when you do not need a file filter."*
+The Commands bullet on the `pnpm exec vitest` workaround gains one sentence: *"Note this form collapses a signal death to exit 1 — see recurring failure 40. Prefer `pnpm test --project client` when you do not need a file filter."*
 
 Add the two env vars to Commands:
 
@@ -994,7 +994,7 @@ Update the Phase MEM section: what shipped, the three recorded worker numbers fr
 ```bash
 git rev-parse --show-toplevel
 git add CLAUDE.md .claude/agent-briefing.md docs/TESTING.md README.md ROADMAP.md docs/superpowers/specs/2026-09-08-local-test-memory-design.md
-git commit -m "Phase MEM: RF37, and the e2e tier amendment in all five places"
+git commit -m "Phase MEM: RF40, and the e2e tier amendment in all five places"
 ```
 
 ---

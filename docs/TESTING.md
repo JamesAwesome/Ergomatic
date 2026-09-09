@@ -413,7 +413,7 @@ and the pattern is worth naming so reviews aim there:
   component's CSS; whether the named e2e specs still pass locally against an
   already-booted stack, then whether the e2e job on the PR is green for the
   full suite (a full local `pnpm e2e` run now costs ~1.5x its old
-  wall-clock under Phase MEM's local worker cap — CLAUDE.md RF37).
+  wall-clock under Phase MEM's local worker cap — CLAUDE.md RF40).
 
 ## 13. Self-mutation is part of writing the test
 
