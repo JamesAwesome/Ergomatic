@@ -14205,4 +14205,67 @@ describe("createPm5Driver: a replacement has one writer of activeRun (RC-13 V3)"
       actual: { index: 0 },
     });
   });
+
+  it("and the mirror: a subscriber that re-enters program() from inside beginFreeRow()'s replacement is refused too — `programInFlight` cannot see that case", async () => {
+    // The other direction, and it is NOT covered by the single-flight gate:
+    // `beginFreeRow()` sets `programInFlight` only AFTER its own replacement
+    // window, so a subscriber called from that door's settlement reaches
+    // `program()` with the flag still down. Without `replacingRun` it would
+    // set `programInFlight = "program()"`, suspend on `sendPrepare()`, and
+    // the free-row door would then overwrite the flag underneath it.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createSubscribedDriver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+    transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      buildEndOfWorkoutSummaryBytes({
+        elapsedSeconds: 60,
+        meters: 200,
+        avgStrokeRate: 22,
+        endingHeartRateBpm: 150,
+        avgHeartRateBpm: 150,
+        minHeartRateBpm: 130,
+        maxHeartRateBpm: 160,
+        dragFactorAverage: 130,
+        recoveryHeartRateBpm: 100,
+        workoutType: 8,
+        avgPaceSecondsPer500m: 150,
+      }),
+    );
+
+    let reentrant: Promise<void> | null = null;
+    driver.events((e) => {
+      if (e.kind === "summary-observations") {
+        reentrant = driver.program(MINIMAL_PROGRAM);
+      }
+    });
+
+    driver.beginFreeRow();
+
+    expect(reentrant).not.toBeNull();
+    await expect(reentrant).rejects.toBeInstanceOf(ProgramBusyError);
+    const refusals = log
+      .entries()
+      .filter((e) => e.kind === "run-replace-reentered");
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]!.detail).toBe(
+      "program() was called while beginFreeRow() was replacing the active run — refused; a replacement has exactly one writer of activeRun in flight",
+    );
+    // The door that was already replacing finished its own job: exactly one
+    // free row opened, and the refusal cost it nothing.
+    expect(
+      log.entries().filter((e) => e.kind === "free-row-open"),
+    ).toHaveLength(1);
+  });
 });
