@@ -33,6 +33,20 @@ matches `## Phase TD`, `^## Phase D` matches `## Phase DE`, `^## Phase P`
 matches `## Phase PROTO`. `/close-phase D` closing DE is a silent
 catastrophe, and the separator is the only thing between you and it.
 
+**Refuse `/close-phase TD` outright.** `## Phase TD` matches the anchor and is
+not a phase: it carries `<!-- debt -->`, the class the register counts and
+never charges for, and `ROADMAP.md`'s own head says it "is deliberately not
+scheduled". Closing it would ask sixteen absent-evidence rows for a
+disposition they cannot have. Check the marker before the span:
+
+```bash
+sed -n "$(($(grep -nE "^## Phase <X>( |$)" ROADMAP.md | cut -d: -f1) + 1))p" ROADMAP.md
+```
+
+A `<!-- debt -->` marker there means refuse; a `<!-- phase -->` marker means
+proceed. Any other marker, or none, means the section is misfiled — say so and
+stop rather than guessing.
+
 ### 0b. The span
 
 ```bash
@@ -223,6 +237,11 @@ rewording a row, which is the only thing the anchor exists to catch. A stored
 copy lets the lift gate `diff` and report per row. **Without the
 anchor the freeze is not a freeze:** parallel sessions are the normal case
 here, and one of them can add or reword a span row with nothing noticing.
+
+**Every span now begins heading, then a class marker at `START+1`** (Phase RR
+PR 2 wrote one into all 33 sections). It is inert for the freeze — it never
+changes — but it is the second line of every anchor file, so a diff that
+reports it as an addition is reading a stale anchor, not a parallel session.
 
 Write the worklist to `docs/closeouts/close-<X>.md` **in the phase worktree,
 tracked and committed at the end of Phase 0**, amended on every disposition

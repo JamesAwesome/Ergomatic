@@ -183,6 +183,10 @@ jobs:
         run: |
           bash -n app/scripts/test-run-advisory.sh
           bash app/scripts/test-run-advisory.test.sh
+      - name: Lint + test the ROADMAP register ratchet
+        run: |
+          bash -n scripts/register.sh
+          bash scripts/register.test.sh
 
   deploy:
     needs: [changes, root-hooks, app, docker, e2e, scripts]

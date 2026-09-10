@@ -341,6 +341,42 @@ requirements).
     bigger PR is cheaper to run gates on but harder to review. When
     grouping would force a reviewer to reason about a stored-shape change
     and an unrelated redesign in one pass, split. Otherwise group.
+- **THE REGISTER MAY ONLY GO DOWN (James, 2026-09-09: _"we need to figure out
+  how we can continue working without filling this register to death with
+  cruft. It's fucking impossible to close things out."_).** RF14 says
+  everything with a life after merge goes in the ROADMAP, and nothing said
+  when a row may DIE — so it only grew: **+81 rows in the 12 days to
+  2026-09-09, monotone, not one down day, +6.75/day**, while the file itself
+  SHRANK 2,625 lines. Two rules, and the second is what makes the first
+  payable. Every section of `ROADMAP.md` carries a class marker on the line
+  after its heading saying whether its rows are charged; run
+  `bash scripts/register.sh ratchet` (and `/register-gate` when it reports a
+  filing, or at a phase close).
+  - **1. A PR that files N register rows strikes N**, or asks James for an
+    explicit exemption naming what would be struck to pay for the row and
+    what is lost either way. The gate REFUSES (exit 2) rather than passing
+    when it cannot resolve a base or the branch has not merged main — two
+    branches that each strike the same row and file elsewhere both read
+    delta 0 against their own fork points while the register rises. **An
+    exit 2 is not a pass and no result may be inferred from it.**
+  - **3. A finding defaults to the CODE, not the register.** A row whose
+    subject is a place in the code is a comment at that place, unless it also
+    has a schedule; the test is "does this have a schedule", not "is this
+    true". This is the rule that funds rule 1 — dead strikeable inventory is
+    ~32 rows against 6.75 filings/day, under five days of currency, after
+    which a ratchet alone either yields on every PR or blocks real findings.
+    **Two exceptions, both measured.** RF29 stands: a change that makes code
+    unreachable still files its removal row, because the reader who would
+    see the comment is the one who will never open that file again. And the
+    **absent-evidence class is exempt entirely** — a row saying "nobody has
+    measured X" has no code site (the producer is often a human at an erg),
+    lives under `<!-- debt -->`, is counted and never payable, and is the
+    class that caught a 3.9x distance error and a headline feature reaching
+    zero of sixteen production rows.
+  - _Rules 2 (no row without a closing condition) and 4 (expire by default)
+    are the expensive half and land with `dies` in Phase RR PR 4, after James
+    rules on class defaults. Until then `register.sh stamps` and `expired`
+    refuse with exit 2 and say so._
 - **CLOSE THE INVARIANT AND KEEP THE REVIEW RECORD CURRENT.** A fix round closes
   every finding's underlying invariant, not only its latest counterexample.
   Every factual claim in a report, review comment, or code comment names
