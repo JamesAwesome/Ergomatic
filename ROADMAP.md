@@ -2745,6 +2745,61 @@ thirteen line numbers, and its own diff broke every one.**
   time)" — `grep -n nudge ROADMAP.md` returns zero, so it has no live home,
   while that phase's status line says its walk passed.
 
+## Phase RR — the register may only go down
+
+**OPEN 2026-09-09.** Design approved in chat the same day; spec
+`docs/superpowers/specs/2026-09-09-register-ratchet-design.md`. Filing a row is
+free and closing one is not, so the register only grows: RF14 says everything
+with a life after merge goes here and nothing anywhere says when a row may DIE.
+James, 2026-09-09: _"we need to figure out how we can continue working without
+filling this register to death with cruft. It's fucking impossible to close
+things out."_ This phase makes the register a ratchet — file N rows, strike N —
+the same shape as the typed-lint suppression ledger.
+
+Nothing a rower sees changes. No stored number changes. No `app/` file is
+touched. The audience is agents and James.
+
+**Rows in this section are PHASE rows, not register rows** — an unmarked
+section is scheduled work, so filing them owes no strike. They are
+dispositioned by `/close-phase RR`.
+
+- [ ] **PR 1 — the spec and this section.** Docs only. RF17: the section lands
+      in the same commit as the spec.
+- [ ] **PR 2 — the mechanism.** `scripts/register.sh` + `scripts/register.test.sh`
+      + fixtures (failing test first), wired into CI's existing `scripts` job;
+      the `<!-- register -->` / `<!-- pinned -->` / `<!-- vision -->` section
+      markers and the stamp grammar written into "How this file is used";
+      `CLAUDE.md`'s four rules as RF14's counterpart; the `/register-gate`
+      skill; `/close-phase` gate 5's expiry defence.
+- [ ] **PR 3 — the stamp pass.** Every register row gets
+      `· filed <date> · dies <date|tag> unless <clause>`; roughly 21 already-
+      closed rows are evicted to `docs/history/` (`## The unlogged-session door`
+      is 6 of 6 closed and `## Active audit overlay` 2 of 2, so both sections
+      empty and archive); strikes carry measured receipts. Lands after James
+      answers the DECIDE batch, because a ruling can delete a row and stamping
+      it first is wasted work.
+
+**The two measurements that shaped it, both at `275c14b2`:** `grep -ci 'struck
+if' ROADMAP.md` returns **0**, so no row in the file has a death condition
+today and this is a retrofit of the whole register rather than a rule for new
+rows; and `git blame` on the file's bullet lines returns 171 at ≤7 days, 162 at
+8-30, 4 at 31-60 and none older, because reflows reset it — so "untouched for
+30 days" would have found 4 rows out of 337 and read as a gate that works
+(RF21). Expiry therefore rides a date the row carries itself, which collapses
+"closing condition" and "expire by default" into one field.
+
+**Two structural findings the design had to absorb:** the register has TWO row
+shapes, because "Rides the next PR touching the connected surface" is a 24-row
+markdown table and that is where RC-13a-e live; and Icebox counts inside the
+ratchet while `# After the strangers` does not, since an exempt Icebox is
+evaded by moving a row there, and charging a debt strike for a product idea
+trades the wrong two things.
+
+**Gates:** not TRIAD (no number's meaning, no stored shape, no auth), so no
+per-PR PM gate and no per-PR antagonist pass. Owed and not skipped: `/harden`
+on the spec before PR 2 (James's instruction), and a PM phase-open gate on the
+slate, because this changes the shape and sequence of all planned work.
+
 ## Needs a decision from James
 
 **BOTH BULLETS BELOW WERE RULED 2026-09-09** in the Phase OD order sweep, so
