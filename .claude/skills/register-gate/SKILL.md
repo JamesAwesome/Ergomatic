@@ -46,6 +46,13 @@ Read the exit code, never the text alone:
 | 1 | the register ROSE | strike, or write the exemption ask |
 | 2 | **REFUSAL — the gate did not run** | fix what it names. Never report a refusal as a pass, and never infer a result from one |
 
+**One refusal is expected and self-resolving:** a base that predates Phase RR
+PR 2 carries no class markers, so parsing it refuses with a list of 33
+unmarked sections. Merge main and re-run. The gate could not measure its own
+introducing PR either, and that is the bootstrap rather than a bug — the
+alternative, treating an unmarked section as some default class, is the
+fail-open that I9 exists to forbid.
+
 `ratchet` names the rows that LEFT and ENTERED rather than printing a scalar,
 because arithmetic cannot tell a receipted strike from a row lost in a merge:
 merging with `-X ours` drops rows and reads as credit. **Check that every row

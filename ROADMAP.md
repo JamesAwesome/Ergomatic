@@ -2818,14 +2818,31 @@ touched. The audience is agents and James.
 **Rows in this section are `<!-- phase -->` rows, not register rows** — filing
 them owes no strike. They are dispositioned by `/close-phase RR`.
 
-- [ ] **PR 1 — the spec and this section.** Docs only. RF17: same commit.
-- [ ] **PR 2 — the mechanism, minus `dies`.** `scripts/register.sh`
+- [x] **PR 1 — MERGED as #386, ticked 2026-09-10.** The spec and this
+      section, docs only. RF17: same commit.
+- [x] **PR 2 — MERGED as #388.** The mechanism, minus `dies`. `scripts/register.sh`
       `count`/`closed`/`ratchet` + `scripts/register.test.sh` + fixtures
       (failing test first), wired into CI's `scripts` job; one of SEVEN
       whitelisted class markers on every section that can hold a row; **rules 1 and 3 in `CLAUDE.md`, together, because rule 3 is
       what funds rule 1** — dead strikeable inventory is ~32 rows against
       6.75 filings/day, so a ratchet shipped alone is unpayable inside five
       days; the `/register-gate` skill; `/close-phase TD`'s refusal.
+      **Measured at the marking commit** — `register.sh count ROADMAP.md`:
+      register open:68 closed:29 sub:8 · debt 16/2 · pinned 14/2 · vision 22/2
+      · phase 83/48 · ledger 85/2 · container 0/0 · `unmarked=0`. The `sub:8`
+      matches the spec's own hand census of eight indented open bullets in
+      register sections, which the parser found without being told.
+      **23 mutation probes, 23 bite.** Four came back green first time and all
+      four were fixed rather than explained: the `- [ ]` OPEN override was
+      UNTESTED (no fixture row had both a checkbox and a closed-vocabulary
+      title, so deleting it left the suite green — RF21's corollary, a green
+      probe is a question about the suite), two probes were badly written
+      rather than the code being safe, and two anchors were ambiguous.
+      **One refusal is the bootstrap and is named rather than weakened:**
+      `ratchet` cannot measure its own introducing PR, because the base
+      predates the markers. Merging main resolves it from PR 3 on; treating an
+      unmarked section as a default class is the fail-open I9 forbids.
+      Unticked deliberately until it merges.
 - [ ] **PR 3 — the eviction.** Already-closed rows out of the register and into
       `docs/history/`, and the one malformed table row repaired. **Every
       candidate is confirmed BY HAND** — the vocabulary has measured false
