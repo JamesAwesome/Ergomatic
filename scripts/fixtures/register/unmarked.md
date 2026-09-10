@@ -14,6 +14,8 @@ Prose only. This section carries no rows at all.
 - **A row whose bolded title wraps across the eighty-column margin
   before it says CLOSED.** Body prose. Not a checkbox row, so the hard OPEN
   override cannot mask the wrapped-title parse.
+- [ ] **RESOLVED in principle, still open in fact.** Only the `- [ ]` hard
+      OPEN override keeps this row out of the closed candidates.
 - [ ] **UNRESOLVED: the free-row tiles.** The word RESOLVED is inside
       UNRESOLVED and must not match.
 - [x] **DONE — a closed bullet.** Its narrative.
