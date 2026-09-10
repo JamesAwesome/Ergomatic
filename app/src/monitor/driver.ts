@@ -2240,14 +2240,20 @@ export function createPm5Driver(
    * One production subscriber, no fault injection required.
    *
    * WHAT THIS DOES NOT CLAIM: that a subscriber has ever been observed
-   * throwing in production. RC-14's row names a throw in here as one of
-   * three surviving explanations for an observed silent zero-fired verdict
-   * — a SURVIVOR, not a cause. This is a live hazard on a supported path;
-   * it is not a confirmed field defect.
+   * throwing in production. This is a live hazard on a supported path — the
+   * `program()` case above establishes that on its own — and not a confirmed
+   * field defect.
    *
-   * The ring entry is what makes a contained throw diagnosable at all
-   * (RC-14's Shape A dependency): a swallowed error with no record would
-   * trade one silence for another. Its detail carries the event kind AND
+   * **AND IT IS NO LONGER A CANDIDATE FOR THE WALKED SILENT VERDICT
+   * (updated 2026-09-09).** An earlier draft of this paragraph said RC-14's
+   * row named a throw in here as one of three surviving explanations. RC-14
+   * is CLOSED and its row now says in bold that nothing threw: the verdict
+   * fired and reached the ring, and the deferred teardown had serialised its
+   * snapshot one statement earlier. This isolation stands on its own merits;
+   * it never was the RC-14 fix.
+   *
+   * The ring entry is still what makes a contained throw diagnosable at all:
+   * a swallowed error with no record would trade one silence for another. Its detail carries the event kind AND
    * the error, so two different contained deliveries never coalesce into
    * one entry (`eventLog.record` collapses a CONSECUTIVE identical
    * kind+detail pair without advancing `seq`).
@@ -3992,11 +3998,22 @@ export function createPm5Driver(
     // makes that count come down silently, which is the same class of
     // silent-instrument failure RC-14 itself was.
     //
-    // The ordinal is per DRIVER, which is per logical session: this hook
-    // mints the log and the driver together inside one successful GATT
-    // connect, so `#1` is always this connection's first verdict. It also
-    // makes an eviction visible — a ring that has dropped its oldest
-    // entries starts at something other than `#1`.
+    // THE ORDINAL IS PER DRIVER, WHICH IS PER CONNECTION, and that is
+    // narrower than it sounds: `useMonitorSession` mints the log and the
+    // driver together inside one successful GATT connect, and every
+    // teardown hangs up — so a walk that leaves the connected screen
+    // between pieces gets a fresh log and a fresh `#1` for each one. Walk
+    // 2026-08-25 is the shape: two pieces, two ring files, each starting
+    // at `seq 0`, one verdict apiece. The walk procedure's "N pieces ⇒ N
+    // lines" is therefore a count ACROSS pasted logs, never within one,
+    // and `#N` above `#1` means one connection genuinely answered twice.
+    //
+    // AND THE FOLD IT PREVENTS HAS NO ESTABLISHED PRODUCER. Two verdicts
+    // can only be consecutive in one ring if two runs share one driver,
+    // which needs a door that replaces a run — and the RC-13 register work
+    // argues at length that neither door has a supported one. This is a
+    // class removed cheaply, not a sighting fixed; do not read it as
+    // evidence that a fold has ever happened.
     avgPaceVerdictsFiled += 1;
     const file = (detail: string): void => {
       log.record("avg-pace-verdict", `#${avgPaceVerdictsFiled} ${detail}`);

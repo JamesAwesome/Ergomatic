@@ -4958,11 +4958,22 @@ export function useMonitorSession(
           //     `recordAvgPaceVerdict(activeRun)`, and `disconnect()`
           //     calls it AFTER its own `await`. A reconcile re-armed
           //     during the terminate wait — a late 0x0039 reaching
-          //     `maybeReconcileImmediately` — therefore files its
-          //     `avg-pace-verdict` where no snapshot can see it. It cannot
-          //     bite today only because `reconcileAndReleaseHandoff()`
-          //     above drains the slot first, which is a fact about the
-          //     current call order and not a guarantee.
+          //     `maybeReconcileImmediately`, which arms unconditionally on
+          //     two of its arms while the driver's own transport
+          //     subscriptions stay live until `await t.disconnect()`
+          //     resolves — therefore files its `avg-pace-verdict` where no
+          //     snapshot can see it. **NOTHING NAMED HOLDS THAT SHUT.** An
+          //     earlier draft of this comment said
+          //     `reconcileAndReleaseHandoff()` drains the slot first; it
+          //     does, but it runs BEFORE `unsubscribeAndDisconnect()`, so
+          //     a re-arm during the terminate wait is by construction
+          //     AFTER that drain and the drain cannot be what stops it.
+          //     `linkGone` does not gate these subscribers either (it
+          //     gates `releaseStatusSubscriptions` only). Whether a late
+          //     0x0039 can actually land in that window is UNESTABLISHED,
+          //     and the fence deliberately does not depend on the answer:
+          //     the rule is that a post-`await` producer reaches no
+          //     snapshot, whether or not one happens to fire.
           //   - the driver's own 0x003A subscriber calls
           //     `recordRestDistanceVerdict`, and it stays subscribed until
           //     `await t.disconnect()` resolves — after this stash. A late

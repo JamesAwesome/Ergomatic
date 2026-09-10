@@ -62,12 +62,24 @@
 // (73 entries, seq 0..72, well inside `eventLog`'s 500-entry capacity, so
 // nothing was evicted) goes straight from `summary-reconciled — split-won`
 // to `disconnect-requested`, with NO `avg-pace-verdict` between them — the
-// silence RC-14 is open on. Replaying that walk's OWN recording produces a
+// silence that was RC-14. Replaying that walk's OWN recording produces a
 // ring that matches it entry for entry and then records the verdict in
-// exactly that gap. RC-14 stays open; what this file adds to it is that
-// the recorded wire stream is SUFFICIENT to produce the verdict, so
-// whatever swallowed it at the erg is not in the traffic. See the RC-14
-// row in ROADMAP.md for the rest of that finding.
+// exactly that gap. What this file contributed to that finding, and what
+// it still asserts, is that the recorded wire stream is SUFFICIENT to
+// produce the verdict, so whatever swallowed it at the erg was not in the
+// traffic.
+//
+// **RC-14 IS CLOSED (2026-09-09), and the answer was one frame below this
+// file's floor.** Nothing swallowed the verdict: it fired and reached the
+// in-memory ring. The deferred teardown had already serialised the
+// SNAPSHOT that becomes `MONITOR LOG · COPY`, because it was running
+// re-entrantly inside the driver's own event delivery, one statement
+// before `recordAvgPaceVerdict`. The fix takes a third snapshot once that
+// stack unwinds. This file could never have caught it and is not meant to
+// — it holds a log it constructs itself and never stashes; the gate lives
+// in `useMonitorSession.test.ts`'s RC-14 block. The walked capture's own
+// derivation is in `docs/monitor/sessions/walk-2026-08-25/README.md`,
+// under the dated addendum to finding W-2.
 
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";

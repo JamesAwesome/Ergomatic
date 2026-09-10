@@ -14129,6 +14129,14 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
     // count needs. The second half of this test feeds the two real details
     // into a fresh log BACK TO BACK and proves the consequence directly.
     //
+    // AND NO PRODUCTION PATH IS KNOWN TO PUT TWO VERDICTS IN ONE RING AT
+    // ALL. This test reaches the shape through the driver's own API,
+    // twice; in the product a driver is minted per connection and every
+    // teardown hangs up, so a second verdict needs a door that replaces a
+    // run inside one connection — and the RC-13 register work argues that
+    // neither door has a supported producer. The discriminator removes a
+    // class cheaply. It is not evidence that a fold has been observed.
+    //
     // ITS MUTANT: drop the ordinal from `recordAvgPaceVerdict`'s `file`
     // helper (`driver.ts`). Both runs then produce byte-identical text, the
     // `not.toBe` below fails, and the back-to-back log collapses to one

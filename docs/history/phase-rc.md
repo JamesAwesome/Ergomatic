@@ -2161,7 +2161,9 @@ item** and W3/W4 ride the same piece.
   (274 m against 274 m). `avg-pace-verdict` fired ZERO times across two
   pieces where it should have fired twice — once legitimately suppressed
   on the terminate, and once SILENT on the natural finish, which is
-  RC-14. The absence-is-a-finding clause below is the only reason the
+  RC-14. **[ADDENDUM 2026-09-09: "SILENT" is falsified — it fired and was
+  lost on the way to the log. See the dated addendum below.]** The
+  absence-is-a-finding clause below is the only reason the
   silence was noticed at all; the count rule (N pieces ⇒ N lines) is
   what caught it. The same walk also settled §23 items 2 and 4 (0x0039
   is cumulative and rest-exclusive) and unblocked RC-9(b), which was
@@ -2227,7 +2229,13 @@ terms, so nobody has to read a spec to apply it.**
   own summary arrived while the app was letting go). If either is there and
   a verdict line is missing, record the piece **INCONCLUSIVE** and re-walk
   it — do not file it. If neither is there, a missing line is a finding, and
-  the count rule applies as written.
+  the count rule applies as written. **Both markers are DEFERRED-path
+  markers**, so on a piece that ended with its summary already in hand you
+  will never see either — `disconnect-requested` is recorded after that
+  path's snapshot and is simply not in the log you pasted. That is not a
+  loophole: on that path the reconcile drains and files its verdict before
+  the snapshot is taken, so "neither marker present ⇒ a missing line is a
+  finding" is exactly right there.
 - **This is a real hole, not a hedge, and it is BOTH oracles.** The
   disconnect files `avg-pace-verdict` from its own drain, which runs after
   it waits on that owed write; and the monitor's 0x003A subscriber files
@@ -2237,12 +2245,17 @@ terms, so nobody has to read a spec to apply it.**
 - **NOT a finding, ever:** a missing terminate-observations entry after a
   hang-up that still owed a terminate write. Same window, and nothing ever
   promised to carry it.
-- **The lines now number themselves.** Every `avg-pace-verdict` entry opens
-  with `#N`, N counting the verdicts filed on that connection, so you read
-  the count off the numbers rather than by counting lines. A sequence that
-  does not start at `#1` means the ring evicted its oldest entries (500-entry
-  cap); a sequence that stops SHORT of the pieces you rowed means the later
-  verdicts were born after the log was sealed — the bound above.
+- **The lines now number themselves, PER CONNECTION — which on a normal
+  walk means every paste reads `#1`.** Every `avg-pace-verdict` entry opens
+  with `#N`, N counting the verdicts filed on that CONNECTION. A new piece
+  means leaving the connected screen, which hangs up, and the next piece
+  builds a fresh log and a fresh driver — so the count restarts. Walk
+  2026-08-25 is the shape: two pieces, two ring files, each starting at
+  `seq 0`, one verdict apiece. **So do not count pieces inside one paste.**
+  The count rule above is a rule ACROSS pastes: N pieces rowed, N pasted
+  logs, one verdict line in each. `#N` above `#1` only appears if one
+  connection genuinely answered twice, and that is worth reporting on its
+  own.
 - **The `FINISH_GRACE_MS` zero-fire this clause names is closed.** Both
   doors that replace a run now SETTLE the outgoing one instead of
   cancelling its pending verdict, so arming the next piece within 3 s of
