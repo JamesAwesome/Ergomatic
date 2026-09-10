@@ -895,8 +895,11 @@ worth knowing, not a defect.
   stated, not assumed. `scripts/` sits OUTSIDE `ci-changes.sh`'s docs-only
   allowlist, so PR 2 pays the full CI gate while PRs 1, 3 and 4 skip it.
 - **PR 3:** `closed` and `count` clean; **every eviction candidate confirmed by
-  hand against its row** (§6.2's false-positive table is the reason, and RC-14
-  is named there as a HELD order the vocabulary flags); every evicted row
+  hand against its row** (§6.2's false-positive table is the reason; RC-14 is
+  named there as a HELD order, and it has since CLOSED — PR 2's measurement
+  found the live false positives to be `AMENDED` and `NO LONGER CARRIES A
+  COUNT`, both now dropped from the vocabulary, and RC-14 to be a false
+  NEGATIVE whose disposition sits in a table's second cell); every evicted row
   findable at its new home; before/after tallies from §8.1 at PR 3's own tree.
 - **PR 4:** `stamps` clean; the `dies` distribution printed.
 

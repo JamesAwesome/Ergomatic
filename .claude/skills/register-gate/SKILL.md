@@ -69,8 +69,10 @@ the vocabulary on that evidence. Confirm each candidate against its row before
 acting, and never quote the count as debt closed.
 
 The reverse also happens and the script cannot see it: a table row's
-disposition often sits in the SECOND cell while the predicate reads the first,
-so `closed` misses it. Hand-scan register tables as well as running this.
+disposition sits in a later cell while the predicate reads the first, so
+`closed` misses it. Measured on `ROADMAP.md`: FOUR register-table rows are that
+shape, of roughly 27, and three are genuine misses. Hand-scan register tables
+as well as running this.
 
 ## 2. The judgements
 

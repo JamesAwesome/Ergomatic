@@ -363,7 +363,7 @@ requirements).
     subject is a place in the code is a comment at that place, unless it also
     has a schedule; the test is "does this have a schedule", not "is this
     true". This is the rule that funds rule 1 — dead strikeable inventory is
-    ~28 rows against 6.75 filings/day, under five days of currency, after
+    26 register rows against 6.75 filings/day, under five days of currency, after
     which a ratchet alone either yields on every PR or blocks real findings.
     **Two exceptions, both measured.** RF29 stands: a change that makes code
     unreachable still files its removal row, because the reader who would

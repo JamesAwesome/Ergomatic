@@ -2825,7 +2825,7 @@ them owes no strike. They are dispositioned by `/close-phase RR`.
       fixtures (failing test first), wired into CI's `scripts` job; one of
       SEVEN whitelisted class markers on every section that can hold a row;
       **rules 1 and 3 in `CLAUDE.md`, together, because rule 3 is
-      what funds rule 1** — dead strikeable inventory is ~28 rows against
+      what funds rule 1** — dead strikeable inventory is 26 register rows against
       6.75 filings/day, so a ratchet shipped alone is unpayable inside five
       days; the `/register-gate` skill; `/close-phase TD`'s refusal.
       **Measured at `f8e296ac`** — `register.sh count ROADMAP.md`:
@@ -2851,13 +2851,22 @@ them owes no strike. They are dispositioned by `/close-phase RR`.
       `ratchet` cannot measure its own introducing PR, because the base
       predates the markers. Merging main resolves it from PR 3 on; treating an
       unmarked section as a default class is the fail-open I9 forbids.
-      **Ticked at merge, not before** — PR 1's row was ticked in advance here
-      and the section contradicted itself three lines later.
+      **Ticked at merge, not before** — this row was ticked in advance and the
+      section contradicted itself three lines later. PR 1's tick above is
+      legitimate; #386 is merged.
 - [ ] **PR 3 — the eviction.** Already-closed rows out of the register and into
       `docs/history/`, and the one malformed table row repaired. **Every
       candidate is confirmed BY HAND** — the vocabulary has measured false
-      positives, including RC-14, a HELD order of James's whose row contains the
-      words "NOT DISCHARGED BY IT". **Its body must say this closes ZERO open
+      positives — an `AMENDED` row whose facts were corrected rather than
+      closed, and one that says it "NO LONGER CARRIES A COUNT" precisely
+      because it is open; both tokens were dropped from the vocabulary on that
+      evidence in PR 2. **What survives is the opposite failure:** a table
+      row's disposition sits in a later cell while the predicate reads the
+      first, so `closed` MISSES it. Four register-table rows are that shape
+      today — `C2 account injection`, `ambiguous_auth`, `RC-13` and `RC-14` —
+      of roughly 27 register table rows, and three are genuine misses. PR 3
+      hand-scans table second cells as well as running the script.
+      **Its body must say this closes ZERO open
       work**: file hygiene against a register growing 6.75/day, not debt
       closure. The count comes from the spec's §8.1 at PR 3's own tree.
 - [ ] **PR 4 — `dies`.** `stamps` and `expired`, `/close-phase` Phase 4 step 5's
@@ -2894,7 +2903,10 @@ useful part:**
   matched zero rows because the file writes `ASKED AND ANSWERED` — so dead
   inventory was undercounted at 21. Widening it over-caught row IDs and
   emphatic openers (`TWO`, `TIER B2`, `RC-38`, `AUD-012`, `PWA`), and matching a
-  row's BODY flags **RC-14 on the words "NOT DISCHARGED BY IT"** and Phase TD on
+  row's BODY flagged **RC-14 on the words "NOT DISCHARGED BY IT"** (that row
+  has since closed — `DONE — fixed 2026-09-09` — and is now a false NEGATIVE
+  instead, its disposition sitting in cell 2 where the predicate reads cell 1)
+  and Phase TD on
   `RESOLVED` inside **`UNRESOLVED`**. It now matches the row TITLE only, with
   word boundaries, a negation guard and `- [ ]` as a hard OPEN override, reports
   CANDIDATES, and is graded a HEURISTIC.
