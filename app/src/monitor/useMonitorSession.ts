@@ -4897,18 +4897,33 @@ export function useMonitorSession(
           // turn with no timer advanced and goes red against the timer
           // version.
           //
-          // THE SESSION IS CAPTURED, NOT RE-READ, matching `stash`'s own
-          // ONE READ discipline: a microtask checkpoint drains the WHOLE
-          // queue in order, so a connect continuation already queued ahead
-          // of this one could in principle mint a fresh logical session
-          // (that code path assigns `sessionRef.current` synchronously
-          // after its `await transport.connect(...)`) before this callback
-          // runs — and a third stash of THAT session's near-empty log
-          // would overwrite the legacy keys with the very trace this
-          // linger exists to preserve. No test reaches it and none is
-          // asked to (RF21): it is the same "two refs that could legally
-          // disagree" hazard `stash`'s own round-5 fix removed, refused
-          // here by construction rather than argued away.
+          // THE SESSION IS CAPTURED HERE, NOT RE-READ INSIDE THE
+          // CALLBACK, and the reason is stated as a REQUIREMENT rather
+          // than as an observation about today's call graph: **this stash
+          // must write the session THIS teardown serialised, whatever runs
+          // between the queueing and the microtask checkpoint.** A
+          // checkpoint drains the WHOLE queue in order, so anything
+          // already queued ahead of this callback runs before it, and
+          // `sessionRef.current` is assigned SYNCHRONOUSLY once a GATT
+          // connect resolves — so "nothing can mint a session in that
+          // window" would be a claim about what happens to be queued
+          // today, not a property of the deferral. This driver and this
+          // hook have both been caught this week arguing their own safety
+          // from a call graph that then changed underneath them; the
+          // capture removes the question instead of answering it.
+          //
+          // WHAT BREAKS IF THE REQUIREMENT STOPS HOLDING: a third stash of
+          // a FRESH session's near-empty log overwrites all three legacy
+          // keys with the wrong session's bytes — destroying the very
+          // trace this linger exists to preserve, and filing it under the
+          // id of a session that never rowed.
+          //
+          // Same ONE READ discipline `stash` itself carries (round 5, item
+          // 1): one value, read once, so no interleaving can pair one
+          // session's trace with another's identity. No test reaches the
+          // guard and none is asked to — it is refused by construction
+          // rather than argued away, the same defensive-branch case
+          // `lastRowingFrameRef`'s clear above already carries (RF21).
           //
           // THE FENCE, NAMED. Entries a producer records after its OWN
           // `await` are outside this invariant and are not in any snapshot
