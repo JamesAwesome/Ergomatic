@@ -52,7 +52,14 @@ queued" is neither once it passes a couple of hundred rows, and it had.
 required even when the row also names a trigger, because Phase OD measured a
 row whose trigger had already fired sitting twenty days. Rows filed before that
 date carry none and are not being migrated; a row gets one the next time any PR
-touches it. The final PR of any piece of work puts two lists in front of James
+touches it. **A WAVE IS STAMPED ON ITS STATUS LINE, NOT ROW BY ROW (ruled by
+James 2026-09-10).** A wave's rows are the scope of one sequenced piece of work
+and they all die together when it closes, so dating them individually writes
+the same clause five times — which is the tell that the row is the wrong unit.
+The wave carries one date, and it answers the question that actually rots: has
+this wave OPENED. Wave D's simulator row records its own subject as "two waves
+out and on no calendar", which is the furniture failure at wave size and is
+what the heading stamp catches. The final PR of any piece of work puts two lists in front of James
 before anything is filed: what it proposes to add, and every row anywhere whose
 date has passed. Nothing is struck without him.
 
@@ -464,7 +471,19 @@ recorded in PR 2's body; release note in rower words (spec §6.6).
 ## Wave A — The front door
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
-closeout. **TRIAD** (auth). **L.**
+closeout. **TRIAD twice — auth AND stored shape** (the second half found
+2026-09-10; see the sign-up row). **L.**
+· dies 2026-10-10 (set 2026-09-10 under the wave-heading rule above) · a month
+after being named next; if the front door has not opened by then the north star
+has gone unfunded for a month, and that comes back to James rather than sliding
+another wave.
+
+**PR 1 IS KNOWN AND IS INDEPENDENT OF THE POLICY DECISION.** `users` has one
+identity column and it is NOT NULL, so lifting identity — `google_sub`
+nullable, or its own table — is the same migration whichever door the gate
+picks. **It is schedulable now, before the policy question is answered**, and
+doing it first means the policy PR is a policy PR rather than a policy PR
+carrying a migration.
 
 **Goal:** someone you have never met installs the build, gets an account, rows,
 and can delete everything from inside the app.
@@ -526,8 +545,14 @@ it lands the stranger on this same denial.
       belongs on the list; it is not a recommendation, because it trades one
       build for a password/reset/verification surface we do not have and
       takes away the one-tap door every current tester uses.
-      **That trade is UNPRICED — nobody has sized the own-accounts surface
-      (RF30: if it is ruled out, it gets a measured reason, not a clause).**
+      **That trade is UNPRICED, and the SPEC is where it gets priced —
+      ruled 2026-09-10, not a separate errand before the spec.** Pricing one
+      option in isolation produces a list where one member has a number and
+      the rest have adjectives; the option list is costed as a list, in one
+      pass, so the comparison is real (RF30: a ruled-out option gets a
+      measured reason, not a clause). What the pricing must cover: password
+      storage, a reset flow with real email delivery, verification, and the
+      migration of every existing tester off a Google identity.
       And note the exemption's word is _exclusively_: adding our own accounts
       BESIDE Google discharges nothing.
       **AND THE ROW IS TRIAD TWICE OVER, not once — found 2026-09-10 while
@@ -988,7 +1013,11 @@ external testers"_), never App Store listing metadata. **That is a claim about
 which FIELDS exist, and it was not researched field by field** — in particular
 nothing here says whether 5.1.1(i)'s privacy-policy requirement reaches a beta
 build. **Whoever opens Wave C runs that check; this is a narrowed premise, not
-a settled one.** **PWA installability is deferred on a product ground, not
+a settled one.**
+· dies 2026-11-10 · filed rather than fixed now because the answer only binds
+before Wave C ships, and Wave C is two waves out; if it has not opened by then
+the quotes need re-reading anyway, so the check and its freshness expire
+together. **PWA installability is deferred on a product ground, not
 a scheduling one:** CLAUDE.md's native-first rule says the web build is test
 harness, dev loop and fallback, "never polished at the app's expense", and
 installability polishes it.
