@@ -6366,3 +6366,84 @@ criteria rather than on "nothing is reachable anyway".
 in one session misread it as already fixed. A row whose framing an antagonist
 has just falsified gets REWRITTEN in the same PR — with the date of the guard
 that closed it — or the next reader is the third.
+
+## 2026-09-09 — Phase RR open (the register ratchet): a ratchet's currency is a measurable quantity, and this one has five days of it
+
+**Ruling: CONDITIONAL PASS, build now, with the slate re-ordered.** The disease
+is measured and monotone — register rows went **36 → 117 across twelve
+consecutive days** (one sample per day of ROADMAP-touching merges on `main`),
+**+6.75 rows/day, no down day** — while `ROADMAP.md` itself shrank **2,625
+lines** over the same window. **Argue the row count, never the line count:** the
+spec led with "grew 384 lines in one day", which is the one axis that is
+improving, and the row trend is a far stronger case than the one it made.
+
+**A RATCHET'S CURRENCY IS COUNTABLE, AND YOU MUST COUNT IT BEFORE ENDORSING
+ONE.** "File N, strike N" is only payable while strikeable rows exist. Measured:
+**32 already-dead rows** of inventory (21 the spec's own `closed` regex sees,
+plus **11 more it cannot** — this file writes `DISCHARGED`, `RULED KEEP`,
+`ACCEPTED (…)`, `DISPOSED` and `~~strike~~ … DONE` mid-line, not at the bullet
+opener) against **6.75 filings/day** = **under five days of currency**. After
+that a ratchet either yields on every PR (a gate that always yields, forbidden
+by "spend proportionally") or blocks real findings. **The rule that FUNDS a
+ratchet ships in the same PR as the ratchet**; here that is "a finding defaults
+to a code comment", which covers ~45% of rows and would alone have prevented
+three of the five rows that triggered the phase. Sequencing by dependency is not
+deferral — but say so explicitly, because it looks identical to
+filing-as-deferral from the outside.
+
+**AN EVICTION OF CLOSED ROWS CLOSES NO OPEN WORK.** The headline win — ~32
+already-closed rows evicted — leaves the open population at 85 before and 85
+after. Same shape as this ledger's standing "report the triple" warning: file
+hygiene reported as debt closure reads as the largest improvement in the
+project's history for an afternoon of tidying. Make the PR body say which it is.
+
+**THE CLASS A "FINDINGS GO IN CODE COMMENTS" RULE LOSES IS THE ABSENT-EVIDENCE
+CLASS, AND IT IS THE MOST DANGEROUS ONE HERE.** 47 of 85 open register rows name
+no code artifact; 11 of 11 owed-capture rows need James at an erg. A comment
+needs a site, and "nobody has measured that hop 2 works" has no site — the
+producer is a human in a browser. That is RF11's and RF24's class, the class
+that caught a 3.9x distance error and a feature reaching zero of sixteen
+production rows, and both were caught because someone wrote down "nobody has
+checked this." **Any scheme that charges for filing or expires by default needs
+an exempt class for unscheduled DEBT** — and in this repo the ROADMAP's own head
+already declares `Phase TD` "deliberately not scheduled", so the spec was asking
+16 rows for a date its own file forbids them to have. **This was the binding
+condition whose refusal would have been a FAIL.**
+
+**A DECIDE BATCH IS SIZED BEFORE JAMES IS ASKED WHETHER IT IS TOO BIG.** The
+spec asked him whether "more than roughly a dozen" rows is acceptable as one
+list; the floor is **37** (Owed captures 11, audit owners 9, say-which-number 5,
+TD 5, Tooling 4, Icebox 3) before touching the 46 rows in the two sections whose
+titles are literally "rides the next PR", and realistically 50-60. **Ask for one
+class default per class, not one ruling per row** — a default he chooses is his
+condition, not an invented one, so it does not breach RF30.
+
+**CEREMONY GOES ON A TRIGGER SOMEONE CAN'T MISS, NOT ON THE COMMONEST EVENT.**
+The gate skill was slated to run on every PR touching `ROADMAP.md`: **122 of 179
+merges** in 14 days, **8.7/day**. Phase closes run **2/day**. Attach a
+register-hygiene skill to the close, not to the touch.
+
+**TWO RULINGS THAT COLLIDE ONE DAY APART, AND THE SPEC CITED ONE IN ITS OWN
+SUPPORT.** (1) The spec's skill refuses trigger-form rows; the ROADMAP's own
+head carries James, 2026-09-08: "a filed row needs either a TRIGGER … or a
+PHASE." (2) It cited Phase OD as establishing that triggers rot, when OD's
+record FALSIFIES the dates remedy by name — a live order with an ACTIVE, FIRED
+trigger that sat 20 days — and replaced it with "an order's OPEN QUESTION is
+scheduled before the order is", 4-for-4. **When a phase opens one day after
+another on the same disease, read the earlier phase's FALSIFIED diagnoses, not
+just its subject line.** A one-day-old measured falsification of your own remedy
+is the cheapest finding available and the easiest to walk past.
+
+**Displacement: none from Wave A item 1, which is still owed.** The accepted OD
+counter-offer was half a day on debt (paid, as OD) and half on Wave A's first
+item (an **S** whose result may shrink an **L** wave to the front door alone).
+It is browser-and-quotes work competing for no hands a bash script needs; both
+are this week. **Two days running now, a process phase has been slated ahead of
+that S. The third time, say no.**
+
+**Release: no tag, no tester impact, nothing under `app/`.** Worth recording
+because it is the clean case: `scripts/` sits outside `ci-changes.sh`'s
+docs-only allowlist, so the mechanism PR pays the full gate while the
+ROADMAP-only PRs skip it — and no CI job ever checks the real `ROADMAP.md`,
+which is the correct consequence of James choosing advisory over blocking, and
+the second reason the skill belongs on the close.
