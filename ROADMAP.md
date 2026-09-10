@@ -2022,29 +2022,48 @@ fixed.
     observation (the churn spans concept2, justrow, diagnostics and log
     captures, "so it smells like seeded data or a date rather than
     antialiasing") is consistent with the clock.
-  **Causes now measured:** the clock rendered into the frame (2026-09-07);
-  a trace chart whose axis ticks follow REAL elapsed test time (`log-monitor`:
-  `0:00/0:05/0:10/0:15` one run, `0:00/0:10/0:20` the next); a focus-dependent
-  hint that comes and goes (`you-derive-offer-accepted`:
-  `ESTIMATED · TYPE TO ADJUST` vs `ESTIMATED`); and the per-day seeded date
-  stamp. **Still unexplained:** which cause owns which files — no run has
-  attributed a count file by file — and whether anything is left once all four
-  are frozen. The 2026-08-28 control says the residue is environmental rather
-  than PR-shaped, which is a bound on the answer, not the answer.
+  **ATTRIBUTED 2026-09-10, and the cause list this row carried was wrong in
+  both directions.** Full measurement and evidence:
+  [the churn spec](docs/superpowers/specs/2026-09-10-screenshot-churn-design.md).
+  The headline: of 67 files differing from committed, only **36 actually
+  churned** — the other 33 reproduced byte-for-byte across two runs and were
+  simply STALE, so every prior filing (which counted the 67) over-reported by
+  half. **Two of the four causes above cannot be live:** the focus-dependent
+  hint's copy was DELETED on 2026-08-28 (`BaselineEditor.tsx:135-144`) and its
+  file is byte-stable, and no `log-monitor*` capture is nondeterministic at
+  all. **The two largest causes were never named here** — a generated identity
+  carrying `Date.now()` (`helpers.ts:117`, spliced into every e2e user's email
+  and rendered on screen), and a capture taken before the suggestion fetch
+  settles, which lands `LOADING…` in the frame (RF7's own failure mode, hiding
+  inside a churn count).
   **Why it matters:** committed captures are the PR's visual record (RF7) and
   a reviewer's only look at a screen. A `git status` full of noise buries the
   frames a change actually altered — PR #341 reverted 61 by hand twice, and
   Phase MT's PR worked around it by adding only the two frames its rule could
   touch and discarding the rest.
-  **Fix:** freeze the clock the captures render, the way the fixtures already
-  freeze their data; then re-measure and attribute what survives.
-  To reproduce: run `pnpm screenshots` twice at the same commit, saving the
-  first run's PNGs, and diff run against run. **The 2026-08-30 measurement is
+  **DONE so far:** eight captures fixed and 33 stale ones recaptured (frozen
+  diagnostics clock, pinned suggestions, two settle waits).
+  **STILL OPEN, and each needs a decision because neither is fast path:**
+  (1) the generated identity, ~12 files — the fix is a FRESH DATABASE per
+  screenshots run so a stable `RUN_ID` becomes safe, which also retires the
+  kept-stack idempotency class; its cost is unmeasured. (2) `loggedAt`,
+  ~9 files — `storedSummary.ts:439` formats a Postgres `defaultNow()` and
+  `server/stores/logs.ts:775` says it is "not settable by `create()`'s
+  input", so closing it needs a server seam.
+  **Two traps for whoever picks this up, both measured here:** back-to-back
+  runs MASK the identity cause (the epoch prefix is stable inside an hour and
+  the UI truncates the email), and one pair of runs is an anecdote — 43
+  distinct files churned across three pairs and only 9 churned in all three.
+  **The 2026-08-30 measurement is
   written out here rather than cited**, because that round's report lives
   under git-excluded `.superpowers/` and a citation into it is unreachable to
   anyone but the session that wrote it (RF16's corollary). **M** — the
   largest of the folded rows' own sizings; the 2026-08-28 filing carried
   **S/M** and the 2026-09-07 and 2026-09-08 filings **M**.
+  · dies 2026-10-10 (dated on the way past, 2026-09-10) · the two remaining
+  causes each need a ruling before they can be built, and a row that has been
+  sighted six times in four weeks has earned a date rather than a seventh
+  sighting.
 - **`src/monitor/useMonitorSession.test.ts` — a pre-existing flake**
   (`listSessionLogs()` expected length 1, got 2: an extra session-log ring
   entry, RF27's own territory) fired once during PR1.75b's coverage runs,
