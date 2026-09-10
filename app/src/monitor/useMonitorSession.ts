@@ -2789,7 +2789,35 @@ export function useMonitorSession(
    *  linger's own `BURST_LINGER_MS` timeout). `null` at every other time,
    *  including every OTHER teardown cause, so a `summary-observations`
    *  event arriving outside a linger (the ordinary in-grace "split-won"
-   *  case, still mounted) finds nothing here to call. */
+   *  case, still mounted) finds nothing here to call.
+   *
+   *  **NOT CLEARED BY `connect()`, AND UNREACHABLE ANYWAY — the layer that
+   *  holds that is not in this file's linger code, so it is written down
+   *  here rather than assumed (RC-14's RF27 pass, 2026-09-09).** Only
+   *  `finish` clears this ref and its sibling below; neither `connect()`
+   *  nor `teardown()`'s own entry does. A linger surviving into a fresh
+   *  `connect()` on the same hook instance is nonetheless impossible today,
+   *  and here is why, in four reads: `teardown` has exactly two callers —
+   *  `cancel()` and the unmount effect `useEffect(() => teardown,
+   *  [teardown])`; that effect's identity is stable, so its cleanup fires
+   *  only at unmount; `cancel()` returns early on `phase === "live" ||
+   *  phase === "ended"`; and every close that can set a burst-eligible
+   *  `endedBy` (`"finished"`/`"rower"`) writes `phase: "ended"` in the same
+   *  synchronous body. So `cancel()` can never reach the linger-arming
+   *  branch, only the unmount can, and an unmount destroys the hook
+   *  instance along with these refs.
+   *
+   *  **WHAT FLIPS IT**, i.e. what to re-check before relying on the above:
+   *  (a) any future close that sets a burst-eligible `endedBy` without the
+   *  paired `phase: "ended"` in the same statement; (b) any relaxation of
+   *  `cancel()`'s `live`/`ended` refusal (its guard carries the other half
+   *  of this note); (c) any surface offering Connect at `ended` on a LIVE
+   *  hook instance.
+   *
+   *  **AND THE CONSEQUENCE IF IT FLIPS IS NOT COSMETIC:** a stale `finish`
+   *  reads `unsubscribeRef.current` LIVE, so it would unsubscribe the NEW
+   *  session's listener while hanging up a driver captured at the OLD
+   *  teardown — the app goes deaf to the erg behind a connected screen. */
   const lingerFinishRef = useRef<(() => void) | null>(null);
 
   /** The burst linger's own timeout canceller (`schedule`'s return value),
@@ -2800,7 +2828,11 @@ export function useMonitorSession(
    *  trigger reaches it first, and assigning across that boundary through
    *  a plain closure variable trips `react-hooks/immutability` — the
    *  reassignment lands in the outer scope after the closure that reads it
-   *  has already been handed off (to `lingerFinishRef.current` above). */
+   *  has already been handed off (to `lingerFinishRef.current` above).
+   *
+   *  Same lifetime and the same unreachable-today gap as
+   *  `lingerFinishRef` — that ref's own comment carries the four reads, the
+   *  three things that flip it, and what breaks when they do. */
   const burstLingerCancelRef = useRef<(() => void) | null>(null);
 
   /** Storage-spine design spec §2, Task 3: releases EVERY owed condition
@@ -4237,6 +4269,31 @@ export function useMonitorSession(
         // what clears it, so the identical function stays callable
         // idempotently from EITHER trigger without this call site needing
         // to know which one fired first.
+        //
+        // **THIS CALL IS A DRIVER `emit` RE-ENTERING THE HOOK'S OWN
+        // UNSUBSCRIBE AND HANG-UP, and that hazard is still live (RC-14,
+        // fixed at the snapshot rather than here).** We are executing
+        // inside `driver.ts`'s `for (const cb of listeners)` loop, on the
+        // stack of whatever produced the observations event; `finish` runs
+        // `driver.reconcile()`, `releaseHandoff("teardown")` and
+        // `driver.disconnect()` to completion before this handler's own
+        // next statement. RC-14 was the visible consequence — the deferred
+        // teardown serialised its snapshot one statement before the driver
+        // recorded the run's avg-pace verdict — and the fix took a third
+        // snapshot once this stack unwinds rather than moving this call.
+        //
+        // THE SHAPE THAT WOULD CLOSE THE CLASS, if something other than a
+        // snapshot ever depends on the ordering: defer this call off the
+        // emitting stack. It was measured and REFUSED for RC-14 (PM ruling,
+        // 2026-09-09) on two grounds. It buys about a third of the class —
+        // `handleEvent` has at least two OTHER branches that unsubscribe
+        // and `bestEffort(driver.disconnect())` on the emitting stack, and
+        // `disconnect()` itself re-enters `drainSummaryReconcile` into a
+        // nested emit. And it costs a BLE hang-up re-timed by one turn,
+        // which is RF19's class: a hang-up that does not happen is
+        // invisible to every instrument this repo owns. Deliberately not a
+        // ROADMAP row — nobody browsing the register is about to edit this
+        // line, and the row would have no closing condition.
         lingerFinishRef.current?.();
         return;
       }
@@ -4555,7 +4612,12 @@ export function useMonitorSession(
       // have not run yet at all, so this is a floor, not the last word —
       // a burst still in flight gets a SECOND stash once they finally do
       // (rewritten from "would never reach sessionStorage" to name it,
-      // storage-spine design spec §2, Task 3).
+      // storage-spine design spec §2, Task 3), and RC-14 added a THIRD
+      // once the stack that triggered that second one has unwound. The
+      // deferred path therefore stashes three times and the immediate path
+      // once; `stash()` is safe to repeat (`session.latchCounted` plus an
+      // identity-bound upsert — its own body says how), so "three" is a
+      // count of snapshots, not of history entries.
       // sessionStorage, not localStorage, for the two keys above:
       // diagnostics for the tab's own lifetime, not a record. Read them
       // back from the console:
@@ -4744,10 +4806,25 @@ export function useMonitorSession(
           unsubscribeAndDisconnect();
           // THE SECOND STASH (spec §2's own "a second ring stash runs at
           // linger end"): the first stash above could not see whatever
-          // STEPS 1/3/4 just wrote to the ring — the drain's own verdict
-          // entry, the disconnect's own entries, and the burst's own
+          // STEPS 1/3/4 just wrote to the ring — the disconnect's own
+          // entries, and the burst's own
           // `summary-observations`/`record-actual` entries if it arrived
           // during the wait. Same keys, overwrite.
+          //
+          // **IT SEES THE DRAIN'S OWN VERDICT ENTRY ON ONE OF THE TWO
+          // TRIGGERS ONLY, and this sentence used to claim both (RC-14).**
+          // On the LINGER TIMEOUT this function runs on the hook's own
+          // stack: `lingerFinishRef` is cleared above before
+          // `reconcileAndReleaseHandoff()`, so the driver's re-entrant
+          // `lingerFinishRef.current?.()` is a no-op, the verdict is
+          // recorded while this function is still between that call and
+          // this line, and the second stash carries it. On the BURST
+          // trigger this whole function is running INSIDE the driver's
+          // `emit`, one statement short of `recordAvgPaceVerdict` — so
+          // this stash cannot carry it, and the third stash below is what
+          // does. That asymmetry was the RC-14 defect; the comment claiming
+          // otherwise sat here, inside the function, for the whole nine
+          // days the walk's silence went unexplained.
           //
           // NOT A SUPERSET, and said so precisely (review fix round 1,
           // MEDIUM finding — the earlier wording here claimed "strictly
@@ -4765,8 +4842,159 @@ export function useMonitorSession(
           // under two seconds to happen at all — bounded, not impossible —
           // and this is the walk's own readout door regardless (exit
           // criterion 7: "the ring's SECOND stash ... without it the walk
-          // sees nothing").
+          // sees nothing"). RC-14's third stash below inherits this
+          // paragraph unchanged: it is a THIRD window on the same ring,
+          // taken a microtask later, so it is a superset of this one only
+          // in the same bounded sense — everything recorded between the two
+          // is present, anything the ring evicted in between is not.
           stash();
+          // THE THIRD STASH (RC-14), AND THE INVARIANT IT BUYS.
+          //
+          // **Every entry a session records SYNCHRONOUSLY BENEATH the
+          // teardown that serialises it, up to the moment that teardown
+          // takes its LAST snapshot, reaches that snapshot.** That is a
+          // BOUNDED claim and both halves of the bound are load-bearing.
+          //
+          // "BENEATH" MEANS ON THE STACK WHEN THE SNAPSHOT IS TAKEN, not
+          // "anywhere later in this teardown's own body" — and the
+          // difference is not academic, because the IMMEDIATE path below
+          // falsifies the looser reading: it runs `stash()` and THEN
+          // `unsubscribeAndDisconnect()`, whose `disconnect-requested` is
+          // recorded synchronously beneath the same teardown and is
+          // deliberately absent from that snapshot (STEP 2's own comment
+          // says so, and the ordering-pin test holds it there). The claim
+          // is about what a snapshot can still be MISSING that was already
+          // produced, not about every statement the teardown goes on to
+          // run.
+          //
+          // WHAT WAS LOST. On the BURST trigger this whole function runs
+          // re-entrantly, inside the driver's own `emit`: the driver's
+          // reconcile calls `reconcileSummary`, whose last act is
+          // `emit(summaryObservationsEvent(...))`; `emit` delivers
+          // synchronously; the hook's `summary-observations` case ends
+          // with `lingerFinishRef.current?.()`, which is this function. So
+          // the second stash above is serialised while the driver is still
+          // one statement short of `recordAvgPaceVerdict(run)` — the
+          // avg-pace oracle's own line, one of the two genuinely
+          // independent oracles RC-9 built after RF11's mirror problem
+          // retired `recordTwdVerdict`. It reached the in-memory ring and
+          // died with the tab. Walk 2026-08-25 (`W-2`) read that silence
+          // as "the function was never reached", which is exactly what the
+          // walk procedure is told to treat as a finding.
+          //
+          // A THIRD SNAPSHOT, NOT A DELAYED SECOND ONE. The second stash
+          // above stays exactly where it is, so the worst this call can do
+          // is leave today's bytes — it can only ADD. Moving the second
+          // stash out here instead would make a lost or throwing deferral
+          // fall back to the LINGER-START snapshot, which carries neither
+          // the disconnect entries nor the burst's own observations: less
+          // than today. It is free to run again — `session.latchCounted`
+          // guards the one non-idempotent line inside `stash`, and
+          // `upsertSessionLog` is an identity-bound upsert keyed on
+          // `session.id` (that module's own header), so N stashes per
+          // logical session update ONE history entry rather than filling
+          // the three-slot ring with clones of one trace.
+          //
+          // `queueMicrotask`, NEVER A TIMER, and this is a gate rather
+          // than a preference: a microtask checkpoint runs when the JS
+          // stack empties, BEFORE control returns to the event loop, and
+          // `pagehide`/`freeze`/backgrounding are all delivered as tasks —
+          // so none of them can interleave between the queueing here and
+          // the checkpoint that runs it. A `setTimeout(..., 0)` deferral
+          // can be lost to exactly those. The only residual is process
+          // termination, where nothing runs at all and the two
+          // `sessionStorage` keys die anyway (this teardown's own STEP 2
+          // comment says why the third key is `localStorage`). The test
+          // "RC-14, THE DEFERRAL IS MICROTASK-CLASS" flushes one microtask
+          // turn with no timer advanced and goes red against the timer
+          // version.
+          //
+          // THE SESSION IS CAPTURED HERE AND THE CALLBACK REFUSES ON ANY
+          // OTHER ONE (it re-reads the ref only to compare, never to
+          // choose what to write), and the reason is a REQUIREMENT rather
+          // than as an observation about today's call graph: **this stash
+          // must write the session THIS teardown serialised, whatever runs
+          // between the queueing and the microtask checkpoint.** A
+          // checkpoint drains the WHOLE queue in order, so anything
+          // already queued ahead of this callback runs before it, and
+          // `sessionRef.current` is assigned SYNCHRONOUSLY once a GATT
+          // connect resolves — so "nothing can mint a session in that
+          // window" would be a claim about what happens to be queued
+          // today, not a property of the deferral. This driver and this
+          // hook have both been caught this week arguing their own safety
+          // from a call graph that then changed underneath them; the
+          // capture removes the question instead of answering it.
+          //
+          // WHAT BREAKS IF THE REQUIREMENT STOPS HOLDING: a third stash of
+          // a FRESH session's near-empty log overwrites all three legacy
+          // keys with the wrong session's bytes — destroying the very
+          // trace this linger exists to preserve, and filing it under the
+          // id of a session that never rowed.
+          //
+          // Same ONE READ discipline `stash` itself carries (round 5, item
+          // 1): one value, read once, so no interleaving can pair one
+          // session's trace with another's identity. No test reaches the
+          // guard and none is asked to — it is refused by construction
+          // rather than argued away, the same defensive-branch case
+          // `lastRowingFrameRef`'s clear above already carries (RF21).
+          //
+          // THE FENCE, NAMED — AND IT IS THE HANG-UP, NOT THE TEARDOWN.
+          // Entries a producer records after its OWN `await` are outside
+          // this invariant and are in no snapshot this teardown takes. The
+          // producer is `driver.disconnect()`, started just above as
+          // `bestEffort(...)` and never awaited: it records
+          // `disconnect-requested` synchronously, then suspends on
+          // `await terminateWritesDrained` whenever a terminate write is
+          // still owed, and only afterwards reaches
+          // `drainSummaryReconcile` and `await t.disconnect()`. A
+          // microtask runs BEFORE a post-`await` continuation, so this
+          // stash is already written by then.
+          //
+          // **THAT TAIL CAN FILE EITHER ORACLE'S OWN VERDICT, so "an
+          // absent verdict IS a finding" must never be restated
+          // absolutely.** Two producers live past the hang-up, and both
+          // are named rather than left to a call graph:
+          //   - `drainSummaryReconcile` ends with
+          //     `recordAvgPaceVerdict(activeRun)`, and `disconnect()`
+          //     calls it AFTER its own `await`. A reconcile re-armed
+          //     during the terminate wait — a late 0x0039 reaching
+          //     `maybeReconcileImmediately`, which arms unconditionally on
+          //     two of its arms while the driver's own transport
+          //     subscriptions stay live until `await t.disconnect()`
+          //     resolves — therefore files its `avg-pace-verdict` where no
+          //     snapshot can see it. **NOTHING NAMED HOLDS THAT SHUT.** An
+          //     earlier draft of this comment said
+          //     `reconcileAndReleaseHandoff()` drains the slot first; it
+          //     does, but it runs BEFORE `unsubscribeAndDisconnect()`, so
+          //     a re-arm during the terminate wait is by construction
+          //     AFTER that drain and the drain cannot be what stops it.
+          //     `linkGone` does not gate these subscribers either (it
+          //     gates `releaseStatusSubscriptions` only). Whether a late
+          //     0x0039 can actually land in that window is UNESTABLISHED,
+          //     and the fence deliberately does not depend on the answer:
+          //     the rule is that a post-`await` producer reaches no
+          //     snapshot, whether or not one happens to fire.
+          //   - the driver's own 0x003A subscriber calls
+          //     `recordRestDistanceVerdict`, and it stays subscribed until
+          //     `await t.disconnect()` resolves — after this stash. A late
+          //     0x003A in the hang-up window files a
+          //     `rest-distance-verdict` the same way.
+          //
+          // SO THE HONEST READING, and the one the walk procedure now
+          // carries: everything this session records up to and including
+          // the hang-up reaches the snapshot, so a verdict missing for a
+          // piece whose own summary frames are already IN the log is a
+          // finding. A verdict missing because its evidence arrived DURING
+          // or AFTER the hang-up (`disconnect-deferred` in the log, or a
+          // `summary-half` at or after `disconnect-requested`) is not — it
+          // is inconclusive, by design. An absent terminate-observations
+          // entry after a hang-up that owed a write is in that same second
+          // category.
+          const settled = sessionRef.current;
+          queueMicrotask(() => {
+            if (sessionRef.current !== settled) return;
+            stash();
+          });
         };
         lingerFinishRef.current = finish;
         burstLingerCancelRef.current = schedule(finish, BURST_LINGER_MS);
@@ -5956,6 +6184,18 @@ export function useMonitorSession(
     // a live run would be the destruction path the spec forbids.
     // `"paused"` dropped from this guard with the phase member (task 5): a
     // frozen session is still `"live"`, so this already covered it.
+    //
+    // **THIS REFUSAL IS ALSO WHAT KEEPS THE BURST LINGER'S REFS SAFE, and
+    // the linger code does not know that.** `teardown`'s deferred branch
+    // arms `lingerFinishRef`/`burstLingerCancelRef`, and nothing but
+    // `finish` ever clears them — not `connect()`, not `teardown()`'s own
+    // entry. A burst-eligible run implies `phase === "ended"`, so the
+    // `ended` clause here is the reason a `cancel()` can never arm a linger
+    // that a later `connect()` could then inherit on this same hook
+    // instance. Relaxing either clause needs `lingerFinishRef`'s own doc
+    // comment read first: it names what breaks (a stale `finish`
+    // unsubscribing the NEW session while hanging up the OLD driver — the
+    // app goes deaf to the erg behind a connected screen).
     if (phase === "live" || phase === "ended") return;
     // Retire any attempt still in flight, BEFORE the awaits below — the
     // same synchronous-claim discipline `driverRef` uses one line down.
@@ -6144,8 +6384,19 @@ export function useMonitorSession(
   }, []);
 
   // Teardown on unmount: the listener goes, the radio goes, no driver is
-  // left holding a subscription to a component that no longer exists. The
-  // effect body runs once (no deps) and `teardown` reads only refs.
+  // left holding a subscription to a component that no longer exists.
+  // `teardown` reads only refs.
+  //
+  // THIS CLEANUP FIRES AT UNMOUNT AND NOWHERE ELSE, but not for the reason
+  // this comment used to give ("the effect body runs once (no deps)") — the
+  // effect HAS a dep. What actually holds it is that `teardown`'s identity
+  // is stable: its deps are `[releaseHandoff, stopSeriesFlush, nowDate]`,
+  // and each of those resolves through `useCallback`s rooted in `[]`
+  // (`releaseHandoff` -> `resolveHandoffCondition` -> `[update,
+  // verifyHandoffWritable]`, both `[]`). Anything that gives one of those
+  // a changing identity re-runs this cleanup MID-SESSION, which tears the
+  // link down under a live screen — check the chain before adding a dep to
+  // any of them.
   useEffect(() => teardown, [teardown]);
 
   // Hand-off store design spec §1, plan Task 3: wires `handoffStore`'s ONE

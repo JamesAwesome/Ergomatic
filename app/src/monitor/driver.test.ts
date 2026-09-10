@@ -12570,8 +12570,11 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
 
     const entries = avgPaceVerdicts(log);
     expect(entries).toHaveLength(1);
+    // `#1` is the connection's own verdict ordinal (`recordAvgPaceVerdict`'s
+    // own comment: the fold guard). Written out here rather than built from
+    // the driver's counter, so a renumbering could not retune this pin.
     expect(entries[0]!.detail).toBe(
-      "suppressed — no work-state (0x0032) averageSplit observed this run",
+      "#1 suppressed — no work-state (0x0032) averageSplit observed this run",
     );
   });
 
@@ -12601,7 +12604,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
     const entries = avgPaceVerdicts(log);
     expect(entries).toHaveLength(1);
     expect(entries[0]!.detail).toBe(
-      "suppressed — nothing measured this run (Σd = 0)",
+      "#1 suppressed — nothing measured this run (Σd = 0)",
     );
   });
 
@@ -14044,7 +14047,7 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
   // interpolated into this string as `band ${…toFixed(1)}s`, so importing it
   // here would retune the assertion with the constant it exists to pin.
   const VERDICT_150 =
-    "machine(0x0032)=150.00s/500m ours=150.00s/500m delta=0.00s — agree (band 1.0s)";
+    "#1 machine(0x0032)=150.00s/500m ours=150.00s/500m delta=0.00s — agree (band 1.0s)";
 
   it("program(): the outgoing run's avg-pace verdict is filed, from the outgoing run's own numbers, before the new run is announced", async () => {
     const { transport, log, driver } = await closedRunOwingAnAnswer();
@@ -14106,6 +14109,89 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
     expect(opened).toHaveLength(1);
     expect(verdicts[0]!.seq).toBeLessThan(opened[0]!.seq);
     expect(reconciled[0]!.seq).toBeLessThan(opened[0]!.seq);
+  });
+
+  it("two verdicts from one connection never carry the same text, so `eventLog.record` can never fold a pair of them into one line", async () => {
+    // THE HALF OF JAMES'S 2026-08-31 INSTRUMENT ORDER THAT SURVIVED ON
+    // MERIT (RC-14). `eventLog.record` coalesces a CONSECUTIVE identical
+    // `kind`+`detail` into its predecessor and deliberately does NOT
+    // advance `seq` (that function's own comment) — so two identical
+    // verdict lines read as one. The archived walk procedure's W11 step
+    // counts verdict lines against pieces rowed ("should produce N
+    // `avg-pace-verdict` lines, FULL STOP"), and a fold makes that count
+    // come down silently: the exact shape of failure the fix in this PR
+    // exists to stop being possible.
+    //
+    // THE PROPERTY PINNED IS DISTINCTNESS, not the fold. Two verdicts
+    // separated by other entries cannot fold today whatever their text; a
+    // pair that can never be byte-identical cannot fold under ANY future
+    // arrangement of the entries between them, which is the guarantee the
+    // count needs. The second half of this test feeds the two real details
+    // into a fresh log BACK TO BACK and proves the consequence directly.
+    //
+    // AND NO PRODUCTION PATH IS KNOWN TO PUT TWO VERDICTS IN ONE RING AT
+    // ALL. This test reaches the shape through the driver's own API,
+    // twice; in the product a driver is minted per connection and every
+    // teardown hangs up, so a second verdict needs a door that replaces a
+    // run inside one connection — and the RC-13 register work argues that
+    // neither door has a supported producer. The discriminator removes a
+    // class cheaply. It is not evidence that a fold has been observed.
+    //
+    // ITS MUTANT: drop the ordinal from `recordAvgPaceVerdict`'s `file`
+    // helper (`driver.ts`). Both runs then produce byte-identical text, the
+    // `not.toBe` below fails, and the back-to-back log collapses to one
+    // entry carrying `repeated: 2`.
+    const { transport, log, driver } = await closedRunOwingAnAnswer();
+
+    // Run 1's answer, filed by the `program()` door.
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    // Run 2: the IDENTICAL numbers, so its verdict's reason, its machine
+    // reading and our own quotient are all the same as run 1's. Without an
+    // ordinal the two lines are the same string.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(150.0));
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+
+    // Run 2's answer, filed by the other door.
+    driver.beginFreeRow();
+
+    const verdicts = log.entries().filter((e) => e.kind === "avg-pace-verdict");
+    expect(verdicts).toHaveLength(2);
+    // Both are the same VERDICT about the same numbers...
+    expect(verdicts[0]!.detail).toContain(
+      "machine(0x0032)=150.00s/500m ours=150.00s/500m",
+    );
+    expect(verdicts[1]!.detail).toContain(
+      "machine(0x0032)=150.00s/500m ours=150.00s/500m",
+    );
+    // ...and they are not the same LINE.
+    expect(verdicts[1]!.detail).not.toBe(verdicts[0]!.detail);
+    // The ordinal is written out rather than derived from the array index,
+    // so a test that renumbered with the implementation could not pass
+    // (RF21).
+    expect(verdicts[0]!.detail).toContain("#1");
+    expect(verdicts[1]!.detail).toContain("#2");
+
+    // THE CONSEQUENCE, proven at the seam that would do the folding: the
+    // two real details, recorded back to back into a fresh log, stay two
+    // entries with two sequence numbers.
+    const backToBack = createEventLog();
+    backToBack.record("avg-pace-verdict", verdicts[0]!.detail);
+    backToBack.record("avg-pace-verdict", verdicts[1]!.detail);
+    const folded = backToBack.entries();
+    expect(folded).toHaveLength(2);
+    expect(folded[0]!.repeated).toBeUndefined();
+    expect(folded[1]!.seq).toBe(folded[0]!.seq + 1);
   });
 
   /**

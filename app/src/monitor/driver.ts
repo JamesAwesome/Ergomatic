@@ -1077,6 +1077,18 @@ const REST_DISTANCE_VERDICT_BAND_METERS = 1;
  * carries verbatim: this is the only capture with both bytes. The margin
  * ratio deliberately matches `BURST_LINGER_MS`'s own ~5.0× precedent
  * rather than inventing a new one.
+ *
+ * **200 IS SHORTER THAN THE ONLY GAP ANYONE HAS MEASURED, AND THAT IS WHY
+ * THE "EMIT ANYWAY" FALL-THROUGH EXISTS AT ALL.** (Was ROADMAP register row
+ * RC-13e; struck 2026-09-09 and moved here, since its own text said it was
+ * filed "so the number is questioned by the next change that touches it" —
+ * and this declaration is where that change happens.) The measured
+ * 0x0039->0x003F gap is ~270-310 ms, so on the ordinary wire this window
+ * expires BEFORE the hash arrives and the observations go out without it.
+ * RC-13 threaded a release cause through that path and must not be read as
+ * validating the number. Nothing has re-measured it since; the corpus is
+ * still the one capture named above. If you are here to change this
+ * constant, that n=1 is the state of the evidence.
  */
 const HASH_SUBWINDOW_MS = 200;
 
@@ -2228,14 +2240,20 @@ export function createPm5Driver(
    * One production subscriber, no fault injection required.
    *
    * WHAT THIS DOES NOT CLAIM: that a subscriber has ever been observed
-   * throwing in production. RC-14's row names a throw in here as one of
-   * three surviving explanations for an observed silent zero-fired verdict
-   * — a SURVIVOR, not a cause. This is a live hazard on a supported path;
-   * it is not a confirmed field defect.
+   * throwing in production. This is a live hazard on a supported path — the
+   * `program()` case above establishes that on its own — and not a confirmed
+   * field defect.
    *
-   * The ring entry is what makes a contained throw diagnosable at all
-   * (RC-14's Shape A dependency): a swallowed error with no record would
-   * trade one silence for another. Its detail carries the event kind AND
+   * **AND IT IS NO LONGER A CANDIDATE FOR THE WALKED SILENT VERDICT
+   * (updated 2026-09-09).** An earlier draft of this paragraph said RC-14's
+   * row named a throw in here as one of three surviving explanations. RC-14
+   * is CLOSED and its row now says in bold that nothing threw: the verdict
+   * fired and reached the ring, and the deferred teardown had serialised its
+   * snapshot one statement earlier. This isolation stands on its own merits;
+   * it never was the RC-14 fix.
+   *
+   * The ring entry is still what makes a contained throw diagnosable at all:
+   * a swallowed error with no record would trade one silence for another. Its detail carries the event kind AND
    * the error, so two different contained deliveries never coalesce into
    * one entry (`eventLog.record` collapses a CONSECUTIVE identical
    * kind+detail pair without advancing `seq`).
@@ -3958,17 +3976,56 @@ export function createPm5Driver(
    *   - nothing this run recorded measures any distance at all (Σd = 0).
    *
    *  BAND: `AVG_PACE_VERDICT_BAND_SECONDS`'s own comment. */
+  /** How many `avg-pace-verdict` lines this DRIVER has filed. Per driver,
+   *  which is per logical session (`useMonitorSession.ts` mints the log and
+   *  the driver together inside one successful GATT connect), and never
+   *  reset by a run replacement — a second piece on the same connection is
+   *  `#2`. Read only by `recordAvgPaceVerdict` below, whose own comment
+   *  carries why it exists. */
+  let avgPaceVerdictsFiled = 0;
   function recordAvgPaceVerdict(run: NonNullable<typeof activeRun>): void {
+    // EVERY VERDICT THIS CONNECTION FILES IS NUMBERED, and the number is
+    // not decoration (James, 2026-08-31: "do NOT hunt it; INSTRUMENT it" —
+    // the surviving half of that order, RC-14).
+    //
+    // `eventLog.record` coalesces a CONSECUTIVE identical `kind`+`detail`
+    // into its predecessor and deliberately does not advance `seq` (that
+    // function's own comment). Four of the seven branches below carry a
+    // FULLY CONSTANT detail and two more are constant for a given shape, so
+    // without an ordinal two verdicts can be byte-identical — and the walk
+    // procedure's W11 step counts verdict lines against pieces rowed
+    // ("should produce N `avg-pace-verdict` lines, FULL STOP"). A fold
+    // makes that count come down silently, which is the same class of
+    // silent-instrument failure RC-14 itself was.
+    //
+    // THE ORDINAL IS PER DRIVER, WHICH IS PER CONNECTION, and that is
+    // narrower than it sounds: `useMonitorSession` mints the log and the
+    // driver together inside one successful GATT connect, and every
+    // teardown hangs up — so a walk that leaves the connected screen
+    // between pieces gets a fresh log and a fresh `#1` for each one. Walk
+    // 2026-08-25 is the shape: two pieces, two ring files, each starting
+    // at `seq 0`, one verdict apiece. The walk procedure's "N pieces ⇒ N
+    // lines" is therefore a count ACROSS pasted logs, never within one,
+    // and `#N` above `#1` means one connection genuinely answered twice.
+    //
+    // AND THE FOLD IT PREVENTS HAS NO ESTABLISHED PRODUCER. Two verdicts
+    // can only be consecutive in one ring if two runs share one driver,
+    // which needs a door that replaces a run — and the RC-13 register work
+    // argues at length that neither door has a supported one. This is a
+    // class removed cheaply, not a sighting fixed; do not read it as
+    // evidence that a fold has ever happened.
+    avgPaceVerdictsFiled += 1;
+    const file = (detail: string): void => {
+      log.record("avg-pace-verdict", `#${avgPaceVerdictsFiled} ${detail}`);
+    };
     if (lastWorkStateAverageSplit === null) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         "suppressed — no work-state (0x0032) averageSplit observed this run",
       );
       return;
     }
     if (run.finalFilledFromSummary) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         "suppressed — the final interval was filled from 0x0039 " +
           "(deriveFinalIntervalFromSummary fired); our own quotient would " +
           "be built partly FROM the machine's summary, so the comparison " +
@@ -3985,8 +4042,7 @@ export function createPm5Driver(
     // false suppression costs a missing walk-log line, never a false
     // DIFFER/agree — and a duplicate index has no committed capture either.
     if (run.actuals > run.recordedActuals.size) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         `suppressed — an actual this run saw could not be attributed to a ` +
           `program interval (${run.actuals} actual(s) emitted, only ` +
           `${run.recordedActuals.size} indexed) and is excluded from our ` +
@@ -4024,8 +4080,7 @@ export function createPm5Driver(
     // average already counts, and no amount of correct TIMING fixes that;
     // the population itself is short.
     if (!run.recordedActuals.has(run.program.intervals.length - 1)) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         `suppressed — this run's own final interval (index ` +
           `${run.program.intervals.length - 1}) was never recorded; the ` +
           `machine's cumulative average may already include work ours has ` +
@@ -4047,8 +4102,7 @@ export function createPm5Driver(
       workMeters += actual.distanceMeters;
     }
     if (excludedSubThreshold) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         `suppressed — a recorded actual measured under ` +
           `${MIN_MEASURABLE_ELAPSED_SECONDS}s and is excluded from our own ` +
           `quotient (mirrors summaryModel.ts's monitorAvgSplit rule)`,
@@ -4056,17 +4110,13 @@ export function createPm5Driver(
       return;
     }
     if (workMeters <= 0) {
-      log.record(
-        "avg-pace-verdict",
-        "suppressed — nothing measured this run (Σd = 0)",
-      );
+      file("suppressed — nothing measured this run (Σd = 0)");
       return;
     }
     const ours = (500 * workSeconds) / workMeters;
     const delta = Math.abs(lastWorkStateAverageSplit - ours);
     const agrees = delta <= AVG_PACE_VERDICT_BAND_SECONDS;
-    log.record(
-      "avg-pace-verdict",
+    file(
       `machine(0x0032)=${lastWorkStateAverageSplit.toFixed(2)}s/500m ` +
         `ours=${ours.toFixed(2)}s/500m delta=${delta.toFixed(2)}s — ` +
         `${agrees ? "agree" : "DIFFER"} (band ${AVG_PACE_VERDICT_BAND_SECONDS.toFixed(1)}s)`,
@@ -6892,9 +6942,49 @@ export function createPm5Driver(
       // every door that replaces a run, and this is the same one call.
       //
       // C1 reduces to "before the assignment" here, because this door has no
-      // per-run reset block at all (ROADMAP register row: whoever adds one
-      // must place it BELOW this line or re-introduce C1's exact bug).
-      // `activeRun` is still the OUTGOING run on this line (I2).
+      // per-run reset block at all. `activeRun` is still the OUTGOING run on
+      // this line (I2).
+      //
+      // ===================================================================
+      // WHOEVER ADDS A PER-RUN RESET BLOCK TO THIS DOOR MUST PLACE IT BELOW
+      // THE `settleOutgoingRun(...)` CALL. Grep that symbol; never a line
+      // number. (Was ROADMAP register row RC-13a; struck 2026-09-09 and
+      // moved here, because a MUST is enforced at the point of danger and
+      // not in a 4300-line file. `program()`'s replacement path resets ~10
+      // fields — `boundaryHalves`, `session`, `refusedKeysLogged`,
+      // `clampedKeysLogged`, `splitAvgPaceProvenanceIndex`,
+      // `lastEmittedTotals`, `lastLoggedTwd`, `lastWorkStateAverageSplit`,
+      // `summarySeen`, `armedWatch`/`armedWatchFired`/
+      // `armedWatchRecoveredLogged`. This door resets none of them.)
+      //
+      // WHAT BREAKS IF IT GOES ABOVE, in the words the trace will print: a
+      // settlement running after `lastWorkStateAverageSplit = null` samples
+      // a reset value, and `recordAvgPaceVerdict` files
+      // `#N suppressed — no work-state (0x0032) averageSplit observed this
+      // run` (the `#N` is RC-14's fold discriminator — that function's own
+      // comment) — a FALSE reason for a run that did observe one. That is
+      // RC-13's C1 bug exactly, and the damage is to an ORACLE'S EVIDENCE:
+      // the same tier RC-14 was fixed to protect.
+      //
+      // THE GATE EXISTS, so you will find out: mutation M2 of the RC-13
+      // design spec (`docs/superpowers/specs/2026-09-09-rc13-drain-
+      // containment-design.md`) — "move the settlement BELOW
+      // `lastWorkStateAverageSplit = null`. Expected: the entry is still
+      // present, kind unchanged, detail becomes `suppressed — no
+      // work-state (0x0032) averageSplit observed this run`. Invisible to
+      // any kind-only assertion, which is why C1 needs its own detail
+      // assertion." — quoted VERBATIM as that spec was written, so it
+      // predates RC-14's `#N` prefix; do not "correct" it.
+      //
+      // THE REQUIREMENT IS UNCONDITIONAL, and deliberately not argued from
+      // the current call graph: the settlement must sample THIS RUN'S
+      // evidence before any per-run reset overwrites it, whoever calls
+      // what. It is not "harmless today because a free row's empty
+      // `program.intervals` returns at `reconcileSummary`'s `lastIndex < 0`
+      // guard" — that is a property of what free rows happen to carry
+      // today, and this driver has twice been caught arguing its own safety
+      // from a call graph that then changed underneath it.
+      // ===================================================================
       //
       // V3's window opens above the settlement and closes the moment the
       // new run has been opened and announced to the ring. Nothing between
@@ -7113,6 +7203,19 @@ export function createPm5Driver(
         replacingRun = "program()";
         try {
           if (runIsOpen()) {
+            // NO PRODUCT PATH REACHES THIS ENTRY, and it is kept anyway.
+            // (Was ROADMAP register row RC-13c; struck 2026-09-09 and moved
+            // here, since its own text said it existed "so the next reader
+            // does not have to re-derive that" — which is the definition of
+            // a comment.) `driver.test.ts` covers it; nothing in the
+            // product produces it, because a driver is minted inside
+            // `connect()` below a guard that refuses when one already
+            // exists, so every `program()` runs against an `activeRun` of
+            // `null`. Kept because it is the one lifecycle transition with
+            // no event of its own: if a UI path that re-programs from
+            // `ready` is ever added, this line becomes the only trace of
+            // it. Do not delete it as dead code without adding that trace
+            // somewhere else first.
             log.record(
               "run-replaced",
               `program() replaced a run that was still OPEN (its ${activeRun!.program.intervals.length}-interval program had accumulated ${activeRun!.actuals} actual(s)) — that run closes here with no workoutComplete/terminated event of its own`,

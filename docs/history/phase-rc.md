@@ -1945,6 +1945,9 @@ that needs no erg, and it can run in a test.
       threw, or something outside the driver dropped the entry between
       `log.record` and the persisted `ergomatic:last-rowed-log`. Those two
       are the survivors; start there, not at the call site.
+      **ADDENDUM 2026-09-09: that enumeration is FALSIFIED — see the dated
+      addendum under W11 below, which carries the mechanism and the one
+      change it forces on this card's own read-it-off procedure.**
 - [x] **RC-15 — 0x003A's Interval Rest Time is the LAST interval's.
       SETTLED by the walk itself (2026-08-25, W-9); no experiment
       owed.** The field read 0 for the third capture running, this time
@@ -2158,7 +2161,9 @@ item** and W3/W4 ride the same piece.
   (274 m against 274 m). `avg-pace-verdict` fired ZERO times across two
   pieces where it should have fired twice — once legitimately suppressed
   on the terminate, and once SILENT on the natural finish, which is
-  RC-14. The absence-is-a-finding clause below is the only reason the
+  RC-14. **[ADDENDUM 2026-09-09: "SILENT" is falsified — it fired and was
+  lost on the way to the log. See the dated addendum below.]** The
+  absence-is-a-finding clause below is the only reason the
   silence was noticed at all; the count rule (N pieces ⇒ N lines) is
   what caught it. The same walk also settled §23 items 2 and 4 (0x0039
   is cumulative and rest-exclusive) and unblocked RC-9(b), which was
@@ -2185,6 +2190,80 @@ item** and W3/W4 ride the same piece.
   clause used to read "minus any genuinely suppressed ones", which
   invited exactly the miscount that would explain a real zero-fire
   away.)
+
+#### ADDENDUM 2026-09-09 (the RC-14 PR) — RC-14 closed; W11 gains a bound
+
+*This phase's record above stays exactly as written. This block is an
+addition, because W11 is the ancestor of the live walk procedure and two
+things in the text above would now mislead the operator running it.*
+
+**1. RC-14's two-survivor enumeration is FALSIFIED, and so is "the
+function was never REACHED".** The mechanism is NEITHER survivor: nothing
+threw, and nothing outside the driver dropped the entry.
+`recordAvgPaceVerdict` ran and recorded its line into the ring. What went
+wrong is one statement earlier — the deferred teardown had already
+serialised the snapshot that becomes `MONITOR LOG · COPY`, because it was
+running re-entrantly inside the driver's own event delivery, and the
+verdict landed in memory after the bytes were taken. Fixed 2026-09-09: the
+deferred teardown now takes a third snapshot once that stack has unwound.
+The derivation off this walk's own bytes is in
+`docs/monitor/sessions/walk-2026-08-25/README.md`, in the dated addendum
+under finding W-2; the live disposition is the RC-14 row in `ROADMAP.md`.
+
+**2. W11's read-it-off procedure still stands, WITH A BOUND — in its own
+terms, so nobody has to read a spec to apply it.**
+
+- **Still a finding, and this is the ordinary case:** a missing
+  `avg-pace-verdict` line, or a missing `rest-distance-verdict` line, for a
+  piece whose own summary frames are already in the log you pasted.
+  **N pieces rowed should produce N `avg-pace-verdict` lines** — the count
+  rule above holds, and a suppression still WRITES a line rather than
+  subtracting one. There is exactly one exception, and you can read it off
+  the log.
+- **THE BOUND IS THE HANG-UP, and two lines tell you when you are in it.**
+  Everything the session records up to and including the moment the app
+  hangs up reaches your log; anything produced after that does not, by
+  design. You are in that window if the log carries **`disconnect-deferred`**
+  (the hang-up was held waiting on a write the erg still owed), or a
+  **`summary-half` sitting at or after `disconnect-requested`** (the piece's
+  own summary arrived while the app was letting go). If either is there and
+  a verdict line is missing, record the piece **INCONCLUSIVE** and re-walk
+  it — do not file it. If neither is there, a missing line is a finding, and
+  the count rule applies as written. **Both markers are DEFERRED-path
+  markers**, so on a piece that ended with its summary already in hand you
+  will never see either — `disconnect-requested` is recorded after that
+  path's snapshot and is simply not in the log you pasted. That is not a
+  loophole: on that path the reconcile drains and files its verdict before
+  the snapshot is taken, so "neither marker present ⇒ a missing line is a
+  finding" is exactly right there.
+- **This is a real hole, not a hedge, and it is BOTH oracles.** The
+  disconnect files `avg-pace-verdict` from its own drain, which runs after
+  it waits on that owed write; and the monitor's 0x003A subscriber files
+  `rest-distance-verdict` right up until the radio is actually released.
+  Either kind can be born after the log has been sealed. The guarantee is
+  "everything up to the hang-up", never "the log holds everything".
+- **NOT a finding, ever:** a missing terminate-observations entry after a
+  hang-up that still owed a terminate write. Same window, and nothing ever
+  promised to carry it.
+- **The lines now number themselves, PER CONNECTION — which on a normal
+  walk means every paste reads `#1`.** Every `avg-pace-verdict` entry opens
+  with `#N`, N counting the verdicts filed on that CONNECTION. A new piece
+  means leaving the connected screen, which hangs up, and the next piece
+  builds a fresh log and a fresh driver — so the count restarts. Walk
+  2026-08-25 is the shape: two pieces, two ring files, each starting at
+  `seq 0`, one verdict apiece. **So do not count pieces inside one paste.**
+  The count rule above is a rule ACROSS pastes: N pieces rowed, N pasted
+  logs, one verdict line in each. `#N` above `#1` only appears if one
+  connection genuinely answered twice, and that is worth reporting on its
+  own.
+- **The `FINISH_GRACE_MS` zero-fire this clause names is closed.** Both
+  doors that replace a run now SETTLE the outgoing one instead of
+  cancelling its pending verdict, so arming the next piece within 3 s of
+  the previous one's finish files that piece's line rather than swallowing
+  it (pinned by `driver.test.ts`'s two settlement cases, one titled for
+  `program()` and one for `beginFreeRow()`). The count rule no longer has
+  that particular way of coming down — which is why an absence is now
+  worth chasing rather than expecting.
 
 **Arming the hold-open instrument (final-review I3 — the card never said
 HOW before this fix):** W2/W3/W4/W10 all need it armed. On the laptop, in

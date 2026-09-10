@@ -28,6 +28,27 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // The ring write this leg proves out does not care whether a record ever
 // opened; only that a connected session ended for real.
 //
+// **SO THIS FILE GATES THE IMMEDIATE PATH ONLY, AND THE DEFERRED PATH HAS
+// NO COMPOSITION GATE AT ALL** (written down here in 2026-09-09's RC-14 PR,
+// because this file's next author is the person who would otherwise assume
+// otherwise). `teardown` has two shapes: the immediate one above, and a
+// DEFERRED one taken when the closed record is burst-eligible and its
+// summary burst has not landed yet — that shape stashes at linger start,
+// again when the burst or the 2 s linger cap finishes it, and a third time
+// a microtask later (RC-14). Nothing in `e2e/` reaches it. Reaching it
+// needs rowing frames AND a summary burst AND an unmount mid-linger, and
+// this file drives zero frames on purpose.
+//
+// Do not "fix" that by adding frames to THIS test: RF41 is the hazard — the
+// first rowing frame opens the run, an open run renders the connected
+// surface whatever else is true, and assertions about a pre-row state
+// quietly stop meaning anything. A deferred-path leg is its own test with
+// its own fixture, and its cost is UNTESTED — nobody has built one. The
+// client layer is where the deciding mutation bites today (the four RC-14
+// tests in `src/monitor/useMonitorSession.test.ts` go red when the third
+// stash is deleted), which is where that gate belongs until someone has a
+// reason to move it.
+//
 // THE TEARDOWN THAT WRITES THE RING RUNS ON UNMOUNT, NOT ON THE CLICK
 // (found running this file for real, `docs/monitor/`-style discipline
 // applied to a client mechanism instead of a wire one): `endSession()`

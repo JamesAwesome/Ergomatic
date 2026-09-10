@@ -2472,6 +2472,435 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // `teardown` to.
     expect(driverTimer.pending()).toBeNull();
   });
+  // ===========================================================================
+  // RC-14 (measured 2026-09-09, fixed in the same PR).
+  //
+  // THE FOUR TESTS BELOW WERE THE MEASUREMENT AND ARE NOW THE GATE. Written
+  // red against the pre-fix code, they pinned the mechanism by which the
+  // walked ring
+  // `docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json` ends at
+  // `seq 71 summary-reconciled split-won` / `seq 72 disconnect-requested`
+  // with NO `avg-pace-verdict` entry anywhere in its 73 entries; they now
+  // assert the entry the walk lost is in the snapshot. Their deciding
+  // mutation is recorded with them: delete the third `stash()` in
+  // `teardown`'s deferred `finish` and each goes red on
+  // `expected false to be true`.
+  //
+  // THE MECHANISM. `recordAvgPaceVerdict` is NOT called by `reconcileSummary`
+  // — it is the NEXT STATEMENT after it, at both of `RECONCILESUMMARY`'s two
+  // call sites (`armSummaryReconcile`'s scheduled callback and
+  // `drainSummaryReconcile`). Two denominators are in play in this block and
+  // each names its own function: `reconcileSummary` has TWO callers;
+  // `recordAvgPaceVerdict` has THREE call sites, the third being the
+  // `terminated` transition, which is why the walked-cell test below calls
+  // `drainSummaryReconcile`'s the THIRD `recordAvgPaceVerdict` site. `reconcileSummary`'s own last act is
+  // `emit(summaryObservationsEvent(...))`, and this hook's
+  // `summary-observations` handler ends with a SYNCHRONOUS
+  // `lingerFinishRef.current?.()`. So when the driver drains while a burst
+  // linger is open, the deferred `finish()` — `reconcileAndReleaseHandoff()`,
+  // `unsubscribeAndDisconnect()`, `stash()` — runs to completion INSIDE the
+  // driver's own stack, ONE STATEMENT BEFORE `recordAvgPaceVerdict` ever
+  // runs. The second stash is therefore serialized before the verdict is
+  // recorded, and the verdict lives only in the in-memory ring, which dies
+  // with the tab.
+  //
+  // The existing ordering pin above did NOT catch this, because it fires the
+  // LINGER's own timeout: there the hook drives, `finish` clears
+  // `lingerFinishRef` before calling `reconcileAndReleaseHandoff`, the
+  // re-entrant `lingerFinishRef.current?.()` is a no-op, `recordAvgPaceVerdict`
+  // runs while `finish` is still between `reconcileAndReleaseHandoff` and
+  // `stash`, and the verdict made the snapshot even before the fix. The
+  // CONTROL test below is that trigger, asserted rather than assumed (RF21) —
+  // same fixture, same assertion, green on both sides of the fix, which is
+  // what proved the two reds were about ordering and not about an
+  // unreachable entry.
+  // ===========================================================================
+
+  it("RC-14 (the split-won shape): a driver-driven drain mid-linger runs the whole deferred teardown inside the driver's stack, and the avg-pace verdict recorded one statement later still reaches the snapshot", async () => {
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    let driverMs = 0;
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+          // The final split lands INSIDE the finish grace, ~50ms after the
+          // terminal tick — the walked ordering (notes §24 item 1: the split
+          // beats 0x0039 to the phone every time), and what makes
+          // `reconcileSummary` take its `split-won` branch rather than the
+          // fill.
+          finalBoundary(250),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: releasingSchedule(driverTimer.schedule),
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    driverMs = 250;
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.actuals).toHaveLength(1);
+
+    // The rower leaves while the burst is still out. Same deferral the pin
+    // above exercises: first stash now, STEPS 1/3/4 owed.
+    unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+
+    // THE BURST ARRIVES, mid-linger — the swap this experiment makes. 0x0039
+    // then its 0x003F hash, each re-arming `maybeReconcileImmediately`'s own
+    // short sub-window on the DRIVER's schedule seam.
+    driverMs = 400;
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 62.5, meters: 214 });
+    });
+    // An INDEPENDENT literal, never the driver's own `HASH_SUBWINDOW_MS`
+    // (which is not exported anyway): a test that imports the constant it
+    // gates retunes with it (RF21).
+    expect(driverTimer.pending()?.ms).toBe(200);
+    driverMs = 440;
+    act(() => {
+      fake.deliverVerification();
+    });
+
+    // The sub-window the BURST armed elapses. The reconcile now runs on the
+    // driver's stack, not the hook's.
+    driverMs = 640;
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    // ONE microtask turn, and NOTHING else: no timer is advanced anywhere
+    // below this line. The verdict is recorded one statement after the
+    // driver's own emit returns, so the snapshot that carries it can only
+    // be taken once this stack has unwound (RC-14's fix). A `setTimeout`
+    // deferral would still be pending here — that is the Condition-2
+    // mutant, gated by its own test further down.
+    await Promise.resolve();
+
+    const entries = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-monitor-log")!,
+    ) as { kind: string; detail: string }[];
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+
+    // The walked shape, confirmed: this is the `split-won` branch, and the
+    // snapshot carries the whole tail `rests-finished-ring.json` carries.
+    expect(
+      entries.filter((e) => e.kind === "summary-reconciled").at(-1)?.detail,
+    ).toContain("split-won");
+
+    // THE MEASUREMENT, NOW THE OTHER WAY UP. Before the fix this snapshot
+    // ENDED at `disconnect-requested` — byte-for-byte the walked ring's
+    // own truncated tail — while the verdict sat one entry further on in
+    // memory only. It is the ADJACENCY that is pinned, not either entry
+    // alone: the pair `[disconnect-requested, avg-pace-verdict]` is
+    // precisely the half the walk is missing.
+    expect(ring.at(-1)?.kind).toBe("avg-pace-verdict");
+    expect(entries.at(-2)?.kind).toBe("disconnect-requested");
+    expect(entries.at(-1)?.kind).toBe("avg-pace-verdict");
+    expect(entries.some((e) => e.kind === "avg-pace-verdict")).toBe(true);
+  });
+
+  it("RC-14 (the fill shape): the same ordering on the driver's own 3000ms deadline, so it is the re-entrancy and not the split-won branch", async () => {
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    let driverMs = 0;
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: releasingSchedule(driverTimer.schedule),
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    driverMs = 400;
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 62.5, meters: 214 });
+    });
+    expect(driverTimer.pending()?.ms).toBe(3000);
+
+    unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+
+    // THE SWAP: the DRIVER's own deadline wins the race against the linger's
+    // 2000ms timeout. (`BURST_LINGER_MS` is the shorter of the two, so on
+    // real timing the linger usually gets there first — but nothing orders
+    // them when the burst re-arms the deadline shorter, which is exactly
+    // what the sibling test above does.)
+    driverMs = 3000;
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    // Microtasks only — see the sibling test above.
+    await Promise.resolve();
+
+    const entries = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-monitor-log")!,
+    ) as { kind: string; detail: string }[];
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    // Same adjacency as the sibling test above, on the fill branch.
+    expect(ring.at(-1)?.kind).toBe("avg-pace-verdict");
+    expect(entries.at(-2)?.kind).toBe("disconnect-requested");
+    expect(entries.at(-1)?.kind).toBe("avg-pace-verdict");
+    expect(entries.some((e) => e.kind === "avg-pace-verdict")).toBe(true);
+  });
+
+  it("RC-14 CONTROL: on the LINGER's own timeout the identical assertion held even BEFORE the fix — the second stash already carried the verdict there, so the reds above were about ordering and not about an unreachable entry", async () => {
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    let driverMs = 0;
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: releasingSchedule(driverTimer.schedule),
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    driverMs = 400;
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 62.5, meters: 214 });
+    });
+
+    unmount();
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
+
+    const entries = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-monitor-log")!,
+    ) as { kind: string; detail: string }[];
+    expect(entries.some((e) => e.kind === "avg-pace-verdict")).toBe(true);
+  });
+
+  it("RC-14, THE WALKED CELL: the whole burst lands mid-linger and the driver drains on the hash itself — `recordAvgPaceVerdict`'s third call site, and the one walk-2026-08-25 actually took", async () => {
+    // WHY THIS CELL EXISTS, and it is NOT the one the design spec named.
+    // The spec called the walked cell "(3000 ms deadline x split-won)",
+    // reading `rests-finished-ring.json`'s seq 71 detail — "interval 2 was
+    // already recorded when the 3000ms finish grace closed". That sentence
+    // was a HARDCODED string on the walk build, and RC-13 replaced it with a
+    // real release cause precisely because it "was already untrue on the
+    // existing drain paths" (the RC-13 ROADMAP row). The capture's own
+    // `atMs` values settle it instead: seq 70 `verification-received`
+    // 1787694123110, seq 71 `summary-reconciled` 1787694123111, seq 72
+    // `disconnect-requested` 1787694123112 — one millisecond apart, so no
+    // 3000 ms deadline and no 200 ms sub-window fired. The walk drained
+    // INSIDE the 0x003F notification, through
+    // `maybeReconcileImmediately`'s "the summary burst completed early"
+    // arm -> `drainSummaryReconcile`, whose own
+    // `recordAvgPaceVerdict(activeRun)` is the THIRD of that function's
+    // three call sites and one neither red test above reaches (both enter
+    // through `armSummaryReconcile`'s scheduled callback).
+    //
+    // The script therefore uses a REAL scripted burst rather than the
+    // on-demand `deliverSummary`/`deliverVerification` pair: 0x003A is what
+    // satisfies `maybeReconcileImmediately`'s `additionalSummary !== null`
+    // check, and only `FakeBurst` puts it on the wire. Same three-frame
+    // order the walk recorded (0x0039, 0x003A, then 0x003F).
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    let driverMs = 0;
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+          // The split beats the burst to the phone (notes §24 item 1), so
+          // this run's final interval is already recorded when the summary
+          // lands — `reconcileSummary`'s `split-won` branch, the walked one.
+          { ...finalBoundary(250), burst: {} },
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: releasingSchedule(driverTimer.schedule),
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    driverMs = 250;
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.actuals).toHaveLength(1);
+
+    // The rower leaves while the burst is still out — the walk's own 359 ms
+    // gap between `handoff-released` (seq 63) and 0x0039 (seq 64).
+    unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+
+    // ONE tick crossing both of the burst's own offsets (INDEPENDENT
+    // literals, never the fake's constants: 269.6 ms for 0x0039+0x003A and
+    // 307.8 ms for 0x003F, measured off the keystone capture), so all three
+    // frames arrive in the order the walk recorded them and the hash's own
+    // handler drains on the spot.
+    driverMs = 700;
+    tick(fake, 400);
+
+    // No timer fired: the drain came from the notification itself. The
+    // 200 ms sub-window 0x0039 armed was cancelled by that drain, and the
+    // 3000 ms deadline before it was cancelled by the sub-window.
+    expect(driverTimer.pending()).toBeNull();
+
+    // THE FIX'S OWN CHECKPOINT. The verdict is recorded one statement after
+    // `reconcileSummary` returns, which is after the re-entrant `finish`
+    // has already taken its second snapshot — so the third snapshot has to
+    // wait for this stack to unwind. Microtasks ONLY; no timer is advanced
+    // anywhere below.
+    await Promise.resolve();
+
+    const entries = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-monitor-log")!,
+    ) as { kind: string; detail: string }[];
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      entries.filter((e) => e.kind === "summary-reconciled").at(-1)?.detail,
+    ).toContain("split-won");
+    expect(ring.some((e) => e.kind === "avg-pace-verdict")).toBe(true);
+    expect(entries.some((e) => e.kind === "avg-pace-verdict")).toBe(true);
+  });
+
+  it("RC-14, THE DEFERRAL IS MICROTASK-CLASS: one microtask turn, no timer advanced, and the verdict is in the snapshot", async () => {
+    // THE GATE FOR PM CONDITION 2 ("the deferral is microtask-class,
+    // `queueMicrotask`, never a timer"), which nothing else in this suite
+    // could go red against — a ruling with no assertion is decoration
+    // (RF21).
+    //
+    // ITS MUTANT, stated so the next editor does not have to guess: replace
+    // `queueMicrotask(...)` in `teardown`'s deferred `finish` with
+    // `setTimeout(..., 0)`. The flush below returns before any timer
+    // callback runs, so the last assertion fails with
+    // `expected false to be true`. This is observable inside this file
+    // because vitest's default `toFake` list excludes `queueMicrotask` and
+    // this repo sets no `fakeTimers` key — and because this block uses
+    // `manualSchedule()` seams rather than fake timers at all, so nothing
+    // here advances a clock of any kind.
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    let driverMs = 0;
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: releasingSchedule(driverTimer.schedule),
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    driverMs = 400;
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 62.5, meters: 214 });
+    });
+    unmount();
+    driverMs = 3000;
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    const read = (): { kind: string; detail: string }[] =>
+      JSON.parse(sessionStorage.getItem("ergomatic:last-monitor-log")!) as {
+        kind: string;
+        detail: string;
+      }[];
+
+    // STILL ABSENT while the driver's stack is the one running: the second
+    // snapshot was taken inside it, one statement before the verdict was
+    // recorded. Nothing between the `act` above and this line awaits, so no
+    // microtask checkpoint has happened yet.
+    expect(read().some((e) => e.kind === "avg-pace-verdict")).toBe(false);
+
+    // ONE microtask turn. No `vi.advanceTimersByTime`, no
+    // `driverTimer`/`burstTimer` fire, no `tick`.
+    await Promise.resolve();
+
+    expect(read().some((e) => e.kind === "avg-pace-verdict")).toBe(true);
+  });
 
   it("MENU TERMINATE RELEASES ON BURST-HEARD (Task 5, storage-spine design spec §2): the arm `:2201` used to hardcode away, still mounted throughout — no unmount, no backstop, the write attempt alone frees the hand-off", async () => {
     // `noteTerminateObservations` (driver.ts) never emits synchronously when
