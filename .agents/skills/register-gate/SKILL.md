@@ -48,7 +48,9 @@ Read the exit code, never the text alone:
 
 **One refusal is expected and self-resolving:** a base that predates Phase RR
 PR 2 carries no class markers, so parsing it refuses with a list of 33
-unmarked sections. Merge main and re-run. The gate could not measure its own
+unmarked sections. Merge main and re-run. **Read the section names first: if
+they are ones YOUR branch added, merging main will not help — the refusal
+names which tree it read for exactly this reason.** The gate could not measure its own
 introducing PR either, and that is the bootstrap rather than a bug — the
 alternative, treating an unmarked section as some default class, is the
 fail-open that I9 exists to forbid.
@@ -60,9 +62,15 @@ it says LEFT is one you meant to strike.**
 
 Then `bash scripts/register.sh closed` for rows that have finished and not yet
 left the register. Its output is CANDIDATES for hand confirmation — the
-vocabulary has measured false positives, including a HELD order of James's
-whose row contains the words "NOT DISCHARGED BY IT" — so confirm each against
-its row before acting, and never quote the count as debt closed.
+vocabulary has measured false positives — a row reading "AMENDED", whose own
+facts were corrected rather than closed, and one that says it "NO LONGER
+CARRIES A COUNT" precisely because it is open. Both tokens were dropped from
+the vocabulary on that evidence. Confirm each candidate against its row before
+acting, and never quote the count as debt closed.
+
+The reverse also happens and the script cannot see it: a table row's
+disposition often sits in the SECOND cell while the predicate reads the first,
+so `closed` misses it. Hand-scan register tables as well as running this.
 
 ## 2. The judgements
 

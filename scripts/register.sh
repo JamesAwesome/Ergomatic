@@ -267,8 +267,14 @@ tallies() {
 # printed tally used to be two different filters, and they could disagree in
 # one run: `grep -c .` does not count an empty line, so an untitled row was
 # invisible to the charge and visible in the tally, and the report read
-# `delta:+2` beside `OK: the register did not rise`. Untitled rows are now
-# refused outright (see `parse`), and this is the only counter either way.
+# `delta:+2` beside `OK: the register did not rise`.
+#
+# WHICH HALF IS LOAD-BEARING, measured: the REFUSAL in `parse` is. With
+# untitled rows refused there is no input on which `n_rows` and `grep -c .`
+# differ, so restoring `grep -c .` here fails NOTHING in the suite. That is a
+# fact about the suite, not a licence to keep two counters — a second counter
+# is what let the two disagree in the first place — but the comment says so
+# rather than letting a green probe read as coverage (RF21).
 rows_open() {
   printf '%s\n' "$1" | awk -F'\t' -v want=" $2 " '
     $1 == "ROW" && $3 == "open" && $4 != "sub" && index(want, " " $2 " ") > 0 { print $5 }'

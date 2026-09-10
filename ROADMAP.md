@@ -2820,29 +2820,39 @@ them owes no strike. They are dispositioned by `/close-phase RR`.
 
 - [x] **PR 1 — MERGED as #386, ticked 2026-09-10.** The spec and this
       section, docs only. RF17: same commit.
-- [x] **PR 2 — MERGED as #388.** The mechanism, minus `dies`. `scripts/register.sh`
-      `count`/`closed`/`ratchet` + `scripts/register.test.sh` + fixtures
-      (failing test first), wired into CI's `scripts` job; one of SEVEN
-      whitelisted class markers on every section that can hold a row; **rules 1 and 3 in `CLAUDE.md`, together, because rule 3 is
-      what funds rule 1** — dead strikeable inventory is ~32 rows against
+- [ ] **PR 2 — OPEN as #388.** The mechanism, minus `dies`. `scripts/register.sh`
+      `count`/`closed`/`sections`/`ratchet` + `scripts/register.test.sh` +
+      fixtures (failing test first), wired into CI's `scripts` job; one of
+      SEVEN whitelisted class markers on every section that can hold a row;
+      **rules 1 and 3 in `CLAUDE.md`, together, because rule 3 is
+      what funds rule 1** — dead strikeable inventory is ~28 rows against
       6.75 filings/day, so a ratchet shipped alone is unpayable inside five
       days; the `/register-gate` skill; `/close-phase TD`'s refusal.
-      **Measured at the marking commit** — `register.sh count ROADMAP.md`:
-      register open:68 closed:29 sub:8 · debt 16/2 · pinned 14/2 · vision 22/2
-      · phase 83/48 · ledger 85/2 · container 0/0 · `unmarked=0`. The `sub:8`
+      **Measured at `f8e296ac`** — `register.sh count ROADMAP.md`:
+      register open:71 closed:26 sub:8 · debt 16/2 · pinned 14/2 · vision 22/2
+      · phase 81/50 · ledger 85/2 · container 0/0 · `unmarked=0`. The `sub:8`
       matches the spec's own hand census of eight indented open bullets in
       register sections, which the parser found without being told.
-      **23 mutation probes, 23 bite.** Four came back green first time and all
-      four were fixed rather than explained: the `- [ ]` OPEN override was
-      UNTESTED (no fixture row had both a checkbox and a closed-vocabulary
-      title, so deleting it left the suite green — RF21's corollary, a green
-      probe is a question about the suite), two probes were badly written
-      rather than the code being safe, and two anchors were ambiguous.
+      **41 mutation probes across two rounds, 40 bite.** Round 1 (23) found
+      four green, all four fixed rather than explained — the `- [ ]` OPEN
+      override was UNTESTED, two probes were badly written, two anchors were
+      ambiguous. A whole-branch review then returned FOUR BLOCKING findings
+      that round missed, and round 2 (18) gates every fix: the charge and the
+      printed tally were two different counters that could disagree in one run;
+      I8's exemption was protected by nothing (`RATCHET_CLASS="register debt"`
+      passed every case); marker discipline had silently become a RED CI check
+      against James's advisory ruling; and fourteen class assertions were
+      tautologies. **The one probe that does NOT bite is recorded as such in
+      the code:** with untitled rows refused, no input distinguishes `n_rows`
+      from `grep -c .`, so the refusal is the load-bearing half and the second
+      counter's removal is hygiene (RF21 — a green probe is a question about
+      the suite).
       **One refusal is the bootstrap and is named rather than weakened:**
       `ratchet` cannot measure its own introducing PR, because the base
       predates the markers. Merging main resolves it from PR 3 on; treating an
       unmarked section as a default class is the fail-open I9 forbids.
-      Unticked deliberately until it merges.
+      **Ticked at merge, not before** — PR 1's row was ticked in advance here
+      and the section contradicted itself three lines later.
 - [ ] **PR 3 — the eviction.** Already-closed rows out of the register and into
       `docs/history/`, and the one malformed table row repaired. **Every
       candidate is confirmed BY HAND** — the vocabulary has measured false

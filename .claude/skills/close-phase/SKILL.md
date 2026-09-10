@@ -36,8 +36,12 @@ catastrophe, and the separator is the only thing between you and it.
 **Refuse `/close-phase TD` outright.** `## Phase TD` matches the anchor and is
 not a phase: it carries `<!-- debt -->`, the class the register counts and
 never charges for, and `ROADMAP.md`'s own head says it "is deliberately not
-scheduled". Closing it would ask sixteen absent-evidence rows for a
-disposition they cannot have. Check the marker before the span:
+scheduled". Closing it would ask its five absent-evidence rows for a
+disposition they cannot have. (Sixteen is the whole `debt` class — TD's five
+plus eleven in `## Owed captures and walk items`; `/close-phase` only ever
+reads one span.) Check the marker before the span, and only AFTER 0a's
+zero-and-multiple refusals above have run — the arithmetic below dies with a
+syntax error on a multi-match rather than answering:
 
 ```bash
 sed -n "$(($(grep -nE "^## Phase <X>( |$)" ROADMAP.md | cut -d: -f1) + 1))p" ROADMAP.md
