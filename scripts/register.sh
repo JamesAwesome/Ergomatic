@@ -287,7 +287,7 @@ parse() {
   if [ -n "$badcontainer" ]; then
     echo "register.sh: a <!-- container --> section holds only other headings, in '${spec:-the working tree}':" >&2
     printf '%s\n' "$badcontainer" >&2
-    refuse "$(printf '%s\n' "$badcontainer" | grep -c .) container section(s) holding rows — mark the section for what it actually holds"
+    refuse "$(printf '%s\n' "$badcontainer" | grep -c .) container section(s) in '${spec:-the working tree}' holding rows — mark the section for what it actually holds"
   fi
   local badrow
   badrow="$(printf '%s\n' "$PARSED" | awk -F'\t' '$1 == "BADROW" { printf "  %s\n", $2 }')"

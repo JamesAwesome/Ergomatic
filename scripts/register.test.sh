@@ -134,7 +134,7 @@ has_last "fence-spans-heading.md" "the spanning-fence REFUSAL line names which t
 
 run count "$FIX/container-row.md"
 check "$rc" "2" "count: REFUSES a row inside a container section"
-has "$out" "container" "count: names the container refusal"
+has_last "container-row.md" "the container REFUSAL line names which tree it read"
 
 # ------------------------------------------------------------- sections
 
