@@ -9944,3 +9944,107 @@ revision history. Here: "the free-row door is independently reachable" became
 became "a symbol that does not exist". Both change no code block, gate command,
 expected value or walk step — so by the skill's own stop rule they are
 bookkeeping, and bookkeeping gets FOLDED, never dispatched against.
+
+## Phase RR anchor pass, 2026-09-09 (the register ratchet — `/harden` lens 1, full pass)
+
+Attacking a spec whose subject is `ROADMAP.md` itself. Every finding came from
+counting the corpus a different way than the spec counted it.
+
+- **"One register section is a table today."** Believed because the spec found
+  the obvious one (`## Rides the next PR`, 24 rows) and its census script counts
+  BULLETS. False: **four** register-marked sections carry tables.
+  **Technique: when a spec says "the corpus has two shapes", census the shape it
+  did NOT use to find them.** `awk '/^#{1,2} /{sec=$0} /^\|/{c[sec]++}'` took
+  seconds and broke three claims at once — a section the spec archives as
+  "2 of 2 closed" holds a live 5-row wave table; a register section is MIXED
+  (bullets AND a table, with a closed row in the table); and the `closed` gate's
+  predicate is bullet-anchored, so no table row can ever be reported.
+
+- **A closed-marker VOCABULARY is a heuristic wearing determinism, and the
+  number that measures the win is its mirror.** The spec listed
+  `DONE|SHIPPED|CLOSED|RESOLVED|STRUCK|ANSWERED` and graded the gate
+  "deterministic". **Technique: enumerate the corpus's ACTUAL first tokens
+  rather than checking that the list matches something.**
+  `grep -oE '^ *- \*\*[A-Z][A-Z ()0-9-]{2,30}' | sort | uniq -c` returned
+  RULED, RULED KEEP, DISPOSED, ACCEPTED, MOVED OUT, ASKED AND ANSWERED, FILED,
+  AMENDED, plus three `~~struck~~` rows — 8 closed rows sitting inside register
+  sections, invisible to the gate. And one of the six listed alternatives,
+  `ANSWERED`, matches ZERO rows: the file writes `**ASKED AND ANSWERED` and the
+  alternation anchors right after `**`. **A vocabulary entry is a claim; grep
+  each one separately and require a nonzero hit or a stated reason.**
+  Corollary (RF11): the figure justifying the migration (21 rows) was produced
+  by the same regex the gate uses, so the gate can never report what the number
+  was blind to. **And the controller's own fix over-corrected the other way** —
+  widening to a blanket `[A-Z]{2,30}` pattern caught `TWO`, `TIER B2`, `PWA`,
+  `RC-38` and `AUD-012`, i.e. row identifiers and emphatic openers, which would
+  have EVICTED LIVE ROWS. A derived vocabulary is a candidate list for a human
+  to curate, never a predicate.
+
+- **"The stamp is the row's last line."** Believed because a stamp is one line
+  when you write it in a spec. False for 262 of 314 rows.
+  **Technique: measure the file's WRAP CONVENTION, then read the spec's own
+  worked example as the parser would.** `mean line 71.5, 262 wrapped rows vs 52
+  single-line` — and the spec's example wraps its own stamp, leaving a last line
+  carrying neither `filed` nor `dies`. **A grammar whose canonical example
+  violates it is falsified without writing any code.**
+
+- **"Blame cannot date a row" — right conclusion, wrong reason, and its headline
+  number is a tautology.** The spec's evidence was a blame-recency histogram
+  ending `>60d:0`. `git log --diff-filter=A` shows `ROADMAP.md` was added
+  **44 days** before the asof date, so that bucket cannot be nonzero.
+  **Technique: for any distribution offered as evidence of churn, check the
+  artifact's AGE first — an empty tail bucket may be arithmetic, not a finding.**
+  Then the independent oracle: compare blame's date to the date each row STATES
+  about itself (`n=102: within 1 day 57, 2-7d 7, 8-30d 37`). Blame is mostly
+  ACCURATE and fails on bulk-rewrite events — a stronger argument for the same
+  design, and one that survives the file getting older.
+
+- **"Filing dates are not recoverable, and are not invented."** Believed because
+  blame was tried and blame measures LAST EDIT.
+  **Technique: ask what quantity the command measures, then find the command
+  that measures the right one.** `git log --reverse -S'<distinctive phrase>' --
+  ROADMAP.md` measures FIRST APPEARANCE, which is exactly what `filed` means:
+  six sampled register rows, six recovered dates. The migration was about to
+  stamp ~50 rows `filed <today>` and erase the age evidence that justifies
+  striking them.
+
+- **A net-count ratchet between two git refs is a SHARED SLOT, and the base ref
+  was never named.** `grep -ci` over the spec: `merge-base` 0, `origin/main` 0,
+  `base branch` 0 — while its lifetime table claimed the count "Survives …
+  parallel sessions". **Technique: build the two-branch collision in a
+  throwaway `git init` repo rather than reasoning about it.** Two branches
+  striking the SAME row and filing in DIFFERENT sections: both read delta 0
+  against their own base, `MERGE CLEAN`, register 40 → **41**. (Adjacent edits
+  conflict; separated ones do not, and the file has 32 sections.) Only
+  `git merge-base origin/main HEAD`, recomputed after the mandatory
+  `git merge origin/main`, goes red — so the gate's whole correctness is one
+  unnamed value.
+
+- **An unknown that resolves to EXEMPT, in a design citing a precedent whose
+  defining property is that unknowns resolve to RUN.** The section-class marker
+  defaulted unmarked → outside the ratchet, so a lost marker silently shrinks
+  the register and pays for a new row. **Technique: read the cited precedent's
+  failure DIRECTION, not its shape.** `ci-changes.sh` resolves every
+  uncertainty to running the jobs; the design inverted it. The same read
+  falsified the neighbouring analogy: the ESLint suppression ledger the spec
+  calls "the same shape" is enforced by `eslint .` reading per-rule COUNTS
+  inside `pnpm lint` — blocking, in CI — while this ratchet is advisory and run
+  by the party under pressure not to run it. **Two ratchets can share their
+  arithmetic and differ in the only property that makes one work.**
+
+- **Attacked and NOT broken — Phase RR's VETTED GROUND.** A later delta pass
+  need not re-attack these: that `ROADMAP.md` is formatted by nothing
+  (`package.json`'s lint-staged globs are `app/**` only, `app/package.json`'s
+  `format` runs prettier from `app/`, no `.prettierignore` exists anywhere);
+  that no machine consumer of `ROADMAP.md` exists to break (every external
+  reference is prose except `ci-changes.test.sh`, which only asserts root
+  markdown is docs-only, and `/close-phase` is the sole parser, to which the
+  grammar is additive); every token-collision count in the spec, reproduced
+  exactly at its pinned base (`<!--` 0, `· filed` 0, `struck if` 0, `·` 72,
+  `^ *- ` 337, size markers 101); `/close-phase` **Phase 4 step 5**, attacked as
+  a dangling "gate 5" citation and found to be a real step the skill's own stop
+  rule numbers the same way; the TRIAD classification (no rower-visible number,
+  no persisted product shape, no auth); Icebox inside the ratchet with
+  `# After the strangers` outside it; and the decision to carry NO census
+  table — whose counter-example is `close-phase/SKILL.md`'s own transcribed
+  `68/45/177`, already stale against a tree reading 59/57.
