@@ -1,6 +1,18 @@
 # Spec — Phase RR: the register may only go down
 
-Status: DESIGN APPROVED by James 2026-09-09 (in-chat gate; he chose "stamp
+> **ABANDONED 2026-09-10. DO NOT BUILD FROM THIS FILE.**
+>
+> James stopped the phase mid-flight: the ratchet is the wrong way to manage
+> this roadmap. PR 1 merged as #386; PR 2 was closed unmerged as #388 after
+> four review rounds; PRs 3 and 4 were never written. Nothing described below
+> exists — there is no `scripts/register.sh`, no class marker on any heading,
+> no `/register-gate` skill, and no rule in `CLAUDE.md`.
+>
+> Kept for the measurements in it, not as a plan. The register's growth was
+> real, and so were the 26 already-finished rows, which were evicted by hand on
+> the day this was abandoned: `docs/history/register-evictions-2026-09-10.md`.
+
+Status: ABANDONED. Was: DESIGN APPROVED by James 2026-09-09 (in-chat gate; he chose "stamp
 everything now" over grandfathering, and "skill plus script, advisory" over a
 blocking CI check). **Revision 2, 2026-09-09** — folds `/harden` lens 1's
 twelve mechanism findings (`antagonist`, phase-open anchor pass) and the

@@ -2202,43 +2202,7 @@ closed with zero Concept2 contact.
       for free rows, or accept and say so in the button's copy. **S**
 
 ## Codebase-audit owners
-- [x] **LOST THE MONITOR must not say "Nothing kept." — DONE in door PR B**
-  (2026-09-03). Shipped on all THREE surfaces that carried the phrase, not
-  one: the banner's `kept === 0` arm renders its title alone (no body
-  element at all, never an emptied one), the connected surface's ended frame
-  says "The erg dropped the workout." and stops, and `LogSession.tsx`'s
-  dropped strip says "You had not finished an interval yet." with the bold
-  clause dropped rather than emptied. Every `kept >= 1` arm is byte-for-byte
-  unchanged. **The sentence below is WRONG and is corrected here rather than
-  deleted, because it was the reason this rode PR B:** a part-rowed interval
-  does NOT count toward "kept" and never will — I-B2, a partial is never an
-  `IntervalActual` and `measuredIntervalCount` does not see it. What PR B
-  actually does is make the zero-kept case one where something IS on screen
-  (the interval's own metres), which is why the phrase had to go. The
-  original text, for the record:
-  > **LOST THE MONITOR must not say "Nothing kept."** (James, 2026-09-02):
-  > on the connected lost-link banner (`ConnectedSurface.tsx`'s
-  > `LostBanner`, the `kept === 0` arm), that line reads as loss at the
-  > exact moment the RECONNECT is nullifying it — scary and, given
-  > recovery, false. Proposed: `kept === 0` renders the title alone (no
-  > body); `kept >= 1` keeps "N intervals kept." Copy-only, one file,
-  > cosmetic failure mode — FAST-PATH eligible, but a rendered **Gate 0**
-  > first (it changes what a rower reads). **Rides PR 4 (§5 partial
-  > metres) — James, 2026-09-02**: the same PR that makes a part-rowed
-  > interval count toward "kept" owns what the zero-kept banner says, one
-  > Gate 0 for the whole kept vocabulary. Evidence:
-  > `ConnectedSurface.tsx:848`.
 
-- **STRUCK 2026-09-09 (Phase OD): the DIAGNOSTICS door's affordance sentence
-  SHIPPED.** `app/src/news/content/releaseNotes.ts:476` carries it verbatim —
-  where it is (You, then DIAGNOSTICS, then Monitor logs), WHEN a rower would
-  tap it (a connected session went wrong and someone asks for the log), and
-  what COPY does. **THE STRIKE CARRIES A CORRECTION, and without it the next
-  reader reopens this row: it landed in `v0.33.0`, not the `v0.32.0` this row
-  named.** The version block above line 476 is `version: "v0.33.0"` (line
-  473). Anyone greping the v0.32.0 notes for the sentence finds nothing and
-  concludes it is still owed. Originally filed at the PM gate on #258,
-  2026-09-01.
 - **The ring history's three-slot eviction has an incident-shaped failure
   mode, filed with its trigger** (PM gate on #258): the identity upsert
   gives one slot per LOGICAL SESSION, so three fumbled reconnects after an
@@ -2316,14 +2280,6 @@ closed with zero Concept2 contact.
   the live verdict is left. **Rides the next PR touching the driver area.**
   Evidence: docs/history/phase-rc.md (RC-9), the oracle corpus test.
 
-- **The store's first copied-ring check — DISCHARGED 2026-09-04.** #239's
-  PM gate required the next supplied ring to be decoded for
-  `commit-accepted{verdict:"failed"}`. Both v0.36.1 walk rings were decoded:
-  all 11 commit receipts say `saved` (Lock revisions 0–4, Drop 0–5), none
-  `failed`. `storage-persist: denied` is not a failed write. This checks the
-  supplied evidence, not the incidence of rejected writes; any future failed
-  receipt still warrants investigation. Evidence:
-  [walk record and complete rings](docs/monitor/sessions/walk-2026-09-04-wave-f/README.md).
 - **The hand-off store's two open residuals, lifted here by #239's STRIKE
   CONTRACT (2026-08-31)** when the AUD-016 item was struck. They are real and
   unscheduled; neither is a defect the store introduced. The former
@@ -2343,27 +2299,6 @@ closed with zero Concept2 contact.
      (`expected 2 to be 6`). Producer purity is a DIFFERENT invariant and is
      not a substitute for it. Evidence: PR #239's consolidated §10 mutation
      ledger.
-- **The machine-summary FIELD PROOF — DISCHARGED 2026-08-31.** Lifted here
-  when Wave F's machine-totals item was struck: every gate behind that fix
-  was the app agreeing with the app (RF11), and it was proven only when a
-  row saved on James's phone from v0.27.0 or later came back
-  machine-confirmed. **It did — the first machine-confirmed row in prod.**
-  James rowed 5x750m/1:30r on 2026-08-31 and photographed the PM5's own
-  View Detail beside the phone: the PM5 reads `15:49.0 · 3750m ·
-  Verification 050E-273C 1B69-9691`; the app's Log renders
-  `MACHINE CONFIRMED · WORK ONLY · 15:49.0 work · 3750m · CODE 050E-273C
-  1B69-9691`. Per-interval paces agree to the tenth on every row the PM5
-  screen showed (2:08.8 / 2:07.7 / 2:06.6 / 2:05.3) and the interval times
-  agree to the second (3:13.3→3:13, 3:11.6→3:12, 3:10.0→3:10, 3:08.0→3:08).
-  This is RF11's real oracle, not a mirror: the code is minted by the
-  monitor and the app cannot compute it. The prod re-count is now a
-  formality (it was the proxy for exactly this photograph); run it at the
-  next DB touch and expect ≥1 of N. Which build produced the row is
-  INFERENCE — `ios:release` for v0.30.0 ran earlier the same day, but the
-  screenshot carries no build stamp; the code alone proves ≥ v0.27.0.
-  Evidence: the two 2026-08-31 photographs (PM5 View Detail + Log detail,
-  in James's session), the 2026-08-30 count (0 of 18) as the baseline it
-  moved from.
 - **AUD-002 — bound History's successful top-level response.** A parseable
   non-array 200 must enter the existing error/Retry state rather than reaching
   `.map`. No real producer was found, so this remains P2/Probable and rides the
@@ -2434,21 +2369,6 @@ closed with zero Concept2 contact.
   the gate is the approval, not the presentation. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`
   (§AUD-006, §V4).
-- **RESOLVED (James, 2026-08-31: "Gold approved" on the rendered
-  `log-monitor-dropped.png` / `log-monitor-dropped-landscape.png` captures
-  at `9bd4ddac`)** — the completion-eyebrow suppression recommended at
-  PR #248's round-1 review ("My recommendation is to suppress the
-  completion eyebrow") is Gate-0 approved: the dropped-arrival log screen
-  no longer reads `WORKOUT COMPLETE` two lines above `THE ERG DROPPED THE
-  WORKOUT.` Scoped across all THREE arrival types that did not complete,
-  never a drop-only fork (`.summary-eyebrow` suppresses on
-  `endedBy === "program-dropped" | "link-lost" | "interrupted"`,
-  `SummaryModel.suppressCompletionEyebrow`), unchanged everywhere else.
-  The controller's ruling stands approved with it: the composed-route
-  evidence (portrait + landscape, real LogSession → PostWorkoutSummary
-  composition) covers the dropped arrival only; link-lost and interrupted
-  share the identical derivation and renderer, so no routed captures are
-  owed for those two unless James asks for them.
 - **The server's `EndedBy` mirror can be derived, not hand-copied.**
   `server/stores/logs.ts` already imports `../db/schema.js`, so
   `export type EndedBy = (typeof endedByEnum.enumValues)[number]` plus
@@ -2747,119 +2667,12 @@ thirteen line numbers, and its own diff broke every one.**
   time)" — `grep -n nudge ROADMAP.md` returns zero, so it has no live home,
   while that phase's status line says its walk passed.
 
-## Phase RR — the register may only go down
-
-**OPEN 2026-09-09.** Design approved in chat the same day; spec
-`docs/superpowers/specs/2026-09-09-register-ratchet-design.md` (**rev 3** — the
-mechanism was rebuilt twice, after `/harden` lens 1 plus the PM phase-open gate,
-then after lens 2; falsified claims are replaced, not annotated). Filing a row is free and closing
-one is not, so the register only grows: RF14 says everything with a life after
-merge goes here and nothing anywhere says when a row may DIE. James, 2026-09-09:
-_"we need to figure out how we can continue working without filling this
-register to death with cruft. It's fucking impossible to close things out."_
-This phase makes the register a ratchet — file N rows, strike N.
-
-**The trend is the case.** One sample per day of ROADMAP-touching merges on
-`main`, 2026-08-29 to 2026-09-09: **36 → 46 → 64 → 67 → 74 → 76 → 88 → 89 → 96
-→ 101 → 108 → 117.** +81 rows in 12 days, monotone, not one down day,
-**+6.75/day** — while the file itself SHRANK 2,625 lines. The line count is the
-axis that is improving; the row count is the one that is not.
-
-Nothing a rower sees changes. No stored number changes. No `app/` file is
-touched. The audience is agents and James.
-
-**Rows in this section are `<!-- phase -->` rows, not register rows** — filing
-them owes no strike. They are dispositioned by `/close-phase RR`.
-
-- [ ] **PR 1 — the spec and this section.** Docs only. RF17: same commit.
-- [ ] **PR 2 — the mechanism, minus `dies`.** `scripts/register.sh`
-      `count`/`closed`/`ratchet` + `scripts/register.test.sh` + fixtures
-      (failing test first), wired into CI's `scripts` job; one of SEVEN
-      whitelisted class markers on every section that can hold a row; **rules 1 and 3 in `CLAUDE.md`, together, because rule 3 is
-      what funds rule 1** — dead strikeable inventory is ~32 rows against
-      6.75 filings/day, so a ratchet shipped alone is unpayable inside five
-      days; the `/register-gate` skill; `/close-phase TD`'s refusal.
-- [ ] **PR 3 — the eviction.** Already-closed rows out of the register and into
-      `docs/history/`, and the one malformed table row repaired. **Every
-      candidate is confirmed BY HAND** — the vocabulary has measured false
-      positives, including RC-14, a HELD order of James's whose row contains the
-      words "NOT DISCHARGED BY IT". **Its body must say this closes ZERO open
-      work**: file hygiene against a register growing 6.75/day, not debt
-      closure. The count comes from the spec's §8.1 at PR 3's own tree.
-- [ ] **PR 4 — `dies`.** `stamps` and `expired`, `/close-phase` Phase 4 step 5's
-      expiry defence, and the stamp pass over every register row. Lands after
-      James answers the spec's §10, because 37+ rows cannot honestly carry a
-      death condition until he rules on class defaults.
-
-**What lens 1 and the PM broke in rev 1, kept here because the wrongness is the
-useful part:**
-
-- **The stamp was "the row's last line".** False for 262 of 314 top-level
-  bullets — the file is hand-wrapped near 80 columns, and rev 1's own worked
-  example wrapped its own stamp onto a line carrying neither field.
-- **"One register section is a table."** Four are, and `## Needs a decision from
-  James` is MIXED; the `closed` gate was bullet-anchored, so a
-  `RULED (James, 2026-09-03): KEEP` row inside a register table could never be
-  reported.
-- **`## Active audit overlay` was to be archived as "2 of 2 closed".** It holds
-  the live **Wave A-E overview table**, including Wave A. It is a ledger, and
-  the archive is dropped.
-- **The ratchet's base ref was never named.** Two branches striking the SAME row
-  and filing in different sections each read a delta of 0, merge clean, and
-  leave the register +1 — demonstrated in a throwaway repo. The base is a
-  recomputed merge base or the gate is decoration.
-- **The unmarked default was fail-OPEN**, in a design citing `ci-changes.sh`,
-  whose defining property is that every uncertainty resolves to RUNNING.
-- **"Filing dates are not recoverable" was false.** Blame measures last edit;
-  `git log --reverse -S` measures first appearance — six rows, six dates.
-  Stamping ~50 rows with today's date would have erased the age evidence that
-  justifies striking them.
-- **The closed-row predicate was wrong in BOTH directions, and the second
-  version could have evicted a live row.** Rev 1's regex anchored after the
-  bullet's `**` while this file writes dispositions mid-line, and `ANSWERED`
-  matched zero rows because the file writes `ASKED AND ANSWERED` — so dead
-  inventory was undercounted at 21. Widening it over-caught row IDs and
-  emphatic openers (`TWO`, `TIER B2`, `RC-38`, `AUD-012`, `PWA`), and matching a
-  row's BODY flags **RC-14 on the words "NOT DISCHARGED BY IT"** and Phase TD on
-  `RESOLVED` inside **`UNRESOLVED`**. It now matches the row TITLE only, with
-  word boundaries, a negation guard and `- [ ]` as a hard OPEN override, reports
-  CANDIDATES, and is graded a HEURISTIC.
-- **Four more gates read green over their own defect** (lens 2, all measured):
-  `ratchet` passed clean when it could not resolve a base, because an optional
-  `<base>` is set-but-EMPTY and `: "${VAR:?}"` does not fire on that; an empty
-  or deleted `ROADMAP.md` reported clean AND credited three strikes; a
-  MISSPELLED marker reported `unmarked=0` with a fall of 3; and the two-branch
-  collision case could not go red as worded. `date` is now banned from the
-  script — `date -j -f` is BSD-only and fails OPEN on the Linux runner into a
-  tidier number than the truth.
-
-**The condition that would have failed the phase (PM, binding):** a
-`<!-- debt -->` class for `## Phase TD` and `## Owed captures and walk items` —
-counted, never payable by strike, never expired, no `dies` owed. **47 of 85 open
-register rows name no code artifact**, and 11 of 11 owed-capture rows need James
-at an erg, so rule 3 has nowhere to send them. That is RF11's and RF24's
-class — the class that caught a 3.9x distance error and a feature reaching zero
-of sixteen production rows, both because somebody wrote down "nobody has checked
-this." This file's own head already says Phase TD _"is deliberately not
-scheduled"_; rev 1 put it inside the ratchet and asked 16 rows for a date the
-file forbids them to have.
-
-**Gates:** not TRIAD (no rower-visible number, no persisted product shape, no
-auth). **PRs 3 and 4 DO get a PM final gate** — `CLAUDE.md`'s third PM trigger
-is "the shape and sequence of planned work", and rev 1 denied the gate in its
-spec while citing that same clause to justify the phase-open one. `/harden` ran
-lens 1 on the spec; lens 2 runs on rev 2. No Gate 0, no walk, no tag.
-
-**Seven questions are batched for James in the spec's §10, and five of them are
-collisions between two of his own rulings** — most sharply, this file's head
-(2026-09-08) blesses a TRIGGER as a legitimate row form while rule 2 as drafted
-refuses one, and Phase OD falsified the dates remedy one day before this design
-was written.
-
 ## Needs a decision from James
 
-**BOTH BULLETS BELOW WERE RULED 2026-09-09** in the Phase OD order sweep, so
-this section currently holds NO live question. **That is not the same as
+**BOTH BULLETS THIS SECTION HELD WERE RULED 2026-09-09** in the Phase OD order
+sweep, and were moved to `docs/history/register-evictions-2026-09-10.md` on
+2026-09-10 — the 1 000 ms collision window and the `PM5` / `Timer` provenance
+label, both RULED KEEP. So this section currently holds NO live question. **That is not the same as
 nothing being owed him.** The sweep found seven live decisions waiting on
 James elsewhere in this file, each findable by NAME rather than by a line this
 merge would break — the hand-verified concept2.com log-dev row, the belted
@@ -2869,21 +2682,6 @@ RE-ASKED at Wave A's close (the plan calendar, the parametric generator, and
 Phase PROTO's sweep). A reader who takes this section's
 emptiness as "he owes nothing" will be wrong by seven.
 
-- **RULED KEEP (James, 2026-09-09): the 1 000 ms collision window stays.**
-  `TARGET_COLLISION_WINDOW_MS` (`src/monitor/transports/capacitorBle.ts`) holds
-  every targeted scan open for a full second after the first exact-name match,
-  so two devices carrying one name fail closed instead of programming the wrong
-  erg. The walk measured 2-3 s to CONNECTED; a third of that is ours.
-  **THE ROW'S OWN PREMISE WAS WRONG, and that is the part worth keeping.** It
-  asked "whether a household of ONE erg should pay a gym's safety margin".
-  Asked directly, James rows REGULARLY AROUND SEVERAL ERGS — so the wrong-erg
-  accident is reachable in his actual environment, not a gym's hypothetical —
-  and he does not notice the second. A cost nobody pays against a risk that is
-  live buys nothing by being shortened.
-  **Consequence for the next reader: whether two PM5s can genuinely advertise
-  one name is NO LONGER LOAD-BEARING.** Keeping the window is correct under
-  either answer, so do not spend a research pass on it. Filed at Phase NF's
-  close 2026-09-06; ruled 2026-09-09 in the Phase OD order sweep.
 - _(previously none open)_ — the `/api/today` row that sat here from Phase SF PR1
   closed 2026-09-05: James ruled DELETE, and the route, its unit block and
   the isolation test's dependence on it left in the same PR (the "done is
@@ -2921,66 +2719,6 @@ question, not a re-raised one.
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
 | **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by THREE FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window; and, since 2026-09-04, the per-user `C2_ALLOWED_EMAILS` gate — the VICTIM must be on that list for the callback to complete at all, because the hop re-checks `availableFor(user.email)` at step 3b after resolving its principal, so on a one-account rollout the population that can be victimised is one) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**; and since 2026-09-04 "a real cohort" is itself gated on `C2_ALLOWED_EMAILS`, so the flag flip alone no longer admits one) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 | **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
-
-- **RULED KEEP (James, 2026-09-09): the `PM5` / `Timer` provenance label
-  stays.** `UnsavedWorkouts.tsx:66,170`, `ReviewSession.tsx:75,111` and
-  `ReadOnlyRecording.tsx:13` render `PM5 · Sep 8 · Not saved` and
-  `Discard PM5 workout X`. Phase MT's RF32 census (2026-09-08) LEFT these
-  deliberately: the label's whole job is telling the reader a MACHINE recorded
-  the row rather than the phone timer, which is RF32's own
-  naming-the-source-of-a-stored-number exemption. It reads against `Timer` as
-  its opposite, and swapping it to `Monitor` would change one word across
-  three screens at once.
-  **HIS REASON, which decides the shape of any future attempt:** the label
-  carries provenance AND device identity, and the two do not separate on these
-  screens. So `Monitor · Sep 8 · Not saved` keeps the provenance half and drops
-  the identity half — a strict loss, not a clarity win. RF32 covers it as
-  written.
-  **The successor is DELIBERATELY UNFILED, and that is a decision, not an
-  oversight.** If the entanglement ever bites, the fix is a design pass
-  separating the two jobs on the row (a provenance word plus the device's own
-  caption), behind a Gate 0. It is **not** a copy sweep and must not be filed
-  as one — filing it as a sweep is how it would get done wrongly and cheaply. Related: the NFC connecting card's copy WAS
-  changed in the same census, on a screen whose shape was Gate 0 approved
-  2026-09-06, one day before the RF32 rule existed; the change is wording-only
-  (no captures owed, James 2026-08-23) and the review judged it correct, but
-  it is the precedent this row would follow.
-  **STRUCK from this row, 2026-09-09 (fix round): it used to call itself "the
-  one place RF32 was not swept" and "the last user-facing `PM5` vocabulary
-  outside disambiguation". Both were false when written** — the census had
-  missed `driver.ts`'s eight `REJECTION_VERBS`, which reach a rower as
-  `ConnectedError.detail` on all three failure doors and printed
-  `PM5 rejected frame 0`. They now read "The monitor …", gated by a test that
-  derives its reason list from the driver's own exhaustive `Record`. The two
-  struck sentences are RF30's shape: a later census reads a completeness claim
-  INSTEAD of re-running the grep, so the wrong one costs more than none.
-  **What still says `PM5` to a rower, so the next census starts from a true
-  list** (`grep -rn "PM5" app/src` over string literals, run 2026-09-09):
-  this row's provenance label; `MachineSummaryTable.tsx:34`'s
-  `PM5 · PER INTERVAL` eyebrow and `useMonitorSession.ts:1723`'s "More than
-  one PM5 has this name." (both are examples RF32's own text names as
-  allowed); the device caption and `Couldn't reach PM5 …`, which interpolate
-  the monitor's advertised name; `capacitorBle.ts`'s three targeted-scan
-  errors (lines 192/199/206), which render in the DETAIL panel's `raw` slot
-  and keep the name on a receipt recorded in that file; **THREE** lines of
-  rendered article prose in `connectTheMonitor.tsx` — line 6 "Connected mode
-  adds a Concept2 PM5", line 14 "The PM5 then runs the piece the way it runs
-  a race", line 34 "You'll need a PM5 (the standard Concept2 monitor)" — none
-  assessed by any census; and **10 note strings / 13 occurrences** in shipped
-  release notes (its own row below).
-  **THIS LIST HAS NOW BEEN WRONG TWICE, so re-run the commands rather than
-  trusting the prose.** Round 1 wrote two false completeness claims (struck
-  above); round 2 replaced them with this list and miscounted both of the
-  numbers in it — `connectTheMonitor` as one mention when it has three, the
-  release notes as "nine" when they carry 13 occurrences over 10 strings.
-  Round 3 (2026-09-09) measured both:
-  `grep -n "PM5" app/src/news/content/bodies/connectTheMonitor.tsx` → 3 hits
-  (6, 14, 34, all inside rendered `<p>` prose);
-  `grep -vn '^\s*//' app/src/news/content/releaseNotes.ts | grep -c "PM5"` →
-  10 and
-  `grep -v '^\s*//' app/src/news/content/releaseNotes.ts | grep -o "PM5" | wc -l`
-  → 13 (the `-v` drops the file's ten `//` provenance comments, which are not
-  copy). Both are counts of the tree at the Phase MT close-out branch.
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
 
@@ -3123,74 +2861,6 @@ in both orientations.**
   Evidence: the 2026-08-31 Log-detail photograph; `traceModel.ts`'s own
   header ("NEITHER `t` NOR `d` IS A WORK-ONLY QUANTITY").
 
-## The unlogged-session door
-
-**Status:** OPEN at James's request, 2026-09-03. Normal Today/warning design
-approved 2026-09-03; additional recovery-case designs approved 2026-09-04.
-Gate 0 and both task reviews are complete; browser recovery proof and generated
-captures include the initial landscape safe exit. Automated gates pass.
-James's approved September 4 follow-up resolved the final verification-byte
-admission gap; scoped review found no new findings. The antagonist cleared
-the proposed one-minute protocol's structural coverage. On build 875, James
-confirmed native recovery, successful Save and removal from Today; three
-phone screenshots are recorded. PM phase-close review passed that bounded
-native-door criterion, not every proposed protocol observation. James then
-authorized "Merge when green". Main `2f258006` is integrated; combined-tree
-verification and scoped integration review passed. PR CI remains the merge gate.
-This is separate from Wave F, whose dependency cleared on 2026-09-04; that
-closeout does not substitute for this feature's own approvals or acceptance.
-[Opening design](docs/superpowers/specs/2026-09-03-unlogged-session-design.md)
-and [comparison](docs/superpowers/specs/2026-09-03-unlogged-session-gate.html).
-**S–M.** Full cycle; non-TRIAD only while retirement, stored shapes and
-recorded-number semantics remain unchanged.
-
-**What and why:** Connect showed "You have an unlogged session. Connecting
-discards it." and the dialog offered Cancel and Connect anyway — nothing to
-VIEW what the session holds, and no way to log it. A rower who does not want
-to lose the row has no move except to walk away.
-
-- [x] **Approve the normal rendered recovery path.** James: "approved",
-      2026-09-03. Today exposes retained work
-      above suggestions; Start/Connect/Just Row warnings offer View unsaved
-      without discarding. Both orientations, long titles and both phone and
-      monitor records. No new queue or automatic save.
-- [x] **Close the completed-programmed PM5 hole.** At c5015c2e,
-      `Today.tsx:1529` hides these records while guards protect them;
-      `Today.test.tsx:2701` explicitly pins the omission. Re-enter the PM5
-      summary, never the manual form. James's precise retained record remains
-      uncaptured; the source/test-confirmed gap is sufficient to open repair,
-      not proof of that incident's exact record shape.
-- [x] **Resolve every other guarded shape honestly.** Deleted library
-      workouts, null-id non-Just-Row records and legacy/invalid frozen seeds
-      cannot use the existing save route. Approved: explicit type choice for
-      valid retained measurements without library metadata; read-only full
-      recording/copy/keep for data that cannot safely rebuild a summary.
-      James approved these extra screens on 2026-09-04 ("Approve").
-- [x] **Keep the recovery destination usable.** Local records must remain
-      visible when Today's unrelated requests stall/fail (`Today.tsx:437`).
-      Two retained Just Row sources must each open the selected recording,
-      not the current newer-timestamp choice (`JustRowLog.tsx:108`). The
-      second is a defensive coexistence case, not an observed normal flow.
-      The error/loading treatment and selection lifetime were approved with
-      the additional recovery cases on 2026-09-04.
-- [x] **Prove preservation across the browser path.** Production writer to warning
-      to Today to PM5 summary to saved history; failed-save retry, cold-start
-      hydration, both records, and View canceling Connect's staged replacement.
-      The 844×390 mounted warning puts the focused View safe exit and its
-      keyboard follow-on above Main nav. Preserve existing save/discard/
-      replacement retirement. Native walk and phase-close review remain required
-      before exit. Evidence:
-      `docs/testing/2026-09-04-unlogged-session-evidence.md`.
-- [x] **Close final review's verification-byte admission gap.** The selected
-      programmed route must refuse arrays outside the existing server contract
-      (1–32 integers, each 0–255) before mounting Save. Empty/out-of-range
-      integer arrays previously passed and produced a rejected Save. Keep the
-      recording in the approved read-only treatment; no repair or byte dropping.
-      James approved one focused follow-up after the final-wave limit on
-      September 4; its scoped review cleared the tested fix with no new findings.
-
----
-
 ## Rides the next PR touching the connected surface
 
 | Item                                       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Evidence                     |
@@ -3218,6 +2888,39 @@ to lose the row has no move except to walk away.
 | **Just Row's refusal stack never gets #370's pairing** | `JustRow.tsx`'s free-row refusal wears `.connected-interstitial-actions` WITHOUT the `--failure` modifier, so the landscape pairing rule #370 shipped does not reach it. Harmless TODAY at two buttons — it becomes a cut headline the moment that stack grows a third. Found at Phase MT's Gate 0, 2026-09-08 | Phase MT Gate 0 |
 
 ## Accepted, pinned, and not being fixed
+
+- **ACCEPTED (Gate 0-A's own cost, door PR A, 2026-09-02): Today's last
+  three rows carry no PARTIAL chip.** The chip lands in History and on the
+  log detail; Today's compact rows have no slot for it without displacing
+  the type badge. Gate 0-A weighed two options and took the cost. A THIRD
+  option — the chip on the title line, or displacing the badge — is
+  deferred to the Timer-mode design pass (the `## Timer mode, on the
+  phone` row above), which is already redesigning that row.
+- **ACCEPTED (James, 2026-08-30): deleting a personal same-titled workout
+  unmarks a completed plan row.** `session_logs.workout_id` is `ON DELETE SET
+  NULL`, so a rower who authored their own `2K Test`, rowed it on a checkpoint
+  day (correctly marked `INSTEAD OF 2K Test`) and later deleted that workout
+  sees the mark disappear — the row's identity becomes unknown, and the mark
+  is a positive accusation that never fires on a guess. Raised at #233's
+  re-review, which was right that the 2026-08-30 Gate 0 ruling did not cover
+  it: that ruling accepted preset-type edits and nothing else. **Re-gated
+  verbally instead, and explicitly with no design pass** ("2 is fine, I don't
+  need a mock up"). The alternative — a nullable `workout_was_global` column
+  written at save time — is TRIAD and is NOT being built.
+  **Revisit only if a rower actually hits it**; the shape is documented in
+  `swapMark`'s own comment.
+- **DISPOSED (post-#233 follow-ons, rationale corrected at #235's review):
+  the real store's `id DESC` tiebreak stays unpinned as LOW-VALUE — not, as
+  this entry first claimed, unreachable.** The owning comment in
+  `stores/logs.ts` says a same-microsecond tie is "unlikely, not
+  impossible", and `contracts.real.integration.test.ts` already forces
+  exact ties on this table with raw SQL, so the test is writable with an
+  in-repo technique. What it would buy: determinism between two rows that
+  are, by construction, interchangeable candidates for one index — the
+  tiebreak is arbitrary-but-stable by its own comment, never "the later
+  insert". A test pinning an arbitrary choice earns integration-suite cost
+  only if some consumer starts depending on WHICH row wins; that is the
+  revisit trigger.
 
 - **Three failure frames now render a DETAIL panel that is a heading and a
   slug, with no other content (Phase MT close-out, 2026-09-08).** The approved
@@ -3396,14 +3099,6 @@ Each needs erg time or a deliberate recording session.
   `webView.reload()`, destroying the driver, the recorder, and up to 30 s of
   unflushed series. _"'terminated no' disposes of force-quit, not of memory
   pressure."_ (`phase-ll.md`)
-- ~~**JR PR 0b's capture walk**~~ — DONE 2026-08-31; six OPENs answered, OPEN 3
-  bounded. Record at `docs/monitor/sessions/walk-2026-08-31-justrow/README.md`.
-- ~~**JR OPEN 3's open half — does a PM5 power itself off with a central
-  connected?**~~ RETIRED 2026-09-01 by ruling, not by evidence: James ruled we
-  assume the connection stays open indefinitely and design for it, rather than
-  spend an erg session settling it. Still unobserved and still undocumented —
-  if a closer ever turns up in the wild it is a bonus, never something the
-  design waits on.
 - **The hardware session shopping list** — three pairing and programming latency
   spans, the unrowed question from §17 item 5, §18's readings-still-owed, a
   genuine mid-piece disconnect, and **one `.5` pace target on the wire**
@@ -3491,57 +3186,6 @@ Each needs erg time or a deliberate recording session.
       on** — not before, because on zero opted-in sends the count is
       trivially zero and proves nothing. **XS**
 
-
-- **DONE (2026-09-07, PR #344): a rower who sets ONE baseline is told which
-  one and offered the other at the 7 s offset.** James's ruling ("If a user
-  sets a 2k or a 6k they should be asked to set both with a suggestion of the
-  7s offset"), raised at Phase RW PR C's PM final gate: every screen collapsed
-  a half pair to `null`, so a rower with a tested 2k read `NO BASELINE SET` on
-  Today, which was false about their account. The PM ruled ASK, not force
-  (forcing would make a 2k test's own result unsavable until a 6k it does not
-  have), and James took the PM's decision. What shipped: Today's row names the
-  stored side (`2K SET · NO 6K`) and fills the other on one tap, stamped
-  `derived`; Library and the workout detail's captions name it too; the doors
-  card states the consequence of leaving them unset. **The doors card now
-  yields to that row whenever one side is stored** — Phase BL PR C had ruled
-  the doors a superset re-entry for any incomplete pair, which sent a rower
-  who typed a 2k in the I-know-my-baseline door back to `SET UP YOUR
-  BASELINE`; that is the ordinary way to hold half a pair, and it never
-  writes `baselinesSkipped`, so the first cut of this work reached only
-  rowers who had skipped first. The estimate is suppressed when the derived
-  split falls outside the storable 60..240 band, matching the refusal
-  `BaselineEditor`'s and `postTestOffer`'s offers already make, and a failed
-  write says so rather than leaving a button that does nothing. The You
-  editor keeps its own existing counterpart offer (`deriveOffer` /
-  `DeriveSlot`) unchanged; no second ask was added there.
-  **Why not force** (PM, 2026-09-07, on James's follow-up "I feel like it's
-  natural but maybe it'd bother some people" — and it is NOT the consistency
-  argument): a rower made to fill a 6k they never rowed types a guess, and
-  `KnowBaseline.tsx` stamps a typed field `manual`, permanently
-  indistinguishable from a rowed number, while the declined offer would have
-  stored `derived`. Force degrades the provenance record it means to
-  complete, and it cannot be done honestly at the erg — removing the
-  post-test Skip holds a real measurement hostage to a heuristic. **Why not
-  silent auto-fill:** this repo's line is not "never store an estimate"
-  (`Recommend.tsx` stores both sides as `estimated` from a hand-authored
-  table), it is that the rower SAW it and the provenance is recorded.
-  **And the 7 s is an offer, not a fact:** `estimateBaseline.ts` grounds it
-  on Paul's Law (≈ +7.9 s, SECONDARY, a forum post, trained rowers) and says
-  in terms that no source grounds a better per-population gap;
-  `deriveBaseline.test.ts` pins the constant and nothing about any real pair.
-- **DONE (2026-09-07, PR #348): v0.42.0's notes corrected, and the tag it
-  was written for DELETED unreleased.** Item 2 promised "a quiet **NO
-  BASELINE SET** line" and that "setting a baseline any time puts the numbers
-  back"; after #344 a half-set rower reads `2K SET · NO 6K`, and setting ONE
-  side does not put the numbers back. James, 2026-09-07: "We won't release
-  that tag" — so `v0.42.0` (which sat at `8326fb2c`, #344's base, and never
-  reached TestFlight) was deleted locally and on the remote, and the VERSION
-  is free to be re-cut at whatever main is when he releases. The notes entry
-  keeps its `v0.42.0` label and `e2e/releasePin.ts` is unchanged for the same
-  reason. Its provenance comment was re-counted over the full
-  `v0.41.0..main` range (sixteen merges, RF15) and three items added: the
-  half-set offer (#344), the verification-code narrowing (#341) and AVG HR
-  (#345).
 - **The vitest 5 migration is owed, and it is why the app's dependency group
   went red** (2026-09-07, PR #349 split it out; Dependabot's #340 bundled the
   major with 17 routine patches). Vitest 5 changes the `Assertion` type
@@ -3689,90 +3333,12 @@ Each needs erg time or a deliberate recording session.
   (`storedSummary.ts:947`). Same distance, two spellings, one screen apart.
   Owed: pick one and share the formatter. Rides the next PR touching
   either. **XS**
-- **STRUCK 2026-09-09 (Phase OD): the comment now says exactly this, so the
-  row's own first branch is satisfied.** `server/concept2/mapping.test.ts`
-  (the block above the `mutation discriminator` case) states verbatim that the
-  row is _"UNREACHABLE on the wire"_, that the extra key is _"deliberately
-  cast past the excess-property check"_, and that _"it exists ONLY to make the
-  two predicates disagree"_ — the honest reading the row asked for, rather than
-  a reachability claim. Struck against the landed text, not against a memory of
-  it. **Original filing (door PR A's PM gate, 2026-09-02):**
-  `mapping.test.ts`'s `source, not deviceName, decides eligibility (mutation
-  discriminator)` leg is pinned by TYPECHECK, not by its own assertion (the row
-  said `:160-169`; the leg is at `:173-182` as of 2026-09-09 — grep the test
-  title). The leg exists to make the retired
-  `deviceName === null` gate and the live `source !== "pm5"` gate disagree,
-  and to do it the fixture is cast past the excess-property check
-  (`as unknown as Parameters<typeof eligibilityFailure>[0]`) onto a row
-  shape the wire cannot produce — `logSourceContradiction` 400s a
-  `deviceName` on any non-pm5 row. So the runtime expectation discriminates
-  a state only the cast can reach. Owed: either say so in the leg's own
-  comment (the honest reading — it is a mutation discriminator, not a
-  reachability claim), or reach the same disagreement through a supported
-  producer. **XS**
 - **FILED (door PR A's PM gate, 2026-09-02): the `freeRow` 401 first-run
   flake.** On a cold stack (24 containers up) the first `freeRow` e2e
   sign-in has 401'd once and passed on retry. Not reproduced on a warm
   stack. Owed: one run with the backdoor sign-in instrumented, to say
   whether it is the auth seam or container start-up ordering. **S**
-- **ACCEPTED (Gate 0-A's own cost, door PR A, 2026-09-02): Today's last
-  three rows carry no PARTIAL chip.** The chip lands in History and on the
-  log detail; Today's compact rows have no slot for it without displacing
-  the type badge. Gate 0-A weighed two options and took the cost. A THIRD
-  option — the chip on the title line, or displacing the badge — is
-  deferred to the Timer-mode design pass (the `## Timer mode, on the
-  phone` row above), which is already redesigning that row.
 
-- **RESOLVED (2026-08-31): `swapMark`'s `globalOnly: false` arm is pinned**
-  — trigger pulled forward by James. The arm's only producer is synthetic,
-  so `Plan.test.tsx` mocks one session's prescription (and nothing else);
-  mutating the predicate to demand a global fails exactly the
-  personal-match case.
-- **RESOLVED (in the same PR that filed it): `stack-env.sh` now refuses an
-  empty `REPO_ROOT`** with `: "${REPO_ROOT:?...}"` instead of hashing the
-  empty string into the phantom `ergomatic-67295` stack. Probed both ways:
-  unset -> loud refusal (exit 127, message names the fix); set -> the real
-  per-worktree id, and `pnpm e2e`/`pnpm screenshots` both boot and pass.
-  All three script consumers (`e2e.sh`, `screenshots.sh`, `walk-lab.sh`)
-  set `REPO_ROOT` before sourcing, verified by grep. Session memory
-  `stack-env-needs-repo-root` carries the incident.
-- **ACCEPTED (James, 2026-08-30): deleting a personal same-titled workout
-  unmarks a completed plan row.** `session_logs.workout_id` is `ON DELETE SET
-  NULL`, so a rower who authored their own `2K Test`, rowed it on a checkpoint
-  day (correctly marked `INSTEAD OF 2K Test`) and later deleted that workout
-  sees the mark disappear — the row's identity becomes unknown, and the mark
-  is a positive accusation that never fires on a guess. Raised at #233's
-  re-review, which was right that the 2026-08-30 Gate 0 ruling did not cover
-  it: that ruling accepted preset-type edits and nothing else. **Re-gated
-  verbally instead, and explicitly with no design pass** ("2 is fine, I don't
-  need a mock up"). The alternative — a nullable `workout_was_global` column
-  written at save time — is TRIAD and is NOT being built.
-  **Revisit only if a rower actually hits it**; the shape is documented in
-  `swapMark`'s own comment.
-
-- **RESOLVED (edge-marks gate + James's re-review, 2026-08-31): a
-  pre-validation row with an unreadable `workoutType` renders a bordered
-  shaded box that is a MEANINGFUL, accessible cue** — `--rule-2` fill,
-  `--ink-4` border (4.76:1 / 4.48:1, clearing 1.4.11's 3:1 non-text
-  floor; the first cut's 1.53:1 "decorative" framing was rejected on
-  review), with a visually-hidden "type unknown" twin for AT. Box model
-  equals a real badge's by construction (shared `.type-badge`, two
-  no-break spaces, border compensated in padding) AND by measurement:
-  `design.spec.ts` injects the badge into the live screen and asserts
-  computed colours, an in-test 3:1 computation, and sub-pixel geometry.
-
-- **DISPOSED (post-#233 follow-ons, rationale corrected at #235's review):
-  the real store's `id DESC` tiebreak stays unpinned as LOW-VALUE — not, as
-  this entry first claimed, unreachable.** The owning comment in
-  `stores/logs.ts` says a same-microsecond tie is "unlikely, not
-  impossible", and `contracts.real.integration.test.ts` already forces
-  exact ties on this table with raw SQL, so the test is writable with an
-  in-repo technique. What it would buy: determinism between two rows that
-  are, by construction, interchangeable candidates for one index — the
-  tiebreak is arbitrary-but-stable by its own comment, never "the later
-  insert". A test pinning an arbitrary choice earns integration-suite cost
-  only if some consumer starts depending on WHICH row wins; that is the
-  revisit trigger.
 - **The swap mark goes stale if a plan preset's session types are ever
   edited.** The Plan screen derives "you swapped this day" by comparing a
   log's stored type against `PLANS`' type for that slot TODAY, so editing
@@ -3785,20 +3351,6 @@ Each needs erg time or a deliberate recording session.
   a stored prescribed-type column, which is TRIAD and wants its own spec.
   The deletion case is RELATED but is NOT covered by this ruling — it has its
   own entry above, because Gate 0 accepted preset edits and nothing else.
-
-- **RULED (edge-marks gate + PM gate, James, 2026-08-31): the
-  self-contradicting mark keeps `INSTEAD OF` everywhere (option D), and the
-  two designated test titles are RESERVED at ALL THREE workout-writing
-  doors** — `POST`, `PUT`, and `POST /api/workouts/bulk` (the PM gate caught
-  bulk unguarded in the first cut), one message (`title is reserved. Pick
-  another name`, James's pick), mirrored at the Builder field. Legacy rows
-  keep rendering and stay suggestable; **editing one without renaming it is
-  ALSO rejected** — James's explicit ruling, declining the narrower
-  changed-into rule ("I don't want to engineer a solution to an imaginary
-  problem"). **The reservation is a fence around the string-keyed test
-  identity, not a product principle** (PM): retirement trigger = a stable
-  seed key replacing `isOnboardingTitle`'s remaining call sites. Name
-  conflicts in general REMAIN allowed.
 
 - **The reservation is a NON-ADDITIVE API change: coordinated tag, and an
   honestly-named residual (PM gate C3, corrected twice at James's
@@ -3912,17 +3464,6 @@ Each needs erg time or a deliberate recording session.
   a test that seeds its own precondition instead of assuming a virgin
   database, or an `e2e.sh` that resets the schema between runs; the first is
   narrower and is the one to try. **S**
-- **RESOLVED (post-#233 follow-ons): the screenshots project's version pin
-  can no longer rot independently.** The class was two independent literals —
-  `news.spec.ts`'s (CI-gated, bumped by every notes PR) and
-  `screenshots.spec.ts`'s (no CI job, rotted at v0.18.0/#166 and
-  v0.27.0/#232). Both now import ONE constant, `e2e/releasePin.ts`, so the
-  ungated copy cannot drift from the gated one and CI still forces the bump
-  through `news.spec.ts`. Running the screenshots project in CI was
-  considered and not taken: it buys nothing this doesn't once the literals
-  cannot diverge, at the cost of a capture pass per push. Deriving the pin
-  from `RELEASE_NOTES` was rejected as a mirror (RF11) — the screen renders
-  that same module, so it could only ever catch render breakage.
 - **AUD-012 — correct the booting-replica claim.** Two complete servers really
   race before the seed lock on an empty database, but the supported deployment
   is explicitly serial and single-replica. This is Confirmed P3 documentation
@@ -4108,7 +3649,6 @@ condition for working on them is a quiet week, not an incident.
       `deliverSummary` never writes) is UNRESOLVED and is the next thing to
       find out. This is a FAKE-side gap only: the same fold works on real
       wire bytes, which is what `justRowReplay.test.ts` gates.
-
 
 
 # Icebox
@@ -4341,6 +3881,16 @@ trigger is the whole entry.
 One row each. The body is in `docs/history/`, archived verbatim, and it is a
 RECORD — do not cite it for a live question.
 
+- **Phase RR — the register may only go down** · ABANDONED 2026-09-10,
+  mid-flight · spec merged #386, mechanism closed unmerged #388 ·
+  [detail](docs/history/phase-rr.md). The register's growth was real
+  (+6.75 rows/day, monotone over twelve samples); a ratchet, a class marker on
+  every heading and a `dies` stamp on every row was the wrong answer to it.
+  The 26 rows that had already finished were evicted by hand instead —
+  [detail](docs/history/register-evictions-2026-09-10.md).
+- **The unlogged-session door** — a rower who did not want to lose an unlogged
+  row now has a move · archived 2026-09-10, all six criteria ticked ·
+  [detail](docs/history/unlogged-session-door.md)
 - **Phase SB** — a blurred, page-coloured strip the height of the status bar
   on every screen, so scrolled content no longer prints over the clock · closed
   2026-09-06 · #323 · released in v0.40.0 · [detail](docs/history/phase-sb.md)
