@@ -27,6 +27,23 @@
  * already names; `pdfinfo` reports `Pages: 39`, matching that table). The
  * design spec quotes the enum verbatim.
  *
+ * CORROBORATED AGAINST A FIRST-PARTY DOCUMENT, 2026-09-10. The transcription
+ * above came from a MIRROR, which is the sourcing RF16's fourth corollary
+ * warns about. James supplied Concept2's own CSAFE definition —
+ * `docs/monitor/PM5_CSAFECommunicationDefinition.pdf`, revision 0.27 — and its
+ * `OBJ_ERGMACHINETYPE_T` was compared value by value against the list below.
+ * **All eight denied values match exactly**, name and number:
+ * `ERGMACHINE_TYPE_STATIC_SKI = 128`, `..._STATIC_SKI_SIMULATOR = 143`,
+ * `..._BIKE = 192`, `..._BIKE_ARMS` (193), `..._BIKE_NOARMS` (194),
+ * `..._BIKE_SIMULATOR = 207`, `..._MULTIERG_SKI` (225), `..._MULTIERG_BIKE`
+ * (226) — and `ERGMACHINE_TYPE_MULTIERG_ROW = 224` is a rower, so it proceeds.
+ * Two independent documents, no divergence; this is no longer a mirror claim.
+ *
+ * One oddity in the vendor's own text, recorded so a future reader does not
+ * take it for a transcription error of ours: the CSAFE doc's comments describe
+ * BOTH 192 and 194 as "Bike, no arms type", while 193 is "Bike, arms type".
+ * Immaterial here — all three are refused either way.
+ *
  * ABSENCE IS NOT A REFUSAL. The field is omitted entirely below firmware
  * V1.26 (0x0032) and V1.27 (0x0038) — `parse.ts` omits the property rather
  * than setting it `undefined`, which `parse.test.ts` pins with `Object.hasOwn`

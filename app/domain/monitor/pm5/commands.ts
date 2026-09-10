@@ -65,7 +65,31 @@ const SET_INTERVALTYPE = 0x17;
 const INTERVALTYPE_TIME = 0x00;
 const INTERVALTYPE_DIST = 0x01;
 
-/** `CSAFE_PM_SET_WORKOUTDURATION` (interface-notes.md §11). */
+/** `CSAFE_PM_SET_WORKOUTDURATION` (interface-notes.md §11).
+ *
+ *  SOURCED 2026-09-10 against `docs/monitor/PM5_CSAFECommunicationDefinition.pdf`
+ *  rev 0.27, whose p.96 `DurationTypes` enum reads, verbatim except that the
+ *  document's `/**< … *` + `/` delimiters are replaced by `--` so they cannot
+ *  close this block:
+ *
+ *    WORKOUT_DURATION_IDENTIFIER_TIME = 0,
+ *    WORKOUT_DURATION_IDENTIFIER_CALORIES = 0x40,
+ *    WORKOUT_DURATION_IDENTIFIER_DISTANCE = 0x80,
+ *    WORKOUT_DURATION_IDENTIFIER_WATTMIN = 0xC0
+ *
+ *  The two values below match it exactly, and the constant names here were
+ *  already the document's own.
+ *
+ *  **THE DOCUMENT CONTRADICTS ITSELF ON WATT-MIN, and only on Watt-Min.**
+ *  The p.96 enum and `CSAFE_PM_GET_WORKOUTDURATION` (0xE8) both say `0xC0`;
+ *  the `CSAFE_PM_SET_WORKOUTDURATION` (0x03) command table says
+ *  `0x60: Watt-Min`. Two against one, so `0xC0` is the likelier reading — but
+ *  it is a READING, and nothing here has ever sent either value. **Anything
+ *  that adds a calorie or watt-minute workout must settle this on the machine
+ *  before trusting either number**, because a wrong duration identifier
+ *  programs the erg for the wrong quantity and no readback distinguishes them.
+ *  Time and Distance are unaffected: every copy of the table agrees on
+ *  `0x00` and `0x80`. */
 const SET_WORKOUTDURATION = 0x03;
 const WORKOUT_DURATION_IDENTIFIER_TIME = 0x00;
 const WORKOUT_DURATION_IDENTIFIER_DISTANCE = 0x80;
