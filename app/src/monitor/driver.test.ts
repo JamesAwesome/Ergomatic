@@ -12570,8 +12570,11 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
 
     const entries = avgPaceVerdicts(log);
     expect(entries).toHaveLength(1);
+    // `#1` is the connection's own verdict ordinal (`recordAvgPaceVerdict`'s
+    // own comment: the fold guard). Written out here rather than built from
+    // the driver's counter, so a renumbering could not retune this pin.
     expect(entries[0]!.detail).toBe(
-      "suppressed — no work-state (0x0032) averageSplit observed this run",
+      "#1 suppressed — no work-state (0x0032) averageSplit observed this run",
     );
   });
 
@@ -12601,7 +12604,7 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
     const entries = avgPaceVerdicts(log);
     expect(entries).toHaveLength(1);
     expect(entries[0]!.detail).toBe(
-      "suppressed — nothing measured this run (Σd = 0)",
+      "#1 suppressed — nothing measured this run (Σd = 0)",
     );
   });
 
@@ -14044,7 +14047,7 @@ describe("createPm5Driver: a run is SETTLED before it is replaced (RC-13 V2)", (
   // interpolated into this string as `band ${…toFixed(1)}s`, so importing it
   // here would retune the assertion with the constant it exists to pin.
   const VERDICT_150 =
-    "machine(0x0032)=150.00s/500m ours=150.00s/500m delta=0.00s — agree (band 1.0s)";
+    "#1 machine(0x0032)=150.00s/500m ours=150.00s/500m delta=0.00s — agree (band 1.0s)";
 
   it("program(): the outgoing run's avg-pace verdict is filed, from the outgoing run's own numbers, before the new run is announced", async () => {
     const { transport, log, driver } = await closedRunOwingAnAnswer();

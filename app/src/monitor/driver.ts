@@ -3958,17 +3958,45 @@ export function createPm5Driver(
    *   - nothing this run recorded measures any distance at all (Σd = 0).
    *
    *  BAND: `AVG_PACE_VERDICT_BAND_SECONDS`'s own comment. */
+  /** How many `avg-pace-verdict` lines this DRIVER has filed. Per driver,
+   *  which is per logical session (`useMonitorSession.ts` mints the log and
+   *  the driver together inside one successful GATT connect), and never
+   *  reset by a run replacement — a second piece on the same connection is
+   *  `#2`. Read only by `recordAvgPaceVerdict` below, whose own comment
+   *  carries why it exists. */
+  let avgPaceVerdictsFiled = 0;
   function recordAvgPaceVerdict(run: NonNullable<typeof activeRun>): void {
+    // EVERY VERDICT THIS CONNECTION FILES IS NUMBERED, and the number is
+    // not decoration (James, 2026-08-31: "do NOT hunt it; INSTRUMENT it" —
+    // the surviving half of that order, RC-14).
+    //
+    // `eventLog.record` coalesces a CONSECUTIVE identical `kind`+`detail`
+    // into its predecessor and deliberately does not advance `seq` (that
+    // function's own comment). Four of the seven branches below carry a
+    // FULLY CONSTANT detail and two more are constant for a given shape, so
+    // without an ordinal two verdicts can be byte-identical — and the walk
+    // procedure's W11 step counts verdict lines against pieces rowed
+    // ("should produce N `avg-pace-verdict` lines, FULL STOP"). A fold
+    // makes that count come down silently, which is the same class of
+    // silent-instrument failure RC-14 itself was.
+    //
+    // The ordinal is per DRIVER, which is per logical session: this hook
+    // mints the log and the driver together inside one successful GATT
+    // connect, so `#1` is always this connection's first verdict. It also
+    // makes an eviction visible — a ring that has dropped its oldest
+    // entries starts at something other than `#1`.
+    avgPaceVerdictsFiled += 1;
+    const file = (detail: string): void => {
+      log.record("avg-pace-verdict", `#${avgPaceVerdictsFiled} ${detail}`);
+    };
     if (lastWorkStateAverageSplit === null) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         "suppressed — no work-state (0x0032) averageSplit observed this run",
       );
       return;
     }
     if (run.finalFilledFromSummary) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         "suppressed — the final interval was filled from 0x0039 " +
           "(deriveFinalIntervalFromSummary fired); our own quotient would " +
           "be built partly FROM the machine's summary, so the comparison " +
@@ -3985,8 +4013,7 @@ export function createPm5Driver(
     // false suppression costs a missing walk-log line, never a false
     // DIFFER/agree — and a duplicate index has no committed capture either.
     if (run.actuals > run.recordedActuals.size) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         `suppressed — an actual this run saw could not be attributed to a ` +
           `program interval (${run.actuals} actual(s) emitted, only ` +
           `${run.recordedActuals.size} indexed) and is excluded from our ` +
@@ -4024,8 +4051,7 @@ export function createPm5Driver(
     // average already counts, and no amount of correct TIMING fixes that;
     // the population itself is short.
     if (!run.recordedActuals.has(run.program.intervals.length - 1)) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         `suppressed — this run's own final interval (index ` +
           `${run.program.intervals.length - 1}) was never recorded; the ` +
           `machine's cumulative average may already include work ours has ` +
@@ -4047,8 +4073,7 @@ export function createPm5Driver(
       workMeters += actual.distanceMeters;
     }
     if (excludedSubThreshold) {
-      log.record(
-        "avg-pace-verdict",
+      file(
         `suppressed — a recorded actual measured under ` +
           `${MIN_MEASURABLE_ELAPSED_SECONDS}s and is excluded from our own ` +
           `quotient (mirrors summaryModel.ts's monitorAvgSplit rule)`,
@@ -4056,17 +4081,13 @@ export function createPm5Driver(
       return;
     }
     if (workMeters <= 0) {
-      log.record(
-        "avg-pace-verdict",
-        "suppressed — nothing measured this run (Σd = 0)",
-      );
+      file("suppressed — nothing measured this run (Σd = 0)");
       return;
     }
     const ours = (500 * workSeconds) / workMeters;
     const delta = Math.abs(lastWorkStateAverageSplit - ours);
     const agrees = delta <= AVG_PACE_VERDICT_BAND_SECONDS;
-    log.record(
-      "avg-pace-verdict",
+    file(
       `machine(0x0032)=${lastWorkStateAverageSplit.toFixed(2)}s/500m ` +
         `ours=${ours.toFixed(2)}s/500m delta=${delta.toFixed(2)}s — ` +
         `${agrees ? "agree" : "DIFFER"} (band ${AVG_PACE_VERDICT_BAND_SECONDS.toFixed(1)}s)`,
