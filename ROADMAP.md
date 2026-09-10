@@ -2750,57 +2750,97 @@ thirteen line numbers, and its own diff broke every one.**
 ## Phase RR — the register may only go down
 
 **OPEN 2026-09-09.** Design approved in chat the same day; spec
-`docs/superpowers/specs/2026-09-09-register-ratchet-design.md`. Filing a row is
-free and closing one is not, so the register only grows: RF14 says everything
-with a life after merge goes here and nothing anywhere says when a row may DIE.
-James, 2026-09-09: _"we need to figure out how we can continue working without
-filling this register to death with cruft. It's fucking impossible to close
-things out."_ This phase makes the register a ratchet — file N rows, strike N —
-the same shape as the typed-lint suppression ledger.
+`docs/superpowers/specs/2026-09-09-register-ratchet-design.md` (**rev 2** — the
+mechanism was rebuilt after `/harden` lens 1 and the PM phase-open gate; rev 1's
+falsified claims are replaced, not annotated). Filing a row is free and closing
+one is not, so the register only grows: RF14 says everything with a life after
+merge goes here and nothing anywhere says when a row may DIE. James, 2026-09-09:
+_"we need to figure out how we can continue working without filling this
+register to death with cruft. It's fucking impossible to close things out."_
+This phase makes the register a ratchet — file N rows, strike N.
+
+**The trend is the case.** One sample per day of ROADMAP-touching merges on
+`main`, 2026-08-29 to 2026-09-09: **36 → 46 → 64 → 67 → 74 → 76 → 88 → 89 → 96
+→ 101 → 108 → 117.** +81 rows in 12 days, monotone, not one down day,
+**+6.75/day** — while the file itself SHRANK 2,625 lines. The line count is the
+axis that is improving; the row count is the one that is not.
 
 Nothing a rower sees changes. No stored number changes. No `app/` file is
 touched. The audience is agents and James.
 
-**Rows in this section are PHASE rows, not register rows** — an unmarked
-section is scheduled work, so filing them owes no strike. They are
-dispositioned by `/close-phase RR`.
+**Rows in this section are `<!-- phase -->` rows, not register rows** — filing
+them owes no strike. They are dispositioned by `/close-phase RR`.
 
-- [ ] **PR 1 — the spec and this section.** Docs only. RF17: the section lands
-      in the same commit as the spec.
-- [ ] **PR 2 — the mechanism.** `scripts/register.sh` + `scripts/register.test.sh`
-      + fixtures (failing test first), wired into CI's existing `scripts` job;
-      the `<!-- register -->` / `<!-- pinned -->` / `<!-- vision -->` section
-      markers and the stamp grammar written into "How this file is used";
-      `CLAUDE.md`'s four rules as RF14's counterpart; the `/register-gate`
-      skill; `/close-phase` gate 5's expiry defence.
-- [ ] **PR 3 — the stamp pass.** Every register row gets
-      `· filed <date> · dies <date|tag> unless <clause>`; roughly 21 already-
-      closed rows are evicted to `docs/history/` (`## The unlogged-session door`
-      is 6 of 6 closed and `## Active audit overlay` 2 of 2, so both sections
-      empty and archive); strikes carry measured receipts. Lands after James
-      answers the DECIDE batch, because a ruling can delete a row and stamping
-      it first is wasted work.
+- [ ] **PR 1 — the spec and this section.** Docs only. RF17: same commit.
+- [ ] **PR 2 — the mechanism, minus `dies`.** `scripts/register.sh`
+      `count`/`closed`/`ratchet` + `scripts/register.test.sh` + fixtures
+      (failing test first), wired into CI's `scripts` job; a class marker on all
+      32 sections; **rules 1 and 3 in `CLAUDE.md`, together, because rule 3 is
+      what funds rule 1** — dead strikeable inventory is ~32 rows against
+      6.75 filings/day, so a ratchet shipped alone is unpayable inside five
+      days; the `/register-gate` skill; `/close-phase TD`'s refusal.
+- [ ] **PR 3 — the eviction.** ~32 already-closed rows out of the register and
+      into `docs/history/`, and the one malformed table row repaired.
+      **Its body must say this closes ZERO open work** — 85 open before, 85
+      after. It is file hygiene against a register growing 6.75/day, not debt
+      closure.
+- [ ] **PR 4 — `dies`.** `stamps` and `expired`, `/close-phase` Phase 4 step 5's
+      expiry defence, and the stamp pass over every register row. Lands after
+      James answers the spec's §10, because 37+ rows cannot honestly carry a
+      death condition until he rules on class defaults.
 
-**The two measurements that shaped it, both at `275c14b2`:** `grep -ci 'struck
-if' ROADMAP.md` returns **0**, so no row in the file has a death condition
-today and this is a retrofit of the whole register rather than a rule for new
-rows; and `git blame` on the file's bullet lines returns 171 at ≤7 days, 162 at
-8-30, 4 at 31-60 and none older, because reflows reset it — so "untouched for
-30 days" would have found 4 rows out of 337 and read as a gate that works
-(RF21). Expiry therefore rides a date the row carries itself, which collapses
-"closing condition" and "expire by default" into one field.
+**What lens 1 and the PM broke in rev 1, kept here because the wrongness is the
+useful part:**
 
-**Two structural findings the design had to absorb:** the register has TWO row
-shapes, because "Rides the next PR touching the connected surface" is a 24-row
-markdown table and that is where RC-13a-e live; and Icebox counts inside the
-ratchet while `# After the strangers` does not, since an exempt Icebox is
-evaded by moving a row there, and charging a debt strike for a product idea
-trades the wrong two things.
+- **The stamp was "the row's last line".** False for 262 of 314 top-level
+  bullets — the file is hand-wrapped near 80 columns, and rev 1's own worked
+  example wrapped its own stamp onto a line carrying neither field.
+- **"One register section is a table."** Four are, and `## Needs a decision from
+  James` is MIXED; the `closed` gate was bullet-anchored, so a
+  `RULED (James, 2026-09-03): KEEP` row inside a register table could never be
+  reported.
+- **`## Active audit overlay` was to be archived as "2 of 2 closed".** It holds
+  the live **Wave A-E overview table**, including Wave A. It is a ledger, and
+  the archive is dropped.
+- **The ratchet's base ref was never named.** Two branches striking the SAME row
+  and filing in different sections each read a delta of 0, merge clean, and
+  leave the register +1 — demonstrated in a throwaway repo. The base is a
+  recomputed merge base or the gate is decoration.
+- **The unmarked default was fail-OPEN**, in a design citing `ci-changes.sh`,
+  whose defining property is that every uncertainty resolves to RUNNING.
+- **"Filing dates are not recoverable" was false.** Blame measures last edit;
+  `git log --reverse -S` measures first appearance — six rows, six dates.
+  Stamping ~50 rows with today's date would have erased the age evidence that
+  justifies striking them.
+- **Dead inventory is ~32, not 21.** The closed regex anchored after the
+  bullet's `**` while this file writes dispositions mid-line, and `ANSWERED`
+  matched zero rows because the file writes `ASKED AND ANSWERED`. Widening it
+  then over-caught row IDs and emphatic openers (`TWO`, `TIER B2`, `RC-38`,
+  `AUD-012`, `PWA`), so the vocabulary is derived, curated, and graded a
+  HEURISTIC rather than deterministic.
 
-**Gates:** not TRIAD (no number's meaning, no stored shape, no auth), so no
-per-PR PM gate and no per-PR antagonist pass. Owed and not skipped: `/harden`
-on the spec before PR 2 (James's instruction), and a PM phase-open gate on the
-slate, because this changes the shape and sequence of all planned work.
+**The condition that would have failed the phase (PM, binding):** a
+`<!-- debt -->` class for `## Phase TD` and `## Owed captures and walk items` —
+counted, never payable by strike, never expired, no `dies` owed. **47 of 85 open
+register rows name no code artifact**, and 11 of 11 owed-capture rows need James
+at an erg, so rule 3 has nowhere to send them. That is RF11's and RF24's
+class — the class that caught a 3.9x distance error and a feature reaching zero
+of sixteen production rows, both because somebody wrote down "nobody has checked
+this." This file's own head already says Phase TD _"is deliberately not
+scheduled"_; rev 1 put it inside the ratchet and asked 16 rows for a date the
+file forbids them to have.
+
+**Gates:** not TRIAD (no rower-visible number, no persisted product shape, no
+auth). **PRs 3 and 4 DO get a PM final gate** — `CLAUDE.md`'s third PM trigger
+is "the shape and sequence of planned work", and rev 1 denied the gate in its
+spec while citing that same clause to justify the phase-open one. `/harden` ran
+lens 1 on the spec; lens 2 runs on rev 2. No Gate 0, no walk, no tag.
+
+**Seven questions are batched for James in the spec's §10, and five of them are
+collisions between two of his own rulings** — most sharply, this file's head
+(2026-09-08) blesses a TRIGGER as a legitimate row form while rule 2 as drafted
+refuses one, and Phase OD falsified the dates remedy one day before this design
+was written.
 
 ## Needs a decision from James
 
